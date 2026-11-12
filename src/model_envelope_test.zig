@@ -554,7 +554,7 @@ const aggregate_bindings: []const @import("domain/model_text_field.zig").Binding
     .{ .field = .extraction_business, .path = &.{.{ .property = "business" }} },
     .{ .field = .reconciliation_technical, .path = &.{.{ .property = "technical" }} },
     .{ .field = .entity_name, .path = &.{.{ .property = "identity" }} },
-    .{ .field = .spec_title, .path = &.{.{ .property = "a/b~c" }} },
+    .{ .field = .spec_goal, .path = &.{.{ .property = "a/b~c" }} },
     // An absent selected union branch is not a returned leaf.
     .{ .field = .edge_condition, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "edge_case" }, .{ .property = "condition" } } },
 };
@@ -577,7 +577,7 @@ test "response composition aggregates concrete sibling fields typed reasons and 
         .{ .path = "/records/0/when", .field = .ac_when, .reason = .reference_only },
         .{ .path = "/business", .field = .extraction_business, .reason = .prohibited_source },
         .{ .path = "/technical", .field = .reconciliation_technical, .reason = .reference_only },
-        .{ .path = "/a~1b~0c", .field = .spec_title, .reason = .prohibited_exact },
+        .{ .path = "/a~1b~0c", .field = .spec_goal, .reason = .prohibited_exact },
         .{ .path = "/questions/0", .field = .clarification_question, .reason = .embedded_insertion_syntax },
     };
     try std.testing.expectEqual(expected.len, diagnostic.fields.len);
@@ -720,7 +720,7 @@ const statement_scope: @import("domain/model_exact_values.zig").Scope = .{ .refe
 const ambiguous_scope: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = .{ .bytes = "REF-current" }, .occurrences = &.{ .{ .claim_id = .{ .ordinal = 3 }, .bytes = "Loan renewed!" }, .{ .claim_id = .{ .ordinal = 4 }, .bytes = "Loan renewed!" } } };
 const statement_rule: @import("domain/model_text_composition.zig").Statements = .{
     .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } },
-    .rule = @import("domain/specification_session.zig").scenario_coverage,
+    .rule = @import("domain/specification_session.zig").statement_rule,
 };
 /// `insertion` appends an exact-copy insertion of the claim 3 value (or a handle naming no claim).
 const StatementRecord = struct { kind: []const u8, text: []const u8, claims: []const i64 = &.{3}, insertion: enum { none, claim, handle } = .none };

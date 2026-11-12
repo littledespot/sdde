@@ -4,7 +4,7 @@ Part of the [proposed design](../design.md#6-common-action-and-orchestrator-cont
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - Every action **and** every orchestrator conforms to the same runtime contract. An
-  [ADR 0032](../decisions/0032-engine-routines.md) engine routine (not yet implemented) is not
+  [ADR 0032](../decisions/0032-engine-routines.md) engine routine (implemented for startup and provider bootstrap; feature logging not yet) is not
   a node and does not.
 - There is one envelope, one result vocabulary, and one dependency declaration mechanism across
   the engine.
@@ -23,7 +23,7 @@ Part of the [proposed design](../design.md#6-common-action-and-orchestrator-cont
 
 [View the Capability-free node runtime sample](../code.md#node-runtime).
 
-It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only; an ADR 0032 engine routine (not yet implemented) receives them as typed parameters, one port per step function. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
+It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only; an ADR 0032 engine routine (implemented for startup and provider bootstrap; feature logging not yet) receives them as typed parameters, one port per step function. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
 
 The common contract makes data dependencies explicit:
 
@@ -81,7 +81,7 @@ Keys are tags of the engine's one closed, unversioned `DataKey` enum, for exampl
 - After contract/delta validation, the runner's `PipelineTelemetryObserver` starts a separate
   logging-internal `PipelineEnvelope` and passes those attributed facts plus trusted run/node
   context through `FeatureLoggingOrchestrator`. Under
-  [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), feature logging
+  [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), feature logging
   becomes a typed engine routine once its preconditions are met. Only that change replaces the
   logging-internal envelope and logging-only `DataKey`s below with function-local values.
 - Both business and logging nodes still use `PipelineNode` and return all intermediate values
@@ -231,7 +231,9 @@ Every action must:
 - An action that publishes output does not decide whether validation passed; it consumes the
   complete validated output set through its declared publication port.
 
-[ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented) adds the **stage action**:
+[ADR 0031](../decisions/0031-stage-actions.md) adds the **stage action** (`prepare-toolchain`
+is the first, in `src/actions/toolchain/prepare_toolchain.zig`; the other stages are not yet
+converted):
 one registered action whose verb-object responsibility is a deterministic sequence of internal
 steps that routes no outcome. The ADR fixes its contract fields: side effect `none` or
 `filesystem_read`, repair role and runner accounting `none`, outcome association
@@ -288,7 +290,7 @@ Every orchestrator must:
   outside an allowlist of contracts, outcomes, envelopes, loop controls, and child-node
   bindings.
 - Orchestrator modules cannot import infrastructure or domain-operation adapters.
-- For [ADR 0032](../decisions/0032-engine-routines.md) engine routines (not yet implemented),
+- For [ADR 0032](../decisions/0032-engine-routines.md) engine routines (implemented for startup and provider bootstrap; feature logging not yet),
   the tests also check:
   - a `*_routine.zig` imports only domain and port modules, never adapters or `std.Io`;
   - no step takes two ports, the port set, a capability bag, `anytype` or `anyopaque`;
@@ -297,7 +299,7 @@ Every orchestrator must:
 
 ### 6.3 Reordering and composition rules
 
-The internal steps of an [ADR 0031](../decisions/0031-stage-actions.md) stage action (not yet implemented) can't be reorganized from YAML; changing them changes the stage action.
+The internal steps of an [ADR 0031](../decisions/0031-stage-actions.md) stage action can't be reorganized from YAML; changing them changes the stage action.
 
 Actions and orchestrators can be reorganized without changing their implementation when their contracts remain satisfiable:
 

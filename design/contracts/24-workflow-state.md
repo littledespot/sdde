@@ -27,15 +27,17 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v24,
+`specification-state` contract (currently v25,
 [ADR 0015](../decisions/0015-specification-principle-review.md),
-[ADR 0023](../decisions/0023-advisory-post-generation-review.md) and
-[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7; v25 is
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md),
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7 and
+[ADR 0048](../decisions/0048-engine-derived-specification-title.md); v26 is
 reserved for the `spec_incomplete` variant of
 [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
-since 30 October 2026, not implemented) over canonical `specification/v5` content, in which
+since 30 October 2026, not implemented) over canonical `specification/v6` content, in which
 an edge case holds the ID of the acceptance criterion it links to and readback checks the
-link against the candidate rule of ADR 0038 Decision 7;
+link against the candidate rule of ADR 0038 Decision 7, and the display name is native text
+that readback derives again from the captured sources (ADR 0048);
 stage discriminators distinguish the variants. Earlier versions reject without
 migration, aliases or a compatibility reader. The completed variant keeps the captured
 principle registry identity as its own `principle_registry` field, which the next
@@ -57,7 +59,7 @@ invalidates affected descendants through the stage rules below.
   classification, dispositions and complete original-occurrence coverage (ADR 0024).
   Inconsistent stored authority rejects instead of being inferred from matching
   display bytes. Request-native exact scope binds its snapshot and eligible occurrence
-  bytes; `model-request-debug/v16` retains it for diagnostics, not state recovery.
+  bytes; `model-request-debug/v18` retains it for diagnostics, not state recovery.
   Published-state validation needs no model request, historical capture or operation
   port.
 - **Review evidence.** State holds no review evidence (ADR 0023). Source-review

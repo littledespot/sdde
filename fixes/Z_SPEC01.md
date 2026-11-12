@@ -17,14 +17,6 @@ limit; the request the model receives is unchanged. Defect class: lost source re
 Evidence: `evaluations/d23-12/measures-set.json` (12 of 12 published; the correction never
 fired, so "not enough evidence"). Open follow-ups: SPEC01 Q2b.
 
-## Q4 D4.1. `uncovered_member` correction names the covering kinds
-
-**Kept 30 October 2026.** The correction names the covering kinds from the compiled coverage
-rule, never hard-coded (`model_schema_diagnostic.zig`, `model_protocol_retry.zig`);
-`required_preserve` unchanged. Evidence `evaluations/e2e/d41-measures-set.json` (correction
-never fired). Its live firings are in SPEC01 Q14; the extension decided 3 November 2026 is open
-in SPEC01 Q4.
-
 ## Q13 D13.1. Post-generation reviews removed
 
 **Committed in `2b3dc8b`** (user, 1 November 2026: "apply best recommendations"). The
@@ -128,8 +120,9 @@ byte-identical, so the proof is the accepted and rejected owner tests.
 
 ## Bare-value `reference_only` correction
 
-**Implemented 7 November 2026** (user: "fix the bare-message failure"); kept or reverted per
-SPEC01 §3 Next item 1. Native recognition makes text that is exactly a source value one
+**Implemented 7 November 2026** (user: "fix the bare-message failure"); **kept 12 November
+2026** (user: "yes", to recording it kept). No set could measure it: it has fired once live,
+changing nothing, so the keep rests on the mechanism. Native recognition makes text that is exactly a source value one
 exact-value node, so a prose-required field holding only it rejects as `reference_only` (ADR
 0036:156-158). The field registry's explanation (`text_field_policy.referenceOnly`) is derived
 from the exact-copy role: where recognition runs it says an exact source value or supplied
@@ -151,8 +144,8 @@ beyond those named.
 - **String kind:** a `[]const u8` member never decodes from an array of byte values. The engine
   decoders use `strict_json`: `decodeAuthored` for a document a user writes (a member with a
   default may be omitted, a present member keeps its wire kind, a defaulted optional is absent
-  or a value and never `null`) in `decode_sddtoolkit_config.zig`; `decode`, which requires every
-  member, for `decode_llm_provider_config.zig` and the clarification-state parser. So
+  or a value and never `null`) in `engine_config_decode.zig`; `decode`, which requires every
+  member, for `llm_provider_document_decode.zig` and the clarification-state parser. So
   `reasoningEffort` is a string when present and `null` rejects (F0001; ADR 0039:84-86 is the
   precedent). An architecture rule (`architecture_test.zig`) forbids a typed `std.json` decode
   in the action, adapter, application and composition layers. The harness and build tools that
@@ -367,3 +360,349 @@ and published bytes are unchanged. Live runs (user-approved, 10 November 2026):
 `2026-11-09T20-29-51Z` hello-world and `20-29-52Z` loan-renewal published and passed
 adjudication (92.86% each; accuracy 0/0/0/0 and 0/0/1/0, the known AC-001 recording clause);
 loan-renewal's EC-001 linked natively to AC-001, its sole candidate.
+
+## C1. An empty exact-member answer is corrected, not a crash (ADR 0046)
+
+**Implemented 11 November 2026** (user: "implement C1"). Defect class: successful completion.
+`validateValue` (`model_payload_schema.zig`) began its repeat scan with `for (1..count)`, which
+panics on an empty array, so an array with a member set and no `minItems` aborted the process
+before its missing-member check. Every answer bound by `withDispositionChoices` reached it
+(native member count; `semantic_dispositions` states no minimum): the dispositions request,
+its repairs and the source-omission conflict-group repair (`reference_reconciliation_repair.zig`
+`:334`, `:753`; ADR 0046 Decision 3), and a replay of any of them (`request_replay.zig:211`). A
+model answer `{"claim_dispositions":[],"conflict_groups":[]}` would have ended the run with a
+panic. The scan now starts at index 0, so an empty array is rejected as `missing_member` at the
+array, naming the first assigned member (ADR 0046:54-56), and takes the bounded correction
+(:58-60). Owner: `model_payload_schema.zig`. Tests, both of which crashed on the old code: in
+`model_payload_schema_test.zig`, a generic schema without `minItems` rejects `[]` and a
+one-item omission as `missing_member` naming member 2, with their corrections, and admits the
+complete set; in `reference_model_input_test.zig`, the dispositions restriction on the real
+reconciliation schema rejects the empty answer in both fixture domains, naming the first
+semantic claim. No request builder changes; the only new model input is ADR 0046's existing
+correction, sent where an empty answer used to abort. §2 rule 10's request-projection diff
+wasn't taken. No schema, report or log version changes, and no keep decision is needed.
+**Rule:** a member or coverage check must handle an empty array.
+
+## Q22. Engine-derived title (ADR 0048)
+
+**Implemented 11 November 2026** (user: option B1 "approved", then "yes level-1 headings block
+run"); **kept 11 November 2026** (user: "yes mark Q22 as kept"). Defect class: lost source
+requirement and restatement through the model-written title (4 of 54 loan-renewal and 21 of 55
+hello-world evaluations since 2 November). ADR 0048 records the decisions, derived choices and
+versions. Owners: `markdown_code_spans.levelOneHeading` (heading classification),
+`specification_title.zig` (derivation and the readback check) and
+`specification_session.initialize`, which takes the title or blocks with `no_title_heading` or
+`conflicting_title_headings`. No screen ran (user: "yes as per recommendation"): every retained
+capture was `model-request-debug/v16`, which the build refuses.
+- **Set** (`2026-11-11T10-14-3*`; revision `35e7937`, `build.source.modified` true, one source
+  `e8a54c98…`; 3 runs per case, none retried; skill `3fe52a92…`): 6 of 6 published and passed.
+  Content-basis counts, lost / weakened / unsupported / contradiction: hello-world 0 / 0 / 0 / 0
+  and loan-renewal 0 / 0 / 3 / 0, all three AC-001's recording clause from a records request that
+  hashes as before Q22. All six H1s are the sources' headings, the nine native deletes were all
+  helpful, and title restatement fell to 0 of 3 hello-world (reference 3 of 3). The target was
+  0 in both states ("benefit not demonstrated"), so the keep rests on the mechanism and the
+  guards. Measures: `evaluations/q22-measures-set.json`.
+- **Evaluator version:** the reference counts (SPEC01 §1) were scored under `185b9bc6…`, which
+  T7 doesn't count with `3fe52a92…`, and weren't re-scored first (SPEC01 §2 rule 5). A re-score
+  can't reverse the keep: the set has no lost, weakened or contradiction defect; each of its
+  three additions is an AC-001 Then byte-identical to one in the reference, which the skill
+  scores the same; and on the target the set holds 0.
+
+## Q14 b3. A scenario gap takes an engine-bound criterion insert (ADR 0038 Decision 3)
+
+**Implemented 12 November 2026** (user: "B3 is approved, implement"); **kept 12 November
+2026** (user: "keep B3"). Defect class: lost source requirement, a behaviour claim no scenario
+tests, reached when the whole-response correction answered a scenario gap by adding the
+claim to an unrelated criterion or exhausted the records retries (SPEC01 Q14). ADR 0038
+Decision 3 records the decision, its derived choices and the versions.
+- **Owners:** `specification_session.scenarioCoverageIssue` (after the duplicate,
+  restatement and repeated-statement checks, on the batch their deletes leave);
+  `specification_candidate.GroupPolicy.scenario`, a fixed record beside entity membership;
+  and `specification_repair` (authorize, packet with the `provenance` context and the
+  claim's exact values, parse, merge, retry validation). Admission keeps only
+  `shared_member`: the result-schema rule records the exclusive and owning kinds, and the
+  `uncovered_member` reason and its correction are gone. `model-request-debug/v18`,
+  `spec-e2e-report/v17`.
+- **Tests:** in `specification_generation_test.zig`, the session reports the uncovered claim
+  after the native delete, needs none for a scope-only claim, authorizes the insert at the end
+  of the batch with the claim and group fixed, selects the criterion definition, refuses an
+  edge case or other claims, validates the merged batch and refuses the stale rejection; six
+  claims of one requirement take six inserts within the bound frozen at the first, which
+  `targetBound` sizes with a criterion per claim a statement names (contract review, 12
+  November 2026); the
+  admission, result-schema and replay tests admit an uncovered response; the scripted matrix
+  publishes uncovered batches, one or every, and a re-sent runaway, each with its inserts and
+  no correction. Request projection `q22-final` to `q14b3-after`: 1,450 of 1,633 requests
+  unchanged, 179 records requests differ only in their recorded rule, and the 4 changed
+  requests of the three uncovered scenarios became repair-slot inserts (one call added).
+- **Set** (`2026-11-11T20-47-36Z` to `-41Z`; revision `666e0c30`, `build.source.modified` true;
+  3 runs per case, none retried; skill `3fe52a92…`, the Q22 evaluator; reference the Q22 set):
+  6 of 6 published and passed, 9 calls each, no correction, re-send, runaway or admission
+  rejection. Content-basis counts, lost / weakened / unsupported / contradiction: hello-world
+  0 / 0 / 0 / 0 and loan-renewal 0 / 0 / 3 / 0 (AC-001's recording clause), the Q22 set's
+  counts; `-38Z`, `-39Z` and `-40Z` publish records byte-identical to a Q22 run. The 10 native
+  deletes of the loan-renewal runs were all helpful. No `scenario_coverage` event fired, so no
+  insert ran live; the target was 0 in both states ("benefit not demonstrated"), so the keep
+  rests on the mechanism, the offline tests and the guards (lost source requirement 0 in both
+  cases, publication 3 of 3 each, exhausted 0). Median tokens 12,712 and 16,342 against the Q22
+  set's 12,796 and 16,290. Measures: `evaluations/q14b3-measures-set.json`.
+- **Not covered by a test or a live run:** replacing an inserted criterion, and exhaustion of
+  the insert's repair bound.
+- **Rule:** an inserted record's association is the engine's; the model writes content only.
+
+## E2. `prepare-toolchain` is one stage action (ADR 0031)
+
+**Implemented 12 November 2026** (user: "yes" confirming DE2, then "approved" to the preflight,
+including the ADR 0031 status edit). The first stage conversion, as the proof of the pattern. No
+behaviour, model request, report, log or state version changes, so no published-output defect
+class is named and no semantic benefit is claimed (ADR 0031:250-252); no live run (choice 7).
+- **Owners:** `src/actions/toolchain/prepare_toolchain.zig` (the closed `Step` enum, the
+  `Diagnostic` slot, `Action.execute` sequencing nine `steps.*` functions with a `NodeRuntime`
+  check between them, and one `NodeContract`: requires nothing, produces `valid_toolchain`,
+  `filesystem_read`); one binding, `toolchain_workflow_runner.PrepareToolchain`; the composition
+  root's one registry entry. A step that reaches a port takes only that port; `validateSafety`
+  alone yields the `safety.Owner`, allocated from the retained allocator while every
+  intermediate lives in the binding's scratch arena. The failure representation of each step is
+  unchanged (`InvalidToolchain`), except that the parser must now return exactly one document per
+  capture: a short or long result rejects at `parse_documents`, where it used to shrink the
+  registry silently and an empty one failed as `OperationExecutionFailed` (user: "yes", 12
+  November 2026, contract review).
+- **Runner:** `StepInput.runtime` carries the runner's `NodeRuntime` (always active for a
+  binding invoked outside the runner), and a non-model operation that fails after the runtime
+  stopped reports that stop (`cancelled`, `deadline_exhausted`), as the checks before and after
+  the invocation do, so a cancelled stage reports what the nine separate nodes did. An
+  allocation failure stays itself and a model call keeps its own reconciled status (contract
+  review, 12 November 2026).
+- **Removed:** the nine actions, nine bindings, eight stage-internal `DataKey`s and their
+  schemas, the Specify subgraph, and the fixture's eight extra steps.
+- **Failing step in the event** (ADR 0031:200-201; user: "yes", 12 November 2026): the runner
+  lends each step invocation a slot (`StepInput.stage_step`, `pipeline.StageStepSlot`), the
+  binding writes the failing step's name before returning its unchanged error, and the failed
+  action's event records it as `step_id`, a new optional field of `action.failed` only (the
+  registry rejects it elsewhere). The event heading gains a column, so **`event-columns/v2`
+  becomes `event-columns/v3`** (38 columns, `step_id` after `rule_id`; F0002, 26-security,
+  design.md updated; no migration, as F0002 requires). The measures harness reads the current
+  heading only, so a feature log written before this change is rejected by it; the saved
+  `measures.json` of earlier runs are unaffected. The prompt stream is unchanged
+  (`prompt-columns/v3`).
+- **Stale pointers** to ADR 0031 as not yet implemented in design.md, ADR 0003, ADR 0005 and ADR
+  0016 now name `prepare-toolchain` as the first stage action (user: "yes").
+- **Evidence (offline):** request projection before and after across the integration matrix is
+  byte-identical (`diff -rq` empty; both equal `q14b3-after`), 122 of 122 integration
+  scenarios pass, and the unit suite covers each function with fake ports, the stage edge (every
+  failing step reported, cancellation between each pair of steps, allocation failure in each
+  step and in the owner, cleanup) and the architecture rules with rejected fixtures.
+- **Live set** (user: "perform 3 e2e live runs and evaluations per test case"; run directories
+  `2026-11-12T00-18-16Z` to `-20Z`; revision `be2966ce`, `build.source.modified` true; 3 runs per
+  case; skill `3fe52a92…`; reference the b3 and Q22 sets): not required by choice 7, taken after
+  the event-field change. Two earlier launch rounds produced no result (a launch without the
+  environment loader, then a provider `AccessDeniedException`, "Authentication failed: Please
+  make sure your API Key is valid.", on a first request byte-identical to a working run's), so
+  their directories are unusable evidence. 6 of 6 published and passed, 9 calls each, no correction, re-send, runaway
+  or admission rejection. Content-basis counts, lost / weakened / unsupported / contradiction:
+  hello-world 0 / 0 / 0 / 0 and loan-renewal 0 / 0 / 2 / 0 (AC-001's recording clause in two of
+  three runs; the third has none), against 0 / 0 / 0 / 0 and 0 / 0 / 3 / 0 before. Hello-world:
+  each run has an entity (3 of 3, against 1 of 3 in both earlier sets), costing one scope point,
+  and the quote-mark artefact is absent (organization 4). The 17 native deletes of the
+  loan-renewal runs (7, 7, 6) were all helpful, including an assumption, a non-goal and a
+  prohibited behavior the source does not state. No `scenario_coverage` event fired, so no insert
+  ran live. Median tokens 12,768 and 16,500 against the b3 set's 12,712 and 16,342. The new
+  `event-columns/v3` logs were written and read by the measures harness; no run failed an
+  action, so no `step_id` was recorded live.
+- **Measures (ADR 0031:355-357), before then after:**
+
+  | Measure | Before | After |
+  | --- | --- | --- |
+  | Toolchain YAML in `spec.workflow.yaml` | 30-line subgraph, 9 steps (file 1,104 lines) | 1 step (file 1,074 lines) |
+  | Toolchain fixture | 17 lines, 9 steps | 9 lines, 1 step |
+  | Registry entries (`entry(` lines) | 166 | 158 |
+  | `DataKey` members | 194 | 186 |
+  | Toolchain action files | 9 (107 lines) | 1 (130 lines), beside `compile_naming_policy` |
+  | Binding and values files | 136 and 19 lines | 35 and 10 lines |
+  | Files a new pure toolchain step touches | 8 (action, binding, values, `DataKey`, composition, YAML, fixture, 13-01) | 2 code files (the stage and its test) and the 13-01 entry |
+- **Rule:** the internal steps of a stage are functions, so a project cannot recompose them and
+  a concept change lands in the stage's file.
+
+## E2b. `prepare-inputs` is the second stage action (ADR 0031)
+
+**Implemented 12 November 2026** (user: "yes" to starting it, after the preflight). The 13-step
+`inputs` subgraph of the Specify workflow is one stage action. No behaviour, model request, report,
+log or state version changes, so no published-output defect class is named and no semantic benefit
+is claimed; offline evidence stands in for a live run (choice 7), and the E2c live set ran this
+stage too. **Kept 12 November 2026** (user: "Keeping the changes"). The ADR 0031 status line and
+the design pointers name it the
+second stage action (user: "yes", 12 November 2026).
+- **Owners:** `src/actions/specify/prepare_inputs.zig` (the closed 13-member `Step` enum, the
+  `Diagnostic` slot, `Action.execute` sequencing 13 `steps.*` functions with a `NodeRuntime`
+  check between them; requires `specify_invocation`, produces the eight edge keys,
+  `filesystem_read`); one binding, `input_preparation_workflow.PrepareInputs`; the composition
+  root's one registry entry. Each port step takes only its own port, and its port aliases are
+  named `*_port` so the architecture rule sees them. The prior specification state and the bytes
+  it was parsed from use the retained allocator and the binding's owner; every other value is
+  allocated in scratch space and copied into the delta.
+- **Removed:** the 13 actions, their 13 bindings and `reference_workflow_runner.zig`, six
+  stage-internal `DataKey`s, the 13-step subgraph, and the `feature-input-preflight` fixture (the
+  `reference-preflight` fixture is now the single stage step). The failure representation of each
+  step is unchanged.
+- **Test wiring:** hand-built assemblies in the integration tests now bind the workflow-state
+  reader on the stage, as the composition root does.
+- **Evidence (offline):** request projection across the integration matrix is byte-identical to
+  `q14b3-after` (`diff -rq` empty); 122 of 122 integration scenarios; the unit suite adds nine
+  stage-edge and binding tests (every failing step named, cancellation between each pair, allocation
+  failure in scratch and retained space, exact produced keys, slot behaviour) and the architecture
+  suite four rules with rejected fixtures; `zig build verify` passes (169 of 169 steps, 2,041
+  tests).
+- **Measures, before then after:**
+
+  | Measure | Before | After |
+  | --- | --- | --- |
+  | Input-preparation YAML in `spec.workflow.yaml` | 42-line subgraph, 13 steps (file 1,074 lines) | 1 step (file 1,032 lines) |
+  | Registry entries (`entry(` lines) | 158 | 148 |
+  | `DataKey` members | 186 | 180 |
+  | Input-preparation action files | 13 | 1 |
+  | Fixtures | `feature-input-preflight` plus the preflight steps in two others | one step in `reference-preflight`, one in `reference-ingestion` |
+
+## E2c. `prepare-reference-evidence` and `prepare-reference-tokens` are the third and fourth stage actions (ADR 0031)
+
+**Implemented 12 November 2026** (user: "apply best recommendations" to the open decisions for
+the 15-step `prepare-references` subgraph). Both answers were my recommendation: `compile-naming-policy`
+stays a separate step, and identity assignment keeps one port of its own. The first makes the
+subgraph two stages with the naming step between them, since the grammar step needs its output.
+No behaviour, model request, report, log or state version changes, so no published-output defect
+class is named and no semantic benefit is claimed; offline evidence stands in for a live run
+(choice 7), and a live set was taken anyway (below). **Kept 12 November 2026** (user: "Keeping the
+changes", covering this entry and E2b). The ADR 0031 status
+line, its one-port rule and the design pointers name all four stage actions (user: "action the
+best practice recommendations", 12 November 2026).
+- **Owners:**
+  - `src/actions/reference/prepare_reference_evidence.zig`: eight steps (inventory, validate
+    inventory, capture, decode, validate accounting, assign identities, build chunks, validate
+    chunks); requires `reference_directory` and `feature_directory`, produces
+    `citable_reference_inputs`, `filesystem_read`.
+  - `src/actions/reference/prepare_reference_tokens.zig`: six steps (build grammar, scan
+    literals, assign literals, validate literals, extract facts, assign candidates); requires
+    `compiled_naming_policy`, `valid_toolchain` and `citable_reference_inputs`, produces
+    `path_token_grammar`, `reference_passive_literals` and `structured_token_candidates`, `none`.
+  - Two bindings (`reference_evidence_preparation_workflow`, `reference_token_preparation_workflow`)
+    and two registry entries. Each stage has a closed `Step` enum, a `Diagnostic` slot and a
+    `NodeRuntime` check between steps.
+- **Port rule:** the user's earlier "yes" (12 November 2026) counts the Unicode text services
+  (normalizer, case folder, lexical classifier), all types of one port module, as one port family.
+  The architecture rule counts every `*_port` type in a step's parameters as one port, except that
+  the text services' alias (`text_port`) counts once in all; no other module is exempt, with
+  rejected fixtures for two types of `corpus_port`, `source_port` and `parser_port`. The `execute`
+  rule now rejects the whole words `Input` and `StepInput` (so `operations.Input` is caught and the
+  token stage's `evidence.Inputs` is not). The identity source stays one port in
+  `assignIdentities`, the only step that draws entropy.
+- **Removed:** the 14 actions, their bindings and schemas (`reference_ingestion_workflow.zig`
+  whole, and the stage-internal parts of the evidence, path-token, passive-literal and
+  structured-token binding files), ten stage-internal `DataKey`s, the 48-line subgraph, and the
+  two redundant composed test fixtures (`reference_text_workflow.zig`,
+  `reference_tokens_workflow.zig`): the stage always produces what each of them ended at, so the
+  one `prepared` composition serves all callers. The failure representation of each step is
+  unchanged. `compile-naming-policy` runs as its own step in the Specify graph instead of inside
+  the subgraph.
+- **Tests:** the per-step tests in the ingestion, evidence, path-token, typed-text and
+  structured-token test files call the step functions. The compiler test for reference ingestion
+  drops the mid-chain `core.noop` substitutions, which tested a chain that no longer exists, and
+  keeps the capability, parameter and dataflow rejections against the stage.
+- **Evidence (offline):** request projection across the integration matrix is byte-identical to
+  `q14b3-after` (`diff -rq` empty); 122 of 122 integration scenarios; a new test file covers each
+  stage edge with fake ports (each reachable failing step named, cancellation between each pair,
+  allocation failure in scratch space, the exact produced keys, slot behaviour); the chunk
+  validation and the literal and token steps can fail at the edge only by allocation, since their
+  derived inputs cannot be forged there, and their rejections stay tested as functions.
+  `zig build verify` passes (169 of 169 steps, 2,059 tests).
+- **Live set** (user: "run 3 e2e run per test case, once done perform an evaluation on each"; run
+  directories `2026-11-12T03-04-19Z` to `-23Z`; revision `a120c188`, `build.source.modified` true;
+  3 runs per case; skill `3fe52a92…`; compared with the E2 set): not required by choice 7, taken
+  because the preparation stages run against real adapters and the `compile-naming-policy` step
+  now precedes feature-log activation. In all six runs `references`, `naming` and `tokens`
+  completed `ok`, in that order, before any model call. 5 of 6 published and passed adjudication;
+  the sixth, loan-renewal, ended `workflow_failed` (`RetryLimitExhausted` at the scenario-link
+  choice request `g26-g14-g4-link-choose-request-account`, after three answers with reasoning and
+  no text; a model limitation in the generation phase, long after the stages, so counted as an
+  attempted workload and not repaired). Content-basis counts, lost / weakened / unsupported /
+  contradiction: hello-world 0 / 0 / 0 / 0 in 3 of 3 runs and loan-renewal 0 / 0 / 0 / 0 and
+  0 / 0 / 1 / 0 (AC-001's recording clause, one of two published runs), against 0 / 0 / 0 / 0 and
+  0 / 0 / 2 / 0 in the E2 set. Aggregates 96.43% for four runs and 100% for one. Hello-world: one
+  of three runs added an entity (3 of 3 in the E2 set) and two of three show the quote-mark
+  artefact (none in the E2 set), each costing one point. One hello-world run took one protocol
+  correction (10 calls); every other published run took 9 calls and none a re-send or runaway.
+  Median tokens 12,783 for hello-world and 16,206 and 16,477 for the two published loan-renewal
+  runs (the failed run used 17,916), against 12,768 and 16,500 in the E2 set. Every native delete
+  in the published runs (one each) was helpful. Evaluations: `evaluations/e2e/<run>/`.
+- **Measures, before then after:**
+
+  | Measure | Before | After |
+  | --- | --- | --- |
+  | Reference preparation YAML in `spec.workflow.yaml` | 48-line subgraph, 15 steps (file 1,032 lines) | 3 steps in the main graph (file 994 lines) |
+  | Registry entries (`entry(` lines) | 148 | 136 |
+  | `DataKey` members | 180 | 170 |
+  | Reference preparation action files | 14 | 2 |
+  | Composed test fixtures | 3 variants plus the ingestion fixture | one `prepared` composition plus the ingestion fixture |
+- **Rule:** the Unicode text services are one port family for ADR 0031's one-port rule; any other
+  step that mixes two port modules is rejected.
+
+## E3. Startup and provider bootstrap are ADR 0032 engine routines
+
+**Implemented 12 November 2026** (user: "apply recommendations and implement", after DE3). One
+change covers all three sequences: provider-config, provider bootstrap after selection, and startup
+before selection. No behaviour changes: public error codes, the cancel-versus-fail mapping, the
+services built, the absence of a lock, and nothing registered or selectable are as before. No
+published-output defect class is named and no semantic benefit is claimed; offline evidence
+stands in for a live run (DE3), and no live set was taken. **Not yet kept.** ADR 0032's status
+is "partly implemented" and the design pointers say so; feature logging stays unconverted.
+- **Owners:**
+  - `src/application/startup_routine.zig`: 29 steps in a closed `Step` enum, a routine-owned
+    `Diagnostic` slot, a `Ports` set no step receives, `code(step)` for the public code of each
+    step, and a `NodeRuntime` check before the first step and after each. Its steps take one port
+    each (`config_locator`, `root_inspector`, the workflow `Enumerator` and `Capturer`, the
+    definition `Parser`, the result-schema `Compiler`); the path limits and the registered
+    operation contracts are values. `validateWorkflowInventory` returns `ValidatedInventory` and
+    `validateWorkflowOperations` returns `ValidatedOperations`, which the later steps require.
+    The composition root builds the ports and the services from the routine's validated owners
+    (`runInProjectWithRegistry`); the `Outcome` type lives in `bootstrap_services.zig`.
+  - `src/application/model_provider_bootstrap_routine.zig`: 7 steps, one port (the provider
+    document locator); `not_required` makes no port call. Reached through the runner-owned
+    `model_provider_bootstrap_binding.zig`.
+  - Moved logic, with its tests: `engine_config_decode`, `bootstrap_root_derivation`,
+    `workflow_authority_inventory_build`, `workflow_resource_binding`,
+    `workflow_definition_schema`, `workflow_graph_compilation`, `workflow_graph_validation`,
+    `llm_provider_document_decode`, `llm_provider_registry_build` and
+    `provider_requirement_derivation` (all `src/domain/`).
+- **Removed:** 14 sequencing files (the startup orchestrator, runners, execution state and child
+  bindings; the provider-config and provider-bootstrap orchestrators, runners, child bindings
+  and service), 29 startup and provider actions, 27 `DataKey`s (5 provider, 22 startup; 142
+  remain), and the 11 spy-child tests. `validate-workflow-operation-registry` stays: the workflow
+  selection runner still uses it.
+- **Rules:** the architecture test enforces ADR 0032:291-303 for the two routines: imports only
+  `std`, domain and port modules, no `std.Io`, no `anyopaque`, an entry that only passes port
+  fields on, no step that takes the port set, two ports or an erased parameter, and only
+  `src/composition/`, tests and the provider-bootstrap binding (for its own routine) import a
+  routine, with startup importing no log, lock or transaction module; every `*_routine.zig`
+  under `src/application/` is discovered and held to the routine rules; each rule has rejected
+  fixtures.
+- **Tests:** `src/startup_routine_test.zig` runs the routine against fake ports: port order, each
+  reachable failing step with its code and step, cancellation from a port, cancellation and
+  deadline at every check (one more check than there are steps), an allocation-failure sweep
+  that must leak nothing and report a step whose code matches, the distinct validated types, and
+  the moved step tests. `bootstrap_root_registry_test.zig` carries the registry validator's tests.
+- **Evidence (offline):** request projection across the integration matrix is byte-identical to
+  `q14b3-after` (`diff -rq` empty); integration scenarios pass; `zig build verify` passes (169 of
+  169 steps, 2,060 tests); lint and the architecture tests pass.
+- **Measures, before then after:**
+
+  | Measure | Before | After |
+  | --- | --- | --- |
+  | Sequencing files and lines (startup and provider sequences) | 14 files, 2,157 lines | 2 routine files, 810 lines (594 and 216) |
+  | `anyopaque` lines in the converted sequences | 130 | 2 (the provider-bootstrap binding's; none in either routine; 105 in all of `src/application/`) |
+  | Startup `DataKey`s | 42 | 15 |
+  | Spy-child tests | 11 | 0 |
+  | Files to add one startup step | an action, its runner field and invoke function, a vtable slot, the orchestrator call, the dispatcher function, a spy-table entry, composition wiring | the routine (enum member, step, entry call, `code` arm) and its test; composition only for a new port |
+
+  The routine files do not hold the moved logic: the domain modules above total about 2,400
+  lines, so total lines fall less than the sequencing lines do. The last row is read from the
+  structure, not measured by a counted change.
+- **Open:** feature logging (ADR 0032:152-172); the remaining `anyopaque` lines are the
+  feature-logging, workflow-engine, workflow-pipeline and Specify-invocation bindings.

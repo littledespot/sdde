@@ -69,7 +69,7 @@ test "test.integration.baseline drifted slot controls cannot silently change the
     const captured = try fixture.capture(std.testing.io, a, .cwd(), template);
     const path_policy = try @import("../../src/adapters/filesystem/workspace_path_policy.zig").Resolver.init(std.testing.io, .cwd()).resolve(a);
     try std.testing.expectError(error.FrozenBindingRejected, frozen_inputs.create(a, build, try files.read(std.testing.io, a, .cwd(), paths.protocol), try files.read(std.testing.io, a, .cwd(), paths.cases), template_bytes, try files.read(std.testing.io, a, .cwd(), paths.rubric), captured, current_paths, path_policy));
-    var current = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, captured.config);
+    var current = try @import("../../src/domain/engine_config_decode.zig").decode(a, captured.config);
     defer current.deinit();
     try std.testing.expectEqualStrings("medium", current.value().models.slots.map.get("spec_generation").?.reasoningEffort.?);
     try fixture.verifySources(std.testing.io, a, .cwd(), captured);
@@ -138,7 +138,7 @@ test "test.integration.baseline frozen development projects contain original sou
     const serialized = try std.json.Stringify.valueAlloc(a, frozen, .{});
     const decoded = try frozen_inputs.decode(a, serialized);
     try frozen_inputs.verifySources(std.testing.io, a, .cwd(), decoded);
-    var original_config = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, decoded.inputs.config);
+    var original_config = try @import("../../src/domain/engine_config_decode.zig").decode(a, decoded.inputs.config);
     defer original_config.deinit();
     const with_foreign_reference = try a.alloc(fixture.CapturedFile, decoded.inputs.files.len + 1);
     @memcpy(with_foreign_reference[0..decoded.inputs.files.len], decoded.inputs.files);
@@ -165,7 +165,7 @@ test "test.integration.baseline frozen development projects contain original sou
         const projected = try frozen_inputs.project(a, decoded, try firstTrial(decoded, example.feature_id));
         try std.testing.expectEqualStrings(rubric_bytes, projected.captured.evaluation.rubric_bytes);
         try std.testing.expectEqualStrings(paths.rubric, projected.captured.evaluation.case.rubric);
-        var config = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, projected.captured.config);
+        var config = try @import("../../src/domain/engine_config_decode.zig").decode(a, projected.captured.config);
         defer config.deinit();
         const reference_root = try frozen_inputs.configuredRoot(a, frozen, .references, config.value().paths.references);
         const selected_reference_root = try std.fs.path.join(a, &.{ reference_root.relative_path, projected.selected.reference });
@@ -263,7 +263,7 @@ const Wire = struct {
 
 fn runTrial(a: std.mem.Allocator, parent: std.Io.Dir, frozen: frozen_inputs.Freeze, trial: comparison.Trial, fault: Fault, gate: *dispatch.Gate, facts: *acquisition.Facts) !usize {
     const projected = try frozen_inputs.project(a, frozen, trial);
-    var config = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, projected.captured.config);
+    var config = try @import("../../src/domain/engine_config_decode.zig").decode(a, projected.captured.config);
     defer config.deinit();
     const reference_root = try frozen_inputs.configuredRoot(a, frozen, .references, config.value().paths.references);
     const selected_reference_root = try std.fs.path.join(a, &.{ reference_root.relative_path, projected.selected.reference });

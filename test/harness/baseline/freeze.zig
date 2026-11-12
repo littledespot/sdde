@@ -199,7 +199,7 @@ fn evaluatorSeparation(inputs: fixture.Capture, paths: InputPaths) !void {
 }
 
 pub fn configuredRoot(a: std.mem.Allocator, frozen: Freeze, key: @import("../../../src/domain/bootstrap_roots.zig").PathKey, raw: []const u8) !@import("../../../src/domain/bootstrap_roots.zig").NormalizedConfiguredPath {
-    return (@import("../../../src/actions/bootstrap/validate_configured_root_path_policy.zig").Action{ .policy = frozen.path_policy }).execute(a, key, raw);
+    return @import("../../../src/domain/bootstrap_root_derivation.zig").normalizeRootPath(frozen.path_policy, a, key, raw);
 }
 
 /// Replace only the explicitly selected reference input with source bytes. The
@@ -209,7 +209,7 @@ pub fn project(a: std.mem.Allocator, frozen: Freeze, trial: comparison.Trial) !P
     const example = for (frozen.sources) |value| {
         if (std.mem.eql(u8, value.id, trial.case_id) and std.mem.eql(u8, value.feature_id, trial.feature_id)) break value;
     } else return error.InvalidBaselineTrial;
-    var config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, frozen.inputs.config);
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, frozen.inputs.config);
     defer config.deinit();
     const references = (try configuredRoot(a, frozen, .references, config.value().paths.references)).relative_path;
     const target_root = try std.fs.path.join(a, &.{ references, example.feature_id });

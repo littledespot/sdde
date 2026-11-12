@@ -49,7 +49,7 @@ test "every declared field schema offers exactly its permitted insertion alterna
         }
     }
     try std.testing.expect(!fields.validSchema(canonical.root(), &.{}));
-    try std.testing.expectError(error.InvalidModelResultSchema, fields.project(a, canonical.root(), &.{.{ .field = .spec_title, .path = &.{.{ .property = "foreign" }} }}, true));
+    try std.testing.expectError(error.InvalidModelResultSchema, fields.project(a, canonical.root(), &.{.{ .field = .spec_goal, .path = &.{.{ .property = "foreign" }} }}, true));
 }
 
 test "native model declarations distinguish shared text types and narrowed replacement context" {
@@ -91,8 +91,8 @@ test "descriptive insertions reject identically in native composition and stored
     var ids: reference.IdSource = .{};
     const inputs = try reference.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "source.md", "An unrelated source-backed meaning.\n"));
     const value: []const text.BusinessSegment = &.{ .{ .literal = .{ .value = "A supported meaning with " } }, .{ .exact_copy = .{ .claim_id = .{ .ordinal = 1 } } } };
-    var context: text.StoredContext = .{ .inputs = inputs, .passive = .{ .records = &.{}, .occurrences = &.{} }, .scopes = &.{.{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id }}, .field = .spec_title, .exact_copies = &.{value[1].exact_copy} };
-    for ([_]policy.Field{ .spec_title, .spec_goal, .spec_entity_basis, .assumption, .clarification_question }) |field| {
+    var context: text.StoredContext = .{ .inputs = inputs, .passive = .{ .records = &.{}, .occurrences = &.{} }, .scopes = &.{.{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id }}, .field = .spec_goal, .exact_copies = &.{value[1].exact_copy} };
+    for ([_]policy.Field{ .spec_goal, .spec_entity_basis, .assumption, .clarification_question }) |field| {
         try std.testing.expectEqual(.prohibited_exact, text.composition(text.BusinessSegment, field, value).?.reason);
         context.field = field;
         try std.testing.expectError(error.InvalidTypedText, text.stored(text.BusinessSegment, a, context, value));

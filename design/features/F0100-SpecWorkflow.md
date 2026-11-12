@@ -22,8 +22,8 @@ primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0036](../decisions/0036-source-quoted-claims.md),
 [0038](../decisions/0038-record-claims-and-scenario-coverage.md),
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
-[0043](../decisions/0043-model-facing-exact-text-names.md) and
-[0046](../decisions/0046-complete-dispositions-at-admission.md). Not yet implemented:
+[0043](../decisions/0043-model-facing-exact-text-names.md),
+[0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md). Not yet implemented:
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md),
 [ADR 0033](../decisions/0033-generic-repair-operations.md) and most of
 [ADR 0030](../decisions/0030-engine-owned-model-request.md);
@@ -136,13 +136,14 @@ sdde <workflow-id> --feature <feature-directory> --reference <relative-selector>
   or registration write is required.
 - An existing directory is not a collision requiring approval.
 
-The existing reusable reference operations remain:
-
-| Contract | Input → output |
-| --- | --- |
-| `normalize-reference-selector` | Validated reference input → normalized candidate |
-| `validate-reference-selector` | Normalized candidate → relative selector |
-| `inspect-reference-directory` | Relative selector → read-only directory observation |
+[ADR 0031](../decisions/0031-stage-actions.md) makes input preparation one stage action,
+`prepare-inputs` ([13.2](../contracts/actions/13-02-invocation-stage-gates.md#prepareinputsaction-prepare-inputs)).
+Its internal steps, in order, are the feature directory's normalization, validation and
+inspection; the reference selector's normalization (validated input → normalized
+candidate), validation (normalized candidate → relative selector) and inspection (relative
+selector → read-only directory observation); artifact-path resolution; the prior
+workflow-state capture and parse; and the clarification state and forms' capture, parse and
+validation. None is registered or placed in YAML.
 
 - The shared ADR 0007 adapter owns NFC.
 - Reference policy retains its 4,096-byte raw/normalized limit, 255-byte segment limit,
@@ -152,9 +153,8 @@ The existing reusable reference operations remain:
   symlinks, requires a readable directory, and grants no write capability.
 - Reference inspection does not read or reconcile the corpus.
 
-`specify-invocation` requires both inputs. `normalize-feature-directory`,
-`validate-feature-directory` and `inspect-feature-directory` reuse shared path
-policy and the runner/value envelope. Inspection carries only `feature-read`;
+`specify-invocation` requires both inputs. The feature steps reuse shared path
+policy and the runner/value envelope. Feature inspection carries only `feature-read`;
 `core.directory-read@1` permits feature/reference inspection. Absent targets are
 accepted without creation; archive targets, aliases and symlinks reject.
 
@@ -172,14 +172,11 @@ The shared artifact-path owner resolves the selected feature's `spec.md`,
 `<paths.workflows>/features/<feature-directory>/`. These are derived paths,
 not configurable filenames, an ownership registry or write permission.
 
-Five registered operations compose through ordinary YAML:
-`resolve-feature-artifact-paths`, `capture-clarification-inputs`,
-`parse-clarification-state`, `validate-clarification-state` and
-`validate-clarification-forms`. Only capture carries `feature-input-read`;
-`core.feature-input-read@1` explicitly permits that capability alongside
-feature/reference inspection; the inspection-only `core.directory-read@1` does not.
-The executable test definition is
-[`feature-input-preflight.workflow.yaml`](../../src/test_fixtures/feature-input-preflight.workflow.yaml),
+The `prepare-inputs` stage resolves the paths and captures and validates the clarification
+inputs. Its binding carries `feature-input-read`; `core.feature-input-read@1` explicitly
+permits that capability alongside feature/reference inspection; the inspection-only
+`core.directory-read@1` does not. The executable test definition is
+[`reference-preflight.workflow.yaml`](../../src/test_fixtures/reference-preflight.workflow.yaml),
 not the complete Specify workflow.
 
 - The single native persisted schema is
@@ -220,10 +217,10 @@ protection, which applies even when acceptance is blocked.
 
 ### 3.3 Read-only Markdown ingestion
 
-- Five registered operations cover the physical source boundary:
-  `inventory-reference-sources`, `validate-reference-inventory`,
-  `capture-reference-sources`, `decode-reference-markdown` and
-  `validate-reference-accounting`.
+- The physical source boundary is the first five steps of the `prepare-reference-evidence`
+  stage action: inventory, inventory validation, capture, Markdown decoding and accounting
+  validation ([13.3](../contracts/actions/13-03-references.md) owns the stages and their
+  order). None of the steps is registered or placed in YAML.
 - They use the configured `paths.references` root and independent selector.
 - Every encountered entry, including hidden files, directories and non-followed
   symlinks, is accounted; unsupported, unreadable, changed, malformed or over-limit
@@ -245,21 +242,22 @@ work; this initial reader does not claim support for arbitrary reference bytes.
 
 ### 3.4 Citable reference inputs
 
-Four registered operations extend that boundary:
+The evidence stage's last three steps extend that boundary, and one registered operation
+validates citations:
 
-| Operation | Contract |
+| Step or operation | Contract |
 | --- | --- |
-| `assign-reference-identities` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
-| `build-reference-chunks` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
-| `validate-reference-chunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
+| `assignIdentities` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
+| `buildChunks` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
+| `validateChunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
 | `validate-source-citations` | Citable inputs and engine-scoped typed proposals → validated source citations. |
 
 - The [reference identity owner](../../src/domain/reference_identity.zig) supplies the
   same state/chunk types used by model-request owners.
 - Each corpus receives a fresh 128-bit system-random namespace, formatted as
   `reference-<hex>`; entropy failure fails the operation.
-- Only identity assignment has `reference-identity`, explicitly allowed by
-  `core.reference-ingestion@1`.
+- Only the evidence stage has `reference-identity`, explicitly allowed by
+  `core.reference-ingestion@1`, and only its `assignIdentities` step draws on it.
 - There is no persisted ID counter, reservation, hash or journal.
 - Files keep normalized source order; source, state-global block and chunk ordinals are
   deterministic within the state.
@@ -347,13 +345,13 @@ contracts follow Design §7.1. Source discovery uses §11's `SupersetPathTokenGr
 compiled from resolved naming/extension rules, reserved/manifest names and reference
 basenames. It does not classify ordinary prose as an operational reference.
 
-The initial native boundary is implemented through three pure registered
-operations:
+The initial native boundary is implemented through two pure registered operations and one
+step of the token stage:
 
-| Operation | Required inputs → output |
+| Operation or step | Required inputs → output |
 | --- | --- |
 | `compile-naming-policy` | `valid_toolchain` → `compiled_naming_policy` |
-| `build-superset-path-token-grammar` | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
+| `buildGrammar` (`prepare-reference-tokens`) | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
 | `scan-path-tokens` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
 
 - [F0003 §3.5](F0003-ToolChainService.md#35-registered-lexical-naming-rules) owns the
@@ -387,13 +385,14 @@ operations:
 
 ### 3.7 Typed reference text and source-backed display literals
 
-Three pure YAML operations prepare the execution-local literal registry:
+Three pure steps of the `prepare-reference-tokens` stage prepare the execution-local literal
+registry:
 
-| Operation | Required inputs → output |
+| Step | Required inputs → output |
 | --- | --- |
-| `scan-reference-passive-literals` | Current grammar/toolchain and citable inputs → ordered source-name/block-span candidates |
-| `assign-passive-literal-identities` | Candidates → source-ordered IDs, deduplicated by `(kind, NFC bytes)` |
-| `validate-reference-passive-literals` | Assigned candidates and current inputs → `reference_passive_literals` |
+| `scanLiterals` | Current grammar/toolchain and citable inputs → ordered source-name/block-span candidates |
+| `assignLiterals` | Candidates → source-ordered IDs, deduplicated by `(kind, NFC bytes)` |
+| `validateLiterals` | Assigned candidates and current inputs → `reference_passive_literals` |
 
 - Validation reuses the shared detector to prove complete exact origins, values and
   allocations.
@@ -441,10 +440,10 @@ file/network access, output write, clarification change or completion transition
 - The source reader and fact extractor share this parser; reader boundaries do not split
   a value, and an over-limit value fails explicitly.
 
-| Operation | Contract |
+| Step or operation | Contract |
 | --- | --- |
-| `extract-structured-reference-facts` | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
-| `assign-structured-token-candidate-identities` | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
+| `extractFacts` (`prepare-reference-tokens`) | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
+| `assignCandidates` (`prepare-reference-tokens`) | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
 | `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
 | `assign-preserved-token-identities` | Validated decisions → state-local token ordinals in source order; irrelevant/blocked candidates allocate none. |
 | `build-preserved-token-claims` | Token assignments → prepared deterministic claims alongside unchanged model claims, before common citation validation, claim-ID assignment and ledger construction. |
@@ -673,10 +672,10 @@ specification-quality oracle. `src/domain/required_authority.zig` owns the
 closed requiredness/ownership policies, current support checks and outcomes.
 `specification_authority.zig` contributes the schema-derived Specify projection.
 
-- The source-readiness projection includes the display name, description, primary
-  goal, acceptance criteria, functional requirements, scenario coverage and
-  evidence-backed entity decision, but not the engine-composed primary story (ADR 0047
-  Decision 5); every accounted reference signal/conflict; and each exact-preservation
+- The source-readiness projection includes the description, primary goal, acceptance
+  criteria, functional requirements, scenario coverage and evidence-backed entity decision,
+  but not the engine-derived primary story or display name (ADRs 0047 Decision 5 and 0048);
+  every accounted reference signal/conflict; and each exact-preservation
   obligation. The opt-in source-preservation projection
   ([ADR 0021](../decisions/0021-optional-source-preservation-review.md)) holds one
   obligation per captured source.
@@ -931,10 +930,10 @@ validators:
   exact compiled extraction-contract comparison evidence, reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v24`). Neither variant holds review evidence.
+  registry identity (`specification-state/v25`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
-- `capture-workflow-state` and `parse-specification-state` validate this singleton
+- The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton
   before generation; reruns reuse only the canonical record-ID counters and the prior
   principle registry's identities, increment the publication revision and regenerate the
   candidate from current inputs.
@@ -1044,13 +1043,13 @@ then applicable sections in this exact relative order:
 - Branch, creation date, draft status and original command metadata are not fields in
   the current content contract and are not fabricated or inferred from the feature
   title.
-- The feature directory remains the identity; the human title is reference-grounded.
+- The feature directory remains the identity; the title is the sources' level-1 heading (ADR 0048).
 
 ### 5.2 Typed content mapping
 
 | Section | Native content field / record kind | Purpose |
 | --- | --- | --- |
-| Document H1 | `display_name` | Reference-grounded human feature name. |
+| Document H1 | `display_name` | The sources' level-1 heading as written, taken natively ([ADR 0048](../decisions/0048-engine-derived-specification-title.md)). |
 | Primary User Story | `primary_user_story` | The source's business claims, quoted in source order and joined natively ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). |
 | Acceptance Criteria | `acceptance_criterion` / `AC-*` | Testable initial state, action, and expected outcome. |
 | User-Visible Outcomes | `user_visible_outcome` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
@@ -1086,8 +1085,8 @@ continuation encoding.
 
 The hierarchy does not authorize invented filler:
 
-- `displayName`, `primaryUserStory`, and every contract-required record must be
-  supported by current reference or resolved clarification authority;
+- `primaryUserStory` and every contract-required record must be supported by current
+  reference or resolved clarification authority; `displayName` is the sources' heading (ADR 0048);
 - acceptance criteria and functional requirements each require supported
   records before successful publication; their headings remain mandatory;
 - other empty collections render no heading, bullet, placeholder or synthetic
@@ -1192,17 +1191,17 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
   - Generation that completes without a mandatory record family ends `invalid`
     (`check-specification-generation-progress`); no model evidence supplies it.
-  - Natively, ADR 0038's one-statement-record and scenario rules apply in each records
-    response ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
-    Decisions 2 and 5). No model compares the generated candidate with its sources; the
+  - Natively, ADR 0038's one-statement-record rule applies to each records response and its
+    scenario rule to each batch the native deletes leave ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+    Decisions 2, 3 and 5). No model compares the generated candidate with its sources; the
     human who reviews `spec.md` judges scenario meaning (ADR 0023).
   - Missing behavior cannot be satisfied by citation presence or a title.
   - Canonical-state parsing rejects missing mandatory families through the same
     specification required-family contract.
 
-- Native proposals contain the attributed title, `records` with one closed
-  content-kind variant and provenance per record, and the entity decision/basis. The
-  engine composes the attributed story (ADR 0047).
+- Native proposals contain `records` with one closed content-kind variant and
+  provenance per record, and the entity decision/basis. The engine composes the
+  attributed story (ADR 0047) and takes the title from the sources (ADR 0048).
 - They contain no generated IDs, paths, questions or completion fields.
 - Ordinary business values use the existing typed-text shape; canonical exact copies
   are engine-derived occurrence handles (ADR 0020), never a second copy of source bytes.
@@ -1220,7 +1219,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 ### 5.7 Generation, coverage and repair
 
 - The native generation candidate is a closed content/clarification/inconclusive union.
-- Content units are a feature brief (title, description, primary goal), the
+- Content units are a feature brief (description, primary goal), the
   engine-composed primary story (ADR 0047), feature-wide entity applicability plus
   entity records, or a source-group batch of non-entity records (§17.3). Each entity independently selects its support; each
   non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
@@ -1371,11 +1370,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   acceptance.
 - Protocol corrections remain separate provider attempts.
 
-- A records response whose behaviour-statement claim no acceptance criterion or edge
-  case names is rejected at admission as `uncovered_member`, and one with a
-  non-requirement statement naming both taken and untaken claims as `shared_member`. Each
-  takes the request's existing protocol
-  correction, which names the governing kinds; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). Coverage counts only the claims
+- A records response with a non-requirement statement naming both taken and untaken
+  claims is rejected at admission as `shared_member`, whose protocol correction names the
+  governing kinds. A behaviour-statement claim no acceptance criterion or edge case names,
+  on the batch the native deletes leave, is a `scenario_coverage` unit defect repaired by
+  one acceptance criterion whose claim and group the engine fixes; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). Coverage counts only the claims
   each record names, so a claim no record names maps only through another target.
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or

@@ -36,7 +36,7 @@ fn command(init: std.process.Init) !bool {
     defer run.close(io);
     const output = try reports.Output.reserve(io, run.dir);
     defer output.close(io);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
     report.build = .{
         .source = (try @import("../contracts.zig").decode(@import("../../../build/provenance.zig").Bundle, allocator, @embedFile("build_provenance"))).identity,
         .zig_version = @import("builtin").zig_version_string,
@@ -86,7 +86,7 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     report.evaluation_case_id = captured.evaluation.case.id;
     try @import("../output.zig").write(io, run, "inputs.json", try std.json.Stringify.valueAlloc(allocator, captured, .{ .whitespace = .indent_2 }));
     try fixture.materialize(io, project, captured);
-    var generation_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, captured.config);
+    var generation_config = try @import("../../../src/domain/engine_config_decode.zig").decode(allocator, captured.config);
     defer generation_config.deinit();
     try @import("../model_cost_policy.zig").requireConfiguredSlots(&generation_config.value().models);
     // Adjudication applies the rubric threshold, so a rubric without one

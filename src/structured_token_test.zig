@@ -445,7 +445,7 @@ test "candidate assignment rejects forged omitted stale and changed source facts
     defer arena.deinit();
     const allocator = arena.allocator();
     const inputs = try inputsFor(allocator, "`exact` ordinary");
-    const facts = try fixture.extract.execute(allocator, inputs);
+    const facts = try fixture.stage.extractFacts(allocator, inputs);
     for (0..5) |case| {
         var tampered = facts;
         var fact = facts.entries[0];
@@ -463,7 +463,7 @@ test "candidate assignment rejects forged omitted stale and changed source facts
             4 => tampered.entries = &.{ fact, fact },
             else => unreachable,
         }
-        try std.testing.expectError(error.InvalidStructuredTokens, fixture.identify.execute(allocator, inputs, tampered));
+        try std.testing.expectError(error.InvalidStructuredTokens, fixture.stage.assignCandidates(allocator, inputs, tampered));
     }
 }
 

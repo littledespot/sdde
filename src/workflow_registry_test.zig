@@ -1,10 +1,5 @@
 const std = @import("std");
-const enumerate_inventory = @import("actions/workflow/enumerate_workflow_authority_resources.zig");
-const normalize_inventory = @import("actions/workflow/normalize_workflow_authority_entries.zig");
-const build_inventory_accounts = @import("actions/workflow/build_workflow_authority_entry_accounts.zig");
-const build_inventory = @import("actions/workflow/build_workflow_authority_inventory.zig");
-const validate_inventory = @import("actions/workflow/validate_workflow_authority_inventory.zig");
-const capture_definitions = @import("actions/workflow/capture_workflow_definitions.zig");
+const startup = @import("application/startup_routine.zig");
 const registry_service = @import("application/workflow_definition_registry_service.zig");
 const bootstrap_registry = @import("domain/bootstrap_root_registry.zig");
 const bootstrap_roots = @import("domain/bootstrap_roots.zig");
@@ -22,11 +17,11 @@ fn runInventoryStages(
     layout: inventory.Layout,
     runtime: pipeline.NodeRuntime,
 ) !inventory.Inventory {
-    const raw = try (enumerate_inventory.Action{ .source = source }).execute(allocator, layout, runtime);
-    const normalized = try (normalize_inventory.Action{}).execute(raw);
-    const accounts = try (build_inventory_accounts.Action{}).execute(allocator, normalized);
-    const candidate = (build_inventory.Action{}).execute(layout, normalized, accounts);
-    return (validate_inventory.Action{}).execute(candidate);
+    const raw = try startup.steps.enumerateWorkflowResources(source, allocator, layout, runtime);
+    const normalized = try startup.steps.normalizeWorkflowEntries(raw);
+    const accounts = try startup.steps.buildWorkflowAccounts(allocator, normalized);
+    const candidate = startup.steps.buildWorkflowInventory(layout, normalized, accounts);
+    return (try startup.steps.validateWorkflowInventory(candidate)).value;
 }
 
 test "workflow inventory sorts and classifies definitions and resource candidates" {
@@ -96,7 +91,7 @@ test "definition capture budget fails before filesystem reads" {
     const result = try runInventoryStages(arena.allocator(), fake.enumerator(), .{ .capability = capability }, .{});
     try std.testing.expectError(
         error.WorkflowDefinitionReadError,
-        (capture_definitions.Action{ .source = fake.capturer() }).execute(arena.allocator(), result, .{}),
+        startup.steps.captureWorkflows(fake.capturer(), arena.allocator(), .{ .value = result }, .{}),
     );
     try std.testing.expectEqual(@as(usize, 0), fake.capture_calls);
 }

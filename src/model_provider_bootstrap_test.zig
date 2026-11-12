@@ -1,12 +1,8 @@
 const std = @import("std");
-const decode_toolkit = @import("actions/config/decode_sddtoolkit_config.zig");
-const compile = @import("actions/workflow/compile_workflow_graphs.zig");
-const derive = @import("actions/provider/derive_provider_requirement.zig");
-const locate_provider_config = @import("actions/provider/locate_llm_provider_config.zig");
-const read_provider_config = @import("actions/provider/read_llm_provider_config.zig");
-const provider_bootstrap = @import("application/model_provider_bootstrap_orchestrator.zig");
-const provider_bootstrap_runner = @import("application/model_provider_bootstrap_runner.zig");
-const provider_config_runner = @import("application/llm_provider_config_runner.zig");
+const decode_toolkit = @import("domain/engine_config_decode.zig");
+const compile = @import("domain/workflow_graph_compilation.zig");
+const routine = @import("application/model_provider_bootstrap_routine.zig");
+const derivation = @import("domain/provider_requirement_derivation.zig");
 const bootstrap_error = @import("domain/bootstrap_error.zig");
 const bootstrap_root_registry = @import("domain/bootstrap_root_registry.zig");
 const bootstrap_roots = @import("domain/bootstrap_roots.zig");
@@ -52,100 +48,162 @@ test "compiled binding requirements activate bootstrap without granting provider
     );
 }
 
-test "conditional runner skips F0008 for a capability-free selected workflow" {
+test "routine skips the provider document for a capability-free selected workflow" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const graph = try compileOne(arena.allocator(), &operation_registry, "test.noop");
-    const selected = selectedWorkflow(&graph);
-
-    var toolkit = try decodeToolkit(model_config);
-    defer toolkit.deinit();
-    const root_owner = try testRootRegistry(std.testing.allocator);
-    defer bootstrap_root_registry.deinitOwner(root_owner);
-    var source: FakeProviderConfigSource = .{ .bytes = "not json" };
-    var config_child_runner = provider_config_runner.Runner.init(
-        std.testing.allocator,
-        .{},
-        bootstrap_root_registry.registry(root_owner).llmProviderConfig(),
-        locate_provider_config.Action{ .locator = source.locator() },
-        read_provider_config.Action{},
-    );
-    defer config_child_runner.deinit();
-    var runner = provider_bootstrap_runner.Runner.init(
-        std.testing.allocator,
-        .{},
-        &selected,
-        &toolkit.value().models,
-        toolkit.value().temperatures(),
-        &config_child_runner,
-        &compiled_provider_contracts,
-    );
-    defer runner.deinit();
-    var outcome = provider_bootstrap.run(runner.childBindings());
+    var world: World = .{ .bytes = "not json" };
+    try world.init(&graph, model_config);
+    defer world.deinit();
+    var outcome = world.run(.{});
     defer outcome.deinit();
 
     try std.testing.expect(outcome == .not_required);
-    try std.testing.expectEqual(@as(usize, 0), source.locate_calls);
-    try std.testing.expectEqual(@as(usize, 0), source.read_calls);
+    try std.testing.expectEqual(@as(usize, 0), world.source.locate_calls);
+    try std.testing.expectEqual(@as(usize, 0), world.source.read_calls);
+    // Only the requirement was derived: the step the run stopped at is the first and only one.
+    try std.testing.expectEqual(@as(?routine.Step, null), world.diagnostic.step);
 }
 
-test "conditional runner captures once and publishes one immutable run authority" {
+test "routine captures once and publishes one immutable run authority" {
     for ([_]*const operations.Registry{ &operation_registry, &binding_only_registry }) |registered| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
         const graph = try compileOne(arena.allocator(), registered, "test.model");
-        const selected = selectedWorkflow(&graph);
-
-        var toolkit = try decodeToolkit(model_config);
-        defer toolkit.deinit();
-        const root_owner = try testRootRegistry(std.testing.allocator);
-        defer bootstrap_root_registry.deinitOwner(root_owner);
-        var source: FakeProviderConfigSource = .{ .bytes = provider_document };
-        var config_child_runner = provider_config_runner.Runner.init(
-            std.testing.allocator,
-            .{},
-            bootstrap_root_registry.registry(root_owner).llmProviderConfig(),
-            locate_provider_config.Action{ .locator = source.locator() },
-            read_provider_config.Action{},
-        );
-        defer config_child_runner.deinit();
-        var runner = provider_bootstrap_runner.Runner.init(
-            std.testing.allocator,
-            .{},
-            &selected,
-            &toolkit.value().models,
-            toolkit.value().temperatures(),
-            &config_child_runner,
-            &compiled_provider_contracts,
-        );
-        defer runner.deinit();
-        var outcome = provider_bootstrap.run(runner.childBindings());
+        var world: World = .{ .bytes = provider_document };
+        try world.init(&graph, model_config);
+        defer world.deinit();
+        var outcome = world.run(.{});
         defer outcome.deinit();
 
         try std.testing.expect(outcome == .ready);
-        try std.testing.expectEqual(@as(usize, 1), source.locate_calls);
-        try std.testing.expectEqual(@as(usize, 1), source.read_calls);
-        source.bytes = "changed after capture";
+        try std.testing.expectEqual(@as(usize, 1), world.source.locate_calls);
+        try std.testing.expectEqual(@as(usize, 1), world.source.read_calls);
+        world.source.bytes = "changed after capture";
 
-        const entry = outcome.ready.registry().resolve(
-            provider_id,
-            identity.ModelId.parse("model-a").?,
-        ).?;
-        try std.testing.expect(outcome.ready.allowlist().resolveSlot(identity.ModelSlotId.parse("implementation").?).?.registry_entry_id.eql(
-            entry.id,
-        ));
-        try std.testing.expectEqual(@as(usize, 1), source.read_calls);
+        const registry = @import("domain/llm_provider_registry.zig").registry(outcome.ready.provider_registry);
+        const entry = registry.resolve(provider_id, identity.ModelId.parse("model-a").?).?;
+        const allowed = @import("domain/repository_model_allowlist.zig").allowlist(outcome.ready.allowlist);
+        try std.testing.expect(allowed.resolveSlot(identity.ModelSlotId.parse("implementation").?).?.registry_entry_id.eql(entry.id));
+        try std.testing.expectEqual(@as(usize, 1), world.source.read_calls);
     }
 }
 
-test "conditional runner maps each provider preparation boundary exactly" {
+test "routine maps each provider preparation boundary exactly and names the failing step" {
     inline for (.{
-        .{ .document = "{", .toolkit = model_config, .failure = bootstrap_error.PublicError.LLM_PROVIDER_CONFIG_PARSE_ERROR },
-        .{ .document = unsupported_provider_document, .toolkit = model_config, .failure = bootstrap_error.PublicError.LLM_PROVIDER_REGISTRY_INVALID },
-        .{ .document = provider_document, .toolkit = missing_model_config, .failure = bootstrap_error.PublicError.LLM_PROVIDER_MODEL_BINDING_INVALID },
+        .{ .document = "{", .toolkit = model_config, .failure = bootstrap_error.PublicError.LLM_PROVIDER_CONFIG_PARSE_ERROR, .step = routine.Step.decode_config },
+        .{ .document = unsupported_provider_document, .toolkit = model_config, .failure = bootstrap_error.PublicError.LLM_PROVIDER_REGISTRY_INVALID, .step = routine.Step.build_registry },
+        .{ .document = provider_document, .toolkit = missing_model_config, .failure = bootstrap_error.PublicError.LLM_PROVIDER_MODEL_BINDING_INVALID, .step = routine.Step.validate_allowlist },
     }) |scenario| {
-        try expectPreparationFailure(scenario.document, scenario.toolkit, scenario.failure);
+        try expectPreparationFailure(scenario.document, scenario.toolkit, scenario.failure, scenario.step);
     }
+}
+
+test "routine maps provider document location and read failures to the read code" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const graph = try compileOne(arena.allocator(), &operation_registry, "test.model");
+    // An oversized document fails the read step; an unlocatable one fails the locate step.
+    var oversized: World = .{ .bytes = &([_]u8{'a'} ** (provider_config.max_bytes + 1)) };
+    try oversized.init(&graph, model_config);
+    defer oversized.deinit();
+    var read_outcome = oversized.run(.{});
+    defer read_outcome.deinit();
+    try std.testing.expectEqual(bootstrap_error.PublicError.LLM_PROVIDER_CONFIG_READ_ERROR, read_outcome.failed);
+    try std.testing.expectEqual(@as(?routine.Step, .read_config), oversized.diagnostic.step);
+
+    var unlocatable: World = .{ .bytes = provider_document, .fail_locate = true };
+    try unlocatable.init(&graph, model_config);
+    defer unlocatable.deinit();
+    var locate_outcome = unlocatable.run(.{});
+    defer locate_outcome.deinit();
+    try std.testing.expectEqual(bootstrap_error.PublicError.LLM_PROVIDER_CONFIG_READ_ERROR, locate_outcome.failed);
+    try std.testing.expectEqual(@as(?routine.Step, .locate_config), unlocatable.diagnostic.step);
+    try std.testing.expectEqual(@as(usize, 0), unlocatable.source.read_calls);
+}
+
+/// The checkpoints of a full run, in order: before the first step, then after each of the seven.
+const checkpoint_steps = [_]routine.Step{ .derive_requirement, .derive_requirement, .locate_config, .read_config, .decode_config, .build_registry, .validate_registry, .validate_allowlist };
+
+test "routine checks cancellation and deadline between every pair of steps and keeps today's codes" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const graph = try compileOne(arena.allocator(), &operation_registry, "test.model");
+    for (checkpoint_steps, 1..) |step, checkpoint| {
+        for ([_]pipeline.RuntimeStatus{ .cancelled, .deadline_exhausted }) |stop| {
+            var countdown: Countdown = .{ .stop_at = checkpoint, .stop = stop };
+            var world: World = .{ .bytes = provider_document };
+            try world.init(&graph, model_config);
+            defer world.deinit();
+            var outcome = world.run(countdown.runtime());
+            defer outcome.deinit();
+            switch (stop) {
+                .cancelled => try std.testing.expect(outcome == .cancelled),
+                .deadline_exhausted => try std.testing.expectEqual(codeOf(step), outcome.failed),
+                .active => unreachable,
+            }
+            try std.testing.expectEqual(@as(?routine.Step, step), world.diagnostic.step);
+            try std.testing.expectEqual(checkpoint, countdown.checks);
+            // The port steps that finished before the stop ran once each and none after it.
+            try std.testing.expectEqual(@as(usize, if (checkpoint >= 3) 1 else 0), world.source.locate_calls);
+            try std.testing.expectEqual(@as(usize, if (checkpoint >= 4) 1 else 0), world.source.read_calls);
+        }
+    }
+}
+
+fn codeOf(step: routine.Step) bootstrap_error.PublicError {
+    return switch (step) {
+        .derive_requirement, .build_registry, .validate_registry => .LLM_PROVIDER_REGISTRY_INVALID,
+        .locate_config, .read_config => .LLM_PROVIDER_CONFIG_READ_ERROR,
+        .decode_config => .LLM_PROVIDER_CONFIG_PARSE_ERROR,
+        .validate_allowlist => .LLM_PROVIDER_MODEL_BINDING_INVALID,
+    };
+}
+
+test "an explicit cancellation of the port steps stays cancellation and any other port failure is the read code" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const graph = try compileOne(arena.allocator(), &operation_registry, "test.model");
+    var cancelled: World = .{ .bytes = provider_document, .locate_error = error.Cancelled };
+    try cancelled.init(&graph, model_config);
+    defer cancelled.deinit();
+    var cancelled_outcome = cancelled.run(.{});
+    defer cancelled_outcome.deinit();
+    try std.testing.expect(cancelled_outcome == .cancelled);
+    try std.testing.expectEqual(@as(?routine.Step, .locate_config), cancelled.diagnostic.step);
+
+    var late: World = .{ .bytes = provider_document, .locate_error = error.DeadlineExhausted };
+    try late.init(&graph, model_config);
+    defer late.deinit();
+    var late_outcome = late.run(.{});
+    defer late_outcome.deinit();
+    try std.testing.expectEqual(bootstrap_error.PublicError.LLM_PROVIDER_CONFIG_READ_ERROR, late_outcome.failed);
+}
+
+test "every allocation failure in a full run yields a failure that names a step, or the ready authority, and leaks nothing" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const graph = try compileOne(arena.allocator(), &operation_registry, "test.model");
+    var fail_index: usize = 0;
+    var failures: usize = 0;
+    while (true) : (fail_index += 1) {
+        var failing: std.testing.FailingAllocator = .init(std.testing.allocator, .{ .fail_index = fail_index });
+        var world: World = .{ .bytes = provider_document };
+        try world.init(&graph, model_config);
+        defer world.deinit();
+        world.allocator = failing.allocator();
+        var outcome = world.run(.{});
+        defer outcome.deinit();
+        switch (outcome) {
+            .ready => break,
+            .failed => {
+                failures += 1;
+                try std.testing.expect(world.diagnostic.step != null);
+            },
+            .not_required, .cancelled => return error.TestUnexpectedResult,
+        }
+    }
+    try std.testing.expect(failures > 0);
 }
 
 fn compileOne(
@@ -184,7 +242,9 @@ fn compileOne(
         .resource_ordinals = &.{},
     };
     var result_schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const graphs = try (compile.Action{ .registry = registry, .result_schema_compiler = result_schema_parser.compiler() }).execute(
+    const graphs = try compile.compile(
+        registry,
+        result_schema_parser.compiler(),
         allocator,
         definitions,
         empty_inventory,
@@ -196,7 +256,7 @@ fn compileOne(
 
 fn deriveGraph(graph: *const compilation.CompiledWorkflow) requirement.Requirement {
     const selected = selectedWorkflow(graph);
-    return (derive.Action{}).execute(&selected);
+    return derivation.derive(&selected);
 }
 
 fn selectedWorkflow(graph: *const compilation.CompiledWorkflow) execution.SelectedWorkflow {
@@ -210,48 +270,91 @@ fn expectPreparationFailure(
     document_bytes: []const u8,
     toolkit_bytes: []const u8,
     expected: bootstrap_error.PublicError,
+    step: routine.Step,
 ) !void {
     for ([_]*const operations.Registry{ &operation_registry, &binding_only_registry }) |registered| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
         const graph = try compileOne(arena.allocator(), registered, "test.model");
-        const selected = selectedWorkflow(&graph);
-        var toolkit = try decodeToolkit(toolkit_bytes);
-        defer toolkit.deinit();
-        const root_owner = try testRootRegistry(std.testing.allocator);
-        defer bootstrap_root_registry.deinitOwner(root_owner);
-        var source: FakeProviderConfigSource = .{ .bytes = document_bytes };
-        var config_child_runner = provider_config_runner.Runner.init(
-            std.testing.allocator,
-            .{},
-            bootstrap_root_registry.registry(root_owner).llmProviderConfig(),
-            locate_provider_config.Action{ .locator = source.locator() },
-            read_provider_config.Action{},
-        );
-        defer config_child_runner.deinit();
-        var runner = provider_bootstrap_runner.Runner.init(
-            std.testing.allocator,
-            .{},
-            &selected,
-            &toolkit.value().models,
-            toolkit.value().temperatures(),
-            &config_child_runner,
-            &compiled_provider_contracts,
-        );
-        defer runner.deinit();
-        var outcome = provider_bootstrap.run(runner.childBindings());
+        var world: World = .{ .bytes = document_bytes };
+        try world.init(&graph, toolkit_bytes);
+        defer world.deinit();
+        var outcome = world.run(.{});
         defer outcome.deinit();
 
         try std.testing.expectEqual(expected, outcome.failed);
+        try std.testing.expectEqual(@as(?routine.Step, step), world.diagnostic.step);
     }
 }
 
 fn decodeToolkit(bytes: []const u8) !@import("domain/config.zig").Owned {
-    return (decode_toolkit.Action{}).execute(std.testing.allocator, bytes);
+    return decode_toolkit.decode(std.testing.allocator, bytes);
 }
+
+/// Reports a stop from its `stop_at`-th status check on.
+const Countdown = struct {
+    checks: usize = 0,
+    stop_at: usize = std.math.maxInt(usize),
+    stop: pipeline.RuntimeStatus = .cancelled,
+
+    fn runtime(self: *Countdown) pipeline.NodeRuntime {
+        return .{ .context = self, .status_fn = status };
+    }
+
+    fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
+        const self: *Countdown = @ptrCast(@alignCast(context.?));
+        self.checks += 1;
+        return if (self.checks >= self.stop_at) self.stop else .active;
+    }
+};
+
+/// Everything one run needs: the fake port, the decoded configuration, the selected workflow and
+/// the capability of a validated root registry.
+const World = struct {
+    bytes: []const u8,
+    fail_locate: bool = false,
+    locate_error: ?provider_source.Error = null,
+    source: FakeProviderConfigSource = undefined,
+    toolkit: @import("domain/config.zig").Owned = undefined,
+    root_owner: *bootstrap_root_registry.Owner = undefined,
+    selected: execution.SelectedWorkflow = undefined,
+    allocator: std.mem.Allocator = std.testing.allocator,
+    diagnostic: routine.Diagnostic = .{},
+
+    fn init(self: *World, graph: *const compilation.CompiledWorkflow, toolkit_bytes: []const u8) !void {
+        self.source = .{ .bytes = self.bytes, .fail_locate = self.fail_locate, .locate_error = self.locate_error };
+        self.toolkit = try decodeToolkit(toolkit_bytes);
+        errdefer self.toolkit.deinit();
+        self.root_owner = try testRootRegistry(std.testing.allocator);
+        self.selected = selectedWorkflow(graph);
+    }
+
+    fn deinit(self: *World) void {
+        bootstrap_root_registry.deinitOwner(self.root_owner);
+        self.toolkit.deinit();
+    }
+
+    fn run(self: *World, runtime: pipeline.NodeRuntime) routine.Outcome {
+        return routine.run(
+            .{ .locator = self.source.locator() },
+            self.allocator,
+            runtime,
+            &self.diagnostic,
+            .{
+                .selected = &self.selected,
+                .models = &self.toolkit.value().models,
+                .temperatures = self.toolkit.value().temperatures(),
+                .capability = bootstrap_root_registry.registry(self.root_owner).llmProviderConfig(),
+                .registered = &compiled_provider_contracts,
+            },
+        );
+    }
+};
 
 const FakeProviderConfigSource = struct {
     bytes: []const u8,
+    fail_locate: bool = false,
+    locate_error: ?provider_source.Error = null,
     locate_calls: usize = 0,
     read_calls: usize = 0,
 
@@ -267,6 +370,8 @@ const FakeProviderConfigSource = struct {
     ) provider_source.Error!provider_source.ExactFile {
         const self: *FakeProviderConfigSource = @ptrCast(@alignCast(context));
         self.locate_calls += 1;
+        if (self.locate_error) |failure| return failure;
+        if (self.fail_locate) return error.LLMProviderConfigReadFailure;
         return .{
             .identity = .{ .filesystem_id = 1, .file_id = 2 },
             .context = self,

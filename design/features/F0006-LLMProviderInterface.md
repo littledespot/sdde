@@ -4,8 +4,8 @@
 provider/model registration, Bedrock and Anthropic configuration, concrete
 authorization/inference wiring, native-schema projection and shared
 fake/real-adapter conformance; [F0007](F0007-AWSBedrockProvider.md) records the
-Bedrock implementation. The ADR 0032 routine (Amendment 2) and the ADR 0030
-`request-model` step (Amendment 13) are not yet implemented.
+Bedrock implementation. The ADR 0032 provider-bootstrap routine (Amendment 2) is
+implemented; the ADR 0030 `request-model` step (Amendment 13) is not yet implemented.
 
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md) owns request handoff;
 the [packaging test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml) shows inference,
@@ -95,16 +95,16 @@ requirements; lifecycle facts remain local to the abandoned or completed executi
    F0008 captures the file, when requested
    ([F0004](F0004-BootstrapRootRegistryService.md#4-path-and-existence-contract);
    [§5](#5-conditional-bootstrap-and-change-handling)).
-2. The fixed, capability-free `ModelProviderBootstrapOrchestrator` runs after
-   selected-workflow compilation and before execution, using runner-owned bindings;
-   this explicitly amends fixed startup-graph authority
+2. The fixed provider-bootstrap engine routine runs after
+   selected-workflow compilation and before execution; this explicitly amends fixed
+   startup authority
    ([§5](#5-conditional-bootstrap-and-change-handling);
    [§9](#9-action-and-orchestration-ownership)). Under
-   [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented) it becomes a
-   typed engine routine at the same point, reached through one runner-owned binding. It
+   [ADR 0032](../decisions/0032-engine-routines.md) it is a
+   typed engine routine at that point, reached through one runner-owned binding. It
    keeps its single typed-requirement branch, outcomes and public codes; each step takes
    only the port it uses, values pass as typed arguments instead of runner-applied
-   deltas, and fake-port routine tests replace the spy-binding checks in §§9 and 12–13.
+   deltas, and fake-port routine tests cover §§9 and 12–13.
 3. The closed document, provider-specific configuration union and its
    byte/collection/nesting/identity limits are normative
    ([§3](#3-exact-sddprovidersjson-contract)).
@@ -225,7 +225,7 @@ ProviderModelDefinition {
 - The decoder rejects malformed transport, duplicate keys, wrong common kinds, and
   unknown root/provider/model members as `LLM_PROVIDER_CONFIG_PARSE_ERROR`.
 
-- `BuildLLMProviderRegistryAction` then resolves each provider discriminator and decodes
+- The `build_registry` step then resolves each provider discriminator and decodes
   its raw `config` through exactly one registered closed variant, producing a validated
   `ProviderModelDefinition`.
 - An unregistered provider, unknown provider-specific field, or wrong provider-specific
@@ -325,11 +325,11 @@ Registry ownership is separated as follows:
 
 | Owner | Sole responsibility |
 | --- | --- |
-| `BuildLLMProviderRegistryAction` | Join the decoded document to the fixed provider discriminator registry and compiler-registered model contracts, producing one owned candidate registry. |
-| `ValidateLLMProviderRegistryAction` | Prove closed variants, exact joins, uniqueness, resource totals, target policy, model capability, and registered provider discriminator availability for the entire candidate. |
-| Pipeline runner | Apply the validated delta and materialize the run-owned immutable `LLMProviderRegistryService`; destroy the candidate on every rejected path. |
+| `build_registry` step | Join the decoded document to the fixed provider discriminator registry and compiler-registered model contracts, producing one owned candidate registry. |
+| `validate_registry` step | Prove closed variants, exact joins, uniqueness, resource totals, target policy, model capability, and registered provider discriminator availability for the entire candidate. |
+| Provider-bootstrap binding | Materialize the run-owned immutable `LLMProviderRegistryService` from the routine's validated registry; the routine destroys the candidate on every rejected path. |
 | `LLMProviderRegistryService` | Expose borrowed immutable lookup by exact `(provider, model)` tuple; it does not read files, mutate entries, choose a workflow operation or slot, or perform I/O. |
-| `ValidateRepositoryModelAllowlistAction` | Join the complete F0001 `models.slots` map to the validated catalogue and produce immutable slot-to-entry references only when every tuple resolves exactly once. |
+| `validate_allowlist` step | Join the complete F0001 `models.slots` map to the validated catalogue and produce immutable slot-to-entry references only when every tuple resolves exactly once. |
 | `ValidatedRepositoryModelAllowlist` | Be the sole repository model-allowlist authority. It owns slot identity, catalogue-entry identity, and validated slot options; it copies no provider configuration, contract facts, adapter, client, or capability. |
 | Composition root | Construct the fixed provider/model contract registry, concrete provider adapters, the private exhaustive dispatcher, and their narrow dependencies; inject the common port only into provider-operation actions. |
 
@@ -403,7 +403,7 @@ LLMProviderDispatch = union(enum) {
   content.
 
 - After the validated workflow registry has resolved the selected graph,
-  `DeriveProviderRequirementAction` derives whether any step has compiled model
+  the `derive_requirement` step derives whether any step has compiled model
   requirements or the exact compiler-owned `model-provider` capability.
 - It reads no workflow/node name, parameter, policy allowance alone, configuration,
   slot, or provider content.
@@ -411,8 +411,8 @@ LLMProviderDispatch = union(enum) {
   field; it can receive it only through an accepted registered node contract under an
   allowing workflow policy.
 
-The fixed `ModelProviderBootstrapOrchestrator` then branches only on that typed
-outcome through runner-owned child bindings:
+The fixed provider-bootstrap routine then branches only on that typed
+outcome:
 
 - If the selected compiled graph has neither model-binding requirements nor
   the exact `model-provider` capability, file existence probing, opening, reading,
@@ -420,7 +420,7 @@ outcome through runner-owned child bindings:
   file is not observed and has no effect on that run.
 - If it has either requirement, F0008 must successfully capture the exact configured
   provider file, and the complete document must build and validate before
-  `ValidateRepositoryModelAllowlistAction` joins the complete `models.slots` map to that
+  the `validate_allowlist` step joins the complete `models.slots` map to that
   catalogue.
 
   - Both the complete catalogue and complete allowlist must validate before the first
@@ -428,11 +428,11 @@ outcome through runner-owned child bindings:
   - Missing, malformed, unsupported, partially valid, or catalogue-missing slot input
     blocks run preparation; no partial allowlist is published.
 
-- The orchestrator performs no filesystem, parsing, registry, state, logging, or
-  provider work itself.
+- The routine's entry function only sequences its steps; each step takes only the port it
+  uses, and none performs state, logging, or provider work.
 - ADR 0004 accepts this fixed run-preparation placement and the narrow expansion beyond
-  the startup graph; the runner does not infer or sequence it by convention.
-- The runner invokes F0008 once, then applies the decoder, registry builder,
+  startup; the runner does not infer or sequence it by convention.
+- The routine reads F0008 once, then runs the decoder, registry builder,
   registry validator, and complete allowlist validator through their existing contracts.
 
 - The engine invocation runner invokes one composition-supplied
@@ -442,7 +442,7 @@ outcome through runner-owned child bindings:
   provider-bootstrap diagnostic; `cancelled` returns cancellation.
 - A `ready` result remains owned until selected-workflow execution returns.
 - The binding exposes no filesystem port; the composition assembly alone constructs the
-  F0008 adapter and both runners.
+  F0008 adapter and the routine's port.
 
 - F0008's owned capture is the only provider-document read for the engine invocation.
 - The validated registry and allowlist derived from it remain authoritative until that
@@ -936,18 +936,18 @@ undone; it does not make any candidate workflow output successful.
 
 | Owner | Sole responsibility |
 | --- | --- |
-| `DeriveProviderRequirementAction` | Return `required` when the selected compiled graph contains typed model-binding requirements or the exact compiler-owned `model-provider` capability; otherwise return `not_required`. |
-| `LocateLLMProviderConfigAction` (F0008) | Open only the exact F0004-authorized no-follow regular file. |
-| `ReadLLMProviderConfigAction` (F0008) | Capture that already-opened file completely under its fixed bound. |
+| `derive_requirement` step | Return `required` when the selected compiled graph contains typed model-binding requirements or the exact compiler-owned `model-provider` capability; otherwise return `not_required`. |
+| `locate_config` step (F0008) | Open only the exact F0004-authorized no-follow regular file. |
+| `read_config` step (F0008) | Capture that already-opened file completely under its fixed bound. |
 | `LLMProviderConfigService` (F0008) | Own the complete capture and expose immutable untrusted bytes without I/O or parsing. |
-| `DecodeLLMProviderConfigAction` | Decode strict JSON and the exact common container into bounded untrusted raw identities/config objects; grant no provider authority. |
-| `BuildLLMProviderRegistryAction` | Resolve discriminators, decode each closed provider config variant, and join entries to model contracts. |
-| `ValidateLLMProviderRegistryAction` | Validate the whole candidate and total resource accounting. |
-| `ValidateRepositoryModelAllowlistAction` | Join the entire F0001 `models.slots` map to the validated provider catalogue and emit only immutable slot-to-entry references; reject the whole allowlist if any tuple is absent or ambiguous. |
-| `ModelProviderBootstrapRunner` | Invoke the fixed child bindings, apply their pipeline deltas, own every intermediate, and map each rejected boundary to its existing provider-bootstrap diagnostic. It delegates provider-file location/read sequencing to F0008 rather than duplicating it. |
+| `decode_config` step | Decode strict JSON and the exact common container into bounded untrusted raw identities/config objects; grant no provider authority. |
+| `build_registry` step | Resolve discriminators, decode each closed provider config variant, and join entries to model contracts. |
+| `validate_registry` step | Validate the whole candidate and total resource accounting. |
+| `validate_allowlist` step | Join the entire F0001 `models.slots` map to the validated provider catalogue and emit only immutable slot-to-entry references; reject the whole allowlist if any tuple is absent or ambiguous. |
+| Provider-bootstrap routine | Run those steps in order, own every intermediate, and map each rejected boundary to its existing provider-bootstrap diagnostic. It delegates provider-file location/read sequencing to F0008 rather than duplicating it. |
 | `ModelProviderBootstrapServices` | Keep the validated registry and repository allowlist alive as one immutable invocation-owned authority and destroy the allowlist before its referenced registry. |
 | `ModelProviderBootstrapBinding` | Give the invocation runner one typed post-selection child boundary without exposing filesystem or provider capabilities. |
-| Provider-bootstrap composition assembly | Construct the concrete F0008 adapter and config/provider runners, then invoke the fixed orchestrator; perform no selection or branching. |
+| Provider-bootstrap composition assembly | Construct the concrete F0008 adapter and the routine's port, then invoke the fixed routine; perform no selection or branching. |
 | Engine invocation runner | Invoke provider preparation after exact selection, preserve its typed outcome, retain `ready` services through workflow execution, and make workflow execution unreachable after failure or cancellation. |
 | `ResolveProviderModelBindingAction` | Resolve one compiled workflow operation's YAML-declared slot through `ValidatedRepositoryModelAllowlist` to its registry entry and supported controls; never accept a raw provider/model tuple or hidden route as authority. |
 | `BuildImmutableUnitOwnerIdAction` | Validate a generic compiled-step owner or the required closed SDD unit-owner tuple; generic ownership never supplies SDD repair/review/clarification authority. |
@@ -955,8 +955,8 @@ undone; it does not make any candidate workflow output successful.
 | Request identity, accounting, lifecycle, invocation and admission actions | `AssignModelRequestIdAction`, `ValidateModelRequestBindingAction`, `BuildModelRequestAction`, `AdvanceModelAttemptAccountingAction`, `CheckWorkflowTokenBudgetAction`, `ReconcileWorkflowTokenUsageAction`, `AdvanceModelRequestLifecycleAction`, `AdvanceProviderOperationLifecycleAction`, `PrepareProviderOperationAuthorizationAction`, `InvokeModelAction`, `ValidateProviderInvocationObservationAction`, `DecodeModelEnvelopeAction` and `ValidateModelPayloadSchemaAction`: each one's responsibility is its [§13.4](../contracts/actions/13-04-model.md) entry, with the F0006 rules in §§6–8. |
 | Pipeline runner | Invoke bound children; own the per-execution token ledger, private authorization-lease table; validate/apply deltas, lifecycle compare-and-swap transitions, explicit operation-local retry accounting, actual token-usage reconciliation and pre-call budget guards, deadlines, and cleanup; choose no workflow branch. |
 
-- `ModelProviderBootstrapOrchestrator` coordinates only the requirement and
-  provider-file child bindings described in Section 5.
+- The provider-bootstrap routine runs only the requirement and
+  provider-file steps described in Section 5.
 - It is engine preparation, not workflow behavior.
 - Provider retry, fallback, and protocol-retry branches must each be visible as YAML
   steps and transitions; their registered generic operations perform one bounded
@@ -1028,7 +1028,7 @@ F0006 does not:
 1. Accepted authority names `LLMProviderInterface` as the sole
    provider-neutral model port; no alternate alias remains.
 2. The bootstrap root registry reserves the exact `paths.providers` path
-   unconditionally; the fixed run-preparation orchestrator conditionally asks F0008 to
+   unconditionally; the fixed run-preparation routine conditionally asks F0008 to
    load only that `.sddproviders.json` file, and no provider reads it independently.
 
    - Full host/target collision proof keeps that file role distinct from engine config

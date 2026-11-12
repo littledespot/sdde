@@ -27,20 +27,6 @@
               "from": "model_output",
               "path": [
                 {
-                  "property": "title"
-                },
-                {
-                  "property": "value"
-                }
-              ],
-              "field": "spec_title",
-              "expected": "prohibited_exact",
-              "value_sha256": "e09f134d4cd6db29aea2d88701c41aa071b432bfa296758ef5b72bdcde405de9"
-            },
-            {
-              "from": "model_output",
-              "path": [
-                {
                   "property": "description"
                 },
                 {
@@ -538,20 +524,6 @@
               "from": "model_output",
               "path": [
                 {
-                  "property": "title"
-                },
-                {
-                  "property": "value"
-                }
-              ],
-              "field": "spec_title",
-              "expected": "embedded_insertion_syntax",
-              "value_sha256": "d843619ca80b409ac88d96b6e5a9673da9649719475d4ef0d6ba160f043d0ddc"
-            },
-            {
-              "from": "model_output",
-              "path": [
-                {
                   "property": "description"
                 },
                 {
@@ -828,20 +800,6 @@
           "construct_exact_copy": false,
           "expected_wire_syntax_rejection": false,
           "values": [
-            {
-              "from": "model_output",
-              "path": [
-                {
-                  "property": "title"
-                },
-                {
-                  "property": "value"
-                }
-              ],
-              "field": "spec_title",
-              "expected": "prohibited_exact",
-              "value_sha256": "dab83e754ba29cc3fb2086e4555a7754c2a6c037530994696ed02548901ba6cb"
-            },
             {
               "from": "model_output",
               "path": [
@@ -1283,20 +1241,6 @@
               "from": "model_output",
               "path": [
                 {
-                  "property": "title"
-                },
-                {
-                  "property": "value"
-                }
-              ],
-              "field": "spec_title",
-              "expected": "admitted",
-              "value_sha256": "2da0ba56f3151cb50d3aa096f32337799aed66aed96f0bcc0135a4a81dfe8aee"
-            },
-            {
-              "from": "model_output",
-              "path": [
-                {
                   "property": "description"
                 },
                 {
@@ -1676,20 +1620,6 @@
               "from": "model_output",
               "path": [
                 {
-                  "property": "title"
-                },
-                {
-                  "property": "value"
-                }
-              ],
-              "field": "spec_title",
-              "expected": "prohibited_exact",
-              "value_sha256": "e09f134d4cd6db29aea2d88701c41aa071b432bfa296758ef5b72bdcde405de9"
-            },
-            {
-              "from": "model_output",
-              "path": [
-                {
                   "property": "description"
                 },
                 {
@@ -1730,19 +1660,7 @@
           "context_sha256": "eda751b1db6207b65d4e7d70135be65b75b53f0d881c5846e2157dbc474f0681",
           "construct_exact_copy": true,
           "expected_wire_syntax_rejection": false,
-          "values": [
-            {
-              "from": "model_output",
-              "path": [
-                {
-                  "property": "value"
-                }
-              ],
-              "field": "spec_title",
-              "expected": "prohibited_exact",
-              "value_sha256": "e09f134d4cd6db29aea2d88701c41aa071b432bfa296758ef5b72bdcde405de9"
-            }
-          ],
+          "values": [],
           "request": "{\"system\":[{\"text\":\"{\\n  \\\"business_value\\\": \\\"Write ordinary prose as a string. For exact-copy or reference insertions, use {\\\\\\\"fragments\\\\\\\":[text or typed insertions]}; fragments concatenate exactly as written, so strings include their own spaces and punctuation. Each relationship is one complete value in the relationships collection. Fulfil the assigned field purpose and preserve source-backed conditions and obligations.\\\",\\n  \\\"exact_copy\\\": \\\"When reproducing a supplied preserved_tokens literal, insert an exact_copy object instead of typing the literal inside a string. Put any surrounding prose in separate string fragments. Include claim_id only when the selected schema requires it.\\\",\\n  \\\"references\\\": \\\"Reference objects insert supplied display values; they do not explain their use or authorize operations.\\\",\\n  \\\"sources\\\": \\\"Original sources establish meaning, conditions and how exact values are used; code samples remain context. When signal_ids are requested, select only supplied groups that support the field purpose; several may jointly support it. Availability is not support. For record authoring, source_assignment.requirements are this batch's duties. context_requirements and prior drafts help interpret them, not replace them with another group's duties. Context cannot change fixed associations or authorized repair evidence. Do not invent decisions.\\\",\\n  \\\"clarification\\\": \\\"A missing user decision: state known facts, the choice, its impact and the expected answer. Missing prewritten sections are not user decisions.\\\",\\n  \\\"inconclusive\\\": \\\"Unresolved interpretation of the supplied evidence.\\\"\\n}\\n\"},{\"text\":\"Return only the selected replacement, matching the supplied schema and evidence.\\nTarget and rule describe the task; do not return their metadata.\\nPreserve business meaning.\\n\"},{\"text\":\"Return exactly one JSON object matching the supplied schema. No Markdown fences or surrounding text.\"},{\"text\":\"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"value\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"value\\\"],\\\"additionalProperties\\\":false}\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"{\\\"input\\\":{\\\"text_fields\\\":[{\\\"field\\\":\\\"clarification_question\\\",\\\"prose\\\":\\\"required\\\",\\\"exact_copy\\\":\\\"incidental\\\",\\\"passive\\\":\\\"incidental\\\",\\\"source\\\":\\\"prohibited\\\",\\\"explanation\\\":\\\"Supply nonblank prose for this field's declared meaning or behavior. Typed insertions may supplement that prose but cannot replace it.\\\"},{\\\"field\\\":\\\"spec_title\\\",\\\"prose\\\":\\\"required\\\",\\\"exact_copy\\\":\\\"incidental\\\",\\\"passive\\\":\\\"incidental\\\",\\\"source\\\":\\\"prohibited\\\",\\\"explanation\\\":\\\"Supply nonblank prose for this field's declared meaning or behavior. Typed insertions may supplement that prose but cannot replace it.\\\"},{\\\"field\\\":\\\"spec_description\\\",\\\"prose\\\":\\\"required\\\",\\\"exact_copy\\\":\\\"obligation_bearing\\\",\\\"passive\\\":\\\"incidental\\\",\\\"source\\\":\\\"prohibited\\\",\\\"explanation\\\":\\\"Supply nonblank prose for this field's declared meaning or behavior. Typed insertions may supplement that prose but cannot replace it.\\\"},{\\\"field\\\":\\\"spec_goal\\\",\\\"prose\\\":\\\"required\\\",\\\"exact_copy\\\":\\\"incidental\\\",\\\"passive\\\":\\\"incidental\\\",\\\"source\\\":\\\"prohibited\\\",\\\"explanation\\\":\\\"Supply nonblank prose for this field's declared meaning or behavior. Typed insertions may supplement that prose but cannot replace it.\\\"}],\\\"source_assignment\\\":{\\\"title\\\":{},\\\"description\\\":{},\\\"primary_goal\\\":{},\\\"kind\\\":\\\"brief\\\"},\\\"source_groups\\\":[{\\\"signal_id\\\":1,\\\"requirements\\\":[{\\\"claim_id\\\":1,\\\"kind\\\":\\\"business\\\",\\\"meaning\\\":\\\"The application must start successfully, display the text `Hello, World!`, and output the current date and time in UTC when started.\\\",\\\"source_id\\\":1}]},{\\\"signal_id\\\":2,\\\"requirements\\\":[{\\\"claim_id\\\":2,\\\"kind\\\":\\\"preserved_token\\\",\\\"meaning\\\":\\\"Hello, World!\\\",\\\"source_id\\\":1}]}],\\\"context_requirements\\\":[],\\\"preserved_tokens\\\":[{\\\"claim_id\\\":2,\\\"value\\\":\\\"Hello, World!\\\",\\\"source_id\\\":1}],\\\"sources\\\":[{\\\"id\\\":1,\\\"text\\\":\\\"# Hello World Application\\\\n\\\\n## Requirements\\\\n\\\\n- The application must start successfully.\\\\n- When started, the application must display `Hello, World!`.\\\\n- Must also output date and time in UTC\\\\n\\\"}],\\\"passive_literals\\\":[],\\\"task\\\":\\\"A concise name derived from the feature's source-backed purpose. The source need not supply a title.\\\",\\\"provenance\\\":{\\\"claim_ids\\\":[1,2],\\\"clarification_response_ids\\\":[]}},\\\"repair\\\":{\\\"operation\\\":\\\"replace\\\",\\\"target\\\":{\\\"subject\\\":{\\\"title\\\":{},\\\"kind\\\":\\\"title\\\"},\\\"field\\\":{\\\"value\\\":{},\\\"kind\\\":\\\"value\\\"},\\\"kind\\\":\\\"value\\\"},\\\"rule\\\":{\\\"requirement\\\":\\\"Supply nonblank prose for this field's declared meaning or behavior. Typed insertions may supplement that prose but cannot replace it.\\\",\\\"text_issue\\\":{\\\"reason\\\":\\\"reference_only\\\",\\\"first_node\\\":0,\\\"last_node\\\":0,\\\"field\\\":\\\"spec_title\\\"}},\\\"current_value\\\":{\\\"value\\\":{\\\"fragments\\\":[{\\\"claim_id\\\":2,\\\"kind\\\":\\\"exact_copy\\\"}]}}}}\"}]}],\"additionalModelRequestFields\":{\"reasoning_effort\":\"low\"},\"inferenceConfig\":{\"temperature\":0.1},\"outputConfig\":{\"textFormat\":{\"type\":\"json_schema\",\"structure\":{\"jsonSchema\":{\"name\":\"sdde_model_envelope_v1\",\"schema\":\"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"value\\\":{\\\"anyOf\\\":[{\\\"type\\\":\\\"string\\\"},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"anyOf\\\":[{\\\"type\\\":\\\"string\\\"},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"value\\\"],\\\"additionalProperties\\\":false}\"}}}}}",
           "request_sha256": "e62762cbaffb53828265ab2ac14a9f2dc47c42b5c8bddec42ed2701894ec9a9d",
           "response": "{\"metrics\":{\"latencyMs\":792},\"output\":{\"message\":{\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"We need to replace spec_title with nonblank prose. Use exact_copy of claim 2? spec_title requires nonblank prose. We can use exact_copy of preserved token? But spec_title is title of spec. We can use exact_copy of claim 2? claim 2 is preserved_token \\\"Hello, World!\\\". So title could be that. Provide fragments: exact_copy claim_id 2. No surrounding prose. So value fragments array with one object.\"}}},{\"text\":\"{\\\"{ \\\"value\\\": { \\\"fragments\\\": [ { \\\"kind\\\": \\\"exact_copy\\\" } ] } }\"}],\"role\":\"assistant\"}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":1127,\"outputTokens\":125,\"serverToolUsage\":{},\"totalTokens\":1252}}",
@@ -1772,20 +1690,6 @@
           "construct_exact_copy": true,
           "expected_wire_syntax_rejection": true,
           "values": [
-            {
-              "from": "model_output",
-              "path": [
-                {
-                  "property": "title"
-                },
-                {
-                  "property": "value"
-                }
-              ],
-              "field": "spec_title",
-              "expected": "admitted",
-              "value_sha256": "8f4cc5363da8db58e226c0ae0b24d7469454e3af2f0cc16d9fc23a4c468e03d5"
-            },
             {
               "from": "model_output",
               "path": [
@@ -1831,20 +1735,6 @@
           "construct_exact_copy": true,
           "expected_wire_syntax_rejection": false,
           "values": [
-            {
-              "from": "model_output",
-              "path": [
-                {
-                  "property": "title"
-                },
-                {
-                  "property": "value"
-                }
-              ],
-              "field": "spec_title",
-              "expected": "admitted",
-              "value_sha256": "8f4cc5363da8db58e226c0ae0b24d7469454e3af2f0cc16d9fc23a4c468e03d5"
-            },
             {
               "from": "model_output",
               "path": [
@@ -2120,10 +2010,10 @@
     "runs": 7,
     "captures": 32,
     "wire_syntax_rejected_responses": 11,
-    "values": 86,
+    "values": 78,
     "reference_only": 13,
-    "prohibited_exact": 5,
-    "embedded_insertion_syntax": 20,
-    "admitted": 48
+    "prohibited_exact": 1,
+    "embedded_insertion_syntax": 19,
+    "admitted": 45
   }
 }

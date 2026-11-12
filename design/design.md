@@ -47,7 +47,7 @@ The design has eight defining properties:
    [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet implemented),
    the stages of one model request are kernel work behind one YAML-selected
    `request-model` step, not workflow operations. Under
-   [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), the internal
+   [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions), the internal
    steps of a stage action are functions, not workflow operations; the stage action
    itself is addressable.
 2. **Ordered SDD suite:** one feature flows through `specify`, `plan`, `tasks`,
@@ -56,7 +56,7 @@ The design has eight defining properties:
 3. **Deterministic shell around probabilistic work:** argument parsing, feature identity, paths, filenames, artifact structure, identifiers, traceability, dependency graphs, writes, commands, task state, and stage gates are engine-owned.
 4. **Preset-controlled project operations:** every model-proposed project path is classified and checked against the selected development-environment preset, such as React, Node, Java, or .NET, before it can be recorded in a plan, emitted as a task, or written during implementation.
 5. **Atomic repair:** a failed candidate is repaired at the smallest independently replaceable field, record, section, task, path, or code operation. Unrelated valid output is retained. The repaired candidate is never committed until all applicable validators pass.
-6. **Actions and orchestrators:** actions have one responsibility and a common typed contract. They do not coordinate other components. Orchestrators contain actions and/or other orchestrators, but perform no filesystem, LLM, parsing, validation, rendering, or command work themselves. Under [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), a stage action's one responsibility may be a deterministic sequence of internal steps that routes no outcome; each step is a single-responsibility function, and the ADR lists the limits. Under [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), fixed engine sequences are typed engine routines, a third category beside actions and orchestrators.
+6. **Actions and orchestrators:** actions have one responsibility and a common typed contract. They do not coordinate other components. Orchestrators contain actions and/or other orchestrators, but perform no filesystem, LLM, parsing, validation, rendering, or command work themselves. Under [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions), a stage action's one responsibility may be a deterministic sequence of internal steps that routes no outcome; each step is a single-responsibility function, and the ADR lists the limits. Under [ADR 0032](decisions/0032-engine-routines.md) (implemented for startup and provider bootstrap; feature logging not yet), fixed engine sequences are typed engine routines, a third category beside actions and orchestrators.
 7. **Closed authority reconciliation:** every datum or decision required by a workflow contract resolves to exactly one current supported authority, an explicitly authorized `not_applicable`/exception outcome, or a clarification owned by the earliest responsible stage. Missing, ambiguous, conflicting, multiple, stale, or unsupported authority never becomes a warning, default, approximation, or downstream local fix.
 8. **Native Zig distribution:** the engine is implemented in Zig and packaged as a native executable. It has no Node.js runtime or Node SEA dependency; JavaScript/TypeScript and Node remain target-project technologies governed through presets.
 
@@ -70,7 +70,7 @@ The resulting boundary is:
   enforcement, policy, facts, identifiers, paths, artifact locations,
   rendering, side effects, validation, hard ceilings, diagnostics, and
   completion evidence.
-- **The LLM owns:** understanding arbitrary reference material, extracting intent, writing business-facing requirements, making justified design choices, decomposing work, and generating or repairing code. The primary user story is not LLM-owned: the engine joins the source's quoted business claims ([ADR 0047](decisions/0047-engine-composed-primary-story.md)).
+- **The LLM owns:** understanding arbitrary reference material, extracting intent, writing business-facing requirements, making justified design choices, decomposing work, and generating or repairing code. The primary user story is not LLM-owned: the engine joins the source's quoted business claims ([ADR 0047](decisions/0047-engine-composed-primary-story.md)). Nor is the specification title: the engine takes the sources' level-1 heading ([ADR 0048](decisions/0048-engine-derived-specification-title.md)).
 - **Executable evidence owns:** syntax, build, lint, test, and other preset-defined checks. An LLM assertion never substitutes for executable evidence.
 
 ---
@@ -86,7 +86,7 @@ engine fixes them:
 | Workflow selection | `sdde <workflowId> ...` resolves exactly one validated `WorkflowId` with no default or filename inference. The compiled workflow's YAML-named invocation operation produces its run context. |
 | SDD sequence | `specify -> plan -> tasks -> implement` is enforced by those workflows' predecessor gates, not an engine-wide role list. |
 | Specify launch | `--feature <feature-directory>` and `--reference <relative-selector>` are independent and both required; neither is inferred from business prose. Every specification has one non-empty selector beneath `paths.references`; there is no reference-free mode. Missing or invalid reference input blocks before activation, logging, model calls or writes. |
-| Reference precedence | Every decoded reference artifact is an authoritative peer within the feature-intent domain. `README.md` may organize them but has no precedence. Conflicts become blocking questions. |
+| Reference precedence | Every decoded reference artifact is an authoritative peer within the feature-intent domain. `README.md` may organize them but has no precedence. Conflicts become blocking questions; sources whose level-1 title headings differ block instead ([ADR 0048](decisions/0048-engine-derived-specification-title.md)). |
 | Artifact paths | The engine assigns `spec.md`, `plan.md`, `tasks.md` and every other canonical artifact location. |
 | Editability | `spec.md` is the only user-editable stage output. `clarify/SNN.md`, `PNN.md` and `TNN.md` accept edits only in their status/answer regions. `reference-context.md`, plan/design views and `tasks.md` are read-only projections. |
 | User validation | Plan views require explicit approval before Tasks; the tasks view requires approval before Implement. Rejection supplies feedback through the engine. |
@@ -108,7 +108,7 @@ engine fixes them:
   execution, and the initial four-workflow SDD suite host-enforced.
 - Allow a project to add a workflow composed from existing registered operation,
   invocation, policy, and state contracts without rebuilding the engine. Under
-  [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), the internal
+  [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions), the internal
   steps of a stage action are not composable on their own; a different combination
   of them needs a new stage action and a rebuild.
 - Keep workflow YAML concise while making every workflow operation, resource,
@@ -147,8 +147,8 @@ engine fixes them:
 5. A stage cannot commit any output until all of its blocking deterministic validators pass.
 6. A repair can modify only the repair unit selected by the engine.
 7. A repaired candidate receives impacted validation followed by a full validation pass before commit.
-8. An action performs one responsibility and never invokes an action or orchestrator. A stage action's one responsibility is its whole internal-step sequence ([ADR 0031](decisions/0031-stage-actions.md), not yet implemented); those steps are functions, not actions.
-9. An orchestrator coordinates child nodes and performs no domain or infrastructure operation itself. Under [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), a fixed engine sequence becomes an engine routine, not an orchestrator, when its conversion lands. It does that work through typed functions, each with only the port it uses. Only the callers the ADR names reach it: the composition root, a runner-owned child binding, or, for logging, the existing logging lifecycle owners.
+8. An action performs one responsibility and never invokes an action or orchestrator. A stage action's one responsibility is its whole internal-step sequence ([ADR 0031](decisions/0031-stage-actions.md)); those steps are functions, not actions.
+9. An orchestrator coordinates child nodes and performs no domain or infrastructure operation itself. Under [ADR 0032](decisions/0032-engine-routines.md) (implemented for startup and provider bootstrap; feature logging not yet), a fixed engine sequence is an engine routine, not an orchestrator, once converted. It does that work through typed functions, each with only the port it uses. Only the callers the ADR names reach it: the composition root, a runner-owned child binding, or, for logging, the existing logging lifecycle owners.
 10. Task completion is an engine-validated candidate fact published only with successful completion of the whole workflow and its required evidence. No task commits independently; the model cannot request `[X]` directly.
 11. Unsupported or unreadable reference files are never silently skipped.
 12. Persistent artifact paths are repository-relative and normalized.
@@ -173,18 +173,18 @@ engine fixes them:
     compiled graph selected by an exactly resolved `WorkflowId`; it contains no
     workflow-specific branching and cannot bypass runner invocation or delta
     validation.
-27. The composition root assembles one fixed engine-startup graph so workflow
-    definitions can be loaded and compiled, plus the fixed capability-free
-    `ModelProviderBootstrapOrchestrator` that conditionally prepares provider
+27. The composition root runs one fixed engine-startup routine so workflow
+    definitions can be loaded and compiled, plus the fixed
+    provider-bootstrap routine that conditionally prepares provider
     authority after exact workflow selection. Neither mechanism is
     project-authored, registered as a runnable workflow, or extensible through
     `paths.workflows`; the workflow compiler remains the sole constructor of
     project-workflow graph descriptors. Under
-    [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), both become
-    typed engine routines.
+    [ADR 0032](decisions/0032-engine-routines.md), both are
+    typed engine routines (implemented for startup and provider bootstrap).
     - The composition root runs startup before selection.
     - A runner-owned binding runs provider bootstrap after selection.
-    - Both keep the properties above, except that provider bootstrap is no longer
+    - Both keep the properties above, except that provider bootstrap is not
       capability-free: its locate and read steps hold the provider-config port.
     - Provider bootstrap keeps its single typed-requirement branch.
 28. Every non-kernel workflow operation is referenceable from workflow YAML
@@ -197,7 +197,7 @@ engine fixes them:
     adds the fixed stage sequence of one model request to those kernel
     responsibilities. The stage sequence is not a domain sequence; YAML still
     selects each request step and every outcome. Under
-    [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), a stage
+    [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions), a stage
     action's absorbed steps become functions, not source-only operations. Its fixed
     internal sequence routes no outcome, so it does not compete with the compiled
     YAML graph.
@@ -248,7 +248,7 @@ Deterministic checks should be used wherever the answer can be computed from con
 | Area | Engine-deterministic | LLM-owned | Limit or escalation |
 | --- | --- | --- | --- |
 | Command input | Parse flags, defaults, enums, duplicates, required arguments | None | Invalid user input is non-repairable by the model. |
-| Feature directory and brief | Validate the supplied directory, containment, no-follow safety and exact output paths; validate brief schema/citations | Derive human title, description and goal from reconciled references | The directory identifies the feature; no model-derived name or ownership registry. |
+| Feature directory and brief | Validate the supplied directory, containment, no-follow safety and exact output paths; take the title from the sources' level-1 heading ([ADR 0048](decisions/0048-engine-derived-specification-title.md)); validate brief schema/citations | Derive the description and goal from reconciled references | The directory identifies the feature; no model-derived name or ownership registry. |
 | Reference discovery | Root containment, traversal, symlinks, inventory, ordering, readability, size, decoder availability | None | Unsupported inputs block or require an installed reader according to policy. |
 | Reference understanding | Source span validity, exact token preservation for structured formats, coverage ledger | Extract requirements, classify signals, recognize semantic conflicts | The engine can prove a citation exists; it cannot prove every semantic implication was found. |
 | Business/technical split | None; explicit references and exact values keep their typed rules ([§21.2](contracts/21-validation.md) records the removed lint) | Place generated content in the business spec or technical context ([§17.5](contracts/17-specify.md)) | The human who reviews and edits the published `spec.md` judges placement; no native check or post-generation review does (ADR 0023). |
@@ -401,7 +401,7 @@ The catalogue has one entry per registered operation: its code owner, what it re
 writes, its single responsibility and its rejections. An entry marked "Proposed, no code"
 names a responsibility no code registers yet; Plan, Tasks and Implement design rewrites those
 when it starts (user decision, 9 November 2026). Under
-[ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), the entries a stage action
+[ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions), the entries a stage action
 absorbs become one stage-action entry that lists its internal steps, each keeping its former
 entry's rules. All actions follow [§6](#6-common-action-and-orchestrator-contract) and
 [§25](#25-atomic-workflow-execution-and-output).
@@ -424,7 +424,7 @@ entry's rules. All actions follow [§6](#6-common-action-and-orchestrator-contra
 Orchestrators coordinate runner-owned child bindings and branch on typed results. They perform
 no domain or infrastructure operations themselves. Fixed engine sequences, such as startup,
 provider bootstrap and feature logging, become typed engine routines under
-[ADR 0032](decisions/0032-engine-routines.md) (not yet implemented).
+[ADR 0032](decisions/0032-engine-routines.md) (implemented for startup and provider bootstrap; feature logging not yet).
 
 [Complete §14 contract](contracts/14-orchestration.md).
 
@@ -448,8 +448,8 @@ provider bootstrap and feature logging, become typed engine routines under
 
 ## 15. Bootstrap flow
 
-The fixed startup graph loads project workflow authority; under ADR 0032 (not yet implemented)
-it is a typed engine routine run by the composition root. After exact selection, the fixed
+Fixed startup loads project workflow authority; under ADR 0032 it is a typed engine
+routine run by the composition root. After exact selection, the fixed
 provider bootstrap ([ADR 0004](decisions/0004-model-provider-bootstrap.md)) prepares provider
 authority only when the selected graph requires it. The selected compiled workflow then
 chooses its permitted setup operations.
@@ -676,7 +676,7 @@ requirements.
 ## 29. Suggested package/module structure
 
 The package layout reflects the required dependency boundaries and native Zig distribution.
-Under ADR 0032 (not yet implemented), engine routines live in `src/application/*_routine.zig`
+Under ADR 0032 (implemented for startup and provider bootstrap; feature logging not yet), engine routines live in `src/application/*_routine.zig`
 and import only domain and port modules.
 
 [Complete §29 contract](contracts/29-package-structure.md).
@@ -695,7 +695,7 @@ and import only domain and port modules.
 - Define IR, diagnostic, evidence, action, orchestrator, and state contracts.
 - Implement the compiler-locked requiredness/ownership/reconciliation registries, structural authority-requirement ledger, closed reconciliation outcomes, complete-ledger validator, and generic earliest-owner gap router before enabling any workflow model operation.
 - Bind the invocation working directory as project root and resolve only its exact `.sddtoolkit.json`, failing the invocation when it is absent; validate the seven configured directory roots and exact `paths.providers` file location, then derive only the fixed clarification/log and workflow `features/` children without an ancestor, descendant, fixed provider path, source-tree, or packaged-example fallback.
-- Implement the fixed nonselectable engine-startup graph and workflow-authority
+- Implement the fixed nonselectable engine-startup routine and workflow-authority
   loading: inventory, definition/resource capture and schema validation,
   registered-operation project graph
   compilation, and variable-size registry validation.
@@ -774,14 +774,14 @@ The new engine is ready for production evaluation when all of the following are 
     - The initial SDD workflow gates still prohibit `plan` before a valid committed
       specification, `tasks` before an approved current plan state, and `implement` before an
       approved current task-definition state.
-    - The composition-root-owned startup graph can build the registry before a project graph
+    - The composition-root-owned startup routine can build the registry before a project graph
       exists but is neither selectable nor project-extensible and acquires no workflow execution
       capability.
-    - After exact selection, the separate fixed capability-free model-provider bootstrap
-      orchestrator derives its branch only from the graph's compiled model-binding requirements
+    - After exact selection, the separate fixed model-provider bootstrap routine
+      derives its branch only from the graph's compiled model-binding requirements
       and provider-call capabilities and is likewise nonselectable and not project-extensible.
-      Under [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), the startup
-      graph and provider bootstrap are typed engine routines with these same properties.
+      Under [ADR 0032](decisions/0032-engine-routines.md), the startup
+      and provider bootstrap are typed engine routines.
     - The generic workflow engine contains no branch on workflow names, invokes the selected
       YAML-named invocation operation once, and follows the exactly selected immutable graph
       only through runner-owned child bindings; the common runner remains the sole node
@@ -841,19 +841,19 @@ The new engine is ready for production evaluation when all of the following are 
 6. No orchestrator imports or directly uses infrastructure/domain-operation ports; actions
     cannot contain/call actions or orchestrators, while orchestrators may contain only
     runner-owned child bindings to actions/orchestrators. Under
-    [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), a runner-owned
+    [ADR 0032](decisions/0032-engine-routines.md), a runner-owned
     child binding may also reach the provider-bootstrap engine routine.
 
 7. Every action and orchestrator conforms to the same typed `PipelineNode` contract,
     communicates through immutable validated envelopes/deltas, and has the required isolated
-    action or spy-child orchestrator tests. An ADR 0032 engine routine (not yet implemented) is
+    action or spy-child orchestrator tests. An ADR 0032 engine routine (implemented for startup and provider bootstrap; feature logging not yet) is
     not a node. It instead has the fake-port routine tests and step tests that the ADR lists,
     and orchestrators reach it only through runner-owned child bindings.
 
 8. **Mandatory feature logging.**
     - Mandatory metadata event logs use fixed-header pipe-delimited `feature-log/v2` beneath
       `<paths.specs>/<featureId>/logs/`.
-    - Logs use only the compiler-locked `event-columns/v2` and `prompt-columns/v3` headings.
+    - Logs use only the compiler-locked `event-columns/v3` and `prompt-columns/v3` headings.
       Each segment has one exact heading and validated segment control rows.
     - Every event/prompt row carries the selected compiled workflow's registry-validated
       `workflow_shortcode` and the registry-owned `level`.
@@ -1139,8 +1139,8 @@ gives its title and status.
 | [0028](decisions/0028-anthropic-messages-provider.md) | Anthropic Messages API provider on shared provider owners | Accepted amendment |
 | [0029](decisions/0029-bedrock-model-families.md) | Bedrock model families | Accepted amendment |
 | [0030](decisions/0030-engine-owned-model-request.md) | One engine-owned step per model request | Accepted amendment, amended 23 October 2026; partly implemented: provider token counting is removed and each catalogue entry requires `requestTimeoutMs`; the `request-model` step is not yet implemented |
-| [0031](decisions/0031-stage-actions.md) | One action per deterministic stage | Accepted amendment; not yet implemented |
-| [0032](decisions/0032-engine-routines.md) | Typed engine routines for fixed engine sequences | Accepted amendment; not yet implemented |
+| [0031](decisions/0031-stage-actions.md) | One action per deterministic stage | Accepted amendment; partly implemented: `prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions; every other stage is not yet converted |
+| [0032](decisions/0032-engine-routines.md) | Typed engine routines for fixed engine sequences | Accepted amendment; startup and provider bootstrap implemented, feature logging not yet |
 | [0033](decisions/0033-generic-repair-operations.md) | Generic repair operations with owner-supplied rules | Accepted amendment; not yet implemented |
 | [0034](decisions/0034-spec-quality-gate.md) | Specify quality gate before Plan | Accepted |
 | [0035](decisions/0035-cross-kind-restatement.md) | Cross-kind and story restatement in the duplicate rule | Accepted |
@@ -1152,6 +1152,7 @@ gives its title and status.
 | [0043](decisions/0043-model-facing-exact-text-names.md) | Model-facing exact-text names | Accepted |
 | [0046](decisions/0046-complete-dispositions-at-admission.md) | Reconciliation dispositions are complete at response admission | Accepted |
 | [0047](decisions/0047-engine-composed-primary-story.md) | Engine-composed primary user story | Accepted |
+| [0048](decisions/0048-engine-derived-specification-title.md) | Engine-derived specification title | Accepted |
 
 Additional accepted feature boundaries:
 

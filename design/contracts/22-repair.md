@@ -286,6 +286,17 @@ whole-record assignment and retry bound. Reuse the native repair owner, selected
 schema definitions, runner and accounting. Full unit validation, source/claim and
 exact-token coverage and publication validation remain required.
 
+**Claim-bound scenario insertion**
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3): in a
+records batch, a claim a behaviour statement names that no acceptance criterion or edge
+case names, decided on the batch the native deletes leave, authorizes insertion of one
+acceptance criterion at the end of the batch. The engine fixes its kind, its authored
+selection `S` (that one claim) and the batch's source group; the response is its content
+only, through the criterion's content-only repair definition. Bound, packet, merge, retry
+and validation follow conditional entity membership above. It may not insert an edge case,
+name another claim, change siblings or infer semantics; each further uncovered claim takes
+its own insertion.
+
 The repair algebra is closed:
 
 - `replace(pointer, expectedValue, replacement)`;
@@ -370,8 +381,9 @@ correlation and readback checks; a membership enum alone cannot authorize a merg
 
 Selected source-review and generation repair responses reject `provenance`,
 including record insertion and coupled record repair. The engine reconstructs
-canonical `provenance.claim_ids` from the bound source group or selected
-diagnostic producer before old-value/revision and full-candidate checks.
+canonical `provenance.claim_ids` from the bound source group, the claim a scenario
+insertion fixes, or the selected diagnostic producer before old-value/revision and
+full-candidate checks.
 Source-ID or detail corrections remain in their existing selected repair
 families; source-omission detail correction uses the coupled explanation and
 obligation shape in §22.1, and cannot change the verdict. Value-only replacements stay
@@ -559,10 +571,8 @@ defined response-level correction containing:
   every constraint that schema syntax can express; [§12.2](12-model-boundary.md#122-initial-guidance-packet)
   owns the admission constraints that stay native, and `duplicate_member` is reported
   with parent scope on the enclosing array.
-  A `missing_member` correction also names the first omitted member (`member`).
-  An `uncovered_member` correction also names the compiled rule's covering kinds
-  (`covering`: its `kind_property` and `kinds`), so the model knows which kinds cover
-  (SPEC01 D4.1, decided 30 October 2026), and a `shared_member` correction, located at
+  A `missing_member` correction also names the first omitted member (`member`), and a
+  `shared_member` correction, located at
   the partly taken record and offering its shape, names its exclusive and owning kinds
   (`exclusive`: `kind_property`, `kinds` and `owning`) and lists every taken value's
   naming in such records (`shared`; SPEC01 D16.1 and D16.2, 2 November 2026); no other
@@ -800,4 +810,4 @@ coverage rule is owned by
 its mechanical claim/token coverage defects have no independently supported repair
 target and block, while an
 [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) scenario gap is
-a response-admission defect corrected under §22.6.
+a records-unit defect repaired by the claim-bound scenario insertion above.

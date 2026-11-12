@@ -18,7 +18,9 @@ pub const Capture = struct {
             .blocked => |failure| failure,
         };
     }
-    pub fn action(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError) ?stream.FailureCode {
+    /// `stage_step` is the internal step a stage action stopped at (ADR 0031); only a failed
+    /// action's event records it.
+    pub fn action(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError, stage_step: ?[]const u8) ?stream.FailureCode {
         var code: [96]u8 = undefined;
         return self.emit(.{
             .event_type = if (result) |value| switch (value.status()) {
@@ -32,6 +34,10 @@ pub const Capture = struct {
                 .diagnostic_code = switch (value.status()) {
                     .ok, .more, .needs_user => null,
                     else => if (value == .rejected) rejectionCode(&code, value.rejected) orelse return .LOG_SERIALIZATION_FAILURE else diagnostic(&code, if (rejection) |cause| @errorName(cause) else @tagName(value.outcome)) orelse return .LOG_SERIALIZATION_FAILURE,
+                },
+                .step_id = switch (value.status()) {
+                    .failed, .blocked, .cancelled => if (stage_step) |step| t.Identifier.validate(step) orelse return .LOG_SERIALIZATION_FAILURE else null,
+                    else => null,
                 },
             } else .{},
         });

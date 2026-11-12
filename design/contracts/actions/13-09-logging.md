@@ -13,24 +13,15 @@ logging orchestrator has no clock, filesystem, redaction, serializer or sink por
 [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md#production-activation-and-finalization)
 owns activation and finalization: one owner finalizes logging before a registered
 `workflow_publication` operation writes, and the terminal binding finalizes every other outcome.
-Under [ADR 0032](../../decisions/0032-engine-routines.md) (not yet implemented) these operations
+Under [ADR 0032](../../decisions/0032-engine-routines.md) (feature logging not yet implemented) these operations
 become the steps of a feature-logging engine routine.
 
 ## Policy
 
-## `CanonicalizeLogLevelAction` (`canonicalize-log-level`)
-
-- **Owner:** [`src/actions/log/canonicalize_log_level.zig`](../../../src/actions/log/canonicalize_log_level.zig)
-- **Reads:** `engine_config` · **Writes:** `canonical_log_level` · **Side effect:** `none`
-- **Does:** Canonicalizes the configured `logs.level`, accepting case and only the two declared aliases.
-- **Rejects:** `LoggingPolicyInvalid`.
-
-## `ValidateLoggingPolicyAction` (`validate-logging-policy`)
-
-- **Owner:** [`src/actions/log/validate_logging_policy.zig`](../../../src/actions/log/validate_logging_policy.zig)
-- **Reads:** `engine_config`, `canonical_log_level` · **Writes:** `logging_policy` · **Side effect:** `none`
-- **Does:** Compiles the logging policy from the `logs` configuration and its canonicalized level.
-- **Rejects:** `LoggingPolicyInvalid`, including canonicalization evidence from a different configured value.
+The `canonicalize_log_level` and `validate_logging_policy` steps of the startup routine
+([`src/application/startup_routine.zig`](../../../src/application/startup_routine.zig)) own
+configured-level canonicalization and logging-policy compilation; both reject
+`LoggingPolicyInvalid`.
 
 ## `ValidateFeatureLogPolicyTransitionAction` (`validate-feature-log-policy-transition`)
 

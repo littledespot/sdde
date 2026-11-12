@@ -1,9 +1,9 @@
 const std = @import("std");
-const parse = @import("actions/workflow/parse_workflow_definitions.zig");
-const validate_schema = @import("actions/workflow/validate_workflow_definition_schema.zig");
-const resolve_resources = @import("actions/workflow/resolve_workflow_resources.zig");
-const compile = @import("actions/workflow/compile_workflow_graphs.zig");
-const validate_graphs = @import("actions/workflow/validate_compiled_workflow_graphs.zig");
+const startup = @import("application/startup_routine.zig");
+const definition_schema = @import("domain/workflow_definition_schema.zig");
+const resource_binding = @import("domain/workflow_resource_binding.zig");
+const graph_compilation = @import("domain/workflow_graph_compilation.zig");
+const graph_validation = @import("domain/workflow_graph_validation.zig");
 const result_schema_parser = @import("adapters/parsers/model_result_schemas.zig");
 const result_schema_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":64}},\"required\":[\"answer\"],\"additionalProperties\":false}";
 const parser_adapter = @import("adapters/parsers/workflow_definitions.zig");
@@ -49,11 +49,11 @@ test "finite native iteration compiles registered progress without a YAML retry 
         \\    use: finite.advance
         \\    on: {ok: end.ok, more: advance}
     ;
-    const raw = try (parse.Action{ .parser = parser.parser() }).execute(a, &.{.{ .ordinal = 1, .bytes = yaml }});
-    const definitions = try (validate_schema.Action{}).execute(a, raw);
-    const manifest = try (resolve_resources.Action{}).execute(a, emptyInventory(), definitions);
-    const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = result_schema.compiler() }).execute(a, definitions, emptyInventory(), manifest, &.{});
-    _ = try (validate_graphs.Action{}).execute(a, graphs);
+    const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
+    const definitions = try definition_schema.validate(a, raw);
+    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions);
+    const graphs = try graph_compilation.compile(&registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{});
+    _ = try graph_validation.validate(a, graphs);
     for (graphs[0].authority.steps) |step| {
         const registered = registry.resolveOperation(step.operation_id).?;
         try std.testing.expectEqualDeep(registered.contract.iteration, step.iteration);
@@ -82,8 +82,8 @@ test "YAML operation IDs are unversioned and reject version selectors and fields
     }) |change| {
         const yaml = try std.mem.replaceOwned(u8, arena.allocator(), resource_workflow, change[0], change[1]);
         try std.testing.expect(!std.mem.eql(u8, resource_workflow, yaml));
-        const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
-        try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, (validate_schema.Action{}).execute(arena.allocator(), raw));
+        const raw = try startup.steps.parseWorkflows(yaml_parser.parser(), arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
+        try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, definition_schema.validate(arena.allocator(), raw));
     }
 }
 
@@ -103,22 +103,24 @@ test "concise resources and native parameters compile into immutable operation a
         var yaml_parser: parser_adapter.Adapter = .{};
         var result_schema_adapter: result_schema_parser.Adapter = .{};
         const captures = [_]inventory.Capture{.{ .ordinal = 1, .bytes = resource_workflow }};
-        const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &captures);
-        const definitions = try (validate_schema.Action{}).execute(arena.allocator(), raw);
+        const raw = try startup.steps.parseWorkflows(yaml_parser.parser(), arena.allocator(), &captures);
+        const definitions = try definition_schema.validate(arena.allocator(), raw);
         const inventory_value = testInventory();
-        const manifest = try (resolve_resources.Action{}).execute(arena.allocator(), inventory_value, definitions);
+        const manifest = try resource_binding.resolve(arena.allocator(), inventory_value, definitions);
         const resource_captures = [_]inventory.Capture{
             .{ .ordinal = 3, .bytes = "Generate one result." },
             .{ .ordinal = 5, .bytes = result_schema_bytes },
         };
-        const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = result_schema_adapter.compiler() }).execute(
+        const graphs = try graph_compilation.compile(
+            &registry,
+            result_schema_adapter.compiler(),
             arena.allocator(),
             definitions,
             inventory_value,
             manifest,
             &resource_captures,
         );
-        _ = try (validate_graphs.Action{}).execute(arena.allocator(), graphs);
+        _ = try graph_validation.validate(arena.allocator(), graphs);
         const graph = graphs[0];
         try std.testing.expectEqualStrings("custom-generation", graph.authority.workflow_id.bytes);
         try std.testing.expectEqual(@as(u32, 1), graph.authority.workflow_version);
@@ -162,7 +164,7 @@ test "concise resources and native parameters compile into immutable operation a
                 steps[0].operation_id.bytes = "model.generate@1";
                 invalid.authority.steps = steps;
             }
-            try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate_graphs.Action{}).execute(arena.allocator(), &.{invalid}));
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(arena.allocator(), &.{invalid}));
         }
     }
 }
@@ -177,17 +179,14 @@ test "one invalid result schema rejects graph compilation without publishing par
         defer arena.deinit();
         var yaml_parser: parser_adapter.Adapter = .{};
         var schema_parser: result_schema_parser.Adapter = .{};
-        const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = resource_workflow }});
-        const definitions = try (validate_schema.Action{}).execute(arena.allocator(), raw);
+        const raw = try startup.steps.parseWorkflows(yaml_parser.parser(), arena.allocator(), &.{.{ .ordinal = 1, .bytes = resource_workflow }});
+        const definitions = try definition_schema.validate(arena.allocator(), raw);
         var changed_descriptors = descriptors;
         changed_descriptors[4].size = bytes.len;
         var inventory_value = testInventory();
         inventory_value.descriptors = &changed_descriptors;
-        const manifest = try (resolve_resources.Action{}).execute(arena.allocator(), inventory_value, definitions);
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (compile.Action{
-            .registry = &operations,
-            .result_schema_compiler = schema_parser.compiler(),
-        }).execute(arena.allocator(), definitions, inventory_value, manifest, &.{
+        const manifest = try resource_binding.resolve(arena.allocator(), inventory_value, definitions);
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_compilation.compile(&operations, schema_parser.compiler(), arena.allocator(), definitions, inventory_value, manifest, &.{
             .{ .ordinal = 3, .bytes = "Generate one result." },
             .{ .ordinal = 5, .bytes = bytes },
         }));
@@ -208,14 +207,14 @@ test "compiled native repair roles retain their counter scope and finite bound" 
     registry.operations = &entries;
     var parser: parser_adapter.Adapter = .{};
     var schemas: result_schema_parser.Adapter = .{};
-    const raw = try (parse.Action{ .parser = parser.parser() }).execute(a, &.{.{ .ordinal = 1, .bytes = resource_workflow }});
-    const definitions = try (validate_schema.Action{}).execute(a, raw);
-    const manifest = try (resolve_resources.Action{}).execute(a, testInventory(), definitions);
-    const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = schemas.compiler() }).execute(a, definitions, testInventory(), manifest, &.{
+    const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = resource_workflow }});
+    const definitions = try definition_schema.validate(a, raw);
+    const manifest = try resource_binding.resolve(a, testInventory(), definitions);
+    const graphs = try graph_compilation.compile(&registry, schemas.compiler(), a, definitions, testInventory(), manifest, &.{
         .{ .ordinal = 3, .bytes = "Generate one result." },
         .{ .ordinal = 5, .bytes = result_schema_bytes },
     });
-    _ = try (validate_graphs.Action{}).execute(a, graphs);
+    _ = try graph_validation.validate(a, graphs);
     const graph = graphs[0];
     try std.testing.expectEqual(.merge_validate, graph.authority.steps[0].repair_role);
     try std.testing.expectEqual(.repair, graph.authority.steps[0].retry_authority.?.scope);
@@ -234,7 +233,7 @@ test "compiled native repair roles retain their counter scope and finite bound" 
             else => unreachable,
         }
         if (fault != 3) invalid.authority.maximum_step_executions = compiled.calculateExecutionLimit(steps).?;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate_graphs.Action{}).execute(a, &.{invalid}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(a, &.{invalid}));
     }
     var bounded = graph.authority.steps[0];
     bounded.retry_authority.?.scope = .model_request;
@@ -253,9 +252,9 @@ test "non-schema resources are not parsed and a compiler cannot substitute a for
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var yaml_parser: parser_adapter.Adapter = .{};
-    const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = resource_workflow }});
-    const definitions = try (validate_schema.Action{}).execute(arena.allocator(), raw);
-    const manifest = try (resolve_resources.Action{}).execute(arena.allocator(), testInventory(), definitions);
+    const raw = try startup.steps.parseWorkflows(yaml_parser.parser(), arena.allocator(), &.{.{ .ordinal = 1, .bytes = resource_workflow }});
+    const definitions = try definition_schema.validate(arena.allocator(), raw);
+    const manifest = try resource_binding.resolve(arena.allocator(), testInventory(), definitions);
     const Spy = struct {
         calls: usize = 0,
         foreign: bool = false,
@@ -280,18 +279,15 @@ test "non-schema resources are not parsed and a compiler cannot substitute a for
         }
     };
     var spy: Spy = .{};
-    const action: compile.Action = .{
-        .registry = &operations,
-        .result_schema_compiler = .{ .context = &spy, .compile_fn = Spy.compileSchema, .compile_selected_fn = Spy.compileSchema, .composition_result_alias_fn = Spy.compositionAlias, .compile_composition_fn = Spy.compileComposition },
-    };
+    const spy_compiler: @import("ports/model_result_schema_compiler.zig").Compiler = .{ .context = &spy, .compile_fn = Spy.compileSchema, .compile_selected_fn = Spy.compileSchema, .composition_result_alias_fn = Spy.compositionAlias, .compile_composition_fn = Spy.compileComposition };
     const captures = [_]inventory.Capture{
         .{ .ordinal = 3, .bytes = "Generate one result." },
         .{ .ordinal = 5, .bytes = result_schema_bytes },
     };
-    _ = try action.execute(arena.allocator(), definitions, testInventory(), manifest, &captures);
+    _ = try graph_compilation.compile(&operations, spy_compiler, arena.allocator(), definitions, testInventory(), manifest, &captures);
     try std.testing.expectEqual(@as(usize, 1), spy.calls);
     spy.foreign = true;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, action.execute(arena.allocator(), definitions, testInventory(), manifest, &captures));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_compilation.compile(&operations, spy_compiler, arena.allocator(), definitions, testInventory(), manifest, &captures));
     try std.testing.expectEqual(@as(usize, 2), spy.calls);
 }
 
@@ -326,13 +322,12 @@ test "composition resources infer one canonical schema and reject missing or con
     var operations_value = operations;
     operations_value.operations = &entries;
     var schemas: result_schema_parser.Adapter = .{};
-    const action: compile.Action = .{ .registry = &operations_value, .result_schema_compiler = schemas.compiler() };
     var captures = [_]inventory.Capture{
         .{ .ordinal = 3, .bytes = "Generate one result." },
         .{ .ordinal = 5, .bytes = canonical_bytes },
         .{ .ordinal = 6, .bytes = composition_bytes },
     };
-    const graphs = try action.execute(a, definitions, source_inventory, resource_manifest, &captures);
+    const graphs = try graph_compilation.compile(&operations_value, schemas.compiler(), a, definitions, source_inventory, resource_manifest, &captures);
     const resources = graphs[0].authority.resources;
     const canonical = @import("domain/workflow_compilation.zig").findResultSchema(resources, .{ .bytes = "result-schema" }).?;
     try std.testing.expectEqual(.json_composition, resources[0].kind());
@@ -343,7 +338,7 @@ test "composition resources infer one canonical schema and reject missing or con
         const invalid_bytes = try std.mem.replaceOwned(u8, a, composition_bytes, "\"result-schema\"", try std.fmt.allocPrint(a, "\"{s}\"", .{wrong_alias}));
         captures[2].bytes = invalid_bytes;
         resource_descriptors[5].size = invalid_bytes.len;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, action.execute(a, definitions, source_inventory, resource_manifest, &captures));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_compilation.compile(&operations_value, schemas.compiler(), a, definitions, source_inventory, resource_manifest, &captures));
     }
 }
 
@@ -354,11 +349,13 @@ test "unknown operations and unguarded cycles reject the complete graph" {
     var result_schema_adapter: result_schema_parser.Adapter = .{};
 
     const unknown_capture = [_]inventory.Capture{.{ .ordinal = 1, .bytes = unknown_operation_workflow }};
-    const unknown_raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &unknown_capture);
-    const unknown = try (validate_schema.Action{}).execute(arena.allocator(), unknown_raw);
+    const unknown_raw = try startup.steps.parseWorkflows(yaml_parser.parser(), arena.allocator(), &unknown_capture);
+    const unknown = try definition_schema.validate(arena.allocator(), unknown_raw);
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        (compile.Action{ .registry = &operations, .result_schema_compiler = result_schema_adapter.compiler() }).execute(
+        graph_compilation.compile(
+            &operations,
+            result_schema_adapter.compiler(),
             arena.allocator(),
             unknown,
             emptyInventory(),
@@ -368,9 +365,11 @@ test "unknown operations and unguarded cycles reject the complete graph" {
     );
 
     const cycle_capture = [_]inventory.Capture{.{ .ordinal = 1, .bytes = unguarded_cycle_workflow }};
-    const cycle_raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &cycle_capture);
-    const cycle = try (validate_schema.Action{}).execute(arena.allocator(), cycle_raw);
-    const graphs = try (compile.Action{ .registry = &operations, .result_schema_compiler = result_schema_adapter.compiler() }).execute(
+    const cycle_raw = try startup.steps.parseWorkflows(yaml_parser.parser(), arena.allocator(), &cycle_capture);
+    const cycle = try definition_schema.validate(arena.allocator(), cycle_raw);
+    const graphs = try graph_compilation.compile(
+        &operations,
+        result_schema_adapter.compiler(),
         arena.allocator(),
         cycle,
         emptyInventory(),
@@ -379,7 +378,7 @@ test "unknown operations and unguarded cycles reject the complete graph" {
     );
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        (validate_graphs.Action{}).execute(arena.allocator(), graphs),
+        graph_validation.validate(arena.allocator(), graphs),
     );
 }
 
@@ -405,10 +404,12 @@ test "YAML rejects retired model size parameters and response controls" {
         try std.testing.expect(!std.mem.eql(u8, yaml, resource_workflow));
         var yaml_parser: parser_adapter.Adapter = .{};
         var result_schema_adapter: result_schema_parser.Adapter = .{};
-        const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
-        const definitions = try (validate_schema.Action{}).execute(arena.allocator(), raw);
-        const manifest = try (resolve_resources.Action{}).execute(arena.allocator(), testInventory(), definitions);
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (compile.Action{ .registry = &operations, .result_schema_compiler = result_schema_adapter.compiler() }).execute(
+        const raw = try startup.steps.parseWorkflows(yaml_parser.parser(), arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
+        const definitions = try definition_schema.validate(arena.allocator(), raw);
+        const manifest = try resource_binding.resolve(arena.allocator(), testInventory(), definitions);
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_compilation.compile(
+            &operations,
+            result_schema_adapter.compiler(),
             arena.allocator(),
             definitions,
             testInventory(),
@@ -423,8 +424,8 @@ test "YAML rejects retired model size parameters and response controls" {
     defer arena.deinit();
     var yaml_parser: parser_adapter.Adapter = .{};
     const yaml = try std.mem.replaceOwned(u8, arena.allocator(), resource_workflow, "policy: test.model-policy@1", "policy: { id: test.model-policy@1, input-tokens: 1000 }");
-    const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
-    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, (validate_schema.Action{}).execute(arena.allocator(), raw));
+    const raw = try startup.steps.parseWorkflows(yaml_parser.parser(), arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
+    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, definition_schema.validate(arena.allocator(), raw));
 }
 
 test "compiler rejects parameter outcome gate and capability violations" {
@@ -445,15 +446,18 @@ test "compiler rejects parameter outcome gate and capability violations" {
         excessive_retry_limit_workflow,
         missing_outcome_workflow,
     }) |yaml| {
-        const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(
+        const raw = try startup.steps.parseWorkflows(
+            yaml_parser.parser(),
             arena.allocator(),
             &.{.{ .ordinal = 1, .bytes = yaml }},
         );
-        const definitions = try (validate_schema.Action{}).execute(arena.allocator(), raw);
-        const manifest = try (resolve_resources.Action{}).execute(arena.allocator(), inventory_value, definitions);
+        const definitions = try definition_schema.validate(arena.allocator(), raw);
+        const manifest = try resource_binding.resolve(arena.allocator(), inventory_value, definitions);
         try std.testing.expectError(
             error.WorkflowGraphCompileInvalid,
-            (compile.Action{ .registry = &operations, .result_schema_compiler = result_schema_adapter.compiler() }).execute(
+            graph_compilation.compile(
+                &operations,
+                result_schema_adapter.compiler(),
                 arena.allocator(),
                 definitions,
                 inventory_value,
@@ -463,12 +467,13 @@ test "compiler rejects parameter outcome gate and capability violations" {
         );
     }
 
-    const accepted_raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(
+    const accepted_raw = try startup.steps.parseWorkflows(
+        yaml_parser.parser(),
         arena.allocator(),
         &.{.{ .ordinal = 1, .bytes = resource_workflow }},
     );
-    const accepted = try (validate_schema.Action{}).execute(arena.allocator(), accepted_raw);
-    const accepted_manifest = try (resolve_resources.Action{}).execute(arena.allocator(), inventory_value, accepted);
+    const accepted = try definition_schema.validate(arena.allocator(), accepted_raw);
+    const accepted_manifest = try resource_binding.resolve(arena.allocator(), inventory_value, accepted);
     const restrictive: operation_registry.Registry = .{
         .operations = &operation_entries,
         .policies = &.{.{
@@ -482,7 +487,9 @@ test "compiler rejects parameter outcome gate and capability violations" {
     try std.testing.expect(restrictive.validate());
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        (compile.Action{ .registry = &restrictive, .result_schema_compiler = result_schema_adapter.compiler() }).execute(
+        graph_compilation.compile(
+            &restrictive,
+            result_schema_adapter.compiler(),
             arena.allocator(),
             accepted,
             inventory_value,
@@ -494,7 +501,9 @@ test "compiler rejects parameter outcome gate and capability violations" {
     missing_gate.gates = &.{};
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        (compile.Action{ .registry = &missing_gate, .result_schema_compiler = result_schema_adapter.compiler() }).execute(
+        graph_compilation.compile(
+            &missing_gate,
+            result_schema_adapter.compiler(),
             arena.allocator(),
             accepted,
             inventory_value,
@@ -503,14 +512,17 @@ test "compiler rejects parameter outcome gate and capability violations" {
         ),
     );
 
-    const hidden_raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(
+    const hidden_raw = try startup.steps.parseWorkflows(
+        yaml_parser.parser(),
         arena.allocator(),
         &.{.{ .ordinal = 1, .bytes = hidden_retry_limit_workflow }},
     );
-    const hidden = try (validate_schema.Action{}).execute(arena.allocator(), hidden_raw);
+    const hidden = try definition_schema.validate(arena.allocator(), hidden_raw);
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        (compile.Action{ .registry = &operations, .result_schema_compiler = result_schema_adapter.compiler() }).execute(
+        graph_compilation.compile(
+            &operations,
+            result_schema_adapter.compiler(),
             arena.allocator(),
             hidden,
             emptyInventory(),
@@ -769,19 +781,19 @@ const reusable_workflow =
 
 fn reusableDefinitions(a: std.mem.Allocator, bytes: []const u8) ![]const @import("domain/workflow_definition.zig").Definition {
     var parser: parser_adapter.Adapter = .{};
-    const raw = try (parse.Action{ .parser = parser.parser() }).execute(a, &.{.{ .ordinal = 1, .bytes = bytes }});
-    return (validate_schema.Action{}).execute(a, raw);
+    const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = bytes }});
+    return definition_schema.validate(a, raw);
 }
 
 fn reusableCompile(a: std.mem.Allocator, bytes: []const u8) !@import("domain/workflow_compilation.zig").CompiledWorkflow {
     const definitions = try reusableDefinitions(a, bytes);
     var parser: result_schema_parser.Adapter = .{};
-    const manifest = try (resolve_resources.Action{}).execute(a, testInventory(), definitions);
-    const graphs = try (compile.Action{ .registry = &operations, .result_schema_compiler = parser.compiler() }).execute(a, definitions, testInventory(), manifest, &.{
+    const manifest = try resource_binding.resolve(a, testInventory(), definitions);
+    const graphs = try graph_compilation.compile(&operations, parser.compiler(), a, definitions, testInventory(), manifest, &.{
         .{ .ordinal = 3, .bytes = "Generate one result." },
         .{ .ordinal = 5, .bytes = result_schema_bytes },
     });
-    _ = try (validate_graphs.Action{}).execute(a, graphs);
+    _ = try graph_validation.validate(a, graphs);
     return graphs[0];
 }
 
@@ -920,8 +932,8 @@ test "definition schema and compiler share the finite expanded graph bound" {
     var registry = operations;
     registry.operations = &entries;
     var schemas: result_schema_parser.Adapter = .{};
-    const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = schemas.compiler() }).execute(a, definitions, emptyInventory(), .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
-    _ = try (validate_graphs.Action{}).execute(a, graphs);
+    const graphs = try graph_compilation.compile(&registry, schemas.compiler(), a, definitions, emptyInventory(), .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
+    _ = try graph_validation.validate(a, graphs);
     try std.testing.expectEqual(maximum, graphs[0].authority.steps.len);
     try std.testing.expectEqual(maximum, graphs[0].authority.maximum_step_executions);
     try yaml.writer.print("  s{d:0>4}: {{use: test.retry, on: {{ok: end.ok}}}}\n", .{maximum});

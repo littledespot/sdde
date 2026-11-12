@@ -41,8 +41,8 @@ immutable post-composition safety-valid toolchain object to declared consumers.
 - It is the canonical immutable post-inheritance, post-composition, safety-valid result,
   not a wrapper around raw YAML or another projection of the same authority.
 - Captured bytes, decoded values, schema-valid layers, registry candidates, and merged
-  pre-safety candidates remain runner-owned workflow intermediates exposed only to
-  operations declaring their typed input keys.
+  pre-safety candidates remain function-local values inside the `prepare-toolchain` stage
+  action; none is pipeline data.
 - None can construct `ToolChainService`.
 
 - After the safety gate succeeds, the runner's envelope owns the original sealed
@@ -67,39 +67,30 @@ immutable post-composition safety-valid toolchain object to declared consumers.
 
 ### Workflow bindings
 
-The single operation registry exposes the existing action IDs below. Each has
-`ok` and `failed` transitions, no parameters, and one action responsibility.
-The YAML graph owns ordering; no combined setup operation hides this sequence.
+The single operation registry exposes two toolchain operations. Each has `ok` and `failed`
+transitions and no parameters.
 
-> **ADR 0031 amendment (not yet implemented).** The first nine operations below, through
-> `validate-toolchain-safety`, become the internal steps, in this order, of one registered
-> `prepare-toolchain` [stage action](../decisions/0031-stage-actions.md):
->
-> - it has `ok` and `failed` outcomes and side effect `filesystem_read`;
-> - its ports are the existing `toolchain-read` and `toolchain-parser` ports, so no workflow
->   policy that runs these steps today needs a new capability;
-> - it outputs `valid_toolchain`.
->
-> Every step only passes `ok` on and `failed` to the end, so the sequence hides no routed
-> choice. Each internal step keeps the rules below and becomes a separate internal function
-> with its own tests; only the safety step can construct `ValidToolchain`. The intermediates
-> become function-local values passed only between those functions, still private, distinctly
-> typed and unable to construct `ToolChainService`. The stage action checks for cancellation
-> between internal steps and cleans up what it owns. The nine operation IDs and their
-> intermediate keys are removed when it lands; `compile-naming-policy` stays a separate
-> operation.
+`prepare-toolchain` is one registered [stage action](../decisions/0031-stage-actions.md)
+(`src/actions/toolchain/prepare_toolchain.zig`):
+
+- it has `ok` and `failed` outcomes and side effect `filesystem_read`;
+- its ports are the existing `toolchain-read` and `toolchain-parser` ports, so no workflow
+  policy that runs these steps needs a new capability;
+- it outputs `valid_toolchain`.
+
+Its internal steps run in this order: capture the project layer, inventory the presets, capture
+the presets, parse the documents, validate the project, validate the registry, resolve
+inheritance, compose, and validate safety. Every step only passes `ok` on and `failed` to the end,
+so the sequence hides no routed choice. Each step keeps the rules below as a separate internal
+function with its own tests; only the safety step can construct `ValidToolchain`. The
+intermediates are function-local values passed only between those functions, private, distinctly
+typed and unable to construct `ToolChainService`. The stage action checks for cancellation
+between internal steps and cleans up what it owns. The nine former operation IDs and their
+intermediate keys no longer exist; `compile-naming-policy` stays a separate operation.
 
 | Operation | Output key |
 | --- | --- |
-| `capture-project-toolchain` | `project_toolchain_capture` |
-| `inventory-toolchain-presets` | `toolchain_preset_inventory` |
-| `capture-toolchain-presets` | `toolchain_preset_captures` |
-| `parse-toolchain-documents` | `raw_toolchain_documents` |
-| `validate-project-toolchain-schema` | `schema_valid_project_toolchain` |
-| `validate-toolchain-preset-registry` | `schema_valid_toolchain_registry` |
-| `resolve-toolchain-inheritance` | `resolved_toolchain_inheritance` |
-| `compose-toolchain` | `composed_toolchain` |
-| `validate-toolchain-safety` | `valid_toolchain` |
+| `prepare-toolchain` | `valid_toolchain` |
 | `compile-naming-policy` | `compiled_naming_policy` |
 
 - Composition binds each source port to its exact F0004 root capability after startup,
@@ -108,7 +99,8 @@ The YAML graph owns ordering; no combined setup operation hides this sequence.
 - The source ports derive `toolchain-read`; the parser port derives `toolchain-parser`.
 - The registered `core.toolchain@1` profile allows those two capabilities only.
 - Unreferenced setup operations perform no reads.
-- Cancellation and cleanup remain runner-owned.
+- Cancellation is checked between the stage action's internal steps, the runner reports the
+  runtime's own stop, and the stage cleans up what it owns.
 
 ## 2. Path authority and the requested upstream service
 
@@ -242,8 +234,8 @@ hide these responsibilities behind a service method.
   candidate, or pre-safety policy.
 - Its sole consumer-visible value is the borrowed immutable `ValidToolchain` constructed
   after post-composition safety validation.
-- There is no service-consumer exception; intermediate workflow keys are not service
-  authority.
+- There is no service-consumer exception; the stage action's intermediate values are not
+  service authority.
 - Publication of validated authority remains with the complete owning workflow under ADR
   0009, outside this read-only boundary.
 
@@ -331,7 +323,8 @@ separate approved F0002 contract.
 
 1. `ToolChainService` has exactly one responsibility: expose one immutable
    `ValidToolchain` through its concrete read-only `toolchain()` accessor. The
-   bounded loading actions remain separate and expose no consumer query.
+   bounded loading steps remain separate functions of the stage action and expose no consumer
+   query.
 2. F0001 remains the only `.sddtoolkit.json` reader, and the path-policy owner
    remains the only owner that turns its raw path strings into capabilities.
    F0003 receives those capabilities only through F0004's
@@ -347,8 +340,8 @@ separate approved F0002 contract.
      inheritance is resolved.
    - The two JSON Schema files document those same closed YAML shapes but are not
      runtime inputs.
-   - Raw and schema-valid results are runner-private intermediates and cannot construct
-     `ToolChainService`.
+   - Raw and schema-valid results are function-local intermediates of the stage action and
+     cannot construct `ToolChainService`.
 5. Every inherited preset identity/version resolves exactly once; missing,
    duplicate, conflicting-version, ranged/latest, and cyclic closures
    fail closed.
@@ -387,8 +380,8 @@ Implementation tests cover the owning boundaries:
 - typed decoding and boundary confinement: accepted project documents plus
   malformed YAML, duplicate/unknown/missing/wrong-kind fields, unresolved
   placeholders, `_structure.yaml`, and unrelated representative legacy
-  documents; raw/schema-valid candidates pass only through their exact
-  runner-owned bindings and cannot construct or enter a public service API;
+  documents; raw/schema-valid candidates pass only between the stage action's internal
+  functions and cannot construct or enter a public service API;
 - preset-registry work: accepted packages, unsupported versions,
   unresolved assets, legacy documents, and an invalid unselected package;
 - inheritance: multiple unrelated valid compositions and rejected missing,

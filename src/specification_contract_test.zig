@@ -527,5 +527,6 @@ fn proposal() spec.ContentProposal {
         .source_group_ids = &.{.{ .ordinal = 1 }},
         .provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} },
     };
-    return .{ .display_name = value, .primary_user_story = value, .records = &.{}, .entities = .{ .disposition = .not_applicable, .basis = value } };
+    // ADR 0048: the display name is the sources' heading text, with no attribution.
+    return .{ .display_name = .{ .bytes = "Reference-grounded feature" }, .primary_user_story = value, .records = &.{}, .entities = .{ .disposition = .not_applicable, .basis = value } };
 }

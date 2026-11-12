@@ -68,11 +68,11 @@ pub const AuthoringValue = struct { value: spec.BusinessValue, signal_ids: []con
 pub const AuthoringEntity = struct { content: spec.Content(spec.BusinessValue), signal_ids: []const @import("reference_reconciliation.zig").SignalId };
 /// A non-entity record names the claims it supports from its batch's group (ADR 0038).
 pub const AuthoringRecord = struct { content: spec.Content(spec.BusinessValue), claim_ids: []const @import("reference_identity.zig").ClaimId };
-/// ADR 0047: the engine composes the story, so no model response carries one.
+/// ADR 0047: the engine composes the story, so no model response carries one. Nor does
+/// one carry the title, which the engine takes from the sources (ADR 0048).
 pub const ModelResponse = union(enum) {
     brief: struct {
-        pub const model_fields = .{ .title = @import("text_field_policy.zig").Field.spec_title, .description = @import("text_field_policy.zig").Field.spec_description, .primary_goal = @import("text_field_policy.zig").Field.spec_goal };
-        title: AuthoringValue,
+        pub const model_fields = .{ .description = @import("text_field_policy.zig").Field.spec_description, .primary_goal = @import("text_field_policy.zig").Field.spec_goal };
         description: AuthoringValue,
         primary_goal: AuthoringValue,
     },
@@ -96,7 +96,7 @@ pub const ModelResponse = union(enum) {
             .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = try wireValue(allocator, context, need.question), .record_kind = need.record_kind } },
             .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
-                .brief => |brief| .{ .brief = .{ .title = try wireValue(allocator, context, brief.title), .description = try wireValue(allocator, context, brief.description), .primary_goal = try wireValue(allocator, context, brief.primary_goal) } },
+                .brief => |brief| .{ .brief = .{ .description = try wireValue(allocator, context, brief.description), .primary_goal = try wireValue(allocator, context, brief.primary_goal) } },
                 .primary_user_story => return error.InvalidSpecificationUnit,
                 .entities => |entities| entity: {
                     const records = try allocator.alloc(AuthoringEntity, entities.records.len);
@@ -129,7 +129,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("sp
             break :clarification .{ .clarification = .{ .reason = need.reason, .question = try associated(allocator, available, need.question, .question), .record_kind = need.record_kind } };
         },
         .inconclusive => |failure| .{ .inconclusive = failure },
-        .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{ .title = try associated(allocator, available, brief.title, .content), .description = try associated(allocator, available, brief.description, .content), .primary_goal = try associated(allocator, available, brief.primary_goal, .content) } } } else error.InvalidSpecificationUnit,
+        .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{ .description = try associated(allocator, available, brief.description, .content), .primary_goal = try associated(allocator, available, brief.primary_goal, .content) } } } else error.InvalidSpecificationUnit,
         .entities => |entities| if (bound == .entities) entity: {
             const records = try allocator.alloc(spec.Model.RecordProposal, entities.records.len);
             for (entities.records, records) |wire, *record| {
@@ -174,10 +174,13 @@ pub fn validate(allocator: std.mem.Allocator, validator: @import("typed_text.zig
 /// Full candidate validation retains the native value-repair evidence bound.
 /// Recognition during revalidation cannot widen a previously authorized S+E.
 pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: candidate.Candidate) Error!Validation {
-    if (proposed.group_repair != null and unit != .entities) return error.InvalidSpecificationUnit;
+    if (proposed.group_repair) |group| if (std.meta.activeTag(unit) != @as(std.meta.Tag(Unit), switch (group.policy) {
+        .membership => .entities,
+        .scenario => .records,
+    })) return error.InvalidSpecificationUnit;
     const result = try validate(a, validator, context, unit, proposed.response);
     if (result != .valid) return result;
-    if (proposed.group_repair) |group| if (group.policy.membership.evidence_bound) |bound| {
+    if (proposed.group_repair) |group| if (group.policy.fixed().evidence_bound) |bound| {
         var scratch_arena: std.heap.ArenaAllocator = .init(a);
         defer scratch_arena.deinit();
         const scratch_allocator = scratch_arena.allocator();
@@ -186,13 +189,13 @@ pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zi
         if (selected != .record or result.valid.response != .content) return error.InvalidSpecificationUnit;
         const record = (recordCollection(.canonical, result.valid.response.content) orelse return error.InvalidSpecificationUnit)[selected.record];
         {
-            const fixed = group.policy.membership.fixed_provenance;
+            const fixed = group.policy.fixed().fixed_provenance;
             if (fixed.claim_ids.len != record.provenance.claim_ids.len) return error.InvalidSpecificationUnit;
             for (fixed.claim_ids, record.provenance.claim_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
             if (fixed.clarification_response_ids.len != record.provenance.clarification_response_ids.len) return error.InvalidSpecificationUnit;
             for (fixed.clarification_response_ids, record.provenance.clarification_response_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
         }
-        const groups = group.policy.membership.fixed_source_group_ids;
+        const groups = group.policy.fixed().fixed_source_group_ids;
         if (groups.len != record.source_group_ids.len) return error.InvalidSpecificationUnit;
         for (groups, record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
         const resolved = try provenance.lineageForRepair(scratch_allocator, context, .{ .claim_ids = record.provenance.claim_ids, .clarification_response_ids = record.provenance.clarification_response_ids }, try provenance.recordValues(scratch_allocator, record.content));
@@ -240,7 +243,6 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
             if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
             break :blk .{ .content = switch (content) {
                 .brief => |brief| .{ .brief = .{
-                    .title = inspectAuthored(boundary, allocator, validator, context, brief.title, .spec_title, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .title, inspection, err),
                     .description = inspectAuthored(boundary, allocator, validator, context, brief.description, .spec_description, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .description, inspection, err),
                     .primary_goal = inspectAuthored(boundary, allocator, validator, context, brief.primary_goal, .spec_goal, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, inspection, err),
                 } },

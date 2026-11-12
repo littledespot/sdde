@@ -5,7 +5,7 @@ const parser = @import("adapters/parsers/clarification_inputs.zig");
 const fixture = @import("test_fixtures/clarification_inputs.zig");
 const artifacts = @import("domain/workflow_artifact_registry.zig");
 const feature = @import("domain/feature_directory.zig");
-const action = @import("actions/clarification/validate_clarification_forms.zig");
+const steps = @import("actions/specify/prepare_inputs.zig").steps;
 const selected = @import("domain/feature_identity.zig").FeatureId{ .bytes = "Chosen/Café" };
 
 test "clarification notices use published open forms and survive invocation release" {
@@ -186,9 +186,9 @@ test "source-aware clarification state binds the current native corpus before pu
 }
 
 fn load(allocator: std.mem.Allocator, captures: c.Captures) !c.Inputs {
-    const parsed = try (@import("actions/clarification/parse_clarification_state.zig").Action{ .parser = parser.stateParser() }).execute(allocator, captures);
-    const state = try (@import("actions/clarification/validate_clarification_state.zig").Action{}).execute(parsed, selected);
-    return (action.Action{ .parser = parser.formParser() }).execute(allocator, state, captures);
+    const parsed = try steps.parseClarificationState(parser.stateParser(), allocator, captures);
+    const state = try steps.validateClarificationState(parsed, selected);
+    return steps.validateClarificationForms(parser.formParser(), allocator, state, captures);
 }
 
 test "clarification publication selects its terminal outcome before any write" {
@@ -365,13 +365,13 @@ test "missing modified stale and mismatched recorded closes fail without changin
     var response = parsed.responses[0];
     response.answer = .{ .business_text = "a different recorded answer" };
     parsed.responses = &.{response};
-    try std.testing.expectError(error.InvalidClarificationInput, (action.Action{ .parser = parser.formParser() }).execute(allocator, try c.validate(.{ .value = parsed }, selected), captures));
+    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = parsed }, selected), captures));
     try std.testing.expectEqualSlices(u8, snapshot, captures.forms[0].bytes);
     const submitted = try fixture.closed(allocator, "S01", false);
     var later = try parser.stateParser().parse(allocator, submitted.state.?);
     later.state_ordinal += 1;
     later.revision += 1;
-    try std.testing.expectError(error.InvalidClarificationInput, (action.Action{ .parser = parser.formParser() }).execute(allocator, try c.validate(.{ .value = later }, selected), submitted));
+    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = later }, selected), submitted));
 }
 
 test "response history rejects malformed answers and unbound closures" {
@@ -467,13 +467,13 @@ test "authority-resolved audit records have no editable answer and exact canonic
     const state = fixture.state(&.{record});
     const bytes = try forms.renderAuthorityAudit(allocator, record, state);
     const captures: c.Captures = .{ .state = null, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = bytes }} };
-    const loaded = try (action.Action{ .parser = parser.formParser() }).execute(allocator, try c.validate(.{ .value = state }, selected), captures);
+    const loaded = try steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = state }, selected), captures);
     try std.testing.expectEqual(@as(usize, 0), loaded.submissions.len);
     try std.testing.expectEqual(@as(usize, 0), loaded.protected_forms.len);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "user-editable") == null);
 }
 
-test "clarification actions propagate parser failures and skip absent state" {
+test "the clarification parse and form steps propagate parser failures and skip absent state" {
     const fake = struct {
         fn state(_: std.mem.Allocator, bytes: []const u8) c.Error!c.State {
             if (!std.mem.eql(u8, bytes, "captured state")) @panic("action changed captured bytes");
@@ -483,13 +483,13 @@ test "clarification actions propagate parser failures and skip absent state" {
             return error.InvalidClarificationInput;
         }
     };
-    const parse = @import("actions/clarification/parse_clarification_state.zig").Action{ .parser = .{ .parse_state_fn = fake.state } };
-    try std.testing.expect((try parse.execute(std.testing.allocator, .{ .state = null, .forms = &.{} })).value == null);
-    try std.testing.expectError(error.InvalidClarificationInput, parse.execute(std.testing.allocator, .{ .state = "captured state", .forms = &.{} }));
+    const state_parser: @import("ports/clarification_input_parser.zig").StateParser = .{ .parse_state_fn = fake.state };
+    try std.testing.expect((try steps.parseClarificationState(state_parser, std.testing.allocator, .{ .state = null, .forms = &.{} })).value == null);
+    try std.testing.expectError(error.InvalidClarificationInput, steps.parseClarificationState(state_parser, std.testing.allocator, .{ .state = "captured state", .forms = &.{} }));
     const record = fixture.record("S01");
     const state = try c.validate(.{ .value = fixture.state(&.{record}) }, selected);
-    const validate = action.Action{ .parser = .{ .parse_form_fn = fake.form } };
-    try std.testing.expectError(error.InvalidClarificationInput, validate.execute(std.testing.allocator, state, .{ .state = null, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = "captured form" }} }));
+    const form_parser: @import("ports/clarification_input_parser.zig").FormParser = .{ .parse_form_fn = fake.form };
+    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, std.testing.allocator, state, .{ .state = null, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = "captured form" }} }));
 }
 
 test "clarification pipeline ownership is leak-free on allocation failures" {

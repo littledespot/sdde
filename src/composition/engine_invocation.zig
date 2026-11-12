@@ -2,7 +2,6 @@ const std = @import("std");
 const pipeline = @import("../domain/pipeline.zig");
 const bootstrap_services = @import("../application/bootstrap_services.zig");
 const model_provider_binding = @import("../application/model_provider_bootstrap_binding.zig");
-const model_provider_orchestrator = @import("../application/model_provider_bootstrap_orchestrator.zig");
 const workflow_bindings = @import("../application/workflow_engine_child_bindings.zig");
 const workflow_pipeline_runner = @import("../application/workflow_pipeline_runner.zig");
 const workflow_selection_runner = @import("../application/workflow_selection_runner.zig");
@@ -19,7 +18,7 @@ pub const Assembly = struct {
     provider_bootstrap: model_provider_binding.Binding,
     operation_registry: *const operations.Registry,
     selection: workflow_selection_runner.Runner,
-    provider_outcome: ?model_provider_orchestrator.Outcome = null,
+    provider_outcome: ?model_provider_binding.Outcome = null,
     pipeline_runner: ?workflow_pipeline_runner.Runner = null,
     provider_clock: ?@import("../ports/provider_authorization_lease.zig").Clock = null,
     provider_runtime: ?*@import("model_provider_runtime.zig").Assembly = null,

@@ -398,7 +398,6 @@ pub fn modelAttributed(comptime boundary: spec.Boundary, a: std.mem.Allocator, r
 
 pub fn modelContent(a: std.mem.Allocator, references: refs.Records, content: spec.IdentifiedContent) Error!spec.IdentifiedContent {
     var projected = content;
-    projected.display_name = try modelAttributed(.canonical, a, references, content.display_name);
     projected.primary_user_story = try modelAttributed(.canonical, a, references, content.primary_user_story);
     projected.entities.basis = try modelAttributed(.canonical, a, references, content.entities.basis);
     const records = try a.dupe(spec.IdentifiedRecord, content.records);
@@ -496,12 +495,12 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
 }
 
 /// Intrinsic stored support joins. Current text/path policy is checked by the
-/// live validators with its real toolchain, never reconstructed by a reader.
+/// live validators with its real toolchain, never reconstructed by a reader. The
+/// display name has no support to join (ADR 0048).
 pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, references: @import("reference_support.zig").Records, brief: spec.Brief, candidate: spec.IdentifiedContent) Error!void {
     const Singleton = struct { value: spec.AttributedValue, field: text.field_policy.Field };
     for ([_]Singleton{
-        .{ .value = brief.title, .field = .spec_title },                  .{ .value = brief.description, .field = .spec_description },
-        .{ .value = brief.primary_goal, .field = .spec_goal },            .{ .value = candidate.display_name, .field = .spec_title },
+        .{ .value = brief.description, .field = .spec_description },      .{ .value = brief.primary_goal, .field = .spec_goal },
         .{ .value = candidate.primary_user_story, .field = .spec_story }, .{ .value = candidate.entities.basis, .field = .spec_entity_basis },
     }) |entry| {
         const attributed = entry.value;

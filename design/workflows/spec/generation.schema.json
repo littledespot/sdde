@@ -94,9 +94,6 @@
         "kind": {
           "const": "brief"
         },
-        "title": {
-          "$ref": "#/$defs/authoring_value"
-        },
         "description": {
           "$ref": "#/$defs/authoring_value"
         },
@@ -106,7 +103,6 @@
       },
       "required": [
         "kind",
-        "title",
         "description",
         "primary_goal"
       ],

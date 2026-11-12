@@ -3,7 +3,7 @@
 **Status:** Proposed feature design
 
 **Implementation:** The bounded read-only configuration increment is implemented
-in [the bootstrap runner](../../src/application/bootstrap_config_runner.zig)
+in [the startup routine](../../src/application/startup_routine.zig)
 and [configuration service](../../src/application/sddtoolkit_config_service.zig).
 This implementation status does not accept the remainder of the proposed design.
 
@@ -33,21 +33,20 @@ interpret logging, model, or path settings as operational policy.
 
 ## 2. Minimal design
 
-The implementation has three actions:
+The implementation has three startup-routine steps:
 
-| Action | Sole responsibility |
+| Step | Sole responsibility |
 | --- | --- |
-| `LocateExactEngineConfigAction` | Canonicalize the invocation working directory as the project root and resolve only its exact `.sddtoolkit.json` child. Any failure to resolve a safe readable file returns `ENGINE_CONFIG_READ_ERROR`. Do not search a parent or child directory. |
-| `ReadEngineConfigAction` | Read that validated no-follow regular file into owned bytes up to the internal 1 MiB guard; any failure returns `ENGINE_CONFIG_READ_ERROR`. |
-| `DecodeSDDToolKitConfigAction` | Parse those bytes directly into the exact closed `SDDToolKitConfig`; any JSON or structural failure returns `ENGINE_CONFIG_PARSE_ERROR`. |
+| `locate_config` | Canonicalize the invocation working directory as the project root and resolve only its exact `.sddtoolkit.json` child. Any failure to resolve a safe readable file returns `ENGINE_CONFIG_READ_ERROR`. Do not search a parent or child directory. |
+| `read_config` | Read that validated no-follow regular file into owned bytes up to the internal 1 MiB guard; any failure returns `ENGINE_CONFIG_READ_ERROR`. |
+| `decode_config` | Parse those bytes directly into the exact closed `SDDToolKitConfig`; any JSON or structural failure returns `ENGINE_CONFIG_PARSE_ERROR`. |
 
 There is no generic JSON-document action or intermediate JSON tree. JSON
 syntax parsing is part of decoding one known JSON contract.
 
-The runner invokes the actions, validates/applies their deltas, constructs one
-`SDDToolKitConfigService`, and returns it through the typed bootstrap result.
-The composition root only constructs the adapter and bindings. No action calls
-another action.
+The startup routine runs the steps and returns the owned configuration through its typed
+ready result; the composition root constructs one `SDDToolKitConfigService` from it. No
+step calls another step.
 
 ## 3. Configuration shape
 
@@ -209,15 +208,15 @@ owner's work.
 1. The invocation working directory is the project root and only its exact
    `.sddtoolkit.json` child is considered; no ancestor or descendant search is
    performed.
-2. Locate, read, and typed decode remain separate actions. Under
-   [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), they become
+2. Locate, read, and typed decode remain separate steps. Under
+   [ADR 0032](../decisions/0032-engine-routines.md), they are
    separate typed steps of the startup engine routine, each with its own tests and public
    codes. Their values pass as typed arguments, not runner-applied deltas.
 3. Decode goes directly from owned bytes to one closed owned
    `SDDToolKitConfig`; no generic JSON tree is retained or published.
 4. A successful invocation reads and decodes the file once.
-5. The runner constructs exactly one `SDDToolKitConfigService` and returns it
-   through the typed bootstrap result.
+5. The composition root constructs exactly one `SDDToolKitConfigService` from the
+   startup routine's typed ready result.
 6. Consumers query typed fields without a second config value, cache, generic
    getter, or reread path.
 7. Structural success grants no logging, model, path, command, transaction, or

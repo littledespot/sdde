@@ -205,6 +205,11 @@ test "captured descriptions round-trip controls and reject a retired output allo
     // ADR 0039: v12 recorded no sampling or configured temperatures, so it is refused.
     const v12 = try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v12");
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, v12));
+    // ADR 0048: v16 could bind the retired brief title's text field, so it is refused.
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v16")));
+    // ADR 0038 Decision 3 (amended): v17 recorded covered and covering kinds for an
+    // admission scenario rule that no longer exists, so it is refused.
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v17")));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, ",\"sampling\":\"configured\"", "")));
     // A re-send records its sampling, and the value it sent round-trips.
     var resend = description;
@@ -1184,19 +1189,18 @@ fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debu
 const coverage_variant = "{{\"type\":\"object\",\"properties\":{{\"kind\":{{\"const\":\"{s}\"}},\"text\":{{\"type\":\"string\",\"maxLength\":40}}}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false}}";
 const coverage_schema = std.fmt.comptimePrint("{{\"type\":\"object\",\"properties\":{{\"entries\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[" ++ coverage_variant ++ "," ++ coverage_variant ++ "]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}}},\"required\":[\"entries\"],\"additionalProperties\":false}}", .{ "rule", "check" });
 const coverage_path: []const @import("domain/model_result_schema.zig").ChoiceStep = &.{ .{ .property = "entries" }, .{ .items = {} }, .{ .property = "ids" } };
-const coverage_rule: @import("domain/model_result_schema.zig").ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"rule"}, .owning = &.{} };
+const coverage_rule: @import("domain/model_result_schema.zig").ItemCoverage = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} };
 
-/// A captured request replays admission's native coverage (ADR 0038), which the
-/// recorded provider schema bytes cannot express.
+/// A captured request replays admission's native cross-item rule (ADR 0038 Decision 5),
+/// which the recorded provider schema bytes cannot express.
 fn expectReplayedCoverage(a: std.mem.Allocator, fixture: *Fixture, selected: debug.Description) !void {
     try std.testing.expectEqual(@as(usize, 1), selected.coverages.len);
+    // A value no other kind names is admitted: scenario coverage is the session's
+    // (ADR 0038 Decision 3), not admission's, so replay doesn't check it either.
     const uncovered = try debugResponse(a, "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2,4]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2]}]}");
-    const checked = try fixture.provider.provider().inspect(a, selected, uncovered);
-    try std.testing.expectEqual(.invalid, checked.schema);
-    try std.testing.expectEqualStrings("uncovered_member", checked.reason.?);
-    try std.testing.expectEqualStrings("/entries/0/ids/1", checked.path.?);
-    // The record also replays exclusivity (ADR 0038 Decision 5): a partly shared item is
-    // rejected, and a wholly shared one is admitted for its owner's native delete.
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, selected, uncovered)).schema);
+    // The record replays exclusivity: a partly shared item is rejected, and a wholly
+    // shared one is admitted for its owner's native delete.
     const shared = try debugResponse(a, "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"rule\",\"text\":\"s\"},\"ids\":[2,4]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2,4]}]}");
     const shared_check = try fixture.provider.provider().inspect(a, selected, shared);
     try std.testing.expectEqualStrings("shared_member", shared_check.reason.?);
@@ -1216,13 +1220,13 @@ fn expectReplayedCoverage(a: std.mem.Allocator, fixture: *Fixture, selected: deb
     // Without the record the same bytes pass, so the record is what replays admission.
     var unrestricted = selected;
     unrestricted.coverages = &.{};
-    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, uncovered)).schema);
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, shared)).schema);
     const unexempt = try fixture.provider.provider().inspect(a, unrestricted, repeated_defect);
     try std.testing.expectEqual(.invalid, unexempt.json);
     try std.testing.expectEqualStrings("/entries/1/content/text", unexempt.path.?);
     // A record that does not fit the captured schema cannot be read or replayed.
     var foreign = selected;
-    foreign.coverages = &.{.{ .path = coverage_path, .allowed = &.{ 2, 4 }, .coverage = .{ .kind_property = "content", .covered = &.{"ghost"}, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} } }};
+    foreign.coverages = &.{.{ .path = coverage_path, .allowed = &.{ 2, 4 }, .coverage = .{ .kind_property = "content", .exclusive = &.{"ghost"}, .owning = &.{} } }};
     try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
     try std.testing.expectEqualDeep(selected.coverages, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).coverages);

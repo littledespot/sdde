@@ -18,14 +18,15 @@ pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.
 }
 /// Source readiness before generation: the feature requirements the sources must
 /// support, and the reference obligations. No candidate exists yet. The story isn't
-/// one: the engine composes it from the sources' business claims (ADR 0047).
+/// one: the engine composes it from the sources' business claims (ADR 0047). Nor is the
+/// display name, which the engine takes from the sources' heading (ADR 0048).
 pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: @import("reference_support.zig").Records) authority.Error!authority.Inputs {
     const items = references.items;
     const sources = try allocator.alloc(authority.Authority, 1);
     sources[0] = .{ .reference = items.state_id };
     var seeds: std.ArrayList(authority.Seed) = .empty;
     var gaps: std.ArrayList(authority.ForcedGap) = .empty;
-    for ([_]authority.Slot{ .display_name, .description, .primary_goal, .entities, .acceptance_criteria, .functional_requirements, .scenario_coverage }) |slot| {
+    for ([_]authority.Slot{ .description, .primary_goal, .entities, .acceptance_criteria, .functional_requirements, .scenario_coverage }) |slot| {
         try seeds.append(allocator, .{
             .id = .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot },
             .requiredness = .{ .schema = .specification },

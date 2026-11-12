@@ -12,7 +12,7 @@ pub fn parse(args: []const []const u8) ![]const u8 {
 }
 
 pub fn preflight(a: std.mem.Allocator, config_bytes: []const u8) !void {
-    var config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, config_bytes);
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, config_bytes);
     defer config.deinit();
     try @import("../model_cost_policy.zig").requireConfiguredSlots(&config.value().models);
     try @import("../frozen_binding.zig").validateModels(a, &config.value().models);
@@ -78,7 +78,7 @@ fn execute(io: std.Io, a: std.mem.Allocator, environment: *const std.process.Env
     report.status = .inconclusive;
     report.build.?.reconstruction = try @import("../e2e/build_evidence.zig").save(store, @embedFile("build_provenance"));
     report.build.?.inputs_file = "build-inputs.json";
-    var workflow: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = report.started_at_utc, .status = .input_invalid };
+    var workflow: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = report.started_at_utc, .status = .input_invalid };
     var probe: @import("../e2e/invoke.zig").Probe = .{};
     defer reports.applyExecution(report, probe, workflow);
     _ = try @import("../e2e/invoke.zig").run(io, a, run.project, selected, captured, @import("../environment.zig").bedrockOnly(key), store, &workflow, .{ .purpose = .{ .single_exchange = &probe } });

@@ -102,40 +102,40 @@ test "test.integration.exact_value.production_admission retained failure classes
     defer arena.deinit();
     const a = arena.allocator();
     const report = try production.run(a);
-    try std.testing.expectEqual(@as(usize, 5), report.requested_runs);
-    try std.testing.expectEqual(@as(usize, 4), report.available_requested_runs);
+    try std.testing.expectEqual(@as(usize, 4), report.requested_runs);
+    try std.testing.expectEqual(@as(usize, 3), report.available_requested_runs);
     try std.testing.expectEqual(@as(usize, 1), report.unavailable_requested_runs);
-    try std.testing.expectEqual(@as(usize, 4), report.replayed_capture_rows);
+    try std.testing.expectEqual(@as(usize, 3), report.replayed_capture_rows);
     try std.testing.expectEqual(@as(usize, 1), report.scripted_control_rows);
     try std.testing.expectEqual(@as(usize, 1), report.admitted_rows);
-    try std.testing.expectEqual(@as(usize, 4), report.typed_rejection_rows);
+    try std.testing.expectEqual(@as(usize, 3), report.typed_rejection_rows);
     try std.testing.expectEqual(@as(usize, 0), report.admission_escape_rows);
-    try std.testing.expectEqual(@as(usize, 6), report.rows.len);
+    try std.testing.expectEqual(@as(usize, 5), report.rows.len);
     try std.testing.expect(!report.historical_metadata_promoted and !report.workflow_authority and !report.semantic_quality_assessed);
     try std.testing.expectEqual(@as(usize, 0), report.model_calls);
-    for ([_]usize{ 0, 1 }) |index| {
-        const row = report.rows[index];
+    {
+        const row = report.rows[0];
         try std.testing.expectEqual(production.Origin.authentic_capture, row.origin);
         try std.testing.expectEqual(.rejected_by_current_schema_and_codec, row.legacy_exact_wire);
         try std.testing.expect(row.outcome == .rejected);
         try std.testing.expect(row.outcome.rejected == .composition or row.outcome.rejected == .schema);
     }
-    try std.testing.expectEqual(.prose_without_insertions, report.rows[2].failure_class);
-    try std.testing.expectEqual(.authentic_capture, report.rows[2].origin);
-    try std.testing.expectEqualStrings("2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4", report.rows[2].execution_id.?);
+    try std.testing.expectEqual(.prose_without_insertions, report.rows[1].failure_class);
+    try std.testing.expectEqual(.authentic_capture, report.rows[1].origin);
+    try std.testing.expectEqualStrings("2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4", report.rows[1].execution_id.?);
     // The old raw prose predates records naming their claims (ADR 0038), and its
     // third record is an entity that B9 assigns to the feature entities unit. This
     // immutable batch ends in a typed schema rejection rather than an old-shape bypass.
-    try std.testing.expectEqual(.missing_required_property, report.rows[2].outcome.rejected.schema.reason);
-    try std.testing.expectEqualStrings("/records/0/claim_ids", report.rows[2].outcome.rejected.schema.path);
-    try std.testing.expectEqual(.unavailable_capture, report.rows[3].origin);
-    try std.testing.expectEqual(.retained_raw_capture_not_found, report.rows[3].outcome.unavailable);
-    try std.testing.expect(report.rows[3].output_sha256 == null);
-    try std.testing.expectEqual(.embedded_insertion_syntax, report.rows[4].failure_class);
-    const syntax = report.rows[4].outcome.rejected.composition;
+    try std.testing.expectEqual(.missing_required_property, report.rows[1].outcome.rejected.schema.reason);
+    try std.testing.expectEqualStrings("/records/0/claim_ids", report.rows[1].outcome.rejected.schema.path);
+    try std.testing.expectEqual(.unavailable_capture, report.rows[2].origin);
+    try std.testing.expectEqual(.retained_raw_capture_not_found, report.rows[2].outcome.unavailable);
+    try std.testing.expect(report.rows[2].output_sha256 == null);
+    try std.testing.expectEqual(.embedded_insertion_syntax, report.rows[3].failure_class);
+    const syntax = report.rows[3].outcome.rejected.composition;
     try std.testing.expect(syntax.len != 0);
     for (syntax) |issue| try std.testing.expectEqual(.embedded_insertion_syntax, issue.reason);
-    for ([_]usize{5}) |index| {
+    for ([_]usize{4}) |index| {
         const row = report.rows[index];
         const accepted = row.outcome.admitted;
         try std.testing.expect(accepted.records >= 2);

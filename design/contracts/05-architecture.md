@@ -12,7 +12,7 @@ Part of the [proposed design](../design.md#5-logical-architecture), as amended b
    through runner-owned child bindings. A workflow-visible orchestrator is
    addressable from YAML and cannot hide a workflow-specific graph; all
    orchestrators own ordering and branching only, not domain work.
-3. **Actions** perform one use-case operation each: read one resource, invoke one model request, validate one concern, render one artifact, publish authorized workflow output, or execute one configured command. Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented), a stage action performs one deterministic sequence of internal steps, such as toolchain preparation, through internal functions that each do one of those things, within the limits the ADR lists.
+3. **Actions** perform one use-case operation each: read one resource, invoke one model request, validate one concern, render one artifact, publish authorized workflow output, or execute one configured command. Under [ADR 0031](../decisions/0031-stage-actions.md) (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions), a stage action performs one deterministic sequence of internal steps, such as toolchain preparation, through internal functions that each do one of those things, within the limits the ADR lists.
 4. **Domain** contains immutable intermediate representations, identifiers, diagnostics, policies, and result types.
 5. **Infrastructure adapters** implement filesystem, model-provider, parser, command-runner, clock, logging, and reader ports.
 6. **Workflow/preset/config compilers** validate declarative workflow graphs,
@@ -38,7 +38,8 @@ Application and domain code depend on interfaces, never provider implementations
   validator ports.
 - This makes the rule “orchestrators organize; actions do” mechanically enforceable and prevents
   child execution from bypassing the runner.
-- [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented) adds a third
+- [ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup and provider
+  bootstrap; feature logging not yet) adds a third
   category, the **engine routine**, for fixed engine sequences: startup, provider bootstrap
   and feature logging.
   - It is neither a node nor an orchestrator.
@@ -50,17 +51,17 @@ Application and domain code depend on interfaces, never provider implementations
 
 - The composition root registers concrete generic operation implementations in one registry of
   current operation contracts and binds their pipeline nodes and infrastructure adapters.
-- It assembles the fixed engine-startup graph that loads and compiles project workflow
-  definitions and the separate fixed, nonselectable, capability-free
-  `ModelProviderBootstrapOrchestrator` accepted by ADR 0004.
+- It runs the fixed engine-startup routine that loads and compiles project workflow
+  definitions; the separate fixed, nonselectable provider-bootstrap routine is accepted by
+  ADR 0004.
 - Project definitions cannot change either mechanism.
-- The startup graph remains unconditional.
-- Under ADR 0032 (not yet implemented), both mechanisms become typed engine routines, with
+- Startup remains unconditional.
+- Under ADR 0032, both mechanisms are typed engine routines, with
   the callers and properties that [invariant 27](../design.md#33-non-negotiable-invariants)
   states.
-- After exact workflow selection, `DeriveProviderRequirementAction` inspects only compiled
-  model-binding requirements and provider-call capabilities; `ModelProviderBootstrapOrchestrator`
-  conditionally coordinates the provider-file children before selected-workflow execution.
+- After exact workflow selection, the provider-bootstrap routine's requirement step inspects
+  only compiled model-binding requirements and provider-call capabilities; its provider-file
+  steps run conditionally before selected-workflow execution.
 - The workflow loader inventories and parses the definitions beneath `paths.workflows`.
 - The workflow compiler alone resolves each referenced operation contract by its unversioned ID,
   validates its closed parameters and typed transitions, proves the effective graph and

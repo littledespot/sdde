@@ -957,7 +957,7 @@ test "explicit native singleton construction omits only determined tagged fields
     try expectSelection(a, captured, "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", true);
 }
 
-test "coverage requires every value a covered item names to be named by a covering item" {
+test "admission requires no scenario coverage, and the cross-item rule's kinds are validated" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -966,68 +966,46 @@ test "coverage requires every value a covered item names to be named by a coveri
     const items = try std.fmt.allocPrint(a, "{{\"type\":\"array\",\"minItems\":0,\"maxItems\":10,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[" ++ variant ++ "," ++ variant ++ "," ++ variant ++ "]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}", .{ "rule", "check", "note" });
     const resource = try compile(a, try fieldSchema(a, items));
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ids" } };
-    const rule: schema.ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} };
-    const covered = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .coverage = rule }});
-    defer covered.release();
+    const rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} };
+    const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .coverage = rule }});
+    defer governed.release();
     const item = "{{\"content\":{{\"kind\":\"{s}\",\"text\":\"t\"}},\"ids\":{s}}}";
     const respond = struct {
         fn of(allocator: std.mem.Allocator, comptime layout: []const u8, args: anytype) ![]const u8 {
             return std.fmt.allocPrint(allocator, "{{\"value\":[" ++ layout ++ "]}}", args);
         }
     }.of;
-    // Admitted: every rule value has a check naming it; notes neither need nor give coverage.
+    // Admitted, as before ADR 0038 Decision 3's amendment some were not: a value no item of
+    // another kind names, and values only ungoverned kinds name. Scenario coverage is the
+    // specification session's, not admission's.
     for ([_][]const u8{
+        try respond(a, item, .{ "rule", "[3,5]" }),
         try respond(a, item ++ "," ++ item ++ "," ++ item, .{ "rule", "[3]", "check", "[5,3]", "note", "[7]" }),
-        try respond(a, item ++ "," ++ item, .{ "check", "[3]", "note", "[5]" }),
+        try respond(a, item ++ "," ++ item, .{ "check", "[3]", "note", "[3]" }),
         "{\"value\":[]}",
     }) |bytes| {
         const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{ .parse_numbers = false });
-        try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), covered.selected().root()) == null);
+        try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), governed.selected().root()) == null);
     }
-    // Rejected at the uncovered value itself, whatever else covers its siblings.
-    for ([_]struct { bytes: []const u8, path: []const u8 }{
-        .{ .bytes = try respond(a, item ++ "," ++ item, .{ "rule", "[3,5]", "check", "[3]" }), .path = "/value/0/ids/1" },
-        .{ .bytes = try respond(a, item ++ "," ++ item, .{ "rule", "[3]", "note", "[3]" }), .path = "/value/0/ids/0" },
-        .{ .bytes = try respond(a, item ++ "," ++ item ++ "," ++ item, .{ "check", "[3]", "rule", "[3]", "rule", "[7]" }), .path = "/value/2/ids/0" },
-    }) |case| {
-        const parsed = try std.json.parseFromSlice(std.json.Value, a, case.bytes, .{ .parse_numbers = false });
-        const rejected = check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), covered.selected().root()).?;
-        try std.testing.expectEqual(check.Rejection.uncovered_member, rejected.reason);
-        try std.testing.expectEqualStrings(case.path, (try rejected.describe(a)).path);
-        try std.testing.expectEqualStrings(case.path, (try rejected.describeExpected(a)).path);
-        // The rejection carries the compiled rule, so its correction names the covering kinds.
-        try std.testing.expectEqualDeep(covered.selected().coverageChoices()[0].coverage, rejected.coverage.?.rule);
-        // The provider schema can't express coverage; replay restores it from the record.
-        const wire = try compile(a, covered.selected().modelBytes());
-        try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), wire.root()) == null);
-        const restored = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, covered.selected().coverageChoices());
-        defer restored.release();
-        try std.testing.expectEqual(check.Rejection.uncovered_member, check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), restored.selected().root()).?.reason);
-    }
-    try std.testing.expectEqual(@as(usize, 1), covered.selected().coverageChoices().len);
-    const cloned = try covered.selected().clone(a);
-    try std.testing.expectEqualDeep(covered.selected().coverageChoices(), cloned.coverageChoices());
+    try std.testing.expectEqual(@as(usize, 1), governed.selected().coverageChoices().len);
+    const cloned = try governed.selected().clone(a);
+    try std.testing.expectEqualDeep(governed.selected().coverageChoices(), cloned.coverageChoices());
     try std.testing.expect(schema.findProperty(cloned.root().object, "value").?.schema.array.coverage != null);
     // The rule must name a subset selector on an item list whose kinds it can see.
     for ([_]schema.IntegerChoice{
         .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .coverage = rule },
         .{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{3}, .collection = .unique_subset, .coverage = rule },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "kinds", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"ghost"}, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{}, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{ "check", "rule" }, .exclusive = &.{}, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{ "rule", "rule" }, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} } },
-        // Exclusive kinds are distinct, offered by the items, and never covering kinds.
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{ "rule", "check" }, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{ "note", "note" }, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"ghost"}, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{""}, .owning = &.{} } },
-        // Owning kinds are distinct, offered by the items, and neither covering nor exclusive.
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"note"}, .owning = &.{"check"} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"note"}, .owning = &.{"note"} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"note"}, .owning = &.{ "rule", "rule" } } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"note"}, .owning = &.{"ghost"} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"note"}, .owning = &.{""} } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "kinds", .exclusive = &.{"rule"}, .owning = &.{} } },
+        // Exclusive kinds are present, distinct and offered by the items.
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{}, .owning = &.{"check"} } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{ "note", "note" }, .owning = &.{} } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"ghost"}, .owning = &.{} } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{""}, .owning = &.{} } },
+        // Owning kinds are distinct, offered by the items, and never exclusive.
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{"note"} } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{ "rule", "rule" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{"ghost"} } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{""} } },
     }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
 }
 
@@ -1042,7 +1020,7 @@ test "the statements array of a response is the array its schema covers, as repl
     // A schema that covers no array has no statements.
     try std.testing.expect(composition.statementsOf(resource) == null);
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ids" } };
-    const rule: schema.ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"rule"}, .owning = &.{} };
+    const rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} };
     const covered = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .coverage = rule }});
     defer covered.release();
     const statements = composition.statementsOf(covered.selected()).?;
@@ -1064,7 +1042,7 @@ test "cross-item rules govern one array, never arrays nested in an outer array" 
     const inner = try std.fmt.allocPrint(a, "{{\"type\":\"array\",\"minItems\":0,\"maxItems\":4,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[" ++ variant ++ "," ++ variant ++ "]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}", .{ "rule", "check" });
     const outer = try std.fmt.allocPrint(a, "{{\"type\":\"array\",\"minItems\":0,\"maxItems\":4,\"items\":{{\"type\":\"object\",\"properties\":{{\"inner\":{s}}},\"required\":[\"inner\"],\"additionalProperties\":false}}}}", .{inner});
     const resource = try compile(a, try fieldSchema(a, outer));
-    const rule: schema.ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"rule"}, .owning = &.{} };
+    const rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} };
     const nested: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "inner" }, .{ .items = {} }, .{ .property = "ids" } };
     try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = nested }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .coverage = rule }}));
     // The same inner array as the response's one governed array is accepted.
@@ -1082,9 +1060,9 @@ test "no exclusive item names both taken and untaken values, owning items are un
     const items = try std.fmt.allocPrint(a, "{{\"type\":\"array\",\"minItems\":0,\"maxItems\":10,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[" ++ variant ++ "," ++ variant ++ "," ++ variant ++ "," ++ variant ++ "]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}", .{ "rule", "check", "note", "own" });
     const resource = try compile(a, try fieldSchema(a, items));
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ids" } };
-    // A note is exclusive with rules but no check must cover it; an own item takes its
-    // values wherever it appears and is never constrained itself.
-    const rule: schema.ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{ "rule", "note" }, .owning = &.{"own"} };
+    // A note is exclusive with rules; an own item takes its values wherever it appears and
+    // is never constrained itself; a check is ungoverned.
+    const rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{ "rule", "note" }, .owning = &.{"own"} };
     const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .coverage = rule }});
     defer governed.release();
     const item = "{{\"content\":{{\"kind\":\"{s}\",\"text\":\"t\"}},\"ids\":{s}}}";

@@ -19,7 +19,7 @@ fn id(kind: a.Kind) a.Id {
         .feature_intent, .entity_applicability => .{ .feature = .singleton },
         else => .{ .decision = .{ .ordinal = 1 } },
     }, .slot = switch (kind) {
-        .feature_intent => .display_name,
+        .feature_intent => .description,
         .entity_applicability => .entities,
         .policy_predicate => .compliance,
         else => .decision,
@@ -214,10 +214,12 @@ test "Specify projects registered native fields and complete reference obligatio
     const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
     const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
     const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted);
-    // Seven mandatory slots, two signals, one exact value. The engine composes the
-    // story, so source readiness has no story subject (ADR 0047).
-    try std.testing.expectEqual(@as(usize, 10), before.seeds.len);
+    // Six mandatory slots, two signals, one exact value. The engine composes the
+    // story and takes the title from the sources, so source readiness has neither
+    // subject (ADRs 0047 and 0048).
+    try std.testing.expectEqual(@as(usize, 9), before.seeds.len);
     try std.testing.expect(!@hasField(a.Slot, "primary_user_story"));
+    try std.testing.expect(!@hasField(a.Slot, "display_name"));
     // A requirement of the previous contract version has no policy.
     var previous = before.seeds[0].id;
     previous.contract_version = a.version - 1;
@@ -274,7 +276,7 @@ test "record purposes place workflow guidance in native record frames" {
         const record = try descriptions.record(allocator, g, kind);
         try std.testing.expectEqualStrings(expected_record.items, record);
         try std.testing.expect(std.mem.indexOf(u8, catalogue, record) != null);
-        try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(g, kind, .display_name));
+        try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(g, kind, .description));
     }
     try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(g, .functional_requirement, .given));
     try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(g, .entity, .text));

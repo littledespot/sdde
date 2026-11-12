@@ -97,11 +97,11 @@ const Fixture = struct {
     fn compile(self: *Fixture, bytes: []const u8) !*const compilation.CompiledWorkflow {
         const allocator = self.arena.allocator();
         var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
-        const raw = try (@import("actions/workflow/parse_workflow_definitions.zig").Action{ .parser = parser.parser() }).execute(allocator, &.{.{ .ordinal = 1, .bytes = bytes }});
-        const definitions = try (@import("actions/workflow/validate_workflow_definition_schema.zig").Action{}).execute(allocator, raw);
+        const raw = try @import("application/startup_routine.zig").steps.parseWorkflows(parser.parser(), allocator, &.{.{ .ordinal = 1, .bytes = bytes }});
+        const definitions = try @import("domain/workflow_definition_schema.zig").validate(allocator, raw);
         var schemas: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-        const graphs = try (@import("actions/workflow/compile_workflow_graphs.zig").Action{ .registry = &self.registry, .result_schema_compiler = schemas.compiler() }).execute(allocator, definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
-        _ = try (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(allocator, graphs);
+        const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&self.registry, schemas.compiler(), allocator, definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
+        _ = try @import("domain/workflow_graph_validation.zig").validate(allocator, graphs);
         return &graphs[0];
     }
     fn runner(self: *Fixture, graph: *const compilation.CompiledWorkflow) runner_module.Runner {

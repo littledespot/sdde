@@ -125,11 +125,13 @@ fn lineAt(bytes: []const u8, offset: usize) struct { usize, usize } {
 /// A heading line ends any item. `wording` is where the line's words start: after
 /// its indentation, and after a list marker only where `listSegments` accepts it as
 /// an item (so a wrapped `2024.` stays wording); a code line keeps every byte (0).
+/// `html` marks a line of an HTML block or comment, its opening line included.
 pub const ListLine = struct {
     start: usize,
     segment: u32,
     code: bool,
     heading: bool,
+    html: bool,
     wording: usize,
 
     /// Whether the line belongs to a top-level list item, not a gap between items.
@@ -167,12 +169,17 @@ pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.All
         const code = block < ranges.len and ranges[block].start <= offset;
         const blank = std.mem.trim(u8, line, " \t").len == 0;
         var heading = false;
+        var html = false;
         // Words start after the indentation, and after a list marker only where
         // this line's classification accepts it as an item marker.
         var wording = indentation(line);
         if (code) {
             wording = 0;
-        } else if (offset < comment_end) {} else if (html_block and !blank) {} else if (blank) {
+        } else if (offset < comment_end) {
+            html = true;
+        } else if (html_block and !blank) {
+            html = true;
+        } else if (blank) {
             html_block = false;
             boundary = true;
         } else if (line[0] == ' ' or line[0] == '\t') {
@@ -193,7 +200,11 @@ pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.All
             heading = isHeading(line);
             if (std.mem.startsWith(u8, line, "<!--")) {
                 comment_end = htmlEnd(bytes, offset) orelse bytes.len;
-            } else html_block = isHtmlBlock(line);
+                html = true;
+            } else {
+                html_block = isHtmlBlock(line);
+                html = html_block;
+            }
         } else if (listMarker(line)) |marker| {
             if (marker.bullet or marker.first or boundary or delimiter == marker.delimiter) {
                 item = items;
@@ -211,10 +222,119 @@ pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.All
             }
             boundary = false;
         }
-        try result.append(allocator, .{ .start = offset, .segment = if (item) |value| 2 * value + 1 else 2 * items, .code = code, .heading = heading, .wording = wording });
+        try result.append(allocator, .{ .start = offset, .segment = if (item) |value| 2 * value + 1 else 2 * items, .code = code, .heading = heading, .html = html, .wording = wording });
         offset = next;
     }
     return result.toOwnedSlice(allocator);
+}
+
+/// The text of a source's first level-1 heading that has text (ADR 0048), or null. A
+/// level-1 heading is CommonMark's, at the top level and outside code, HTML and comments: one
+/// `#` after at most three spaces, followed by a space, a tab or the line's end (ATX), or a
+/// paragraph underlined by a line of `=` (Setext). A heading inside a list item or block quote
+/// is not one. The text is the heading's as written, less the opening `#` and the spaces or
+/// tabs after it, a closing run of `#` that follows a space or tab, and outer spaces and tabs;
+/// a Setext paragraph's lines, each so trimmed, are joined by a line feed. Nothing else
+/// changes. The caller owns the result.
+pub fn levelOneHeading(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error!?[]u8 {
+    const lines = try listSegments(allocator, bytes);
+    defer allocator.free(lines);
+    for (lines, 0..) |line, index| {
+        if (!topLevel(line)) continue;
+        const text = lineText(bytes, line);
+        if (atxLevel(text)) |level| {
+            const content = atxText(text);
+            if (level == 1 and content.len != 0) return try allocator.dupe(u8, content);
+            continue;
+        }
+        if (!setextUnderline(text)) continue;
+        var first = index;
+        while (first > 0 and paragraphLine(bytes, lines[first - 1])) first -= 1;
+        // The paragraph must open at a top-level boundary, not continue an item, a quote or
+        // an HTML block, and its first line must not be indented code.
+        if (first == index or (first > 0 and !paragraphBoundary(bytes, lines[first - 1])) or
+            indentedCode(lineText(bytes, lines[first]))) continue;
+        var joined: std.ArrayList(u8) = .empty;
+        errdefer joined.deinit(allocator);
+        for (lines[first..index], 0..) |member, position| {
+            if (position != 0) try joined.append(allocator, '\n');
+            try joined.appendSlice(allocator, std.mem.trim(u8, lineText(bytes, member), " \t"));
+        }
+        return try joined.toOwnedSlice(allocator);
+    }
+    return null;
+}
+
+/// The line's bytes without its ending, or a leading byte-order mark.
+fn lineText(bytes: []const u8, line: ListLine) []const u8 {
+    const end, _ = lineAt(bytes, line.start);
+    const text = bytes[line.start..end];
+    return if (line.start == 0 and std.mem.startsWith(u8, text, "\xef\xbb\xbf")) text[3..] else text;
+}
+
+fn topLevel(line: ListLine) bool {
+    return !line.code and !line.html and !line.inItem();
+}
+
+/// The level of an ATX heading line: one to six `#` after at most three spaces, then a
+/// space, a tab or the line's end.
+fn atxLevel(line: []const u8) ?usize {
+    const indent = std.mem.indexOfNone(u8, line, " ") orelse return null;
+    if (indent > 3) return null;
+    const count = runLength(line, indent, '#');
+    const after = indent + count;
+    if (count == 0 or count > 6 or (after < line.len and line[after] != ' ' and line[after] != '\t')) return null;
+    return count;
+}
+
+/// An ATX heading's text: its opening run, a closing run of `#` that follows a space or tab
+/// (or is all the text), and outer spaces and tabs removed.
+fn atxText(line: []const u8) []const u8 {
+    const indent = std.mem.indexOfNone(u8, line, " ").?;
+    const content = std.mem.trim(u8, line[indent + runLength(line, indent, '#') ..], " \t");
+    var start = content.len;
+    while (start > 0 and content[start - 1] == '#') start -= 1;
+    if (start == 0) return content[0..0];
+    if (start < content.len and (content[start - 1] == ' ' or content[start - 1] == '\t')) return std.mem.trimEnd(u8, content[0..start], " \t");
+    return content;
+}
+
+/// A Setext level-1 underline: `=` after at most three spaces, then only spaces and tabs.
+fn setextUnderline(line: []const u8) bool {
+    const indent = std.mem.indexOfNone(u8, line, " ") orelse return false;
+    if (indent > 3 or line[indent] != '=') return false;
+    return std.mem.trim(u8, line[indent + runLength(line, indent, '=') ..], " \t").len == 0;
+}
+
+/// A top-level line of paragraph text: not blank, not a heading, break, fence, quote, or an
+/// indented HTML block or comment opener.
+fn paragraphLine(bytes: []const u8, line: ListLine) bool {
+    if (!topLevel(line)) return false;
+    const text = lineText(bytes, line);
+    const content = std.mem.trimStart(u8, text, " ");
+    return std.mem.trim(u8, text, " \t").len != 0 and atxLevel(text) == null and !isBlockSeparator(content) and
+        !fenceLine(content) and !std.mem.startsWith(u8, content, ">") and !isHtmlBlock(content) and !std.mem.startsWith(u8, content, "<!--");
+}
+
+/// A line after which a top-level paragraph opens: a blank line, which ends any list item
+/// before it, a heading, a break or underline, a code fence, or the end of an HTML block or
+/// comment.
+fn paragraphBoundary(bytes: []const u8, line: ListLine) bool {
+    const text = lineText(bytes, line);
+    if (line.html or (!line.code and std.mem.trim(u8, text, " \t").len == 0)) return true;
+    if (line.code or line.inItem()) return false;
+    const content = std.mem.trimStart(u8, text, " ");
+    return atxLevel(text) != null or isBlockSeparator(content) or fenceLine(content);
+}
+
+fn fenceLine(content: []const u8) bool {
+    return std.mem.startsWith(u8, content, "```") or std.mem.startsWith(u8, content, "~~~");
+}
+
+/// Whether a line that opens a block is indented code: four columns of spaces or a tab.
+fn indentedCode(line: []const u8) bool {
+    const indent = std.mem.indexOfNone(u8, line, " ") orelse return false;
+    return indent > 3 or line[indent] == '\t';
 }
 
 fn indentation(line: []const u8) usize {

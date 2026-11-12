@@ -11,7 +11,7 @@ const integer = "{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximu
 const variants =
     \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"content"},"value":{"type":"string","maxLength":8}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"question"},"subject":{"enum":["alpha","beta"]}},"required":["kind","subject"],"additionalProperties":false}]}
 ;
-const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null, expected_path: ?[]const u8 = null, shared: []const []const u8 = &.{}, foreign: []const []const u8 = &.{} };
+const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null, expected_path: ?[]const u8 = null, member: ?i64 = null, shared: []const []const u8 = &.{}, foreign: []const []const u8 = &.{} };
 
 const child_objects =
     \\{"type":"object","properties":{"optional":{"type":"object","properties":{"a~/b":{"type":"boolean"},"deep":{"type":"object","properties":{"id":{"type":"boolean"}},"required":["id"],"additionalProperties":false}},"required":["a~/b","deep"],"additionalProperties":false},"empty":{"type":"object","properties":{},"required":[],"additionalProperties":false},"loose":{"type":"object","properties":{"flag":{"type":"boolean"}},"required":[],"additionalProperties":false},"items":{"type":"array","maxItems":2,"items":{"type":"boolean"}},"choice":
@@ -703,6 +703,7 @@ pub fn checkCompiled(contract: *const @import("domain/model_result_schema.zig").
     if (case.rejection) |reason| {
         try std.testing.expect(result != null);
         try std.testing.expectEqual(reason, result.?.reason);
+        if (case.member) |member| try std.testing.expectEqual(@as(?i64, member), result.?.member);
         if (case.path) |path| {
             const description = try result.?.describe(std.testing.allocator);
             defer std.testing.allocator.free(description.path);
@@ -771,13 +772,31 @@ test "provider schema rejection proofs and protocol corrections retain every dia
         defer omitted.deinit();
         try checkFixture(&omitted, case);
     }
-    // An uncovered value is located at itself, and an exclusive item that names both a
-    // value an earlier one names and a value none does at the item; each correction names
-    // its compiled kinds.
+    // A schema that states no minimum admits an empty array (ADR 0006), and a
+    // native count keeps that bound. An empty array omits every member, so it is
+    // rejected at the array like any other omission, naming the first (ADR 0046).
+    const unbounded = try adapter.compiler().compile(arena.allocator(), "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[\"value\"],\"additionalProperties\":false}");
+    const owed = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, unbounded, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .exact_members, .member_count = .native }});
+    defer owed.release();
+    try std.testing.expectEqual(@as(u32, 0), owed.selected().root().object[0].schema.array.minimum);
+    for ([_]Case{
+        .{ .bytes = "{\"value\":[]}", .rejection = .missing_member, .path = "/value", .member = 2 },
+        .{ .bytes = "{\"value\":[{\"ordinal\":4}]}", .rejection = .missing_member, .path = "/value", .member = 2 },
+        .{ .bytes = "{\"value\":[{\"ordinal\":6},{\"ordinal\":4},{\"ordinal\":2}]}" },
+    }) |case| {
+        var unanswered: Fixture = undefined;
+        try unanswered.initWithCompiledSchema(owed.selected());
+        defer unanswered.deinit();
+        try checkFixture(&unanswered, case);
+    }
+    // An exclusive item that names both a value an earlier one names and a value none does
+    // is located at the item, and its correction names its compiled kinds. A value no other
+    // kind names is no admission defect: scenario coverage is the session's (ADR 0038
+    // Decision 3).
     const variant = "{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"KIND\"},\"text\":{\"type\":\"string\",\"maxLength\":20}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false}";
     const kinds = try std.mem.join(arena.allocator(), ",", &.{ try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "rule"), try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "check"), try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "scope"), try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "own") });
     const listed = try adapter.compiler().compile(arena.allocator(), try std.fmt.allocPrint(arena.allocator(), "{{\"type\":\"object\",\"properties\":{{\"value\":{{\"type\":\"array\",\"minItems\":0,\"maxItems\":4,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[{s}]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{kinds}));
-    const coverage = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, listed, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ids" } } }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{ "rule", "scope" }, .owning = &.{"own"} } }});
+    const coverage = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, listed, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ids" } } }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{ "rule", "scope" }, .owning = &.{"own"} } }});
     defer coverage.release();
     const item = struct {
         fn of(comptime kind: []const u8, comptime ids: []const u8) []const u8 {
@@ -785,10 +804,11 @@ test "provider schema rejection proofs and protocol corrections retain every dia
         }
     }.of;
     const cases = comptime [_]Case{
-        // Accepted: each value in one exclusive item, an exclusive kind no scenario must
-        // cover, covering items that repeat a value freely, and a later exclusive item
-        // whose every value an earlier one names, of another kind or the same kind, which
-        // its owner deletes without a model call.
+        // Accepted: each value in one exclusive item, with or without an ungoverned item
+        // naming it too, ungoverned items that repeat a value freely, and a later exclusive
+        // item whose every value an earlier one names, of another kind or the same kind,
+        // which its owner deletes without a model call.
+        .{ .bytes = "{\"value\":[" ++ item("rule", "3") ++ "]}" },
         .{ .bytes = "{\"value\":[" ++ item("rule", "3") ++ "," ++ item("check", "3") ++ "]}" },
         .{ .bytes = "{\"value\":[" ++ item("rule", "3") ++ "," ++ item("scope", "5") ++ "," ++ item("check", "3") ++ "]}" },
         .{ .bytes = "{\"value\":[" ++ item("rule", "3") ++ "," ++ item("check", "3") ++ "," ++ item("check", "3,5") ++ "]}" },
@@ -797,10 +817,8 @@ test "provider schema rejection proofs and protocol corrections retain every dia
         // An owning item takes its values wherever it appears and is never constrained.
         .{ .bytes = "{\"value\":[" ++ item("scope", "3") ++ "," ++ item("own", "3") ++ "]}" },
         .{ .bytes = "{\"value\":[" ++ item("own", "3,5") ++ "," ++ item("own", "3") ++ "," ++ item("scope", "5,3") ++ "]}" },
-        // Rejected: an uncovered value, and an exclusive item naming both a value an
-        // earlier one names and a value none does, of another kind or the same kind.
-        .{ .bytes = "{\"value\":[" ++ item("rule", "3") ++ "]}", .rejection = .uncovered_member, .path = "/value/0/ids/0" },
-        // Its correction refuses a response whose first partly shared item is elsewhere,
+        // Rejected: an exclusive item naming both a value an earlier one names and a value
+        // none does, of another kind or the same kind. Its correction refuses a response whose first partly shared item is elsewhere,
         // one whose only shared item is wholly shared, and one with none.
         .{ .bytes = "{\"value\":[" ++ item("rule", "3") ++ "," ++ item("scope", "3,5") ++ "," ++ item("check", "3") ++ "]}", .rejection = .shared_member, .path = "/value/1", .shared = &.{"/value/1/ids/0"}, .foreign = &.{ "{\"value\":[" ++ item("rule", "3") ++ "," ++ item("check", "3") ++ "," ++ item("scope", "3,5") ++ "]}", "{\"value\":[" ++ item("rule", "3") ++ "," ++ item("scope", "3") ++ "," ++ item("check", "3") ++ "]}", "{\"value\":[" ++ item("rule", "3") ++ "," ++ item("check", "3") ++ "]}" } },
         .{ .bytes = "{\"value\":[" ++ item("rule", "5") ++ "," ++ item("rule", "3,5") ++ "," ++ item("check", "3,5") ++ "]}", .rejection = .shared_member, .path = "/value/1", .shared = &.{"/value/1/ids/1"} },
@@ -820,7 +838,7 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     }
 }
 
-test "only an uncovered or shared value's correction carries a cross-item rule, and only a missing member's names it" {
+test "only a shared value's correction carries a cross-item rule, and only a missing member's names it" {
     var fixture: Fixture = undefined;
     try fixture.init();
     defer fixture.deinit();
@@ -829,9 +847,8 @@ test "only an uncovered or shared value's correction carries a cross-item rule, 
     var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer captured.deinit();
     const root = fixture.prepared.request.response_schema.root();
-    const coverage: @import("domain/model_result_schema.zig").Coverage = .{ .property = "ids", .rule = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} } };
+    const coverage: @import("domain/model_result_schema.zig").Coverage = .{ .property = "ids", .rule = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} } };
     for ([_]@import("domain/model_schema_diagnostic.zig").Diagnostic{
-        .{ .reason = .uncovered_member, .expected = root },
         .{ .reason = .shared_member, .expected = root },
         // A shared value's correction must find the rejected response's namings.
         .{ .reason = .shared_member, .expected = root, .coverage = coverage },
@@ -858,6 +875,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
     const result = (action.Action{}).execute(decoded.candidate);
     if (case.rejection) |reason| {
         try std.testing.expectEqual(reason, result.invalid.reason);
+        if (case.member) |member| try std.testing.expectEqual(@as(?i64, member), result.invalid.member);
         if (case.path) |path| {
             const description = try result.invalid.describe(std.testing.allocator);
             defer std.testing.allocator.free(description.path);
@@ -894,9 +912,8 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             for (request.value.object.get("system").?.array.items) |part|
                 occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
             try std.testing.expectEqual(@as(usize, 1), occurrences);
-            // ADR 0038: only an uncovered value's correction names the compiled covering
-            // kinds, and only a shared value's names the exclusive kinds.
-            try std.testing.expectEqual(@as(usize, 3) + @intFromBool(reason == .uncovered_member) + 2 * @as(usize, @intFromBool(reason == .shared_member)) + @intFromBool(reason == .missing_member), guidance.value.object.count());
+            // ADR 0038 Decision 5: only a shared value's correction names the exclusive kinds.
+            try std.testing.expectEqual(@as(usize, 3) + 2 * @as(usize, @intFromBool(reason == .shared_member)) + @intFromBool(reason == .missing_member), guidance.value.object.count());
             // ADR 0038 Decision 5: a partly taken item's correction lists every taken value's naming.
             if (reason == .shared_member) {
                 const listed = guidance.value.object.get("shared").?.array.items;
@@ -918,25 +935,19 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             if (result.invalid.member) |member| {
                 try std.testing.expectEqual(member, guidance.value.object.get("member").?.integer);
             } else try std.testing.expect(!guidance.value.object.contains("member"));
-            for ([_]struct { name: []const u8, reason: @TypeOf(reason) }{ .{ .name = "covering", .reason = .uncovered_member }, .{ .name = "exclusive", .reason = .shared_member } }) |named| {
-                if (reason != named.reason) {
-                    try std.testing.expect(!guidance.value.object.contains(named.name));
-                    continue;
-                }
+            try std.testing.expect(!guidance.value.object.contains("covering"));
+            if (reason == .shared_member) {
                 const rule = result.invalid.coverage.?.rule;
-                const governed = guidance.value.object.get(named.name).?.object;
+                const governed = guidance.value.object.get("exclusive").?.object;
                 try std.testing.expectEqualStrings(rule.kind_property, governed.get("kind_property").?.string);
                 const kinds = governed.get("kinds").?.array.items;
-                const compiled = if (reason == .uncovered_member) rule.covering else rule.exclusive;
-                try std.testing.expectEqual(compiled.len, kinds.len);
-                for (compiled, kinds) |kind, listed| try std.testing.expectEqualStrings(kind, listed.string);
+                try std.testing.expectEqual(rule.exclusive.len, kinds.len);
+                for (rule.exclusive, kinds) |kind, listed| try std.testing.expectEqualStrings(kind, listed.string);
                 // A partly taken item's correction also names the kinds that take values.
-                if (reason == .shared_member) {
-                    const owning = governed.get("owning").?.array.items;
-                    try std.testing.expectEqual(rule.owning.len, owning.len);
-                    for (rule.owning, owning) |kind, listed| try std.testing.expectEqualStrings(kind, listed.string);
-                } else try std.testing.expect(!governed.contains("owning"));
-            }
+                const owning = governed.get("owning").?.array.items;
+                try std.testing.expectEqual(rule.owning.len, owning.len);
+                for (rule.owning, owning) |kind, listed| try std.testing.expectEqualStrings(kind, listed.string);
+            } else try std.testing.expect(!guidance.value.object.contains("exclusive"));
             const explanation = guidance.value.object.get("explanation").?.string;
             try std.testing.expect(std.mem.startsWith(u8, explanation, "Schema validation failed:"));
             const expected_words = switch (reason) {
@@ -950,7 +961,6 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                 .enum_mismatch => "allowed values",
                 .unknown_variant => "allowed kind",
                 .duplicate_member => "repeats an assigned member",
-                .uncovered_member => "covering.kinds",
                 .shared_member => "exclusive.kinds",
                 .missing_member => "no item names this assigned member",
             };

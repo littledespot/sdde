@@ -4,7 +4,7 @@ Part of [design §13](../../design.md#13-action-catalogue). Action names define 
 boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
-> **ADR 0032 (not yet implemented).** The two `specify` invocation actions below become the
+> **ADR 0032 (not yet implemented for the Specify invocation).** The two `specify` invocation actions below become the
 > internal functions of one [ADR 0031](../../decisions/0031-stage-actions.md) stage action
 > (parse, then validate, side effect `none`), named by the definition's `invoke:` field and run
 > by the engine before the graph starts ([ADR 0032](../../decisions/0032-engine-routines.md)).
@@ -44,43 +44,68 @@ two capability-free operations any workflow may use; neither reads or writes dat
   starting with `-`.
 - **Rejects:** `InvalidSpecifyArguments`.
 
-## `NormalizeFeatureDirectoryAction` (`normalize-feature-directory`)
+## `PrepareInputsAction` (`prepare-inputs`)
 
-- **Owner:** [`src/actions/specify/normalize_feature_directory.zig`](../../../src/actions/specify/normalize_feature_directory.zig)
-- **Reads:** `specify_invocation` · **Writes:** `normalized_feature_directory` · **Side effect:** `none`
-- **Does:** Normalize the raw `--feature` value to NFC through the Unicode port, then apply the
-  shared relative-path normalization; it adds no slug, truncation or suffix.
-- **Rejects:** the Unicode port's `InvalidUtf8`, `NormalizationLimitExceeded` and
-  `NormalizationFailed`.
+[ADR 0031](../../decisions/0031-stage-actions.md) made the thirteen former operations the internal
+steps of this one stage action. [F0100](../../features/F0100-SpecWorkflow.md) owns where it sits in
+the Specify workflow.
 
-## `ValidateFeatureDirectoryAction` (`validate-feature-directory`)
-
-- **Owner:** [`src/actions/specify/validate_feature_directory.zig`](../../../src/actions/specify/validate_feature_directory.zig)
-- **Reads:** `normalized_feature_directory` · **Writes:** `relative_feature_directory` · **Side effect:** `none`
-- **Does:** Parse the feature ID and join it to the configured specs root; require lexical path
-  safety, containment in the specs root and exclusion from the archive root. No filesystem
-  access or ownership lookup.
-- **Rejects:** `InvalidFeatureDirectory`, also when no roots are bound.
-
-## `InspectFeatureDirectoryAction` (`inspect-feature-directory`)
-
-- **Owner:** [`src/actions/specify/inspect_feature_directory.zig`](../../../src/actions/specify/inspect_feature_directory.zig)
-  (adapter [`feature_directory_inspector.zig`](../../../src/adapters/filesystem/feature_directory_inspector.zig))
-- **Reads:** `relative_feature_directory` · **Writes:** `feature_directory` · **Side effect:** `filesystem_read`
-- **Does:** Through the bound read capability, observe only the selected directory and its
-  specs root: absent, or a readable directory with its identity. No other feature is scanned.
-- **Rejects:** `FeatureDirectoryUnavailable` for a missing capability, a selector that no
-  longer revalidates, or an unreadable or unsafe node.
-
-## `ResolveFeatureArtifactPathsAction` (`resolve-feature-artifact-paths`)
-
-- **Owner:** [`src/actions/specify/resolve_feature_artifact_paths.zig`](../../../src/actions/specify/resolve_feature_artifact_paths.zig)
-- **Reads:** `feature_directory` · **Writes:** `feature_artifact_paths` · **Side effect:** `none`
-- **Does:** Derive every registered artifact path for the feature (specification, reference
-  context, clarification forms and state, workflow state, event and prompt logs) from the
-  configured roots; no model or user supplies a path.
-- **Rejects:** `InvalidFeatureArtifactPath` when roots are unbound or the selector no longer
-  revalidates against them.
+- **Owner:** [`src/actions/specify/prepare_inputs.zig`](../../../src/actions/specify/prepare_inputs.zig)
+  (binding [`input_preparation_workflow.zig`](../../../src/application/input_preparation_workflow.zig);
+  adapters [`feature_directory_inspector.zig`](../../../src/adapters/filesystem/feature_directory_inspector.zig),
+  [`reference_directory_inspector.zig`](../../../src/adapters/filesystem/reference_directory_inspector.zig),
+  [`feature_input_source.zig`](../../../src/adapters/filesystem/feature_input_source.zig))
+- **Reads:** `specify_invocation` · **Writes:** `feature_directory`, `relative_feature_directory`,
+  `reference_directory`, `feature_artifact_paths`, `prior_specification_state`,
+  `prior_principle_registry`, `raw_clarification_inputs`, `clarification_inputs` · **Side effect:** `filesystem_read`
+- **Ports:** the Unicode normalizer and the feature-directory, reference-directory, workflow-state
+  and feature-input ports, one per step; the binding derives `feature-read`, `reference-read` and
+  `feature-input-read` only.
+- **Outcomes:** `ok`, `failed`. Each internal step's success continues to the next and every
+  failure ends the stage with the step's own error. The stage records the step it stopped at in
+  its diagnostic slot, which the binding hands the runner's step slot, and the runner records it
+  as `step_id` in the failed action's event ([§27](../27-observability.md)). It checks the runtime
+  between steps, so a cancelled run stops before the next step.
+- **Does:** Runs these functions in order. Each keeps its former action's responsibility, input,
+  output and rejection rules; intermediates are function-local values, and the prior specification
+  state is the only value owned beyond the run's scratch space.
+  1. `normalizeFeature`: NFC-normalizes the raw `--feature` value through the Unicode port, then
+     applies the shared relative-path normalization; it adds no slug, truncation or suffix.
+     Rejects the port's `InvalidUtf8`, `NormalizationLimitExceeded` and `NormalizationFailed`.
+  2. `validateFeature`: parses the feature ID and joins it to the configured specs root; requires
+     lexical path safety, containment in the specs root and exclusion from the archive root. No
+     filesystem access or ownership lookup. Rejects `InvalidFeatureDirectory`, also when no roots
+     are bound.
+  3. `inspectFeature`: through the bound read capability, observes only the selected directory and
+     its specs root: absent, or a readable directory with its identity. No other feature is
+     scanned. Rejects `FeatureDirectoryUnavailable` for a missing capability, a selector that no
+     longer revalidates, or an unreadable or unsafe node.
+  4. `normalizeReference`: NFC-normalizes the raw `--reference` value within the selector byte
+     limit, then normalizes it as a relative directory path. Rejects the Unicode port's errors.
+  5. `validateReference`: requires a safe relative selector. Rejects `InvalidReferenceSelector`.
+  6. `inspectReference`: observes the selected reference directory through the read-only
+     inspector. Rejects `ReferenceDirectoryUnavailable`.
+  7. `resolvePaths`: derives every registered artifact path for the feature (specification,
+     reference context, clarification forms and state, workflow state, event and prompt logs)
+     from the configured roots; no model or user supplies a path. Rejects
+     `InvalidFeatureArtifactPath` when roots are unbound or the selector no longer revalidates.
+  8. `captureState`: reads the feature's canonical workflow-state file through the state-source
+     port, or reports it absent; it never parses the bytes. Rejects `FeatureInputUnavailable`.
+  9. `parseState`: parses the feature's prior `specification-state` or incomplete state; a first
+     run has none. Rejects `specification_state.Error`, including `InvalidSpecificationState`.
+  10. `captureClarifications`: captures the feature's clarification-state bytes and every
+      `clarify/` form through the feature-input port. Rejects the port's typed errors.
+  11. `parseClarificationState`: parses the captured state bytes through the state-parser port;
+      no bytes give no state. Rejects `InvalidClarificationInput` from the parser.
+  12. `validateClarificationState`: checks the schema and feature, then each record: stage IDs in
+      order with no gap, revisions within the state's, nonempty bounded question and reason, at
+      most 64 distinct authorities, and one record per stage and subject. Rejects
+      `InvalidClarificationInput`.
+  13. `validateClarificationForms`: pairs each record with exactly one captured form and parses
+      it against the record's binding. An authority-resolved form must equal its re-rendered
+      audit bytes, and a recorded response's form must equal its saved bytes and answer. A
+      `closed` form becomes protected. Rejects `InvalidClarificationInput` for a form-count or ID
+      mismatch, changed audit or saved bytes, or a requested status that contradicts the record.
 
 Feature-log identities ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)): one
 adapter builds the policy ID (`LOGPOL-` and the SHA-256 of the compiled policy), a fresh random

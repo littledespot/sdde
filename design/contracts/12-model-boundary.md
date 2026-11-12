@@ -105,7 +105,7 @@ Each generation request contains only what the current unit needs:
   and local validation. Two admission constraints are exceptions, because
   provider schema syntax cannot express them: `exact_members` uniqueness, and with a
   native count its completeness (`missing_member`; below, ADR 0046), and
-  ADR 0038's records coverage and exclusivity (`uncovered_member`, `shared_member`). Local admission, request descriptions and replay
+  ADR 0038's records exclusivity (`shared_member`; scenario coverage is the session's, Decision 3). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -216,7 +216,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v16` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v18` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 
@@ -360,7 +360,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   preparation paths, protocol corrections and diagnostic source capture retain
   that exact selection. It adds no caching behavior or schema authority.
 - Semantic guidance that native packet builders present is workflow-owned: one closed
-  `packet-guidance/v5` resource, published as run data by one `capture-packet-guidance`
+  `packet-guidance/v6` resource, published as run data by one `capture-packet-guidance`
   step and received explicitly by each consuming operation that declares
   `.packet_guidance`, never as the resource. The
   [ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance
@@ -483,8 +483,9 @@ findings. Only complete native collection validation permits authority advanceme
 - The feature-brief result schema selected by the workflow yields a `FeatureBriefProposal`
   grounded only in the completed reference claim/citation registries, or a typed specification
   clarification need, or the approved `inconclusive` diagnostic result.
-- The model supplies a business title, description, and primary goal plus selected
-  source-group handles (`signal_ids`, ADR 0020) or resolved clarification-response IDs;
+- The model supplies a business description and primary goal plus selected source-group
+  handles (`signal_ids`, ADR 0020) or resolved clarification-response IDs; the engine takes
+  the title from the sources ([ADR 0048](../decisions/0048-engine-derived-specification-title.md));
   it cannot supply the `featureId`, any
   workflow or project path, or a reference selector.
 - Before the call, the engine binds `featureId` to the validated supplied directory's lossless
@@ -842,9 +843,9 @@ and source-preservation/reference exact claim sets retain their existing rules.
 
 Reconciliation supplies validated source-obligation groups. The engine binds each record authoring task to one active group before
 dispatch and resolves its claims through the existing ledger. A task may author
-several records, each naming the claims it supports from that group, and admission
-applies ADR 0038's one-statement-record and scenario rules
-([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2 and 5); overlapping or multi-claim groups preserve
+several records, each naming the claims it supports from that group; admission applies
+ADR 0038's one-statement-record rule and the session its scenario rule, inserting an engine-bound criterion for a gap
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2, 3 and 5); overlapping or multi-claim groups preserve
 many-to-many links.
 Unbound or stale units block as engine defects. Semantic verdicts and ADR 0020's
 generation evidence bounds remain independently enforced.

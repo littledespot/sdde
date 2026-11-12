@@ -181,7 +181,7 @@ test "shipped workflow conforms to native registrations and rejects contract dri
                     if (changed_part) break;
                 }
                 try std.testing.expect(changed_part);
-                try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("../../../src/actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(a, &.{invalid_graph}));
+                try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("../../../src/domain/workflow_graph_validation.zig").validate(a, &.{invalid_graph}));
             }
             const protocol = for (captured.files) |file| {
                 if (std.mem.eql(u8, file.mapping.source, "design/workflows/spec/protocol.prompt.md")) break file.bytes;
@@ -295,7 +295,7 @@ test "production E2E binding honors configured models and cannot succeed without
             _ = slot.object.swapRemove("reasoningEffort");
         }
         try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config, .{}) });
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
         var evidence_run = std.testing.tmpDir(.{});
         defer evidence_run.cleanup();
         const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{} };
@@ -377,7 +377,7 @@ test "publication handoff captures poor output for adjudication without changing
     const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
     const captured = try fixture.capture(io, a, .cwd(), choice);
     const evaluation = @import("../e2e/evaluation.zig");
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "2026-09-11T00:00:00Z", .execution_id = "run-123", .expected_outcome = .publication, .evaluation_case_id = captured.evaluation.case.id, .status = .generated, .workflow_outcome = .ok, .publication_check = .passed, .specification = "specs/hello-world/spec.md", .models = &.{.{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }} };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "2026-09-11T00:00:00Z", .execution_id = "run-123", .expected_outcome = .publication, .evaluation_case_id = captured.evaluation.case.id, .status = .generated, .workflow_outcome = .ok, .publication_check = .passed, .specification = "specs/hello-world/spec.md", .models = &.{.{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }} };
     const inputs = try evaluation.inputs(a, report, captured.evaluation, "Readable but poor output.", "run-123");
     report.evaluation_inputs = inputs;
     try std.testing.expectEqualStrings("Readable but poor output.", inputs.specification);
@@ -498,7 +498,7 @@ test "clarification reports are ungraded normal pauses with registered IDs and p
     const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const id = @import("../../../src/domain/clarification_inputs.zig").Id.parse("S02").?;
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "2026-09-16T00:00:00Z", .expected_outcome = .clarification, .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed, .specification = "outputs/chosen/spec.md", .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured }, .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "2026-09-16T00:00:00Z", .expected_outcome = .clarification, .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed, .specification = "outputs/chosen/spec.md", .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured }, .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
     try output.save(io, a, report);
     const bytes = try @import("../files.zig").read(io, a, dir.dir, "report.json");
     const retained = try @import("../contracts.zig").decode(c.Report, a, bytes);
@@ -531,7 +531,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v15",
+        .schema = .@"spec-e2e-report/v17",
         .started_at_utc = "2026-09-11T00:00:00Z",
         .execution_id = "run-failed",
         .case_source = "chosen.case.json",
@@ -591,7 +591,7 @@ test "completed E2E reports retain the exact captured adjudication inputs" {
     captured.evaluation.rubric.pass_threshold_percent = 75.5;
     captured.evaluation.rubric_bytes = try std.json.Stringify.valueAlloc(a, captured.evaluation.rubric, .{});
     var report: c.Report = .{
-        .schema = .@"spec-e2e-report/v15",
+        .schema = .@"spec-e2e-report/v17",
         .started_at_utc = "2026-10-11T00:00:00Z",
         .execution_id = "MOCK-published-run",
         .expected_outcome = .publication,
@@ -654,7 +654,7 @@ test "E2E report finalization preserves workflow outcomes and exposes write and 
             else if (status == .generated)
                 try @import("../e2e/acceptance_test.zig").completed(a)
             else
-                .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "2026-10-11T00:00:00Z", .expected_outcome = .publication, .status = .workflow_failed, .workflow_outcome = .failed, .diagnostic = "WorkflowTokenBudgetExceeded", .terminal_rejection = .{ .kind = .token_budget, .detail = "WorkflowTokenBudgetExceeded" } };
+                .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "2026-10-11T00:00:00Z", .expected_outcome = .publication, .status = .workflow_failed, .workflow_outcome = .failed, .diagnostic = "WorkflowTokenBudgetExceeded", .terminal_rejection = .{ .kind = .token_budget, .detail = "WorkflowTokenBudgetExceeded" } };
             // Override only the standard file-sync operation; all other I/O
             // retains its real test implementation and original context.
             var vtable = io.vtable.*;
@@ -700,7 +700,7 @@ test "retired protocol rejection stays associated with its call across later fai
     const a = arena.allocator();
     var snapshot: @import("../e2e/observation.zig").LastModelRejection = .{};
     defer snapshot.deinit(std.testing.allocator);
-    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
+    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
     var rejected = empty;
     rejected.model_diagnostic = "InvalidModelEnvelope";
     rejected.last_model_origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
@@ -754,7 +754,7 @@ test "composition reports retain every field across retirement rendering and lat
     const a = arena.allocator();
     var snapshot: @import("../e2e/observation.zig").LastModelRejection = .{};
     defer snapshot.deinit(std.testing.allocator);
-    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
+    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
     var rejected = empty;
     rejected.model_diagnostic = "InvalidModelEnvelope";
     rejected.last_model_call = 13;
@@ -805,7 +805,7 @@ test "candidate rejection reports retain the producing call separately from the 
     defer arena.deinit();
     const a = arena.allocator();
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v15",
+        .schema = .@"spec-e2e-report/v17",
         .started_at_utc = "2026-09-12T00:00:00Z",
         .status = .workflow_failed,
         .candidate_error = .{ .token_classifications = .{
@@ -843,10 +843,10 @@ test "later budget transport and capture stops retain separate protocol and exch
     for (&calls, 1..) |*call, ordinal| call.* = .{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = @intCast(ordinal) } }, .step = "repair", .raw_response_available = true, .output = if (ordinal < 35) .available else .not_projected };
     var retained: obs.LastModelRejection = .{};
     defer retained.deinit(std.testing.allocator);
-    try retained.observe(std.testing.allocator, 34, .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = calls[33].origin, .model_diagnostic = "SyntaxError", .json_error = .{ .reason = .SyntaxError } });
+    try retained.observe(std.testing.allocator, 34, .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = calls[33].origin, .model_diagnostic = "SyntaxError", .json_error = .{ .reason = .SyntaxError } });
     for (0..4) |stop| {
         var report: c.Report = .{
-            .schema = .@"spec-e2e-report/v15",
+            .schema = .@"spec-e2e-report/v17",
             .started_at_utc = "",
             .status = .workflow_failed,
             .workflow_outcome = .failed,
@@ -893,10 +893,10 @@ test "provider cause survives request release without inventing a candidate reje
         .exception = "AccessDeniedException",
         .request_id = "request-1",
     }};
-    var observed: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .provider_origin = calls[0].origin, .last_model_origin = calls[0].origin };
+    var observed: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .provider_origin = calls[0].origin, .last_model_origin = calls[0].origin };
     try obs.correlate(a, &calls, &observed);
     // The next projection has no active request or provider observation slots.
-    var released: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .usage_complete = false };
+    var released: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .usage_complete = false };
     try obs.correlate(a, &calls, &released);
     try std.testing.expectEqual(@as(usize, 1), released.last_model_call.?);
     try std.testing.expectEqualStrings("authorization_denied", released.provider_diagnostic.?);
@@ -942,7 +942,7 @@ test "unrepairable responses preserve complete production logs and forbid public
             try project.dir.createDirPath(io, std.fs.path.dirname(file.path).?);
             try project.dir.writeFile(io, .{ .sub_path = file.path, .data = file.bytes });
         }
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed };
         {
             var runtime: @import("../../../src/composition/root.zig").Runtime = undefined;
             runtime.init(io, std.testing.allocator, project.dir, .{});
@@ -1076,7 +1076,7 @@ test "reports retain scoped retry history and rejected-content usage after owner
     try std.testing.expectEqual(@as(usize, 3), counts.defects.len);
     var calls = [_]@import("../e2e/observation.zig").Call{.{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .step = "repair", .raw_response_available = true, .status = 200 }};
     var observed: c.Report = .{
-        .schema = .@"spec-e2e-report/v15",
+        .schema = .@"spec-e2e-report/v17",
         .started_at_utc = "",
         .status = .workflow_failed,
         .workflow_outcome = .failed,
@@ -1091,7 +1091,7 @@ test "reports retain scoped retry history and rejected-content usage after owner
         },
     };
     try @import("../e2e/observation.zig").correlate(a, &calls, &observed);
-    var retained: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
+    var retained: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
     try @import("../e2e/observation.zig").correlate(a, &calls, &retained);
     try std.testing.expectEqual(@as(u64, 932), retained.last_model_usage.?.total_tokens);
     try std.testing.expectEqual(@as(usize, 0), retained.repairs.len);
@@ -1139,7 +1139,7 @@ test "input failure report explains environment setup and escapes untrusted labe
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v15",
+        .schema = .@"spec-e2e-report/v17",
         .started_at_utc = "2026-09-12T00:00:00Z",
         .case_id = "<script> [click](untrusted)",
         .status = .input_invalid,
@@ -1168,7 +1168,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
         .{ .origin = repair, .step = "repair", .output = .available },
     };
     var report: c.Report = .{
-        .schema = .@"spec-e2e-report/v15",
+        .schema = .@"spec-e2e-report/v17",
         .started_at_utc = "",
         .status = .workflow_failed,
         .last_model_origin = repair,
@@ -1251,11 +1251,12 @@ test "reports preserve native extraction reconciliation authoring coverage speci
     defer arena.deinit();
     const a = arena.allocator();
     var retained: [6]Diagnostic = undefined;
+    var title_block: Diagnostic = undefined;
     {
         var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer source.deinit();
         const scratch = source.allocator();
-        const input = try reference_fixture.prepare(scratch, &.{ "Confirm a reservation.\n", "Renew a loan.\n" });
+        const input = try reference_fixture.prepare(scratch, &.{ "# Reservations\nConfirm a reservation.\n", "Renew a loan.\n" });
         defer input.deinit();
         const global = try references.summaries(scratch, try references.initialize(scratch, input.inputs, input.extracted, 2), input.context());
         const proposal = try references.global(scratch, global);
@@ -1282,7 +1283,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         const groups = try @import("../../../src/domain/specification_source_binding.zig").catalogue(scratch, @import("../../../src/domain/reference_support.zig").records(accounted), .content);
         try std.testing.expect(groups.len > 0);
         const unsupported: @import("../../../src/domain/specification.zig").Model.AttributedValue = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} }, .source_group_ids = &.{groups[0].signal_id}, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } };
-        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .brief = .{ .title = unsupported, .description = unsupported, .primary_goal = unsupported } } } })).invalid;
+        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .brief = .{ .description = unsupported, .primary_goal = unsupported } } } })).invalid;
         retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
         const extraction_action = @import("../../../src/actions/reference/validate_reference_extraction_text.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
         const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;
@@ -1292,9 +1293,18 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         partial.references.records.assignments.checked.prior.prior.source.fields = &.{.{ .unit = .signals, .field = .record, .origin = origin }};
         const gap = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, partial)).blocked;
         retained[5] = try (Diagnostic{ .source_catalogue = gap }).copy(a);
+        title_block = try (Diagnostic{ .source_catalogue = @import("../../../src/domain/specification_source_binding.zig").titleRejection(accounted, .conflicting_title_headings) }).copy(a);
+    }
+    // ADR 0048: a title block enters the report as the candidate's, with no model origin.
+    {
+        const report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked, .terminal_step = "initialize-specification-generation", .candidate_error = title_block };
+        const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
+        try std.testing.expectEqualDeep(report, decoded);
+        try std.testing.expect(decoded.candidate_error.?.origin() == null);
+        try std.testing.expectEqual(.conflicting_title_headings, decoded.candidate_error.?.source_catalogue.reason);
     }
     for (retained) |diagnostic| {
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = if (diagnostic == .source_catalogue) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .source_catalogue) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
+        const report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = if (diagnostic == .source_catalogue) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .source_catalogue) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqualDeep(origin, decoded.candidate_error.?.origin().?);
@@ -1342,7 +1352,7 @@ test "events and reports preserve native repair changes and text spans after rel
     }
     try std.testing.expectEqual(.invalid_scalar, retained.reconciliation.issue.expected.text_issue.reason);
     for (merged, 0..) |merge, index| {
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = if (index == 0) .invalid else .ok, .terminal_step = "validate-signals", .candidate_error = if (index == 0) retained else null, .repairs = &.{merge} };
+        const report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = if (index == 0) .invalid else .ok, .terminal_step = "validate-signals", .candidate_error = if (index == 0) retained else null, .repairs = &.{merge} };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqual(index == 1, decoded.repairs[0].changed);
@@ -1395,10 +1405,10 @@ test "provider content rejection survives retirement and projects exact native e
     defer retained.deinit(std.testing.allocator);
     var reason = "missing_final_text".*;
     const origin: @import("../../../src/domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 8 }, .attempt = .{ .value = 2 } };
-    const observed: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = origin, .provider_origin = origin, .provider_diagnostic = &reason, .provider_content_diagnostic = .missing_final_text };
+    const observed: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = origin, .provider_origin = origin, .provider_diagnostic = &reason, .provider_content_diagnostic = .missing_final_text };
     try retained.observe(std.testing.allocator, 11, observed);
     @memset(&reason, 'x');
-    var terminal: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed };
+    var terminal: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed };
     try retained.observe(std.testing.allocator, 12, terminal);
     try retained.project(a, 12, &terminal);
     retained.deinit(std.testing.allocator);
@@ -1433,7 +1443,7 @@ test "native correction links retain first observation invalidation rebuild and 
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed, .last_operation_rejection = .{ .cause = .UnsafeSpecificationRepair, .outcome = .blocked } };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .last_operation_rejection = .{ .cause = .UnsafeSpecificationRepair, .outcome = .blocked } };
     try progress.observe(2, "authorize", report, null);
     report.last_operation_rejection = null;
     const permit: @import("../../../src/domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
@@ -1458,16 +1468,16 @@ test "native correction links retain first observation invalidation rebuild and 
     const removed_label = "first_" ++ "observed_defect";
     const obsolete = try std.mem.replaceOwned(u8, a, renamed, "first_native_rejection", removed_label);
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, obsolete));
-    const old_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v15", "spec-e2e-report/v2");
+    const old_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v17", "spec-e2e-report/v2");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, old_version));
-    const previous_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v15", "spec-e2e-report/v14");
+    const previous_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v17", "spec-e2e-report/v16");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, previous_version));
-    const missing_version = try std.mem.replaceOwned(u8, a, renamed, "\"schema\":\"spec-e2e-report/v15\",", "");
+    const missing_version = try std.mem.replaceOwned(u8, a, renamed, "\"schema\":\"spec-e2e-report/v17\",", "");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, missing_version));
     const text = try @import("../e2e/report.zig").renderMarkdown(a, readback);
     try std.testing.expect(std.mem.indexOf(u8, text, "First native rejection") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "not proven root cause") != null);
-    var fresh: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed };
+    var fresh: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed };
     try progress.project(a, &fresh);
     try std.testing.expect(fresh.first_native_rejection == null and fresh.corrections.len == 0 and fresh.outstanding_work.len == 0);
 }
@@ -1716,7 +1726,7 @@ test "production workflow enforces one global token budget and fails required st
         try std.testing.expectEqual(@as(usize, @intFromBool(required_stop)), resent);
         try std.testing.expectEqual(@as(usize, @intFromBool(required_stop)), scripted.resend_sends);
         // The E2E report marks each re-send and the attempt it repeats.
-        var report: @import("../e2e/contracts.zig").Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .workflow_failed };
+        var report: @import("../e2e/contracts.zig").Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed };
         try @import("../e2e/observation.zig").capture(a, runner, &report);
         var marked: usize = 0;
         for (report.attempts) |entry| if (entry.resends) |repeated| {

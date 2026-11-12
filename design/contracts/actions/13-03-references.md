@@ -9,119 +9,78 @@ effect, responsibility and typed rejections. Entries marked "Proposed, no code" 
 responsibilities another document names and no code implements yet; §16 owns the
 reference contract.
 
-## `NormalizeReferenceSelectorAction` (`normalize-reference-selector`)
+The reference selector's normalization, validation and directory inspection are steps 4 to 6 of
+`prepare-inputs` ([13.2](13-02-invocation-stage-gates.md#prepareinputsaction-prepare-inputs)).
 
-- **Owner:** [`src/actions/reference/normalize_reference_selector.zig`](../../../src/actions/reference/normalize_reference_selector.zig)
-- **Reads:** `specify_invocation` · **Writes:** `normalized_reference_selector` · **Side effect:** `none`
-- **Does:** NFC-normalizes the raw `--reference` value within the selector byte limit, then normalizes it as a relative directory path.
-- **Rejects:** errors of `unicode_normalizer.Error`
+[ADR 0031](../../decisions/0031-stage-actions.md) made the fourteen former preparation
+operations the internal steps of two stage actions, with `compile-naming-policy`
+([13.1](13-01-bootstrap-configuration.md)) staying a separate step between them. The Specify
+workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
+`prepare-reference-tokens`.
 
-## `ValidateReferenceSelectorAction` (`validate-reference-selector`)
+## `PrepareReferenceEvidenceAction` (`prepare-reference-evidence`)
 
-- **Owner:** [`src/actions/reference/validate_reference_selector.zig`](../../../src/actions/reference/validate_reference_selector.zig)
-- **Reads:** `normalized_reference_selector` · **Writes:** `relative_reference_selector` · **Side effect:** `none`
-- **Rejects:** errors of `reference_selector.Error`
+- **Owner:** [`src/actions/reference/prepare_reference_evidence.zig`](../../../src/actions/reference/prepare_reference_evidence.zig)
+  (binding [`reference_evidence_preparation_workflow.zig`](../../../src/application/reference_evidence_preparation_workflow.zig))
+- **Reads:** `reference_directory`, `feature_directory` · **Writes:** `citable_reference_inputs` · **Side effect:** `filesystem_read`
+- **Ports:** the corpus enumerator and capturer, the Markdown decoder, the reference-state identity
+  source and the Unicode text services (normalizer and case folder, one port family); the binding
+  derives `reference-content-read`, `reference-decode` and `reference-identity` only.
+- **Outcomes:** `ok`, `failed`. Each internal step's success continues to the next and every
+  failure ends the stage with the step's own error, recorded as `step_id` in the failed action's
+  event ([§27](../27-observability.md)). It checks the runtime between steps.
+- **Does:** Runs these functions in order. Each keeps its former action's responsibility, input,
+  output and rejection rules; intermediates are function-local values.
+  1. `inventorySources`: enumerates the selected directory. Rejects errors of
+     `reference_corpus_source.Error`.
+  2. `validateInventory`: checks the raw entries against the entry-count, depth and duration
+     limits, with Unicode normalization and case folding; any failure is
+     `InvalidReferenceInventory`.
+  3. `captureSources`: captures each inventoried entry. Rejects errors of
+     `reference_corpus_source.Error`.
+  4. `decodeMarkdown`: decodes each captured entry, recording directories, blocked entries and
+     decoder failures per entry, and totals the decoded bytes. Rejects only allocation failure: an
+     unsupported, malformed or over-budget entry is recorded as that entry's `blocked` result
+     (`unsupported_media`, `malformed_text`, `decoded_budget`), and the step still succeeds.
+  5. `validateAccounting`: requires the decoded and captured entries to match the inventory one for
+     one within the entry limit, then totals source and decoded bytes into the accepted
+     documents. Rejects `InvalidReferenceAccounting`.
+  6. `assignIdentities`: numbers sources in document order and maps each provisional source and
+     block to its canonical ID under a fresh reference-state ID. It is the only step that draws
+     system entropy, through its own port. Rejects errors of `reference_evidence.Error` and
+     `reference_state_identity.Error`.
+  7. `buildChunks`: makes one chunk per source block, numbered in source and block order, under the
+     `source_blocks_v1` partition. Rejects errors of `reference_evidence.Error`.
+  8. `validateChunks`: checks the chunks against the corpus: the same feature and state, one
+     source and mapping per document, and one chunk per block mapping. Rejects
+     `InvalidReferenceChunks`.
 
-## `InspectReferenceDirectoryAction` (`inspect-reference-directory`)
+## `PrepareReferenceTokensAction` (`prepare-reference-tokens`)
 
-- **Owner:** [`src/actions/reference/inspect_reference_directory.zig`](../../../src/actions/reference/inspect_reference_directory.zig)
-- **Reads:** `relative_reference_selector` · **Writes:** `reference_directory` · **Side effect:** `filesystem_read`
-- **Rejects:** errors of `reference_directory_inspector.Error`
-
-## `InventoryReferenceSourcesAction` (`inventory-reference-sources`)
-
-- **Owner:** [`src/actions/reference/inventory_reference_sources.zig`](../../../src/actions/reference/inventory_reference_sources.zig)
-- **Reads:** `reference_directory` · **Writes:** `raw_reference_inventory` · **Side effect:** `filesystem_read`
-- **Rejects:** errors of `reference_corpus_source.Error`
-
-## `ValidateReferenceInventoryAction` (`validate-reference-inventory`)
-
-- **Owner:** [`src/actions/reference/validate_reference_inventory.zig`](../../../src/actions/reference/validate_reference_inventory.zig)
-- **Reads:** `raw_reference_inventory` · **Writes:** `reference_inventory` · **Side effect:** `none`
-- **Does:** Checks the raw entries against the entry-count, depth and duration limits, with Unicode normalization and case folding; any failure is `InvalidReferenceInventory`.
-- **Rejects:** `InvalidReferenceInventory` and the rest of `reference_ingestion.Error`
-
-## `CaptureReferenceSourcesAction` (`capture-reference-sources`)
-
-- **Owner:** [`src/actions/reference/capture_reference_sources.zig`](../../../src/actions/reference/capture_reference_sources.zig)
-- **Reads:** `reference_inventory` · **Writes:** `captured_reference_corpus` · **Side effect:** `filesystem_read`
-- **Rejects:** errors of `reference_corpus_source.Error`
-
-## `DecodeReferenceMarkdownAction` (`decode-reference-markdown`)
-
-- **Owner:** [`src/actions/reference/decode_reference_markdown.zig`](../../../src/actions/reference/decode_reference_markdown.zig)
-- **Reads:** `captured_reference_corpus` · **Writes:** `decoded_reference_corpus` · **Side effect:** `none`
-- **Does:** Decodes each captured entry, recording directories, blocked entries and decoder failures per entry, and totals the decoded bytes.
-- **Rejects:** only allocation failure. An unsupported, malformed or over-budget entry is not a
-  rejection: it is recorded as that entry's `blocked` result (`unsupported_media`,
-  `malformed_text`, `decoded_budget`), and the step still succeeds.
-
-## `ValidateReferenceAccountingAction` (`validate-reference-accounting`)
-
-- **Owner:** [`src/actions/reference/validate_reference_accounting.zig`](../../../src/actions/reference/validate_reference_accounting.zig)
-- **Reads:** `decoded_reference_corpus` · **Writes:** `reference_inputs` · **Side effect:** `none`
-- **Does:** Requires the decoded and captured entries to match the inventory one for one within the entry limit, then totals source and decoded bytes into the accepted documents.
-- **Rejects:** `InvalidReferenceAccounting` and the rest of `reference_ingestion.Error`
-
-## `AssignReferenceIdentitiesAction` (`assign-reference-identities`)
-
-- **Owner:** [`src/actions/reference/assign_reference_identities.zig`](../../../src/actions/reference/assign_reference_identities.zig)
-- **Reads:** `reference_inputs`, `feature_directory` · **Writes:** `identified_reference_corpus` · **Side effect:** `none`
-- **Does:** Numbers sources in document order and maps each provisional source and block to its canonical ID under a fresh reference-state ID.
-- **Rejects:** errors of `reference_evidence.Error`, `reference_state_identity.Error`
-
-## `BuildReferenceChunksAction` (`build-reference-chunks`)
-
-- **Owner:** [`src/actions/reference/build_reference_chunks.zig`](../../../src/actions/reference/build_reference_chunks.zig)
-- **Reads:** `identified_reference_corpus` · **Writes:** `reference_chunks` · **Side effect:** `none`
-- **Does:** Makes one chunk per source block, numbered in source and block order, under the `source_blocks_v1` partition.
-- **Rejects:** errors of `reference_evidence.Error`
-
-## `ValidateReferenceChunksAction` (`validate-reference-chunks`)
-
-- **Owner:** [`src/actions/reference/validate_reference_chunks.zig`](../../../src/actions/reference/validate_reference_chunks.zig)
-- **Reads:** `reference_inputs`, `feature_directory`, `identified_reference_corpus`, `reference_chunks` · **Writes:** `citable_reference_inputs` · **Side effect:** `none`
-- **Does:** Checks the chunks against the corpus: the same feature and state, one source and mapping per document, and one chunk per block mapping.
-- **Rejects:** `InvalidReferenceChunks` and the rest of `reference_evidence.Error`
-
-## `BuildSupersetPathTokenGrammarAction` (`build-superset-path-token-grammar`)
-
-- **Owner:** [`src/actions/reference/build_superset_path_token_grammar.zig`](../../../src/actions/reference/build_superset_path_token_grammar.zig)
-- **Reads:** `compiled_naming_policy`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `path_token_grammar` · **Side effect:** `none`
-- **Rejects:** errors of `path_token_grammar.Error`
-
-## `ScanReferencePassiveLiteralsAction` (`scan-reference-passive-literals`)
-
-- **Owner:** [`src/actions/reference/scan_reference_passive_literals.zig`](../../../src/actions/reference/scan_reference_passive_literals.zig)
-- **Reads:** `path_token_grammar`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `passive_literal_candidates` · **Side effect:** `none`
-- **Does:** Collects passive-literal candidates from source bodies in source, block and byte order; source names stay citation metadata.
-- **Rejects:** errors of `passive_literals.Error`
-
-## `AssignPassiveLiteralIdentitiesAction` (`assign-passive-literal-identities`)
-
-- **Owner:** [`src/actions/reference/assign_passive_literal_identities.zig`](../../../src/actions/reference/assign_passive_literal_identities.zig)
-- **Reads:** `passive_literal_candidates` · **Writes:** `passive_literal_identities` · **Side effect:** `none`
-- **Rejects:** errors of `passive_literals.Error`
-
-## `ValidateReferencePassiveLiteralsAction` (`validate-reference-passive-literals`)
-
-- **Owner:** [`src/actions/reference/validate_reference_passive_literals.zig`](../../../src/actions/reference/validate_reference_passive_literals.zig)
-- **Reads:** `passive_literal_identities`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `reference_passive_literals` · **Side effect:** `none`
-- **Does:** Re-scans the captured inputs through the same detector, so candidate bytes or supplied IDs can neither add an occurrence nor drop source coverage.
-- **Rejects:** errors of `passive_literals.Error`
-
-## `ExtractStructuredReferenceFactsAction` (`extract-structured-reference-facts`)
-
-- **Owner:** [`src/actions/reference/extract_structured_reference_facts.zig`](../../../src/actions/reference/extract_structured_reference_facts.zig)
-- **Reads:** `citable_reference_inputs` · **Writes:** `structured_reference_facts` · **Side effect:** `none`
-- **Does:** Runs the registered extractors over the captured inputs; only an extractor decides eligibility, with no filesystem access or model-authored value.
-- **Rejects:** errors of `structured_tokens.Error`
-
-## `AssignStructuredTokenCandidateIdentitiesAction` (`assign-structured-token-candidate-identities`)
-
-- **Owner:** [`src/actions/reference/assign_structured_token_candidate_identities.zig`](../../../src/actions/reference/assign_structured_token_candidate_identities.zig)
-- **Reads:** `citable_reference_inputs`, `structured_reference_facts` · **Writes:** `structured_token_candidates` · **Side effect:** `none`
-- **Rejects:** errors of `structured_tokens.Error`
+- **Owner:** [`src/actions/reference/prepare_reference_tokens.zig`](../../../src/actions/reference/prepare_reference_tokens.zig)
+  (binding [`reference_token_preparation_workflow.zig`](../../../src/application/reference_token_preparation_workflow.zig))
+- **Reads:** `compiled_naming_policy`, `valid_toolchain`, `citable_reference_inputs` · **Writes:**
+  `path_token_grammar`, `reference_passive_literals`, `structured_token_candidates` · **Side effect:** `none`
+- **Ports:** the Unicode text services (normalizer, case folder and lexical classifier, one port
+  family) only; the binding is capability free.
+- **Outcomes:** `ok`, `failed`, as above; it checks the runtime between steps.
+- **Does:** Runs these functions in order. Each keeps its former action's responsibility, input,
+  output and rejection rules; intermediates are function-local values.
+  1. `buildGrammar`: builds the superset path-token grammar from the compiled naming policy, the
+     toolchain and the inputs. Rejects errors of `path_token_grammar.Error`, including
+     `StaleNamingPolicy` for a policy compiled from another toolchain.
+  2. `scanLiterals`: collects passive-literal candidates from source bodies in source, block and
+     byte order; source names stay citation metadata. Rejects errors of `passive_literals.Error`.
+  3. `assignLiterals`: assigns the candidates their identities. Rejects errors of
+     `passive_literals.Error`.
+  4. `validateLiterals`: re-scans the captured inputs through the same detector, so candidate
+     bytes or supplied IDs can neither add an occurrence nor drop source coverage. Rejects errors
+     of `passive_literals.Error`.
+  5. `extractFacts`: runs the registered extractors over the captured inputs; only an extractor
+     decides eligibility, with no filesystem access or model-authored value. Rejects errors of
+     `structured_tokens.Error`.
+  6. `assignCandidates`: assigns the extracted facts their candidate identities. Rejects errors of
+     `structured_tokens.Error`.
 
 ## `InitializeReferenceExtractionAction` (`initialize-reference-extraction`)
 

@@ -8,40 +8,13 @@ const source_values = @import("reference_evidence_workflow.zig");
 const extraction_values = @import("reference_extraction_workflow.zig");
 const owned = @import("../domain/reference_candidate_value.zig");
 
-// Source-derived bounds only. Model candidate values use the sealed owner below.
-pub const facts_schema = values.schema(.structured_reference_facts, tokens.Facts, 1, 64 * 1024 * 1024);
+// Source-derived bounds only. Model candidate values use the sealed owner below. The stage action
+// `prepare-reference-tokens` publishes the candidates; the extracted facts stay function-local.
 pub const candidates_schema = values.schema(.structured_token_candidates, tokens.Candidates, 1, 64 * 1024 * 1024);
 pub const assigned_schema = values.schema(.preserved_token_identities, owned.Value, 1, null);
 pub const prepared_schema = values.schema(.prepared_reference_claims, owned.Value, 1, null);
-pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ facts_schema, candidates_schema, assigned_schema, prepared_schema };
+pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ candidates_schema, assigned_schema, prepared_schema };
 
-pub const Extract = struct {
-    pub const Action = @import("../actions/reference/extract_structured_reference_facts.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const source = values.read(&input.step.data, source_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
-        var arena: std.heap.ArenaAllocator = .init(self.allocator);
-        defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), source.*) catch |operation_error| return operation_error;
-        return @import("workflow_candidate.zig").publish(self.allocator, facts_schema, tokens.Facts, result);
-    }
-};
-pub const AssignCandidates = struct {
-    pub const Action = @import("../actions/reference/assign_structured_token_candidate_identities.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const source = values.read(&input.step.data, source_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
-        const facts = values.read(&input.step.data, facts_schema, tokens.Facts) catch |operation_error| return operation_error;
-        var arena: std.heap.ArenaAllocator = .init(self.allocator);
-        defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), source.*, facts.*) catch |operation_error| return operation_error;
-        return @import("workflow_candidate.zig").publish(self.allocator, candidates_schema, tokens.Candidates, result);
-    }
-};
 pub const AssignTokens = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .validated_reference_selections, .evidence = .validated_reference_selections, .result = .preserved_token_identities } };
     pub const Action = @import("../actions/reference/assign_preserved_token_identities.zig").Action;

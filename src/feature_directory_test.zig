@@ -1,16 +1,15 @@
 const std = @import("std");
 const feature = @import("domain/feature_directory.zig");
 const identity = @import("domain/feature_identity.zig");
-const normalize = @import("actions/specify/normalize_feature_directory.zig");
-const validate = @import("actions/specify/validate_feature_directory.zig");
+const steps = @import("actions/specify/prepare_inputs.zig").steps;
 const normalizer: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = @import("unicode_normalization").nfc };
 const configured: feature.Roots = .{ .specs = "requirements/current", .archive = "requirements/current/archive" };
 
 test "feature input is lossless config-root-relative and independent of reference input" {
     for ([_][]const u8{ "one", "unrelated/日本語" }) |reference| {
-        const candidate = try (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "./Cafe\u{301}\\日本語", .raw_reference = reference });
+        const candidate = try steps.normalizeFeature(normalizer, std.testing.allocator, .{ .raw_feature = "./Cafe\u{301}\\日本語", .raw_reference = reference });
         defer std.testing.allocator.free(candidate.bytes);
-        const result = try (validate.Action{ .roots = configured }).execute(std.testing.allocator, candidate);
+        const result = try steps.validateFeature(std.testing.allocator, candidate, configured);
         defer std.testing.allocator.free(result.project_relative_path);
         try std.testing.expectEqualStrings("Café/日本語", result.feature_id.bytes);
         try std.testing.expectEqualStrings("requirements/current/Café/日本語", result.project_relative_path);
@@ -35,7 +34,7 @@ test "feature path safety rejects escape aliases invalid components and archive 
     }) |path| {
         try std.testing.expectError(error.InvalidFeatureDirectory, feature.validate(std.testing.allocator, .{ .bytes = path }, configured));
     }
-    try std.testing.expectError(error.InvalidFeatureDirectory, (validate.Action{}).execute(std.testing.allocator, .{ .bytes = "hello" }));
+    try std.testing.expectError(error.InvalidFeatureDirectory, steps.validateFeature(std.testing.allocator, .{ .bytes = "hello" }, null));
     const sibling = try feature.validate(std.testing.allocator, .{ .bytes = "archive-copy" }, configured);
     defer std.testing.allocator.free(sibling.project_relative_path);
     const oversized = [_]u8{'a'} ** 256;
@@ -44,7 +43,7 @@ test "feature path safety rejects escape aliases invalid components and archive 
 }
 
 fn allocationCase(allocator: std.mem.Allocator) !void {
-    const candidate = try (normalize.Action{ .normalizer = normalizer }).execute(allocator, .{ .raw_feature = "./Cafe\u{301}/notes", .raw_reference = "independent" });
+    const candidate = try steps.normalizeFeature(normalizer, allocator, .{ .raw_feature = "./Cafe\u{301}/notes", .raw_reference = "independent" });
     defer allocator.free(candidate.bytes);
     const result = try feature.validate(allocator, candidate, configured);
     defer allocator.free(result.project_relative_path);
@@ -53,15 +52,6 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
 
 test "feature normalization and resolution release every failed allocation" {
     try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
-}
-
-test "feature inspection is a narrow read capability not a reference or model capability" {
-    const binding = @import("application/workflow_operation_binding.zig");
-    const runners = @import("application/feature_directory_workflow.zig");
-    const inspection = comptime binding.inspect(runners.Inspect, &.{});
-    try std.testing.expect(inspection.valid and inspection.feature_read and !inspection.reference_read and !inspection.model_provider);
-    const validation = comptime binding.inspect(runners.Validate, &.{});
-    try std.testing.expect(validation.valid and !validation.feature_read and !validation.reference_read);
 }
 
 test "feature state and logging consumers accept directory keys without relaxing other identifiers" {

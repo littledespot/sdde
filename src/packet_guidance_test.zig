@@ -84,14 +84,14 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         const changed = try std.json.Stringify.valueAlloc(a, document, .{});
         try std.testing.expectError(error.InvalidPacketGuidance, guidance.compile(a, changed));
     }
-    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v5\",", "{\"schema\":\"packet-guidance/v5\",\"schema\":\"packet-guidance/v5\",");
+    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v6\",", "{\"schema\":\"packet-guidance/v6\",\"schema\":\"packet-guidance/v6\",");
     try std.testing.expect(!std.mem.eql(u8, duplicate, valid));
     for ([_][]const u8{
         duplicate,
         "",
         "[]",
         "null",
-        "\"packet-guidance/v5\"",
+        "\"packet-guidance/v6\"",
         try std.mem.concat(a, u8, &[_][]const u8{ "[", valid, "]" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "{}" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "x" }),
@@ -363,8 +363,8 @@ const guided_registry: operations.Registry = .{
 
 fn compileGuided(a: std.mem.Allocator, yaml: []const u8, resources: []const Resource) !compilation.CompiledWorkflow {
     var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
-    const raw = try (@import("actions/workflow/parse_workflow_definitions.zig").Action{ .parser = parser.parser() }).execute(a, &.{.{ .ordinal = 1, .bytes = yaml }});
-    const definitions = try (@import("actions/workflow/validate_workflow_definition_schema.zig").Action{}).execute(a, raw);
+    const raw = try @import("application/startup_routine.zig").steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
+    const definitions = try @import("domain/workflow_definition_schema.zig").validate(a, raw);
     const descriptors = try a.alloc(inventory.InventoryDescriptor, resources.len + 1);
     const accounts = try a.alloc(inventory.InventoryAccount, resources.len + 1);
     const resource_ordinals = try a.alloc(u16, resources.len);
@@ -379,10 +379,10 @@ fn compileGuided(a: std.mem.Allocator, yaml: []const u8, resources: []const Reso
         captures[index] = .{ .ordinal = ordinal, .bytes = resource.bytes };
     }
     const source: inventory.Inventory = .{ .capability = undefined, .descriptors = descriptors, .accounts = accounts, .definition_ordinals = &.{1}, .resource_ordinals = resource_ordinals };
-    const manifest = try (@import("actions/workflow/resolve_workflow_resources.zig").Action{}).execute(a, source, definitions);
+    const manifest = try @import("domain/workflow_resource_binding.zig").resolve(a, source, definitions);
     var schemas: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const graphs = try (@import("actions/workflow/compile_workflow_graphs.zig").Action{ .registry = &guided_registry, .result_schema_compiler = schemas.compiler() }).execute(a, definitions, source, manifest, captures);
-    _ = try (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(a, graphs);
+    const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&guided_registry, schemas.compiler(), a, definitions, source, manifest, captures);
+    _ = try @import("domain/workflow_graph_validation.zig").validate(a, graphs);
     return graphs[0];
 }
 

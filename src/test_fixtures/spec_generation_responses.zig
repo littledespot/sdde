@@ -54,7 +54,8 @@ pub const Options = struct {
     reconciliation_repair_fault: ?enum { unchanged, alternating, unchanged_text } = null,
     reconciliation_fault: ?ReconciliationFault = null,
     uncertain: bool = false,
-    brief_text: ?[3][]const u8 = null,
+    /// The brief's description and primary goal.
+    brief_text: ?[2][]const u8 = null,
     repair: bool = false,
     repeated_provenance_fault: bool = false,
     repair_across_units: bool = false,
@@ -398,6 +399,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = content_value } }, .provenance = membership.fixed_provenance };
                         return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, record.content) });
                     }
+                    // ADR 0038 Decision 3: the engine fixed the criterion's claim; the
+                    // response is its content only.
+                    if (auth.rule.group != null and auth.rule.group.? == .scenario) {
+                        // Written from the fixed claim, so criteria inserted in different
+                        // batches don't repeat each other's content.
+                        const tested = try withoutExact(allocator, options, try attributed(allocator, all, auth.rule.group.?.scenario.fixed_provenance.claim_ids));
+                        const content: @FieldType(g.spec.Model.RecordProposal, "content") = .{ .acceptance_criterion = .{ .given = tested.value, .when = tested.value, .then = tested.value } };
+                        return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, content) });
+                    }
                 }
                 return if (options.failed_repair) "{\"provenance\":{\"claim_ids\":[999999]}}" else error.UnexpectedScriptedRepair;
             }
@@ -409,7 +419,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             }
             var proposed: g.Response = .{
                 .content = switch (unit) {
-                    .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
+                    .brief => .{ .brief = .{ .description = value, .primary_goal = value } },
                     // ADR 0047: the engine composes the story; no request asks for it.
                     .primary_user_story => return error.UnexpectedStoryRequest,
                     .entities => entity: {
@@ -463,7 +473,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 },
             };
             if (unit == .brief) if (options.brief_text) |texts| {
-                inline for (.{ "title", "description", "primary_goal" }, 0..) |field, index| {
+                inline for (.{ "description", "primary_goal" }, 0..) |field, index| {
                     @field(proposed.content.brief, field).value = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = texts[index] } }}) };
                 }
             };
@@ -472,7 +482,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 // missing prose belongs to response protocol correction.
                 const invalid: g.spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
                 switch (unit) {
-                    .brief => proposed.content.brief.title.value = invalid,
+                    .brief => proposed.content.brief.description.value = invalid,
                     .primary_user_story => return error.UnexpectedStoryRequest,
                     .entities => if (options.repair_across_units) {
                         proposed.content.entities.basis.value = invalid;
@@ -558,7 +568,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
                 }
                 if (options.source_gaps and requirement.seed.id.kind == .feature_intent and requirement.seed.id.unit == .feature) finding.value = .{ .kind = .unsupported, .question = switch (requirement.seed.id.slot) {
-                    .display_name => "What should users call this feature? Supply its display name.",
                     .description => "What behavior should this feature provide? Describe the expected result.",
                     .primary_goal => "Which user outcome takes priority? Name the primary goal.",
                     .acceptance_criteria => "Which observable outcome counts as success? State the pass/fail condition.",
@@ -819,7 +828,7 @@ fn fixtureGroups(allocator: std.mem.Allocator, context: @import("../domain/speci
 fn associateFixtureResponse(allocator: std.mem.Allocator, context: @import("../domain/specification_provenance.zig").Context, bound: @import("../domain/specification_source_binding.zig").Bound, response: *g.Response) !void {
     switch (response.*) {
         .content => |*content| switch (content.*) {
-            .brief => |*brief| inline for (.{ "title", "description", "primary_goal" }) |field| try associateFixtureValue(allocator, context, &@field(brief, field)),
+            .brief => |*brief| inline for (.{ "description", "primary_goal" }) |field| try associateFixtureValue(allocator, context, &@field(brief, field)),
             .primary_user_story => return error.UnexpectedStoryRequest,
             .entities => |*entities| {
                 try associateFixtureValue(allocator, context, &entities.basis);

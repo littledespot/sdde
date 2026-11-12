@@ -8,7 +8,8 @@
   ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 6, 8 November 2026)
   took v23, and the linked edge-case outcome
   ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7, 8 November 2026) took v24,
-  so when this ADR resumes it takes v25. Since
+  and the engine-derived title ([ADR 0048](0048-engine-derived-specification-title.md),
+  11 November 2026) took v25, so when this ADR resumes it takes v26. Since
   post-generation review was removed (SPEC01 D13.1, 1 November 2026), "review" leaves the
   checks a failed view lists as not completed.
 - **Date:** 2026-10-26
@@ -41,7 +42,7 @@
     fatal to model work, but publishes this projection;
   - §3.3 (invariant on failed publication), §12.8.1 (the terminal-error rows), §17,
     §22.6 (uncorrectable JSON/schema rejection), §23.2 and §25 (the published set),
-    §24 (`specification-state/v25`), §27 and F0002 (the `run.incomplete_published`
+    §24 (`specification-state/v26`), §27 and F0002 (the `run.incomplete_published`
     event), §31.15, F0100 §5.5, the [E2E harness](../harness/e2e.md) and the §32 index;
   - §23.2 ("blocked … executions publish no new specification") and the §12.8.1
     administrative-block row, for blocked runs;
@@ -97,8 +98,8 @@ incomplete specification when a run pauses for clarification.
      exists to publish.
 2. **What is published.** Only content that passed every check that applies to it on
    its own: the validated reference snapshot and its cited source requirements (as in
-   ADR 0017), and each generated unit (title, brief, story or record batch) that was
-   admitted and validated before the failure.
+   ADR 0017), the title the engine took from the sources (ADR 0048), and each generated
+   unit (brief, story or record batch) that was admitted and validated before the failure.
    - A unit that failed, or was still being corrected or repaired, is not published, in
      whole or in part, and neither is a unit whose owner has an unresolved candidate
      outcome. Unvalidated model output never appears.
@@ -224,7 +225,7 @@ incomplete specification when a run pauses for clarification.
 
 ## Consequences
 
-- **Persistence.** `specification-state` advances to v25 for the new variant. Earlier
+- **Persistence.** `specification-state` advances to v26 for the new variant. Earlier
   states reject without migration. Workflow definitions advance to `workflow/v2`; a
   project holding a copied `workflow/v1` definition must replace it.
 - **Risks.**

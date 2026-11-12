@@ -127,7 +127,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     var prefix_cancellation: PrefixCancellation = .{ .wire = &wire };
     var probe: invoke.Probe = .{};
     var report: contracts.Report = .{
-        .schema = .@"spec-e2e-report/v15",
+        .schema = .@"spec-e2e-report/v17",
         .started_at_utc = "2026-10-15T00:00:00Z",
         .case_id = selected.id,
         .workflow_id = selected.workflow_id,
@@ -157,7 +157,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
             try std.testing.expect(report.specification == null);
             try std.testing.expectEqual(.not_run, report.publication_check);
             try std.testing.expect(report.evaluation_inputs == null);
-            var current = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, try files.read(io, a, project, ".sddtoolkit.json"));
+            var current = try @import("../../src/domain/engine_config_decode.zig").decode(a, try files.read(io, a, project, ".sddtoolkit.json"));
             defer current.deinit();
             try std.testing.expectEqualStrings("medium", current.value().models.slots.map.get("spec_generation").?.reasoningEffort.?);
             try fixture.verifySources(io, a, .cwd(), captured);
@@ -214,7 +214,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
         try std.testing.expectEqual(@as(u128, 0), report.total_tokens);
         try std.testing.expect(report.last_model_usage == null);
     }
-    var config = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, captured.config);
+    var config = try @import("../../src/domain/engine_config_decode.zig").decode(a, captured.config);
     defer config.deinit();
     try absent(io, project, try std.fs.path.join(a, &.{ config.value().paths.specs, selected.feature, artifacts.specification_filename }));
     try absent(io, project, try std.fs.path.join(a, &.{ config.value().paths.workflows, "features", selected.feature, "state", artifacts.workflow_state_filename }));
@@ -542,7 +542,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         .delivery = .accepted_or_unknown,
     } } else .{ .received = .{ .status = 200, .body = response } };
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
-    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
     const published = invoke.run(io, a, project, selected, captured, @import("../harness/environment.zig").bedrockOnly(key), store, &report, .{
         .purpose = .whole_workflow,

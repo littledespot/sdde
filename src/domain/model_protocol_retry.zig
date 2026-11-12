@@ -56,12 +56,11 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
         .decoder => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason }, .explanation = reason.explanation() }, .{}),
         .composition => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .composition = try reason.describe(scratch) }, .explanation = "Model-text composition failed. Correct every listed field within this same response and retain the original assignment." }, .{}),
         .schema => |reason| value: {
-            // ADR 0038: exactly an uncovered value's correction names the compiled covering
-            // kinds, and exactly a partly taken item's names the exclusive and owning kinds.
-            if ((reason.coverage != null) != (reason.reason == .uncovered_member or reason.reason == .shared_member)) return error.ModelRequestAssociationInvalid;
+            // ADR 0038 Decision 5: exactly a partly taken item's correction names the
+            // exclusive and owning kinds.
+            if ((reason.coverage != null) != (reason.reason == .shared_member)) return error.ModelRequestAssociationInvalid;
             // Exactly a missing member's correction names the member no item names.
             if ((reason.member != null) != (reason.reason == .missing_member)) return error.ModelRequestAssociationInvalid;
-            const Kinds = struct { kind_property: []const u8, kinds: []const []const u8 };
             const Exclusive = struct { kind_property: []const u8, kinds: []const []const u8, owning: []const []const u8 };
             // ADR 0038 Decision 5: a partly taken item's correction lists every taken
             // value's naming in such items, found by the admission owner from the same rule.
@@ -79,7 +78,6 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
                     .schema_pointer = (try projection.locate(scratch, original.response_schema, reason.expected)) orelse return error.ModelRequestAssociationInvalid,
                     .shape = try projection.outline(scratch, reason.expected),
                 },
-                .covering = @as(?Kinds, if (reason.reason == .uncovered_member) .{ .kind_property = reason.coverage.?.rule.kind_property, .kinds = reason.coverage.?.rule.covering } else null),
                 .exclusive = @as(?Exclusive, if (reason.reason == .shared_member) .{ .kind_property = reason.coverage.?.rule.kind_property, .kinds = reason.coverage.?.rule.exclusive, .owning = reason.coverage.?.rule.owning } else null),
                 .shared = shared,
                 .member = reason.member,

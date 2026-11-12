@@ -35,11 +35,11 @@ invocation's complete immutable validated identity-free workflow registry,
 keyed by unique `WorkflowId` and derived from every in-scope definition beneath
 the configured workflow-authority root.
 
-- The loader/compiler/registry actions produce and validate that identity-free candidate
+- The loader/compiler/registry steps produce and validate that identity-free candidate
   before workflow selection.
 - F0005 names the resulting nominal value `ValidatedWorkflowDefinitionRegistry`; it is
   the candidate plus its exact validation evidence, with no `BootstrapComponentId`.
-- Only then does the runner construct one service with one concrete borrowed
+- Only then does the composition root construct one service with one concrete borrowed
   `registry()` accessor.
 - A bootstrap materialization owner (not implemented) may consume this same validated
   value to assign an ID and construct `WorkflowDefinitionRegistryState`; F0005 does not
@@ -52,18 +52,18 @@ The one feature outcome is built by separate owners:
 | Owner | Sole responsibility |
 | --- | --- |
 | F0004 | Supply the validated `workflow_authority` root capability; no workflow loader reinterprets the raw config string. |
-| Workflow loader actions | Derive the reserved layout, inventory every in-scope entry, capture definition bytes, decode YAML 1.2, validate the closed schema, and totally account for the inventory. |
-| Workflow compiler actions | Resolve registered contracts and compile one validated immutable graph per schema-valid definition. |
-| Registry actions | Index all compiled graphs and prove global uniqueness and total coverage. |
-| Fixed startup orchestrator | Coordinate those runner-owned child bindings in order and branch only on typed outcomes. Under ADR 0032 (not yet implemented), a typed engine routine run by the composition root replaces it; AC 17's "uses only runner-owned bindings" then means "reached only through the composition root". |
+| Workflow loader steps | Derive the reserved layout, inventory every in-scope entry, capture definition bytes, decode YAML 1.2, validate the closed schema, and totally account for the inventory. |
+| Workflow compiler steps | Resolve registered contracts and compile one validated immutable graph per schema-valid definition. |
+| Registry steps | Index all compiled graphs and prove global uniqueness and total coverage. |
+| Fixed startup routine | Run those steps in order, each taking only the port it uses, and stop on a typed failure or cancellation. Under ADR 0032 it is a typed engine routine run by the composition root; AC 17's "uses only runner-owned bindings" means "reached only through the composition root". |
 | Pipeline runner | Invoke nodes, validate/apply deltas, own intermediates, and destroy rejected candidates. Values inside an ADR 0031 stage action are function-local; the runner owns its edge inputs and outputs. |
-| Composition root | Register concrete generic operation implementations in the single operation registry and assemble the fixed nonselectable startup graph. |
+| Composition root | Register concrete generic operation implementations in the single operation registry and run the fixed nonselectable startup routine. |
 | Registry service | Own and expose only the final immutable validated identity-free registry. |
 
-No action calls another action or chooses its successor. The compiler performs
+No step calls another step. The compiler performs
 no filesystem I/O or node invocation. The registry builder performs no parsing
-or compilation. The orchestrator receives no filesystem, parser, compiler,
-registry-mutator, logger, state, or transaction capability.
+or compilation. The startup routine receives no logger, state, or transaction
+capability, and each step takes only the port it uses.
 
 The service accessor is:
 
@@ -94,7 +94,7 @@ The workflow-authority media boundary:
 
 The loader/compiler/registry split and fixed startup coordination use the
 concise definition and single operation registry exclusively for transport,
-registered input, and runner bindings.
+registered input, and typed routine steps.
 
 It begins with:
 
@@ -115,7 +115,7 @@ It ends with either:
 - terminal `cancelled` and no service or partial authority for an explicit
   runner/user cancellation.
 
-The fixed startup graph is compiler-locked, composition-root-owned,
+The fixed startup routine is compiler-locked, composition-root-owned,
 nonselectable, and not project-extensible. It is not a member of the resulting
 registry and acquires no feature transaction lock.
 
@@ -139,7 +139,7 @@ registry and acquires no feature transaction lock.
 - The schema validator alone converts that raw value into an owned
   `DeclarativeWorkflowDefinition`.
 
-- `ParseWorkflowDefinitionAction` depends only on a narrow `WorkflowDefinitionParser`
+- The `parse_workflows` step depends only on a narrow `WorkflowDefinitionParser`
   port.
 - The composition root binds a workflow adapter backed by the shared private bounded
   YAML 1.2 syntax adapter.
@@ -159,7 +159,7 @@ V1 acceptance is the conjunction of three non-overlapping contracts:
    YAML data for concise mapping fields, scalar types/patterns, resources,
    steps, and static collection bounds; and
 3. typed validators own relational rules that JSON Schema cannot express here:
-   `ValidateWorkflowDefinitionSchemaAction` owns typed local identifiers while
+   the `validate_workflow_schema` step owns typed local identifiers while
    the compiler owns step/outcome/resource cross-reference joins, registered
    parameter constraints, resource-kind compatibility, and graph closure.
 
@@ -239,14 +239,14 @@ An operation step contains one registered generic operation, an optional compact
 map, and one outcome map:
 
 ```yaml
-capture-project:
-  use: capture-project-toolchain
-  on: { ok: inventory-presets, failed: end.failed }
+toolchain:
+  use: prepare-toolchain
+  on: { ok: end.ok, failed: end.failed }
 ```
 
 This step of the [toolchain workflow fixture](../../src/test_fixtures/toolchain.workflow.yaml)
 uses a registered operation; a complete graph must supply its required inputs and
-define the `inventory-presets` successor, as the fixture does.
+map every outcome, as the fixture does.
 
 - The step's mapping key is its unique `WorkflowStepId`.
 - `use` identifies a registered operation contract, not a concrete implementation or
@@ -275,7 +275,7 @@ define the `inventory-presets` successor, as the fixture does.
   workflow root.
 - An operation parameter that expects a prompt, schema, example, JSON-composition
   ([ADR 0016](../decisions/0016-configured-json-response-composition.md)) or
-  `packet-guidance/v5` (ADR 0016 packet-guidance amendment) resource accepts only a
+  `packet-guidance/v6` (ADR 0016 packet-guidance amendment) resource accepts only a
   declared alias of that expected kind.
 - A JSON-composition resource references one complete result schema and owns only the
   part partition and dependencies; it adds no configuration owner or executable
@@ -352,8 +352,8 @@ typed content cannot change the compiled semantic graph.
   retry/cycle checks, capability policy and runner semantics apply to the complete
   expanded graph.
 - Nothing is hidden in an action. An [ADR 0031](../decisions/0031-stage-actions.md) stage
-  action (not yet implemented) hides no workflow choice either: its internal steps are
-  functions whose non-success outcomes all end the stage, and every routed outcome stays in
+  action (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are the stage actions) hides no workflow choice either: its internal steps
+  are functions whose non-success outcomes all end the stage, and every routed outcome stays in
   YAML.
 - See [the spec workflow](../workflows/spec.workflow.yaml) for parameterized reuse.
 
@@ -426,7 +426,7 @@ timeout or cancellation never turns an incomplete inventory into success.
 
 ## 5. Workflow root and reserved children
 
-- `BuildWorkflowAuthorityLayoutAction` derives its root only from F0004's exact
+- The `build_workflow_layout` step derives its root only from F0004's exact
   `workflow_authority` capability.
 - The root inventory includes an encountered direct child named exactly `features` to
   validate its reserved state-root role, but enumeration never enters its descendant
@@ -619,7 +619,7 @@ service is published.
   through one narrow compiler port bound at composition.
 - Result-schema resources are decoded; their tagged compiled values carry an opaque
   immutable schema and exact captured bytes. JSON-composition resources (§3.3) and
-  `packet-guidance/v5` resources (ADR 0016 packet-guidance amendment) are also decoded
+  `packet-guidance/v6` resources (ADR 0016 packet-guidance amendment) are also decoded
   and validated at compilation through their closed encodings.
 - The registry owns deep copies of this same authority.
 - Missing, malformed, unsupported or unbounded schema declarations reject the graph with
@@ -722,7 +722,7 @@ transitions and their existing native authority.
 
 ### Compilation checks
 
-- `CompileWorkflowGraphAction` is a pure deterministic compiler over one schema-valid
+- The `compile_workflows` step is a pure deterministic compiler over one schema-valid
   definition and immutable registered contracts.
 - It resolves every reference exactly once, binds the current invocation contract,
   validates definition-safe parameters, canonicalizes graph data, and derives effective
@@ -730,7 +730,7 @@ transitions and their existing native authority.
 - It constructs no adapter, child binding, state identity, or executable code and
   invokes no node.
 
-`ValidateCompiledWorkflowGraphAction` proves at least:
+The `validate_workflow_graphs` step proves at least:
 
 - the invocation reference resolves to a registered capability-free invocation
   contract and its output typed run context/data keys satisfy graph entry;
@@ -793,12 +793,12 @@ evidence.
 
 ## 8. Variable-size registry and handoff
 
-`BuildWorkflowDefinitionRegistryAction` indexes the complete compiled graph set
+The `build_workflow_registry` step indexes the complete compiled graph set
 once by typed `WorkflowId`. The candidate retains each graph's validated
 `WorkflowShortcode` and source inventory ordinal as metadata, but assigns no
 source identity and no `BootstrapComponentId`.
 
-`ValidateWorkflowDefinitionRegistryAction` proves:
+The `validate_workflow_registry` step proves:
 
 - cardinality is between zero and `maxWorkflowDefinitions`, with no required
   workflow name or fixed count;
@@ -811,7 +811,7 @@ source identity and no `BootstrapComponentId`.
   and
 - a reserved, directory, blocking, or unaccounted ordinal cannot be indexed.
 
-- For preselection, the runner constructs exactly one
+- For preselection, the composition root constructs exactly one
   `WorkflowDefinitionRegistryService` from the validated identity-free value; no earlier
   candidate can construct it.
 - Separately, when the larger bootstrap authority-state flow is required, its
@@ -919,11 +919,11 @@ Those concerns remain with their accepted owners or later increments.
 14. Source order/path, registry identity, and validation evidence cannot change
     another graph's stable semantic authority.
 15. One invalid sibling yields no partial or fallback registry.
-16. The runner constructs exactly one service after identity-free registry
+16. The composition root constructs exactly one service after identity-free registry
     validation; `registry()` returns the same borrowed immutable value without I/O,
     compilation, selection, allocation, or mutation.
-17. The startup graph is nonselectable and not project-extensible, uses only
-    runner-owned bindings, and acquires no feature transaction lock.
+17. The startup routine is nonselectable and not project-extensible, is reached only
+    through the composition root, and acquires no feature transaction lock.
 18. F0005 performs no model call, command, write, state transition, logging sink
     operation, workflow selection, or graph execution.
 19. The packaged executable requires no design schema/example, source tree,
@@ -1027,12 +1027,12 @@ Implementation tests must cover the owning boundaries:
 
 - actions cannot call nodes
 - the compiler imports no filesystem/provider implementation
-- the workflow parse action depends only on its narrow parser port
+- the workflow parse step depends only on its narrow parser port
 - the YAML library and syntax-node types remain adapter-private
 - workflow and toolchain ports/raw values/schema validators do not merge
-- the startup orchestrator has only child bindings
+- no startup step takes two ports, the port set, a capability bag, `anytype` or `anyopaque`
 - the runner is the sole node/delta owner
-- the fixed startup graph is absent from the registry
+- the fixed startup routine is absent from the registry
 - no write, model call, command, or feature lock occurs
 - all owned intermediates are released on every terminal branch.
 

@@ -9,45 +9,17 @@ pub const DataKey = enum {
     prior_principle_registry,
     packet_guidance,
     invocation_working_directory,
-    exact_engine_config_file,
     raw_engine_config,
     engine_config,
-    exact_llm_provider_config_file,
-    raw_llm_provider_config,
-    raw_llm_provider_document,
-    llm_provider_registry_candidate,
     llm_provider_registry,
     repository_model_allowlist,
     canonical_log_level,
     logging_policy,
-    configured_root_path_policy_set,
-    llm_provider_config_path_policy,
-    configured_root_candidate_set,
-    llm_provider_config_path_candidate,
-    configured_root_capability_set,
-    bootstrap_root_registry_id,
-    bootstrap_root_registry,
-    bootstrap_root_registry_evidence,
-    workflow_authority_layout,
-    raw_workflow_authority_entries,
-    normalized_workflow_authority_entries,
-    workflow_authority_entry_accounts,
-    workflow_authority_inventory_candidate,
-    workflow_authority_inventory,
-    workflow_definition_captures,
-    raw_workflow_definitions,
-    declarative_workflow_definitions,
-    workflow_resource_manifest,
-    workflow_resource_captures,
-    compiled_workflow_graphs,
-    validated_workflow_graphs,
-    workflow_definition_registry_candidate,
     workflow_definition_registry,
     workflow_operation_registry,
     workflow_operation_registry_evidence,
     workflow_invocation,
     selected_compiled_workflow,
-    model_provider_requirement,
     validated_provider_model_binding,
     validated_provider_authorization,
     model_request_identity_ledger,
@@ -67,56 +39,32 @@ pub const DataKey = enum {
     json_composition,
     assembled_json,
     validated_assembled_json,
-    project_toolchain_capture,
-    toolchain_preset_inventory,
-    toolchain_preset_captures,
-    raw_toolchain_documents,
-    schema_valid_project_toolchain,
-    schema_valid_toolchain_registry,
-    resolved_toolchain_inheritance,
-    composed_toolchain,
     valid_toolchain,
     compiled_naming_policy,
     path_token_grammar,
     path_token_scan,
-    passive_literal_candidates,
-    passive_literal_identities,
     reference_passive_literals,
     parsed_specify_invocation,
     specify_invocation,
-    normalized_reference_selector,
-    relative_reference_selector,
     reference_directory,
-    normalized_feature_directory,
     relative_feature_directory,
     feature_directory,
     activated_feature_directory,
     feature_artifact_paths,
     raw_clarification_inputs,
-    parsed_clarification_state,
-    validated_clarification_state,
     clarification_inputs,
     clarification_needs,
     refreshed_clarification_state,
     clarification_views,
     prepared_workflow_output,
     published_workflow_output,
-    raw_workflow_state,
     prior_specification_state,
     specification_publication_state,
     incomplete_specification_state,
     rendered_incomplete_specification,
     reference_snapshot,
     rendered_reference_context,
-    raw_reference_inventory,
-    reference_inventory,
-    captured_reference_corpus,
-    decoded_reference_corpus,
-    reference_inputs,
-    identified_reference_corpus,
-    reference_chunks,
     citable_reference_inputs,
-    structured_reference_facts,
     structured_token_candidates,
     reference_citation_proposals,
     validated_source_citations,
@@ -245,6 +193,12 @@ pub const NodeRuntime = struct {
         return self.status_fn(self.context);
     }
 };
+
+/// Where inside a stage action a failing invocation stopped (ADR 0031). A Zig error carries no
+/// payload, so the runner lends each step invocation this slot and the binding writes the failing
+/// internal step's name, a static enum tag, before it returns its unchanged error. The runner
+/// records it in the failed action's event.
+pub const StageStepSlot = struct { name: ?[]const u8 = null };
 
 pub const NodeDelta = struct {
     data_writes: data.Slots = data.empty_slots,
@@ -565,13 +519,13 @@ test "data shape applies only the exact declared effects" {
         .id = "test",
         .kind = .action,
         .requires = &.{.engine_config},
-        .produces = &.{.configured_root_path_policy_set},
+        .produces = &.{.canonical_log_level},
         .side_effect = .none,
     };
     const initial = DataShape.init(&.{.engine_config});
     const next = try initial.apply(contract, DataEffects.fromContract(contract));
-    try std.testing.expect(next.contains(.configured_root_path_policy_set));
-    try std.testing.expect(!initial.contains(.configured_root_path_policy_set));
+    try std.testing.expect(next.contains(.canonical_log_level));
+    try std.testing.expect(!initial.contains(.canonical_log_level));
 }
 
 test "data shape rejects missing undeclared and duplicate writes" {
@@ -579,7 +533,7 @@ test "data shape rejects missing undeclared and duplicate writes" {
         .id = "test",
         .kind = .action,
         .requires = &.{.engine_config},
-        .produces = &.{.configured_root_path_policy_set},
+        .produces = &.{.canonical_log_level},
         .side_effect = .none,
     };
     const envelope = DataShape.init(&.{.engine_config});
@@ -595,8 +549,8 @@ test "data shape rejects missing undeclared and duplicate writes" {
         error.DuplicateWrite,
         envelope.apply(contract, .{
             .data_writes = &.{
-                .configured_root_path_policy_set,
-                .configured_root_path_policy_set,
+                .canonical_log_level,
+                .canonical_log_level,
             },
         }),
     );

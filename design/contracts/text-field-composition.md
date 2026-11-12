@@ -64,7 +64,7 @@ semantic judgments.
 | Declared fields | Nonblank prose | Exact-copy role | Passive/source roles |
 | --- | --- | --- | --- |
 | Brief description; AC Given/When/Then; visible outcome; edge condition; functional requirement, business rule, non-goal, prohibited behavior | Required | Obligation-bearing | Passive incidental; source prohibited |
-| Brief title and goal; entity-applicability basis; assumption; clarification question | Required | Prohibited ([below](#exact-copies-only-where-they-can-carry-an-obligation)) | Passive incidental; source prohibited |
+| Brief goal; entity-applicability basis; assumption; clarification question | Required | Prohibited ([below](#exact-copies-only-where-they-can-carry-an-obligation)) | Passive incidental; source prohibited |
 | Primary story: the engine's join of quoted business claims ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)) | Required | Incidental: an exact value may occur, but discharges no exact-copy duty | Passive incidental; source prohibited |
 | Entity name | Optional: supplied insertions may express an identity label | Incidental | Passive incidental; source prohibited |
 | Extraction and reconciliation business and scope-guard text | Required | Prohibited: preserved-token records carry exact-value identity separately | Passive incidental; source prohibited by their business-text contract |

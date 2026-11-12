@@ -93,8 +93,8 @@ prohibited, incidental or obligation-bearing. All exact occurrences retain the
 same handle, lineage, scope and byte-resolution contracts below. Only occurrences
 in successfully validated obligation-bearing fields satisfy behavioral exact-copy
 coverage. An incidental entity-name occurrence cannot discharge that duty.
-Titles and the other descriptive fields in the inventory's second row carry no
-exact-copy occurrence at all. The policy is shared across generation, correction,
+The descriptive fields in the inventory's second row carry no exact-copy occurrence,
+nor does the engine's title (ADR 0048). The policy is shared across generation, correction,
 repair and stored readback; it is not another model role classifier or support
 decision. Wire syntax embedded in prose never creates an occurrence and follows
 the source-aware protocol rule.
@@ -186,8 +186,9 @@ There is no role classifier, independent role request, `generation_roles` field,
 role-coverage gate, legacy reader or dual binding registry.
 
 Initial attributed values use `{signal_ids:[...],value:BusinessValue}`. Brief
-requires title, description and goal; entities retain disposition and a selected,
-explained basis; the story is engine-composed (ADR 0047). Initial clarification questions
+requires description and goal; entities retain disposition and a selected,
+explained basis; the story is engine-composed (ADR 0047), and the title is the sources'
+level-1 heading, native text with no lineage or group support (ADR 0048). Initial clarification questions
 use the same selected-group value with the existing reason and optional record
 kind. Their native scope resolves only selected question-eligible groups, never the
 whole available catalogue. Missing/duplicate/foreign/inactive group handles reject.
@@ -258,7 +259,7 @@ handles, never chooses semantic support or adds citations to satisfy a review.
 
 ## Persistence and readback
 
-Canonical content is `specification/v5`; completed and clarification-pending
+Canonical content is `specification/v6` (ADR 0048); completed and clarification-pending
 specification state share one version and reject earlier versions without
 migration, dual reader or fallback. Canonical reference snapshots persist no
 presentation roles. Completed readback resolves handles from the captured ledger,

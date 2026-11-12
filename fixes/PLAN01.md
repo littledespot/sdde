@@ -32,7 +32,7 @@ authority (intent.md:3-9).
     definitions already run side by side (`test/integration/workflow_tests.zig:344-369`).
   - Shared code already names Plan in three places:
     - the authority registry makes Plan the owner of `design_decision` and `policy_predicate`
-      (`src/domain/required_authority.zig:56-58`);
+      (`src/domain/required_authority.zig:57-59`);
     - clarification IDs and allocation handle `PNN` (`src/domain/clarification_refresh.zig:105-113`);
     - the request-owner unions declare `plan_unit` (`src/domain/model_request_identity.zig:75-96`).
   - The repair contract is generic (`src/domain/atomic_repair.zig:81`).
@@ -58,11 +58,11 @@ authority (intent.md:3-9).
 | Mechanism | State | Evidence |
 | --- | --- | --- |
 | Multi-workflow selection, compiler, runner | Generic | `workflow_tests.zig:344-369`; no `spec-generation` literal in production code |
-| Required-authority ledger, reconcile, routing, gate | Generic; Plan kinds declared; no Plan seed producer | `required_authority.zig:13`, `:56-58`, `:356-360`; seeds only `specification_authority.zig`, `source_preservation.zig` |
+| Required-authority ledger, reconcile, routing, gate | Generic; Plan kinds declared; no Plan seed producer | `required_authority.zig:14`, `:57-59`, `:357-361`; seeds only `specification_authority.zig`, `source_preservation.zig` |
 | Clarification registry, `PNN` IDs, forms, refresh | Generic for S/P/T; answers rejected for every stage | `clarification_refresh.zig:64-66`, `:105-113` |
 | Atomic repair contract and retry state | Generic core; all 7 instances Spec or reference | `atomic_repair.zig:81`; ADR 0033:237-240 |
 | Toolchain capture, inheritance, safety | Generic; holds package IDs and naming rules only | `src/composition/toolchain_policy_registry.zig:6-22`; F0003:208-209 |
-| Principle capture | Generic, persisted, read by no model call | `spec.workflow.yaml:44-46`; 09-configuration.md:336-337 |
+| Principle capture | Generic, persisted, read by no model call | `spec.workflow.yaml` step `principles`; 09-configuration.md:336-337 |
 | Bounded no-follow directory scan | Root-generic; two users | `src/adapters/filesystem/directory_inventory.zig:8-34` |
 | Request-owner and state ID types | Declared, never built in production | `model_request_identity.zig:15-19`, `:61-68` |
 
@@ -90,9 +90,9 @@ change, not a Plan-local one:
 - publication permission, which only a clarification subject has
   (`src/domain/workflow_outcome_association.zig:206-215`);
 - the feature-directory chain, which starts from the Spec invocation
-  (`src/actions/specify/normalize_feature_directory.zig:12`);
+  (`src/actions/specify/prepare_inputs.zig:126`);
 - the state parser, which accepts two Spec stages (`specification_state.zig:52`);
-- packet guidance, one closed `packet-guidance/v5` keyed by Spec registries (ADR 0016:142-147).
+- packet guidance, one closed `packet-guidance/v6` keyed by Spec registries (ADR 0016:144-149).
 
 ## 5. Decisions Plan needs
 
@@ -123,7 +123,7 @@ change, not a Plan-local one:
    - **Recommended:** extend ADR 0025 Decision 1, where the invoking account is the actor, to
      all three, after E7.
 4. **PD4. Edited `spec.md`.**
-   - §18.1 reads an edit back as authority (18-plan.md:52-79; 24-workflow-state.md:148).
+   - §18.1 reads an edit back as authority (18-plan.md:52-79; 24-workflow-state.md:150).
    - Today a Spec rerun overwrites it (23-rendering.md:224-225).
    - SPEC01 D13.7 (SPEC01:403-410) is open for edited derived lines.
    - **Recommended for a first slice:** Plan accepts only an unedited `spec.md`, the "equal
@@ -133,7 +133,7 @@ change, not a Plan-local one:
    - §18.4 publishes a successor input state and ID ledger (18-plan.md:252-257).
    - The accepted persistence exception covers clarifications and Spec's pending set only (ADR
      0009:67-69; ADR 0017), and "Nothing from the paused execution is reused"
-     (24-workflow-state.md:94).
+     (24-workflow-state.md:96).
    - **Recommended:** forms and `clarifications.json` only.
 6. **PD6. State layout.**
    - One `workflow.json` per feature (24-workflow-state.md:15-18) is typed as Spec state today.
@@ -203,7 +203,7 @@ change, not a Plan-local one:
 - **The harness is Spec-only:**
   - case `spec-e2e-case/v3`, which requires Spec's four artifacts
     (`test/harness/e2e/contracts.zig:4`, `:23-26`);
-  - report `spec-e2e-report/v15` (`:140`);
+  - report `spec-e2e-report/v17` (`:140`);
   - adjudication `spec-adjudication-record/v1` (`test/harness/adjudication.zig:13`, `:50`);
   - stage measures, which count `plan_unit` as `other` (`test/harness/baseline/stages.zig:94`).
   - "Plan, Tasks and Implement need their own workflow cases" (design/harness/e2e.md:328).

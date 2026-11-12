@@ -313,8 +313,8 @@ pub const Tracker = struct {
             .inconclusive => {},
             .clarification => |need| try self.business(sequence, after_call, checked, record_offset, .clarification_question, .clarification_question, need.question.value),
             .content => |content| switch (content) {
+                // The engine takes the title from the sources; it is not model text (ADR 0048).
                 .brief => |brief| {
-                    try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .title, .field = .value } } }, .spec_title, brief.title.value);
                     try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .description, .field = .value } } }, .spec_description, brief.description.value);
                     try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .primary_goal, .field = .value } } }, .spec_goal, brief.primary_goal.value);
                 },
@@ -447,7 +447,7 @@ fn validSubject(subject: Subject, field: policy.Field, value: Value) bool {
                 selected.record_kind != null and (if (selected.record_kind.? == .entity) selected.unit == .entities else selected.unit == .records) and field == (candidate.recordKindTextField(selected.record_kind.?, target.value.field) catch return false)
             else
                 selected.record_kind == null and target.value.field == .value and field == (candidate.singletonTextField(target.value.subject) catch return false) and switch (target.value.subject) {
-                    .title, .description, .primary_goal => selected.unit == .brief,
+                    .description, .primary_goal => selected.unit == .brief,
                     // The engine composes the story, so no model text audits it (ADR 0047).
                     .story => false,
                     .entity_basis => selected.unit == .entities,
@@ -744,8 +744,8 @@ test "audit binds Subject and value kind to the native field policy instead of t
     var tracker: Tracker = .init(a);
     defer tracker.deinit();
     const nodes = [_]text.BusinessSegment{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 1 } } }};
-    const subject: Subject = .{ .specification = .{ .unit = .brief, .field = .{ .target = .{ .value = .{ .subject = .title, .field = .value } } } } };
-    try tracker.inspect(1, 1, testOrigin(1), subject, .spec_title, .{ .business = .{ .segments = &nodes } });
+    const subject: Subject = .{ .specification = .{ .unit = .brief, .field = .{ .target = .{ .value = .{ .subject = .primary_goal, .field = .value } } } } };
+    try tracker.inspect(1, 1, testOrigin(1), subject, .spec_goal, .{ .business = .{ .segments = &nodes } });
     const exchanges = [_]Exchange{.{ .call = 1, .origin = testOrigin(1), .usage = null }};
     var tampered = tracker.checks.items[0];
     tampered.field = .entity_name;
@@ -755,7 +755,7 @@ test "audit binds Subject and value kind to the native field policy instead of t
     tampered.subject.specification.unit = .entities;
     try std.testing.expectError(error.InvalidAdmissionAudit, validate(a, .{ .sources = &.{}, .checks = &.{tampered}, .complete = true }, &exchanges));
     const reference_value: Value = .{ .reference = .{ .nodes = &.{.{ .literal = .{ .value = "A business statement." } }} } };
-    try std.testing.expectError(error.InvalidAdmissionAudit, tracker.inspect(2, 1, testOrigin(1), subject, .spec_title, reference_value));
+    try std.testing.expectError(error.InvalidAdmissionAudit, tracker.inspect(2, 1, testOrigin(1), subject, .spec_goal, reference_value));
     const wrong_record: Subject = .{ .specification = .{ .unit = .records, .record_kind = .functional_requirement, .field = .{ .target = .{ .value = .{ .subject = .{ .record = 0 }, .field = .text } } } } };
     try std.testing.expectError(error.InvalidAdmissionAudit, tracker.inspect(2, 1, testOrigin(1), wrong_record, .entity_name, .{ .business = .{ .segments = &nodes } }));
     // ADR 0047: the engine composes the story, so no audited model value is a story.
@@ -813,7 +813,7 @@ test "audit batch offsets share native reserved occurrence spans and repaired fi
         .{ .unit = .records, .response = .{ .content = .{ .records = &records } }, .origins = .{ .initial = testOrigin(1), .record_occurrences = .{ .values = &left_ids, .next_ordinal = 4 } }, .record_assignment = .{ .reference_state = .{ .bytes = "state" }, .group_index = 0, .source_group_id = .{ .ordinal = 1 }, .references = .{ .bytes = @splat(0) } } },
         .{ .unit = .records, .response = .{ .content = .{ .records = &records } }, .origins = .{ .initial = testOrigin(2), .fields = &repaired_fields, .record_occurrences = .{ .values = &right_ids, .next_ordinal = 3 } }, .record_assignment = .{ .reference_state = .{ .bytes = "state" }, .group_index = 1, .source_group_id = .{ .ordinal = 2 }, .references = .{ .bytes = @splat(0) } } },
     };
-    const current: session.Session = .{ .feature = .{ .bytes = "receipts" }, .reference_state = .{ .bytes = "state" }, .record_batches = &batches };
+    const current: session.Session = .{ .feature = .{ .bytes = "receipts" }, .reference_state = .{ .bytes = "state" }, .title = .{ .bytes = "Receipts" }, .record_batches = &batches };
     const offset = try recordOffset(current, batches[1]);
     try std.testing.expectEqual(@as(usize, 3), offset);
     try tracker.unit(1, 3, batches[1], offset);
@@ -917,8 +917,8 @@ test "missing model provenance remains unavailable and cannot be relabelled nati
     var tracker: Tracker = .init(a);
     defer tracker.deinit();
     const nodes = [_]text.BusinessSegment{.{ .literal = .{ .value = "Retain the original decision." } }};
-    const subject: Subject = .{ .specification = .{ .unit = .brief, .field = .{ .target = .{ .value = .{ .subject = .title, .field = .value } } } } };
-    try tracker.inspect(1, 0, null, subject, .spec_title, .{ .business = .{ .segments = &nodes } });
+    const subject: Subject = .{ .specification = .{ .unit = .brief, .field = .{ .target = .{ .value = .{ .subject = .primary_goal, .field = .value } } } } };
+    try tracker.inspect(1, 0, null, subject, .spec_goal, .{ .business = .{ .segments = &nodes } });
     try validate(a, tracker.snapshot(true), &.{});
     const metric = try measure(tracker.snapshot(true), &.{});
     try std.testing.expectEqual(.unavailable, metric.status);
@@ -928,7 +928,7 @@ test "missing model provenance remains unavailable and cannot be relabelled nati
     try std.testing.expectError(error.InvalidAdmissionAudit, validate(a, .{ .sources = &.{}, .checks = &.{forged}, .complete = true }, &.{}));
     forged.producer = .{ .model = testOrigin(1) };
     try std.testing.expectError(error.InvalidAdmissionAudit, validate(a, .{ .sources = &.{}, .checks = &.{forged}, .complete = true }, &.{}));
-    try tracker.inspect(2, 0, testOrigin(1), subject, .spec_title, .{ .business = .{ .segments = &nodes } });
+    try tracker.inspect(2, 0, testOrigin(1), subject, .spec_goal, .{ .business = .{ .segments = &nodes } });
     tracker.reconcile(&.{});
     try std.testing.expectEqual(.missing_model_receipt, tracker.checks.items[1].producer.unavailable);
     try validate(a, tracker.snapshot(true), &.{});

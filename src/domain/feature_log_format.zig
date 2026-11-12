@@ -6,7 +6,7 @@ const log_binding = @import("feature_log_binding.zig");
 const log_stream = @import("feature_log_stream.zig");
 const prompt_log = @import("sanitized_prompt_log.zig");
 
-pub const event_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
+pub const event_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|step_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
 pub const event_column_count = std.mem.countScalar(u8, event_heading, '|') + 1;
 
 pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted|workflow_id|action_id|call_id|call_kind|original_call_id|parent_call_id|body_bytes\n";
@@ -249,6 +249,7 @@ pub fn serializeEvent(
     try appendOptional(allocator, &row, &first, if (fields.diagnostic_code) |value| value.bytes else null);
     try appendOptionalId(allocator, &row, &first, fields.validator_id);
     try appendOptionalId(allocator, &row, &first, fields.rule_id);
+    try appendOptionalId(allocator, &row, &first, fields.step_id);
     try appendOptionalId(allocator, &row, &first, fields.model_route_id);
     try appendOptionalId(allocator, &row, &first, fields.model_profile_id);
     try appendOptionalUnsigned(allocator, &row, &first, fields.input_tokens, &number_buffer);
@@ -323,7 +324,7 @@ pub fn validatePersistedControlRow(
 ) Error!void {
     if (!std.mem.eql(u8, cellAt(line, 0) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or
         parseUtcMs(cellAt(line, 10) orelse return error.InvalidFeatureLogRecord) == null) return error.InvalidFeatureLogRecord;
-    const event_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
+    const event_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37 };
     const prompt_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
     const null_columns: []const usize = if (stream == .event) &event_nulls else &prompt_nulls;
     for (null_columns) |column| {
@@ -492,7 +493,7 @@ fn stageText(value: telemetry.Stage) []const u8 {
 }
 
 test "built-in headings are byte stable and have exact widths" {
-    try std.testing.expectEqual(@as(usize, 37), std.mem.countScalar(u8, event_heading, '|') + 1);
+    try std.testing.expectEqual(@as(usize, 38), std.mem.countScalar(u8, event_heading, '|') + 1);
     try std.testing.expectEqual(@as(usize, 37), std.mem.countScalar(u8, prompt_heading, '|') + 1);
     try std.testing.expect(std.mem.endsWith(u8, event_heading, "|count\n"));
     try std.testing.expect(std.mem.endsWith(u8, prompt_heading, "|body_bytes\n"));
@@ -527,6 +528,41 @@ test "event rows use fixed columns escaping and reserved nulls" {
     try std.testing.expect(std.mem.indexOf(u8, row, "|info|task.started|task.started/v1|") != null);
 }
 
+test "a failed action's row carries its stage step in the step_id column and no other row does" {
+    const allocator = std.testing.allocator;
+    const base: EventRecord = .{
+        .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
+        .binding_id = telemetry.Identifier.validate("LOGBIND-1").?,
+        .segment_ordinal = 1,
+        .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"),
+        .event_id = telemetry.Identifier.validate("EVENT-1").?,
+        .sequence = 1,
+        .occurred_at_utc = "2026-08-30T10:15:30Z",
+        .monotonic_offset = 42,
+        .run_id = telemetry.Identifier.validate("RUN-1").?,
+        .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
+        .fact = .{
+            .event_type = .action_failed,
+            .fields = .{
+                .diagnostic_code = telemetry.DiagnosticCode.validate("INVALIDTOOLCHAIN").?,
+                .outcome = .failed,
+                .step_id = telemetry.Identifier.validate("validate_registry").?,
+            },
+        },
+    };
+    const row = try serializeEvent(allocator, base);
+    defer allocator.free(row);
+    try validateEncodedRow(allocator, row, event_column_count);
+    var column: usize = 0;
+    var cells = std.mem.splitScalar(u8, std.mem.trimEnd(u8, event_heading, "\n"), '|');
+    while (cells.next()) |name| : (column += 1) if (std.mem.eql(u8, name, "step_id")) break;
+    try std.testing.expectEqualStrings("validate_registry", cellAt(row, column).?);
+    // Only a failed action names a step: the same field on a completed action is not a registered row.
+    var completed = base;
+    completed.fact.event_type = .action_completed;
+    try std.testing.expectError(error.InvalidFeatureLogRecord, serializeEvent(allocator, completed));
+}
+
 test "dialect rejects unknown dangling escapes and wrong width" {
     try std.testing.expectError(error.InvalidFeatureLogRecord, validateEncodedRow(std.testing.allocator, "a|b\\q\n", 2));
     try std.testing.expectError(error.InvalidFeatureLogRecord, validateEncodedRow(std.testing.allocator, "a|b\\\n", 2));
@@ -534,7 +570,7 @@ test "dialect rejects unknown dangling escapes and wrong width" {
 }
 
 test "event rows reject the obsolete transaction column" {
-    const obsolete_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
+    const obsolete_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|step_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
     try std.testing.expectError(error.InvalidFeatureLogRecord, validateEncodedRow(std.testing.allocator, obsolete_heading, event_column_count));
     try std.testing.expect(std.mem.indexOf(u8, event_heading, "transaction_id") == null);
 }

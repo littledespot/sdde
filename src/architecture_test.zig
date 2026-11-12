@@ -144,7 +144,7 @@ const model_attempt_accounting = @import("domain/model_attempt_accounting.zig");
 const llm_provider_operation = @import("domain/llm_provider_operation.zig");
 const llm_provider_interface = @import("ports/llm_provider_interface.zig");
 const llm_provider_registry_service = @import("application/llm_provider_registry_service.zig");
-const derive_provider_requirement = @import("actions/provider/derive_provider_requirement.zig");
+const provider_requirement_derivation = @import("domain/provider_requirement_derivation.zig");
 const workflow_execution = @import("domain/workflow_execution.zig");
 
 test "workflow filesystem traversal uses the inventory reserved-child policy" {
@@ -174,7 +174,7 @@ test "result schema authority is opaque and compilation remains a kernel concern
     try std.testing.expect(content.tag_type.? == @import("domain/workflow_operation.zig").ResourceKind);
     try std.testing.expect(@FieldType(@FieldType(resource, "content"), "result_schema") == *const schema.Schema);
     try std.testing.expect(@FieldType(llm_provider_operation.IdentifiedProviderNeutralModelRequest, "response_schema") == *const schema.Schema);
-    const compiler = @embedFile("actions/workflow/compile_workflow_graphs.zig");
+    const compiler = @embedFile("domain/workflow_graph_compilation.zig");
     try std.testing.expect(std.mem.indexOf(u8, compiler, "result_schema_compiler.compile") != null);
     try expectAbsent(compiler, "std.json");
     try expectAbsent(compiler, "/adapters/");
@@ -284,11 +284,135 @@ test "shared reference support does not import Spec policy" {
     try expectAbsent(source, "specification_provenance.zig");
 }
 
-test "bootstrap orchestrator imports only binding and result contracts" {
-    const source = @embedFile("application/bootstrap_orchestrator.zig");
-    try expectAbsent(source, "/actions/");
-    try expectAbsent(source, "/adapters/");
-    try expectAbsent(source, "std.Io");
+const RoutineViolation = enum {
+    imports_outside_domain_and_ports,
+    uses_io,
+    entry_calls_a_port,
+    step_takes_the_port_set,
+    step_takes_two_ports,
+    step_is_erased,
+    routine_is_erased,
+};
+
+/// ADR 0032's source rules for an engine routine. It imports `std` and domain and port modules only,
+/// and uses no `std.Io` and no `anyopaque`. Its entry function `run` only passes its port set's
+/// fields on, so a call through one is a port call. Each step takes at most one port, never the port
+/// set, and nothing erased. A struct that bundles ports is not detectable in source text.
+fn routineViolation(source: []const u8) ?RoutineViolation {
+    var rest = source;
+    while (std.mem.indexOf(u8, rest, "@import(\"")) |at| {
+        const target = rest[at + "@import(\"".len ..];
+        const end = std.mem.indexOfScalar(u8, target, '"') orelse return .imports_outside_domain_and_ports;
+        const path = target[0..end];
+        const allowed = std.mem.eql(u8, path, "std") or std.mem.startsWith(u8, path, "../domain/") or std.mem.startsWith(u8, path, "../ports/");
+        if (!allowed) return .imports_outside_domain_and_ports;
+        rest = target[end..];
+    }
+    if (std.mem.indexOf(u8, source, "std.Io") != null) return .uses_io;
+    if (std.mem.indexOf(u8, source, "anyopaque") != null) return .routine_is_erased;
+    if (std.mem.indexOf(u8, source, "pub fn run(")) |start| {
+        const body_end = std.mem.indexOfPos(u8, source, start, "\n}\n") orelse source.len;
+        var body = source[start..body_end];
+        while (std.mem.indexOf(u8, body, "ports.")) |at| {
+            var end = at + "ports.".len;
+            while (end < body.len and (std.ascii.isAlphanumeric(body[end]) or body[end] == '_')) end += 1;
+            if (end >= body.len or (body[end] != ',' and body[end] != ')')) return .entry_calls_a_port;
+            body = body[end..];
+        }
+    }
+    const steps_start = std.mem.indexOf(u8, source, "pub const steps = struct {") orelse return null;
+    var cursor = steps_start;
+    while (std.mem.indexOfPos(u8, source, cursor, "fn ")) |at| {
+        cursor = at + "fn ".len;
+        const parameters = parameterText(source, at) orelse continue;
+        if (std.mem.indexOf(u8, parameters, "anytype") != null) return .step_is_erased;
+        if (hasWord(parameters, "Ports") or hasWord(parameters, "ports")) return .step_takes_the_port_set;
+        if (portCount(parameters) > 1) return .step_takes_two_ports;
+    }
+    return null;
+}
+
+/// Whether the file at `path` (relative to `src/`) imports a `*_routine.zig` it may not. ADR 0032
+/// names the callers: the composition root, the provider-bootstrap binding for its own routine, and
+/// the logging lifecycle owners (not yet converted, so none is named here). Tests and test fixtures
+/// may import any routine. An action, an orchestrator, a runner or any other application module never does.
+fn importsRoutineIllegally(path: []const u8, source: []const u8) bool {
+    if (std.mem.endsWith(u8, path, "_test.zig") or std.mem.startsWith(u8, path, "test_fixtures/") or std.mem.startsWith(u8, path, "composition/")) return false;
+    var rest = source;
+    while (std.mem.indexOf(u8, rest, "_routine.zig\")")) |at| {
+        var start = at;
+        while (start > 0 and (std.ascii.isAlphanumeric(rest[start - 1]) or rest[start - 1] == '_')) start -= 1;
+        const routine = rest[start..at];
+        const own_binding = std.mem.eql(u8, path, "application/model_provider_bootstrap_binding.zig") and
+            std.mem.eql(u8, routine, "model_provider_bootstrap");
+        if (!own_binding) return true;
+        rest = rest[at + "_routine.zig\")".len ..];
+    }
+    return false;
+}
+
+test "every engine routine obeys ADR 0032's routine rules and is reached only from its named callers" {
+    try std.testing.expectEqual(@as(?RoutineViolation, null), routineViolation(@embedFile("application/startup_routine.zig")));
+    try std.testing.expectEqual(@as(?RoutineViolation, null), routineViolation(@embedFile("application/model_provider_bootstrap_routine.zig")));
+    // Startup acquires no feature transaction lock: it imports no log, lock or transaction module.
+    const startup_source = @embedFile("application/startup_routine.zig");
+    try expectAbsent(startup_source, "feature_log");
+    try expectAbsent(startup_source, "_lock");
+    try expectAbsent(startup_source, "transaction.zig");
+
+    const root = @embedFile("composition/root.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(root, "startup_routine.run("));
+    try expectAbsent(root, "ChildBindings");
+
+    const services = @embedFile("application/bootstrap_services.zig");
+    try expectAbsent(services, "startup_routine");
+    try expectAbsent(services, "std.Io");
+
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var source_root = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer source_root.close(io);
+    var walker = try source_root.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        try std.testing.expect(!importsRoutineIllegally(entry.path, source));
+        // A routine found here is held to the routine rules; a new one needs no new test.
+        if (std.mem.startsWith(u8, entry.path, "application/") and std.mem.endsWith(u8, entry.basename, "_routine.zig")) {
+            try std.testing.expectEqual(@as(?RoutineViolation, null), routineViolation(source));
+        }
+    }
+}
+
+test "routine rules reject a routine that imports an action or adapter, uses I/O, reaches a port in its entry, or takes the port set, two ports or an erased parameter" {
+    const head = "const std = @import(\"std\");\nconst a = @import(\"../ports/x_port.zig\");\npub fn run(ports: Ports) void {\n    step(ports.one, ports.two);\n}\npub const steps = struct {\n";
+    try std.testing.expectEqual(@as(?RoutineViolation, null), routineViolation(head ++ "    pub fn one(port: x_port.Thing) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .imports_outside_domain_and_ports), routineViolation("const a = @import(\"../actions/x/y.zig\");\n" ++ head ++ "};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .imports_outside_domain_and_ports), routineViolation("const a = @import(\"../adapters/x/y.zig\");\n" ++ head ++ "};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .imports_outside_domain_and_ports), routineViolation("const a = @import(\"sibling.zig\");\n" ++ head ++ "};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .uses_io), routineViolation(head ++ "    pub fn io(x: std.Io) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .routine_is_erased), routineViolation(head ++ "    pub fn raw(context: *anyopaque) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .entry_calls_a_port), routineViolation("pub fn run(ports: Ports) void {\n    ports.locator.locate();\n}\npub const steps = struct {\n};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .entry_calls_a_port), routineViolation("pub fn run(ports: Ports) void {\n    const alias = ports.locator;\n}\npub const steps = struct {\n};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .step_takes_the_port_set), routineViolation(head ++ "    pub fn whole(set: Ports) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .step_takes_two_ports), routineViolation(head ++ "    pub fn two(a: x_port.A, b: y_port.B) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?RoutineViolation, .step_is_erased), routineViolation(head ++ "    pub fn bag(capabilities: anytype) void {}\n};\n"));
+    // Who may import the startup routine: composition and tests, never an action or an orchestrator.
+    const import_startup = "const r = @import(\"../application/startup_routine.zig\");\n";
+    const import_provider = "const r = @import(\"model_provider_bootstrap_routine.zig\");\n";
+    try std.testing.expect(!importsRoutineIllegally("composition/root.zig", import_startup));
+    try std.testing.expect(!importsRoutineIllegally("startup_routine_test.zig", import_startup));
+    try std.testing.expect(!importsRoutineIllegally("application/model_provider_bootstrap_binding.zig", import_provider));
+    try std.testing.expect(!importsRoutineIllegally("application/some_orchestrator.zig", "const x = @import(\"other.zig\");\n"));
+    // An action, an orchestrator, a runner, another application module or the provider binding
+    // importing the wrong routine is rejected, for either routine.
+    try std.testing.expect(importsRoutineIllegally("actions/workflow/some_action.zig", import_startup));
+    try std.testing.expect(importsRoutineIllegally("application/some_orchestrator.zig", import_provider));
+    try std.testing.expect(importsRoutineIllegally("application/some_runner.zig", import_startup));
+    try std.testing.expect(importsRoutineIllegally("application/model_provider_bootstrap_binding.zig", import_startup));
+    try std.testing.expect(importsRoutineIllegally("application/workflow_engine_orchestrator.zig", import_provider));
 }
 
 test "public root does not re-export ports or infrastructure adapters" {
@@ -325,9 +449,6 @@ test "validated bootstrap registry authority is opaque" {
     try std.testing.expectEqual(@as(usize, 1), init_type.params.len);
     try std.testing.expect(init_type.params[0].type.? == *bootstrap_root_registry.Owner);
 
-    const provider_service = @embedFile("application/llm_provider_config_service.zig");
-    try expectAbsent(provider_service, "std.Io");
-    try expectAbsent(provider_service, "std.json");
     const root_domain = @embedFile("domain/bootstrap_root_registry.zig");
     const provider_adapter = @embedFile("adapters/filesystem/llm_provider_config_source.zig");
     try std.testing.expect(std.mem.indexOf(u8, root_domain, "bindLLMProviderConfigSource") != null);
@@ -344,41 +465,15 @@ test "configuration domain ownership is independent of the JSON parser" {
     try expectAbsent(source, "Registry");
 }
 
-test "provider config orchestration is capability free and runner owned" {
-    const orchestrator = @embedFile("application/llm_provider_config_orchestrator.zig");
-    try expectAbsent(orchestrator, "/actions/");
-    try expectAbsent(orchestrator, "/adapters/");
-    try expectAbsent(orchestrator, "/ports/");
-    try expectAbsent(orchestrator, "std.Io");
-
-    const runner = @embedFile("application/llm_provider_config_runner.zig");
-    try expectAbsent(runner, "/adapters/");
-    try expectAbsent(runner, "std.Io");
-    try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.apply") != null);
-
-    const composition = @embedFile("composition/model_provider_bootstrap.zig");
-    try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_source.Adapter.init") != null);
-    try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_runner.Runner.init") != null);
-}
-
-test "conditional provider bootstrap has one orchestration and capture authority" {
-    const orchestrator = @embedFile("application/model_provider_bootstrap_orchestrator.zig");
-    try expectAbsent(orchestrator, "/actions/");
-    try expectAbsent(orchestrator, "/adapters/");
-    try expectAbsent(orchestrator, "/ports/");
-    try expectAbsent(orchestrator, "std.Io");
-
-    const runner = @embedFile("application/model_provider_bootstrap_runner.zig");
-    try expectAbsent(runner, "/adapters/");
-    try expectAbsent(runner, "/ports/");
-    try expectAbsent(runner, "std.Io");
-    try expectAbsent(runner, "locate_llm_provider_config.zig");
-    try expectAbsent(runner, "read_llm_provider_config.zig");
-    try std.testing.expectEqual(
-        @as(usize, 1),
-        countOccurrences(runner, "config_orchestrator.run("),
-    );
-    try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.apply") != null);
+test "conditional provider bootstrap has one routine and capture authority" {
+    // ADR 0032: one routine owns the provider document's capture, decode and validation; it holds the
+    // provider-config port alone, imports no adapter and runs only through the composition-built binding.
+    const routine = @embedFile("application/model_provider_bootstrap_routine.zig");
+    try expectAbsent(routine, "/actions/");
+    try expectAbsent(routine, "/adapters/");
+    try expectAbsent(routine, "std.Io");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(routine, "locator.locate("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(routine, "exact.read("));
 
     const services = @embedFile("application/model_provider_bootstrap_services.zig");
     try expectAbsent(services, "std.json");
@@ -396,7 +491,7 @@ test "conditional provider bootstrap has one orchestration and capture authority
     );
     try std.testing.expectEqual(
         @as(usize, 1),
-        countOccurrences(assembly, "orchestrator.run("),
+        countOccurrences(assembly, "routine.run("),
     );
 
     const workflow_engine = @embedFile("application/workflow_engine_orchestrator.zig");
@@ -416,7 +511,7 @@ test "conditional provider bootstrap has one orchestration and capture authority
 
     const root = @embedFile("composition/root.zig");
     try expectAbsent(root, "loadLLMProviderConfigInProject");
-    try expectAbsent(root, "llm_provider_config_orchestrator.zig");
+    try expectAbsent(root, "model_provider_bootstrap_routine.zig");
 }
 
 test "provider catalogue and repository allowlist have one immutable authority each" {
@@ -487,7 +582,7 @@ test "model capability facts have no local size ceilings or operational authorit
         try expectAbsent(source, "std.http");
         try expectAbsent(source, "std.process");
     }
-    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/workflow/compile_workflow_graphs.zig"), "entry.contract.requiresModelBinding()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("domain/workflow_graph_compilation.zig"), "entry.contract.requiresModelBinding()") != null);
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("application/workflow_pipeline_runner.zig"), "step.model orelse") != null);
 }
 
@@ -681,7 +776,7 @@ test "model-binding requirement is immutable data not a provider-call capability
     try std.testing.expect(!@hasField(operation.Contract, "model_capacity"));
     try std.testing.expect(@FieldType(registry.StepInput, "model_binding") == ?*const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
     try std.testing.expect(!@hasField(registry.StepInput, "provider"));
-    const derive = @embedFile("actions/provider/derive_provider_requirement.zig");
+    const derive = @embedFile("domain/provider_requirement_derivation.zig");
     try std.testing.expect(std.mem.indexOf(u8, derive, "step.model != null") != null);
     try expectAbsent(derive, "step.parameters");
     try expectAbsent(@embedFile("actions/provider/resolve_provider_model_binding.zig"), "LLMProviderInterface");
@@ -1221,28 +1316,18 @@ test "only request identity owners can produce or replace its ledger key" {
 }
 
 test "provider requirement derives only from one exactly selected compiled workflow" {
-    const action_source = @embedFile("actions/provider/derive_provider_requirement.zig");
-    try expectAbsent(action_source, "/adapters/");
-    try expectAbsent(action_source, "/ports/");
-    try expectAbsent(action_source, "std.Io");
-    try expectAbsent(action_source, "config.zig");
-    try expectAbsent(action_source, "sddproviders");
-    try expectAbsent(action_source, "\"specify\"");
-    try expectAbsent(action_source, "\"implement\"");
+    const derivation_source = @embedFile("domain/provider_requirement_derivation.zig");
+    try expectAbsent(derivation_source, "/adapters/");
+    try expectAbsent(derivation_source, "/ports/");
+    try expectAbsent(derivation_source, "std.Io");
+    try expectAbsent(derivation_source, "config.zig");
+    try expectAbsent(derivation_source, "sddproviders");
+    try expectAbsent(derivation_source, "\"specify\"");
+    try expectAbsent(derivation_source, "\"implement\"");
 
-    const execute_type = @typeInfo(@TypeOf(derive_provider_requirement.Action.execute)).@"fn";
-    try std.testing.expectEqual(@as(usize, 2), execute_type.params.len);
-    try std.testing.expect(execute_type.params[1].type.? == *const workflow_execution.SelectedWorkflow);
-    try std.testing.expectEqualSlices(
-        @import("domain/pipeline.zig").DataKey,
-        &.{.selected_compiled_workflow},
-        derive_provider_requirement.Action.contract.requires,
-    );
-    try std.testing.expectEqualSlices(
-        @import("domain/pipeline.zig").DataKey,
-        &.{.model_provider_requirement},
-        derive_provider_requirement.Action.contract.produces,
-    );
+    const derive_type = @typeInfo(@TypeOf(provider_requirement_derivation.derive)).@"fn";
+    try std.testing.expectEqual(@as(usize, 1), derive_type.params.len);
+    try std.testing.expect(derive_type.params[0].type.? == *const workflow_execution.SelectedWorkflow);
 }
 
 test "workflow compiler and service preserve their authority boundaries" {
@@ -1250,7 +1335,7 @@ test "workflow compiler and service preserve their authority boundaries" {
         .@"opaque" => {},
         else => return error.WorkflowRegistryAuthorityMustBeOpaque,
     }
-    const compiler = @embedFile("actions/workflow/compile_workflow_graphs.zig");
+    const compiler = @embedFile("domain/workflow_graph_compilation.zig");
     try expectAbsent(compiler, "adapters/");
     try expectAbsent(compiler, "filesystem");
     try expectAbsent(compiler, "std.Io");
@@ -1293,11 +1378,11 @@ test "workflow compiler and service preserve their authority boundaries" {
         "bindWorkflowAuthorityAdapter",
     ));
 
-    const parser_action = @embedFile("actions/workflow/parse_workflow_definitions.zig");
-    try std.testing.expect(std.mem.indexOf(u8, parser_action, "workflow_definition_parser.zig") != null);
-    try expectAbsent(parser_action, "std.json");
-    try expectAbsent(parser_action, "bounded_yaml_syntax");
-    try expectAbsent(parser_action, "/adapters/");
+    const parser_step = @embedFile("application/startup_routine.zig");
+    try std.testing.expect(std.mem.indexOf(u8, parser_step, "workflow_definition_parser.zig") != null);
+    try expectAbsent(parser_step, "std.json");
+    try expectAbsent(parser_step, "bounded_yaml_syntax");
+    try expectAbsent(parser_step, "/adapters/");
     const parser_adapter = @embedFile("adapters/parsers/workflow_definitions.zig");
     try std.testing.expect(std.mem.indexOf(u8, parser_adapter, "bounded_yaml_syntax") != null);
     try std.testing.expect(std.mem.indexOf(u8, parser_adapter, "workflow_definition_parser.zig") != null);
@@ -1330,9 +1415,9 @@ test "workflow compiler and service preserve their authority boundaries" {
     try expectAbsent(compilation_domain, "RawDefinition");
     try expectAbsent(compilation_domain, "ValidatedWorkflowDefinitionRegistry");
 
-    const capture = @embedFile("actions/workflow/capture_workflow_definitions.zig");
+    const capture = @embedFile("application/startup_routine.zig");
     const budget_index = std.mem.indexOf(u8, capture, "validateCaptureBudget") orelse return error.MissingWorkflowCaptureBudget;
-    const read_index = std.mem.indexOf(u8, capture, "source.capture") orelse return error.MissingWorkflowCapture;
+    const read_index = std.mem.indexOf(u8, capture, "capturer.capture") orelse return error.MissingWorkflowCapture;
     try std.testing.expect(budget_index < read_index);
 }
 
@@ -1348,14 +1433,18 @@ test "toolchain safety authority is opaque and path handoff has one adapter cons
     const service = @embedFile("application/toolchain_service.zig");
     try expectAbsent(service, "RawDocument");
     try expectAbsent(service, "std.Io");
-    const runner = @embedFile("application/bootstrap_runner.zig");
-    try expectAbsent(runner, "invokeBootstrapToolchain");
-    const capture = @embedFile("actions/toolchain/capture_toolchain_presets.zig");
+    const startup = @embedFile("application/startup_routine.zig");
+    try expectAbsent(startup, "invokeBootstrapToolchain");
+    const stage = @embedFile("actions/toolchain/prepare_toolchain.zig");
+    const capture_step = std.mem.indexOf(u8, stage, "pub fn capturePresets") orelse return error.MissingCaptureStep;
+    const parse_step = std.mem.indexOf(u8, stage, "pub fn parseDocuments") orelse return error.MissingParseStep;
+    const validate_step = std.mem.indexOf(u8, stage, "pub fn validateProject") orelse return error.MissingValidateStep;
+    try std.testing.expect(capture_step < parse_step and parse_step < validate_step);
+    const capture = stage[capture_step..parse_step];
     const budget_index = std.mem.indexOf(u8, capture, "validateCaptureBudget") orelse return error.MissingCaptureBudget;
-    const read_index = std.mem.indexOf(u8, capture, "capturePreset") orelse return error.MissingPresetCapture;
+    const read_index = std.mem.indexOf(u8, capture, "source.capturePreset(") orelse return error.MissingPresetCapture;
     try std.testing.expect(budget_index < read_index);
-    const parser = @embedFile("actions/toolchain/parse_toolchain_documents.zig");
-    try expectAbsent(parser, "validateCaptureBudget");
+    try expectAbsent(stage[parse_step..validate_step], "validateCaptureBudget");
 
     const contracts = @embedFile("domain/toolchain.zig");
     try expectAbsent(contracts, "validateCaptureBudget(");
@@ -1400,59 +1489,390 @@ test "bootstrap source ports and workflow inventory stages remain single purpose
     try std.testing.expect(std.mem.indexOf(u8, toolchain_ports, "pub const PresetEnumerator") != null);
     try std.testing.expect(std.mem.indexOf(u8, toolchain_ports, "pub const PresetCapturer") != null);
 
-    const runner = @embedFile("application/bootstrap_runner.zig");
-    try expectAbsent(runner, "inventory_workflow_authority.zig");
-    const inventory_stages = [_][]const u8{
-        @embedFile("actions/workflow/enumerate_workflow_authority_resources.zig"),
-        @embedFile("actions/workflow/normalize_workflow_authority_entries.zig"),
-        @embedFile("actions/workflow/build_workflow_authority_entry_accounts.zig"),
-        @embedFile("actions/workflow/build_workflow_authority_inventory.zig"),
-        @embedFile("actions/workflow/validate_workflow_authority_inventory.zig"),
-    };
-    for (inventory_stages) |source| {
-        try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "pub fn execute("));
+    const startup = @embedFile("application/startup_routine.zig");
+    try expectAbsent(startup, "inventory_workflow_authority.zig");
+    // Each inventory stage is one single-purpose step of the startup routine, declared once.
+    for ([_][]const u8{
+        "pub fn enumerateWorkflowResources(",
+        "pub fn normalizeWorkflowEntries(",
+        "pub fn buildWorkflowAccounts(",
+        "pub fn buildWorkflowInventory(",
+        "pub fn validateWorkflowInventory(",
+    }) |step| {
+        try std.testing.expectEqual(@as(usize, 1), countOccurrences(startup, step));
     }
 }
 
-test "bootstrap dispatcher delegates to focused runners" {
-    const dispatcher = @embedFile("application/bootstrap_runner.zig");
-    try expectAbsent(dispatcher, "/actions/");
-    try expectAbsent(dispatcher, "/adapters/");
-    try expectAbsent(dispatcher, "std.Io");
-
-    const config_runner = @embedFile("application/bootstrap_config_runner.zig");
-    try expectAbsent(config_runner, "/actions/bootstrap/");
-    try expectAbsent(config_runner, "/actions/workflow/");
-    try expectAbsent(config_runner, "/actions/toolchain/");
-
-    const root_runner = @embedFile("application/bootstrap_root_runner.zig");
-    try expectAbsent(root_runner, "/actions/config/");
-    try expectAbsent(root_runner, "/actions/workflow/");
-    try expectAbsent(root_runner, "/actions/toolchain/");
-
-    const workflow_runner = @embedFile("application/bootstrap_workflow_runner.zig");
-    try expectAbsent(workflow_runner, "/actions/config/");
-    try expectAbsent(workflow_runner, "/actions/bootstrap/");
-    try expectAbsent(workflow_runner, "/actions/toolchain/");
-
+test "the toolchain runner imports no startup action" {
     const toolchain_runner = @embedFile("application/toolchain_workflow_runner.zig");
     try expectAbsent(toolchain_runner, "/actions/config/");
     try expectAbsent(toolchain_runner, "/actions/bootstrap/");
     try expectAbsent(toolchain_runner, "/actions/workflow/");
 }
 
-test "configured path policy and resolution have distinct action owners" {
-    const runner = @embedFile("application/bootstrap_root_runner.zig");
-    try expectAbsent(runner, "validate_engine_path_policy.zig");
-    try std.testing.expect(std.mem.indexOf(u8, runner, "validate_configured_root_path_policy.zig") != null);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "validate_llm_provider_config_path_policy.zig") != null);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "resolve_configured_base_root.zig") != null);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "resolve_llm_provider_config_path.zig") != null);
+const StageViolation = enum {
+    execute_reaches_a_port,
+    execute_lacks_the_node_runtime,
+    internal_step_takes_the_action,
+    internal_step_takes_two_ports,
+    internal_step_is_erased,
+    absorbs_a_gate_or_model_module,
+};
 
-    const root_resolution = @embedFile("actions/bootstrap/resolve_configured_base_root.zig");
-    try expectAbsent(root_resolution, "LLMProviderConfig");
-    const provider_resolution = @embedFile("actions/bootstrap/resolve_llm_provider_config_path.zig");
-    try expectAbsent(provider_resolution, "PathKey");
+/// The text between the parentheses of the function whose `fn` keyword is at `at`, across lines.
+fn parameterText(source: []const u8, at: usize) ?[]const u8 {
+    const open = std.mem.indexOfPos(u8, source, at, "(") orelse return null;
+    var depth: usize = 0;
+    var index = open;
+    while (index < source.len) : (index += 1) switch (source[index]) {
+        '(' => depth += 1,
+        ')' => {
+            depth -= 1;
+            if (depth == 0) return source[open + 1 .. index];
+        },
+        else => {},
+    };
+    return null;
+}
+
+/// The alias a stage action gives the Unicode text services' port module (`unicode_normalizer.zig`).
+/// The user's ruling (12 November 2026) counts its three types (normalizer, case folder, lexical
+/// classifier) as one port family for ADR 0031's one-port rule; no other module has that exemption.
+const text_family_alias = "text_port";
+
+/// The number of ports a step's parameter list takes: each `*_port.` type counts as one, except that
+/// every type of the text services' module together counts as one.
+fn portCount(parameters: []const u8) usize {
+    var count: usize = 0;
+    var text_family = false;
+    var rest = parameters;
+    while (std.mem.indexOf(u8, rest, "_port.")) |at| {
+        var start = at;
+        while (start > 0 and (std.ascii.isAlphanumeric(rest[start - 1]) or rest[start - 1] == '_')) start -= 1;
+        if (std.mem.eql(u8, rest[start .. at + "_port".len], text_family_alias)) text_family = true else count += 1;
+        rest = rest[at + "_port.".len ..];
+    }
+    return count + @intFromBool(text_family);
+}
+
+/// Whether `word` occurs in `text` as a whole identifier, so `Input` matches `operations.Input` but
+/// not `evidence.Inputs`.
+fn hasWord(text: []const u8, word: []const u8) bool {
+    var from: usize = 0;
+    while (std.mem.indexOfPos(u8, text, from, word)) |at| : (from = at + word.len) {
+        const before = at == 0 or !(std.ascii.isAlphanumeric(text[at - 1]) or text[at - 1] == '_');
+        const end = at + word.len;
+        const after = end == text.len or !(std.ascii.isAlphanumeric(text[end]) or text[end] == '_');
+        if (before and after) return true;
+    }
+    return false;
+}
+
+/// ADR 0031's source rules for a stage action. `execute` takes the capability-free runtime and no
+/// other runtime handle, and only passes its receiver's fields on: any other use of a field, such
+/// as a call through it or an alias of it, reaches a port. Each internal step takes at most one
+/// port and never the `Action` value, a receiver or an erased parameter, and the stage absorbs no
+/// gate or model module. A struct that bundles ports is not detectable in source text.
+fn stageViolation(source: []const u8) ?StageViolation {
+    for ([_][]const u8{ "workflow_gate", "domain/model_", "provider_" }) |module| {
+        if (std.mem.indexOf(u8, source, module) != null) return .absorbs_a_gate_or_model_module;
+    }
+    if (std.mem.indexOf(u8, source, "pub fn execute")) |start| {
+        const parameters = parameterText(source, start) orelse return .execute_lacks_the_node_runtime;
+        if (countOccurrences(parameters, "runtime: pipeline.NodeRuntime") != 1 or countOccurrences(parameters, "Runtime") != 1 or hasWord(parameters, "Input") or hasWord(parameters, "StepInput")) return .execute_lacks_the_node_runtime;
+        const receiver = std.mem.trim(u8, parameters[0 .. std.mem.indexOfScalar(u8, parameters, ':') orelse return .execute_lacks_the_node_runtime], " \n");
+        var needle_buffer: [64]u8 = undefined;
+        const needle = std.fmt.bufPrint(&needle_buffer, "{s}.", .{receiver}) catch return .execute_reaches_a_port;
+        var rest = source[start .. std.mem.indexOfPos(u8, source, start, "\n};") orelse source.len];
+        while (std.mem.indexOf(u8, rest, needle)) |at| {
+            var end = at + needle.len;
+            while (end < rest.len and (std.ascii.isAlphanumeric(rest[end]) or rest[end] == '_')) end += 1;
+            if (end >= rest.len or (rest[end] != ',' and rest[end] != ')')) return .execute_reaches_a_port;
+            rest = rest[end..];
+        }
+    }
+    const steps_start = std.mem.indexOf(u8, source, "pub const steps = struct {") orelse return null;
+    var cursor = steps_start;
+    while (std.mem.indexOfPos(u8, source, cursor, "fn ")) |at| {
+        cursor = at + "fn ".len;
+        const parameters = parameterText(source, at) orelse continue;
+        if (std.mem.indexOf(u8, parameters, "anytype") != null or std.mem.indexOf(u8, parameters, "anyopaque") != null) return .internal_step_is_erased;
+        if (std.mem.indexOf(u8, parameters, "Action") != null or std.mem.indexOf(u8, parameters, "self") != null) return .internal_step_takes_the_action;
+        if (portCount(parameters) > 1) return .internal_step_takes_two_ports;
+    }
+    return null;
+}
+
+/// A step that turns a candidate value into a validated one returns a type distinct from its
+/// input, and the next step requires exactly that type.
+fn validatedHandoff(comptime Input: type, comptime Output: type, comptime NextInput: type) bool {
+    return Input != Output and Output == NextInput;
+}
+
+fn ReturnPayload(comptime function: anytype) type {
+    return @typeInfo(@typeInfo(@TypeOf(function)).@"fn".return_type.?).error_union.payload;
+}
+
+fn ParameterType(comptime function: anytype, comptime index: usize) type {
+    return @typeInfo(@TypeOf(function)).@"fn".params[index].type.?;
+}
+
+test "the prepare-toolchain stage action obeys ADR 0031's stage rules" {
+    const stage = @embedFile("actions/toolchain/prepare_toolchain.zig");
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(stage));
+    try expectAllowedActionImports(stage);
+    try expectSingleActionContract(stage);
+    const pipeline = @import("domain/pipeline.zig");
+    const action = @import("actions/toolchain/prepare_toolchain.zig");
+    const contract = action.Action.contract;
+    try std.testing.expect(contract.side_effect == .none or contract.side_effect == .filesystem_read);
+    try std.testing.expectEqual(pipeline.NodeKind.action, contract.kind);
+    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
+    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
+    // The stage reads no retained model request and replaces or produces only its own edge key.
+    try std.testing.expectEqual(@as(usize, 0), contract.requires.len + contract.optional.len + contract.replaces.len + contract.invalidates.len);
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.valid_toolchain}, contract.produces);
+}
+
+test "stage rules reject a stage that reaches a port, lacks the node runtime, takes the action, two ports or an erased parameter, or absorbs a gate or model module" {
+    const execute_head = "pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime) void {\n";
+    const clean_head = execute_head ++ "        step(self.source, runtime);\n    }\n};\npub const steps = struct {\n";
+    const steps_tail = "    }\n};\npub const steps = struct {\n};\n";
+    // A call through a port field, an alias of one, and a receiver under another name reach a port.
+    try std.testing.expectEqual(@as(?StageViolation, .execute_reaches_a_port), stageViolation(execute_head ++ "        self.source.read();\n" ++ steps_tail));
+    try std.testing.expectEqual(@as(?StageViolation, .execute_reaches_a_port), stageViolation(execute_head ++ "        const alias = self.source;\n" ++ steps_tail));
+    try std.testing.expectEqual(@as(?StageViolation, .execute_reaches_a_port), stageViolation("pub const Action = struct {\n    pub fn execute(stage: Action, runtime: pipeline.NodeRuntime) void {\n        stage.source.read();\n" ++ steps_tail));
+    // `execute` takes exactly the capability-free runtime: none, or another handle besides it, rejects.
+    try std.testing.expectEqual(@as(?StageViolation, .execute_lacks_the_node_runtime), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action) void {\n" ++ steps_tail));
+    try std.testing.expectEqual(@as(?StageViolation, .execute_lacks_the_node_runtime), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime, input: StepInput) void {\n" ++ steps_tail));
+    // The registry's `Input` union carries the step input, so it is as forbidden as `StepInput`; a domain
+    // type that merely contains the letters, such as `evidence.Inputs`, is not.
+    try std.testing.expectEqual(@as(?StageViolation, .execute_lacks_the_node_runtime), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime, input: operations.Input) void {\n" ++ steps_tail));
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime, inputs: evidence.Inputs) void {\n" ++ steps_tail));
+    // A signature split across lines is read whole.
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(\n        a: source_port.ProjectCapturer,\n        b: parser_port.Parser,\n    ) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_is_erased), stageViolation(clean_head ++ "    pub fn split(\n        allocator: std.mem.Allocator,\n        context: *anyopaque,\n    ) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(clean_head ++ "    pub fn one(port: source_port.ProjectCapturer) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(a: source_port.ProjectCapturer, b: parser_port.Parser) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_the_action), stageViolation(clean_head ++ "    pub fn whole(stage: Action) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_the_action), stageViolation(clean_head ++ "    pub fn method(self: *Self) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_is_erased), stageViolation(clean_head ++ "    pub fn bag(capabilities: anytype) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_is_erased), stageViolation(clean_head ++ "    pub fn raw(context: *anyopaque) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .absorbs_a_gate_or_model_module), stageViolation("const g = @import(\"../../domain/workflow_gate.zig\");\n" ++ clean_head ++ "};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .absorbs_a_gate_or_model_module), stageViolation("const m = @import(\"../../domain/model_request.zig\");\n" ++ clean_head ++ "};\n"));
+}
+
+test "stage steps that validate hand the next step a distinct validated type" {
+    const steps = @import("actions/toolchain/prepare_toolchain.zig").steps;
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateProject, 1), ReturnPayload(steps.validateProject), ParameterType(steps.resolveInheritance, 1)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateRegistry, 1), ReturnPayload(steps.validateRegistry), ParameterType(steps.resolveInheritance, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.resolveInheritance, 2), ReturnPayload(steps.resolveInheritance), ParameterType(steps.compose, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.compose, 2), ReturnPayload(steps.compose), ParameterType(steps.validateSafety, 1)));
+    // Only the safety step yields the owner of the valid toolchain.
+    try std.testing.expect(ReturnPayload(steps.validateSafety) == *toolchain_safety.Owner);
+    // A step that returns its own input type, or a type the next step does not take, is rejected.
+    try std.testing.expect(!validatedHandoff(u8, u8, u8));
+    try std.testing.expect(!validatedHandoff(u8, u16, u32));
+}
+
+test "no absorbed toolchain operation remains registered or bound" {
+    const absorbed = [_][]const u8{
+        "capture-project-toolchain",
+        "inventory-toolchain-presets",
+        "capture-toolchain-presets",
+        "parse-toolchain-documents",
+        "validate-project-toolchain-schema",
+        "validate-toolchain-preset-registry",
+        "resolve-toolchain-inheritance",
+        "compose-toolchain",
+        "validate-toolchain-safety",
+    };
+    const sources = [_][]const u8{
+        @embedFile("composition/native_workflow_operations.zig"),
+        @embedFile("application/toolchain_workflow_runner.zig"),
+        @embedFile("test_fixtures/toolchain.workflow.yaml"),
+    };
+    for (absorbed) |id| for (sources) |source| try expectAbsent(source, id);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "runners.PrepareToolchain") != null);
+}
+
+test "the prepare-inputs stage action obeys ADR 0031's stage rules" {
+    const stage = @embedFile("actions/specify/prepare_inputs.zig");
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(stage));
+    try expectAllowedActionImports(stage);
+    try expectSingleActionContract(stage);
+    const pipeline = @import("domain/pipeline.zig");
+    const contract = @import("actions/specify/prepare_inputs.zig").Action.contract;
+    try std.testing.expect(contract.side_effect == .none or contract.side_effect == .filesystem_read);
+    try std.testing.expectEqual(pipeline.NodeKind.action, contract.kind);
+    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
+    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
+    // The stage reads only the invocation, replaces and invalidates nothing, and produces only its
+    // own edge keys: none of its intermediates and no gate or captured-retention key.
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.specify_invocation}, contract.requires);
+    try std.testing.expectEqual(@as(usize, 0), contract.optional.len + contract.replaces.len + contract.invalidates.len);
+    try std.testing.expectEqual(@as(usize, 8), contract.produces.len);
+}
+
+test "a stage rejects a step that takes two ports under this stage's port aliases" {
+    const clean_head = "pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime) void {\n        step(self.source, runtime);\n    }\n};\npub const steps = struct {\n";
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(a: feature_port.Inspector, b: state_port.Capturer) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(a: input_port.Capturer, b: parser_port.StateParser) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(clean_head ++ "    pub fn one(a: input_port.Capturer, allocator: std.mem.Allocator) void {}\n};\n"));
+}
+
+test "a stage counts only the Unicode text services as one port family and rejects every other pair of ports" {
+    const clean_head = "pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime) void {\n        step(self.source, runtime);\n    }\n};\npub const steps = struct {\n";
+    // The text services are three types of one port module: one family, however many a step takes.
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(clean_head ++ "    pub fn texts(a: text_port.Normalizer, b: text_port.CaseFolder, c: text_port.LexicalClassifier) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn mixed(a: text_port.Normalizer, b: identity_port.Source) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn mixed(\n        a: text_port.Normalizer,\n        b: text_port.CaseFolder,\n        c: corpus_port.Capturer,\n    ) void {}\n};\n"));
+    // No other module is a family: two types of one non-text module are two ports.
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn pair(a: corpus_port.Enumerator, b: corpus_port.Capturer) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn pair(a: source_port.ProjectCapturer, b: source_port.PresetCapturer) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn pair(a: parser_port.StateParser, b: parser_port.FormParser) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(clean_head ++ "    pub fn one(a: corpus_port.Capturer, allocator: std.mem.Allocator) void {}\n};\n"));
+}
+
+test "the reference preparation stage actions obey ADR 0031's stage rules" {
+    const pipeline = @import("domain/pipeline.zig");
+    const key = pipeline.DataKey;
+    inline for (.{
+        .{ @embedFile("actions/reference/prepare_reference_evidence.zig"), @import("actions/reference/prepare_reference_evidence.zig").Action.contract },
+        .{ @embedFile("actions/reference/prepare_reference_tokens.zig"), @import("actions/reference/prepare_reference_tokens.zig").Action.contract },
+    }) |stage| {
+        try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(stage[0]));
+        try expectAllowedActionImports(stage[0]);
+        try expectSingleActionContract(stage[0]);
+        try expectAbsent(stage[0], "std.Io");
+        try expectAbsent(stage[0], "/adapters/");
+        try std.testing.expect(stage[1].side_effect == .none or stage[1].side_effect == .filesystem_read);
+        try std.testing.expectEqual(pipeline.NodeKind.action, stage[1].kind);
+        try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, stage[1].repair_role);
+        try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, stage[1].runner_accounting);
+        try std.testing.expectEqual(@as(usize, 0), stage[1].optional.len + stage[1].replaces.len + stage[1].invalidates.len);
+    }
+    // The evidence stage reads the filesystem; the token stage reads nothing and is capability free.
+    const evidence = @import("actions/reference/prepare_reference_evidence.zig").Action.contract;
+    const tokens = @import("actions/reference/prepare_reference_tokens.zig").Action.contract;
+    try std.testing.expectEqual(pipeline.SideEffect.filesystem_read, evidence.side_effect);
+    try std.testing.expectEqual(pipeline.SideEffect.none, tokens.side_effect);
+    try std.testing.expectEqualSlices(key, &.{ .reference_directory, .feature_directory }, evidence.requires);
+    try std.testing.expectEqualSlices(key, &.{.citable_reference_inputs}, evidence.produces);
+    try std.testing.expectEqualSlices(key, &.{ .compiled_naming_policy, .valid_toolchain, .citable_reference_inputs }, tokens.requires);
+    try std.testing.expectEqualSlices(key, &.{ .path_token_grammar, .reference_passive_literals, .structured_token_candidates }, tokens.produces);
+}
+
+test "the reference preparation steps that validate hand the next step a distinct validated type" {
+    const evidence_steps = @import("actions/reference/prepare_reference_evidence.zig").steps;
+    const token_steps = @import("actions/reference/prepare_reference_tokens.zig").steps;
+    try std.testing.expect(validatedHandoff(ParameterType(evidence_steps.validateInventory, 3), ReturnPayload(evidence_steps.validateInventory), ParameterType(evidence_steps.captureSources, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(evidence_steps.validateAccounting, 1), ReturnPayload(evidence_steps.validateAccounting), ParameterType(evidence_steps.assignIdentities, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(evidence_steps.validateChunks, 0), ReturnPayload(evidence_steps.validateChunks), @import("domain/reference_evidence.zig").Inputs));
+    try std.testing.expect(validatedHandoff(ParameterType(token_steps.validateLiterals, 4), ReturnPayload(token_steps.validateLiterals), @import("domain/passive_literals.zig").Registry));
+    // Each token step takes exactly the type its predecessor returns.
+    try std.testing.expect(ReturnPayload(token_steps.buildGrammar) == ParameterType(token_steps.scanLiterals, 4));
+    try std.testing.expect(ReturnPayload(token_steps.scanLiterals) == ParameterType(token_steps.assignLiterals, 1));
+    try std.testing.expect(ReturnPayload(token_steps.assignLiterals) == ParameterType(token_steps.validateLiterals, 4));
+    try std.testing.expect(ReturnPayload(token_steps.extractFacts) == ParameterType(token_steps.assignCandidates, 2));
+}
+
+test "no absorbed reference preparation operation remains registered, bound or placed in a workflow, and naming stays separate" {
+    const absorbed = [_][]const u8{
+        "inventory-reference-sources",
+        "validate-reference-inventory",
+        "capture-reference-sources",
+        "decode-reference-markdown",
+        "validate-reference-accounting",
+        "assign-reference-identities",
+        "build-reference-chunks",
+        "validate-reference-chunks",
+        "build-superset-path-token-grammar",
+        "scan-reference-passive-literals",
+        "assign-passive-literal-identities",
+        "validate-reference-passive-literals",
+        "extract-structured-reference-facts",
+        "assign-structured-token-candidate-identities",
+    };
+    const io = std.testing.io;
+    const spec_workflow = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(spec_workflow);
+    const sources = [_][]const u8{
+        @embedFile("composition/native_workflow_operations.zig"),
+        @embedFile("application/reference_evidence_preparation_workflow.zig"),
+        @embedFile("application/reference_token_preparation_workflow.zig"),
+        @embedFile("test_fixtures/reference-ingestion.workflow.yaml"),
+        @embedFile("test_fixtures/path_token_workflow.zig"),
+        spec_workflow,
+    };
+    for (absorbed) |id| for (sources) |source| try expectAbsent(source, id);
+    const native = @embedFile("composition/native_workflow_operations.zig");
+    try std.testing.expect(std.mem.indexOf(u8, native, "evidence_preparation.PrepareReferenceEvidence") != null);
+    try std.testing.expect(std.mem.indexOf(u8, native, "token_preparation.PrepareReferenceTokens") != null);
+    // The naming policy compiles in its own step, between the two stages (SPEC01 E2c).
+    const evidence_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-reference-evidence") orelse return error.MissingEvidenceStage;
+    const naming_at = std.mem.indexOf(u8, spec_workflow, "use: compile-naming-policy") orelse return error.MissingNamingStep;
+    const tokens_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-reference-tokens") orelse return error.MissingTokenStage;
+    try std.testing.expect(evidence_at < naming_at and naming_at < tokens_at);
+}
+
+test "the prepare-inputs stage steps that validate hand the next step a distinct validated type" {
+    const steps = @import("actions/specify/prepare_inputs.zig").steps;
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateFeature, 1), ReturnPayload(steps.validateFeature), ParameterType(steps.inspectFeature, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateReference, 0), ReturnPayload(steps.validateReference), ParameterType(steps.inspectReference, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateClarificationState, 0), ReturnPayload(steps.validateClarificationState), ParameterType(steps.validateClarificationForms, 2)));
+    // Observation precedes path resolution and the prior state is parsed from bytes the capture read.
+    try std.testing.expect(ReturnPayload(steps.inspectFeature) == ParameterType(steps.resolvePaths, 2));
+    try std.testing.expect(ReturnPayload(steps.captureState) == ?[]const u8 and ParameterType(steps.parseState, 3) == ?[]const u8);
+}
+
+test "no absorbed input-preparation operation remains registered, bound or placed in a workflow" {
+    const absorbed = [_][]const u8{
+        "normalize-feature-directory",
+        "validate-feature-directory",
+        "inspect-feature-directory",
+        "resolve-feature-artifact-paths",
+        "normalize-reference-selector",
+        "validate-reference-selector",
+        "inspect-reference-directory",
+        "capture-workflow-state",
+        "parse-specification-state",
+        "capture-clarification-inputs",
+        "parse-clarification-state",
+        "validate-clarification-state",
+        "validate-clarification-forms",
+    };
+    const io = std.testing.io;
+    const spec_workflow = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(spec_workflow);
+    const sources = [_][]const u8{
+        @embedFile("composition/native_workflow_operations.zig"),
+        @embedFile("application/input_preparation_workflow.zig"),
+        @embedFile("test_fixtures/reference-preflight.workflow.yaml"),
+        @embedFile("test_fixtures/reference-ingestion.workflow.yaml"),
+        spec_workflow,
+    };
+    for (absorbed) |id| for (sources) |source| try expectAbsent(source, id);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "input_preparation.PrepareInputs") != null);
+    try std.testing.expect(std.mem.indexOf(u8, spec_workflow, "use: prepare-inputs") != null);
+}
+
+test "configured path policy and resolution have distinct startup steps over one domain owner" {
+    const startup = @embedFile("application/startup_routine.zig");
+    try expectAbsent(startup, "validate_engine_path_policy.zig");
+    try std.testing.expect(std.mem.indexOf(u8, startup, "bootstrap_root_derivation.zig") != null);
+    for ([_][]const u8{
+        "pub fn validateRootPaths(",
+        "pub fn validateProviderPath(",
+        "pub fn resolveRoots(",
+        "pub fn resolveProviderPath(",
+    }) |step| {
+        try std.testing.expectEqual(@as(usize, 1), countOccurrences(startup, step));
+    }
+    const derivation = @embedFile("domain/bootstrap_root_derivation.zig");
+    for ([_][]const u8{ "pub fn normalizeRootPath(", "pub fn normalizeProviderPath(", "pub fn resolveRoot(", "pub fn resolveProviderPath(" }) |function| {
+        try std.testing.expectEqual(@as(usize, 1), countOccurrences(derivation, function));
+    }
 }
 
 test "feature log paths have one opaque artifact authority and one sink consumer" {
@@ -1648,8 +2068,8 @@ test "workflow operation capabilities have one typed binding authority" {
 
 test "toolchain setup has no unconditional startup path or second result owner" {
     try std.testing.expect(!@hasField(@import("application/bootstrap_services.zig").BootstrapServices, "toolchain"));
-    try expectAbsent(@embedFile("application/bootstrap_orchestrator.zig"), "Toolchain");
-    try expectAbsent(@embedFile("application/bootstrap_runner.zig"), "toolchain");
+    try expectAbsent(@embedFile("application/startup_routine.zig"), "Toolchain");
+    try expectAbsent(@embedFile("application/startup_routine.zig"), "prepare_toolchain");
     const service = @import("application/toolchain_service.zig").ToolChainService;
     try std.testing.expect(!@hasField(service, "owner"));
     try std.testing.expect(!@hasDecl(service, "deinit"));
@@ -1660,10 +2080,11 @@ test "toolchain setup has no unconditional startup path or second result owner" 
 }
 
 test "reference preflight shares path safety without leaking normalization or read capabilities" {
-    const actions = @embedFile("application/reference_workflow_runner.zig");
-    try expectAbsent(actions, "std.Io.Dir");
-    try expectAbsent(actions, "/adapters/");
-    try expectAbsent(actions, "bootstrap_root_registry");
+    inline for (.{ @embedFile("application/input_preparation_workflow.zig"), @embedFile("actions/specify/prepare_inputs.zig") }) |actions| {
+        try expectAbsent(actions, "std.Io.Dir");
+        try expectAbsent(actions, "/adapters/");
+        try expectAbsent(actions, "bootstrap_root_registry");
+    }
     const selector = @embedFile("domain/reference_selector.zig");
     try expectAbsent(selector, "@cImport");
     try expectAbsent(selector, "/adapters/");
@@ -1703,7 +2124,7 @@ test "feature directory selection shares path policy and has no generated identi
     try expectAbsent(domain, "@cImport");
     try expectAbsent(domain, "/adapters/");
     try std.testing.expect(std.mem.indexOf(u8, domain, "path.validate") != null);
-    const action = @embedFile("actions/specify/normalize_feature_directory.zig");
+    const action = @embedFile("actions/specify/prepare_inputs.zig");
     try expectAbsent(action, "std.Io.Dir");
     try expectAbsent(action, "/adapters/");
     try expectAbsent(action, "model_provider");
@@ -1722,7 +2143,7 @@ test "feature directory selection shares path policy and has no generated identi
 }
 
 test "feature inspection root handoff has one narrow consumer and cannot mix configured roots" {
-    try std.testing.expectEqual(.filesystem_read, @import("application/feature_directory_workflow.zig").Inspect.Action.contract.side_effect);
+    try std.testing.expectEqual(.filesystem_read, @import("actions/specify/prepare_inputs.zig").Action.contract.side_effect);
     const roots = @import("domain/bootstrap_root_registry.zig");
     const inspector = @import("ports/feature_directory_inspector.zig").Inspector;
     try std.testing.expect(@FieldType(inspector, "capability") == ?*const roots.FeatureDirectoryReadCapability);
@@ -1744,19 +2165,15 @@ test "feature inspection root handoff has one narrow consumer and cannot mix con
 
 test "clarification input operations have narrow read-only ports and no workflow-name authority" {
     const binding = @import("application/workflow_operation_binding.zig");
-    const capture = comptime binding.inspect(@import("application/clarification_input_workflow.zig").Capture, &.{});
-    try std.testing.expect(capture.valid and capture.feature_input_read);
-    try std.testing.expectEqual(.filesystem_read, @import("application/clarification_input_workflow.zig").Capture.Action.contract.side_effect);
-    try std.testing.expect(!capture.model_provider and !capture.feature_read and !capture.reference_read);
-    const parse = comptime binding.inspect(@import("application/clarification_input_workflow.zig").ParseState, &.{});
-    try std.testing.expect(parse.valid and !parse.feature_input_read);
+    const inputs = comptime binding.inspect(@import("application/input_preparation_workflow.zig").PrepareInputs, &.{});
+    // Reads the feature's inputs through the narrow input port, with no model or output capability.
+    try std.testing.expect(inputs.valid and inputs.feature_input_read);
+    try std.testing.expectEqual(.filesystem_read, @import("actions/specify/prepare_inputs.zig").Action.contract.side_effect);
+    try std.testing.expect(!inputs.model_provider and !inputs.feature_output_write and !inputs.toolchain_read);
     inline for (.{
-        @embedFile("actions/clarification/capture_clarification_inputs.zig"),
-        @embedFile("actions/clarification/parse_clarification_state.zig"),
-        @embedFile("actions/clarification/validate_clarification_state.zig"),
-        @embedFile("actions/clarification/validate_clarification_forms.zig"),
-        @embedFile("actions/specify/resolve_feature_artifact_paths.zig"),
+        @embedFile("actions/specify/prepare_inputs.zig"),
         @embedFile("application/clarification_input_workflow.zig"),
+        @embedFile("application/input_preparation_workflow.zig"),
     }) |source| {
         try expectAbsent(source, "std.Io.Dir");
         try expectAbsent(source, "std.json");
@@ -1796,18 +2213,17 @@ test "reference evidence has shared identity types and pure chunk citation bound
     try std.testing.expect(model.ReferenceChunkId == evidence.identity.ChunkId);
     const binding = @import("application/workflow_operation_binding.zig");
     const operations = @import("application/reference_evidence_workflow.zig");
-    const assigning = comptime binding.inspect(operations.Assign, &.{});
-    try std.testing.expect(assigning.valid and assigning.reference_identity);
-    try std.testing.expect(!assigning.reference_read and !assigning.reference_content_read and !assigning.model_provider);
-    inline for (.{ operations.BuildChunks, operations.ValidateChunks, operations.ValidateCitations }) |T| {
+    // The stage reads the reference content and draws identities, and nothing else.
+    const preparing = comptime binding.inspect(@import("application/reference_evidence_preparation_workflow.zig").PrepareReferenceEvidence, &.{});
+    try std.testing.expect(preparing.valid and preparing.reference_identity and preparing.reference_content_read);
+    try std.testing.expect(!preparing.reference_read and !preparing.model_provider and !preparing.feature_input_read and !preparing.feature_output_write);
+    inline for (.{operations.ValidateCitations}) |T| {
         const pure = comptime binding.inspect(T, &.{});
         try std.testing.expectEqual(@import("application/workflow_operation_binding.zig").Inspection{}, pure);
     }
     inline for (.{
         @embedFile("domain/reference_evidence.zig"),
-        @embedFile("actions/reference/assign_reference_identities.zig"),
-        @embedFile("actions/reference/build_reference_chunks.zig"),
-        @embedFile("actions/reference/validate_reference_chunks.zig"),
+        @embedFile("actions/reference/prepare_reference_evidence.zig"),
         @embedFile("actions/reference/validate_source_citations.zig"),
         @embedFile("application/reference_evidence_workflow.zig"),
     }) |source| {
@@ -1849,7 +2265,7 @@ test "extraction candidates reuse citation and identity owners without gaining c
 test "path-token rules share toolchain authority and scanner bindings are capability free" {
     const bindings = @import("application/workflow_operation_binding.zig");
     const operations = @import("application/path_token_workflow.zig");
-    inline for (.{ operations.Compile, operations.Build, operations.Scan }) |T| {
+    inline for (.{ operations.Compile, operations.Scan, @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens }) |T| {
         try std.testing.expectEqual(bindings.Inspection{}, comptime bindings.inspect(T, &.{}));
         try std.testing.expect(T.Action.contract.side_effect == .none);
     }
@@ -1868,9 +2284,9 @@ test "path-token rules share toolchain authority and scanner bindings are capabi
 
 test "typed content has one shared boundary and no passive or exact operational capability" {
     const binding = @import("application/workflow_operation_binding.zig");
-    const operations = @import("application/passive_literal_workflow.zig");
+    const operations = @import("application/reference_token_preparation_workflow.zig");
     const extraction = @import("application/reference_extraction_workflow.zig");
-    inline for (.{ operations.Scan, operations.Assign, operations.Validate, extraction.ValidateText }) |T| {
+    inline for (.{ operations.PrepareReferenceTokens, extraction.ValidateText }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expect(T.Action.contract.side_effect == .none);
     }
@@ -1896,7 +2312,7 @@ test "preservation is a generic YAML boundary with source-only scalars and manda
     const selection = @import("application/reference_extraction_workflow.zig").ValidateSelections;
     const binding = @import("application/workflow_operation_binding.zig");
     const key = @import("domain/pipeline.zig").DataKey;
-    inline for (.{ native.Extract, native.AssignCandidates, selection, native.AssignTokens, native.BuildClaims }) |T| {
+    inline for (.{ @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens, selection, native.AssignTokens, native.BuildClaims }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }

@@ -31,21 +31,6 @@ pub const Compile = struct {
         return publish(self.allocator, policy_schema, naming.Compiled, result);
     }
 };
-pub const Build = struct {
-    pub const Action = @import("../actions/reference/build_superset_path_token_grammar.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action,
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch |operation_error| return operation_error;
-        const policy = values.read(&input.step.data, policy_schema, naming.Compiled) catch |operation_error| return operation_error;
-        const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
-        var scratch: std.heap.ArenaAllocator = .init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), policy.*, current, source.*) catch |operation_error| return operation_error;
-        return publish(self.allocator, grammar_schema, grammar.Grammar, result);
-    }
-};
 pub const Scan = struct {
     pub const Action = @import("../actions/reference/scan_path_tokens.zig").Action;
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{

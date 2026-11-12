@@ -4,7 +4,7 @@ const std = @import("std");
 const text = @import("typed_text.zig");
 const reference = @import("reference_extraction.zig");
 
-pub const version = "specification/v5";
+pub const version = "specification/v6";
 pub const Error = error{InvalidSpecification};
 /// A record kind's part in ADR 0038's cross-record rules.
 pub const RecordRole = enum { requirement, behaviour, scope, scenario, entity };
@@ -150,9 +150,10 @@ pub fn Values(comptime boundary: Boundary) type {
         const Self = @This();
         pub const Evidence = if (boundary == .model) Selection else Provenance;
         pub const AttributedValue = struct { value: BusinessValue, source_group_ids: []const @import("reference_reconciliation.zig").SignalId = &.{}, provenance: Evidence };
+        /// The brief's model content. The title is no model content: the engine takes the
+        /// display name from the sources (ADR 0048).
         pub const Brief = struct {
-            pub const model_fields = .{ .title = text.field_policy.Field.spec_title, .description = text.field_policy.Field.spec_description, .primary_goal = text.field_policy.Field.spec_goal };
-            title: Self.AttributedValue,
+            pub const model_fields = .{ .description = text.field_policy.Field.spec_description, .primary_goal = text.field_policy.Field.spec_goal };
             description: Self.AttributedValue,
             primary_goal: Self.AttributedValue,
         };
@@ -243,7 +244,7 @@ pub fn entityMembershipSatisfied(disposition: Applicability, entity_count: usize
 }
 pub const ApplicabilityProposal = Values(.canonical).ApplicabilityProposal;
 pub const ContentProposal = struct {
-    display_name: AttributedValue,
+    display_name: DisplayName,
     primary_user_story: AttributedValue,
     records: []const RecordProposal,
     entities: ApplicabilityProposal,
@@ -253,7 +254,7 @@ pub const ContentProposal = struct {
 /// whose Then it prints (`scenario_link.zig`). It is the display's only canonical source.
 pub const IdentifiedRecord = struct { id: Id, proposal: RecordProposal, outcome_of: ?Id = null };
 pub const IdentifiedContent = struct {
-    display_name: AttributedValue,
+    display_name: DisplayName,
     primary_user_story: AttributedValue,
     records: []const IdentifiedRecord,
     entities: ApplicabilityProposal,
@@ -272,6 +273,9 @@ pub fn sameContent(allocator: std.mem.Allocator, a: IdentifiedContent, b: Identi
 /// Captured unescaped Markdown field; deliberately not BusinessText authority.
 pub const CodeSpan = struct { start: usize, end: usize };
 pub const Scalar = struct { bytes: []const u8, code_spans: []const CodeSpan = &.{} };
+/// The specification's display name: the sources' level-1 heading text as written (ADR 0048).
+/// Plain text, so it holds no code span, claim, group or provenance.
+pub const DisplayName = struct { bytes: []const u8 };
 /// One-based, inclusive source lines.
 pub const LineRange = struct { first: u32, last: u32 };
 /// One source file's merged cited lines, in ascending order: an engine-owned display

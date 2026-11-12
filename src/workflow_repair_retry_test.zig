@@ -476,13 +476,13 @@ test "structured repair retains native CAS witnesses and selected field metadata
     defer packets.release(scoped);
     defer packets.release(witnessed);
     defer packets.release(raw);
-    const structured = try Contract.packet(a, authorization, base, .{ .bytes = "replacement" }, null, .{ .fields = .{ .replacement = .{ .inherited = .spec_title } } });
+    const structured = try Contract.packet(a, authorization, base, .{ .bytes = "replacement" }, null, .{ .fields = .{ .replacement = .{ .inherited = .spec_goal } } });
     defer packets.release(structured);
     try std.testing.expect(@import("domain/model_exact_values.zig").same(base.exactScope(), structured.exactScope()));
     const body = (try std.json.parseFromSlice(std.json.Value, a, structured.body(), .{})).value;
     try std.testing.expect(body.object.get("repair").?.object.contains("current_value"));
     try std.testing.expectError(error.InvalidAtomicRepair, Contract.packet(a, authorization, base, .{ .bytes = "replacement" }, null, .{ .fields = .{ .replacement = .{} } }));
-    const selected = try @import("domain/model_candidate_json.zig").selectedFieldBindings(Replacement, a, .value, .{ .inherited = .spec_title });
+    const selected = try @import("domain/model_candidate_json.zig").selectedFieldBindings(Replacement, a, .value, .{ .inherited = .spec_goal });
     const selected_request = try Contract.packet(std.testing.allocator, authorization, base, .{ .bytes = "replacement" }, null, .{ .fields = .{ .selected = selected } });
     defer packets.release(selected_request);
     try std.testing.expectEqualDeep(selected, selected_request.fieldPolicies());

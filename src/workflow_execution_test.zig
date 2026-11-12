@@ -458,7 +458,7 @@ test "pending independent prohibiting outcome prevents publication finalization 
 
 test "maximum graph validates executes every operation and rejects cycles and overflow" {
     const definition = @import("domain/workflow_definition.zig");
-    const validate = @import("actions/workflow/validate_compiled_workflow_graphs.zig");
+    const validate = @import("domain/workflow_graph_validation.zig");
     const maximum = definition.max_steps;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -484,7 +484,7 @@ test "maximum graph validates executes every operation and rejects cycles and ov
     graph.authority.steps = steps[0..maximum];
     graph.authority.transitions = transitions;
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(graph.authority.steps).?;
-    _ = try (validate.Action{}).execute(a, &.{graph});
+    _ = try validate.validate(a, &.{graph});
     var control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var barrier: FakeBarrier = .{};
     var registry = testRegistry(&control);
@@ -498,11 +498,11 @@ test "maximum graph validates executes every operation and rejects cycles and ov
     try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
 
     transitions[(maximum - 1) * 2].target = .{ .step = steps[0].id };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate.Action{}).execute(a, &.{graph}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate.validate(a, &.{graph}));
     transitions[(maximum - 1) * 2].target = .{ .terminal = .ok };
     graph.authority.steps = steps;
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(steps).?;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate.Action{}).execute(a, &.{graph}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate.validate(a, &.{graph}));
 
     var bounded = test_steps[0];
     bounded.retry_authority = .{
@@ -1110,6 +1110,11 @@ const OperationState = struct {
     expected_resource_id: ?[]const u8 = null,
     calls: usize = 0,
     fail_call: ?usize = null,
+    /// The runtime stops while the failing call runs, as a cancelled stage action does.
+    stops: ?*PublicationRuntime = null,
+    stops_to: pipeline.RuntimeStatus = .cancelled,
+    /// The address of the runtime handle the last step invocation received from the runner.
+    runtime_context: usize = 0,
     failure: enum { generic, reconciliation, omission, allocation } = .generic,
     diagnostic: enum { none, unsafe, allocation } = .none,
     delta_fault: ?DeltaFault = null,
@@ -1165,6 +1170,7 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
         .invocation => .{ .outcome = .ok, .delta = .{} },
         .step => |step_input| step: {
             const control = context.?;
+            control.runtime_context = @intFromPtr(step_input.runtime.context);
             if (control.expected_steps.len != 0) {
                 if (control.calls >= control.expected_steps.len or
                     !std.mem.eql(u8, step_input.step.id.bytes, control.expected_steps[control.calls]))
@@ -1182,12 +1188,15 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
             else
                 control.outcome;
             control.calls += 1;
-            if (control.fail_call == control.calls) return switch (control.failure) {
-                .generic => error.OperationExecutionFailed,
-                .reconciliation => error.InvalidReferenceReconciliation,
-                .omission => error.InvalidSpecificationCoverageRepair,
-                .allocation => error.OutOfMemory,
-            };
+            if (control.fail_call == control.calls) {
+                if (control.stops) |runtime| runtime.value = control.stops_to;
+                return switch (control.failure) {
+                    .generic => error.OperationExecutionFailed,
+                    .reconciliation => error.InvalidReferenceReconciliation,
+                    .omission => error.InvalidSpecificationCoverageRepair,
+                    .allocation => error.OutOfMemory,
+                };
+            }
             var delta: pipeline.NodeDelta = .{};
             if (control.delta_fault) |fault| {
                 const values = @import("application/pipeline_values.zig");
@@ -1229,6 +1238,38 @@ fn testGraph() !compilation.CompiledWorkflow {
 }
 
 const test_outcomes: []const workflow.OutcomeTag = &.{ .ok, .needs_user, .invalid, .blocked, .failed, .cancelled };
+
+test "an operation that fails after the runtime stopped reports the stop, not an operation failure" {
+    for ([_]?pipeline.RuntimeStatus{ null, .cancelled, .deadline_exhausted }) |stop| {
+        var runtime: PublicationRuntime = .{};
+        var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1, .stops = if (stop != null) &runtime else null, .stops_to = stop orelse .cancelled } };
+        var barrier: FakeBarrier = .{};
+        var graph = try testGraph();
+        var registry = testRegistry(&control);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{ .context = &runtime, .status_fn = PublicationRuntime.status }, null, .{ .budget = .{ .value = 1000 } });
+        defer runner.deinit();
+        try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+        const expected: execution.Rejection = if (stop) |status|
+            (if (status == .cancelled) .cancelled else .deadline_exhausted)
+        else
+            .{ .operation_failed = error.OperationExecutionFailed };
+        try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = expected }), runner.bindings().invokeStep(test_steps[0].id));
+        // The operation received the runner's own runtime handle, not the always-active default.
+        try std.testing.expectEqual(@intFromPtr(&runtime), control.state.runtime_context);
+    }
+}
+
+test "an allocation failure stays itself when the runtime stopped during the operation" {
+    var runtime: PublicationRuntime = .{};
+    var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1, .failure = .allocation, .stops = &runtime } };
+    var barrier: FakeBarrier = .{};
+    var graph = try testGraph();
+    var registry = testRegistry(&control);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{ .context = &runtime, .status_fn = PublicationRuntime.status }, null, .{ .budget = .{ .value = 1000 } });
+    defer runner.deinit();
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = .{ .operation_failed = error.OutOfMemory } }), runner.bindings().invokeStep(test_steps[0].id));
+}
 
 test "native policies cannot admit bounded progress as terminal authority" {
     var control: OperationControl = .{ .state = .{ .outcome = .ok } };

@@ -11,7 +11,7 @@
 removes capacity fields and size-ceiling prerequisites; binding/call separation
 and conditional bootstrap remain unchanged.
 
-**Routine amendment (22 October 2026, not yet implemented):**
+**Routine amendment (22 October 2026, implemented):**
 [ADR 0032](0032-engine-routines.md) replaces the capability-free
 `ModelProviderBootstrapOrchestrator` and its runner-owned child bindings with a typed
 engine routine. Each step is a function with only the port it uses, and values pass as

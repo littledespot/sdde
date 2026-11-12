@@ -507,8 +507,9 @@ ClarificationOwnershipRegistry {
 
 ## 7. Specification IR
 
-This illustrative sample describes canonical `specification/v5` under
-[ADR 0020](decisions/0020-derived-exact-reference-lineage.md). Initial narrative
+This illustrative sample describes canonical `specification/v6` under
+[ADR 0020](decisions/0020-derived-exact-reference-lineage.md). The display name is native
+text, the sources' level-1 heading ([ADR 0048](decisions/0048-engine-derived-specification-title.md)). Initial narrative
 responses select current whole groups through `signal_ids`; non-entity record
 responses keep their one native-assigned group and name a nonempty ordered subset of
 its claims as `claim_ids` ([ADR 0038](decisions/0038-record-claims-and-scenario-coverage.md));
@@ -1778,18 +1779,18 @@ schema is already bound by the engine; there is no echoed `schemaId` or outer
 ## 24. Orchestrator composition
 
 ```text
-CompositionRoot (before the engine starts; ADR 0032 routine when implemented)
-└── BootstrapOrchestrator preselection portion; validated result passed to the engine
-    ├── configuration/root actions
-    ├── workflow inventory/capture/parse/schema actions
-    ├── workflow graph compile/validate actions
-    └── variable-size workflow registry actions; no feature transaction lock
+CompositionRoot (before the engine starts; ADR 0032 startup routine)
+└── startup routine; validated result passed to the engine
+    ├── configuration/root steps
+    ├── workflow inventory/capture/parse/schema steps
+    ├── workflow graph compile/validate steps
+    └── variable-size workflow registry steps; no feature transaction lock
 
 PipelineRunner
 ├── WorkflowEngineOrchestrator (capability-free graph coordination)
 │   ├── validate-workflow-operation-registry, parse-workflow-invocation and
 │   │   select-compiled-workflow, in that order, through runner-owned child bindings
-│   ├── ModelProviderBootstrapOrchestrator through a runner-owned child binding (ADR 0004)
+│   ├── provider-bootstrap routine through a runner-owned binding (ADR 0004, ADR 0032)
 │   └── Selected CompiledWorkflowGraph
 │       ├── YAML-named invocation operation through a runner-owned binding
 │       │   └── parser/validator child bindings when that contract composes them

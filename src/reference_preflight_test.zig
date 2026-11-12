@@ -2,9 +2,8 @@ const std = @import("std");
 const reference = @import("domain/reference_selector.zig");
 const parse = @import("actions/specify/parse_specify_invocation.zig");
 const validate = @import("actions/specify/validate_specify_arguments.zig");
-const normalize = @import("actions/reference/normalize_reference_selector.zig");
-const lexical = @import("actions/reference/validate_reference_selector.zig");
-const runner = @import("application/reference_workflow_runner.zig");
+const steps = @import("actions/specify/prepare_inputs.zig").steps;
+const runner = @import("application/input_preparation_workflow.zig");
 const values = @import("application/pipeline_values.zig");
 const schemas = @import("application/specify_invocation_values.zig");
 const invocation_runner = @import("application/specify_invocation_runner.zig");
@@ -49,9 +48,9 @@ test "selector normalization preserves meaning and canonicalizes only NFC separa
         .{ "\u{1100}\u{1161}/reference", "가/reference" },
     };
     inline for (cases) |case| {
-        const normalized = try (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = case[0] });
+        const normalized = try steps.normalizeReference(normalizer, std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = case[0] });
         defer std.testing.allocator.free(normalized.bytes);
-        const selector = try (lexical.Action{}).execute(normalized);
+        const selector = try steps.validateReference(normalized);
         try std.testing.expectEqualStrings(case[1], selector.bytes);
     }
 }
@@ -63,25 +62,25 @@ test "selector safety rejects escape forms controls ambiguous separators and por
         "hello/%2Fworld",       "hello/%5cworld", "hello/con", "hello/bad.",   "hello/bad ",      "hello/bad?",      "hello/..\\world",
     };
     for (rejected) |raw| {
-        const normalized = try (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = raw });
+        const normalized = try steps.normalizeReference(normalizer, std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = raw });
         defer std.testing.allocator.free(normalized.bytes);
-        try std.testing.expectError(error.InvalidReferenceSelector, (lexical.Action{}).execute(normalized));
+        try std.testing.expectError(error.InvalidReferenceSelector, steps.validateReference(normalized));
     }
-    try std.testing.expectError(error.InvalidUtf8, (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = "\xed\xa0\x80" }));
+    try std.testing.expectError(error.InvalidUtf8, steps.normalizeReference(normalizer, std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = "\xed\xa0\x80" }));
     const long_segment = [_]u8{'a'} ** (reference.max_segment_bytes + 1);
-    try std.testing.expectError(error.InvalidReferenceSelector, (lexical.Action{}).execute(.{ .bytes = &long_segment }));
+    try std.testing.expectError(error.InvalidReferenceSelector, steps.validateReference(.{ .bytes = &long_segment }));
     const long_path = [_]u8{'a'} ** (reference.max_bytes + 1);
-    try std.testing.expectError(error.NormalizationLimitExceeded, (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = &long_path }));
+    try std.testing.expectError(error.NormalizationLimitExceeded, steps.normalizeReference(normalizer, std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = &long_path }));
 }
 
 test "Unicode reference paths do not weaken the distinct ASCII configured-root contract" {
     const policy: @import("domain/bootstrap_roots.zig").WorkspacePathPolicy = .{ .max_component_bytes = 255, .max_relative_path_bytes = 4096, .max_absolute_path_bytes = 4096 };
     try std.testing.expectError(error.InvalidConfiguredPath, @import("domain/configured_path_policy.zig").normalize(policy, std.testing.allocator, "Café", false));
-    _ = try (lexical.Action{}).execute(.{ .bytes = "Café" });
+    _ = try steps.validateReference(.{ .bytes = "Café" });
 }
 
 fn normalizationAllocationCase(allocator: std.mem.Allocator) !void {
-    const result = try (normalize.Action{ .normalizer = normalizer }).execute(allocator, .{ .raw_feature = "unused", .raw_reference = "./Cafe\u{301}/notes" });
+    const result = try steps.normalizeReference(normalizer, allocator, .{ .raw_feature = "unused", .raw_reference = "./Cafe\u{301}/notes" });
     defer allocator.free(result.bytes);
     try std.testing.expectEqualStrings("Café/notes", result.bytes);
 }
@@ -107,10 +106,10 @@ test "invocation publishes only validated owned context and rejects without outp
 
 test "registered bindings derive only their narrow operational capabilities" {
     const binding = @import("application/workflow_operation_binding.zig");
-    const normalization = comptime binding.inspect(runner.NormalizeSelector, &.{});
-    const inspection = comptime binding.inspect(runner.InspectDirectory, &.{});
-    try std.testing.expect(normalization.valid and !normalization.reference_read and !normalization.model_provider);
-    try std.testing.expect(inspection.valid and inspection.reference_read and !inspection.model_provider and !inspection.toolchain_read);
+    const inputs = comptime binding.inspect(runner.PrepareInputs, &.{});
+    // The stage reads the feature and reference directories and the feature's inputs, and nothing else.
+    try std.testing.expect(inputs.valid and inputs.reference_read and inputs.feature_read and inputs.feature_input_read);
+    try std.testing.expect(!inputs.model_provider and !inputs.toolchain_read and !inputs.toolchain_parser and !inputs.feature_output_write and !inputs.reference_content_read);
     try std.testing.expect((comptime binding.inspect(invocation_runner.Invocation, &.{})).valid);
 }
 
@@ -127,7 +126,7 @@ test "invocation cleans up every failed allocation without leaking parsed contex
     try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(invocationAllocationCase, .{});
 }
 
-test "reference directory action exposes only inspection and propagates source failure" {
+test "the reference inspection step exposes only inspection and propagates source failure" {
     // Missing bound authority must stop before the adapter callback is reached.
     const Fake = struct {
         calls: usize = 0,
@@ -138,7 +137,7 @@ test "reference directory action exposes only inspection and propagates source f
         }
     };
     var fake: Fake = .{};
-    const action: @import("actions/reference/inspect_reference_directory.zig").Action = .{ .inspector = .{ .context = &fake, .inspect_fn = Fake.inspect } };
-    try std.testing.expectError(error.ReferenceDirectoryUnavailable, action.execute(std.testing.allocator, .{ .bytes = "hello" }));
+    const inspector: @import("ports/reference_directory_inspector.zig").Inspector = .{ .context = &fake, .inspect_fn = Fake.inspect };
+    try std.testing.expectError(error.ReferenceDirectoryUnavailable, steps.inspectReference(inspector, std.testing.allocator, .{ .bytes = "hello" }));
     try std.testing.expectEqual(@as(usize, 0), fake.calls);
 }

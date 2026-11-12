@@ -4,11 +4,10 @@ const g = @import("specification_generation.zig");
 const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 const occurrences = @import("repair_occurrences.zig");
-pub const Subject = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
+pub const Subject = union(enum) { description, primary_goal, story, entity_basis, record: usize };
 pub const ValueField = union(enum) { value, given, when, then, text, condition, name };
 pub fn singletonTextField(subject: Subject) Error!@import("text_field_policy.zig").Field {
     return switch (subject) {
-        .title => .spec_title,
         .description => .spec_description,
         .primary_goal => .spec_goal,
         .story => .spec_story,
@@ -32,7 +31,7 @@ pub const Part = union(enum) { provenance, value: ValueField };
 pub const Target = union(enum) { provenance: Subject, value: struct { subject: Subject, field: ValueField }, attributed: Subject, record: usize };
 pub const StableTarget = struct { value: Target };
 pub const Replacement = union(enum) { provenance: g.spec.Selection, value: g.spec.BusinessValue, attributed: g.spec.Model.AttributedValue, record: g.spec.Model.RecordProposal };
-pub const Rule = enum { provenance, typed_text, exact_copy, duplicate_record, restatement, repeated_statement, entity_membership, unit_kind, interpretation };
+pub const Rule = enum { provenance, typed_text, exact_copy, duplicate_record, restatement, repeated_statement, entity_membership, scenario_coverage, unit_kind, interpretation };
 pub const Blocked = enum { competing_records, unit_kind, clarification_question, inconclusive_review };
 pub const Field = union(enum) { target: Target, unit, clarification_question, interpretation };
 pub const Issue = struct {
@@ -46,6 +45,9 @@ pub const Issue = struct {
     value_choices: ?@import("specification_provenance.zig").ValueChoices = null,
     repair_target: ?Target = null,
     membership: ?struct { disposition: g.spec.Applicability, entity_count: usize } = null,
+    /// ADR 0038 Decision 3: the first claim a behaviour statement names that no
+    /// acceptance criterion or edge case of its batch names.
+    uncovered_claim: ?@import("reference_identity.zig").ClaimId = null,
     native_error: ?enum { InvalidSpecification, InvalidReferenceReconciliation, InvalidSourceCitation, InvalidTypedText, InvalidPassiveLiteral } = null,
 };
 pub const Rejection = struct { owner: identity.ImmutableUnitOwnerId, revision: u64, origin: ?Origin, issue: Issue, last_repair: ?@import("atomic_repair.zig").Merge = null, dependencies: ?@import("atomic_repair.zig").Snapshot = null };
@@ -138,8 +140,24 @@ pub const Origins = struct {
         return null;
     }
 };
+/// A whole record whose association the engine fixes and whose content the model writes.
+pub const FixedRecord = struct { fixed_provenance: g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId, evidence_bound: ?EvidenceBound = null };
 pub const GroupPolicy = union(enum) {
-    membership: struct { fixed_provenance: g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId, evidence_bound: ?EvidenceBound = null },
+    /// An entity the fixed applicability decision requires, or a contradictory one.
+    membership: FixedRecord,
+    /// ADR 0038 Decision 3: an acceptance criterion naming one uncovered claim.
+    scenario: FixedRecord,
+
+    pub fn fixed(self: GroupPolicy) FixedRecord {
+        return switch (self) {
+            inline else => |value| value,
+        };
+    }
+    pub fn fixedPtr(self: *GroupPolicy) *FixedRecord {
+        return switch (self.*) {
+            inline else => |*value| value,
+        };
+    }
 };
 pub const GroupRepair = struct { target: StableTarget, policy: GroupPolicy };
 pub const EvidenceBound = struct {
@@ -191,7 +209,6 @@ fn setRecordIndex(target: *Target, index: usize) void {
 }
 fn attributed(comptime boundary: g.spec.Boundary, content: *g.Responses(boundary).Content, subject: Subject) Error!*g.spec.Values(boundary).AttributedValue {
     return switch (subject) {
-        .title => if (content.* == .brief) &content.brief.title else error.InvalidSpecificationRepair,
         .description => if (content.* == .brief) &content.brief.description else error.InvalidSpecificationRepair,
         .primary_goal => if (content.* == .brief) &content.brief.primary_goal else error.InvalidSpecificationRepair,
         // Unit validation still reports the engine-composed story's observed value;

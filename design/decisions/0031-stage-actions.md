@@ -1,8 +1,11 @@
 # ADR 0031: One action per deterministic stage
 
-- **Status:** Accepted amendment. **Not yet implemented:** every stage is still a run
-  of single-step actions until its conversion lands. Documents that describe
-  single-step granularity carry a pointer to this ADR until then.
+- **Status:** Accepted amendment. **Partly implemented:** `prepare-toolchain` is the first
+  stage action (12 November 2026, SPEC01 E2) and `prepare-inputs` the second (12 November
+  2026, SPEC01 E2b), and `prepare-reference-evidence` and `prepare-reference-tokens` the third
+  and fourth (12 November 2026, SPEC01 E2c); every other stage is still a run of
+  single-step actions until its conversion lands. Documents that describe single-step
+  granularity for those stages carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
   documentation with the recommendations for option B". It decides FIX05
@@ -11,7 +14,8 @@
   outcomes is the most important". The approved recommendation included three rules:
   single responsibility and narrow ports per function, function-local intermediate
   values, and model calls and every real branch kept in YAML. The choices under "Derived
-  under existing rules" follow from existing authority and await the user's confirmation.
+  under existing rules" follow from existing authority; the user confirmed choices 1–3 and
+  6–8 on 12 November 2026 ("yes").
 - **Amends:**
   - AGENTS.md "Actions, orchestrators, and runner" (one responsibility and narrow ports)
     and "Testing expectations" (action tests);
@@ -116,7 +120,11 @@ architecture tests carry the narrowness instead:
 - `execute` only calls internal-step functions in order, with a cancellation check
   between them. It never calls a port method itself.
 - Each port-using internal step takes exactly one port parameter. No internal function
-  takes the `Action` value, `self` or any struct that holds more than one port.
+  takes the `Action` value, `self` or any struct that holds more than one port. The one
+  exception is the Unicode text services (the normalizer, the case folder and the lexical
+  classifier, the three types of `ports/unicode_normalizer.zig`), which are pure and carry no
+  operational capability: they count as one port family (user ruling, 12 November 2026), so a step
+  may take any of them together. No other pair of ports, even from one module, is exempt.
 - No capability bag, `anytype` or `anyopaque` crosses an internal-step boundary.
 - §6.1's read-versus-parse split holds between functions: a function that reads does not
   parse. Raw, parsed, normalized and validated values stay distinct types, with explicit
@@ -198,11 +206,18 @@ engine-startup graph, the feature-logging pipeline or the invocation operation.
     stage-owned diagnostic slot before returning the error, and its binding reads that
     slot before propagating the unchanged error.
   - The runner's stage event records the step either way, so a report can still say where
-    inside the stage a run stopped.
+    inside the stage a run stopped. The runner lends each step invocation a slot
+    (`StepInput.stage_step`), the binding writes the failing step's name before it returns its
+    unchanged error, and the failed action's event records it as `step_id`
+    (`event-columns/v3`, F0002).
 - **Cancellation** is checked between internal steps. Unlike other actions today, a stage
   action's `execute` also takes the capability-free `NodeRuntime` (from
   `domain/pipeline.zig`) and checks its status between steps. A cancelled stage stops
   before its next internal step and cleans up what it owns.
+  - The runner supplies the runtime in the step input, and a non-model operation that fails
+    after the runtime stopped reports that stop (cancelled or deadline exhausted), not an
+    operation failure, as the checks before and after the invocation do. An allocation
+    failure stays itself, and a model call keeps its own reconciled status.
 
 ### Runner, compiler and registry
 
@@ -341,8 +356,8 @@ All offline, for each converted stage:
   - it imports only domain and port modules;
   - `execute` calls no port method, and takes the capability-free `NodeRuntime` and no
     other runtime handle;
-  - no internal function takes two port parameters, the `Action` value or `self`, or any
-    struct holding more than one port;
+  - no internal function takes two port parameters (the Unicode text services count as one),
+    the `Action` value or `self`, or any struct holding more than one port;
   - no internal function takes a capability bag, `anytype` or `anyopaque`;
   - each of these rules has rejected fixtures;
   - no absorbed operation remains registered;

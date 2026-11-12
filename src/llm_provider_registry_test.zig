@@ -1,29 +1,13 @@
 const std = @import("std");
-const decode_toolkit = @import("actions/config/decode_sddtoolkit_config.zig");
-const build_registry = @import("actions/provider/build_llm_provider_registry.zig");
-const decode_provider = @import("actions/provider/decode_llm_provider_config.zig");
-const validate_allowlist = @import("actions/provider/validate_repository_model_allowlist.zig");
-const validate_registry = @import("actions/provider/validate_llm_provider_registry.zig");
+const decode_toolkit = @import("domain/engine_config_decode.zig");
+const steps = @import("application/model_provider_bootstrap_routine.zig").steps;
 const registry_service = @import("application/llm_provider_registry_service.zig");
 const config = @import("domain/config.zig");
 const allowlist_contract = @import("domain/repository_model_allowlist.zig");
 const contracts = @import("domain/llm_provider_contracts.zig");
 const document = @import("domain/llm_provider_document.zig");
 const identity = @import("domain/llm_provider_identity.zig");
-const pipeline = @import("domain/pipeline.zig");
 const registry_contract = @import("domain/llm_provider_registry.zig");
-
-comptime {
-    pipeline.validateLinear(
-        &.{ .raw_llm_provider_config, .engine_config },
-        &.{
-            decode_provider.Action.contract,
-            build_registry.Action.contract,
-            validate_registry.Action.contract,
-            validate_allowlist.Action.contract,
-        },
-    );
-}
 
 const provider_id = identity.ProviderId.parse("compiled-provider").?;
 const implementation_id = contracts.RegisteredProviderImplementationId.init(1).?;
@@ -84,7 +68,7 @@ test "repository allowlist accepts all catalogue models" {
     var toolkit = try decodeToolkit(all_slots_config);
     defer toolkit.deinit();
 
-    const owner = try (validate_allowlist.Action{}).execute(
+    const owner = try steps.validateAllowlist(
         std.testing.allocator,
         &toolkit.value().models,
         toolkit.value().temperatures(),
@@ -103,7 +87,7 @@ test "repository allowlist accepts a strict subset and leaves unused catalogue e
     var toolkit = try decodeToolkit(subset_slots_config);
     defer toolkit.deinit();
 
-    const owner = try (validate_allowlist.Action{}).execute(
+    const owner = try steps.validateAllowlist(
         std.testing.allocator,
         &toolkit.value().models,
         toolkit.value().temperatures(),
@@ -127,7 +111,7 @@ test "multiple slots may reference one catalogue model without duplicating autho
     var toolkit = try decodeToolkit(repeated_model_slots_config);
     defer toolkit.deinit();
 
-    const owner = try (validate_allowlist.Action{}).execute(
+    const owner = try steps.validateAllowlist(
         std.testing.allocator,
         &toolkit.value().models,
         toolkit.value().temperatures(),
@@ -150,7 +134,7 @@ test "one absent or option-incompatible slot rejects the complete allowlist" {
         defer toolkit.deinit();
         try std.testing.expectError(
             error.LLMProviderModelBindingInvalid,
-            (validate_allowlist.Action{}).execute(
+            steps.validateAllowlist(
                 std.testing.allocator,
                 &toolkit.value().models,
                 toolkit.value().temperatures(),
@@ -181,11 +165,12 @@ test "unsupported duplicate invalid-config and partially valid catalogues publis
     };
 
     for (invalid) |bytes| {
-        var raw = try (decode_provider.Action{}).execute(std.testing.allocator, bytes);
+        var raw = try steps.decodeConfig(std.testing.allocator, bytes);
         defer raw.deinit();
         try std.testing.expectError(
             error.LLMProviderRegistryInvalid,
-            (build_registry.Action{ .contracts = &compiled_contracts }).execute(
+            steps.buildRegistry(
+                &compiled_contracts,
                 std.testing.allocator,
                 raw.value(),
             ),
@@ -194,12 +179,13 @@ test "unsupported duplicate invalid-config and partially valid catalogues publis
 }
 
 test "registry validator independently rejects facts not supplied by compiler contracts" {
-    var raw = try (decode_provider.Action{}).execute(
+    var raw = try steps.decodeConfig(
         std.testing.allocator,
         valid_provider_document,
     );
     defer raw.deinit();
-    var candidate = try (build_registry.Action{ .contracts = &compiled_contracts }).execute(
+    var candidate = try steps.buildRegistry(
+        &compiled_contracts,
         std.testing.allocator,
         raw.value(),
     );
@@ -209,7 +195,8 @@ test "registry validator independently rejects facts not supplied by compiler co
 
     try std.testing.expectError(
         error.LLMProviderRegistryInvalid,
-        (validate_registry.Action{ .contracts = &compiled_contracts }).execute(
+        steps.validateRegistry(
+            &compiled_contracts,
             std.testing.allocator,
             candidate,
         ),
@@ -217,14 +204,15 @@ test "registry validator independently rejects facts not supplied by compiler co
 }
 
 test "production-empty contract registry activates no project provider" {
-    var raw = try (decode_provider.Action{}).execute(
+    var raw = try steps.decodeConfig(
         std.testing.allocator,
         valid_provider_document,
     );
     defer raw.deinit();
     try std.testing.expectError(
         error.LLMProviderRegistryInvalid,
-        (build_registry.Action{ .contracts = &contracts.Registry.empty }).execute(
+        steps.buildRegistry(
+            &contracts.Registry.empty,
             std.testing.allocator,
             raw.value(),
         ),
@@ -237,14 +225,16 @@ const Fixture = struct {
     service: registry_service.LLMProviderRegistryService,
 
     fn init(allocator: std.mem.Allocator, bytes: []const u8) !Fixture {
-        var raw = try (decode_provider.Action{}).execute(allocator, bytes);
+        var raw = try steps.decodeConfig(allocator, bytes);
         errdefer raw.deinit();
-        var candidate = try (build_registry.Action{ .contracts = &compiled_contracts }).execute(
+        var candidate = try steps.buildRegistry(
+            &compiled_contracts,
             allocator,
             raw.value(),
         );
         errdefer candidate.deinit();
-        const owner = try (validate_registry.Action{ .contracts = &compiled_contracts }).execute(
+        const owner = try steps.validateRegistry(
+            &compiled_contracts,
             allocator,
             candidate,
         );
@@ -264,7 +254,7 @@ const Fixture = struct {
 };
 
 fn decodeToolkit(bytes: []const u8) !config.Owned {
-    return (decode_toolkit.Action{}).execute(std.testing.allocator, bytes);
+    return decode_toolkit.decode(std.testing.allocator, bytes);
 }
 
 const all_slots_config = toolkitPrefix() ++
@@ -307,9 +297,9 @@ test "catalogue JSON selection retains per-model choices and rejects unsupported
     const bytes =
         \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json":true,"config":{"requestTimeoutMs":1000}},{"model":"model-b","json":false,"config":{"requestTimeoutMs":1000}}]}]}
     ;
-    var decoded = try (decode_provider.Action{}).execute(a, bytes);
+    var decoded = try steps.decodeConfig(a, bytes);
     defer decoded.deinit();
-    var candidate = try (build_registry.Action{ .contracts = &registered }).execute(a, decoded.value());
+    var candidate = try steps.buildRegistry(&registered, a, decoded.value());
     defer candidate.deinit();
     try std.testing.expect(candidate.entries[0].json);
     try std.testing.expect(!candidate.entries[1].json);
@@ -341,9 +331,9 @@ test "Bedrock catalogue entries take every compiled control from the family they
             var models: [model_ids.len]Entry = undefined;
             for (&models, model_ids) |*model, id| model.* = .{ .model = id, .json = json, .config = .{ .region = @tagName(region), .family = @tagName(family), .maxOutputTokens = 16000, .requestTimeoutMs = 180000 } };
             const bytes = try std.json.Stringify.valueAlloc(a, .{ .providers = &[_]Provider{.{ .provider = "aws-bedrock", .models = &models }} }, .{});
-            var raw = try (decode_provider.Action{}).execute(a, bytes);
+            var raw = try steps.decodeConfig(a, bytes);
             defer raw.deinit();
-            var candidate = try (build_registry.Action{ .contracts = &registered }).execute(a, raw.value());
+            var candidate = try steps.buildRegistry(&registered, a, raw.value());
             defer candidate.deinit();
             const owner = try registry_contract.createValidated(a, candidate, registered);
             defer registry_contract.deinitOwner(owner);
@@ -380,12 +370,12 @@ test "Bedrock catalogue entries take every compiled control from the family they
         const changed = try std.mem.replaceOwned(u8, a, valid, replacement[0], replacement[1]);
         defer a.free(changed);
         try std.testing.expect(!std.mem.eql(u8, valid, changed));
-        var raw = try (decode_provider.Action{}).execute(a, changed);
+        var raw = try steps.decodeConfig(a, changed);
         defer raw.deinit();
-        try std.testing.expectError(error.LLMProviderRegistryInvalid, (build_registry.Action{ .contracts = &registered }).execute(a, raw.value()));
+        try std.testing.expectError(error.LLMProviderRegistryInvalid, steps.buildRegistry(&registered, a, raw.value()));
     }
     try std.testing.expect(!@hasField(registry_contract.CandidateEntry, "bedrock_request_profile"));
     const injected = try std.mem.replaceOwned(u8, a, valid, "\"json\":true", "\"json\":true,\"family\":\"converse\"");
     defer a.free(injected);
-    try std.testing.expectError(error.LLMProviderConfigParseError, (decode_provider.Action{}).execute(a, injected));
+    try std.testing.expectError(error.LLMProviderConfigParseError, steps.decodeConfig(a, injected));
 }
