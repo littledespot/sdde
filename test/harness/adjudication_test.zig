@@ -112,6 +112,49 @@ test "adjudication rejects foreign criteria and missing or forged native capture
     try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluate(a, try record(a, proposal), forged_capture));
 }
 
+test "a rejected record names the stage and the judgment reason that rejected it" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var report = try fixture.completed(a);
+    const proposal: judgment.Proposal = .{ .results = &fixture.passing };
+    const original = try bytes(a, report);
+    var rejection: ?adjudication.Rejection = null;
+
+    // A criterion the rubric does not name leaves a rubric criterion unanswered: a judgment rejection.
+    const foreign = try a.dupe(judgment.CriterionResult, proposal.results);
+    foreign[0].criterion_id = "foreign-criterion";
+    try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, try record(a, .{ .results = foreign }), original, &rejection));
+    try std.testing.expectEqual(adjudication.Stage.judgment, rejection.?.stage);
+    try std.testing.expectEqual(.missing_criterion, rejection.?.judgment.?.reason);
+
+    // Evidence that cites a line the document does not have names the criterion and the evidence entry.
+    const beyond = try a.dupe(judgment.CriterionResult, proposal.results);
+    const evidence = try a.dupe(judgment.Evidence, beyond[0].evidence);
+    evidence[0].last_line = 100_000;
+    beyond[0].evidence = evidence;
+    try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, try record(a, .{ .results = beyond }), original, &rejection));
+    try std.testing.expectEqual(adjudication.Stage.judgment, rejection.?.stage);
+    try std.testing.expectEqual(.invalid_line_range, rejection.?.judgment.?.reason);
+    try std.testing.expectEqual(@as(?usize, 0), rejection.?.judgment.?.evidence_index);
+
+    // The other stages name themselves: the capture, the reviewer, the record shape and the report.
+    report.evaluation_inputs = null;
+    try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, try record(a, proposal), try bytes(a, report), &rejection));
+    try std.testing.expectEqual(adjudication.Stage.capture, rejection.?.stage);
+    const valid = try record(a, proposal);
+    try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, try std.mem.replaceOwned(u8, a, valid, "unit-fixture-reviewer", ""), original, &rejection));
+    try std.testing.expectEqual(adjudication.Stage.reviewer, rejection.?.stage);
+    try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, try std.mem.replaceOwned(u8, a, valid, "\"reviewer\":", "\"approved\":true,\"reviewer\":"), original, &rejection));
+    try std.testing.expectEqual(adjudication.Stage.record, rejection.?.stage);
+    try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, valid, try std.mem.replaceOwned(u8, a, original, "spec-e2e-report/v17", "spec-e2e-report/v16"), &rejection));
+    try std.testing.expectEqual(adjudication.Stage.report, rejection.?.stage);
+
+    // An accepted record leaves no rejection.
+    _ = try adjudication.evaluateReporting(a, valid, original, &rejection);
+    try std.testing.expect(rejection == null);
+}
+
 test "adjudication record and original E2E report are closed explicitly versioned contracts" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

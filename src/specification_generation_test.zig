@@ -9684,7 +9684,7 @@ test "ADR 0038 Decision 7 an edge case's link is native, one closed choice among
     try std.testing.expectEqualStrings("The loan is renewed.", criteria[0].object.get("then").?.string);
     try std.testing.expectEqualStrings("The loan keeps its due date.", criteria[1].object.get("then").?.string);
     try std.testing.expect(std.mem.indexOf(u8, offered.body(), "The renewal is refused.") == null);
-    try std.testing.expectEqualStrings(request.definition, offered.resultDefinition().?.bytes);
+    try std.testing.expectEqualStrings(request.definition.id().bytes, offered.resultDefinition().?.bytes);
     try std.testing.expectEqualStrings("specification-links-1", offered.unit().specification_unit.unit_slot_id.bytes);
     try std.testing.expectEqual(@as(usize, 1), offered.integerChoices().len);
     try std.testing.expectEqualSlices(i64, &.{ 1, 2 }, offered.integerChoices()[0].allowed);
@@ -9692,7 +9692,7 @@ test "ADR 0038 Decision 7 an edge case's link is native, one closed choice among
     // The request's response schema admits only an offered id and nothing else.
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const canonical = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/links.schema.json", a, .unlimited));
-    const restricted = try @import("domain/model_result_schema.zig").restrict(a, canonical.select(.{ .bytes = request.definition }).?, offered.excludedVariants(), offered.integerChoices());
+    const restricted = try @import("domain/model_result_schema.zig").restrict(a, canonical.select(request.definition.id()).?, offered.excludedVariants(), offered.integerChoices());
     defer restricted.release();
     const payload = @import("model_payload_schema_test.zig");
     try payload.checkCompiled(restricted.selected(), .{ .bytes = "{\"criterion\":1}" });

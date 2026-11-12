@@ -4,6 +4,7 @@ const std = @import("std");
 const data = @import("../domain/pipeline_data.zig");
 const workflow = @import("../domain/workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
+const definitions = @import("../domain/specification_result_definitions.zig");
 pub const Fault = struct {
     /// `loss_review` selects only source-loss preservation comparisons.
     /// `records` selects only record-authoring generation requests.
@@ -213,7 +214,12 @@ pub const Driver = struct {
                 std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = path, .data = measured }) catch unreachable;
             };
             const phase = if (current_request.packet()) |packet| if (packet.resultDefinition()) |definition|
-                (if (std.mem.eql(u8, definition.bytes, "dispositions_assignment")) "dispositions" else if (std.mem.eql(u8, definition.bytes, "signals_assignment")) "signals" else if (std.mem.eql(u8, definition.bytes, "conflicts_assignment")) "conflicts" else "")
+                (if (definitions.Reconciliation.parse(definition)) |stage_definition| switch (stage_definition) {
+                    .dispositions_assignment => "dispositions",
+                    .signals_assignment => "signals",
+                    .conflicts_assignment => "conflicts",
+                    else => "",
+                } else "")
             else
                 "" else "";
             if (self.global_sequence) |mode| self.fake.invocation_plan.complete.content = @import("global_protocol_sequence.zig").corrupt(arena.allocator(), self.fake.invocation_plan.complete.content, phase, attempt, mode) catch unreachable;
@@ -263,7 +269,7 @@ pub const Driver = struct {
             if (current_request.id().purpose == .semantic_review) {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
-                const loss = std.mem.eql(u8, packet.resultDefinition().?.bytes, "preservation_comparisons");
+                const loss = definitions.Support.parse(packet.resultDefinition().?) == .preservation_comparisons;
                 assertReviewPrompt(arena.allocator(), current_request.prepared().?, if (loss) "design/workflows/spec/support-loss.prompt.md" else "design/workflows/spec/support.prompt.md") catch unreachable;
                 // Spec reviews sources only before generation; no review request
                 // follows generated content.
@@ -286,7 +292,7 @@ pub const Driver = struct {
                     }
                     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
                     const canonical = parser.compiler().compile(arena.allocator(), std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", arena.allocator(), .unlimited) catch unreachable) catch unreachable;
-                    const expected = @import("../domain/model_result_schema.zig").restrict(arena.allocator(), canonical.select(.{ .bytes = "preservation_comparisons" }).?, packet.excludedVariants(), packet.integerChoices()) catch unreachable;
+                    const expected = @import("../domain/model_result_schema.zig").restrict(arena.allocator(), canonical.select(definitions.Support.preservation_comparisons.id()).?, packet.excludedVariants(), packet.integerChoices()) catch unreachable;
                     defer expected.release();
                     std.testing.expectEqualStrings(expected.selected().modelBytes(), current_request.prepared().?.response_schema.modelBytes()) catch unreachable;
                     // Response admission binds exactly one assessment per comparison.
@@ -338,8 +344,7 @@ pub const Driver = struct {
             if (current_request.id().immutable_unit_owner_id == .reference_chunk and current_request.id().purpose == .atomic_repair) {
                 if (self.malformed_classification_repair_once and self.classification_repair_calls == 0) self.fake.invocation_plan.complete.content = "{}";
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
-                const definition = packet.resultDefinition().?.bytes;
-                if (std.mem.eql(u8, definition, "classification_replacement")) self.classification_repair_calls += 1;
+                if (definitions.Extraction.parse(packet.resultDefinition().?) == .classification_replacement) self.classification_repair_calls += 1;
             }
             if (self.fault) |fault| {
                 const request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
@@ -350,9 +355,9 @@ pub const Driver = struct {
                     .semantic_review => .support,
                     else => unreachable,
                 };
-                const definition = if (stage == .support) (@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?.bytes else "";
-                const records_request = stage == .generation and fault.stage == .records and std.mem.eql(u8, (@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?.bytes, "records");
-                const matches_stage = stage == fault.stage or records_request or (fault.stage == .loss_review and std.mem.eql(u8, definition, "preservation_comparisons"));
+                const support_definition: ?definitions.Support = if (stage == .support) definitions.Support.parse((@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?) else null;
+                const records_request = stage == .generation and fault.stage == .records and definitions.Generation.parse((@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?) == .records;
+                const matches_stage = stage == fault.stage or records_request or (fault.stage == .loss_review and support_definition == .preservation_comparisons);
                 if (matches_stage and fault.shape == .forbidden_provenance) {
                     const references = view.slots[@intFromEnum(@import("../application/reference_reconciliation_workflow.zig").accounted_schema.key)].?;
                     if (self.brief_references) |retained| std.testing.expect(retained == references) catch unreachable else self.brief_references = references;
@@ -418,7 +423,7 @@ pub const Driver = struct {
                 if (matches_stage and (fault.shape == .shared_statement or fault.shape == .bare_statement or fault.shape == .duplicate_record or fault.shape == .uncovered_scenario)) std.testing.expectEqual(@as(u32, 1), attempt) catch unreachable;
                 if (stage == .repair and fault.shape == .uncovered_scenario or stage == .repair and fault.shape == .runaway_uncovered) {
                     const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
-                    if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "repair_record_acceptance_criterion")) self.scenario_inserts += 1;
+                    if (definitions.Generation.parse(packet.resultDefinition().?) == .repair_record_acceptance_criterion) self.scenario_inserts += 1;
                 }
                 if (matches_stage and (fault.shape == .runaway or fault.shape == .runaway_uncovered or fault.shape == .runaway_partial_assignment) and attempt > 1) {
                     // ADR 0039: the re-send of a first runaway repeats its request at
@@ -477,7 +482,7 @@ pub const Driver = struct {
                     self.fault_calls += 1;
                 }
             }
-            const link_request = if (current_request.packet()) |packet| if (packet.resultDefinition()) |definition| std.mem.eql(u8, definition.bytes, @import("../domain/scenario_link_request.zig").definition) else false else false;
+            const link_request = if (current_request.packet()) |packet| if (packet.resultDefinition()) |definition| definitions.Links.parse(definition) == .scenario_link else false else false;
             if (link_request) {
                 // After generation completed, a closed choice with its own prompt and no
                 // generation context, offering the criteria of one records batch.
@@ -796,11 +801,16 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
         }
     }
     if (packet.resultDefinition()) |definition| {
-        if (std.mem.eql(u8, definition.bytes, "preservation_finding") or std.mem.eql(u8, definition.bytes, "finding") or std.mem.eql(u8, definition.bytes, "applicability_finding")) {
+        const review = definitions.Support.parse(definition);
+        if (review == .preservation_finding or review == .finding or review == .applicability_finding) {
             const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});
-            try assertReviewShape(schema.value, std.mem.eql(u8, definition.bytes, "applicability_finding"), std.mem.eql(u8, definition.bytes, "preservation_finding"), true);
+            try assertReviewShape(schema.value, review == .applicability_finding, review == .preservation_finding, true);
         }
-        const payload: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "business_text")) "segments" else if (std.mem.eql(u8, definition.bytes, "reference_text")) "nodes" else null;
+        const payload: ?[]const u8 = switch (definitions.Reconciliation.parse(definition) orelse .summary) {
+            .business_text => "segments",
+            .reference_text => "nodes",
+            else => null,
+        };
         if (payload) |field| {
             const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});
             const properties = schema.value.object.get("properties").?.object;

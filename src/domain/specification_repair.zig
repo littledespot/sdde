@@ -323,18 +323,19 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         .presentation = .{ .task = task },
     });
     defer packets.release(base);
-    const definition = switch (kind) {
+    const definitions = @import("specification_result_definitions.zig").Generation;
+    const definition: definitions = switch (kind) {
         .provenance => return error.InvalidSpecificationRepair,
-        .value => "value",
-        .attributed => "attributed_value",
+        .value => .value,
+        .attributed => .attributed_value,
         .record => switch (authorization.rule.group.?) {
-            .membership => "repair_record_entity",
-            .scenario => "repair_record_acceptance_criterion",
+            .membership => .repair_record_entity,
+            .scenario => .repair_record_acceptance_criterion,
         },
     };
     if (authorization.operation == .insert) {
         const group = authorization.rule.group orelse return error.InvalidSpecificationRepair;
-        if (group == .membership) return atomic.packet(allocator, authorization, base, .{ .bytes = definition }, authorization.dependencies.candidate.origins.initial, options);
+        if (group == .membership) return atomic.packet(allocator, authorization, base, definition.id(), authorization.dependencies.candidate.origins.initial, options);
         // The engine-bound claim is the scenario's whole association; its exact
         // values are the only ones offered, and the provenance context names it.
         const fixed = group.fixed().fixed_provenance;
@@ -342,7 +343,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         defer packets.release(narrowed);
         const contextual = try packets.withContext(g.spec.Selection, allocator, narrowed, "provenance", fixed);
         defer packets.release(contextual);
-        return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.initial, options);
+        return atomic.packet(allocator, authorization, contextual, definition.id(), authorization.dependencies.candidate.origins.initial, options);
     }
     // current_value already carries the whole selected record. Containing-field
     // context is needed only when a smaller value selection is writable.
@@ -353,7 +354,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         else
             try packets.withExcludedVariants(allocator, base, base.excludedVariants());
         defer packets.release(narrowed);
-        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
+        return atomic.packet(allocator, authorization, narrowed, definition.id(), authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
     }
     if (kind == .value) {
         const value = try candidates.attributedValue(.model, authorization.dependencies.candidate.response, authorization.target.value.subject, authorization.target.value.field);
@@ -367,11 +368,11 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         const bound = authorization.rule.value_bound orelse return error.InvalidSpecificationRepair;
         const narrowed = try session.withSelectionChoices(allocator, contextual, context, .{ .claim_ids = bound.effective, .clarification_response_ids = value.provenance.clarification_response_ids });
         defer packets.release(narrowed);
-        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
+        return atomic.packet(allocator, authorization, narrowed, definition.id(), authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
     }
     const contextual = try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try modelReadContext(guidance_arena.allocator(), context, try candidates.readContext(authorization.dependencies.candidate.response, authorization.target)));
     defer packets.release(contextual);
-    return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
+    return atomic.packet(allocator, authorization, contextual, definition.id(), authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
 }
 
 fn modelReadContext(a: std.mem.Allocator, context: p.Context, value: candidates.ReadContext) Error!candidates.ReadContext {

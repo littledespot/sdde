@@ -105,7 +105,7 @@ Each generation request contains only what the current unit needs:
   and local validation. Two admission constraints are exceptions, because
   provider schema syntax cannot express them: `exact_members` uniqueness, and with a
   native count its completeness (`missing_member`; below, ADR 0046), and
-  ADR 0038's records exclusivity (`shared_member`; scenario coverage is the session's, Decision 3). Local admission, request descriptions and replay
+  ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -844,7 +844,7 @@ and source-preservation/reference exact claim sets retain their existing rules.
 Reconciliation supplies validated source-obligation groups. The engine binds each record authoring task to one active group before
 dispatch and resolves its claims through the existing ledger. A task may author
 several records, each naming the claims it supports from that group; admission applies
-ADR 0038's one-statement-record rule and the session its scenario rule, inserting an engine-bound criterion for a gap
+ADR 0038's one-statement-record rule, and a second request per group writes one engine-bound criterion for each claim a surviving behaviour statement names
 ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2, 3 and 5); overlapping or multi-claim groups preserve
 many-to-many links.
 Unbound or stale units block as engine defects. Semantic verdicts and ADR 0020's

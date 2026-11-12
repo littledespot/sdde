@@ -939,7 +939,6 @@ undone; it does not make any candidate workflow output successful.
 | `derive_requirement` step | Return `required` when the selected compiled graph contains typed model-binding requirements or the exact compiler-owned `model-provider` capability; otherwise return `not_required`. |
 | `locate_config` step (F0008) | Open only the exact F0004-authorized no-follow regular file. |
 | `read_config` step (F0008) | Capture that already-opened file completely under its fixed bound. |
-| `LLMProviderConfigService` (F0008) | Own the complete capture and expose immutable untrusted bytes without I/O or parsing. |
 | `decode_config` step | Decode strict JSON and the exact common container into bounded untrusted raw identities/config objects; grant no provider authority. |
 | `build_registry` step | Resolve discriminators, decode each closed provider config variant, and join entries to model contracts. |
 | `validate_registry` step | Validate the whole candidate and total resource accounting. |

@@ -706,3 +706,44 @@ is "partly implemented" and the design pointers say so; feature logging stays un
   structure, not measured by a counted change.
 - **Open:** feature logging (ADR 0032:152-172); the remaining `anyopaque` lines are the
   feature-logging, workflow-engine, workflow-pipeline and Specify-invocation bindings.
+
+## E8. Spec request builders select result definitions through closed enums
+
+**Implemented 12 November 2026** (user: "implement E8"); not yet kept. No request, model-facing
+text or behaviour changes, so no published-output defect class is named and no semantic benefit is
+claimed; the request projection across the integration matrix is byte-identical to `q14b3-after`.
+- **Owner:** `src/domain/specification_result_definitions.zig`: one closed enum per Spec schema
+  resource (`Extraction`, `Reconciliation`, `Generation`, `Links`, `Support`), each with `id()`
+  (the generic `DefinitionId`) and `parse()` (a request's selected definition back to its member).
+  ADR 0013's selection clause records the rule.
+- **Changed:** the 19 raw-string sites the code-heuristics report listed (the extraction and text
+  repairs, the reconciliation assignments and repairs, the specification session, the support
+  review and its repair, the record repair and the scenario link), the two computed names of C34
+  (`@tagName(stage) ++ "_assignment"`, `"repair_{s}"`, now explicit switches that reject every
+  kind without a definition) and a site the report had missed (`specification_support.zig:256`,
+  found by the new architecture rule). The scripted fixtures (`spec_generation_driver.zig`,
+  `spec_generation_responses.zig`, `source_loss_calibration.zig`) branch on `parse()` instead of
+  string equality, so a renamed definition fails to compile instead of turning a check off (C41).
+- **Rules:** an architecture test fails when production code under `src/domain`, `application`,
+  `actions` or `composition` spells a definition by a string literal in a `DefinitionId` or
+  `.definition` initializer, by a literal or computed positional argument to a packet constructor,
+  by an enum tag or format (`.{ .bytes = @tagName(…)`, `_assignment"`, `"repair_{s}"`) or by a
+  `definition` constant, with rejected fixtures for each shape; it reads text, so it guards those
+  shapes and the enums are what make a rename a compile error. It also requires the generic schema,
+  composition, packet, repair and handoff owners and the ports to import no Spec enum.
+  `specification_result_definitions_test.zig` compiles each shipped schema with the production
+  compiler and requires every enum member to be a selectable definition, no name shared by two
+  enums, the `parse()` round trip and a rejected cross-schema member.
+- **Review:** the contract-reviewer found no blocker. Its two major findings are fixed: a surviving
+  computed name (`@tagName(input.purpose)` for a reconciliation base packet; the global purpose
+  names no schema definition, so that packet now carries none) and a guard that caught one of four
+  old patterns. Its minor findings are fixed too: one exhaustive content-to-definition function,
+  a typed support-detail member instead of a string comparison, the doc wording, the cross-enum
+  disjointness test and the generic-owner import check.
+- **Measures:** raw-string schema-name branches in production 19 to 0 (tests 89 to 69; the rest are
+  schema-file tests that take definition names as data).
+- **Not done:** a generic compile-time rule (see SPEC01 E8). E1 does not add it (DE1 decision 3);
+  the shipped-schema test is the load-time check until it is decided.
+- **Found, left:** `source_loss_calibration.zig:351` compares a request's definition with
+  `assignment_findings`, which no schema declares, so its early return always runs and the code
+  after it never does.

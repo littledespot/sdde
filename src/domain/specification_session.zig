@@ -275,12 +275,12 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
     const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), a, payload);
-    var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
-        .brief => "brief",
+    var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, @as(@import("specification_result_definitions.zig").Generation, switch (selected) {
+        .brief => .brief,
         .primary_user_story => return error.InvalidSpecificationUnit,
-        .entities => "entities",
-        .records => "records",
-    } });
+        .entities => .entities,
+        .records => .records,
+    }).id());
     defer packets.release(result);
     const scoped = try packets.withExactScope(allocator, result, .{ .reference_state = all.state_id, .occurrences = try p.exactOccurrences(a, @import("reference_support.zig").records(context.references), options.exact_claims) });
     packets.release(result);

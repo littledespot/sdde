@@ -691,7 +691,8 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
     defer packets.release(packet);
     try checkProjectedPacket(a, packet.body());
     try std.testing.expectEqual(.reference_global, std.meta.activeTag(packet.unit()));
-    try std.testing.expectEqualStrings("global", packet.resultDefinition().?.bytes);
+    // The global base packet names no definition; a stage or a repair selects its own.
+    try std.testing.expect(packet.resultDefinition() == null);
     const projected = try @import("domain/model_evidence.zig").project(a, global.items);
     try std.testing.expectEqual(global.items.len, projected.claims.len);
     var body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});

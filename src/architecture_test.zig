@@ -186,6 +186,77 @@ test "result schema authority is opaque and compilation remains a kernel concern
     try expectAbsent(runner, "parseFromSlice");
 }
 
+/// Whether production source spells a result definition (E8): as a string literal in a
+/// `DefinitionId` or `.definition` initializer, as a literal or computed positional argument to a
+/// packet constructor, as a name built from an enum tag or a format, or as a `definition` constant. A
+/// Spec builder selects one through a member of `specification_result_definitions.zig`; generic code
+/// only carries or parses a `DefinitionId`. The rule reads text, so it is a guard on these shapes, not
+/// a proof that no other spelling exists; the enums are what make a rename a compile error.
+fn spellsDefinitionLiteral(source: []const u8) bool {
+    for ([_][]const u8{
+        "DefinitionId = .{ .bytes = \"",
+        ".definition = .{ .bytes = \"",
+        "DefinitionId{ .bytes = \"",
+        ".{ .bytes = @tagName(",
+        "_assignment\"",
+        "\"repair_{s}\"",
+        "pub const definition = \"",
+    }) |needle| {
+        if (std.mem.indexOf(u8, source, needle) != null) return true;
+    }
+    var lines = std.mem.splitScalar(u8, source, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.indexOf(u8, line, "packet") == null and std.mem.indexOf(u8, line, "create(") == null and std.mem.indexOf(u8, line, "withIntegerChoices") == null) continue;
+        for ([_][]const u8{ ", .{ .bytes = \"", ", .{ .bytes = if (", ", .{ .bytes = switch (" }) |needle| {
+            if (std.mem.indexOf(u8, line, needle) != null) return true;
+        }
+    }
+    return false;
+}
+
+test "production code selects result definitions only through the closed Spec enums" {
+    try std.testing.expect(spellsDefinitionLiteral("const d: DefinitionId = .{ .bytes = \"finding\" };"));
+    try std.testing.expect(spellsDefinitionLiteral("x(.{ .definition = .{ .bytes = \"claim\" }, .allowed = ids })"));
+    try std.testing.expect(spellsDefinitionLiteral("packets.create(a, body, unit, .initial_generation, .{ .bytes = @tagName(input.purpose) });"));
+    try std.testing.expect(spellsDefinitionLiteral("return @tagName(v) ++ \"_assignment\";"));
+    try std.testing.expect(spellsDefinitionLiteral("const n = try std.fmt.allocPrint(a, \"repair_{s}\", .{@tagName(kind)});"));
+    try std.testing.expect(spellsDefinitionLiteral("pub const definition = \"scenario_link\";"));
+    try std.testing.expect(spellsDefinitionLiteral("return atomic.packet(a, authorization, base, .{ .bytes = \"claim\" }, origin, options);"));
+    try std.testing.expect(spellsDefinitionLiteral("return atomic.packet(a, authorization, base, .{ .bytes = if (x) \"a\" else \"b\" }, origin, options);"));
+    try std.testing.expect(!spellsDefinitionLiteral("const d: DefinitionId = .{ .bytes = try arena.dupe(u8, id.bytes) };"));
+    try std.testing.expect(!spellsDefinitionLiteral("x(.{ .definition = definitions.Support.finding.id() })"));
+    try std.testing.expect(!spellsDefinitionLiteral("const s = .{ .unit_slot_id = .{ .bytes = \"required-information\" } };"));
+
+    // The generic schema, composition, packet, repair and handoff owners and the ports never import
+    // the Spec-owned enums: a YAML-authored definition stays a parsed name (ADR 0003, 0016).
+    for ([_][]const u8{
+        @embedFile("domain/model_result_schema.zig"),
+        @embedFile("domain/json_composition.zig"),
+        @embedFile("domain/model_input_packet.zig"),
+        @embedFile("domain/atomic_repair.zig"),
+        @embedFile("domain/model_request_handoff.zig"),
+        @embedFile("ports/workflow_operation_registry.zig"),
+        @embedFile("ports/model_result_schema_compiler.zig"),
+    }) |generic| try expectAbsent(generic, "specification_result_definitions");
+
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    for ([_][]const u8{ "src/domain", "src/application", "src/actions", "src/composition" }) |root| {
+        var directory = try std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
+        defer directory.close(io);
+        var walker = try directory.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next(io)) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+            // The owner of the closed enums is the one place a definition is built from a tag.
+            if (std.mem.eql(u8, entry.basename, "specification_result_definitions.zig")) continue;
+            const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+            defer allocator.free(source);
+            try std.testing.expect(!spellsDefinitionLiteral(source));
+        }
+    }
+}
+
 test "every action imports only standard domain and port modules" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;

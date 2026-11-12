@@ -2,6 +2,7 @@
 const std = @import("std");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("../application/pipeline_values.zig");
+const definitions = @import("../domain/specification_result_definitions.zig");
 const r = @import("../domain/reference_reconciliation.zig");
 const g = @import("../domain/specification_generation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");
@@ -369,7 +370,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             // An edge case's outcome link: the model names the last criterion it is offered for the
             // first pending edge case, the first for the next, and so on, so a run proves the engine
             // used each answer for its own edge case, not a default candidate.
-            if (request.packet()) |packet| if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, @import("../domain/scenario_link_request.zig").definition)) {
+            if (request.packet()) |packet| if (packet.resultDefinition()) |definition| if (definitions.Links.parse(definition) == .scenario_link) {
                 const offered = packet.integerChoices()[0].allowed;
                 const earlier = (try @import("../application/scenario_link_workflow.zig").chosen(&view)).len;
                 return std.fmt.allocPrint(allocator, "{{\"criterion\":{d}}}", .{if (earlier % 2 == 0) offered[offered.len - 1] else offered[0]});
@@ -512,7 +513,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const ledger = try a.build(allocator, inputs);
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
             if (options.evidence_fault == .empty_correction and options.attempt > 1) return "{}";
-            if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, "preservation_comparisons")) {
+            if (packet.resultDefinition()) |definition| if (definitions.Support.parse(definition) == .preservation_comparisons) {
                 const prior = workflow.prior(progress);
                 const candidate = switch (prior.?) {
                     .pending => |value| value,
@@ -868,7 +869,7 @@ fn selection(value: g.spec.Provenance) g.spec.Selection {
 fn dispositionClaims(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, input: r.Input) ![]const r.ClaimId {
     const packet = request.packet() orelse return error.InvalidReconciliationFixture;
     const definition = packet.resultDefinition() orelse return error.InvalidReconciliationFixture;
-    if (!std.mem.eql(u8, definition.bytes, "dispositions_assignment")) return @import("../domain/reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
+    if (definitions.Reconciliation.parse(definition) != .dispositions_assignment) return @import("../domain/reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
     const body = try std.json.parseFromSlice(std.json.Value, allocator, packet.body(), .{});
     const supplied = body.value.object.get("assignment").?.object.get("claim_ids").?.array.items;
     const result = try allocator.alloc(r.ClaimId, supplied.len);
@@ -883,7 +884,12 @@ fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain
     const part = request.part() orelse {
         const bound = request.packet() orelse return body;
         const definition = bound.resultDefinition() orelse return body;
-        const field: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "dispositions_assignment")) "claim_dispositions" else if (std.mem.eql(u8, definition.bytes, "signals_assignment")) "signals" else if (std.mem.eql(u8, definition.bytes, "conflicts_assignment")) "conflicts" else null;
+        const field: ?[]const u8 = if (definitions.Reconciliation.parse(definition)) |selected| switch (selected) {
+            .dispositions_assignment => "claim_dispositions",
+            .signals_assignment => "signals",
+            .conflicts_assignment => "conflicts",
+            else => null,
+        } else null;
         if (field) |name| {
             const parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
             defer parsed.deinit();

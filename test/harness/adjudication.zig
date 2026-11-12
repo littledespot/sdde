@@ -23,16 +23,35 @@ pub const Adjudication = struct {
     acceptance: gate.Result,
 };
 
+/// The stage that rejected a record or its original report, in the order they run.
+pub const Stage = enum { report, record, reviewer, capture, judgment };
+/// Why `evaluateReporting` returned `InvalidAdjudication`: the stage and, for the judgment stage, the
+/// rubric-judgment diagnostic (criterion, evidence index and reason) when the judgment owner gave one.
+pub const Rejection = struct { stage: Stage, judgment: ?judgment.Diagnostic = null };
+
 /// All returned strings and judgments belong to the caller's arena.
 pub fn evaluate(a: std.mem.Allocator, record_bytes: []const u8, original_report_bytes: []const u8) Error!Adjudication {
-    const original = try parseOriginal(a, original_report_bytes);
-    const record = c.decode(Record, a, record_bytes) catch |err| return invalid(err);
-    if (!identity.validReviewer(record.reviewer) or !identity.validUtcTimestamp(record.reviewed_at_utc)) return error.InvalidAdjudication;
+    var rejection: ?Rejection = null;
+    return evaluateReporting(a, record_bytes, original_report_bytes, &rejection);
+}
+
+/// `evaluate`, and on `InvalidAdjudication` it also names the stage that rejected in `rejection`, so a
+/// command-line caller can say why instead of only that the record is invalid.
+pub fn evaluateReporting(a: std.mem.Allocator, record_bytes: []const u8, original_report_bytes: []const u8, rejection: *?Rejection) Error!Adjudication {
+    rejection.* = null;
+    const original = parseOriginal(a, original_report_bytes) catch |err| return stageFailure(rejection, .report, err);
+    const record = c.decode(Record, a, record_bytes) catch |err| return stageFailure(rejection, .record, err);
+    if (!identity.validReviewer(record.reviewer) or !identity.validUtcTimestamp(record.reviewed_at_utc)) return stageFailure(rejection, .reviewer, error.InvalidAdjudication);
     // The capture is created at the production publication handoff, before any
     // adjudication. A capture supplied elsewhere cannot substitute it.
-    const input = original.evaluation_inputs orelse return error.InvalidAdjudication;
-    try validateCapture(a, input);
-    const scored = judgment.validate(a, null, input, try std.json.Stringify.valueAlloc(a, record.proposal, .{})) catch |err| return invalid(err);
+    const input = original.evaluation_inputs orelse return stageFailure(rejection, .capture, error.InvalidAdjudication);
+    validateCapture(a, input) catch |err| return stageFailure(rejection, .capture, err);
+    var diagnostic: ?judgment.Diagnostic = null;
+    const scored = judgment.validate(a, &diagnostic, input, try std.json.Stringify.valueAlloc(a, record.proposal, .{})) catch |err| {
+        if (err == error.OutOfMemory) return error.OutOfMemory;
+        rejection.* = .{ .stage = .judgment, .judgment = diagnostic };
+        return error.InvalidAdjudication;
+    };
     return .{
         .reviewer = record.reviewer,
         .reviewed_at_utc = record.reviewed_at_utc,
@@ -61,4 +80,11 @@ fn validateCapture(a: std.mem.Allocator, input: c.Capture) Error!void {
 
 fn invalid(err: anyerror) Error {
     return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAdjudication;
+}
+
+/// An allocation failure stays one; any other failure of `stage` is a rejection that names it.
+fn stageFailure(rejection: *?Rejection, stage: Stage, err: anyerror) Error {
+    if (err == error.OutOfMemory) return error.OutOfMemory;
+    rejection.* = .{ .stage = stage };
+    return error.InvalidAdjudication;
 }

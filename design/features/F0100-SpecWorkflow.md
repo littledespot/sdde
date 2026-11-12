@@ -23,7 +23,8 @@ primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0038](../decisions/0038-record-claims-and-scenario-coverage.md),
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
 [0043](../decisions/0043-model-facing-exact-text-names.md),
-[0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md). Not yet implemented:
+[0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md). Not yet implemented: the scenario slots of
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3,
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md),
 [ADR 0033](../decisions/0033-generic-repair-operations.md) and most of
 [ADR 0030](../decisions/0030-engine-owned-model-request.md);
@@ -1191,8 +1192,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
   - Generation that completes without a mandatory record family ends `invalid`
     (`check-specification-generation-progress`); no model evidence supplies it.
-  - Natively, ADR 0038's one-statement-record rule applies to each records response and its
-    scenario rule to each batch the native deletes leave ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+  - Natively, ADR 0038's one-statement-record rule applies to each records response, and a
+    second request per group writes one criterion for each claim a surviving behaviour
+    statement names on the batch the native deletes leave ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
     Decisions 2, 3 and 5). No model compares the generated candidate with its sources; the
     human who reviews `spec.md` judges scenario meaning (ADR 0023).
   - Missing behavior cannot be satisfied by citation presence or a title.
@@ -1261,11 +1263,13 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Engine code allocates monotonic per-family record IDs; no model identity, completion,
   approval or artifact-path field is accepted.
 
-- Three configured task types (brief, entities and one call per record group) reuse
-  the same generation subgraph and generic model path; narrative, applicability and
-  records use concise purpose-specific guidance. The registered action
-  `compose-specification-story` composes the story between the brief and entities,
-  with no model call (ADR 0047). After the records, the `link-scenarios` step links each
+- Four configured task types (brief, entities, one call per record group and one call per
+  record group with a scenario slot) reuse the same generation subgraph and generic model
+  path; narrative, applicability, records and scenarios use concise purpose-specific
+  guidance. The registered action `compose-specification-story` composes the story between
+  the brief and entities, with no model call (ADR 0047). After the records, a scenarios
+  step (not yet implemented) writes one acceptance criterion per claim a surviving behaviour statement names,
+  each bound to its claim by the engine (ADR 0038 Decision 3, §17.3). After it, the `link-scenarios` step links each
   edge case to an acceptance criterion of its own batch that shares a claim: natively when
   one does, by one closed model request offering those criteria when several do, and by a
   typed block when none does (ADR 0038 Decision 7, §17.3).
@@ -1372,9 +1376,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
 - A records response with a non-requirement statement naming both taken and untaken
   claims is rejected at admission as `shared_member`, whose protocol correction names the
-  governing kinds. A behaviour-statement claim no acceptance criterion or edge case names,
-  on the batch the native deletes leave, is a `scenario_coverage` unit defect repaired by
-  one acceptance criterion whose claim and group the engine fixes; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). Coverage counts only the claims
+  governing kinds. A scenario slot's criterion is written by the scenarios request with its
+  claim and group fixed by the engine, a defect in its text takes the field-level value
+  repair, and exhaustion fails; a behaviour-statement claim left without a criterion on the
+  merged batch is a `scenario_coverage` engine defect that takes no repair ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). Coverage counts only the claims
   each record names, so a claim no record names maps only through another target.
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or
@@ -1519,7 +1524,8 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
   shared required-authority gate, the native content schema and Markdown codec, and
   registered publication of either completed output or the ADR 0017 incomplete
   specification with its clarification forms and pending state.
-- Not implemented: authenticated answer application (ADR 0025, SPEC01 E7), additional
+- Not implemented: the scenario slots of ADR 0038 Decision 3 (SPEC01 Q14 b4),
+  authenticated answer application (ADR 0025, SPEC01 E7), additional
   reference formats, the reference-feedback API (§16.5), and §5.5's failed-run
   incomplete publication (ADR 0041, accepted, on hold since 30 October 2026).
 - Offline verification does not establish live E2E acceptance; the

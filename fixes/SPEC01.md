@@ -169,7 +169,8 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
    required is done (9 November 2026, skill `3c74781e…`, `evaluations/e2e/<run>/`); its records
    are unapplied (`adjudication-record.3c74781e-unapplied.json`, §2 rule 12).
 4. **Kept 12 November 2026:** a scenario gap takes an engine-bound criterion insert (ADR 0038
-   Decision 3; [Z_SPEC01](Z_SPEC01.md) Q14 b3). b4 is not started (decided 8 November 2026).
+   Decision 3; [Z_SPEC01](Z_SPEC01.md) Q14 b3). **b4 approved 12 November 2026, not
+   implemented** (§4 Q14): the second request per group replaces b3's insert.
 5. **Kept 11 November 2026:** the engine takes the title (ADR 0048; [Z_SPEC01](Z_SPEC01.md) Q22).
 6. **Kept 9 November 2026:** an entity is a name and its groups ([Z_SPEC01](Z_SPEC01.md) Next 6).
 7. **Kept 9 November 2026:** the renderer escapes only the bytes Markdown reads as markup
@@ -177,7 +178,7 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
 8. **Kept 9 November 2026:** an edge case's outcome is the Then of a linked criterion
    ([Z_SPEC01](Z_SPEC01.md) Next 8). Evidence for it: EC-001's free-text outcome dropped
    "calendar", "existing" or the new due date, failing `successful-renewal` in 4 of the 6
-   loan-renewal runs before 8 November and 2 of the 3 that day. ADR 0038:227-228's limit still applies: a success criterion
+   loan-renewal runs before 8 November and 2 of the 3 that day. ADR 0038's edge-case outcome limit (Consequences) still applies: a success criterion
    citing the refusal claims can be a refusal edge case's only candidate and print the success
    Then. No HEAD-set run was scored with that defect; changing the link rule amends ADR 0038
    Decision 7 (a **Decision**).
@@ -417,21 +418,34 @@ error.
 
 - **Already in place:** every claim, signal and line ID a model supplies is a closed integer
   choice (for example records' `claim_ids`, `specification_session.zig:405`). A non-existent
-  ID fails response admission as `enum_mismatch` (`model_payload_schema.zig:197`) and gets a
+  ID fails response admission as `enum_mismatch` (`model_payload_schema.zig:181-188`) and gets a
   protocol correction within the step's retry limit. No such correction has fired in any
   measured run.
 - **Gap, the guidance:** the correction says only "this value is not among the allowed
   values" (`model_schema_diagnostic.zig:34`), and its expected shape for an ID choice is
   `{"type":"integer"}` (`model_schema_projection.zig:75-79`). It names neither the rejected
   ID nor the IDs that exist; the rejected response travels with the correction
-  (`model_protocol_retry.zig:96`).
-- **Change (approval needed to implement):** the `enum_mismatch` correction for an ID choice
-  names the rejected value and lists the allowed IDs, both taken from the compiled choice,
-  never hard-coded (as the `shared_member` correction names its compiled kinds). It amends 22-repair.md:573-574,
-  which keeps the allowed-ID list out of an integer-enum outline, and :568-569 ("no other
-  correction changes"). It changes model-visible correction text only; first requests stay
-  byte-identical (§2.10). Proven offline: a scripted non-existent claim gets the named
-  correction and an accepted retry. A set can't measure it, since it hasn't fired live.
+  (`model_protocol_retry.zig:94`). The correction request does carry the complete schema,
+  which lists every allowed ID (`model_schema_projection.zig:154-158`), so the change adds
+  locality, not new information.
+- **Change: approved 12 November 2026 (user: "yes, update documentation, do not make any
+  code changes"); contract amended in 22-repair.md (§22.6 correction clause); code not
+  yet implemented.** The `enum_mismatch` correction for an integer ID choice carries
+  `rejected` and `allowed` beside the existing locator, both from the compiled choice,
+  never hard-coded; a string enumeration keeps its correction. It changes model-visible
+  correction text only; first requests stay byte-identical (§2.10).
+  - **Shape:** structured guidance fields like `member` and `shared`, not text in the
+    explanation, which stays as it is (`model_payload_schema_test.zig:961` pins it). The
+    rejected value is captured at admission as `member` is (`rejected: ?i64` on the
+    diagnostic, copied and compared with it).
+  - **Before editing:** inspect how the request debugger records and replays correction
+    guidance (`request_debugger_test.zig:1229` records its own allowed lists).
+  - **Tests, at the owning boundary:** the guidance test (`model_payload_schema_test.zig`
+    :940-968) gains the two fields for an integer enum and their absence for every other
+    reason and for string enums; two schemas with different allowed sets give different
+    lists; a scripted non-existent claim (`claim_ids:[999]`) gets the named correction and
+    an accepted retry. A set can't measure it, since it hasn't fired live: report
+    implementation and mechanical checks only, semantic benefit not demonstrated.
 
 ### Q14. Scenarios bound to their claims
 
@@ -439,7 +453,7 @@ error.
 since ADR 0047 (`2026-11-03T04-13-31Z-fa03…`, `2026-11-07T01-19-36Z-728d…`; none in the HEAD
 set). In both, one FR named every claim and the success-only AC-001 cited the refusal lines.
 Coverage (ADR 0038 Decision 2; `specification_session.zig:351-357`) covers FR, BR, UO and PB
-claims and checks links, not meaning (ADR 0038:219-221), so an AC naming every claim passes
+claims and checks links, not meaning (ADR 0038 Consequences, Limits), so an AC naming every claim passes
 it: `fa03…` passed on its first attempt with no `uncovered_member` firing, a route b3 doesn't
 close. No retained `uncovered_member` firing ended well: two runs exhausted the records retry
 limit (2, step `gen` in `generate-unit`), and three passed by adding the claim IDs to the
@@ -447,18 +461,31 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
 
 - **b3 (D14.1):** a claim-bound scenario insert. **Kept 12 November 2026** (user: "keep B3";
   [Z_SPEC01](Z_SPEC01.md) Q14 b3, ADR 0038 Decision 3). No insert has fired live.
-- **b4** (proposed 8 November 2026; not started, §3 Next item 4): claim-bound scenarios at
-  first generation too: the engine fixes each scenario's `claim_ids` before the model writes
-  it, closing `fa03…`'s first-attempt route that b3 leaves. Slots can come only from IDs, so a
-  slot per claim needs the statements first (a second records call per group) or D21.1's unit
-  (§4 Q21). Risk: each added scenario is another restatement that can lose part of its claim.
-  Amends ADR 0038 Decisions 1–3 beyond b3's.
+- **b4** (**approved 12 November 2026**; user: "approved decisions 1, 3, 4 and 5", then
+  "Approved five sub-option picks"; **not implemented**, §3 Next item 4): claim-bound
+  scenarios at first generation too: the engine fixes each scenario's claim before the model
+  writes it, closing `fa03…`'s first-attempt route that b3 leaves. After the records, a
+  second request per group writes one criterion per claim a surviving behaviour statement
+  names; D21.1 is not the slot source. ADR 0038 Decisions 2 and 3 record the design. At
+  implementation b3's insert goes, with its content-only definition and fixed-claim policy
+  (no remaining use: a text defect in a written criterion takes the field-level value
+  repair); the records prompt loses its scenario sentence; and the generation schema,
+  packet guidance, the Spec workflow YAML and a scenarios prompt change. Risk: each added
+  scenario is another restatement that can lose part of its claim, and a claim has one
+  criterion.
+  - **Measure** (§2 rule 6): target lost source requirement; guards lost source
+    requirement and the publication rate; watch items unsupported addition (loan-renewal's
+    AC-001 clause counts 3 a set), weakened obligation and `competing_records` blocks; run
+    maximum per rule 4. Reference: the b3 set (§2 rule 7). The first-attempt route has
+    occurred once since ADR 0047 and not in the b3 set, so expect "benefit not
+    demonstrated" and a keep on the mechanism, the offline tests and the guards.
 - **b2** (not chosen): the scenarios naming a claim must together contain every exact value
   its quoted text requires; it misses claim 4 and business-rule-only cases.
 
 **D14.1:** b3, not b2 (decided 1 November 2026); held until lost source requirement recurs
 (re-decided 3 November 2026), a condition since met; held again with b4 not started (8
-November 2026, §3 Next item 4); released, implemented and kept 12 November 2026.
+November 2026, §3 Next item 4); released, implemented and kept 12 November 2026. b4 was
+approved the same day (above).
 
 ### Q17. Principles as Spec context
 
@@ -496,24 +523,24 @@ principles "should be used for context when executing the spec workflow".
 passes coverage, because the brief fields, entity basis and composed story select whole
 groups and a claim maps through any field holding it (`specification_coverage.zig:52-61`,
 `:75`). In a one-group feature, as both development cases are, ADR 0038 Decision 2's scenario
-rule never reaches an unnamed claim (ADR 0038:239-241; pinned at
+rule never reaches an unnamed claim (ADR 0038 Consequences, Limits; pinned at
 `specification_generation_test.zig:9231-9234`). No failure since ADR 0047 is of this kind, so a
 set may show only "benefit not demonstrated".
 
 **Proposed 8 November 2026** (not decided): a narrative selection gives traceability only;
 every obligation-bearing claim must be named by a behaviour statement (FR, BR, UO or PB),
 whose claims then need a scenario. A coverage gap blocks with no repair today
-(`specification_coverage_repair.zig:26-30`), so it needs a correction at records admission
-(ADR 0038 Decision 3) or a claim-bound insert (b3, [Z_SPEC01](Z_SPEC01.md) Q14 b3), or silent passes become blocked
-runs. Owner: `Coverage` (`model_result_schema.zig:56`) and `specification_coverage.zig`;
-amends ADR 0038 Decision 2 and :234-241, 17-specify.md §17.5 and F0100.
+(`specification_coverage_repair.zig:26-30`), so it needs a correction at records admission,
+or silent passes become blocked runs. Owner: `Coverage` (`model_result_schema.zig:56`) and
+`specification_coverage.zig`; amends ADR 0038 Decision 2 and its Limits, 17-specify.md
+§17.5 and F0100.
 
 **D21.1 (Decision):** which claims bear obligations: (a) every `business` claim, which
 includes feature identity and purpose (`extraction.context.json:6`); (b) a new obligation
 category in extraction (`:5-13`), changing extraction requests; (c) a bounded model
 decomposition into source-span elements, the only option that separates a compound claim such
 as loan-renewal's four-part refusal item (`test/e2e/wf-002-loan-renewal/stories.md:9`, ADR
-0038:217-218), at the cost of a model step whose losses nothing native detects. Treating
+0038 Consequences, Limits), at the cost of a model step whose losses nothing native detects. Treating
 shared source evidence as no redundancy is not adopted: it would reverse ADR 0038 Decision 5
 (user, 2 November 2026).
 
@@ -564,6 +591,81 @@ step; port each runner-level lifecycle test in `src/model_request_workflow_test.
 with a mapping table and a reason for any dropped assertion (user decision, 23 October 2026,
 option b). If E1 removes a request-lifecycle `DataKey`, it lands under §2.12.
 
+**DE1 decided 12 November 2026** (user: "yes i accept", to my recommendations on the eight
+questions that the preflight raised; none was in an accepted text):
+1. **Slice text.** ADR 0030's Acceptance list (:400-471) is the full contract; the "slices" of
+   `194e29a:fixes/Z_FIX05.md` are planning history and need not be read.
+2. **Data-key contract of `request-model`.** Keep current only the records a step outside the
+   kernel reads today: the request ledger, `prepared_model_request`, `model_payload_schema_result`,
+   `terminal_provider_operation` and `accounted_model_attempt`; every other request key becomes
+   internal and is removed. On `ok` the five stay current; on `invalid`, `failed` and `cancelled`
+   only the accounting and evidence keys stay. The preflight confirms each reader against the
+   code, and a call site that continues after one of those outcomes changes this.
+3. **Parameters.** `input` carries over (exclusive with `composition-part`). E8's definition
+   declaration is **not** added to the step in E1; it stays open (SPEC01 E8), to be decided
+   separately.
+4. **Allowance.** A `request-model` step counts once toward the 1,024-step limit and once toward
+   the workflow's execution ceiling. Its internal stages are bounded by the step's own allowance of
+   at most 2 × (1 + `retry-limit`) provider calls (each attempt, correction or not, plus its one
+   runaway re-send, ADR 0039), and do not count against the workflow ceiling.
+5. **Superseded rules.** ADR 0039's route rule (`validateRunawayRoutes`) is replaced by branch
+   tests on the kernel orchestrator, and ADR 0005:80-82 and `06-pipeline-nodes.md:281-282`
+   ("exactly one retry") are amended in the same change.
+6. **Test port rule.** A test that asserts a lifecycle outcome, accounting, evidence or cleanup is
+   ported; one that only asserts YAML shape is deleted with a stated reason; a mapping table in
+   [Z_SPEC01](Z_SPEC01.md) lists every one of the 196 in `model_request_workflow_test.zig`.
+7. **Proof and landing.** The proof that gates landing is offline: the request-projection pair
+   taken on the commit before, the step-trace pair and named integration assertions. One live set
+   (one run per case) follows landing; it is not a landing precondition under ADR 0030 and needs
+   the user's go-ahead then.
+8. **§2.12.** The report and step-event versions advance in the E1 change, exactly the contracts
+   whose shape changes, with no compatibility reader. A retained set is adjudicated first. The
+   three loan-renewal runs of the 12 November set stay unadjudicated: the adjudicator rejects
+   their records because the records cite no source range for `organization` (all three) and no
+   specification range for `source-grounding` (run 3), an authoring omission, not a harness fault
+   (`adjudicate-spec` now names the stage and reason of a rejection). The skill forbids editing and
+   re-applying a rejected record, so the gate is open until the user authorizes corrected records
+   or a new set is adjudicated.
+
+**E1 preflight, 12 November 2026.** The "before" freezes are taken and equal each other:
+`evaluations/request-projection/e1-before` (byte-identical to `q14b3-after`) and
+`evaluations/step-trace/e1-before` (402 files). Nothing else of E1 is implemented. What it touches:
+- **Registry and YAML:** 26 lifecycle entries (`model_request_operations.zig:95-124`); 7 subgraphs and
+  17 request call sites plus 15 `release-request` sites in `spec.workflow.yaml`; the packaging
+  fixture and `smoke.zig`.
+- **Runner and compiler:** `executeStep` runs one operation per step; the kernel needs a runner
+  invocation per stage with a per-stage step record (the retained request, retry authority, accounting
+  and capture all key on it); four shape validators, `validAccounting`/`validRepair`,
+  `calculateExecutionLimit`, the JSON-composition state machine and `validateRunawayRoutes`; about 25
+  text-order pins on the runner in `architecture_test.zig`.
+- **Events and persisted contracts:** `action_completed` carries no `step_id` and retry exhaustion no
+  stage, so both change; `model-request-debug` v18, `model-call-evidence` v3, `request-source/v1`,
+  `e2e-step-event` v2, `spec-e2e-report` v17 and `specification-state` v25 advance, with the debugger
+  app and every reader of them.
+- **Tests:** of the 196 in `model_request_workflow_test.zig`, 63 are whole-request behaviour (port),
+  96 are single-stage (port onto a stage seam), 27 assert YAML shape (delete, with a reason) and 10
+  are other (re-drive); 91 read keys that become internal; the integration driver hooks `invoke-model`.
+- **Ordering of work, each step leaves the tree green:** (1) freezes (done); (2) the orchestrator, its
+  child-binding vtable and spy tests, as new files; (3) the registry entry, compile and runner
+  per-stage invocation, event and exhaustion stage fields, proven on a test workflow while the old
+  lifecycle stays registered; (4) switch the Spec workflow and the packaging fixture; (5) delete the
+  26 entries, the validators and pins, port the tests with the mapping table in
+  [Z_SPEC01](Z_SPEC01.md); (6) versions, harness, docs; (7) the projection and step-trace pairs, then
+  `verify`. Steps 3 to 5 hold both paths until step 5, so the change lands whole.
+
+**DE1b: decisions the preflight found** (user's call; recommended answers):
+1. **Mechanism.** ADR 0030:136-160 keeps a runtime orchestrator with runner-owned child bindings.
+   Compiling the fixed stage graph into internal steps would keep the runner, accounting and validators
+   nearly unchanged and cut the work about in half, but it deviates from that text and needs an ADR 0030
+   amendment. *Recommended: follow the ADR (runtime orchestrator); take the expansion only if you
+   amend the ADR.*
+2. **Internal keys.** DE1 decision 2 removes the non-kept request keys from `DataKey`. That needs a
+   typed stage handoff, which rewrites every stage binding. *Recommended: in E1 mark them
+   engine-internal (no YAML-visible contract, dropped when the step ends) and remove them from the
+   enum in a follow-up change; DE1 decision 2 is amended accordingly.*
+3. **Sessions.** The change lands whole, so it is several verified sessions. *Recommended: proceed
+   with steps 2 and 3 first and report at the end of step 3.*
+
 ### E2. Stage actions (A2, ADR 0031)
 
 **`prepare-toolchain` converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E2; DE2 confirmed,
@@ -595,8 +697,9 @@ longer decode): all Specify owners in one change on offline equivalence evidence
 operations and 13 owners of ADR 0033:87-103 still match (10 authorize, 6 build, 6 parse, 7
 merge). Seven operations read `.packet_guidance`; their variants keep those reads. Retained
 reports carry repair keys, so it lands under §2.12. **DE4:** confirm ADR 0033's derived choices
-2–8 (:273-285; choice 6 is moot since D13.1, :280-281). Q14 b3 extends the specification-unit
-repair route these operations replace; E4 isn't its prerequisite (§4 Q14).
+2–8 (:273-285; choice 6 is moot since D13.1, :280-281). Q14 b3 extended the specification-unit
+repair route these operations replace, and b4 will remove its insert; E4 isn't a prerequisite
+of either (§4 Q14).
 
 ### E5. Rejections say why (A4)
 
@@ -666,7 +769,17 @@ E1–E4. §10 C8 adds record-lifecycle gaps.
 
 ### E8. Typed schema-definition identities
 
-Domain code names result-schema definitions by raw strings (T5.2: 20 production sites on the
+**Typed identities implemented 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E8; the user's
+"implement E8"): the 19 production sites, the derived names of C34 and the scripted fixtures'
+branches now use closed per-schema enums, with an offline schema-load check. **Open:** a
+generic compiler rule that a registered operation contract declares the definitions it reads and
+the graph compile rejects a schema resource that lacks one (`WORKFLOW_GRAPH_COMPILE_INVALID`).
+No accepted text places a check at schema load today (ADR 0012:68, 0013:77, 0016:96 reject at
+request preparation). The declaration could sit on the request step, which would duplicate the
+enums in YAML, or on the 14 packet-building operations, which would each take the schema as a
+parameter and needs no E1. E1 does not add it (DE1 decision 3); decide it separately.
+
+Domain code (before E8) names result-schema definitions by raw strings (T5.2: 20 production sites on the
 `b38628c` tree, `zig-out/code-heuristics/report.json`, 2 November 2026; ADR 0047 removed the
 story's, and `e681cfd` added `scenario_link`, `scenario_link_request.zig:19`). They fail only
 at request preparation (`model_request_handoff.zig:343`; sites in `specification_support.zig`,

@@ -204,8 +204,8 @@ prohibition whose every claim a requirement or an earlier such record names is d
 natively unless it holds an exact copy no other record holds (a record so deleted is not
 judged on its text), and one naming such claims and others is a defect;
 requirements are never deleted or rejected by this rule; admission rejects that defect for the
-request's existing protocol correction. Every claim a behaviour statement names must also be named by an acceptance criterion or
-edge case of its batch after the native deletes; the session repairs a gap by inserting one acceptance criterion whose claim it fixes
+request's existing protocol correction. Every claim a surviving behaviour statement names is named by an acceptance criterion
+of its batch: a records response carries no acceptance criterion, and the scenarios step below writes exactly one per claim, each bound to its claim by the engine
 ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2, 3 and 5). The shared finite native
 iteration contract in §6 fixes the population at the brief, the engine-composed story
 and the entities assignment plus the native record-authoring group count and advances
@@ -217,8 +217,10 @@ An empty collection contributes no positive coverage.
 All-preserved-token groups have no record batch, but remain in general source
 catalogues and exact evidence. Zero authorable groups returns a typed binding
 rejection. Mixed groups retain every original member and occurrence identity.
-The model-facing `record_requirements` projects those same native assembly rules:
-AC and FR are required across the assembled non-entity record batches. Entity
+The model-facing `record_requirements` projects those same native assembly rules for
+the families a records request can return: FR is required across the assembled non-entity
+record batches, while AC, which the scenarios step writes, is required of the assembled
+specification when that step completes and is not offered to a records request. Entity
 records are owned by the single feature-wide entities unit, which returns the
 applicability decision, its basis and the complete entity collection together.
 A `required` decision requires at least one entity; `not_applicable` requires an
@@ -263,10 +265,11 @@ source associations, never inferred from headings or claim ordinals.
 
 For each feature-brief or specification unit other than the engine-composed story, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
-- **Consolidated generation:** the shipped workflow requests brief, feature entities and
-  source-group records as three sequential task types through one shared
-  generation subgraph: one call each for the brief and entities, and one per record group.
-  A fourth, closed request follows the records only when an edge case needs it (next bullet).
+- **Consolidated generation:** the shipped workflow requests brief, feature entities,
+  source-group records and source-group scenarios as four sequential task types through one
+  shared generation subgraph: one call each for the brief and entities, one per record
+  group, and one per record group that has a scenario slot (the scenarios bullet below).
+  A further, closed request follows only when an edge case needs it (the link bullet below).
   Brief, entity-applicability and record drafting receive their
   purpose-specific configured authoring prompts. Native repairs receive the
   configured repair prompt and the selected field/record purpose from the existing
@@ -340,9 +343,30 @@ For each feature-brief or specification unit other than the engine-composed stor
   as its subject, preserving identities across reruns instead of merging all record
   questions into a new generic subject. This changes no clarification admission rule.
 
+- **Scenario slots** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+  Decision 3; not yet implemented, the code still inserts per ADR 0038's first
+  amendment): once every group's records are admitted and the native deletes have run,
+  native code plans each group's slots: one per distinct claim that a surviving
+  functional requirement, business rule, user-visible outcome or prohibited behavior of its
+  batch names, in record and claim order. A compound claim is one slot, and a claim no
+  behavior statement names, a scope-only or edge-case-only claim for one, has none. The
+  scenarios step takes its own native iteration population, the groups with at least one
+  slot, and makes one request per group on the generation slot through the shared
+  generation subgraph, as an initial generation and before `link-scenarios`. The request
+  offers the slots numbered from one, each with its claim's source text and exact values,
+  and no statement, entity, story or other batch (SPEC01 D12.1). Its result schema admits
+  one item per slot, the slot's number and a content-only acceptance criterion, each number
+  exactly once (`exact_members`), with no claim, kind or group. The engine fixes each
+  criterion's kind, claim and group and appends the criteria to the group's batch in slot
+  order; full unit validation and the field-level value repair then apply (§22.3), which
+  never changes a criterion's claim. The session's scenario-coverage check requires at
+  least one criterion for each such claim, and a claim it finds without one is an engine
+  defect (`scenario_coverage`) that takes no repair. No criterion is inserted for an edge
+  case.
+
 - **Edge-case outcome links** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
   Decision 7): an edge case's response names its condition and claims, and no outcome. When
-  the records unit completes, the `link-scenarios` step finds each edge case's candidates
+  the scenarios step completes, the `link-scenarios` step finds each edge case's candidates
   natively: the acceptance criteria of its own batch that name one of its claims. One
   candidate is the link; two or more make one request per edge case that offers the
   criteria, numbered, with their given, when and then, and returns one offered id (a result
@@ -468,7 +492,7 @@ The engine validates:
 - derived-feature-brief records cite the reference claims from which they were generated; a later user-authored record requires its explicit acknowledgement provenance;
 - exact user-facing copy obligations;
 - exact preserved-token propagation in `reference-context.md`, with visual/style kinds additionally requiring visual checks;
-- presence of separate observable flows when claims explicitly distinguish success, invalid, empty, error, or terminal outcomes; natively, each claim a behaviour statement names is also named by an acceptance criterion or edge case ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 2);
+- presence of separate observable flows when claims explicitly distinguish success, invalid, empty, error, or terminal outcomes; natively, each claim a surviving behaviour statement names is named by an acceptance criterion, one per claim written and bound by the engine, and an edge case is not cover ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2 and 3); whether a criterion carries every flow of its claim is judged by the human who reviews `spec.md`;
 - a record maps only the claims it names, not its whole group; an unnamed claim maps only through another target, such as a narrative field that selects its group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md));
 - no template placeholders or model-authored checklist state, guaranteed structurally: typed rendering emits none and readback accepts only its closed grammar;
 - artifact boundary: `spec.md` has no `Reference Context` heading; its only reference metadata

@@ -135,19 +135,23 @@ pub const Source = struct {
         };
         const base = try review.packetFor(a, inputs, context, guidance, if (kind == .finding) .{ .finding = authorization.target.requirement } else .{ .correction = authorization.target.requirement });
         defer packets.release(base);
+        const support = @import("specification_result_definitions.zig").Support;
+        const detail_member: ?support = if (kind == .detail) (if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) support.invalid_detail else if (review.decisionOf(authorization.rule.finding.?) == .candidate_omission) support.omission_detail else if (@import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) support.gap_detail else support.detail) else null;
         const definition = switch (kind) {
-            .finding => base.resultDefinition().?.bytes,
-            .detail => if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_detail" else if (review.decisionOf(authorization.rule.finding.?) == .candidate_omission) "omission_detail" else if (@import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
-            .selection => if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_selection" else "selection",
+            .finding => base.resultDefinition().?,
+            .detail => detail_member.?.id(),
+            .selection => (if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) support.invalid_selection else support.selection).id(),
         };
-        const raw_input = try atomic.packetPresenting(a, authorization, guidance, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index], .{ .fields = .{ .replacement = .{} } });
+        const raw_input = try atomic.packetPresenting(a, authorization, guidance, base, definition, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index], .{ .fields = .{ .replacement = .{} } });
         defer packets.release(raw_input);
         // A narrowed result schema owns its prose paths. It cannot inherit
         // question paths from the complete finding when they are absent.
         const Field = @import("model_text_wire.zig").ProseField;
-        const prose_fields: []const Field = if (kind == .detail)
-            (if (std.mem.eql(u8, definition, "gap_detail")) &.{.{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }} else if (std.mem.eql(u8, definition, "invalid_detail")) &.{.{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } }} else &.{})
-        else if (kind == .finding) base.proseFields() else &.{};
+        const prose_fields: []const Field = if (detail_member) |member| switch (member) {
+            .gap_detail => &.{.{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }},
+            .invalid_detail => &.{.{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } }},
+            else => &.{},
+        } else if (kind == .finding) base.proseFields() else &.{};
         const prepared_input = try packets.withProseFields(a, raw_input, prose_fields);
         if (kind != .selection) return prepared_input;
         defer packets.release(prepared_input);
@@ -155,8 +159,8 @@ pub const Source = struct {
         const ids = try a.alloc(i64, rule.eligible_source_ids.len);
         defer a.free(ids);
         for (ids, rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
-        const choices: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids };
-        if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) return packets.withIntegerChoices(a, prepared_input, &.{ choices, .{ .target = .{ .path = &.{.{ .property = "authority_gap_source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids } });
+        const choices: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = definition, .allowed = ids };
+        if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) return packets.withIntegerChoices(a, prepared_input, &.{ choices, .{ .target = .{ .path = &.{.{ .property = "authority_gap_source_ids" }} }, .definition = definition, .allowed = ids } });
         return packets.withIntegerChoices(a, prepared_input, &.{choices});
     }
     pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {

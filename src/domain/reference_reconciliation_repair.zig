@@ -321,14 +321,15 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
     else
         try packets.withContext(@FieldType(r.Parsed, "proposal"), a, base, "candidate", parsed.proposal);
     defer packets.release(contextual);
-    const definition = if (authorization.target == .conflict_selection) "repair_conflict_selection" else if (scope == .content) switch (scope.content) {
-        .model => |model| switch (model) {
-            .business, .scope_guard => "business_text",
-            .design, .technical, .validation, .implementation_assumption, .open_question => "reference_text",
-        },
-        .preserved_token => return error.InvalidAtomicRepair,
-    } else try std.fmt.allocPrint(scratch, "repair_{s}", .{@tagName(kind)});
-    const prepared_input = try atomic.packet(a, authorization, contextual, .{ .bytes = definition }, parsed.source.at(targetOrigin(authorization.target).unit, targetOrigin(authorization.target).field), options);
+    const definitions = @import("specification_result_definitions.zig").Reconciliation;
+    const definition: definitions = if (authorization.target == .conflict_selection) .repair_conflict_selection else if (scope == .content) try contentDefinition(scope.content) else switch (kind) {
+        .selection => .repair_selection,
+        .disposition => .repair_disposition,
+        .summary => .repair_summary,
+        .conflict_detail => .repair_conflict_detail,
+        .content, .statement, .signal, .conflict, .conflict_group => return error.InvalidAtomicRepair,
+    };
+    const prepared_input = try atomic.packet(a, authorization, contextual, definition.id(), parsed.source.at(targetOrigin(authorization.target).unit, targetOrigin(authorization.target).field), options);
     if (kind == .disposition) {
         defer packets.release(prepared_input);
         return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, parsed.input.items), authorization.rule.disposition_choices, false);
@@ -348,7 +349,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
     };
     return packets.withIntegerChoices(a, prepared_input, &.{.{
         .target = .{ .path = &.{.{ .property = if (authorization.target == .conflict_selection) "group_id" else "claim_ids" }} },
-        .definition = .{ .bytes = definition },
+        .definition = definition.id(),
         .allowed = ids,
         .collection = if (authorization.target == .conflict_selection) .sequence else .unique_subset,
     }});
@@ -356,6 +357,18 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
 
 /// Content repairs use the same engine-selected leaf as parse/decodeSelected,
 /// rather than the larger native Replacement.content wrapper retained for CAS.
+/// The corrected-text definition of one content kind: business text for the business kinds, reference
+/// text for the others, and none for an engine-owned preserved token.
+fn contentDefinition(kind: d.ContentKind) error{InvalidAtomicRepair}!@import("specification_result_definitions.zig").Reconciliation {
+    return switch (kind) {
+        .model => |model| switch (model) {
+            .business, .scope_guard => .business_text,
+            .design, .technical, .validation, .implementation_assumption, .open_question => .reference_text,
+        },
+        .preserved_token => error.InvalidAtomicRepair,
+    };
+}
+
 fn contentFieldBindings(a: std.mem.Allocator, kind: d.ContentKind) Error![]const @import("model_text_field.zig").Binding {
     return switch (kind) {
         .model => |selected| @import("model_candidate_json.zig").selectedFieldBindings(@FieldType(r.ContentProposal, "model"), a, selected, .{ .reference_phase = .reconciliation }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAtomicRepair,
@@ -741,13 +754,9 @@ pub const Omission = struct {
         const kind = if (auth.target == .unit and auth.target.unit == .signal_content) (try v.selectedKind(parsed.input.progress.plan.layout.items, parsed.proposal.global.signals[auth.target.unit.signal_content].claim_ids)) orelse return error.InvalidAtomicRepair else null;
         const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, if (kind) |value| .{ .content = value } else if (auth.target == .conflict_group) .all else .{ .disposition = if (auth.rule.disposition_choices == null) .rules else .choices }, null);
         defer packets.release(base);
-        const prepared_input = try Atomic.packetPresenting(a, auth, guidance, base, .{ .bytes = if (kind) |value| switch (value) {
-            .preserved_token => return error.InvalidAtomicRepair,
-            .model => |model| switch (model) {
-                .business, .scope_guard => "business_text",
-                else => "reference_text",
-            },
-        } else if (auth.target == .conflict_group) "repair_conflict_group" else "repair_disposition" }, if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record), .{ .fields = if (kind) |value| .{ .selected = try contentFieldBindings(arena.allocator(), value) } else .{ .replacement = .{ .reference_phase = .reconciliation } } });
+        const definitions = @import("specification_result_definitions.zig").Reconciliation;
+        const definition: definitions = if (kind) |value| try contentDefinition(value) else if (auth.target == .conflict_group) .repair_conflict_group else .repair_disposition;
+        const prepared_input = try Atomic.packetPresenting(a, auth, guidance, base, definition.id(), if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record), .{ .fields = if (kind) |value| .{ .selected = try contentFieldBindings(arena.allocator(), value) } else .{ .replacement = .{ .reference_phase = .reconciliation } } });
         if (kind != null) return prepared_input;
         defer packets.release(prepared_input);
         return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, if (auth.target == .conflict_group) auth.target.conflict_group else try @import("reference_reconciliation_projection.zig").semanticClaimIds(arena.allocator(), parsed.input.items), auth.rule.disposition_choices, auth.target == .conflict_group);

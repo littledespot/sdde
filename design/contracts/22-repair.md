@@ -286,16 +286,16 @@ whole-record assignment and retry bound. Reuse the native repair owner, selected
 schema definitions, runner and accounting. Full unit validation, source/claim and
 exact-token coverage and publication validation remain required.
 
-**Claim-bound scenario insertion**
-([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3): in a
-records batch, a claim a behaviour statement names that no acceptance criterion or edge
-case names, decided on the batch the native deletes leave, authorizes insertion of one
-acceptance criterion at the end of the batch. The engine fixes its kind, its authored
-selection `S` (that one claim) and the batch's source group; the response is its content
-only, through the criterion's content-only repair definition. Bound, packet, merge, retry
-and validation follow conditional entity membership above. It may not insert an edge case,
-name another claim, change siblings or infer semantics; each further uncovered claim takes
-its own insertion.
+**Slot criteria**
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3; not yet
+implemented, the code still inserts per ADR 0038's first amendment): an acceptance
+criterion for a claim a behaviour statement names is written by the scenarios request as
+an initial generation, never inserted by repair. The engine fixes its kind, its authored
+selection `S` (its slot's one claim) and the batch's source group; the response is its
+content only. A defect in a written criterion's text takes the field-level value repair above,
+which never changes that association. No repair inserts or replaces a whole criterion or
+inserts an edge case, and a claim without its criterion after the merge is an engine
+defect that takes no repair.
 
 The repair algebra is closed:
 
@@ -381,8 +381,8 @@ correlation and readback checks; a membership enum alone cannot authorize a merg
 
 Selected source-review and generation repair responses reject `provenance`,
 including record insertion and coupled record repair. The engine reconstructs
-canonical `provenance.claim_ids` from the bound source group, the claim a scenario
-insertion fixes, or the selected diagnostic producer before old-value/revision and
+canonical `provenance.claim_ids` from the bound source group or the selected
+diagnostic producer before old-value/revision and
 full-candidate checks.
 Source-ID or detail corrections remain in their existing selected repair
 families; source-omission detail correction uses the coupled explanation and
@@ -575,13 +575,16 @@ defined response-level correction containing:
   `shared_member` correction, located at
   the partly taken record and offering its shape, names its exclusive and owning kinds
   (`exclusive`: `kind_property`, `kinds` and `owning`) and lists every taken value's
-  naming in such records (`shared`; SPEC01 D16.1 and D16.2, 2 November 2026); no other
-  correction changes. A wholly taken record is never corrected: the records validator deletes it natively
+  naming in such records (`shared`; SPEC01 D16.1 and D16.2, 2 November 2026). An
+  `enum_mismatch` correction for an integer ID choice names the rejected value
+  (`rejected`) and lists the choice's allowed IDs (`allowed`), both taken from the compiled
+  choice and never hard-coded (SPEC01 D13.6, 12 November 2026); a string enumeration keeps
+  its correction. No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
   (`repeated_statement`, ADR 0038 Decision 5), without judging its text, unless it holds
   the only copy of an exact value, which keeps it and its text under the usual rules. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
-  synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
-  the allowed-ID list from the complete selected schema into the outline.
+  synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline;
+  the allowed IDs travel in `allowed`, never in the outline.
 
 [§22.6.1](#2261-child-object-requirements) adds required names to immediate
 child-object descriptors only.
@@ -808,6 +811,6 @@ Across §22, repairs of typed specification content use the
 coverage rule is owned by
 [F0100 §5.7](../features/F0100-SpecWorkflow.md#57-generation-coverage-and-repair):
 its mechanical claim/token coverage defects have no independently supported repair
-target and block, while an
-[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) scenario gap is
-a records-unit defect repaired by the claim-bound scenario insertion above.
+target and block, and an
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) scenario gap takes no
+repair either: the claim-bound slots above leave it unreachable.

@@ -37,7 +37,8 @@ pub fn main(init: std.process.Init) !void {
     const options = parse(args.items) catch return fail(io, "Invalid arguments; use --help. No API call is possible.");
     const original = files.read(io, a, .cwd(), options.report) catch return fail(io, "Original report unavailable.");
     const review = files.read(io, a, .cwd(), options.review) catch return fail(io, "Adjudication record unavailable.");
-    const result = adjudication.evaluate(a, review, original) catch |err| return fail(io, try std.fmt.allocPrint(a, "Adjudication rejected: {s}.", .{@errorName(err)}));
+    var rejection: ?adjudication.Rejection = null;
+    const result = adjudication.evaluateReporting(a, review, original, &rejection) catch |err| return fail(io, try std.fmt.allocPrint(a, "Adjudication rejected: {s}{s}.", .{ @errorName(err), try rejectionDetail(a, rejection) }));
     const parent = directories.open(io, .cwd(), options.output) catch return fail(io, "Output must be an existing safe directory.");
     defer parent.close(io);
     var random: [16]u8 = undefined;
@@ -58,6 +59,20 @@ pub fn main(init: std.process.Init) !void {
         .unresolved => std.process.exit(2),
     }
 }
+/// " (stage ...)" naming the stage that rejected and, for a judgment, its reason, criterion, evidence
+/// entry and document, so a rejected record says what to look at. Empty when no stage was recorded.
+fn rejectionDetail(a: std.mem.Allocator, rejection: ?adjudication.Rejection) ![]const u8 {
+    const found = rejection orelse return "";
+    const diagnostic = found.judgment orelse return std.fmt.allocPrint(a, " (stage {s})", .{@tagName(found.stage)});
+    var out: std.Io.Writer.Allocating = .init(a);
+    try out.writer.print(" (stage {s}: {s}", .{ @tagName(found.stage), @tagName(diagnostic.reason) });
+    if (diagnostic.criterion_id) |criterion| try out.writer.print(", criterion {s}", .{criterion});
+    if (diagnostic.evidence_index) |index| try out.writer.print(", evidence {d}", .{index});
+    if (diagnostic.document_id) |document| try out.writer.print(", document {s}", .{document});
+    try out.writer.writeAll(")");
+    return out.toOwnedSlice();
+}
+
 fn markdown(a: std.mem.Allocator, result: adjudication.Adjudication) ![]const u8 {
     var out: std.Io.Writer.Allocating = .init(a);
     defer out.deinit();

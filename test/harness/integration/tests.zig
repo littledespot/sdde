@@ -1598,7 +1598,7 @@ const ProductionRun = struct {
             // Spec reviews sources only before generation.
             if (required_source and generating) self.semantic_after_generation += 1;
             records = request.id().immutable_unit_owner_id == .specification_unit and request.id().purpose == .initial_generation and
-                std.mem.eql(u8, request.packet().?.resultDefinition().?.bytes, "records");
+                @import("../../../src/domain/specification_result_definitions.zig").Generation.parse(request.packet().?.resultDefinition().?) == .records;
             // Every request carries the configured model's registered controls,
             // whichever provider the shipped case selects.
             std.testing.expectEqual(request.binding().registry_entry.capabilities.inferenceControls(@import("../../../src/test_fixtures/model_temperatures.zig").temperatures), request.prepared().?.controls) catch unreachable;
