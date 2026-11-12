@@ -528,7 +528,9 @@ class is named and no semantic benefit is claimed (ADR 0031:250-252); no live ru
 **Implemented 12 November 2026** (user: "yes" to starting it, after the preflight). The 13-step
 `inputs` subgraph of the Specify workflow is one stage action. No behaviour, model request, report,
 log or state version changes, so no published-output defect class is named and no semantic benefit
-is claimed; no live run (choice 7). The ADR 0031 status line and the design pointers name it the
+is claimed; offline evidence stands in for a live run (choice 7), and the E2c live set ran this
+stage too. **Kept 12 November 2026** (user: "Keeping the changes"). The ADR 0031 status line and
+the design pointers name it the
 second stage action (user: "yes", 12 November 2026).
 - **Owners:** `src/actions/specify/prepare_inputs.zig` (the closed 13-member `Step` enum, the
   `Diagnostic` slot, `Action.execute` sequencing 13 `steps.*` functions with a `NodeRuntime`
@@ -567,7 +569,9 @@ the 15-step `prepare-references` subgraph). Both answers were my recommendation:
 stays a separate step, and identity assignment keeps one port of its own. The first makes the
 subgraph two stages with the naming step between them, since the grammar step needs its output.
 No behaviour, model request, report, log or state version changes, so no published-output defect
-class is named and no semantic benefit is claimed; no live run (choice 7). The ADR 0031 status
+class is named and no semantic benefit is claimed; offline evidence stands in for a live run
+(choice 7), and a live set was taken anyway (below). **Kept 12 November 2026** (user: "Keeping the
+changes", covering this entry and E2b). The ADR 0031 status
 line, its one-port rule and the design pointers name all four stage actions (user: "action the
 best practice recommendations", 12 November 2026).
 - **Owners:**
