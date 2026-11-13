@@ -157,16 +157,17 @@ The persisted stage status is advisory until these current artifacts pass. This 
   native progress and operation/defect accounting under [§22.7](22-repair.md#227-repair-retry-limit-and-escalation).
   The unsupported-content branch invokes
   `CreateNoInventionClarificationReplacementAuthorizationAction` and consumes only its
-  unit-local one-shot flag during scope validation.
+  unit-local one-shot flag during scope validation. No owner of the generic operations has
+  this branch (ADR 0033, DE4 5); SPEC01 §10 keeps the wider keep-or-remove question for
+  this design text.
 - It performs one authorized repair attempt and returns its typed result.
 - A further attempt, candidate validation, clarification, or terminal outcome is a YAML
   transition, not an internal successor choice.
-- Under ADRs [0030](../decisions/0030-engine-owned-model-request.md) and
-  [0033](../decisions/0033-generic-repair-operations.md) (not yet implemented), this repair
-  operation is a sequence of YAML steps: `authorize-repair`, `build-repair-input`,
-  `request-model`, `parse-repair` and `merge-repair`, each with the route's `owner`. The
-  ordering, selection, classification and no-invention branch above run inside
-  `authorize-repair`. It is still one authorized attempt.
+- Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (implemented), this
+  repair operation is a sequence of YAML steps: `authorize-repair`, `build-repair-input`,
+  `request-model` (ADR 0030, which takes no `owner`), `parse-repair` and `merge-repair`.
+  The four repair operations each take the route's `owner`. The ordering, selection and
+  classification above run inside `authorize-repair`. It is still one authorized attempt.
 
 ### 14.5 User-review operation
 
@@ -298,8 +299,9 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
   `WorkflowArtifactRegistry` and active-feature capability; it does **not** build the current
   run's policy or binding merely to discover history.
 - It scans/validates all bounded prior-run binding groups, resolves each historical policy
-  solely through its `segment_header` control row's policy identity and readable bootstrap
-  lineage, and processes groups in deterministic `(runId, bindingId, stream rank)` order.
+  solely through its `segment_header` control row's policy identity
+  ([ADR 0026](../decisions/0026-header-identity-log-retention.md), amended 14 November 2026),
+  and processes groups in deterministic `(runId, bindingId, stream rank)` order.
 - For an active prior tail it acquires that prior run's ordinary single-binding physical lock,
   recovers the tail, invokes `FeatureLogPort.closeHistoricalTailAfterCrash`, validates the
   close, and releases; for a closed-only group it validates the durable `segment_trailer`
@@ -313,11 +315,11 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
   initialization.
 - Thus crash recovery needs no durable run-local transition pointer, and neither a current
   binding nor a dual-binding capability is misapplied to a historical run.
-- Not yet implemented: no persisted bootstrap authority supplies historical policy
-  lineage. Retention uses segment-header identity instead
-  ([ADR 0026](../decisions/0026-header-identity-log-retention.md)). It runs after the
-  current activation and before `run.started`, and every prior group must still
-  validate. A prior run with an active tail is kept whole and unfinalized.
+- Not yet implemented: prior-run finalization. The order above, relative to the current
+  activation, is undecided, and its preconditions are in
+  [ADR 0026](../decisions/0026-header-identity-log-retention.md). Retention runs after the
+  current activation and before `run.started`, and every prior group must still validate. A
+  prior run with an active tail is kept whole and unfinalized.
 
 ### 14.11 Implementation workflow composition
 

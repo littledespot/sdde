@@ -124,14 +124,15 @@ steps:
     use: retire-required-authority-projection
     on: {ok: generate, failed: end.failed}
   repair-source:
-    use: authorize-source-omission-repair
+    use: authorize-repair
+    with: {owner: source-omission}
     on: {ok: repair-extraction, more: repair-reconciliation, invalid: end.invalid, failed: end.failed}
   repair-extraction:
     call: repair-source-extraction
     on: {ok: merge-source-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
   merge-source-extraction:
-    use: merge-source-extraction-repair
-    with: {retry-limit: 1}
+    use: merge-repair
+    with: {owner: source-omission-extraction, retry-limit: 1}
     on: {ok: rebuild-extraction, failed: end.failed}
   rebuild-extraction:
     call: validate-extraction
@@ -141,8 +142,8 @@ steps:
     with: {schema: reconciliation-schema}
     on: {ok: merge-source-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
   merge-source-reconciliation:
-    use: merge-source-reconciliation-repair
-    with: {retry-limit: 1}
+    use: merge-repair
+    with: {owner: source-omission-reconciliation, retry-limit: 1}
     on: {ok: validate, failed: end.failed}
   generate:
     call: generate-specification
@@ -256,20 +257,24 @@ subgraphs:
         use: validate-reference-extraction-text
         on: {ok: end.ok, invalid: authorize-text-repair, failed: end.failed}
       authorize-text-repair:
-        use: authorize-reference-text-repair
+        use: authorize-repair
+        with: {owner: reference-text}
         on: {ok: text-repair-input, invalid: end.invalid, failed: end.failed}
       text-repair-input:
-        use: build-reference-text-repair-input
+        use: build-repair-input
+        with: {owner: reference-text}
         on: {ok: text-repair, failed: end.failed}
       text-repair:
         use: request-model
         with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, result-selection: input, retry-limit: 1}
         on: {ok: parse-text-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-text-repair:
-        use: parse-reference-text-repair
+        use: parse-repair
+        with: {owner: reference-text}
         on: {ok: merge-text-repair, invalid: end.invalid, failed: end.failed}
       merge-text-repair:
-        use: merge-reference-text-repair
+        use: merge-repair
+        with: {owner: reference-text}
         on: {ok: text-repair-release, invalid: end.invalid, failed: end.failed}
       text-repair-release:
         call: release-request
@@ -293,20 +298,24 @@ subgraphs:
         use: validate-reference-selections
         on: {ok: assign-tokens, invalid: authorize-extraction-repair, failed: end.failed}
       authorize-extraction-repair:
-        use: authorize-reference-extraction-repair
+        use: authorize-repair
+        with: {owner: reference-extraction}
         on: {ok: repair-input, invalid: end.invalid, failed: end.failed}
       repair-input:
-        use: build-reference-extraction-repair-input
+        use: build-repair-input
+        with: {owner: reference-extraction}
         on: {ok: request, failed: end.failed}
       request:
         use: request-model
         with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, result-selection: input, retry-limit: 1}
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-repair:
-        use: parse-reference-extraction-repair
+        use: parse-repair
+        with: {owner: reference-extraction}
         on: {ok: merge-repair, invalid: end.invalid, failed: end.failed}
       merge-repair:
-        use: merge-reference-extraction-repair
+        use: merge-repair
+        with: {owner: reference-extraction}
         on: {ok: release, invalid: end.invalid, failed: end.failed}
       release:
         call: release-request
@@ -415,14 +424,15 @@ subgraphs:
         use: build-reference-reconciliation-summary
         on: {ok: reconciliation-input, failed: end.failed}
       authorize-summary-repair:
-        use: authorize-reference-summary-repair
+        use: authorize-repair
+        with: {owner: reference-summary}
         on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
       repair-input:
         call: repair-reconciliation-candidate
         on: {ok: check-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       merge:
-        use: merge-reference-reconciliation-repair
-        with: {retry-limit: 128}
+        use: merge-repair
+        with: {owner: reference-reconciliation, retry-limit: 128}
         on: {ok: check-reconciliation, failed: end.failed}
   validate-reconciliation:
     start: validate-dispositions
@@ -471,13 +481,16 @@ subgraphs:
         use: validate-reference-conflict-proposals
         on: {ok: assign-records, invalid: authorize-conflicts-repair, failed: end.failed}
       authorize-dispositions-repair:
-        use: authorize-reference-dispositions-repair
-        on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
+        use: authorize-repair
+        with: {owner: reference-dispositions}
+        on: {ok: repair-input, blocked: end.blocked, failed: end.failed}
       authorize-signals-repair:
-        use: authorize-reference-signals-repair
+        use: authorize-repair
+        with: {owner: reference-signals}
         on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
       authorize-conflicts-repair:
-        use: authorize-reference-conflicts-repair
+        use: authorize-repair
+        with: {owner: reference-conflicts}
         on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
       assign-records:
         use: assign-reference-reconciliation-identities
@@ -489,14 +502,15 @@ subgraphs:
         call: repair-reconciliation-candidate
         on: {ok: validate-dispositions, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       merge:
-        use: merge-reference-reconciliation-repair
-        with: {retry-limit: 128}
+        use: merge-repair
+        with: {owner: reference-reconciliation, retry-limit: 128}
         on: {ok: validate-dispositions, failed: end.failed}
   repair-reconciliation-candidate:
     start: repair-input
     steps:
       repair-input:
-        use: build-reference-reconciliation-repair-input
+        use: build-repair-input
+        with: {owner: reference-reconciliation}
         on: {ok: request, failed: end.failed}
       request:
         use: request-model
@@ -509,14 +523,15 @@ subgraphs:
           retry-limit: 1
         on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse:
-        use: parse-reference-reconciliation-repair
+        use: parse-repair
+        with: {owner: reference-reconciliation}
         on: {ok: release, failed: end.failed}
       release:
         call: release-request
         on: {ok: merge, failed: end.failed}
       merge:
-        use: merge-reference-reconciliation-repair
-        with: {retry-limit: 128}
+        use: merge-repair
+        with: {owner: reference-reconciliation, retry-limit: 128}
         on: {ok: end.ok, failed: end.failed}
   review-source-support:
     start: assess
@@ -570,13 +585,15 @@ subgraphs:
         call: release-request
         on: {ok: end.ok, failed: end.failed}
       authorize:
-        use: authorize-specification-support-repair
+        use: authorize-repair
+        with: {owner: specification-support}
         on: {ok: retire, more: merge, blocked: end.blocked, failed: end.failed}
       retire:
         call: release-request
         on: {ok: repair-input, failed: end.failed}
       repair-input:
-        use: build-specification-support-repair-input
+        use: build-repair-input
+        with: {owner: specification-support}
         on: {ok: repair, failed: end.failed}
       repair:
         use: request-model
@@ -589,11 +606,13 @@ subgraphs:
           retry-limit: 1
         on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse:
-        use: parse-specification-support-repair
+        use: parse-repair
+        with: {owner: specification-support}
         on: {ok: merge, failed: end.failed}
       merge:
-        use: merge-specification-support-repair
+        use: merge-repair
         with:
+          owner: specification-support
           retry-limit: 2
         on: {ok: release, more: release, invalid: authorize, failed: end.failed}
   generate-specification:
@@ -653,10 +672,12 @@ subgraphs:
         call: release-request
         on: {ok: validate-specification, failed: end.failed}
       authorize-repair:
-        use: authorize-specification-repair
+        use: authorize-repair
+        with: {owner: specification-unit}
         on: {ok: repair-input, more: merge-repair, invalid: end.invalid, blocked: end.blocked, failed: end.failed}
       repair-input:
-        use: build-specification-repair-input
+        use: build-repair-input
+        with: {owner: specification-unit}
         on: {ok: repair, failed: end.failed}
       repair:
         use: request-model
@@ -670,11 +691,13 @@ subgraphs:
           retry-limit: 1
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-repair:
-        use: parse-specification-repair
+        use: parse-repair
+        with: {owner: specification-unit}
         on: {ok: repair-release, failed: end.failed}
       merge-repair:
-        use: merge-specification-repair
+        use: merge-repair
         with:
+          owner: specification-unit
           retry-limit: 64
         on: {ok: validate-specification, failed: end.failed}
       repair-release:
@@ -718,7 +741,8 @@ subgraphs:
         use: validate-specification-coverage
         on: {ok: end.ok, invalid: authorize-coverage-repair, failed: end.failed}
       authorize-coverage-repair:
-        use: authorize-specification-coverage-repair
+        use: authorize-repair
+        with: {owner: specification-coverage}
         on: {blocked: end.blocked, failed: end.failed}
   publish-specification:
     start: project-document
@@ -766,7 +790,8 @@ subgraphs:
     start: input
     steps:
       input:
-        use: build-source-omission-repair-input
+        use: build-repair-input
+        with: {owner: source-omission}
         on: {ok: request, failed: end.failed}
       request:
         use: request-model
@@ -779,7 +804,8 @@ subgraphs:
     start: input
     steps:
       input:
-        use: build-source-omission-repair-input
+        use: build-repair-input
+        with: {owner: source-omission}
         on: {ok: request, failed: end.failed}
       request:
         use: request-model
@@ -798,7 +824,8 @@ subgraphs:
     start: parse
     steps:
       parse:
-        use: parse-source-omission-repair
+        use: parse-repair
+        with: {owner: source-omission}
         on: {ok: release, failed: end.failed}
       release:
         call: release-request

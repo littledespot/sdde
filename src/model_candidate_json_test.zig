@@ -712,61 +712,6 @@ fn compactRoundTrip(allocator: std.mem.Allocator) !void {
     }) |bad| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Value, a, bad));
 }
 
-test "native singleton fields reconstruct by bound occurrence without changing raw responses" {
-    try nativeSingletonFields(std.testing.allocator);
-    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(nativeSingletonFields, .{});
-}
-fn nativeSingletonFields(allocator: std.mem.Allocator) !void {
-    const Node = union(enum) {
-        pub const model_inline = .{ .literal = "value" };
-        literal: struct { value: []const u8 },
-        reference: struct { id: u32 },
-    };
-    const Value = struct {
-        pub const model_scalar = "segments";
-        pub const model_text = "segments";
-        segments: []const Node,
-    };
-    const choices = [_]@import("domain/model_result_schema.zig").IntegerChoice{.{ .target = .{ .tagged = .{ .kind = "reference", .field = "id" } }, .allowed = &.{41}, .singleton = .construct }};
-    const raw = "{\"value\":{\"fragments\":[\"MOCK surrounding narrative \",{\"kind\":\"reference\"},\" and \",{\"kind\":\"reference\"}]}}";
-    const complete = try codec.constructBound(allocator, raw, &choices);
-    defer allocator.free(complete);
-    try std.testing.expectEqualStrings("{\"value\":{\"fragments\":[\"MOCK surrounding narrative \",{\"kind\":\"reference\",\"id\":41},\" and \",{\"kind\":\"reference\",\"id\":41}]}}", complete);
-    try std.testing.expect(std.mem.indexOf(u8, raw, "id") == null);
-    var arena: std.heap.ArenaAllocator = .init(allocator);
-    defer arena.deinit();
-    const parsed = try codec.decode(Value, arena.allocator(), complete);
-    try std.testing.expectEqual(@as(u32, 41), parsed.segments[1].reference.id);
-    try std.testing.expectEqual(@as(u32, 41), parsed.segments[3].reference.id);
-    for ([_][]const u8{
-        "{\"value\":{\"fragments\":[{\"kind\":\"reference\",\"id\":41}]}}",
-        "{\"value\":{\"fragments\":[{\"kind\":\"reference\",\"id\":42}]}}",
-    }) |echo| {
-        if (codec.constructBound(allocator, echo, &choices)) |unexpected| {
-            allocator.free(unexpected);
-            return error.TestUnexpectedSuccess;
-        } else |err| {
-            if (err == error.OutOfMemory) return err;
-            try std.testing.expectEqual(error.InvalidJsonDocument, err);
-        }
-    }
-    var different = choices;
-    different[0].allowed = &.{42};
-    const alternate = try codec.constructBound(allocator, raw, &different);
-    defer allocator.free(alternate);
-    try std.testing.expect(std.mem.indexOf(u8, alternate, "\"id\":42") != null);
-    different[0].allowed = &.{ 41, 42 };
-    const undecided = try codec.constructBound(allocator, raw, &different);
-    defer allocator.free(undecided);
-    try std.testing.expectEqualStrings(raw, undecided);
-    if (codec.decode(Value, arena.allocator(), undecided)) |_| {
-        return error.TestUnexpectedSuccess;
-    } else |err| {
-        if (err == error.OutOfMemory) return err;
-        try std.testing.expectEqual(error.InvalidJsonDocument, err);
-    }
-}
-
 test "exact source values reach models only as exact_text, while native names stay (ADR 0043)" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

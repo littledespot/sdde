@@ -53,7 +53,7 @@ test "finite native iteration compiles registered progress without a YAML retry 
     const definitions = try definition_schema.validate(a, raw);
     const manifest = try resource_binding.resolve(a, emptyInventory(), definitions);
     const graphs = try graph_compilation.compile(&registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{});
-    _ = try graph_validation.validate(a, graphs);
+    _ = try graph_validation.validate(a, graphs, &registry);
     for (graphs[0].authority.steps) |step| {
         const registered = registry.resolveOperation(step.operation_id).?;
         try std.testing.expectEqualDeep(registered.contract.iteration, step.iteration);
@@ -120,7 +120,7 @@ test "concise resources and native parameters compile into immutable operation a
             manifest,
             &resource_captures,
         );
-        _ = try graph_validation.validate(arena.allocator(), graphs);
+        _ = try graph_validation.validate(arena.allocator(), graphs, &registry);
         const graph = graphs[0];
         try std.testing.expectEqualStrings("custom-generation", graph.authority.workflow_id.bytes);
         try std.testing.expectEqual(@as(u32, 1), graph.authority.workflow_version);
@@ -164,7 +164,7 @@ test "concise resources and native parameters compile into immutable operation a
                 steps[0].operation_id.bytes = "model.generate@1";
                 invalid.authority.steps = steps;
             }
-            try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(arena.allocator(), &.{invalid}));
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(arena.allocator(), &.{invalid}, &registry));
         }
     }
 }
@@ -214,7 +214,7 @@ test "compiled native repair roles retain their counter scope and finite bound" 
         .{ .ordinal = 3, .bytes = "Generate one result." },
         .{ .ordinal = 5, .bytes = result_schema_bytes },
     });
-    _ = try graph_validation.validate(a, graphs);
+    _ = try graph_validation.validate(a, graphs, &registry);
     const graph = graphs[0];
     try std.testing.expectEqual(.merge_validate, graph.authority.steps[0].repair_role);
     try std.testing.expectEqual(.repair, graph.authority.steps[0].retry_authority.?.scope);
@@ -233,7 +233,7 @@ test "compiled native repair roles retain their counter scope and finite bound" 
             else => unreachable,
         }
         if (fault != 3) invalid.authority.maximum_step_executions = compiled.calculateExecutionLimit(steps).?;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(a, &.{invalid}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(a, &.{invalid}, &registry));
     }
     var bounded = graph.authority.steps[0];
     bounded.retry_authority.?.scope = .model_request;
@@ -378,7 +378,7 @@ test "unknown operations and unguarded cycles reject the complete graph" {
     );
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        graph_validation.validate(arena.allocator(), graphs),
+        graph_validation.validate(arena.allocator(), graphs, &operations),
     );
 }
 
@@ -793,7 +793,7 @@ fn reusableCompile(a: std.mem.Allocator, bytes: []const u8) !@import("domain/wor
         .{ .ordinal = 3, .bytes = "Generate one result." },
         .{ .ordinal = 5, .bytes = result_schema_bytes },
     });
-    _ = try graph_validation.validate(a, graphs);
+    _ = try graph_validation.validate(a, graphs, &operations);
     return graphs[0];
 }
 
@@ -933,7 +933,7 @@ test "definition schema and compiler share the finite expanded graph bound" {
     registry.operations = &entries;
     var schemas: result_schema_parser.Adapter = .{};
     const graphs = try graph_compilation.compile(&registry, schemas.compiler(), a, definitions, emptyInventory(), .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
-    _ = try graph_validation.validate(a, graphs);
+    _ = try graph_validation.validate(a, graphs, &registry);
     try std.testing.expectEqual(maximum, graphs[0].authority.steps.len);
     try std.testing.expectEqual(maximum, graphs[0].authority.maximum_step_executions);
     try yaml.writer.print("  s{d:0>4}: {{use: test.retry, on: {{ok: end.ok}}}}\n", .{maximum});

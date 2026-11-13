@@ -130,25 +130,12 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 - **Does:** Validates each parsed claim's text against the toolchain, the passive-literal registry and the captured inputs.
 - **Rejects:** errors of `reference_extraction.Error`
 
-## `MergeSourceExtractionRepairAction` (`merge-source-extraction-repair`)
+## Repair operations
 
-- **Owner:** [`src/actions/reference/merge_source_extraction_repair.zig`](../../../src/actions/reference/merge_source_extraction_repair.zig)
-- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
-- **Reads:** the merge context (`citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `specification_support_review`, `source_omission_repair`), `structured_token_candidates`, `text_validated_reference_extraction` (optional: `specification_generation_session`, `identified_specification_content`) · **Writes:** replaces `text_validated_reference_extraction`; invalidates every key derived from it, through `source_omission_repair` (`source_omission.extraction_dependents`) · **Side effect:** `none`
-- **Does:** In the repair phase only, merges a source-omission extraction replacement over the text-validated extraction; another authorization or a missing response is `InvalidAtomicRepair`.
-- **Rejects:** `InvalidAtomicRepair` and the rest of `reference_extraction_repair.Error`
-
-## `AuthorizeReferenceTextRepairAction` (`authorize-reference-text-repair`)
-
-- **Owner:** [`src/actions/reference/authorize_reference_text_repair.zig`](../../../src/actions/reference/authorize_reference_text_repair.zig)
-- **Reads:** `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `text_validated_reference_extraction` · **Writes:** `reference_text_repair_authorization` · **Side effect:** `none`
-- **Rejects:** errors of `reference_extraction_text_repair.Error`
-
-## `BuildReferenceTextRepairInputAction` (`build-reference-text-repair-input`)
-
-- **Owner:** [`src/actions/reference/build_reference_text_repair_input.zig`](../../../src/actions/reference/build_reference_text_repair_input.zig)
-- **Reads:** `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `structured_token_candidates`, `reference_text_repair_authorization` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Rejects:** errors of `reference_extraction_text_repair.Error`
+The repair operations of this area (reference text, reference extraction, reference summary,
+dispositions, signals and conflicts, reference reconciliation, and source omission with its two
+merges) are variants of the generic repair operations, specified once in
+[13-04](13-04-model.md#generic-repair-operations).
 
 ## `CollectReferenceExtractionResultAction` (`collect-reference-extraction-result`)
 
@@ -163,18 +150,6 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 - **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction` · **Writes:** `validated_reference_selections` · **Side effect:** `none`
 - **Does:** Validates the token classifications against the structured token candidates.
 - **Rejects:** errors of `reference_extraction.Error`
-
-## `AuthorizeReferenceExtractionRepairAction` (`authorize-reference-extraction-repair`)
-
-- **Owner:** [`src/actions/reference/authorize_reference_extraction_repair.zig`](../../../src/actions/reference/authorize_reference_extraction_repair.zig)
-- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `validated_reference_selections` · **Writes:** `reference_extraction_repair_authorization` · **Side effect:** `none`
-- **Rejects:** errors of `reference_extraction_repair.Error`
-
-## `BuildReferenceExtractionRepairInputAction` (`build-reference-extraction-repair-input`)
-
-- **Owner:** [`src/actions/reference/build_reference_extraction_repair_input.zig`](../../../src/actions/reference/build_reference_extraction_repair_input.zig)
-- **Reads:** `citable_reference_inputs`, `reference_passive_literals`, `structured_token_candidates`, `text_validated_reference_extraction`, `reference_extraction_repair_authorization` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Rejects:** errors of `reference_extraction_repair.Error`
 
 ## `AssignPreservedTokenIdentitiesAction` (`assign-preserved-token-identities`)
 
@@ -339,47 +314,6 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 - **Does:** Captures the extraction-contract binding and assembles the snapshot from the accepted extraction and reconciliation records, keeping every source.
 - **Rejects:** errors of `reference_extraction_contract.Error`, `reference_snapshot.Error`
 
-## `AuthorizeSourceOmissionRepairAction` (`authorize-source-omission-repair`)
-
-- **Owner:** [`src/actions/reference/authorize_source_omission_repair.zig`](../../../src/actions/reference/authorize_source_omission_repair.zig)
-- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `parsed_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `specification_support_review` (optional: `specification_generation_session`, `identified_specification_content`) · **Writes:** `source_omission_repair` · **Side effect:** `none`
-- **Does:** In the repair phase, localizes the omission and authorizes an extraction or reconciliation repair there; an unlocalized, candidate or association location is `InvalidAtomicRepair`.
-- **Rejects:** `InvalidAtomicRepair` and the rest of `reference_extraction_repair.Error`, `reference_reconciliation_repair.Error`
-
-## `MergeSourceReconciliationRepairAction` (`merge-source-reconciliation-repair`)
-
-- **Owner:** [`src/actions/reference/merge_source_reconciliation_repair.zig`](../../../src/actions/reference/merge_source_reconciliation_repair.zig)
-- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
-- **Reads:** the merge context (as for `merge-source-extraction-repair`), `parsed_reference_reconciliation` (optional: `specification_generation_session`, `identified_specification_content`) · **Writes:** replaces `parsed_reference_reconciliation`; invalidates every key derived from it, through `source_omission_repair` (`source_omission.reconciliation_dependents`) · **Side effect:** `none`
-- **Does:** In the repair phase only, merges a source-omission reconciliation replacement over the parsed reconciliation; another authorization or a missing response is `InvalidAtomicRepair`.
-- **Rejects:** `InvalidAtomicRepair` and the rest of `reference_reconciliation_repair.Error`
-
-## `ParseReferenceTextRepairAction` (`parse-reference-text-repair`)
-
-- **Owner:** [`src/actions/reference/parse_reference_text_repair.zig`](../../../src/actions/reference/parse_reference_text_repair.zig)
-- **Reads:** `reference_text_repair_authorization`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** `reference_text_repair_result` · **Side effect:** `none`
-- **Rejects:** errors of `reference_extraction_text_repair.Error`
-
-## `MergeReferenceTextRepairAction` (`merge-reference-text-repair`)
-
-- **Owner:** [`src/actions/reference/merge_reference_text_repair.zig`](../../../src/actions/reference/merge_reference_text_repair.zig)
-- **Reads:** `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `reference_text_repair_authorization`, `reference_text_repair_result` · **Writes:** replaces `parsed_reference_extraction`; invalidates `text_validated_reference_extraction`, `reference_text_repair_authorization`, `reference_text_repair_result` · **Side effect:** `none`
-- **Does:** Merges the authorized replacement into the parsed extraction over the canonical captured text.
-- **Rejects:** errors of `reference_extraction_text_repair.Error`
-
-## `ParseReferenceExtractionRepairAction` (`parse-reference-extraction-repair`)
-
-- **Owner:** [`src/actions/reference/parse_reference_extraction_repair.zig`](../../../src/actions/reference/parse_reference_extraction_repair.zig)
-- **Reads:** `reference_extraction_repair_authorization`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** `reference_extraction_repair_result` · **Side effect:** `none`
-- **Rejects:** errors of `reference_extraction_repair.Error`
-
-## `MergeReferenceExtractionRepairAction` (`merge-reference-extraction-repair`)
-
-- **Owner:** [`src/actions/reference/merge_reference_extraction_repair.zig`](../../../src/actions/reference/merge_reference_extraction_repair.zig)
-- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `reference_extraction_repair_authorization`, `reference_extraction_repair_result` · **Writes:** replaces `text_validated_reference_extraction`; invalidates `validated_reference_selections`, `reference_extraction_repair_authorization`, `reference_extraction_repair_result` · **Side effect:** `none`
-- **Does:** Merges the authorized replacement into the text-validated extraction over the canonical captured text.
-- **Rejects:** errors of `reference_extraction_repair.Error`
-
 ## `CollectReferenceDispositionsCandidateAction` (`collect-reference-dispositions-candidate`)
 
 - **Owner:** [`src/actions/reference/collect_reference_dispositions_candidate.zig`](../../../src/actions/reference/collect_reference_dispositions_candidate.zig)
@@ -407,12 +341,6 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 - **Reads:** `reference_summary_identities`, `reference_reconciliation_plan`, `reference_reconciliation_progress` · **Writes:** replaces `reference_reconciliation_progress`; invalidates `reference_reconciliation_input`, `parsed_reference_reconciliation`, `validated_reference_summary`, `reference_summary_identities` · **Side effect:** `none`
 - **Does:** Attach native IDs while preserving normalized statements, complete partition membership, validated child-summary lineage and validation proof.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
-
-## `AuthorizeReferenceSummaryRepairAction` (`authorize-reference-summary-repair`)
-
-- **Owner:** [`src/actions/reference/authorize_reference_summary_repair.zig`](../../../src/actions/reference/authorize_reference_summary_repair.zig)
-- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_summary` · **Writes:** `reference_reconciliation_repair`; invalidates `validated_reference_summary` · **Side effect:** `none`
-- **Rejects:** errors of `reference_reconciliation_repair.Error`
 
 ## `ValidateReferenceClaimDispositionsAction` (`validate-reference-claim-dispositions`)
 
@@ -457,32 +385,6 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 - **Does:** Requires a complete prior phase, checks the conflicts, and records relations and dependencies for an invalid result.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `AuthorizeReferenceDispositionsRepairAction` (`authorize-reference-dispositions-repair`)
-
-- **Owner:** [`src/actions/reference/authorize_reference_dispositions_repair.zig`](../../../src/actions/reference/authorize_reference_dispositions_repair.zig)
-- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_dispositions` · **Writes:** `reference_reconciliation_repair`; invalidates `validated_reference_dispositions` · **Side effect:** `none`
-- **Rejects:** errors of `reference_reconciliation_repair.Error`
-
-## `AuthorizeReferenceSignalsRepairAction` (`authorize-reference-signals-repair`)
-
-- **Owner:** [`src/actions/reference/authorize_reference_signals_repair.zig`](../../../src/actions/reference/authorize_reference_signals_repair.zig)
-- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_signals` · **Writes:** `reference_reconciliation_repair`; invalidates `validated_reference_dispositions`, `validated_reference_signals` · **Side effect:** `none`
-- **Rejects:** errors of `reference_reconciliation_repair.Error`
-
-## `AuthorizeReferenceConflictsRepairAction` (`authorize-reference-conflicts-repair`)
-
-- **Owner:** [`src/actions/reference/authorize_reference_conflicts_repair.zig`](../../../src/actions/reference/authorize_reference_conflicts_repair.zig)
-- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_conflicts` · **Writes:** `reference_reconciliation_repair`; invalidates `validated_reference_dispositions`, `validated_reference_signals`, `validated_reference_conflicts` · **Side effect:** `none`
-- **Rejects:** errors of `reference_reconciliation_repair.Error`
-
-## `MergeReferenceReconciliationRepairAction` (`merge-reference-reconciliation-repair`)
-
-- **Owner:** [`src/actions/reference/merge_reference_reconciliation_repair.zig`](../../../src/actions/reference/merge_reference_reconciliation_repair.zig)
-- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
-- **Reads:** `parsed_reference_reconciliation`, `reference_reconciliation_repair`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** replaces `parsed_reference_reconciliation`; invalidates `reference_reconciliation_repair` · **Side effect:** `none`
-- **Does:** Merges the authorized replacement into the parsed reconciliation over the canonical captured text.
-- **Rejects:** errors of `reference_reconciliation_repair.Error`
-
 ## `AssignReferenceReconciliationIdentitiesAction` (`assign-reference-reconciliation-identities`)
 
 - **Owner:** [`src/actions/reference/assign_reference_reconciliation_identities.zig`](../../../src/actions/reference/assign_reference_reconciliation_identities.zig)
@@ -497,20 +399,6 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 - **Does:** Pairs each signal and conflict with its ID into the reconciliation records, rejecting a count mismatch.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `BuildReferenceReconciliationRepairInputAction` (`build-reference-reconciliation-repair-input`)
-
-- **Owner:** [`src/actions/reference/build_reference_reconciliation_repair_input.zig`](../../../src/actions/reference/build_reference_reconciliation_repair_input.zig)
-- **Reads:** `parsed_reference_reconciliation`, `reference_reconciliation_repair`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Does:** Builds the reconciliation repair packet; only a summary input carries the workflow's summary purpose.
-- **Rejects:** errors of `reference_reconciliation_repair.Error`
-
-## `BuildSourceOmissionRepairInputAction` (`build-source-omission-repair-input`)
-
-- **Owner:** [`src/actions/reference/build_source_omission_repair_input.zig`](../../../src/actions/reference/build_source_omission_repair_input.zig)
-- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `parsed_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `specification_support_review`, `source_omission_repair`, `packet_guidance` (optional: `specification_generation_session`, `identified_specification_content`) · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Does:** In the repair phase, builds the extraction or reconciliation repair packet that the source-omission authorization selected.
-- **Rejects:** errors of `reference_extraction_repair.Error`, `reference_reconciliation_repair.Error`
-
 ## `CollectReferenceSignalsCandidateAction` (`collect-reference-signals-candidate`)
 
 - **Owner:** [`src/actions/reference/collect_reference_signals_candidate.zig`](../../../src/actions/reference/collect_reference_signals_candidate.zig)
@@ -524,19 +412,6 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 - **Reads:** `validated_reference_signals`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `parsed_reference_reconciliation`; invalidates `validated_reference_dispositions`, `validated_reference_signals` · **Side effect:** `none`
 - **Does:** Collects the conflicts response; a prior phase other than conflicts is `InvalidReferenceReconciliation`.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
-
-## `ParseReferenceReconciliationRepairAction` (`parse-reference-reconciliation-repair`)
-
-- **Owner:** [`src/actions/reference/parse_reference_reconciliation_repair.zig`](../../../src/actions/reference/parse_reference_reconciliation_repair.zig)
-- **Reads:** `reference_reconciliation_repair`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `reference_reconciliation_repair` · **Side effect:** `none`
-- **Rejects:** errors of `reference_reconciliation_repair.Error`
-
-## `ParseSourceOmissionRepairAction` (`parse-source-omission-repair`)
-
-- **Owner:** [`src/actions/reference/parse_source_omission_repair.zig`](../../../src/actions/reference/parse_source_omission_repair.zig)
-- **Reads:** `source_omission_repair`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `source_omission_repair` · **Side effect:** `none`
-- **Does:** Parses the response as the extraction or reconciliation replacement its authorization names, keeping the response origin.
-- **Rejects:** errors of `reference_extraction_repair.Error`, `reference_reconciliation_repair.Error`
 
 ## Proposed, no code
 

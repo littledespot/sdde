@@ -259,11 +259,130 @@ Proposed, no code: select the bounded known context for a unit ([§12](../12-mod
 
 Proposed, no code: build a unit's deterministic initial guidance packet ([§12](../12-model-boundary.md)).
 
-> **ADR 0033 (not yet implemented).** The repair entries below become domain functions of
-> [ADR 0033](../../decisions/0033-generic-repair-operations.md)'s four generic repair operations;
-> today each owner registers its own `authorize`/`parse`/`merge` operations. Whether the
-> no-invention and semantic-review branches stay is an open decision (SPEC01 "Design–code
-> conflicts").
+> **ADR 0033 (implemented).** The repair entries below are domain functions inside
+> [ADR 0033](../../decisions/0033-generic-repair-operations.md)'s four generic repair operations
+> (`authorize-repair`, `build-repair-input`, `parse-repair`, `merge-repair`), whose per-owner
+> variants are specified once, in [Generic repair operations](#generic-repair-operations) below.
+> Whether the no-invention and semantic-review branches stay in the design text is an open
+> decision (SPEC01 "Design–code conflicts"); the generic operations have none.
+
+## Generic repair operations
+
+Four registered operations replace the 29 per-owner repair operations of the Specify
+definition ([ADR 0033](../../decisions/0033-generic-repair-operations.md)). Each is **one
+registered contract made of closed variants**, one per owner it serves, selected at compile
+time by the required enumeration parameter `owner`
+([ADR 0030](../../decisions/0030-engine-owned-model-request.md), "Contract variants"). The
+owners are the 13 members of `RepairOwner`
+([`src/domain/repair_owner.zig`](../../../src/domain/repair_owner.zig)); each operation's
+allowed `owner` values are exactly the owners that have a variant of it, so a step that names
+an owner with no variant rejects at compilation.
+
+- **Common facts.** Every variant has side effect `none`, declares no gates and holds no
+  capability. No variant makes a model call: the call is the separate `request-model` step
+  between `build-repair-input` and `parse-repair`. A repair route is `authorize-repair`,
+  `build-repair-input`, `request-model`, `parse-repair`, `merge-repair`; an authorizer's `more`
+  skips input, request and parse and goes to merge.
+- **Where the rules live.** The generic operation selects the owner's rules through one
+  exhaustive `switch` over `RepairOwner`
+  ([`src/application/repair_workflow.zig`](../../../src/application/repair_workflow.zig)), with no
+  default branch, table or dispatcher. Each owner's binding declares its data effects once
+  (`repair_owner.Effects`) and holds its rules in the owner's domain module, reusing the shared
+  `atomic_repair.Contract`.
+- **`owner` selects no policy, scope or defect identity.** Where a variant's required keys prove
+  the owner, the compiler checks it. Otherwise the owner's binding reads only its own native
+  facts, and a mismatch is a terminal runner rejection, never a routable outcome. Retry identity
+  is the compiled step instance, so two steps using one operation keep separate counters.
+- **Retry.** Only merges retry. The `reference-text` and `reference-extraction` merges forbid
+  `retry-limit`. The others require it, within their variant's maximum: `reference-reconciliation`
+  128, `source-omission-extraction` 1, `source-omission-reconciliation` 1, `specification-unit`
+  64, `specification-support` 2 ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
+- **Source omission.** The current native pre-generation phase witness is checked inside
+  authorize, input and both merges whatever `owner` says. Its authorize `ok` selects the
+  extraction branch and `more` the reconciliation branch; each branch merges through its own
+  owner.
+- **`.packet_guidance`** is read by exactly seven (operation, owner) variants:
+  `authorize-repair` and `build-repair-input` for `specification-unit` and `specification-support`,
+  `merge-repair` for `specification-support`, and `build-repair-input` for
+  `reference-reconciliation` and `source-omission`.
+
+### `authorize-repair`
+
+Decides whether one engine-selected unit may be repaired and binds its target, old value,
+revision, dependencies and retry identity. Role `authorize`; association `repair_authorize`.
+Rejects with the owner's own errors.
+
+| Owner | Reads | Writes | Outcomes | Association (kind; subject; evidence) |
+| --- | --- | --- | --- | --- |
+| `reference-text` | `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `text_validated_reference_extraction` | `reference_text_repair_authorization` | `ok`, `invalid`, `failed` | candidate; `parsed_reference_extraction`; `text_validated_reference_extraction` |
+| `reference-extraction` | `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `validated_reference_selections` | `reference_extraction_repair_authorization` | `ok`, `invalid`, `failed` | candidate; `text_validated_reference_extraction`; `validated_reference_selections` |
+| `reference-summary` | `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_summary` | `reference_reconciliation_repair`; invalidates `validated_reference_summary` | `ok`, `more`, `blocked`, `failed` | candidate; `parsed_reference_reconciliation`; `validated_reference_summary` |
+| `reference-dispositions` | as `reference-summary`, with `validated_reference_dispositions` | `reference_reconciliation_repair`; invalidates `validated_reference_dispositions` | `ok`, `blocked`, `failed` (no `more`: ADR 0046) | candidate; `parsed_reference_reconciliation`; `validated_reference_dispositions` |
+| `reference-signals` | as `reference-summary`, with `validated_reference_signals` | `reference_reconciliation_repair`; invalidates `validated_reference_dispositions`, `validated_reference_signals` | `ok`, `more`, `blocked`, `failed` | candidate; `parsed_reference_reconciliation`; `validated_reference_signals` |
+| `reference-conflicts` | as `reference-summary`, with `validated_reference_conflicts` | `reference_reconciliation_repair`; invalidates `validated_reference_dispositions`, `validated_reference_signals`, `validated_reference_conflicts` | `ok`, `more`, `blocked`, `failed` | candidate; `parsed_reference_reconciliation`; `validated_reference_conflicts` |
+| `source-omission` | `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `parsed_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `specification_support_review` (optional: `specification_generation_session`, `identified_specification_content`) | `source_omission_repair` | `ok` (extraction branch), `more` (reconciliation branch), `invalid`, `failed` | authority; `required_authority_inputs`; `required_authority_result` |
+| `specification-unit` | `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `parsed_specification_unit`, `validated_specification_unit`, `packet_guidance` | `specification_repair_authorization` | `ok`, `more` (a delete), `invalid`, `blocked`, `failed` | candidate; `parsed_specification_unit`; `validated_specification_unit` |
+| `specification-support` | `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` | `specification_support_repair` | `ok`, `more`, `blocked`, `failed` | candidate; `specification_support_review`; `specification_support_review` |
+| `specification-coverage` | `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `specification_coverage` | `specification_coverage_repair` | `blocked`, `failed` only | candidate; `specification_generation_session`; `specification_coverage` |
+
+### `build-repair-input`
+
+Builds the repair packet for the authorization. Writes `model_input_packet`; outcomes `ok` and
+`failed`; role `none`; association independent. Reads the owner's inputs and its authorization key:
+
+| Owner | Reads |
+| --- | --- |
+| `reference-text` | `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `structured_token_candidates`, `reference_text_repair_authorization` |
+| `reference-extraction` | `citable_reference_inputs`, `reference_passive_literals`, `structured_token_candidates`, `text_validated_reference_extraction`, `reference_extraction_repair_authorization` |
+| `reference-reconciliation` | `parsed_reference_reconciliation`, `reference_reconciliation_repair`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` (only a summary input carries the workflow's summary purpose) |
+| `source-omission` | the `source-omission` authorize reads, plus `source_omission_repair` and `packet_guidance`; builds the extraction or reconciliation packet the authorization selected |
+| `specification-unit` | `specification_generation_session`, `specification_repair_authorization`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` |
+| `specification-support` | `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_support_repair`, `packet_guidance` |
+
+### `parse-repair`
+
+Decodes and validates the admitted replacement. Role `none`; association `preserve` (candidate;
+authority for `source-omission`). Reads the owner's authorization key and the request evidence
+(`model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`,
+`accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result`);
+`specification-support` reads only five keys: `specification_support_repair`,
+`model_request_identity_ledger`, `prepared_model_request`, `model_input_packet` and
+`model_payload_schema_result`.
+
+| Owner | Authorization read | Writes | Outcomes |
+| --- | --- | --- | --- |
+| `reference-text` | `reference_text_repair_authorization` | `reference_text_repair_result` | `ok`, `invalid`, `failed` |
+| `reference-extraction` | `reference_extraction_repair_authorization` | `reference_extraction_repair_result` | `ok`, `invalid`, `failed` |
+| `reference-reconciliation` | `reference_reconciliation_repair` | replaces `reference_reconciliation_repair` | `ok`, `failed` |
+| `source-omission` | `source_omission_repair` | replaces `source_omission_repair`; parses the extraction or reconciliation replacement its authorization names, keeping the response origin | `ok`, `failed` |
+| `specification-unit` | `specification_repair_authorization` | replaces `specification_repair_authorization` | `ok`, `failed` |
+| `specification-support` | `specification_support_repair` | replaces `specification_support_repair` | `ok`, `failed` |
+
+### `merge-repair`
+
+Compare-and-swaps the authorized replacement into the candidate, over the canonical (NFC)
+captured text. Another authorization, or a missing response, is `InvalidAtomicRepair`.
+
+| Owner | Replaces | Invalidates | Outcomes | Role; association | `retry-limit` |
+| --- | --- | --- | --- | --- | --- |
+| `reference-text` | `parsed_reference_extraction` | `text_validated_reference_extraction`, `reference_text_repair_authorization`, `reference_text_repair_result` | `ok`, `invalid`, `failed` | `merge`; `repair_merge` | forbidden |
+| `reference-extraction` | `text_validated_reference_extraction` | `validated_reference_selections`, `reference_extraction_repair_authorization`, `reference_extraction_repair_result` | `ok`, `invalid`, `failed` | `merge`; `repair_merge` | forbidden |
+| `reference-reconciliation` | `parsed_reference_reconciliation` | `reference_reconciliation_repair` | `ok`, `failed` | `merge`; `repair_merge` | required, at most 128 |
+| `source-omission-extraction` | `text_validated_reference_extraction` | every key derived from it, through `source_omission_repair` (`source_omission.extraction_dependents`) | `ok`, `failed` | `merge`; `repair_merge` | required, at most 1 |
+| `source-omission-reconciliation` | `parsed_reference_reconciliation` | every key derived from it, through `source_omission_repair` (`source_omission.reconciliation_dependents`) | `ok`, `failed` | `merge`; `repair_merge` | required, at most 1 |
+| `specification-unit` | `parsed_specification_unit` | `validated_specification_unit`, `specification_repair_authorization` | `ok`, `failed` | `merge`; `repair_merge` | required, at most 64 |
+| `specification-support` | `specification_support_review` | `specification_support_repair` | `ok`, `more`, `invalid`, `failed` | `merge_validate`; `repair_validate` | required, at most 2 |
+
+The two source-omission merges merge only in the repair phase; their reads are the merge
+context (`citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`,
+`required_authority_inputs`, `required_authority_observations`, `required_authority_result`,
+`specification_support_review`, `source_omission_repair`), plus
+`structured_token_candidates` and `text_validated_reference_extraction` for the extraction merge
+or `parsed_reference_reconciliation` for the reconciliation merge (optional:
+`specification_generation_session`, `identified_specification_content`). The other owners read
+the keys they replace, their authorization or repair key and the shared inputs
+(`citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, and for the
+specification owners `accounted_reference_reconciliation`).
 
 ## `ClassifyRepairAuthorizationPurposeAction`
 

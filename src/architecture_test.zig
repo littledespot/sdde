@@ -927,7 +927,7 @@ test "the request-model orchestrator only follows stage outcomes, and only the r
     // The runner owns the attempt allowance, in one admission every stage entry passes, and the
     // stage's own checks live only in the one step body.
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, "context.admission.admit("));
-    try expectAbsent(runner, "contractMatchesStep(registered.contract");
+    try expectAbsent(runner, "matchesContract(registered.contract");
     // Every consumer that asks "does this step begin one request" asks the one owner.
     inline for (.{ "domain/reference_extraction_contract.zig", "domain/workflow_json_composition.zig" }) |path| {
         const consumer = @embedFile(path);
@@ -937,6 +937,65 @@ test "the request-model orchestrator only follows stage outcomes, and only the r
     // Only the composition root builds the kernel entry, and its capabilities derive from the stages.
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/model_request_operations.zig"), "bindRequestKernel(&stage_types)") != null);
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("ports/workflow_operation_registry.zig"), "fn validRequestKernel(") != null);
+}
+
+test "the contract-variant mechanism has no operation-specific branch and one owner for each rule" {
+    const mechanism = .{
+        "domain/workflow_operation.zig",
+        "domain/workflow_compilation.zig",
+        "domain/workflow_graph_compilation.zig",
+        "domain/workflow_graph_validation.zig",
+        "domain/workflow_registry.zig",
+        "ports/workflow_operation_registry.zig",
+        "application/workflow_pipeline_runner.zig",
+    };
+    // The selector is data: a contract names its parameter, and nothing in the mechanism names a
+    // selector value, an owner or an operation (ADR 0030, ADR 0033's 13 owners).
+    const names = [_][]const u8{
+        "\"owner\"",
+        "\"reference-text\"",
+        "\"reference-extraction\"",
+        "\"reference-summary\"",
+        "\"reference-dispositions\"",
+        "\"reference-signals\"",
+        "\"reference-conflicts\"",
+        "\"reference-reconciliation\"",
+        "\"source-omission\"",
+        "\"source-omission-extraction\"",
+        "\"source-omission-reconciliation\"",
+        "\"specification-unit\"",
+        "\"specification-support\"",
+        "\"specification-coverage\"",
+        "authorize-repair",
+        "merge-repair",
+        "parse-repair",
+        "build-repair-input",
+    };
+    inline for (mechanism) |path| {
+        const source = @embedFile(path);
+        inline for (names) |name| try expectAbsent(source, name);
+    }
+    // One lookup picks a variant: the contract's own `resolve`, reached through `selectedContract`
+    // (compiled parameters) or `selectDeclared` (declared ones); no consumer matches a selector value.
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("domain/workflow_operation.zig"), "pub fn resolve("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("domain/workflow_compilation.zig"), "pub fn selectedContract("));
+    // The compiler selects first and checks everything else against the selected contract alone.
+    const compiler = @embedFile("domain/workflow_graph_compilation.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(compiler, "selectDeclared(entry.contract, declared.parameters)"));
+    try expectAbsent(compiler, "compileParameters(allocator, entry.contract");
+    try expectAbsent(compiler, "validateDeclaredOutcomes(entry.contract");
+    try expectAbsent(compiler, "resolveRetryAuthority(item, declared.id, entry.contract");
+    // The runner runs a step against its own variant, never the registered contract as a whole.
+    const runner = @embedFile("application/workflow_pipeline_runner.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, "entry.contractFor(step.parameters)"));
+    try expectAbsent(runner, ".contract = entry.contract, .binding = entry.binding");
+    // Graph validation and registry publication recheck a compiled step against its variant through
+    // the one registry function, and the startup routine gives both the operation registry.
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("domain/workflow_graph_validation.zig"), "operations.stepsMatchVariants("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("domain/workflow_registry.zig"), "operations.stepsMatchVariants("));
+    // Only a variant-aware composition function registers such an operation, and it takes a shell.
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "pub fn variantEntry(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "isShell()") != null);
 }
 
 test "YAML invocation owns one response and uses runner accounting without hidden response work" {
@@ -2581,13 +2640,20 @@ test "candidate repairs share authority and expose only native scoped operations
     const source_omission = @import("application/source_omission_repair_workflow.zig");
     inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, coverage.Authorize, support.Authorize, support.BuildInput, support.Parse, support.Merge, source_omission.Authorize, source_omission.BuildInput, source_omission.Parse, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
-        try std.testing.expectEqual(.none, T.Action.contract.side_effect);
+        // An owner's step is capability-free and carries its data effects once, in its own binding.
+        try std.testing.expect(@TypeOf(T.effects) == @import("domain/repair_owner.zig").Effects);
+    }
+    // No owner's repair step has a side effect: every variant of the four generic operations says so.
+    const generic = @import("application/repair_workflow.zig");
+    inline for (.{ generic.AuthorizeRepair, generic.BuildRepairInput, generic.ParseRepair, generic.MergeRepair }) |G| {
+        try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(G, &.{}));
+        for (G.contract.variants) |variant| try std.testing.expectEqual(@import("domain/pipeline.zig").SideEffect.none, variant.side_effect);
     }
     inline for (.{ source_omission.Authorize, source_omission.BuildInput, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
-        try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &@import("domain/specification_generation_phase.zig").optional, T.Action.contract.optional);
+        try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &@import("domain/specification_generation_phase.zig").optional, T.effects.optional);
     }
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.Action.contract.replaces);
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.Action.contract.invalidates);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.effects.replaces);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.effects.invalidates);
     try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .blocked, .failed }, &coverage.Authorize.outcomes);
     inline for (.{ @embedFile("domain/reference_extraction_repair.zig"), @embedFile("domain/specification_repair.zig"), @embedFile("domain/reference_extraction_text_repair.zig"), @embedFile("domain/reference_reconciliation_repair.zig"), @embedFile("domain/specification_support_repair.zig") }) |source| {
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic_repair.zig"));
@@ -2607,8 +2673,108 @@ test "candidate repairs share authority and expose only native scoped operations
     try expectAbsent(reconciliation_owner, "equivalentStatement");
     try expectAbsent(reconciliation_owner, "checkBusinessIn");
     try expectAbsent(reconciliation_owner, "checkReferenceIn");
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.text_validated_reference_extraction}, tokens.Merge.Action.contract.replaces);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.text_validated_reference_extraction}, tokens.Merge.effects.replaces);
     try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/reference_extraction_workflow.zig").ValidateSelections.outcomes);
+}
+
+test "the generic repair operations select owner rules through one exhaustive switch and hold none themselves" {
+    const generic = @embedFile("application/repair_workflow.zig");
+    const owners = @embedFile("domain/repair_owner.zig");
+    // One `switch` over the closed owner enum in each of the four operations' `invoke`, and nothing else
+    // that selects: no default branch, no inline-else, no function-pointer or callback table, no
+    // dynamic field access, no dispatcher field (ADR 0033).
+    try std.testing.expectEqual(@as(usize, 4), countOccurrences(generic, "switch (try ownerOf(contract, input))"));
+    try expectAbsent(generic, "else =>");
+    try expectAbsent(generic, "*const fn");
+    try expectAbsent(generic, "@field(");
+    try expectAbsent(generic, "@call(");
+    try expectAbsent(generic, "anyopaque");
+    // The owner's rules stay in the owner's own binding: the generic file runs no action, reads no
+    // data, builds no delta and names no data key or schema.
+    try expectAbsent(generic, ".execute(");
+    try expectAbsent(generic, "@import(\"../actions/");
+    try expectAbsent(generic, "DataKey");
+    try expectAbsent(generic, "values.read");
+    try expectAbsent(generic, "NodeDelta");
+    try expectAbsent(generic, "data_replacements");
+    try expectAbsent(generic, "_schema");
+    // The owner enum is plain domain data: it reads no compiled step, so no code that exists only for a
+    // test fixture (a step selector) lives in the domain.
+    try expectAbsent(owners, "workflow_compilation");
+    try expectAbsent(owners, "CompiledStep");
+    // Each arm runs the binding its own owner holds: the arm for `.x` invokes the binding in field `x`.
+    // The field's type is the owner's binding (`repair_operations_test` pins each field to its owner's
+    // variant) and the arm cannot invoke another type on it, so a swapped arm cannot compile and a
+    // consistent swap of arm and field breaks this pairing.
+    var arms: usize = 0;
+    var generic_lines = std.mem.splitScalar(u8, generic, '\n');
+    while (generic_lines.next()) |line| {
+        const marker = ".invoke(&self.";
+        const at = std.mem.indexOf(u8, line, marker) orelse continue;
+        const arrow = std.mem.indexOf(u8, line, " => ") orelse return error.TestUnexpectedResult;
+        const tag = std.mem.trim(u8, line[0..arrow], " .");
+        const rest = line[at + marker.len ..];
+        const field = rest[0 .. std.mem.indexOfScalar(u8, rest, ',') orelse return error.TestUnexpectedResult];
+        try std.testing.expectEqualStrings(tag, field);
+        arms += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 29), arms);
+    // Its imports are exactly the contract types and the seven owner bindings.
+    try std.testing.expectEqual(@as(usize, 7), countOccurrences(generic, "_workflow.zig\")"));
+    try std.testing.expectEqual(@as(usize, 14), countOccurrences(generic, "@import(\""));
+    // An owner function has one definition: each owner binding's `invoke` is declared once in its own file,
+    // so the generic operation holds it once and no second path to it exists.
+    inline for (.{
+        .{ @embedFile("application/reference_text_repair_workflow.zig"), 4 },
+        .{ @embedFile("application/reference_extraction_repair_workflow.zig"), 4 },
+        .{ @embedFile("application/reference_reconciliation_repair_workflow.zig"), 4 },
+        .{ @embedFile("application/source_omission_repair_workflow.zig"), 4 },
+        .{ @embedFile("application/specification_repair_workflow.zig"), 4 },
+        .{ @embedFile("application/specification_support_repair_workflow.zig"), 4 },
+        .{ @embedFile("application/specification_coverage_repair_workflow.zig"), 1 },
+    }) |pair| try std.testing.expectEqual(@as(usize, pair[1]), countOccurrences(pair[0], "pub fn invoke("));
+    // The owner enum's rules are exhaustive switches too: only `id` may use an inline-else prong.
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(owners, "else =>"));
+    try expectAbsent(owners, "default");
+    // No per-owner branch in the mechanism: it names no owner (ADR 0030 "Contract variants").
+    inline for (.{ @embedFile("domain/workflow_operation.zig"), @embedFile("ports/workflow_operation_registry.zig"), @embedFile("domain/workflow_graph_compilation.zig"), @embedFile("application/workflow_pipeline_runner.zig") }) |source| {
+        try expectAbsent(source, "repair_owner");
+        try expectAbsent(source, "RepairOwner");
+    }
+}
+
+test "no per-owner repair operation remains: the four generic operations are the only registered repair operations" {
+    // The registry registers the four generic operations and no per-owner one (ADR 0033).
+    const composition = @embedFile("composition/native_workflow_operations.zig");
+    try std.testing.expectEqual(@as(usize, 4), countOccurrences(composition, "variantEntry(generic_repair."));
+    for ([_][]const u8{ "entry(text_repair.", "entry(extraction_repair.", "entry(reconciliation_repair.", "entry(source_omission.", "entry(specification_repair.", "entry(support_repair.", "entry(coverage_repair." }) |forbidden| {
+        try expectAbsent(composition, forbidden);
+    }
+    // Each owner's binding is an owner module: it declares its data effects and rules, imports no action
+    // and registers no contract of its own.
+    inline for (.{
+        @embedFile("application/reference_text_repair_workflow.zig"),
+        @embedFile("application/reference_extraction_repair_workflow.zig"),
+        @embedFile("application/reference_reconciliation_repair_workflow.zig"),
+        @embedFile("application/source_omission_repair_workflow.zig"),
+        @embedFile("application/specification_repair_workflow.zig"),
+        @embedFile("application/specification_support_repair_workflow.zig"),
+        @embedFile("application/specification_coverage_repair_workflow.zig"),
+    }) |source| {
+        try expectAbsent(source, "@import(\"../actions/");
+        try expectAbsent(source, "Action.contract");
+        try expectAbsent(source, "action: Action");
+    }
+    // No action file declares a repair step, and no domain code reaches a repair rule through an action.
+    const io = std.testing.io;
+    var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
+    defer actions.close(io);
+    var walker = try actions.walk(std.testing.allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file) continue;
+        try std.testing.expect(std.mem.indexOf(u8, entry.basename, "repair") == null);
+    }
 }
 
 test "principle root access stays in its narrow source adapter and shares physical traversal" {

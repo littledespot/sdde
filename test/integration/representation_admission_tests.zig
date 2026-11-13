@@ -110,19 +110,39 @@ fn decodeSelectedText(a: std.mem.Allocator, bytes: []const u8) !text.BusinessTex
     return codec.decode(text.BusinessText, a, wrapped);
 }
 
-fn capturedConstruction(a: std.mem.Allocator, packet: std.json.Value, construct: bool) ![]const schemas.IntegerChoice {
-    if (!construct) return &.{};
+/// The retained captures were taken while the engine left a determined `exact_copy` handle out of the
+/// selected response schema and restored it before decoding. That mechanism is gone from the engine; the
+/// replay restores the captured handle here, only to observe the frozen bytes.
+fn capturedClaim(packet: std.json.Value, construct: bool) !?i64 {
+    if (!construct) return null;
     const tokens = try member(packet, "preserved_tokens");
     if (tokens != .array or tokens.array.items.len != 1) return error.InvalidReplayFixture;
     const claim = try member(tokens.array.items[0], "claim_id");
     if (claim != .number_string) return error.InvalidReplayFixture;
     const id = try @import("../../src/domain/model_payload_schema.zig").exactInteger(claim.number_string);
     if (id <= 0 or id > std.math.maxInt(u32)) return error.InvalidReplayFixture;
-    const allowed = try a.alloc(i64, 1);
-    allowed[0] = id;
-    const choices = try a.alloc(schemas.IntegerChoice, 1);
-    choices[0] = .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = allowed, .singleton = .construct };
-    return choices;
+    return id;
+}
+
+fn restoreCapturedHandles(a: std.mem.Allocator, value: *std.json.Value, claim: i64) !void {
+    switch (value.*) {
+        .object => |*object| {
+            for (object.values()) |*child| try restoreCapturedHandles(a, child, claim);
+            const tag = object.get("kind") orelse return;
+            if (tag != .string or !std.mem.eql(u8, tag.string, "exact_copy")) return;
+            if (object.contains("claim_id")) return error.InvalidJsonDocument;
+            try object.put(a, "claim_id", .{ .integer = claim });
+        },
+        .array => |*array| for (array.items) |*child| try restoreCapturedHandles(a, child, claim),
+        else => {},
+    }
+}
+
+fn withCapturedClaim(a: std.mem.Allocator, bytes: []const u8, claim: ?i64) ![]const u8 {
+    const id = claim orelse return bytes;
+    var parsed = try strict.parse(a, bytes, .{ .maximum_depth = 64 }, false, null);
+    try restoreCapturedHandles(a, &parsed.value, id);
+    return std.json.Stringify.valueAlloc(a, parsed.value, .{});
 }
 
 test "test.integration.representation_admission retained F10 F11 and F12 observations stay frozen while current exact wire rejects" {
@@ -194,7 +214,7 @@ test "test.integration.representation_admission retained F10 F11 and F12 observa
             const wire_issue = try wire.checkValue(a, raw.parsed.value, schema.root(), sources);
             try std.testing.expectEqual(capture.expected_wire_syntax_rejection, wire_issue != null);
             if (wire_issue != null) counts.wire_syntax_rejected_responses += 1;
-            const choices = try capturedConstruction(a, packet, capture.construct_exact_copy);
+            const claim = try capturedClaim(packet, capture.construct_exact_copy);
             for (capture.values) |selection| {
                 stage = .field_selection;
                 errdefer std.debug.print("retained representation field failed: {s}\n", .{@tagName(selection.field)});
@@ -202,7 +222,7 @@ test "test.integration.representation_admission retained F10 F11 and F12 observa
                 const raw_value = try selected(if (selection.from == .model_output) raw.parsed.value else user.value, selection.path);
                 const bytes = try std.json.Stringify.valueAlloc(a, raw_value, .{});
                 try std.testing.expectEqualStrings(selection.value_sha256, &hash(bytes));
-                const constructed = try codec.constructBound(a, bytes, choices);
+                const constructed = try withCapturedClaim(a, bytes, claim);
                 stage = .native_decode;
                 // Observe the pinned pre-B3 wire kinds without decoding them as
                 // current model values. Native scope was not retained here.

@@ -294,13 +294,13 @@ map every outcome, as the fixture does.
   either another local step ID or one of `end.ok`, `end.needs-user`, `end.invalid`,
   `end.blocked`, `end.failed`, and `end.cancelled`.
   - **Contract variants** ([ADR 0030](../decisions/0030-engine-owned-model-request.md)
-    "Contract variants", not yet implemented). An operation's one contract may consist of
+    "Contract variants", implemented). An operation's one contract may consist of
     closed variants. One required closed step parameter selects the variant at compile
     time.
   - Each variant is a complete contract: outcomes, all data effects including `optional`
     and `replaces`, side effect, association descriptors, repair role, and
-    whether retry authority is required or forbidden, with its maximum and native key
-    population.
+    whether retry authority is required or forbidden, with its maximum. The native key
+    population of a repair scope stays the engine's own (`workflow_retry`).
   - Registry admission validates each variant independently, and registry-wide checks
     cover every variant. This rule, the rules below, compiled-graph validation, registry
     publication and the runner all check the step's own variant, never a union.
@@ -745,8 +745,9 @@ The `validate_workflow_graphs` step proves at least:
   monotonic counts per native key under [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation).
   Execution bounds multiply their allowances by the finite native key population;
   request-accounting sites also include their ordinary-request population. Under
-  ADR 0033, a generic repair step's key population and role come from its owner's
-  contract variant, and its retry count stays bound to that step instance. Arithmetic
+  ADR 0033, a generic repair step's role and `retry-limit` maximum come from its owner's
+  contract variant, its key population is the scope's engine-wide population, and its
+  retry count stays bound to that step instance. Arithmetic
   overflow and incompatible repair roles/scopes reject before execution;
 - native finite iteration uses registered scope/progress contracts and a cursor
   bound to the validated population under [§6.3](../contracts/06-pipeline-nodes.md#63-reordering-and-composition-rules).

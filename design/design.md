@@ -565,7 +565,7 @@ safety validation remains mandatory; semantic review is identified separately.
 
 Repair changes only the engine-authorized unit under current identity, revision, and old-value
 preconditions. Impacted validation and full-candidate validation precede acceptance. Under
-[ADR 0033](decisions/0033-generic-repair-operations.md) (not yet implemented), repairs run
+[ADR 0033](decisions/0033-generic-repair-operations.md) (implemented), repairs run
 through four generic operations with owner-supplied rules, and these boundaries are unchanged.
 
 [Complete §22 contract](contracts/22-repair.md).
@@ -1139,10 +1139,10 @@ gives its title and status.
 | [0026](decisions/0026-header-identity-log-retention.md) | Prune prior-run log segments by header identity | Accepted amendment |
 | [0028](decisions/0028-anthropic-messages-provider.md) | Anthropic Messages API provider on shared provider owners | Accepted amendment |
 | [0029](decisions/0029-bedrock-model-families.md) | Bedrock model families | Accepted amendment |
-| [0030](decisions/0030-engine-owned-model-request.md) | One engine-owned step per model request | Accepted amendment, amended 23 October 2026; implemented: provider token counting is removed, each catalogue entry requires `requestTimeoutMs`, and the `request-model` step runs every model request of the Spec workflow |
+| [0030](decisions/0030-engine-owned-model-request.md) | One engine-owned step per model request | Accepted amendment, amended 23 October 2026; implemented: provider token counting is removed, each catalogue entry requires `requestTimeoutMs`, the `request-model` step runs every model request of the Spec workflow, and the contract-variant mechanism (one registered contract of closed variants selected by a required enumeration parameter) serves ADR 0033's four generic repair operations |
 | [0031](decisions/0031-stage-actions.md) | One action per deterministic stage | Accepted amendment; partly implemented: `prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions; every other stage is not yet converted |
 | [0032](decisions/0032-engine-routines.md) | Typed engine routines for fixed engine sequences | Accepted amendment; startup and provider bootstrap implemented, feature logging not yet |
-| [0033](decisions/0033-generic-repair-operations.md) | Generic repair operations with owner-supplied rules | Accepted amendment; not yet implemented |
+| [0033](decisions/0033-generic-repair-operations.md) | Generic repair operations with owner-supplied rules | Accepted amendment; implemented: the four generic repair operations select one of 13 owners' contract variants through the shared variant mechanism, and the 29 per-owner operations are deleted |
 | [0034](decisions/0034-spec-quality-gate.md) | Specify quality gate before Plan | Accepted |
 | [0035](decisions/0035-cross-kind-restatement.md) | Cross-kind and story restatement in the duplicate rule | Accepted |
 | [0036](decisions/0036-source-quoted-claims.md) | Source-quoted extraction claims | Accepted |

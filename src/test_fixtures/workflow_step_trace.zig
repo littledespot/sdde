@@ -9,6 +9,8 @@ const compilation = @import("../domain/workflow_compilation.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const source = @import("../domain/workflow_source.zig");
 const filesystem = @import("../domain/filesystem_identity.zig");
+const workflow_retry = @import("../domain/workflow_retry.zig");
+const atomic_repair = @import("../domain/atomic_repair.zig");
 
 pub const schema = "workflow-step-trace/v1";
 pub const directory = ".zig-cache/workflow-step-trace";
@@ -48,9 +50,28 @@ pub fn writeCallSite(w: *std.Io.Writer, step: *const compilation.CompiledStep) s
     }
 }
 
+/// The closed enumeration parameter that selects an operation's contract variant (ADR 0030
+/// "Contract variants"; `owner` for ADR 0033's repair operations).
+pub const selector_parameter = "owner";
+
+/// The step's selected variant, when it declares one; absent for every operation that has a single
+/// contract, so such a step's line is unchanged.
+fn selectedVariant(step: *const compilation.CompiledStep) ?[]const u8 {
+    for (step.parameters) |parameter| {
+        if (!std.mem.eql(u8, parameter.id.bytes, selector_parameter)) continue;
+        return switch (parameter.value) {
+            .enumeration => |value| value,
+            .boolean, .integer, .string, .registered_ref, .resource, .model_slot => null,
+        };
+    }
+    return null;
+}
+
 fn writeLine(w: *std.Io.Writer, step: *const compilation.CompiledStep, applied: execution.Applied) std.Io.Writer.Error!void {
     try writeCallSite(w, step);
-    try w.print("#{s}\t", .{step.operation_id.bytes});
+    try w.print("#{s}", .{step.operation_id.bytes});
+    if (selectedVariant(step)) |variant| try w.print("@{s}", .{variant});
+    try w.writeByte('\t');
     switch (applied) {
         .outcome => |tag| try w.writeAll(@tagName(tag)),
         .rejected => |reason| try writeRejection(w, reason),
@@ -189,10 +210,34 @@ pub fn hashed(a: std.mem.Allocator, observed: []const File) std.mem.Allocator.Er
     return result;
 }
 
+pub const repairs_schema = "workflow-repair-evidence/v1";
+
+/// The scenario's native repair evidence beside its step lines (ADR 0033 "Freeze first"): each
+/// instance's retry limit, scope, executions, the defect keys counted per instance (hex of the
+/// scope, target and family digests) and the per-request assignment counts, and every retained
+/// native merge (its authorization, owner, operation, revisions, change fact, origin and permit).
+/// It is a separate file so the trace and summary bytes of earlier freezes stay comparable.
+pub const RepairEvidence = struct {
+    schema: []const u8 = repairs_schema,
+    retry_settings: []const workflow_retry.Observation,
+    merges: []const atomic_repair.Merge,
+};
+
+fn basePath(a: std.mem.Allocator, summary: Summary) std.mem.Allocator.Error![]const u8 {
+    return std.fmt.allocPrint(a, "{s}/{s}-{s}-{d:0>3}", .{ directory, summary.workflow, summary.case, summary.scenario });
+}
+
+/// Writes `<workflow>-<case>-<scenario>.repairs`, the JSON of `evidence`.
+pub fn writeRepairs(io: std.Io, a: std.mem.Allocator, summary: Summary, evidence: RepairEvidence) !void {
+    const cwd = std.Io.Dir.cwd();
+    try cwd.createDirPath(io, directory);
+    try cwd.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "{s}.repairs", .{try basePath(a, summary)}), .data = try std.json.Stringify.valueAlloc(a, evidence, .{ .whitespace = .indent_2 }) });
+}
+
 /// Writes `<workflow>-<case>-<scenario>.trace`, `.json` and the masked files
 /// beneath `<...>.files/`.
 pub fn write(io: std.Io, a: std.mem.Allocator, trace: *Trace, summary: Summary, observed: []const File) !void {
-    const base = try std.fmt.allocPrint(a, "{s}/{s}-{s}-{d:0>3}", .{ directory, summary.workflow, summary.case, summary.scenario });
+    const base = try basePath(a, summary);
     const cwd = std.Io.Dir.cwd();
     try cwd.createDirPath(io, directory);
     try cwd.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "{s}.trace", .{base}), .data = trace.written() });
@@ -243,6 +288,34 @@ test "a step without a source chain keys by its compiled ID and rejections use t
     const step = testStep(&.{}, "release-model-transport");
     try trace.record(&step, .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } });
     try std.testing.expectEqualStrings("g1-step#release-model-transport\trejected:operation_failed:OperationExecutionFailed\n", trace.written());
+}
+
+test "a step that selects a contract variant names it and every other step's line is unchanged" {
+    var trace: Trace = .init(std.testing.allocator);
+    defer trace.deinit();
+    var selecting = testStep(&.{}, "merge-repair");
+    selecting.parameters = &.{
+        .{ .id = .{ .bytes = "retry-limit" }, .value = .{ .integer = 64 } },
+        .{ .id = .{ .bytes = selector_parameter }, .value = .{ .enumeration = "specification-unit" } },
+    };
+    var other = testStep(&.{}, "merge-repair");
+    // A string parameter of the same name is not a selector: only a closed enumeration selects.
+    other.parameters = &.{.{ .id = .{ .bytes = selector_parameter }, .value = .{ .string = "specification-unit" } }};
+    try trace.record(&selecting, .{ .outcome = .ok });
+    try trace.record(&other, .{ .outcome = .ok });
+    try trace.record(&testStep(&.{}, "merge-repair"), .{ .outcome = .ok });
+    try std.testing.expectEqualStrings("g1-step#merge-repair@specification-unit\tok\ng1-step#merge-repair\tok\ng1-step#merge-repair\tok\n", trace.written());
+}
+
+test "the repair evidence record is deterministic JSON with its schema first" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const evidence: RepairEvidence = .{ .retry_settings = &.{}, .merges = &.{} };
+    const first = try std.json.Stringify.valueAlloc(a, evidence, .{ .whitespace = .indent_2 });
+    const second = try std.json.Stringify.valueAlloc(a, evidence, .{ .whitespace = .indent_2 });
+    try std.testing.expectEqualStrings(first, second);
+    try std.testing.expect(std.mem.startsWith(u8, first, "{\n  \"schema\": \"workflow-repair-evidence/v1\""));
 }
 
 test "observed files exclude log components, mask the run identity and sort by path" {

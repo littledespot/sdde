@@ -204,7 +204,7 @@ pub fn run() !void {
         for (seeds) |seed| {
             // ADR 0047: the engine composes the story between the model's units.
             if (current.completed == session.story_index) current = (try compose_story.execute(a, current, prepared.context)).composed;
-            if (index == 0 and current.completed == 0) try singletonConstructionChecks(a, schema, current, prepared.context);
+            if (index == 0 and current.completed == 0) try exactValueRecognitionChecks(a, schema, current, prepared.context);
             const request = try exportRequest(a, schema, example.id, current, prepared.context);
             if (index == 0 and current.completed == 0) try receiptChecks(a, request, try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, prepared.context, seed)));
             try addTrials(a, &trials, example.id, request);
@@ -382,11 +382,7 @@ pub fn admitResponse(a: std.mem.Allocator, schema: *const schema_owner.Schema, c
     var document = try @import("../domain/model_envelope.zig").parseContent(a, bytes, null);
     defer document.deinit();
     if (@import("../domain/model_payload_schema.zig").validateValue(@import("../domain/model_envelope.zig").value(&document.parsed.value), restricted.selected().root()) != null) return error.InvalidCalibrationPayload;
-    // Production collection restores only engine-determined singleton fields
-    // after selected-wire admission; provider bytes remain original evidence.
-    const constructed = try codec.constructBound(a, document.content, packet.integerChoices());
-    defer a.free(constructed);
-    const parsed = try g.parse(a, constructed, try session.currentBinding(a, current, context));
+    const parsed = try g.parse(a, document.content, try session.currentBinding(a, current, context));
     const checked = switch (try g.validate(a, text.validator, context, try session.unit(current.completed), parsed)) {
         .valid => |checked| try session.admit(a, current, context, checked),
         .invalid => |issue| return .{ .invalid = issue },
@@ -395,17 +391,19 @@ pub fn admitResponse(a: std.mem.Allocator, schema: *const schema_owner.Schema, c
     return .{ .valid = checked };
 }
 
-fn singletonConstructionChecks(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !void {
+/// A model-written exact value in prose is recognised as the source's exact copy, and an echoed
+/// engine handle in the response is rejected.
+fn exactValueRecognitionChecks(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !void {
     const occurrences = try @import("../domain/specification_provenance.zig").exactOccurrences(a, @import("../domain/reference_support.zig").records(context.references), null);
-    if (occurrences.len != 1) return error.InvalidCalibrationSingleton;
-    // The brief description is the obligation-bearing singleton a model writes.
+    if (occurrences.len != 1) return error.InvalidCalibrationExactValue;
+    // The brief description is the exact value, written as prose, that a model writes.
     const prose = try std.fmt.allocPrint(a, "{s} MOCK The application starts successfully and displays its greeting and UTC date and time.", .{occurrences[0].bytes});
     const groups: []const @import("../domain/reference_reconciliation.zig").SignalId = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } };
     const plain: g.AuthoringValue = .{ .value = try business(a, "MOCK Startup display"), .signal_ids = groups };
     const wire = try codec.encode(g.ModelResponse, a, .{ .brief = .{ .description = .{ .value = try business(a, prose), .signal_ids = groups }, .primary_goal = plain } });
     const checked = switch (try admitResponse(a, schema, current, context, wire)) {
         .valid => |checked| checked,
-        .invalid => return error.InvalidCalibrationSingleton,
+        .invalid => return error.InvalidCalibrationExactValue,
     };
     try std.testing.expectEqual(@as(u32, 4), checked.response.content.brief.description.value.segments[0].exact_copy.claim_id.ordinal);
     const echoed = "{\"kind\":\"brief\",\"description\":{\"value\":{\"fragments\":[{\"kind\":\"exact_copy\",\"claim_id\":4}]},\"signal_ids\":[1,2]},\"primary_goal\":{\"value\":\"MOCK Startup display\",\"signal_ids\":[1,2]}}";

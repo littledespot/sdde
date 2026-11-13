@@ -143,16 +143,7 @@ pub const State = struct {
             if (!sameOptionalOrigin(existing.origin(), origin) or !std.mem.eql(u8, current_bytes, existing_bytes)) return error.ConflictingCompositionPart;
             return self;
         }
-        const canonical_value = canonical: {
-            for (self.base.integerChoices()) |choice| {
-                if (choice.constructedValue() != null) break;
-            } else break :canonical candidate.json().*;
-            const body = @import("model_candidate_json.zig").constructBound(allocator, candidate.content(), self.base.integerChoices()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAssembledCandidate;
-            defer allocator.free(body);
-            const parsed = @import("strict_json.zig").parse(allocator, body, .{ .maximum_depth = schema.max_json_depth }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAssembledCandidate;
-            if (payload.validateValue(envelope.value(&parsed.value), binding.schema.root()) != null) return error.InvalidAssembledCandidate;
-            break :canonical parsed.value;
-        };
+        const canonical_value = candidate.json().*;
         const entries = try allocator.alloc(?Entry, self.plan.parts().len);
         @memset(entries, null);
         @memcpy(entries[0..self.entries.len], self.entries);

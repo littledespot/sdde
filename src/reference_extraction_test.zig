@@ -693,6 +693,84 @@ test "no-feature-claim text repair retains native failures and immutable classif
     }
 }
 
+test "a generic authorize-repair step runs the reference text owner over a real text rejection and no other owner" {
+    // The reference text route takes no scripted run (response admission rejects a text defect before
+    // the native validator sees it), so this proves the owner's authorization binding, selected by the
+    // generic operation's `owner`, against a real native text rejection: the text owner finds its facts,
+    // and every other owner of `authorize-repair` fails with nothing applied (ADR 0033 "owner checks").
+    const native = @import("application/reference_extraction_workflow.zig");
+    const generic = @import("application/repair_workflow.zig");
+    const repair_owner = @import("domain/repair_owner.zig");
+    const values = @import("application/pipeline_values.zig");
+    const compilation = @import("domain/workflow_compilation.zig");
+    const owned = @import("domain/reference_candidate_value.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: fixture.IdSource = .{};
+    const inputs = try fixture.prepare(a, &ids, try ingest(a, "guidance.md", "Background context only."));
+    const context = try text_fixture.prepare(a, inputs);
+    var transferred = false;
+    defer if (!transferred) context.deinit();
+    const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
+    const reason: extraction.text.ReferenceSemanticText = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} };
+    const candidate: extraction.Parsed = .{ .entries = &.{.{ .scope = scope, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = reason } }} };
+    const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+
+    const current = try values.adopt(std.testing.allocator, @import("application/toolchain_workflow_values.zig").valid, text_fixture.safety.ValidToolchain, text_fixture.safety.Owner, context.owner, text_fixture.safety.value, text_fixture.safety.deinitOwner, text_fixture.safety.retainedBytes(context.owner));
+    transferred = true;
+    defer values.destroy(current);
+    const source = try values.create(std.testing.allocator, @import("application/reference_evidence_workflow.zig").inputs_schema, evidence.Inputs, inputs);
+    defer values.destroy(source);
+    const registry = try values.create(std.testing.allocator, @import("application/passive_literal_workflow.zig").registry_schema, @import("domain/passive_literals.zig").Registry, context.registry);
+    defer values.destroy(registry);
+    const parsed_value = parsed: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .parsed = candidate };
+        break :parsed (try native.publish(std.testing.allocator, native.parsed_schema, owner, .ok)).delta.data_writes[@intFromEnum(native.parsed_schema.key)].?;
+    };
+    defer values.destroy(parsed_value);
+    const rejected_value = rejected: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .text_rejected = rejection };
+        break :rejected (try native.publish(std.testing.allocator, native.text_schema, owner, .invalid)).delta.data_writes[@intFromEnum(native.text_schema.key)].?;
+    };
+    defer values.destroy(rejected_value);
+    var view: @import("domain/pipeline_data.zig").View = .{};
+    view.slots[@intFromEnum(@import("application/reference_evidence_workflow.zig").inputs_schema.key)] = source;
+    view.slots[@intFromEnum(@import("application/passive_literal_workflow.zig").registry_schema.key)] = registry;
+    view.slots[@intFromEnum(@import("application/toolchain_workflow_values.zig").valid.key)] = current;
+    view.slots[@intFromEnum(native.parsed_schema.key)] = parsed_value;
+    view.slots[@intFromEnum(native.text_schema.key)] = rejected_value;
+
+    var generic_context: generic.AuthorizeRepair = undefined;
+    inline for (@typeInfo(generic.AuthorizeRepair).@"struct".fields) |field| @field(generic_context, field.name).allocator = std.testing.allocator;
+    var found: usize = 0;
+    inline for (comptime repair_owner.served(.authorize)) |owner| {
+        const parameters = [_]compilation.CompiledParameter{.{ .id = .{ .bytes = generic.selector }, .value = .{ .enumeration = owner.id() } }};
+        const effects = @import("application/reference_text_repair_workflow.zig").Authorize.effects;
+        const step: compilation.CompiledStep = .{ .id = .{ .bytes = "authorize" }, .operation_id = .{ .bytes = "authorize-repair" }, .parameters = &parameters, .requires = effects.requires, .produces = effects.produces, .replaces = effects.replaces, .invalidates = effects.invalidates, .outcomes = &.{ .ok, .invalid, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+        const input: @import("ports/workflow_operation_registry.zig").Input = .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } };
+        if (generic.AuthorizeRepair.invoke(&generic_context, input)) |authorized| {
+            // Only the text owner finds its native facts in this data.
+            try std.testing.expectEqual(repair_owner.RepairOwner.reference_text, owner);
+            try std.testing.expectEqual(.ok, authorized.outcome);
+            values.destroy(authorized.delta.data_writes[@intFromEnum(@import("application/reference_text_repair_workflow.zig").authorization_schema.key)].?);
+            try std.testing.expect(authorized.delta.repair_transition != null and authorized.delta.repair_transition.? == .authorized);
+            found += 1;
+        } else |err| {
+            // Any other owner fails the run terminally: no candidate, so no delta is applied. The
+            // extraction owner reads the same parsed and text keys and finds a text rejection where it
+            // needs its own; every other owner finds no key of its own.
+            try std.testing.expect(owner != .reference_text);
+            try std.testing.expectEqual(if (owner == .reference_extraction) error.OperationExecutionFailed else error.MissingRequiredData, err);
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 1), found);
+}
+
 test "reason text repair binds its packet, origin, progress and authority to current policy" {
     const repair = @import("domain/reference_extraction_text_repair.zig");
     const contexts = @import("domain/reference_extraction_context.zig");

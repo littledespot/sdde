@@ -13,7 +13,7 @@ blocked outcomes; valid citations or model-assisted comparisons do not establish
 semantic corroboration. A genuine native authority gap remains typed, never an
 automatic upstream rebuild after generation. Pre-generation source repair and
 native generation/protocol repair remain distinct authorized operations. Under
-[ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
+[ADR 0033](../decisions/0033-generic-repair-operations.md) (implemented),
 "distinct" means distinct authorization categories and owners, each with its own rules
 and phase witness. Both run through the four generic repair operations, with distinct
 `owner` values, not distinct operation IDs.

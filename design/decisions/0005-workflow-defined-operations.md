@@ -95,11 +95,11 @@ workflow behavior without duplicating large resources at every node.
 
 - Explicit user direction removes operation-contract versioning.
 - Each operation has one current contract and one unversioned ID, such as
-  `invoke-model`. Under [ADR 0033](0033-generic-repair-operations.md) (not yet
-  implemented), the four generic repair operations each keep one contract and one ID.
-  That contract has a closed variant per repair owner, and the compiler selects it from
-  the step's `owner` at compile time. They use the one contract-variant mechanism that
-  [ADR 0030](0030-engine-owned-model-request.md) builds ("Contract variants"); a variant
+  `request-model`. Under [ADR 0033](0033-generic-repair-operations.md) (implemented), the
+  four generic repair operations each keep one contract and one ID. That contract has a
+  closed variant per repair owner, and the compiler selects it from the step's `owner` at
+  compile time. They use the one contract-variant mechanism that
+  [ADR 0030](0030-engine-owned-model-request.md) specifies ("Contract variants"); a variant
   is a complete contract, and one closed step parameter selects it. `request-model` has
   one contract with no variants.
 - Both `invoke` and `steps.*.use` name that ID directly.

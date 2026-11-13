@@ -5,6 +5,7 @@ const data = @import("../domain/pipeline_data.zig");
 const workflow = @import("../domain/workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const definitions = @import("../domain/specification_result_definitions.zig");
+const repair_owner = @import("../domain/repair_owner.zig");
 pub const Fault = struct {
     /// `loss_review` selects only source-loss preservation comparisons.
     /// `records` selects only record-authoring generation requests.
@@ -551,7 +552,7 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes)) {
             if (std.mem.eql(u8, entry.operation_id.bytes, "initialize-specification-generation")) std.testing.expect(self.runner.repair_retry.currentPermit() == null) catch unreachable;
             if (std.mem.eql(u8, entry.operation_id.bytes, "check-reference-summary-reuse")) summary_check_before = SummaryCheckSnapshot.capture(arena.allocator(), self) catch unreachable;
-            const keys: []const @import("../domain/pipeline.zig").DataKey = if (sourceMergeContract(entry.operation_id.bytes) != null) &.{.source_omission_repair} else if (std.mem.eql(u8, entry.operation_id.bytes, "collect-specification-support-loss")) &.{.specification_support_review} else if (std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair")) &.{ .specification_support_review, .specification_support_repair } else if ((self.summary_sequence != null or self.global_sequence != null) and std.mem.eql(u8, entry.operation_id.bytes, "merge-reference-reconciliation-repair")) &.{.parsed_reference_reconciliation} else &.{};
+            const keys: []const @import("../domain/pipeline.zig").DataKey = if (isSourceMerge(entry)) &.{.source_omission_repair} else if (std.mem.eql(u8, entry.operation_id.bytes, "collect-specification-support-loss")) &.{.specification_support_review} else if (isRoute(entry, .merge, .specification_support)) &.{ .specification_support_review, .specification_support_repair } else if ((self.summary_sequence != null or self.global_sequence != null) and isRoute(entry, .merge, .reference_reconciliation)) &.{.parsed_reference_reconciliation} else &.{};
             for (keys) |key| {
                 const index = @intFromEnum(key);
                 before_merge.slots[index] = values.retain(self.runner.envelope.slots[index].?) catch unreachable;
@@ -589,9 +590,9 @@ pub const Driver = struct {
         };
         if (before_merge.contains(.source_omission_repair) and (result.status() == .ok or result.status() == .more)) for (self.runner.selected.graph.authority.steps) |entry| {
             if (!std.mem.eql(u8, entry.id.bytes, id.bytes)) continue;
-            const contract = sourceMergeContract(entry.operation_id.bytes).?;
+            std.testing.expect(isSourceMerge(entry)) catch unreachable;
             const view: data.View = .{ .slots = self.runner.envelope.slots };
-            for (contract.invalidates) |key| std.testing.expect(!view.contains(key)) catch unreachable;
+            for (entry.invalidates) |key| std.testing.expect(!view.contains(key)) catch unreachable;
             const authorization = (@import("../application/source_omission_repair_workflow.zig").read(&before_merge) catch unreachable).authorization;
             const permit = switch (authorization) {
                 inline else => |value| value.retry.?,
@@ -630,7 +631,7 @@ pub const Driver = struct {
             self.admitted_losses.getPtr(std.meta.activeTag(admitted.location)).* += 1;
             if (admitted.uncertain) self.uncertain_loss_calls += 1;
         };
-        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, @import("../actions/reference/merge_reference_reconciliation_repair.zig").Action.contract.id) and result.status() == .ok) {
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and isRoute(entry, .merge, .reference_reconciliation) and result.status() == .ok) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const parsed = @import("../application/reference_extraction_workflow.zig").read(&view, @import("../application/reference_reconciliation_workflow.zig").parsed_schema, .reconciliation_parsed) catch unreachable;
             const merged = parsed.payload().reconciliation_parsed.source.last_repair.?;
@@ -646,7 +647,7 @@ pub const Driver = struct {
             self.reconciliation_merges += 1;
             if (!merged.changed) self.unchanged_reconciliation_merges += 1;
         };
-        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair") and (result.status() == .ok or result.status() == .more or result.status() == .invalid)) {
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and isRoute(entry, .merge, .specification_support) and (result.status() == .ok or result.status() == .more or result.status() == .invalid)) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             assertSupportMerge(arena.allocator(), &before_merge, &view) catch unreachable;
             const review_workflow = @import("../application/specification_support_workflow.zig");
@@ -1079,12 +1080,26 @@ fn authorityInputs(view: *const data.View) @import("../domain/required_authority
     return @import("../application/required_authority_values.zig").read(view, @import("../application/required_authority_workflow.zig").inputs_schema, .inputs) catch unreachable;
 }
 
-fn sourceMergeContract(id: []const u8) ?@import("../domain/pipeline.zig").NodeContract {
-    inline for (.{
-        @import("../actions/reference/merge_source_extraction_repair.zig").Action,
-        @import("../actions/reference/merge_source_reconciliation_repair.zig").Action,
-    }) |Action| if (std.mem.eql(u8, id, Action.contract.id)) return Action.contract;
-    return null;
+/// Whether a compiled step runs generic repair operation `op` for `owner`: the step names the
+/// operation and its `owner` parameter, read through the contract's own selector, names the owner. A
+/// fixture selects a repair step this way, never by comparing YAML text.
+fn isRoute(step: @import("../domain/workflow_compilation.zig").CompiledStep, comptime op: repair_owner.Operation, owner: repair_owner.RepairOwner) bool {
+    const generic = @import("../application/repair_workflow.zig");
+    const contract = switch (op) {
+        .authorize => generic.AuthorizeRepair.contract,
+        .build_input => generic.BuildRepairInput.contract,
+        .parse => generic.ParseRepair.contract,
+        .merge => generic.MergeRepair.contract,
+    };
+    if (!std.mem.eql(u8, step.operation_id.bytes, op.id())) return false;
+    const value = @import("../domain/workflow_compilation.zig").selectorValue(contract, step.parameters) orelse return false;
+    return std.mem.eql(u8, value, owner.id());
+}
+
+/// Whether a compiled step is one of source omission's two merges, selected by its generic operation
+/// and `owner`, never by an operation ID.
+fn isSourceMerge(entry: @import("../domain/workflow_compilation.zig").CompiledStep) bool {
+    return isRoute(entry, .merge, .source_omission_extraction) or isRoute(entry, .merge, .source_omission_reconciliation);
 }
 
 // The provider receives every member of the current native assignment, including

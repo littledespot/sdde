@@ -34,6 +34,17 @@
   ADR 0032's logging preconditions are met. Its five-step order and the rule that only
   this path prunes are unchanged. Fake-port routine tests replace the coordinator's
   step-order spy test.
+- **Amended 14 November 2026** (user: "recommendation accepted"): this amendment reaches
+  prior-run crash finalization, not retention. Finalization resolves each historical policy
+  solely through its `segment_header` control row's policy identity. No persisted
+  `BootstrapAuthorityState` or bootstrap lineage is read for a prior run. This decides the
+  authority only. The identity is a digest of the compiled policy: it names a policy without
+  supplying its content. Before finalization is built, confirm that the identity suffices for
+  every historical-policy value finalization needs (the runner reads the policy to select the
+  prompt stream), or state what a mismatch with the current policy does. Finalization stays
+  unimplemented, and its order relative to the current activation, the same-run policy
+  transition and that transition's coordinator ([ADR 0032](0032-engine-routines.md)) stay
+  undecided.
 
 ## Context
 
@@ -127,7 +138,8 @@ in those segments.
 
 - Retention now runs on every fresh activation. A prior run's logs disappear only
   after they are closed and older than 14 days.
-- A crashed run's logs are kept until crash finalization is decided.
+- A crashed run's logs are kept until crash finalization is built (14 November 2026
+  amendment).
 - Damaged or tampered prior-run logs block every later run of the feature until
   someone repairs or removes them. The emergency line gives the failure code but no
   path. This follows §26.5. Since the log-folder entries amendment, a stray regular

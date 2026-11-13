@@ -1706,16 +1706,16 @@ test "reconciliation input nodes place the summary purpose from captured run gui
     };
     defer values.destroy(rejected_value);
     view.slots[@intFromEnum(workflow.summary_schema.key)] = rejected_value;
-    const authorize_contract = repairs.Authorize(.summary).Action.contract;
-    const authorize_step: compilation.CompiledStep = .{ .id = .{ .bytes = "authorize-summary" }, .operation_id = .{ .bytes = authorize_contract.id }, .parameters = &.{}, .requires = authorize_contract.requires, .produces = authorize_contract.produces, .replaces = authorize_contract.replaces, .invalidates = authorize_contract.invalidates, .outcomes = &.{ .ok, .more, .blocked, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+    const authorize_effects = repairs.Authorize(.summary).effects;
+    const authorize_step: compilation.CompiledStep = .{ .id = .{ .bytes = "authorize-summary" }, .operation_id = .{ .bytes = "authorize-repair" }, .parameters = &.{}, .requires = authorize_effects.requires, .produces = authorize_effects.produces, .replaces = authorize_effects.replaces, .invalidates = authorize_effects.invalidates, .outcomes = &.{ .ok, .more, .blocked, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
     var authorize: repairs.Authorize(.summary) = .{ .allocator = std.testing.allocator };
     const authorized = try repairs.Authorize(.summary).invoke(&authorize, .{ .step = .{ .data = view, .step = &authorize_step, .resources = &.{}, .model_binding = null, .log = log } });
     try std.testing.expectEqual(.ok, authorized.outcome);
     const state = authorized.delta.data_writes[@intFromEnum(repairs.state_schema.key)].?;
     defer values.destroy(state);
     view.slots[@intFromEnum(repairs.state_schema.key)] = state;
-    const repair_contract = repairs.BuildInput.Action.contract;
-    const repair_step: compilation.CompiledStep = .{ .id = .{ .bytes = "summary-repair-input" }, .operation_id = .{ .bytes = repair_contract.id }, .parameters = &.{}, .requires = repair_contract.requires, .produces = repair_contract.produces, .replaces = repair_contract.replaces, .invalidates = repair_contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+    const repair_effects = repairs.BuildInput.effects;
+    const repair_step: compilation.CompiledStep = .{ .id = .{ .bytes = "summary-repair-input" }, .operation_id = .{ .bytes = "build-repair-input" }, .parameters = &.{}, .requires = repair_effects.requires, .produces = repair_effects.produces, .replaces = repair_effects.replaces, .invalidates = repair_effects.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
     var build_repair: repairs.BuildInput = .{ .allocator = std.testing.allocator };
     const repaired = try repairs.BuildInput.invoke(&build_repair, .{ .step = .{ .data = view, .step = &repair_step, .resources = &.{}, .model_binding = null, .log = log } });
     const repair_value = repaired.delta.data_writes[@intFromEnum(requests.packet_schema.key)].?;
@@ -1724,6 +1724,118 @@ test "reconciliation input nodes place the summary purpose from captured run gui
     const repair_body = try std.json.parseFromSliceLeaky(std.json.Value, a, repair_packet.body(), .{});
     try std.testing.expectEqualStrings(marked.summary_purpose, repair_body.object.get("input").?.object.get("summary_purpose").?.string);
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, repair_packet.body(), marked.summary_purpose));
+}
+
+test "a generic authorize-repair step runs only the owner whose native facts the data holds" {
+    // ADR 0033 "owner checks": `owner` selects an owner's rules, and an owner that disagrees with the
+    // native facts the data holds fails the run terminally. The data here is a real rejected reference
+    // summary, with the keys the reconciliation authorizers share in the graph; only the summary owner
+    // finds its facts, and every other owner of `authorize-repair` fails with nothing applied.
+    const owned = @import("domain/reference_candidate_value.zig");
+    const native = @import("application/reference_extraction_workflow.zig");
+    const workflow = @import("application/reference_reconciliation_workflow.zig");
+    const repairs = @import("application/reference_reconciliation_repair_workflow.zig");
+    const generic = @import("application/repair_workflow.zig");
+    const repair_owner = @import("domain/repair_owner.zig");
+    const values = @import("application/pipeline_values.zig");
+    const compilation = @import("domain/workflow_compilation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"MOCK Record the inspection.\n"});
+    var transferred = false;
+    defer if (!transferred) fixture.deinit();
+    const current = try values.adopt(std.testing.allocator, @import("application/toolchain_workflow_values.zig").valid, text.safety.ValidToolchain, text.safety.Owner, fixture.text.owner, text.safety.value, text.safety.deinitOwner, text.safety.retainedBytes(fixture.text.owner));
+    transferred = true;
+    defer values.destroy(current);
+    const inputs = try values.create(std.testing.allocator, @import("application/reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs, fixture.inputs);
+    defer values.destroy(inputs);
+    const registry = try values.create(std.testing.allocator, @import("application/passive_literal_workflow.zig").registry_schema, text.literals.Registry, fixture.text.registry);
+    defer values.destroy(registry);
+    var view: @import("domain/pipeline_data.zig").View = .{};
+    view.slots[@intFromEnum(@import("application/reference_evidence_workflow.zig").inputs_schema.key)] = inputs;
+    view.slots[@intFromEnum(@import("application/passive_literal_workflow.zig").registry_schema.key)] = registry;
+    view.slots[@intFromEnum(@import("application/toolchain_workflow_values.zig").valid.key)] = current;
+    const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8));
+    const good = try f.summary(a, input);
+    const statements = try a.dupe(r.StatementProposal, good.statements);
+    statements[0].content.model.business.segments = &.{.{ .literal = .{ .value = "MOCK\x01invalid" } }};
+    const parsed: r.Parsed = .{ .input = input, .proposal = .{ .summary = .{ .statements = statements } } };
+    const rejection = (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
+    const parsed_value = parsed: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .reconciliation_parsed = parsed };
+        break :parsed (try native.publish(std.testing.allocator, workflow.parsed_schema, owner, .ok)).delta.data_writes[@intFromEnum(workflow.parsed_schema.key)].?;
+    };
+    defer values.destroy(parsed_value);
+    view.slots[@intFromEnum(workflow.parsed_schema.key)] = parsed_value;
+    const rejected_value = rejected: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .reconciliation_rejected = rejection };
+        break :rejected (try native.publish(std.testing.allocator, workflow.summary_schema, owner, .ok)).delta.data_writes[@intFromEnum(workflow.summary_schema.key)].?;
+    };
+    defer values.destroy(rejected_value);
+    view.slots[@intFromEnum(workflow.summary_schema.key)] = rejected_value;
+    // The later phases' keys hold their own valid results: present, but not a rejection to repair.
+    const global_input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8), fixture.context());
+    const global_parsed: r.Parsed = .{ .input = global_input, .proposal = .{ .global = try f.global(a, global_input) } };
+    const valid_dispositions = (try f.validate_dispositions.execute(a, global_parsed)).valid;
+    const valid_signals = (try f.validate_signals.execute(a, valid_dispositions, fixture.context())).valid;
+    const valid_conflicts = (try f.validate_conflicts.execute(a, valid_signals, fixture.context())).valid;
+    const dispositions_value = valid: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .reconciliation_dispositions = valid_dispositions };
+        break :valid (try native.publish(std.testing.allocator, workflow.dispositions_schema, owner, .ok)).delta.data_writes[@intFromEnum(workflow.dispositions_schema.key)].?;
+    };
+    defer values.destroy(dispositions_value);
+    view.slots[@intFromEnum(workflow.dispositions_schema.key)] = dispositions_value;
+    const signals_value = valid: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .reconciliation_signals = valid_signals };
+        break :valid (try native.publish(std.testing.allocator, workflow.signals_schema, owner, .ok)).delta.data_writes[@intFromEnum(workflow.signals_schema.key)].?;
+    };
+    defer values.destroy(signals_value);
+    view.slots[@intFromEnum(workflow.signals_schema.key)] = signals_value;
+    const conflicts_value = valid: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .reconciliation_conflicts = valid_conflicts };
+        break :valid (try native.publish(std.testing.allocator, workflow.conflicts_schema, owner, .ok)).delta.data_writes[@intFromEnum(workflow.conflicts_schema.key)].?;
+    };
+    defer values.destroy(conflicts_value);
+    view.slots[@intFromEnum(workflow.conflicts_schema.key)] = conflicts_value;
+
+    var context: generic.AuthorizeRepair = undefined;
+    inline for (@typeInfo(generic.AuthorizeRepair).@"struct".fields) |field| @field(context, field.name).allocator = std.testing.allocator;
+    var found: usize = 0;
+    inline for (comptime repair_owner.served(.authorize)) |owner| {
+        const parameters = [_]compilation.CompiledParameter{.{ .id = .{ .bytes = generic.selector }, .value = .{ .enumeration = owner.id() } }};
+        const effects = repairs.Authorize(.summary).effects;
+        const step: compilation.CompiledStep = .{ .id = .{ .bytes = "authorize" }, .operation_id = .{ .bytes = "authorize-repair" }, .parameters = &parameters, .requires = effects.requires, .produces = effects.produces, .replaces = effects.replaces, .invalidates = effects.invalidates, .outcomes = &.{ .ok, .more, .blocked, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+        const input_value: @import("ports/workflow_operation_registry.zig").Input = .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } };
+        if (generic.AuthorizeRepair.invoke(&context, input_value)) |authorized| {
+            // Only the summary owner finds its native facts in this data.
+            try std.testing.expectEqual(repair_owner.RepairOwner.reference_summary, owner);
+            try std.testing.expectEqual(.ok, authorized.outcome);
+            const state = authorized.delta.data_writes[@intFromEnum(repairs.state_schema.key)].?;
+            values.destroy(state);
+            try std.testing.expect(authorized.delta.repair_transition != null and authorized.delta.repair_transition.? == .authorized);
+            found += 1;
+        } else |err| {
+            // Any other owner fails the run terminally: no candidate, so no delta is applied. A phase whose
+            // key holds a valid result finds the wrong kind of value; every other owner finds no key.
+            try std.testing.expect(owner != .reference_summary);
+            try std.testing.expectEqual(switch (owner) {
+                .reference_dispositions, .reference_signals, .reference_conflicts => error.OperationExecutionFailed,
+                else => error.MissingRequiredData,
+            }, err);
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 1), found);
 }
 
 test "native reuse binding retains its child after the preceding pipeline value is released" {
@@ -3156,6 +3268,43 @@ test "checked phase facts retire resolved receipts and preserve repairs owned by
         try std.testing.expectEqual(later, facts.source.pending_repair != null);
         if (!later) try std.testing.expectEqual(.resolved, checked.delta.repair_transition.?.validated.result);
     }
+}
+
+test "a dispositions rejection is authorized for a model replacement or blocked, never handed straight to merge" {
+    // DE4 7 drops `more` from the dispositions authorizer's variant because admission binds one
+    // disposition to every assigned claim (ADR 0046): no dispositions rejection takes the native
+    // path that `more` stands for. This pins that property at the domain owner, over the unit shapes a
+    // dispositions rejection takes: a member's own relationship, a collection that lacks a member, and
+    // a member whose replacement the model cannot choose.
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Renew the loan.\n", "Retain the receipt.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    var units: usize = 0;
+    for ([_]enum { self_duplicate, self_superseded, missing_member }{ .self_duplicate, .self_superseded, .missing_member }) |shape| {
+        var parsed: r.Parsed = .{ .phase = .dispositions, .input = input, .proposal = .{ .global = try f.global(a, input) } };
+        const dispositions = try a.dupe(r.ClaimDispositionProposal, parsed.proposal.global.claim_dispositions);
+        switch (shape) {
+            .self_duplicate => dispositions[0].disposition = .{ .duplicate = .{ .target_claim_id = dispositions[0].claim_id } },
+            .self_superseded => dispositions[0].disposition = .{ .superseded = .{ .related_claim_ids = try a.dupe(r.ClaimId, &.{dispositions[0].claim_id}) } },
+            .missing_member => parsed.proposal.global.claim_dispositions = dispositions[0 .. dispositions.len - 1],
+        }
+        if (shape != .missing_member) parsed.proposal.global.claim_dispositions = dispositions;
+        const rejection = (try f.validate_dispositions.execute(a, parsed)).invalid;
+        switch (rejection.unit) {
+            .disposition, .dispositions => units += 1,
+            else => return error.TestUnexpectedResult,
+        }
+        // Whatever the answer, it is a model replacement, a block or a rejected authority: never the
+        // automatic decision that skips the model.
+        if (repair.authorize(a, parsed, fixture.context(), rejection)) |decision| {
+            try std.testing.expect(decision == .model or decision == .blocked);
+        } else |err| try std.testing.expectEqual(error.InvalidAtomicRepair, err);
+    }
+    try std.testing.expectEqual(@as(usize, 3), units);
 }
 
 test "prepared reconciliation content repairs bind every selected wire member for statement and signal insertion and replacement" {

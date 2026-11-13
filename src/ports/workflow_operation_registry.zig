@@ -99,6 +99,13 @@ pub const Entry = struct {
         for (self.request_stages) |*entry| if (entry.stage == stage) return entry;
         return null;
     }
+
+    /// The one contract a step with these compiled parameters runs against: the registered contract,
+    /// or the variant its selector picks (ADR 0030 "Contract variants"). Null when the contract has
+    /// variants and the step carries no selector value that picks one.
+    pub fn contractFor(self: Entry, parameters: []const compilation.CompiledParameter) ?operation.Contract {
+        return compilation.selectedContract(self.contract, parameters);
+    }
 };
 
 pub const Registry = struct {
@@ -153,7 +160,11 @@ pub const Registry = struct {
             if (entry.binding.implementation.context_required and entry.binding.context == null) return false;
             if (workflow.OperationId.parse(entry.contract.id) == null) return false;
             if (entry.request_stages.len != 0) {
+                // A kernel entry is one fixed contract with stages; it has no variants.
+                if (entry.contract.hasVariants() or entry.contract.selector != null) return false;
                 if (!validRequestKernel(entry, &schemas)) return false;
+            } else if (entry.contract.hasVariants() or entry.contract.selector != null) {
+                if (!self.validVariants(entry, &schemas)) return false;
             } else if (!validContract(entry.contract, entry.binding.capabilities())) return false;
             inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
                 for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
@@ -178,6 +189,51 @@ pub const Registry = struct {
 
     const SchemaIndex = [data.key_count]?*const data.Schema;
 
+    /// A contract with variants (ADR 0030 "Contract variants"): one registered contract made of
+    /// closed variants, selected per step at compile time. The contract itself is a shell with no
+    /// shape of its own; each variant is admitted independently, with the same checks as any
+    /// registered contract, against the entry's one binding.
+    fn validVariants(self: *const Registry, entry: Entry, schemas: *const SchemaIndex) bool {
+        const shell = entry.contract;
+        const selector = shell.selector orelse return false;
+        if (!shell.isShell() or shell.kind != .step or workflow.WorkflowParameterId.parse(selector) == null) return false;
+        for (shell.variants, 0..) |variant, index| {
+            if (variant.value.len == 0 or variant.value.len > 128) return false;
+            for (shell.variants[0..index]) |prior| if (std.mem.eql(u8, prior.value, variant.value)) return false;
+        }
+        for (shell.variants) |variant| {
+            const flat = shell.resolve(variant.value) orelse return false;
+            // The selector is the one closed enumeration parameter of every variant, and its allowed
+            // values are exactly the variants: a value outside them, or one without a variant, has no
+            // way to reach compilation.
+            const descriptor = findParameter(flat.parameters, selector) orelse return false;
+            if (descriptor.kind != .enumeration or !descriptor.required or !descriptor.workflow_definition_safe or
+                descriptor.allowed_values.len != shell.variants.len) return false;
+            for (shell.variants) |other| if (!containsString(descriptor.allowed_values, other.value)) return false;
+            if (!validContract(flat, entry.binding.capabilities())) return false;
+            inline for (.{ flat.requires, flat.optional, flat.produces, flat.replaces, flat.invalidates }) |keys| {
+                for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
+            }
+            for (flat.gates) |id| if (self.resolveGate(.{ .bytes = id }) == null) return false;
+        }
+        return true;
+    }
+
+    /// Whether every step of `steps` that runs a contract with variants carries the selector value of
+    /// one of its variants and exactly that variant's effects, outcomes, role, association and retry
+    /// authority. Graph validation and registry publication both recheck compiled steps with it
+    /// (ADR 0030 "Contract variants"). A step of an operation this registry does not hold is the
+    /// compiler's to reject, as before; a step of a single-shape operation is checked by the runner.
+    pub fn stepsMatchVariants(self: *const Registry, steps: []const compilation.CompiledStep) bool {
+        for (steps) |step| {
+            const entry = self.resolveOperation(step.operation_id) orelse continue;
+            if (!entry.contract.hasVariants()) continue;
+            const selected = entry.contractFor(step.parameters) orelse return false;
+            if (!compilation.matchesContract(selected, step)) return false;
+        }
+        return true;
+    }
+
     fn validGates(self: *const Registry, schemas: *const SchemaIndex) bool {
         for (self.gates, 0..) |contract, index| {
             if (workflow.RegisteredRef.parse(contract.id.bytes) == null or
@@ -187,6 +243,9 @@ pub const Registry = struct {
                 if (prior.evidence == contract.evidence or std.mem.eql(u8, prior.id.bytes, contract.id.bytes)) return false;
             }
             const issuer = self.resolveOperation(contract.issuer) orelse return false;
+            // A gate names its issuer by operation, so an issuer is a single-shape contract: with
+            // variants, "the issuer's effects" would be ambiguous.
+            if (issuer.contract.hasVariants() or issuer.contract.selector != null) return false;
             if (issuer.contract.kind != .step or issuer.binding.capabilities().len != 0 or issuer.contract.side_effect != .none or
                 (!containsKey(issuer.contract.produces, contract.evidence) and !containsKey(issuer.contract.replaces, contract.evidence))) return false;
             for (contract.authority) |key| if (!containsKey(issuer.contract.requires, key)) return false;
@@ -199,6 +258,10 @@ pub const Registry = struct {
             for (self.operations) |entry| {
                 if (std.mem.eql(u8, entry.contract.id, contract.issuer.bytes)) continue;
                 if (containsKey(entry.contract.produces, contract.evidence) or containsKey(entry.contract.replaces, contract.evidence)) return false;
+                // Every variant is a contract too: none, first or later, may write another issuer's evidence.
+                for (entry.contract.variants) |variant| {
+                    if (containsKey(variant.produces, contract.evidence) or containsKey(variant.replaces, contract.evidence)) return false;
+                }
                 // A kernel entry's stages are contracts too: none may write another issuer's evidence.
                 for (entry.request_stages) |stage| {
                     if (containsKey(stage.contract.produces, contract.evidence) or containsKey(stage.contract.replaces, contract.evidence)) return false;

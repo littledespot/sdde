@@ -3,6 +3,7 @@ const std = @import("std");
 const data = @import("../domain/pipeline_data.zig");
 const pipeline = @import("../domain/pipeline.zig");
 const repair = @import("../domain/specification_repair.zig");
+const repair_owner = @import("../domain/repair_owner.zig");
 const owned = @import("specification_values.zig").storage;
 const spec = @import("specification_workflow.zig");
 const values = @import("pipeline_values.zig");
@@ -22,12 +23,14 @@ pub fn authorizationBlocked(view: *const data.View) values.Error!bool {
 }
 
 pub const Authorize = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_generation_session, .parsed_specification_unit, .validated_specification_unit, .packet_guidance },
+        .produces = &.{.specification_repair_authorization},
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .specification_repair_authorization } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
-    pub const Action = @import("../actions/specification/authorize_specification_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .blocked, .failed };
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const rejection = owned.read(&input.step.data, spec.checked_schema, .unit_rejected) catch |operation_error| return operation_error;
@@ -35,7 +38,7 @@ pub const Authorize = struct {
         const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const authorized = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, rejection, guidance) catch |err| return reject(self.allocator, authorization_schema, owner, err);
+        const authorized = repair.authorize(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, rejection, guidance) catch |err| return reject(self.allocator, authorization_schema, owner, err);
         owner.payload = .{ .repair_authorization = .{ .authorization = authorized } };
         var result = owned.publish(self.allocator, authorization_schema, owner, if (authorized.operation == .delete) .more else .ok) catch |operation_error| return operation_error;
         result.delta.repair_transition = .{ .authorized = authorized.retry orelse return error.OperationExecutionFailed };
@@ -43,21 +46,25 @@ pub const Authorize = struct {
     }
 };
 pub const BuildInput = struct {
-    pub const Action = @import("../actions/specification/build_specification_repair_input.zig").Action;
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .specification_generation_session, .specification_repair_authorization, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .packet_guidance },
+        .produces = &.{.model_input_packet},
+    };
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
-        const packet = self.action.execute(self.allocator, try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), state.authorization, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
+        const packet = repair.packet(self.allocator, try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), state.authorization, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };
 pub const Parse = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .specification_repair_authorization, .model_input_packet, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result },
+        .replaces = &.{.specification_repair_authorization},
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .specification_repair_authorization, .evidence = .specification_repair_authorization, .result = .specification_repair_authorization } };
-    pub const Action = @import("../actions/specification/parse_specification_repair.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
@@ -65,30 +72,38 @@ pub const Parse = struct {
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const source = try @import("model_candidate_handoff.zig").read(&input.step.data);
-        owner.payload = .{ .repair_authorization = .{ .authorization = state.authorization, .response = .{ .value = self.action.execute(owner.arena.allocator(), state.authorization, packet, source.body) catch |operation_error| return operation_error, .origin = source.origin } } };
+        owner.payload = .{ .repair_authorization = .{ .authorization = state.authorization, .response = .{ .value = repair.parse(owner.arena.allocator(), state.authorization, packet, source.body) catch |operation_error| return operation_error, .origin = source.origin } } };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(authorization_schema.key)] = values.adopt(self.allocator, authorization_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };
 pub const Merge = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_generation_session, .parsed_specification_unit, .specification_repair_authorization },
+        .replaces = &.{.parsed_specification_unit},
+        .invalidates = &.{ .validated_specification_unit, .specification_repair_authorization },
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .specification_repair_authorization, .result = .parsed_specification_unit } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
     pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
-    pub const Action = @import("../actions/specification/merge_specification_repair.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action,
+    normalizer: @import("../ports/unicode_normalizer.zig").Normalizer,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
         const candidate = owned.read(&input.step.data, spec.parsed_schema, .parsed) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .parsed = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, state.authorization, if (state.response) |response| response.value else null, if (state.response) |response| response.origin else null) catch |operation_error| return operation_error };
+        const context_value = try spec.readContext(&input.step.data);
+        const arena = owner.arena.allocator();
+        var canonical = @import("../domain/typed_text.zig").CanonicalText.fromInputs(arena, self.normalizer, context_value.inputs) catch |operation_error| return operation_error;
+        defer canonical.deinit(arena);
+        owner.payload = .{ .parsed = repair.merge(arena, canonical, try spec.readSession(&input.step.data), context_value, candidate, state.authorization, if (state.response) |response| response.value else null, if (state.response) |response| response.origin else null) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(spec.parsed_schema.key)] = values.adopt(self.allocator, spec.parsed_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
-        for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
+        for (effects.invalidates) |key| delta.data_invalidations.insert(key);
         delta.repair_transition = (owner.payload.parsed.last_repair orelse return error.OperationExecutionFailed).transition(.native) catch return error.OperationExecutionFailed;
         return .{ .outcome = .ok, .delta = delta };
     }

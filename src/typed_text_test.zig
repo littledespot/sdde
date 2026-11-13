@@ -29,7 +29,6 @@ test "prose punctuation never manufactures a reference and exact selections reta
     const content: text.BusinessText = .{ .segments = &.{ .{ .literal = .{ .value = "Display " } }, .{ .exact_copy = selected }, .{ .literal = .{ .value = " at date/time." } } } };
     const rejected = (try fixture.validator.checkBusinessIn(a, scoped, content)).invalid;
     try std.testing.expectEqual(.unknown_exact, rejected.reason);
-    try std.testing.expectEqualDeep(selected, rejected.rejected_exact.?);
     try std.testing.expectEqual(@as(usize, 1), rejected.first_node);
     scoped.exact_copies = &.{selected};
     try std.testing.expectEqualDeep(content, (try fixture.validator.checkBusinessIn(a, scoped, content)).valid.value);

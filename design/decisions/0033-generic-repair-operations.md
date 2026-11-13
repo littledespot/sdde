@@ -1,8 +1,9 @@
 # ADR 0033: Generic repair operations with owner-supplied rules
 
-- **Status:** Accepted amendment. **Not yet implemented:** the Specify definition still
-  uses per-owner repair operations until the conversion lands. Documents that describe
-  per-owner repair operations carry a pointer to this ADR until then.
+- **Status:** Accepted amendment, **implemented 14 November 2026** (SPEC01 E4): the Specify
+  definition runs the four generic repair operations with an `owner` parameter, and the 29
+  per-owner operations are deleted. The contract-variant mechanism they use was built by
+  that change (ADR 0030 "Contract variants").
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
   documentation on the yes, ass suggested". It decides FIX05 (`fixes/Z_FIX05.md` §21,
@@ -11,11 +12,11 @@
   - generic repair operations, with each owner supplying only its own rules;
   - sequenced after ADR 0030 is implemented and ADR 0031's first conversion is measured.
 
-  The choices under "Derived under existing rules" follow from existing authority and
-  await the user's confirmation, except choice 1, which the user confirmed on
-  23 October 2026 ("update the documentation around option 1"): per-owner variants use
-  one shared contract-variant mechanism, which
-  [ADR 0030](0030-engine-owned-model-request.md) builds first and this ADR reuses.
+  The choices under "Derived under existing rules" follow from existing authority. The
+  user confirmed choice 1 on 23 October 2026 ("update the documentation around option
+  1"): per-owner variants use one shared contract-variant mechanism, which the E4 change
+  built before converting the owners. The user confirmed choices 2 to 5, 7 and 8 on
+  13 November 2026 ("yes to all 10 decisions", SPEC01 DE4); choice 6 is moot.
 - **Amends:**
   - [ADR 0005](0005-workflow-defined-operations.md): "Each operation has one current
     contract", which becomes one contract with closed owner variants for the four repair
@@ -64,8 +65,8 @@ FIX05 W3 first proposed one repair operation per owner that also made the model 
 ADR 0030 (every model call is its own `request-model` step) and ADR 0031 (a stage action
 never calls a model, and has repair role `none`) both forbid that. AGENTS.md prefers
 the alternative: "Domain components contribute typed facts or evidence to shared
-mechanisms". So does invariant 23. The code already specializes the reconciliation
-authorizers by kind (`reconciliation_repair.Authorize(.summary)` and its siblings).
+mechanisms". So does invariant 23. The code already specialized the reconciliation
+authorizers by kind (one generic authorizer with a kind per phase) when this was decided.
 
 ## Decision
 
@@ -84,7 +85,7 @@ The 29 per-owner operations are replaced by four registered operations:
 Each takes a required `owner` parameter from a closed, exhaustive enum. Each owner has a
 variant only for the operations it uses today:
 
-| Owner | Authorize | Input | Parse | Merge (YAML retry limit today) |
+| Owner | Authorize | Input | Parse | Merge (maximum `retry-limit`) |
 | --- | --- | --- | --- | --- |
 | `reference-text` | yes | yes | yes | yes (none) |
 | `reference-extraction` | yes | yes | yes | yes (none) |
@@ -100,7 +101,7 @@ variant only for the operations it uses today:
 | `specification-support` | yes | yes | yes | yes, `merge_validate` (2) |
 | `specification-coverage` | yes, `blocked`/`failed` only | — | — | — |
 
-That is 13 owners and 29 variants, one per removed operation. A step that names an owner
+That is 13 owners and 29 variants, one per removed per-owner operation. A step that names an owner
 with no variant for its operation rejects at compilation.
 
 The model call stays a separate `request-model` step (ADR 0030). Release and every
@@ -126,17 +127,18 @@ The YAML `owner` value is a typed selector, not a policy choice:
 - **Checked at compilation where it can be.** Where a variant's required keys already
   prove the owner, the compiler checks it.
 - **Checked at run time otherwise.** Each operation checks it against the owner that the
-  native diagnostic, authorization and context determine. A mismatch is a **terminal
-  runner rejection** with a closed diagnostic, not a YAML outcome that a workflow could
-  route.
+  native diagnostic, authorization and context determine: the selected owner's binding
+  reads only its own keys and the native facts they carry, so another owner's facts do not
+  satisfy it. A mismatch is a **terminal runner rejection**, not a YAML outcome that a
+  workflow could route. It ends through the existing closed errors
+  (`OperationExecutionFailed` or `InvalidAtomicRepair`); a distinct closed reason for it
+  belongs to E5 (SPEC01 §5).
 - **No policy, scope or defect identity.** `owner` grants none of these. YAML supplies
   allowances, not defect identity (ADR 0005). Caller flags cannot select a policy
   (ADR 0023).
 - **The pre-generation phase witness** stays bound inside authorize, input and merge for
   source-omission owners, whatever `owner` says (§22.5,
   [ADR 0023](0023-advisory-post-generation-review.md#pre-generation-source-repair)).
-- **The no-invention branch** of §14.4 survives inside `authorize-repair` for the owners
-  where it applies today.
 
 ### Owner-specialized contracts
 
@@ -151,7 +153,9 @@ as the selector; this ADR adds no second mechanism. Each variant is a complete c
 - its outcome-association descriptor;
 - its repair role;
 - whether retry authority is required or forbidden, and if required, its operation-local
-  maximum and finite native key population.
+  maximum. The native key population the compiler's execution bounds multiply by is the
+  repair scope's own, engine-wide (`workflow_retry.maximum_repair_keys`); a variant does
+  not declare one (F0005 §11, DE4 6).
 
 Enforcement:
 
@@ -168,17 +172,24 @@ Enforcement:
 Today's differences become variant facts:
 
 - **Native repairs with no model call.** The authorizers of the specification unit,
-  specification support, reference summary, dispositions, signals and conflicts declare
-  `more`, which today goes straight to merge with no model call.
+  specification support, reference summary, signals and conflicts declare `more`, which
+  goes straight to merge with no model call. The `reference-dispositions` variant declares
+  no `more`: since ADR 0046 its authorizer returns only a model call or `blocked`, so the
+  variant, and its YAML step, carry no unreachable outcome.
 - **Source omission's `more`** selects its reconciliation branch. Each branch then merges
   through its own owner, `source-omission-extraction` or `source-omission-reconciliation`.
   Those two variants differ in `requires`, `optional`, `replaces` and `invalidates`.
-- **The three reconciliation authorizers** are three steps with distinct owners feeding
-  one `merge-repair` with the `reference-reconciliation` owner. Each phase keeps its own
+- **The four reconciliation authorizers** are four steps with distinct owners
+  (`reference-summary`, `-dispositions`, `-signals` and `-conflicts`). They feed three
+  `merge-repair` steps with the `reference-reconciliation` owner, one per reconciliation
+  route, each with its own counter (see "Retry identity"). Each phase keeps its own
   explicit YAML step (ADR 0022).
 - **Coverage** declares only `blocked` and `failed`, so it gains no unreachable outcome.
-- **Merge retries.** The text and extraction merges forbid a `retry-limit`, as today. The
-  other merges require one within their declared maximum.
+- **Merge retries.** The text and extraction merges forbid a `retry-limit`. The other
+  merges require one, within their variant's maximum, which is the YAML value of the
+  conversion: 128 for `reference-reconciliation`, 1 for each of the two source-omission
+  merges, 64 for `specification-unit` and 2 for `specification-support`. Native key
+  populations are unchanged.
 
 ### Retry identity
 
@@ -189,8 +200,9 @@ requires.
 
 - **Defect keys** still include the validator-owned diagnostic family, so owners never
   alias keys at one step.
-- **Native key populations** are declared per variant, so the compiler's execution
-  bounds stay finite.
+- **Native key population** is the repair scope's own, engine-wide
+  (`workflow_retry.maximum_repair_keys`), so the compiler's execution bounds stay finite
+  and an owner or `owner` value cannot change them.
 
 ### What stays the same
 
@@ -229,12 +241,10 @@ internal edges are identical. Others keep their steps spelled out.
 
 ### Sequencing
 
-This converts only after:
+The conversion required ADR 0030 (the routes use `request-model`) and ADR 0031's first
+conversion, `prepare-toolchain`, measured; both held.
 
-1. ADR 0030 is implemented, because the routes use `request-model`;
-2. ADR 0031's first conversion, `prepare-toolchain`, is measured.
-
-All Specify owners convert in one change, with no compatibility form, removing the 29
+All Specify owners converted in one change, with no compatibility form, removing the 29
 per-owner operations. The enum covers Specify's owners now, because ADR 0034 defers Plan,
 Tasks and Implement work until the Specify quality gate passes. Later workflows add owners and variants to the same mechanism
 instead of new operations.
@@ -263,13 +273,13 @@ Each statement AGENTS.md lists is reported separately.
 ## Derived under existing rules
 
 The user approved the suggestion. These choices are derived from existing authority, not
-from the user's words, and await the user's confirmation, except choice 1, which the user
-confirmed on 23 October 2026:
+from the user's words. The user confirmed choice 1 on 23 October 2026 and choices 2 to 5,
+7 and 8 on 13 November 2026; choice 6 is moot:
 
 1. **Owner-specialized contracts.** Each generic operation's contract consists of
    complete per-owner variants, validated independently. The alternative was distinct
    contracts for owners whose shapes differ. **Confirmed on 23 October 2026,** through
-   ADR 0030's shared contract-variant mechanism, which ADR 0030 builds first.
+   ADR 0030's shared contract-variant mechanism, which the E4 change built first.
 2. **The owner list.** The 13 owners above, including the split of source omission's
    merges into two owners.
 3. **`owner` is checked against native facts,** and a mismatch is terminal. It selects no
@@ -282,7 +292,7 @@ confirmed on 23 October 2026:
 7. **All Specify owners convert in one change,** after ADR 0030 and ADR 0031's first
    conversion, and the enum is Specify-only for now.
 8. **Evidence:** structural conversion on offline evidence (as ADR 0031's derived
-   choice 7, also awaiting confirmation).
+   choice 7, confirmed 12 November 2026).
 
 ## Consequences
 
@@ -299,13 +309,16 @@ Expected benefits, pending the measure:
 
 Costs:
 
-- **No new compiler extension here.** The compiler, registry and runner gain contract
-  variants with ADR 0030, which is implemented first; this ADR adds its 13 owners'
-  variants to that mechanism.
+- **A compiler, registry and runner extension.** The compiler, registry and runner gained
+  contract variants (ADR 0030 "Contract variants"), which the E4 change built first, with
+  that ADR's acceptance cases as their tests; this ADR then added its 13 owners' variants
+  to that mechanism.
 - **The largest refactor of the four.** It touches every repair route, and repair is
   safety-critical. The freeze-and-reproduce evidence and the sequencing bound the risk.
 - **Repair is less visible from the operation ID.** It now comes from the `owner` value.
-  Reports and the debugger must show both.
+  The owner is visible through the compiled step's declaration, which reports and the
+  debugger already carry by step id; no report field was added (DE4 9), and the step trace
+  prints it as `@<owner>` after the operation id.
 - **No behaviour change is claimed.**
 
 ## Acceptance
@@ -315,12 +328,11 @@ All offline:
 - **Equivalence.** The frozen outcomes, evidence, retry counts, defect keys and token
   accounting are reproduced for every owner, including:
   - every no-model `more` path (specification unit, specification support, reference
-    summary, dispositions, signals and conflicts);
+    summary, signals and conflicts);
   - source omission's `more` to its reconciliation branch and both of its merges;
-  - the three reconciliation authorizers feeding one merge;
+  - the four reconciliation authorizers feeding the three reconciliation merges;
   - coverage `blocked`;
-  - specification support's `merge_validate`;
-  - the no-invention branch.
+  - specification support's `merge_validate`.
 - **`owner` checks.** A YAML `owner` that disagrees with the native owner is a terminal
   runner rejection, or a compile error where provable. `owner` cannot widen scope, reset
   a count or change a defect key.
@@ -346,6 +358,5 @@ All offline:
 
 - Owner enums for Plan, Tasks and Implement, which wait for the
   [ADR 0034](0034-spec-quality-gate.md) Specify quality gate.
-- Engine-owned release, which ADR 0030 leaves open.
 - SPEC01 R6's exact-reference repair eligibility. That stays open, and this ADR doesn't
   foreclose it.

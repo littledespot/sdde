@@ -15,7 +15,11 @@ committed, unmodified build (`a3d083e`, source `5fb59f67…`, 3 runs per case, n
 `185b9bc6…`, no critical failure) with no lost or weakened requirement ([Z_SPEC01](Z_SPEC01.md)
 Next 6). **Judged 9 November 2026** (user: "three per case is enough for now"): the HEAD set is
 enough stability evidence for now. ADR 0034 leaves actioning Plan to the user, so none is
-started.
+started. **Re-run decided 14 November 2026** (user: "the above recommendations are approved"): the
+gate is re-run on the build after E1–E4 land, as one closing set after the output-track changes
+(§3) are each kept or reverted, so the evidence comes from the build Plan work would start from
+(ADR 0034, derived item 7). E1's live set (3 per case, 6 of 6 published and passed) is a
+no-regression check, not the closing set.
 
 **Reference** for quality phases (§2 rule 7): the HEAD set, the last kept state (§3 Next items
 6, 7 and 8). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
@@ -160,8 +164,12 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
    ([Z_SPEC01](Z_SPEC01.md)). It has fired once live (8 November,
    `2026-11-07T20-44-15Z-9273…`, uncommitted tree) and changed nothing: all three records
    attempts returned the same bare outcomes and the run exhausted its retries, so the keep
-   rests on the mechanism. The repeated-statement change has no recorded keep decision; its
-   native deletes ran in the Q22 set (nine) and the Q14 b3 set (ten), all helpful.
+   rests on the mechanism. **The repeated-statement change kept 14 November 2026** (user: "the
+   above recommendations are approved"; [Z_SPEC01](Z_SPEC01.md)): offline only, no request
+   change; its native deletes ran in the HEAD set (thirteen), the Q22 set (nine) and the Q14 b3
+   set (ten), all helpful, with no guard failing. The keep rests on the mechanism, the offline
+   proof and those deletes; the original failure hasn't recurred, so a benefit on the target
+   defect isn't demonstrated.
 2. **Closed 8 November 2026:** skill `1d66d882…` is the same evaluator as `af394020…` and
    `0b552067…` ([Z_SPEC01](Z_SPEC01.md) T7).
 3. **Decided 8 November 2026** (user: "recommendations accepted for 1 to 6"): a title that
@@ -183,9 +191,21 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
    Then. No HEAD-set run was scored with that defect; changing the link rule amends ADR 0038
    Decision 7 (a **Decision**).
 
-**Output track** (recommended order, not decided, inside the decided constraints: D17.1 puts
-Q17 after D12.2; each change set is measured on its own committed
-build, §2.1 and §2.3):
+**Set order, decided 14 November 2026** (user: "the above recommendations are approved"). Each
+change set is measured on its own committed build (§2.1, §2.3), against the previous item's
+kept state (§2 rule 7):
+1. **E4's live set,** one run set after step 7 lands (DE4 decision 4). E4 changes no request
+   byte, so the set is a no-regression check and the clean reference for b4, since E1's set
+   predates E4.
+2. **Q14 b4:** screens, then a set (§4 Q14).
+3. **Q17,** then **Q7 D7.5,** then **Q4** (the table below): screens, then a set each.
+4. **The closing set** (§1).
+
+The order is approved, not a blanket go-ahead: each screen batch and live set still needs its
+own approval when it is ready (AGENTS.md; the project settings prompt for every live step).
+
+**Output track** (rank order of the table; each item's screens and set follow the set order
+above, inside the decided constraints: D17.1 puts Q17 after D12.2):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
@@ -207,19 +227,19 @@ exhaustion, never budget, in two modes, each reported with no lever:
   prose and no JSON on all three attempts, from a request byte-identical to one that succeeded:
   the model's variance under a coherent contract.
 
-**Engine track, in gaps:** E2's first conversion is done and measured (the next stage is the
-user's call); E3 may follow (nothing technical ties startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6 and E8 in
-any gap; E4 after E1, E2's measure and its capture replays (§5 E4); E5's closed reasons
-with the E1–E4 conversion that rewrites them, its evaluator gap in any gap; E9 with E1, E4 or
-E5; R-A1 after E1; E7 last. E0 is on hold. E1, E4, E5, E9 and T8 land only under §2.12. E1–E4
+**Engine track, in gaps:** E1 is implemented and kept; E2 stops at its three preparation stages
+(decided 14 November 2026); E3's startup is done and its feature logging waits on E6; E6 in any
+gap; E4 and E9 are implemented and kept (§5 E4); E5's closed reasons with the E1–E4 conversion that
+rewrites them, its evaluator gap in any gap; E8 is closed and R-A1 is not adopted
+(§5 E8, §8); E7 last. E0 is on hold. E1, E4, E5, E9 and T8 land only under §2.12. E1–E4
 before the closing set is the user's call (ADR 0034:93-95). **Tests:** T2, T3 and T8 in any
 gap; T4 with E1–E4. **Adjudication:** H1 (the evaluate-e2e skill) for every set.
 **Human:** H2 when required source review is labelled or review returns; H3 when the user
 reviews the panels; H4 before any formal baseline freeze; H5 at the user's choice. **Closing
 set:** repeated runs of both cases on one committed, unmodified build (ADR 0034:55-56) unless
 the user amends ADR 0034; every counted published run adjudicated (H1). The HEAD set (3 per
-case) is enough for now (user); a later structural change (E1–E4) re-opens whether the gate is
-re-run on the new build (ADR 0034:93-95).
+case) is enough for now (user); the gate is re-run on the post-E1–E4 build (§1, decided 14
+November 2026; ADR 0034:93-95).
 
 **Open problems without an item.** Each stays until a structural lever with an owner is found
 or the user records it as a model limitation.
@@ -429,8 +449,10 @@ error.
   which lists every allowed ID (`model_schema_projection.zig:154-158`), so the change adds
   locality, not new information.
 - **Change: approved 12 November 2026 (user: "yes, update documentation, do not make any
-  code changes"); contract amended in 22-repair.md (§22.6 correction clause); code not
-  yet implemented.** The `enum_mismatch` correction for an integer ID choice carries
+  code changes"); contract amended in 22-repair.md (§22.6 correction clause); code
+  go-ahead given 14 November 2026 (user: "recommendation accepted"); code not yet implemented,
+  to land between sets before b4's build (§2 rule 1 lets it share that build only if the §2.10
+  projection proves every first request byte-identical).** The `enum_mismatch` correction for an integer ID choice carries
   `rejected` and `allowed` beside the existing locator, both from the compiled choice,
   never hard-coded; a string enumeration keeps its correction. It changes model-visible
   correction text only; first requests stay byte-identical (§2.10).
@@ -476,7 +498,9 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
   - **Measure** (§2 rule 6): target lost source requirement; guards lost source
     requirement and the publication rate; watch items unsupported addition (loan-renewal's
     AC-001 clause counts 3 a set), weakened obligation and `competing_records` blocks; run
-    maximum per rule 4. Reference: the b3 set (§2 rule 7). The first-attempt route has
+    maximum per rule 4. Reference: E4's live set, the last kept measured state (§3 "Set
+    order"; decided 14 November 2026 in place of the b3 set, which predates E1 and E4;
+    §2 rule 7). The first-attempt route has
     occurred once since ADR 0047 and not in the b3 set, so expect "benefit not
     demonstrated" and a keep on the mechanism, the offline tests and the guards.
 - **b2** (not chosen): the scenarios naming a claim must together contain every exact value
@@ -584,7 +608,8 @@ Budget-stopped runs publish nothing while it is on hold (none since D13.1).
 review finding 7); the packaged smoke cannot tell a kernel failure from another failure (the packaged
 executable prints only `failed`); a cycle bounded only by a kernel step's retry authority ends in an
 untyped rejection at the execution ceiling (the attempt count restarts for an ordinary-scope request
-that revisits a `request-model` step); recorded retention keeps every call's raw exchange for the run
+that revisits a `request-model` step; decided 14 November 2026, finding 11 below: count it in the
+allowance, code not yet changed); recorded retention keeps every call's raw exchange for the run
 and its growth is unmeasured; the `action.started`, `action.completed` and `action.invalid` log
 templates were left unbumped (the `step_id` column existed; ADR 0031 added the same optional field to
 `action.failed` without a bump) pending the user's decision; one live set (one run per case) pending
@@ -605,8 +630,7 @@ questions that the preflight raised; none was in an accepted text):
    only the accounting and evidence keys stay. The preflight confirms each reader against the
    code, and a call site that continues after one of those outcomes changes this.
 3. **Parameters.** `input` carries over (exclusive with `composition-part`). E8's definition
-   declaration is **not** added to the step in E1; it stays open (SPEC01 E8), to be decided
-   separately.
+   declaration is **not** added to the step in E1 (decided later: no rule is added, §5 E8).
 4. **Allowance.** A `request-model` step counts once toward the 1,024-step limit and once toward
    the workflow's execution ceiling. Its internal stages are bounded by the step's own allowance of
    at most 2 × (1 + `retry-limit`) provider calls (each attempt, correction or not, plus its one
@@ -845,6 +869,16 @@ seam, 19 deleted, each with the test that covers it; see "step 5 review fixes" b
   such a cycle; the kernel step adds nothing to `calculateExecutionLimit`, so a legitimate bounded
   loop would end in an untyped `.authority` rejection at the ceiling. Before E1 the accounting step
   counted per assignment in the same way, but the ceiling then included its retry visits.
+  **Decided 14 November 2026** (user: "recommendation accepted"): count every `request-model`
+  step's retry authority, re-sends included, in `calculateExecutionLimit`, restoring the pre-E1
+  formula (the compiler can't tell an ordinary-scope request from a repair one), with accepted and
+  rejected tests (a cycle whose only guard is a `request-model` step revisits it without an
+  allowance rejection). The code change must also flip `model_request_workflow_test.zig:8465-8468`
+  and the comment at `workflow_compilation.zig:215-216`, and key the re-send term on the kernel step
+  (its `runner_accounting` is `none`, so the old `.increment_model_attempt` key no longer matches). This removes the mismatch between the cycle guard and the
+  ceiling; native iteration still bounds ordinary loops. The compiled `maximum_step_executions`
+  value changes, so it needs the §2.10 pair, with no request-byte change expected. The contract is
+  stated in model-request-operations.md ("Allowance"). Code not yet changed.
 - **Docs:** ADR 0005, 06-pipeline-nodes, the operation catalogue (decode and payload-schema are one
   admission stage), 12-model-boundary, 13-04-model, 14-orchestration, 21, 25, 27, 07, F0005, F0006,
   F0100, ADR 0012, 0016, 0030 and design.md no longer call `request-model` unimplemented or name a
@@ -1054,26 +1088,114 @@ today.
 separate step between them ([Z_SPEC01](Z_SPEC01.md) E2c; the user's "apply best recommendations").
 The three preparation subgraphs the E2 preflight named (`prepare-toolchain`, `prepare-inputs`,
 `prepare-references`) are now stage actions; converting any other subgraph is a separate decision.
+**Decided 14 November 2026** (user: "recommendation accepted"): no further conversion before the
+closing set (§1). The remaining chains are short or excluded by ADR 0031: publication, clarification
+output and the authority gate write, branch or issue a gate, and the assemble subgraph has a repair
+step. The only eligible candidates, read from the YAML with no freeze taken, are two pure
+five-step tails (before publish, and in clarification output). A conversion changes the build
+before the closing set. Revisit when Plan work begins (ADR 0034).
 
 ### E3. Engine routines (A3, ADR 0032)
 
 **Startup and provider bootstrap converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E3; the
 user's "apply recommendations and implement"). Still open: feature logging, which waits on its
 preconditions (ADR 0032:152-172): no test covers cancellation under a log lock, and the
-policy-transition coordinator waits on E6's §14.10 decision. **DE3 confirmed 12 November
+policy-transition coordinator waits on E6's same-run transition decision (prior-run finalization's
+authority is decided, §5 E6). **DE3 confirmed 12 November
 2026** (user: "yes"): ADR 0032's derived choices 1–8 (:224-241), including offline evidence.
 
 ### E4. Generic repair operations (W3, ADR 0033)
 
-After E1, E2's measure and its capture replays (ADR 0033:261), which must be
-`model-request-debug/v18` captures (`model_request_description.zig:5-10`; earlier captures no
-longer decode): all Specify owners in one change on offline equivalence evidence; the 29
-operations and 13 owners of ADR 0033:87-103 still match (10 authorize, 6 build, 6 parse, 7
-merge). Seven operations read `.packet_guidance`; their variants keep those reads. Retained
-reports carry repair keys, so it lands under §2.12. **DE4:** confirm ADR 0033's derived choices
-2–8 (:273-285; choice 6 is moot since D13.1, :280-281). Q14 b3 extended the specification-unit
-repair route these operations replace, and b4 will remove its insert; E4 isn't a prerequisite
-of either (§4 Q14).
+**State, 14 November 2026: implemented (steps 1 to 7 done) and kept** (user: "yes", to keeping E4 for its
+reduced brittleness; no outcome improvement is claimed). The final record is below, and the measures and
+proof are in [Z_SPEC01](Z_SPEC01.md) E4; the live set, approved 14 November 2026 and not a landing
+condition, is reported in Z_SPEC01 when taken. The Spec workflow's 32 repair steps run the four generic
+repair operations with `owner`, the 29 per-owner operations and their action files are deleted, the
+contract-variant mechanism exists (ADR 0030), E9 and the C27 singleton are applied, and ADR 0033 and its
+pointers read implemented. Only Specify's 13 owners exist; Plan, Tasks and Implement owners wait for the
+quality gate. Q14 b3 extended the specification-unit repair route these operations replace, and b4 will
+remove its insert; E4 isn't a prerequisite of either (§4 Q14). Retained reports carry repair keys, so it
+lands under §2.12; no persisted contract moved (the final record).
+
+**DE4 decided 13 November 2026** (user: "yes to all 10 decisions", to the E4 preflight's ten
+recommendations; E1 is kept, so ADR 0033's precondition 1 holds):
+1. **Mechanism.** E4 builds ADR 0030's contract-variant mechanism (registry, compiler, runner) as its
+   own early steps, with ADR 0030:428-445 as its test list, in the same landing. E1 built none.
+2. **Choices 2-3 confirmed.** The 13 owners, source omission's merges split in two. `owner` is checked
+   against native facts: at compilation where the variant's required keys prove it, otherwise a terminal
+   runner rejection with a closed diagnostic. It selects no policy, scope or defect identity.
+3. **Choices 4-5 confirmed** (already in C22:15-19 and :709-712): a "compiled operation" is the compiled
+   step instance; §22.1's "distinct" means authorization categories and owners, not operation IDs.
+4. **Choices 7-8 confirmed.** All Specify owners convert in one change on offline evidence; one live set
+   follows landing only on the user's go-ahead (ADR 0033 choice 6 is moot).
+5. **No-invention branch removed** from ADR 0033:138-139 and its acceptance list (no owner has it; this
+   closes the open keep-or-remove decision recorded under §10 C-notes).
+6. **Variant retry maxima** equal today's YAML values (128, 1, 1, 64, 2); the text and extraction merges
+   still forbid `retry-limit`; native key populations are unchanged.
+7. **Dispositions authorizer** drops its unreachable `more` and the matching YAML edge (ADR 0046).
+8. **Freeze.** Defect-key bytes are compared (the repair `Family` type names are not renamed) and the step
+   trace prints the owner; repair evidence per scenario is frozen too.
+9. **Owner visibility.** The owner is shown through the step's declared parameters; no new report field
+   and no version bump for it.
+10. **Docs scope.** The change includes editing the accepted ADRs' pointers and stale prose (ADR 0005, 0023,
+   0031, 0033 "three reconciliation authorizers", 0030 "two users"), design.md §22 and §32, and
+   deleting or updating the per-owner entries in C13-03 and C13-05.
+
+**E4 final record, 14 November 2026** (steps 1 to 7 done; the per-step notes are collapsed, the measures
+and the old-test mapping are in [Z_SPEC01](Z_SPEC01.md) E4). **Built:** the contract-variant mechanism
+(ADR 0030 "Contract variants": registry admission per variant, selection before compilation, graph and
+publication rechecks, the runner's `Entry.contractFor`); the four generic repair operations with 13 owners
+and 29 variants (`repair_owner.zig`, `repair_workflow.zig`, each owner binding's `effects`); the Spec
+workflow's 32 repair steps run them with `owner` (the dispositions authorizer lost its unreachable `more`);
+the 29 per-owner operations, their 29 action files and wrappers are deleted; E9 and the C27 singleton are
+applied; ADR 0033 and its pointers read implemented, and one specification of the four operations replaces
+the per-owner entries in [13-04](../design/contracts/actions/13-04-model.md#generic-repair-operations).
+**Evidence:** `evaluations/request-projection/e4-before` and `e4-final` are byte-identical (what every
+request sends is unchanged); `evaluations/step-trace/e4-final` (135 scenarios, 817 files) differs from
+`e4-before` only in 65 `.trace` files (repair-step operation ids, same outcomes), 65 summaries
+(`trace_sha256`) and 9 `.repairs` files whose retained-merge authorization digest changed because E9 removed
+`rejected_exact` from the hashed rule (accepted by the user, 14 November 2026). `<scenario>.repairs`
+(`workflow-repair-evidence/v1`, a trace-fixture file kind, not a persisted engine contract) records each
+retry-bearing step's limit, scope and executions, its defect keys and the retained native merges; it cannot
+record a merge no final candidate retains or a repair attempt's request bytes. **Versions moved: none** (no
+persisted shape holds a repair operation id; `state/workflow.json` is byte-identical). **No semantic
+benefit is claimed**, and E4 does not reduce lines (Z_SPEC01). **E9's defect class:** none scored; the only
+model-facing change is the correction text for an unknown exact copy in model prose, which falls to the
+issue's own description without the `repair_tails.value_choices` tail; its reachability in live runs is not
+established.
+
+**Final-review fixes, 14 November 2026.** The routes the matrix cannot reach now run through the generic
+operations in `src/repair_routes_test.zig`, over real facts: the `reference-text` route runs authorize,
+build-input, parse (after a real request answered through the stage seam) and merge, and the
+`specification-support` route runs the same four over a whole rejected review and over a focused one (merge
+`ok` and `more`), each asserting the outcome, the exact keys the delta writes, replaces and invalidates, and
+the produced value against the domain function; the support merge's `invalid` (a response that changes
+nothing) and authorize's `blocked` (a rejection with no candidate) are covered too. Not covered: authorize's
+`more` for a support `delete`, and support merge `more` through a whole review (only a focused candidate
+yields it). Owner mismatch is pinned for data that holds the other owner's key with another kind of value
+(the three later reconciliation phases holding valid results; the extraction owner over a text rejection; a
+valid text at the text key; a pending or not-yet-begun review at the review key; a wrong repair state), and
+absent keys. The same pass corrected the prose: ADR 0033 now says the engine-wide
+`workflow_retry.maximum_repair_keys` bounds key population, and ADR 0030's acceptance bullets,
+`14-orchestration.md` §14.4 and design.md §32 read as the mechanism now stands.
+
+**Decided 14 November 2026** (user: "yes", to my recommendations): (a) the `reference-text` and
+`specification-support` routes stay registered (against removing two owners and 8 variants); (b)
+`model_text_wire.zig` `insertion` keeps recognising `{"kind":"exact_copy"}` with no `claim_id` and rejecting it
+as an encoded insertion: only its stale comment was reworded; (c) one live set (3 runs per case) on this
+build; (d) E4 is kept; (e) the E5 preflight starts.
+
+**Open, none blocking the implementation:** (1) the `reference-text` and `specification-support` routes: their
+8 variants never run in the scripted matrix (admission inside `request-model` rejects the
+defects first, and the fixtures cannot encode a rejected support finding), so they are proven by invoke-level
+tests over real facts and domain-level tests only, and equivalence to the deleted per-owner operations cannot
+be shown offline; (2) closed (b); (3) the owner-mismatch failure is the
+generic `OperationExecutionFailed`, `MissingRequiredData` or `InvalidRequiredAuthority` (or
+`InvalidAtomicRepair` from the domain), pinned per owner in the tests, and E5 can give it a closed reason; (4) the
+wider no-invention keep-or-remove question (§10: C12, C22, design.md invariant 18, `code.md`; DE4 5 settled
+only ADR 0033); (5) `Registry.validate()` runs every step and its cost with 29 variants is not measured; (6)
+a gate issuer must be a single-shape operation (ADR 0030 states it); (7) the live set's result is recorded in
+Z_SPEC01 E4 when taken.
 
 ### E5. Rejections say why (A4)
 
@@ -1110,14 +1232,19 @@ rewrite land with that conversion. Failure-evidence gaps:
   `feature_log_historical_stream.zig` 1) and about 9 consumers of the log outcome, not a small
   change; it affects no model request. No production code supplies a cancellation status today
   (§10 C28).
-- **Prior-run crash finalization** (§14.10) is blocked on a persisted bootstrap authority that
-  doesn't exist (14-orchestration.md:317-321), so a crashed run's logs are kept whole and
-  damaged prior logs block later runs until someone repairs or removes them. **Decision:**
-  which persisted authority supplies the historical policy lineage (§14.10; ADR 0032:310-311,
-  "Not decided here"). E3's feature-logging conversion waits on it.
-- **Redaction policy ID:** 26-security.md:195 and F0002:542 name `redaction/default-v1`, which
-  no code carries. **Decision:** a record carries the ID (a new field, so `feature-log/v3`;
-  v2 is current, `feature_log_limits.zig:1`), or both documents drop it. **Recommended:** drop it.
+- **Prior-run crash finalization** (§14.10). **Authority decided 14 November 2026** (user:
+  "recommendation accepted"): segment-header identity alone, with no persisted bootstrap
+  lineage (ADR 0026 amended; §14.10 and ADR 0032 updated). Building it is deferred: a crashed
+  run's logs stay whole and unpruned, and only damaged prior logs block later runs. Before
+  building it, check that header identity suffices where the runner selects the prompt stream
+  from the policy (`feature_log_runner.zig:87`), and decide its order against the current
+  activation. The same-run policy transition stays a separate decision (§8 "Mid-run logging
+  transition"); E3's feature-logging conversion waits on it and on the cancellation change above.
+- **Redaction policy ID: dropped 14 November 2026** (user: "recommendation accepted").
+  `redaction/default-v1` is gone from 26-security.md and F0002 §6.4 (the row is :548). No code
+  carried it, and a record field would invalidate every `feature-log/v2` segment. F0002's
+  "classified fragments retain their existing detector contract" clause still has no code
+  counterpart.
 - **Producerless rejection** (fixed, [Z_SPEC01](Z_SPEC01.md)), still open: contract 27
   (27-observability.md:44-47) names only coverage as an assembled-candidate example (design
   edit awaiting approval: add `producerless` as a second example); `observation.capture`'s
@@ -1145,13 +1272,13 @@ E1–E4. §10 C8 adds record-lifecycle gaps.
 
 **Typed identities implemented 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E8; the user's
 "implement E8"): the 19 production sites, the derived names of C34 and the scripted fixtures'
-branches now use closed per-schema enums, with an offline schema-load check. **Open:** a
-generic compiler rule that a registered operation contract declares the definitions it reads and
-the graph compile rejects a schema resource that lacks one (`WORKFLOW_GRAPH_COMPILE_INVALID`).
-No accepted text places a check at schema load today (ADR 0012:68, 0013:77, 0016:96 reject at
-request preparation). The declaration could sit on the request step, which would duplicate the
-enums in YAML, or on the 14 packet-building operations, which would each take the schema as a
-parameter and needs no E1. E1 does not add it (DE1 decision 3); decide it separately.
+branches now use closed per-schema enums, with an offline schema-load check. **Decided 14
+November 2026** (user: "recommendation accepted"): no generic compile-time rule, so E8 is closed.
+The check stays at request preparation (ADR 0012:68, ADR 0013:81, 12-model-boundary.md), and
+ADR 0013's shipped-schema test is the load-time check. A target project's own schema copy that
+lacks a member still fails at preparation, after earlier calls. If a rule is wanted later,
+declare the definitions on the packet-building operations, not as a list on the request step,
+which invariant 29 and the scalar-only parameter schema forbid.
 
 Domain code (before E8) names result-schema definitions by raw strings (T5.2: 20 production sites on the
 `b38628c` tree, `zig-out/code-heuristics/report.json`, 2 November 2026; ADR 0047 removed the
@@ -1166,15 +1293,13 @@ Spec definition (ADR 0003:100-101). Test fixtures branch on names too
 
 ### E9. Superseded exact-handle correction
 
-`ValueChoices.correction`'s `unknown_exact` arm (`specification_provenance.zig:172-175`)
-corrects a model-authored exact handle that models can't author since `dfae959` (ADR 0020:234).
-`ValueChoices.permits` (`:162-164`) has no caller. Delete the arm, `permits`, the
-`rejected_exact` member (`typed_text.zig:144`), its assignments (`typed_text.zig:245`,
-`specification_provenance.zig:426-433`) and the assertions that read it
-(`typed_text_test.zig:32`, `specification_generation_test.zig:6907`,
-`packet_guidance_test.zig:205`); the `unknown_exact` rejection stays. No freeze under
-`evaluations/request-projection/` carries `rejected_exact`, and no retained report does. Lands
-with E1, E4 or E5. §10 C27 adds the `.construct` singleton choice.
+**Implemented 14 November 2026 with E4 step 5** ([Z_SPEC01](Z_SPEC01.md) E4, with the C27
+`.construct` singleton choice): `ValueChoices.permits`, the `unknown_exact` arm of
+`ValueChoices.correction`, `Issue.rejected_exact` with its assignments and the assertions that read it
+are deleted; the `unknown_exact` rejection stays, and a surviving one falls to its description with no
+repair tail. The only trace difference is nine retained-merge authorization digests, accepted
+(§5 E4, "E4 final record"). Defect class: none scored; reachability of the changed correction text in live
+runs is not established.
 
 ### E15. Streamed provider replies (proposal; no ADR)
 
@@ -1481,8 +1606,12 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
 
 ### R-A1. Engine-owned release
 
-Whether the engine also takes over release, changing ADR 0012's retained-request handoff (ADR
-0030:475-477). Decide after E1.
+**Not adopted 14 November 2026** (user: "recommendation accepted"): release stays an explicit
+YAML step (ADR 0030 decision 4a, amended). Engine-owned release needs compiler-derived
+lifetimes, which are path-sensitive across loops and joins; it would amend ADRs 0005, 0012, 0030
+and 0033 and invariants 25 and 28; and it has no published-output benefit. E4 also rewrites the
+repair routes that hold ten of the release sites. About 54 lines of release steps remain in the
+Spec YAML.
 
 ## 9. Guardrails
 
@@ -1860,8 +1989,6 @@ definition.
 - `model_request_handoff.zig:213` `acceptsRetained`; `model_request_workflow.zig:156`
   `selectionForPacket`; `model_text_wire.zig:106-122` `checkProseFields` and its helper;
   `model_result_schema.zig:13` `ChoiceBoundError`.
-- The engine-constructed singleton choice (`.singleton = .construct`), superseded by ADR
-  0020:26-28 and set only in tests (adds to E9).
 - `PipelineEnvelope.place` (`pipeline_envelope.zig:75-84`); `DataKey.feature_log_recovery` and
   `.log_drop_evidence` (`pipeline.zig:185`, `:197`).
 - `ValidToolchain.packages()` (`toolchain_safety.zig:10-12`); `ToolChainService`

@@ -13,6 +13,9 @@ pub const RegistryCandidate = struct {
     resource_captures: []const inventory.Capture,
     definitions: []const definition.Definition,
     graphs: []const compilation.CompiledWorkflow,
+    /// The operation registry the graphs were compiled from: publication rechecks each step of a
+    /// contract with variants against the variant it selected (ADR 0030 "Contract variants").
+    operations: *const @import("../ports/workflow_operation_registry.zig").Registry,
 };
 
 pub const ValidatedWorkflowDefinitionRegistry = opaque {
@@ -95,6 +98,7 @@ fn validateCandidate(allocator: std.mem.Allocator, candidate: RegistryCandidate)
     try validateResourceCaptures(candidate);
     for (candidate.graphs, 0..) |graph, index| {
         const declared = findDefinition(candidate.definitions, graph.source_ordinal) orelse return invalid();
+        if (!candidate.operations.stepsMatchVariants(graph.authority.steps)) return invalid();
         if (!graphProjectsDefinition(allocator, candidate, graph, declared) or
             !containsOrdinal(candidate.inventory.definition_ordinals, graph.source_ordinal)) return invalid();
         for (candidate.graphs[0..index]) |prior| {

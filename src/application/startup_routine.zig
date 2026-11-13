@@ -196,9 +196,9 @@ pub fn run(
     if (checkpoint(runtime, diagnostic, .validate_workflow_operations)) |stop| return stop;
     const graphs = steps.compileWorkflows(ports.result_schema_compiler, operations, arena, definitions, workflow_inventory, manifest, resource_captures) catch return failed(diagnostic, .compile_workflows);
     if (checkpoint(runtime, diagnostic, .compile_workflows)) |stop| return stop;
-    const validated_graphs = steps.validateWorkflowGraphs(arena, graphs) catch return failed(diagnostic, .validate_workflow_graphs);
+    const validated_graphs = steps.validateWorkflowGraphs(arena, graphs, operations) catch return failed(diagnostic, .validate_workflow_graphs);
     if (checkpoint(runtime, diagnostic, .validate_workflow_graphs)) |stop| return stop;
-    const workflow_candidate = steps.buildWorkflowRegistry(arena, workflow_inventory, definition_captures, manifest, resource_captures, definitions, validated_graphs) catch return failed(diagnostic, .build_workflow_registry);
+    const workflow_candidate = steps.buildWorkflowRegistry(arena, workflow_inventory, definition_captures, manifest, resource_captures, definitions, validated_graphs, operations) catch return failed(diagnostic, .build_workflow_registry);
     if (checkpoint(runtime, diagnostic, .build_workflow_registry)) |stop| return stop;
     const workflows_owner = steps.validateWorkflowRegistry(allocator, workflow_candidate) catch return failed(diagnostic, .validate_workflow_registry);
     defer if (!published) workflow_registry.deinitOwner(workflows_owner);
@@ -542,8 +542,9 @@ pub const steps = struct {
     pub fn validateWorkflowGraphs(
         allocator: std.mem.Allocator,
         graphs: []const compilation.CompiledWorkflow,
+        operations: ValidatedOperations,
     ) graph_validation.Error!compilation.ValidatedGraphs {
-        return graph_validation.validate(allocator, graphs);
+        return graph_validation.validate(allocator, graphs, operations.registry);
     }
 
     pub fn buildWorkflowRegistry(
@@ -554,6 +555,7 @@ pub const steps = struct {
         resource_captures: []const inventory.Capture,
         definitions: []const definition.Definition,
         graphs: compilation.ValidatedGraphs,
+        operations: ValidatedOperations,
     ) error{WorkflowRegistryInvalid}!workflow_registry.RegistryCandidate {
         const sorted = allocator.dupe(compilation.CompiledWorkflow, graphs.values) catch {
             return error.WorkflowRegistryInvalid;
@@ -566,6 +568,7 @@ pub const steps = struct {
             .resource_captures = resource_captures,
             .definitions = definitions,
             .graphs = sorted,
+            .operations = operations.registry,
         };
     }
 

@@ -10,6 +10,42 @@ const compilation = @import("domain/workflow_compilation.zig");
 const inventory = @import("domain/workflow_inventory.zig");
 const registry = @import("domain/workflow_registry.zig");
 const source_port = @import("ports/workflow_authority_source.zig");
+const operation_registry = @import("ports/workflow_operation_registry.zig");
+
+/// These candidates are built by hand from steps of no registered operation; the variant recheck at
+/// publication is `operation_variant_test.zig`'s subject.
+const no_operations: operation_registry.Registry = .{ .operations = &.{}, .policies = &.{}, .gates = &.{} };
+
+fn unusedOperation(_: ?*void, _: operation_registry.Input) operation_registry.Error!@import("domain/workflow_execution.zig").Candidate {
+    return error.OperationExecutionFailed;
+}
+
+/// A registry whose `core.noop` is a contract made of variants, so a compiled step of `core.noop`
+/// is valid only if it carries the selector of one of them (ADR 0030 "Contract variants").
+const selecting_operations: operation_registry.Registry = .{
+    .operations = &.{.{
+        .contract = .{ .id = "core.noop", .kind = .step, .outcomes = &.{}, .side_effect = .none, .selector = "mode", .variants = &.{.{
+            .value = "only",
+            .parameters = &.{.{ .id = "mode", .kind = .enumeration, .required = true, .workflow_definition_safe = true, .allowed_values = &.{"only"} }},
+            .requires = &.{},
+            .optional = &.{},
+            .produces = &.{},
+            .replaces = &.{},
+            .invalidates = &.{},
+            .outcomes = &.{.ok},
+            .side_effect = .none,
+            .runner_accounting = .none,
+            .repair_role = .none,
+            .outcome_association = .independent,
+            .gates = &.{},
+            .retry_limit = null,
+            .iteration = null,
+        }} },
+        .binding = @import("application/workflow_operation_binding.zig").bind(void, null, unusedOperation),
+    }},
+    .policies = &.{},
+    .gates = &.{},
+};
 
 fn runInventoryStages(
     allocator: std.mem.Allocator,
@@ -108,6 +144,7 @@ test "validated workflow registry accepts zero definitions and owns its graph re
         .resource_captures = &.{},
         .definitions = &.{},
         .graphs = &.{},
+        .operations = &no_operations,
     });
     defer registry.deinitOwner(empty_owner);
     try std.testing.expectEqual(@as(usize, 0), registry.registry(empty_owner).count());
@@ -236,6 +273,7 @@ test "validated workflow registry accepts zero definitions and owns its graph re
         .resource_captures = &resource_captures,
         .definitions = &.{declared},
         .graphs = &.{graph},
+        .operations = &no_operations,
     };
     var foreign_resources = compiled_resources;
     const foreign_schema = try schema_adapter.compiler().compile(scratch.allocator(), schema_bytes);
@@ -258,6 +296,12 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     source_graph.authority.resources = &wrong_path;
     source_candidate.graphs = &.{source_graph};
     try std.testing.expectError(error.InvalidWorkflowRegistry, registry.createValidated(std.testing.allocator, source_candidate));
+    // Publication rechecks a step of a contract with variants against the variant it selected: this
+    // step runs `core.noop` without the selector those variants need, and the same candidate is
+    // published under the registry that holds no variants.
+    var selecting_candidate = candidate;
+    selecting_candidate.operations = &selecting_operations;
+    try std.testing.expectError(error.InvalidWorkflowRegistry, registry.createValidated(std.testing.allocator, selecting_candidate));
     const owner = try registry.createValidated(std.testing.allocator, candidate);
     const cloned_step = registry.registry(owner).resolve(declared.workflow_id).?.authority.steps[0];
     try std.testing.expect(cloned_step.model.?.slot.bytes.ptr != slot.ptr);
@@ -326,6 +370,7 @@ test "registry rejects a partially valid duplicate identity set" {
         .resource_captures = &.{},
         .definitions = &definitions,
         .graphs = &graphs,
+        .operations = &no_operations,
     }));
 }
 

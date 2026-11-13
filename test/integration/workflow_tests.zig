@@ -1277,7 +1277,6 @@ test "configured native summary reuse advances a fresh validated plan after pre-
 test "an edge case links natively, by one closed model choice, or blocks the run when no criterion of its batch can serve it" {
     try testSpecificationWorkflows(.scenario_links);
 }
-
 const step_trace = @import("../../src/test_fixtures/workflow_step_trace.zig");
 
 /// Records one scenario's step trace and totals beneath `.zig-cache` as
@@ -1313,7 +1312,7 @@ fn writeStepTrace(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir,
     const identity = try stateId(runner);
     var observed: std.ArrayList(step_trace.File) = .empty;
     for ([_][]const u8{ "requirements", "engine/workflows/features" }) |root| try observed.appendSlice(a, try step_trace.files(io, a, project, root, identity));
-    try step_trace.write(io, a, trace, .{
+    const summary: step_trace.Summary = .{
         .workflow = "spec-generation",
         .case = case,
         .scenario = scenario,
@@ -1327,7 +1326,14 @@ fn writeStepTrace(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir,
         .committed_tokens = ledger.committed(),
         .requests = requests,
         .files = try step_trace.hashed(a, observed.items),
-    }, observed.items);
+    };
+    try step_trace.write(io, a, trace, summary, observed.items);
+    // The native repair evidence the report reads, frozen beside the trace (ADR 0033 "Freeze first").
+    const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+    try step_trace.writeRepairs(io, a, summary, .{
+        .retry_settings = try runner.retryObservations(a),
+        .merges = try @import("../../src/application/candidate_repair_observations.zig").read(a, &view),
+    });
 }
 
 /// The run's random reference state ID, which rendered views cite.

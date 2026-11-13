@@ -192,7 +192,7 @@ Every activated run writes beneath the spec being run, never into the editable s
   optional console output; 65,536-byte records; 8,388,608-byte segments; 16 segments per
   feature/run/stream; 14-day retention; lower-level flush after 32 records or 1,000 monotonic
   ms; 5,000-byte sanitized prompt chunks without an exchange truncation ceiling;
-  compiler-owned `redaction/default-v1` with no configured additions; `error`
+  compiler-owned redaction with no configured additions; `error`
   forced-flush threshold; and `block_new_work`.
 - These are compiler-owned constants rather than configurable values or defaults.
 

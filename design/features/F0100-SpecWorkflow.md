@@ -23,11 +23,11 @@ primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0038](../decisions/0038-record-claims-and-scenario-coverage.md),
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
 [0043](../decisions/0043-model-facing-exact-text-names.md),
-[0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md). Not yet implemented: the scenario slots of
-[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3,
-[ADR 0025](../decisions/0025-clarification-answer-authentication.md),
-[ADR 0033](../decisions/0033-generic-repair-operations.md) and most of
-[ADR 0030](../decisions/0030-engine-owned-model-request.md);
+[0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md), and the engine-owned `request-model` step of
+[ADR 0030](../decisions/0030-engine-owned-model-request.md) and the four generic repair
+operations of [ADR 0033](../decisions/0033-generic-repair-operations.md) are implemented. Not yet implemented: the scenario slots of
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3 and
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md);
 [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) is accepted, on hold
 since 30 October 2026. The
 [§32 index](../design.md#32-accepted-and-deferred-implementation-choices) lists every
@@ -1388,15 +1388,15 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   claims. Cycle and permutation regressions exercise the complete publication path.
 - JSON/schema protocol retry remains separate from semantic repair.
 - Each repair route is bounded by an explicit YAML `retry-limit` on its repair request or
-  merge ([ADR 0033](../decisions/0033-generic-repair-operations.md)'s per-owner table);
-  exhaustion fails.
-- Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
-  the 29 per-owner repair operations of the Spec definition become four generic ones:
-  `authorize-repair`, `build-repair-input`, `parse-repair` and `merge-repair`.
+  merge ([ADR 0033](../decisions/0033-generic-repair-operations.md)'s table of variant
+  maxima); exhaustion fails.
+- Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (implemented), the Spec
+  definition's repair routes use four generic operations: `authorize-repair`,
+  `build-repair-input`, `parse-repair` and `merge-repair`, specified in
+  [13-04](../contracts/actions/13-04-model.md#generic-repair-operations).
   - Each takes the route's closed `owner`, and the owner rules stay in their domain
     modules.
   - Each route keeps its own steps, retry counter and ceiling.
-  - This converts after ADR 0030 and ADR 0031's first conversion.
 - Only the workflow's cumulative actual token budget limits model tokens.
 - No missing knowledge is replaced with a default or treated as deterministic proof.
 

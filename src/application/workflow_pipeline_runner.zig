@@ -226,7 +226,10 @@ pub const Runner = struct {
         const step = &self.selected.graph.authority.steps[index];
         const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .authority };
         if (kernel.isKernel(step.*)) return self.executeRequestKernel(id, index, step, entry);
-        return self.executeBound(id, index, step, .{ .contract = entry.contract, .binding = entry.binding }, null);
+        // The step runs against its own variant of the registered contract, never a union of them
+        // (ADR 0030 "Contract variants"): a step whose selector picks none is rejected.
+        const contract = entry.contractFor(step.parameters) orelse return .{ .rejected = .authority };
+        return self.executeBound(id, index, step, .{ .contract = contract, .binding = entry.binding }, null);
     }
 
     /// The contract and binding one compiled step runs: a registered operation's own, or a stage of
@@ -244,7 +247,7 @@ pub const Runner = struct {
     /// runner-owned child bindings. The step counts once toward the execution ceiling; its stages
     /// run through the same checks, accounting and retention as any step, each with its own event.
     fn executeRequestKernel(self: *Runner, id: workflow.WorkflowStepId, index: usize, step: *const compilation.CompiledStep, entry: *const operations.Entry) execution.Applied {
-        if (!kernel.validProjection(step.*) or !contractMatchesStep(entry.contract, step.*) or
+        if (!kernel.validProjection(step.*) or !compilation.matchesContract(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
             !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .authority };
         if (self.remaining_step_executions == 0) return .{ .rejected = .authority };
@@ -302,7 +305,7 @@ pub const Runner = struct {
             !operation_selection.validProjection(step.*) or
             !request_lifecycle_selection.validProjection(step.*) or
             !authorization_selection.validProjection(step.*)) return .{ .rejected = .authority };
-        if (!contractMatchesStep(entry.contract, step.*) or
+        if (!compilation.matchesContract(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
             !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .authority };
         switch (step.side_effect) {
@@ -1034,25 +1037,6 @@ fn stepPipelineContract(step: compilation.CompiledStep) pipeline.NodeContract {
         .repair_role = step.repair_role,
     };
 }
-fn contractMatchesStep(
-    contract: operation.Contract,
-    step: compilation.CompiledStep,
-) bool {
-    return contract.kind == .step and
-        std.mem.eql(pipeline.DataKey, contract.requires, step.requires) and
-        std.mem.eql(pipeline.DataKey, contract.optional, step.optional) and
-        std.mem.eql(pipeline.DataKey, contract.produces, step.produces) and
-        std.mem.eql(pipeline.DataKey, contract.replaces, step.replaces) and
-        std.mem.eql(pipeline.DataKey, contract.invalidates, step.invalidates) and
-        std.mem.eql(workflow.OutcomeTag, contract.outcomes, step.outcomes) and
-        contract.side_effect == step.side_effect and
-        contract.runner_accounting == step.runner_accounting and
-        contract.repair_role == step.repair_role and
-        contract.outcome_association.eql(step.outcome_association) and
-        std.meta.eql(contract.iteration, step.iteration) and
-        gateIdsMatch(contract.gates, step.gates) and
-        retryContractMatches(contract, step);
-}
 fn terminalFor(transitions: []const workflow.Transition, step: workflow.WorkflowStepId, outcome: workflow.OutcomeTag) ?workflow.OutcomeTag {
     for (transitions) |edge| if (std.mem.eql(u8, edge.from.bytes, step.bytes) and edge.outcome == outcome) {
         return switch (edge.target) {
@@ -1061,18 +1045,6 @@ fn terminalFor(transitions: []const workflow.Transition, step: workflow.Workflow
         };
     };
     return null;
-}
-fn gateIdsMatch(ids: []const []const u8, gates: []const @import("../domain/workflow_gate.zig").Contract) bool {
-    if (ids.len != gates.len) return false;
-    for (ids, gates) |id, gate| if (!std.mem.eql(u8, id, gate.id.bytes)) return false;
-    return true;
-}
-fn retryContractMatches(contract: operation.Contract, step: compilation.CompiledStep) bool {
-    if (contract.retry_limit == null or step.retry_authority == null) {
-        return contract.retry_limit == null and step.retry_authority == null;
-    }
-    return step.retry_authority.?.limit.within(contract.retry_limit.?.maximum) and
-        step.retry_authority.?.scope == contract.retry_limit.?.scope;
 }
 fn equalStrings(left: []const []const u8, right: []const []const u8) bool {
     if (left.len != right.len) return false;

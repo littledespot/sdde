@@ -6,7 +6,10 @@
   `requestTimeoutMs` ("Request deadline"). `request-model` is implemented and registered, and
   the Spec workflow and the packaging fixture use it. The explicit request-lifecycle operations
   are deleted: the stages are native bindings of the kernel entry, no workflow can select one,
-  and a definition that names a stage's former ID fails to compile.
+  and a definition that names a stage's former ID fails to compile. The shared contract-variant
+  mechanism ("Contract variants") is implemented (registry admission, compiler selection, graph
+  validation, publication recheck and runner check, with a test contract), and the four
+  generic repair operations of ADR 0033 use it (SPEC01 E4, 14 November 2026).
 - **Date:** 2026-10-22; amended 2026-10-23.
 - **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
   subgraph as suggested, update documentations. do not make any code change yet". It
@@ -201,9 +204,9 @@ bindings. This is the one stage list; other documents refer to it.
 
 Confirmed by the user on 23 October 2026 ("update the documentation around option 1").
 One operation may have one registered contract made of closed variants, selected per step
-at compile time. This ADR builds the mechanism, and
-[ADR 0033](0033-generic-repair-operations.md)'s four generic repair operations reuse it,
-so there is one mechanism with two users.
+at compile time. This ADR specifies the mechanism, and
+[ADR 0033](0033-generic-repair-operations.md)'s four generic repair operations are its only
+user (the advisory variant was withdrawn), so there is one mechanism with one user.
 
 - **A variant is a complete contract:** outcome set, data effects, side-effect class,
   outcome-association descriptors, repair role and retry authority, the same fields as
@@ -221,7 +224,8 @@ so there is one mechanism with two users.
 - **Registry admission** validates every variant independently, with the same checks as
   any registered contract. Registry-wide checks that read every contract cover every
   variant of every contract: gate-evidence exclusivity, the gate-issuer check and schema
-  registration.
+  registration. The gate-issuer check holds for variants by rejecting an issuer that has
+  variants: a gate issuer must be a single-shape operation.
 - **The compiler** checks each step against its selected variant alone: outcome mapping,
   data flow, role and association compatibility, and retry authority. Compiled-graph
   validation and registry publication recheck each step against that same variant.
@@ -373,7 +377,8 @@ for a proof of concept whose primary goal is the best outcome:
 4. **4a. Release stays an explicit YAML step**, as derived, because sites choose
    different retirements and a release must follow the request's workflow-specific
    consumers. Engine-owned release needs the compiler to derive each request's
-   lifetime, and stays a separate question.
+   lifetime. It was not adopted (user, 14 November 2026). Adopting it would amend ADRs 0005,
+   0012, 0030 and 0033 and invariants 25 and 28, and needs its own decision.
 5. **4b. Advisory routing** was settled as a per-site `advisory: allowed` marking. It was
    withdrawn on 1 November 2026, when the advisory protocol it routed was removed with
    post-generation review (SPEC01 D13.1).
@@ -385,9 +390,10 @@ for a proof of concept whose primary goal is the best outcome:
   measures the saving.
 - **Deadlines follow the model.** Selecting a different model for a slot brings that
   model's deadline with it; no workflow edit is needed.
-- **A larger first change.** The shared contract-variant mechanism lands with this ADR,
+- **A larger first change.** The shared contract-variant mechanism is part of this ADR,
   in the compiler, the registry and the runner, so ADR 0033 can reuse it. Its admission,
-  compiler and runner tests are part of this ADR's acceptance.
+  compiler and runner tests are part of this ADR's acceptance. The `request-model` landing
+  (E1) did not need variants, so the mechanism was built with ADR 0033's conversion (E4).
 - **Most of the remaining YAML size is outside this decision.** More than half of the
   Specify definition's steps only pass `ok` to the next step and `failed` to the end;
   ADRs 0031 and 0033 address those.
@@ -429,7 +435,7 @@ All offline. The change makes no model call.
   - accepted: an operation with one contract of closed variants, each admitted on its
     own, and a step whose selector picks one;
   - accepted: a selector forwarded through a subgraph `{param}`, as ADR 0033's call
-    sites will;
+    sites may (none forwards `owner` today);
   - rejected at admission: a variant that fails any per-contract check while its
     sibling variant is valid; two variants with the same selector value; and a
     non-first variant that produces another operation's gate evidence key;
@@ -442,7 +448,7 @@ All offline. The change makes no model call.
   - the mechanism has no operation-specific branch: a test contract whose two
     variants differ in data effects, retry authority (required and forbidden, with
     different maximums) and repair role passes through the same admission, compiler and
-    runner paths that ADR 0033 will use.
+    runner paths that ADR 0033's four generic repair operations use.
 - **Request deadline:**
   - accepted: catalogue entries of each provider with a positive integer
     `requestTimeoutMs`;
@@ -473,9 +479,6 @@ All offline. The change makes no model call.
 
 ## Not decided here
 
-- Whether the engine should also release a request after its consumers, removing the
-  per-site release steps. That changes ADR 0012's retained-request handoff, needs the
-  compiler to derive each request's lifetime, and needs its own decision.
 - The measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`.
 - Token counting's return, if a workflow and a counting-capable model ever need it.
 - Any workflow-level parameter default. Stage actions and generic repair operations are

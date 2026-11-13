@@ -545,7 +545,7 @@ compiler injects them only after validating the two user choices.
 | Flush level | `flushAtOrAbove` is exactly `error`; `error`, `fatal`, and terminal stage/task events force flush |
 | Lower-level flush | flush after 32 records or 1,000 monotonic ms since the last successful flush, whichever occurs first |
 | Failure mode | exactly `block_new_work` |
-| Redaction policy | compiler-owned `redaction/default-v1`; production complete-body capture removes exact authorized credentials and JSON-escaped forms before splitting; classified fragments retain their existing detector contract; no configured patterns |
+| Redaction policy | compiler-owned; production complete-body capture removes exact authorized credentials and JSON-escaped forms before splitting; classified fragments retain their existing detector contract; no configured patterns |
 | Prompt capture | `debug`/`trace` selects every direction/body class; higher thresholds emit metadata only; no independent selector setting |
 | Prompt content | `maxContentBytes = 5,000` per sanitized chunk; complete selected exchanges use lossless ordered chunks, never tail truncation |
 | Stream lock | compiler constant 2,000 ms from first acquisition attempt; one attempt, no retry or backoff |

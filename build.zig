@@ -869,7 +869,7 @@ fn define(b: *std.Build) Graph {
         .optimize = optimize,
     }) });
     b.step("test-workflow-operation-registry", "Test current operation registry schemas, bindings and authority").dependOn(&b.addRunArtifact(operation_registry_tests).step);
-    for ([_][]const u8{ "src/workflow_definition_test.zig", "src/workflow_registry_test.zig", "src/workflow_json_composition_test.zig" }) |source| {
+    for ([_][]const u8{ "src/workflow_definition_test.zig", "src/workflow_registry_test.zig", "src/workflow_json_composition_test.zig", "src/operation_variant_test.zig" }) |source| {
         const graph_tests = b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path(source),
             .target = target,

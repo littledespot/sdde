@@ -159,18 +159,10 @@ pub const ValueChoices = struct {
     exact_copy: []const text.ExactCopy,
     passive: []const @import("passive_literals.zig").Id = &.{},
 
-    pub fn permits(self: ValueChoices, selected: text.ExactCopy) bool {
-        return text.permitsExact(self.exact_copy, selected);
-    }
-
     pub fn correction(self: ValueChoices, a: std.mem.Allocator, guidance: *const @import("packet_guidance.zig").Guidance, issue: text.Issue) std.mem.Allocator.Error![]const u8 {
         const rejected = switch (issue.reason) {
             .unknown_passive => if (issue.rejected_passive) |id|
                 try std.fmt.allocPrint(a, "passive reference ID {d}", .{id.ordinal})
-            else
-                return issue.description(),
-            .unknown_exact => if (issue.rejected_exact) |handle|
-                try std.fmt.allocPrint(a, "exact-copy claim {d}", .{handle.claim_id.ordinal})
             else
                 return issue.description(),
             else => return issue.description(),
@@ -426,7 +418,6 @@ fn recognizeInspected(comptime boundary: spec.Boundary, a: std.mem.Allocator, re
                 _ = refs.exact(references.items, segment.exact_copy.claim_id) catch {
                     inspection.text_issue.?.first_node = index;
                     inspection.text_issue.?.last_node = index;
-                    inspection.text_issue.?.rejected_exact = segment.exact_copy;
                     break;
                 };
             };

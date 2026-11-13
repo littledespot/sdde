@@ -5,14 +5,22 @@ const definition = @import("workflow_definition.zig");
 const compilation = @import("workflow_compilation.zig");
 const workflow_retry = @import("workflow_retry.zig");
 const kernel = @import("model_request_kernel.zig");
+const operation_registry = @import("../ports/workflow_operation_registry.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
+/// Validates every compiled graph, including that each step of a contract with variants carries
+/// exactly the variant its selector picks (ADR 0030 "Contract variants"): the compiler's output is
+/// rechecked against the registry's contracts, not trusted.
 pub fn validate(
     allocator: std.mem.Allocator,
     graphs: []const compilation.CompiledWorkflow,
+    operations: *const operation_registry.Registry,
 ) Error!compilation.ValidatedGraphs {
-    for (graphs) |graph| try validateGraph(allocator, graph);
+    for (graphs) |graph| {
+        if (!operations.stepsMatchVariants(graph.authority.steps)) return invalid();
+        try validateGraph(allocator, graph);
+    }
     return .{ .values = graphs };
 }
 
@@ -246,6 +254,10 @@ fn invalid() Error {
     return error.WorkflowGraphCompileInvalid;
 }
 
+/// These tests build graphs by hand from steps of no registered operation; the variant recheck is
+/// the registry tests' subject (`operation_variant_test.zig`).
+const no_operations: operation_registry.Registry = .{ .operations = &.{}, .policies = &.{}, .gates = &.{} };
+
 test "bounded progress can never be a compiled workflow terminal state" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -255,7 +267,7 @@ test "bounded progress can never be a compiled workflow terminal state" {
         .{ .from = step.id, .outcome = .ok, .target = .{ .terminal = .ok } },
         .{ .from = step.id, .outcome = .more, .target = .{ .terminal = .more } },
     };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{testGraph(&.{step}, &transitions)}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{testGraph(&.{step}, &transitions)}, &no_operations));
 }
 
 test "publication ends every outcome directly without a later pure or effectful operation" {
@@ -272,7 +284,7 @@ test "publication ends every outcome directly without a later pure or effectful 
     };
     var accepted = testGraph(&.{publication}, &terminal);
     accepted.authority.maximum_step_executions = compilation.calculateExecutionLimit(accepted.authority.steps).?;
-    _ = try validate(a, &.{accepted});
+    _ = try validate(a, &.{accepted}, &no_operations);
     for ([_]pipeline.SideEffect{ .none, .filesystem_read, .filesystem_write, .model_call, .workflow_publication }) |effect| {
         var after = testStep("later", null);
         after.side_effect = effect;
@@ -285,17 +297,17 @@ test "publication ends every outcome directly without a later pure or effectful 
             var rejected = testGraph(&.{ publication, after }, &transitions);
             rejected.authority.maximum_step_executions = compilation.calculateExecutionLimit(rejected.authority.steps).?;
             try std.testing.expect(!compilation.publicationTerminates(rejected.authority));
-            try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{rejected}));
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{rejected}, &no_operations));
         }
     }
     var loop = terminal;
     loop[0].target = .{ .step = publication.id };
     accepted.authority.transitions = &loop;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{accepted}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{accepted}, &no_operations));
     var wrong_terminal = terminal;
     wrong_terminal[1].target = .{ .terminal = .ok };
     accepted.authority.transitions = &wrong_terminal;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{accepted}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{accepted}, &no_operations));
 }
 
 test "separate workflow branches may each select their own terminal publication" {
@@ -317,7 +329,7 @@ test "separate workflow branches may each select their own terminal publication"
     };
     var graph = testGraph(&.{ select, first, second }, &transitions);
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(graph.authority.steps).?;
-    _ = try validate(arena.allocator(), &.{graph});
+    _ = try validate(arena.allocator(), &.{graph}, &no_operations);
 }
 
 fn testStep(id: []const u8, retry_limit: ?u32) compilation.CompiledStep {
@@ -396,14 +408,14 @@ test "native finite iteration guards only its declared advancing outcome" {
         .{ .from = steps[1].id, .outcome = .ok, .target = .{ .step = steps[1].id } },
         .{ .from = steps[1].id, .outcome = .failed, .target = .{ .terminal = .failed } },
     };
-    _ = try validate(arena.allocator(), &.{iterationTestGraph(&steps, &transitions)});
+    _ = try validate(arena.allocator(), &.{iterationTestGraph(&steps, &transitions)}, &no_operations);
     var failure_loop = transitions;
     failure_loop[2].target = .{ .terminal = .ok };
     failure_loop[3].target = .{ .step = steps[1].id };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&steps, &failure_loop)}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&steps, &failure_loop)}, &no_operations));
     var unguarded = steps;
     unguarded[1].iteration = null;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&unguarded, &transitions)}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&unguarded, &transitions)}, &no_operations));
 }
 
 test "native iteration initialization cannot replenish a cycle without an independent retry guard" {
@@ -422,14 +434,14 @@ test "native iteration initialization cannot replenish a cycle without an indepe
         .{ .from = steps[2].id, .outcome = .ok, .target = .{ .step = steps[0].id } },
         .{ .from = steps[2].id, .outcome = .failed, .target = .{ .terminal = .failed } },
     };
-    _ = try validate(arena.allocator(), &.{iterationTestGraph(&steps, &transitions)});
+    _ = try validate(arena.allocator(), &.{iterationTestGraph(&steps, &transitions)}, &no_operations);
     var unguarded = steps;
     unguarded[2].retry_authority = null;
     unguarded[2].parameters = &.{};
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&unguarded, &transitions)}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&unguarded, &transitions)}, &no_operations));
     var bypass = transitions;
     bypass[3].target = .{ .step = steps[0].id };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&steps, &bypass)}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&steps, &bypass)}, &no_operations));
 }
 
 test "compiled native iteration rejects undeclared authority and effects" {
@@ -451,7 +463,7 @@ test "compiled native iteration rejects undeclared authority and effects" {
             5 => invalid_steps[0].repair_role = .validate,
             else => unreachable,
         }
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&invalid_steps, &transitions)}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&invalid_steps, &transitions)}, &no_operations));
     }
 }
 
@@ -465,20 +477,20 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
         .{ .from = guarded_steps[1].id, .outcome = .ok, .target = .{ .step = guarded_steps[0].id } },
         .{ .from = guarded_steps[1].id, .outcome = .failed, .target = .{ .terminal = .failed } },
     };
-    _ = try validate(arena.allocator(), &.{testGraph(&guarded_steps, &transitions)});
+    _ = try validate(arena.allocator(), &.{testGraph(&guarded_steps, &transitions)}, &no_operations);
 
     var wrong_bound = testGraph(&guarded_steps, &transitions);
     wrong_bound.authority.maximum_step_executions -= 1;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{wrong_bound}),
+        validate(arena.allocator(), &.{wrong_bound}, &no_operations),
     );
 
     var wrong_retry_steps = guarded_steps;
     wrong_retry_steps[0].retry_authority.?.operation_instance_id = workflow.WorkflowStepId.parse("work").?;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{testGraph(&wrong_retry_steps, &transitions)}),
+        validate(arena.allocator(), &.{testGraph(&wrong_retry_steps, &transitions)}, &no_operations),
     );
 
     var mismatched_retry_steps = guarded_steps;
@@ -487,7 +499,7 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
     mismatched_retry_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&mismatched_retry_steps).?;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{mismatched_retry_graph}),
+        validate(arena.allocator(), &.{mismatched_retry_graph}, &no_operations),
     );
 
     var unguarded_steps = guarded_steps;
@@ -497,7 +509,7 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
     unguarded_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&unguarded_steps).?;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{unguarded_graph}),
+        validate(arena.allocator(), &.{unguarded_graph}, &no_operations),
     );
 }
 

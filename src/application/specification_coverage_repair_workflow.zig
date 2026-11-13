@@ -1,6 +1,7 @@
 const std = @import("std");
 const data = @import("../domain/pipeline_data.zig");
 const repair = @import("../domain/specification_coverage_repair.zig");
+const repair_owner = @import("../domain/repair_owner.zig");
 const owned = @import("specification_values.zig").storage;
 const spec = @import("specification_workflow.zig");
 const values = @import("pipeline_values.zig");
@@ -19,18 +20,20 @@ pub fn authorizationBlocked(view: *const data.View) values.Error!bool {
 }
 
 pub const Authorize = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .specification_generation_session, .accounted_reference_reconciliation, .identified_specification_content, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .specification_coverage },
+        .produces = &.{.specification_coverage_repair},
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage, .result = .specification_coverage_repair } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
-    pub const Action = @import("../actions/specification/authorize_specification_coverage_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .blocked, .failed };
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const rejection = owned.read(&input.step.data, spec.coverage_schema, .coverage_rejected) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const decision = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), rejection) catch |operation_error| return operation_error;
+        const decision = repair.authorize(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), rejection) catch |operation_error| return operation_error;
         owner.payload = .{ .coverage_repair = decision };
         return owned.publish(self.allocator, schema, owner, .blocked) catch |operation_error| return operation_error;
     }

@@ -195,39 +195,9 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 
 ## Specification repair ([§22](../22-repair.md))
 
-## `AuthorizeSpecificationRepairAction` (`authorize-specification-repair`)
-
-- **Owner:** [`src/actions/specification/authorize_specification_repair.zig`](../../../src/actions/specification/authorize_specification_repair.zig)
-- **Reads:** `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `parsed_specification_unit`, `validated_specification_unit`, `packet_guidance` · **Writes:** `specification_repair_authorization` · **Side effect:** `none`
-- **Rejects:** `InvalidSpecificationRepair`, `UnsafeSpecificationRepair`; outcomes `blocked`,
-  `invalid` and `more`.
-
-## `BuildSpecificationRepairInputAction` (`build-specification-repair-input`)
-
-- **Owner:** [`src/actions/specification/build_specification_repair_input.zig`](../../../src/actions/specification/build_specification_repair_input.zig)
-- **Reads:** `specification_generation_session`, `specification_repair_authorization`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Rejects:** `specification_repair.Error`.
-
-## `ParseSpecificationRepairAction` (`parse-specification-repair`)
-
-- **Owner:** [`src/actions/specification/parse_specification_repair.zig`](../../../src/actions/specification/parse_specification_repair.zig)
-- **Reads:** `specification_repair_authorization`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `specification_repair_authorization` · **Side effect:** `none`
-- **Rejects:** `specification_repair.Error`.
-
-## `MergeSpecificationRepairAction` (`merge-specification-repair`)
-
-- **Owner:** [`src/actions/specification/merge_specification_repair.zig`](../../../src/actions/specification/merge_specification_repair.zig)
-- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
-- **Reads:** `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `parsed_specification_unit`, `specification_repair_authorization` · **Writes:** replaces `parsed_specification_unit`; invalidates `validated_specification_unit`, `specification_repair_authorization` · **Side effect:** `none`
-- **Does:** Merge the replacement into only the authorized unit, checked against canonical
-  (NFC) source text.
-- **Rejects:** `specification_repair.Error`.
-
-## `AuthorizeSpecificationCoverageRepairAction` (`authorize-specification-coverage-repair`)
-
-- **Owner:** [`src/actions/specification/authorize_specification_coverage_repair.zig`](../../../src/actions/specification/authorize_specification_coverage_repair.zig)
-- **Reads:** `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `specification_coverage` · **Writes:** `specification_coverage_repair` · **Side effect:** `none`
-- **Rejects:** `specification_repair.Error`; outcome `blocked`.
+The specification unit, specification support and specification coverage repair operations are
+variants of the generic repair operations, specified once in
+[13-04](13-04-model.md#generic-repair-operations).
 
 ## Source review before generation
 
@@ -270,34 +240,6 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 - **Owner:** [`src/actions/specification/collect_specification_support_loss.zig`](../../../src/actions/specification/collect_specification_support_loss.zig)
 - **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
 - **Rejects:** `specification_support` errors; outcome `invalid`.
-
-## `AuthorizeSpecificationSupportRepairAction` (`authorize-specification-support-repair`)
-
-- **Owner:** [`src/actions/specification/authorize_specification_support_repair.zig`](../../../src/actions/specification/authorize_specification_support_repair.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `specification_support_repair` · **Side effect:** `none`
-- **Rejects:** `specification_support_repair` errors; outcome `blocked`.
-
-## `BuildSpecificationSupportRepairInputAction` (`build-specification-support-repair-input`)
-
-- **Owner:** [`src/actions/specification/build_specification_support_repair_input.zig`](../../../src/actions/specification/build_specification_support_repair_input.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_support_repair`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Rejects:** `specification_support_repair` errors.
-
-## `ParseSpecificationSupportRepairAction` (`parse-specification-support-repair`)
-
-- **Owner:** [`src/actions/specification/parse_specification_support_repair.zig`](../../../src/actions/specification/parse_specification_support_repair.zig)
-- **Reads:** `specification_support_repair`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `specification_support_repair` · **Side effect:** `none`
-- **Does:** Parse the repair response against its authorization.
-- **Rejects:** `specification_support_repair` errors.
-
-## `MergeSpecificationSupportRepairAction` (`merge-specification-support-repair`)
-
-- **Owner:** [`src/actions/specification/merge_specification_support_repair.zig`](../../../src/actions/specification/merge_specification_support_repair.zig)
-- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `model_request_identity_ledger`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_support_repair`, `packet_guidance` · **Writes:** replaces `specification_support_review`; invalidates `specification_support_repair` · **Side effect:** `none`
-- **Does:** Merge the repaired finding into the review, checked against canonical (NFC) source
-  text.
-- **Rejects:** `specification_support_repair` errors; outcome `invalid`.
 
 ## `ApplySpecificationSupportAction` (`apply-specification-support`)
 

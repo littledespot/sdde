@@ -47,7 +47,12 @@ The owner in code is `src/domain/model_request_kernel.zig`.
   2 x (1 + `retry-limit`) provider calls: each attempt, correction or not, plus its one runaway
   re-send ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), which
   lies outside `retry-limit`. The attempt-accounting stage refuses the entry past that bound as a
-  retry exhaustion that names the stage.
+  retry exhaustion that names the stage. Every `request-model` step's retry authority counts in the
+  compiled retry-derived execution allowance, including each attempt's one runaway re-send, as the
+  attempt-accounting step it replaced did (not yet implemented: the compiler skips these steps
+  today). An ordinary-scope request that a workflow revisits starts a new request assignment,
+  which restarts the attempt count, so across visits only this allowance and native iteration
+  bound it. The stage bound above is separate from that allowance.
 - **Events.** Every event of a stage names the stage (its dashed `Stage` name in `step_id`). The
   step's own start and end events name none, except that a failed end names the stage that ended
   the request. Retry exhaustion names the step and the stage.

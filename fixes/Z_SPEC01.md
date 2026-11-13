@@ -167,7 +167,8 @@ beyond those named.
 
 ## Repeated statement text is not judged
 
-**Implemented 8 November 2026** (user: "yes as per recommendation"); offline only, no request,
+**Implemented 8 November 2026** (user: "yes as per recommendation"); **kept 14 November 2026**
+(user: "the above recommendations are approved"; SPEC01 §3 Next 1); offline only, no request,
 report or state version. Defect class: run completion (a loan-renewal run exhausting the
 records retry limit on `reference_only` for a bare outcome that repeated another record's
 value). `statement_ownership.zig` is the one rule for which statement a batch deletes; payload
@@ -742,8 +743,8 @@ claimed; the request projection across the integration matrix is byte-identical 
   disjointness test and the generic-owner import check.
 - **Measures:** raw-string schema-name branches in production 19 to 0 (tests 89 to 69; the rest are
   schema-file tests that take definition names as data).
-- **Not done:** a generic compile-time rule (see SPEC01 E8). E1 does not add it (DE1 decision 3);
-  the shipped-schema test is the load-time check until it is decided.
+- **Not done, decided 14 November 2026** (user: "recommendation accepted"): a generic compile-time
+  rule (SPEC01 E8). None is added; the shipped-schema test is the load-time check.
 - **Found, left:** `source_loss_calibration.zig:351` compares a request's definition with
   `assignment_findings`, which no schema declares, so its early return always runs and the code
   after it never does.
@@ -1046,7 +1047,7 @@ YAML shape, and no deviation from DE1 decision 6 remains.
 | 178 | retained semantic assignments require complete current packet request binding and accepted origin | seam | |
 | 179 | retained semantic assignments preserve the actual accepted correction attempt | seam | |
 | 180 | a request binds native exclusions to the one canonical schema | port | was "detailed and consolidated requests bind native exclusions to the same canonical schema"; one path |
-| 181 | protocol correction retains singleton authority and assembly requirements and rejects echoed determined handles | seam | |
+| 181 | protocol correction retains the selected integer choice and assembly requirements and rejects a value outside it | seam | renamed by C27 (E4 below); it rejects a value outside a one-value choice instead of an echoed handle |
 | 182 | protocol correction retains summary and signal guidance selection bounds categories and evidence | seam | |
 | 183 | composition protocol corrections keep complete assignment and grouped defects through recovery or exhaustion | port | one path |
 | 184 | retained semantic selections bind native exact scope independently of unchanged input bytes | seam | |
@@ -1067,3 +1068,149 @@ YAML shape, and no deviation from DE1 decision 6 remains.
 | compiled decoding contracts cannot bypass evidence or add a provider capability | #153 |
 | YAML payload validation rejects foreign decoded and nondecoded evidence without rebinding | the stage no longer takes decoded evidence as input; #95 and #158 cover foreign observation evidence |
 | the compiler requires every continuing admission to route a runaway to its one re-send | asserted `validateRunawayRoutes`, deleted by DE1 decision 5; the orchestrator's branch tests (`a runaway takes the re-send, not the correction`, `an invalid response takes one protocol correction and returns to attempt accounting`) and #111 to #119 cover the branches |
+
+## E4. Generic repair operations (ADR 0033)
+
+**Kept 14 November 2026** (user: "yes", to keeping E4 for its reduced brittleness; no outcome improvement is
+claimed). The `reference-text` and `specification-support` routes stay registered, and `model_text_wire.zig`
+`insertion` keeps recognising and rejecting a model-authored `{"kind":"exact_copy"}`: only its comment changed.
+
+**Step 5 implemented 14 November 2026** (user: "yes implement step 5"; DE4, the ten decisions approved).
+The 29 per-owner repair operations, their 29 action files and the seven owner bindings' action wrappers
+are deleted; the four generic operations (`authorize-repair`, `build-repair-input`, `parse-repair`,
+`merge-repair`) hold the owner bindings by value and select one by the step's `owner`. **Defect class
+named:** none; the change reduces brittleness (29 registrations, 29 wrappers and 29 contracts to keep in
+step with each other) and claims no semantic benefit. The request projection is byte-identical to the one
+before E4, so what each request sends is unchanged. **Accepted finding** (user, 14 November 2026, "yes"):
+the retained-merge `authorization` digest differs in 9 scenarios of the step trace, because of E9 (below);
+every other trace file is identical to step 4's.
+- **Where the contract data lives now:** once, in each owner binding's `effects`
+  (`repair_owner.Effects`: requires, optional, produces, replaces, invalidates), which the generic
+  operation's variants are built from; the outcome, role, association, gates and retry maximum are in
+  `repair_workflow.zig` and `repair_owner.zig`. The source-omission rules moved from five action files to
+  `src/domain/source_omission_repair.zig`.
+- **Measures** (recomputed 14 November 2026 for the review fixes below; two baselines, because step 3
+  registered the generic operations beside the 29 per-owner ones):
+  - Registered repair operations 29 to 4 (variants 10, 6, 6, 7). Native registry entries (excluding the
+    core and request entries): 137 to 112 against the tree before E4 (25 fewer: 29 removed, 4 added), and
+    141 to 112 against the end of step 4 (when both sets were registered). The 29 `Assembly` fields and init
+    lines are gone; the generic operations hold the owner bindings by value.
+  - Data keys are unchanged: the nine repair keys of `pipeline.zig` (`specification_coverage_repair`,
+    `specification_support_repair`, `source_omission_repair`, `reference_reconciliation_repair`, the
+    authorization and result keys of reference-text and reference-extraction, and
+    `specification_repair_authorization`) stay, because the owner bindings the generic operations hold read
+    and write the same keys; the change removes registrations, not data flow.
+  - Files a new repairable owner touches (a variant, not a new operation): before E4, one `Action` file per
+    operation it needed (up to four), one registry entry and one `Assembly` field each, one contract each,
+    and the YAML steps; after E4, its owner binding (`effects` and its bound domain functions), one
+    `RepairOwner` arm in `repair_owner.zig`, one arm in each generic operation it joins in
+    `repair_workflow.zig` (the architecture pin counts the arms), one `frozen` row and the YAML steps. The
+    registry, the compiler and the four generic contracts do not change.
+  - **Defect class named:** none. ADR 0033 chose structural-only evidence for E4 (an approved deviation
+    from AGENTS.md "Model output, prompts and evidence"): it changes no prompt, no admission rule and no
+    published-output behaviour, and no live run is claimed for it.
+  - Action files 188 to 159 (29 deleted, one per removed operation id; the ids are the list in
+    `removed_operations` of `repair_operations_test.zig`); about 1,240 lines of action code replaced by
+    `effects` declarations, direct domain calls and one 58-line domain file. Owner binding files 7 to 7
+    (each rewritten); `repair_workflow.zig` 272 lines.
+  - Spec YAML: 910 lines, 32 repair steps naming an `owner`, unchanged by step 5.
+  - Tests: unit suite 2,004 to 2,004 (3 added, 3 removed by C27), then 2,007 after the review fixes (3
+    real-facts and property tests added, one test replaced), then 2,012 after the final-review fixes (5 tests
+    in `src/repair_routes_test.zig`; two existing owner-mismatch tests now pin the specific error);
+    `test-architecture` 195; `test-model-request-workflow` 507; `test-integration` 128 with no failed row.
+  - `anyopaque`: none in the generic operations, the owner bindings or the new domain files; none added.
+- **Old test or pin to replacement:**
+
+| Before step 5 | After |
+| --- | --- |
+| step 3's equivalence test, which compared each variant with the registered per-owner contract | `every variant states what the per-owner operation it replaced stated, but for the named differences`: a fixed 29-row table (`frozen`) taken from the 29 old contracts on 14 November 2026, before they were deleted; it asserts requires, optional, produces, replaces, invalidates, side effect, role, association, gates, outcomes (less `unreachableOutcome`), retry scope and maximum, and the selector and `retry-limit` parameter, and that the table has 29 rows each served by its owner |
+| run tests that built each per-owner assembly field | `a generic operation runs the selected owner's binding and fails as that binding fails` (all 29 variants; the operation's field is the binding's own type) |
+| none | `a workflow that names a removed per-owner repair operation is rejected as an unknown operation, at a step and in a called subgraph` (29 ids at two positions, with a control that compiles `merge-repair` at both) |
+| none | `the production registry holds the four generic repair operations with their variants, and none of the 29 they replaced` (the composition root's own registry validates; 10, 6, 6 and 7 variants; no other operation has variants) |
+| architecture pin `candidate repairs share authority and expose only native scoped operations` read each action's `Action.contract` | the same pin reads each owner binding's `effects` and asserts the generic operations are capability-free and every variant's side effect is none |
+| none | architecture pin `no per-owner repair operation remains: the four generic operations are the only registered repair operations`: four `variantEntry(generic_repair.` and none of the per-owner `entry(` families in the composition; no owner binding imports an action, names `Action.contract` or holds an `action` field; no file under `src/actions` has `repair` in its name |
+| packet-guidance pin listing the per-owner repair actions that require `.packet_guidance` | the pin walks the four operations' variants and asserts exactly seven (operation, owner) readers: authorize for specification-unit and specification-support; build-input for reference-reconciliation, source-omission, specification-unit and specification-support; merge for specification-support |
+| `reference_reconciliation_test.zig` read the per-owner action contracts | reads `repairs.Authorize(.summary).effects` and `repairs.BuildInput.effects` under the generic ids |
+- **E9 (applied):** deleted `ValueChoices.permits`, the `unknown_exact` arm of `ValueChoices.correction`
+  (the issue's own description is used, as for every other reason), `typed_text.Issue.rejected_exact` and its
+  two assignments (the text validator and `recognizeInspected`), and the assertions that read it
+  (`typed_text_test.zig`, `packet_guidance_test.zig`, `specification_generation_test.zig`). Kept: the
+  first-node and last-node narrowing in `recognizeInspected`, which is the issue's own located range and
+  cannot be shown unreachable. **Effect not foreseen in E9:** an authorization's id is the SHA-256 of the
+  JSON of its owner, revision, target, operation, dependencies and rule; a rule embeds the
+  `typed_text.Issue` (the specification rule's `text_issue`, the reconciliation rule's rejection), so
+  removing the member removes its key from those bytes. In 9 of the 135 step-trace scenarios
+  (`spec-generation-existing` 005, 008, 018, 020, 024, 028, 054, 055 and 065) a retained merge's
+  `authorization` digest, and the permit digest derived from it, differ from step 4's; no other field of any
+  trace, summary, state or `.repairs` file differs. The cause is established by reading the code, not by
+  restoring the member. `state/workflow.json` is identical in all 135 scenarios, so the id is not in the persisted state; it is
+  in the retained-merge evidence (`.repairs`, and the report's `repairs`), whose schema is unchanged.
+  **E9's defect class:** none scored. The only model-facing change is the correction text for an unknown
+  exact copy in model prose, which now falls to the issue's own description without the
+  `repair_tails.value_choices` tail; no scenario or live run shows that path reached, so its reachability in
+  live runs is not established.
+- **C27 (applied):** the `.construct` singleton choice was set only in tests (SPEC01 §10 C27, ADR
+  0020:26-28). Deleted: `IntegerChoice.singleton` and `constructedValue`, `omitConstructedField` with its
+  branch and check in `restrict`, the copy in `model_input_packet`, `constructBound` and `constructFields`
+  with their four callers (specification collection, specification repair parse, atomic repair parse, the
+  composition retention), and the fixture's `modelWire` and `omitScriptedNativeFields`. Tests: three
+  singleton tests deleted (`composition reconstructs native singleton choices while retaining the original
+  admitted response`, `native singleton fields reconstruct by bound occurrence without changing raw
+  responses`, `explicit native singleton construction omits only determined tagged fields`); the E1 table's
+  row 181 is now `protocol correction retains the selected integer choice and assembly requirements and
+  rejects a value outside it`, which rejects a value outside a one-value choice instead of an echoed
+  handle; the retained F10 to F12 replay (`representation_admission_tests.zig`) restores the captured
+  handle in the test itself, so the frozen observations are unchanged. The projection and the trace
+  retaken after C27 are byte-identical to those before it. **Left:** `model_text_wire.zig` `insertion`
+  still accepts an `exact_copy` object with only its `kind` (its comment names the deleted singleton);
+  whether prose holding such an object is still recognised as a wire object is a model-output admission
+  decision, so it is not changed here.
+- **Versions this step moves:** none (see SPEC01 E4 step 5). **Remains for step 6:** the docs that still
+  describe the 29 operations or the singleton: C13-03 and C13-05 per-owner entries, the "not yet
+  implemented" pointers and the three-reconciliation-authorizers prose of ADR 0005, 0023, 0031 and 0033,
+  ADR 0030 "two users", design.md §22 and §32, C22, F0005, F0100, and
+  `test/calibration/authoring-associations/README.md:139-140` (`constructBound`): done in step 6.
+
+**Final measures and proof (step 7, 14 November 2026).** E4 is a structural change and claims no semantic
+benefit; its defect class is none (ADR 0033's structural-only evidence, an approved deviation).
+- **Evidence kept:** `evaluations/request-projection/e4-before` and `e4-final`, `evaluations/step-trace/e4-before`
+  and `e4-final`; the interim `e4-step3` to `e4-step6a` directories are deleted. `e4-final` was written by a
+  fresh `test-integration` run (a new `SDDE_REQUEST_PROJECTION` value forces it) on the final tree; every one of
+  the 135 `.repairs` files was rewritten by it. **Projection:** `diff -rq` of `e4-final` against `e4-before` and
+  against the step 6a retake is empty. **Trace** (135 scenarios, 817 files): `e4-final` is byte-identical to
+  `e4-step6a`; against `e4-before`, by script over every file: 678 identical; 65 `.trace` files that differ
+  only in repair-step operation ids (the old id became the generic id with `@owner`, same outcome, every other
+  line identical and in order); 65 summaries that differ only in `trace_sha256`; 9 `.repairs` files that
+  differ only in the authorization and permit digests (E9, accepted). Nothing else differs, including
+  outcomes, retry counts, token totals, defect-key bytes, executions, retained merges and every
+  `state/workflow.json`.
+- **Sizes** (`wc -l` on 14 November 2026; the pre-E4 sizes of the mechanism files were not recorded and no
+  version control is read, so their line changes are not stated): registered repair operations 29 to 4;
+  native registry entries 137 to 112 against the tree before E4 (141 to 112 against the end of step 4);
+  action files 188 to 159. Removed: 29 action files (372 lines) and the 29 registrations (about 87
+  lines). Rewritten: the seven owner bindings, 779 to 901 lines (they now hold each contract's `effects`
+  once). Added production files: `repair_owner.zig` 170, `repair_workflow.zig` 272 and
+  `source_omission_repair.zig` 58, 500 lines. Net of the replaced 1,238 lines (372, 779 and 87) and the
+  1,401 now (901 and 500): about 163 lines more, before the variant mechanism's edits (`workflow_operation.zig`
+  157, `workflow_compilation.zig` 229, `workflow_operation_registry.zig` 464, `workflow_graph_compilation.zig`
+  431, `workflow_graph_validation.zig` 527, `workflow_registry.zig` 372 and the runner 1,136 lines now, none
+  measured before). E4 reduces registrations, wrappers, contracts and the files a new owner touches; it does
+  not reduce lines. Spec YAML 910 lines, 32 repair steps naming an `owner`.
+- **Tests:** unit suite 1,975 (end of E1) to 2,012; new files `src/operation_variant_test.zig` (12 tests),
+  `src/repair_operations_test.zig` (15 tests) and `src/repair_routes_test.zig` (5 tests), plus two step-trace
+  fixture tests, one architecture pin group and the E1 and E9 test edits; `test-architecture` 195,
+  `test-model-request-workflow` 507, `test-integration` 128 without a failed row. `anyopaque`: 0 in `repair_workflow.zig`, `repair_owner.zig`
+  and `source_omission_repair.zig`; the registry port (2), the runner (6) and `operation_variant_test.zig`
+  (2) carry the existing binding-context pointers, not attributed to E4 and not re-measured before it.
+- **Versions moved:** none (step 6).
+- **Evidence limits, stated plainly:** the `reference-text` and `specification-support` routes (8 variants)
+  appear in no scenario of the matrix, so their equivalence to the 29 operations they replaced cannot be
+  shown offline. They stand on the contract table (`frozen`), a dispatch test and invoke-level tests over real
+  facts in `src/repair_routes_test.zig`, which run each operation through the generic operation and assert
+  the outcome, the exact keys of the delta and the value against the domain function: the text route's
+  authorize, input, parse (after a real request answered through the stage seam) and merge; the support
+  route's four operations over a whole and a focused rejected review (merge `ok` and `more`), merge
+  `invalid` and authorize `blocked`. Not covered by such a test: the support authorize `more` (a delete).
+  The other eleven owners run in the scripted matrix. Owner mismatch is pinned for absent keys and for keys
+  that hold another kind of value. `Registry.validate()` runs on every step and now checks 112 entries and 29
+  variants; its cost is not measured.

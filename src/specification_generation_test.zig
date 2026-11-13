@@ -16,7 +16,7 @@ const test_directory: @import("domain/reference_ingestion.zig").RelativePath = .
 // Native review tests can construct a complete collection directly. Production
 // model admission accepts the complete native unit or collection assignment,
 // not this unconstrained complete-ledger wire shape.
-fn collectReview(comptime Review: type, allocator: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, bytes: []const u8, origin: ?@import("domain/model_candidate_origin.zig").Origin) !Review.Collection {
+pub fn collectReview(comptime Review: type, allocator: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, bytes: []const u8, origin: ?@import("domain/model_candidate_origin.zig").Origin) !Review.Collection {
     const proposed = try @import("domain/model_candidate_json.zig").decode(Review.Review, allocator, bytes);
     const origins = try allocator.alloc(?@import("domain/model_candidate_origin.zig").Origin, proposed.entries.len);
     @memset(origins, origin);
@@ -347,7 +347,7 @@ test "authoring assignments retain field purpose bound meaning and exact choices
                         // Occurrence handles are native facts, never accepted
                         // model-text variants, even when their ID is known.
                         try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = wire, .rejection = .type_mismatch });
-                        try std.testing.expectError(error.InvalidSpecificationUnit, g.parse(a, try codec.constructBound(a, wire, packet.integerChoices()), bound));
+                        try std.testing.expectError(error.InvalidSpecificationUnit, g.parse(a, wire, bound));
                     }
                     const export_value = .{ .input = std.json.Value{ .object = body }, .prior_assignment = (try std.json.parseFromSlice(std.json.Value, a, before, .{})).value, .schema = selected.selected().modelBytes() };
                     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = try std.fmt.allocPrint(a, ".zig-cache/authoring-comparison/{s}.json", .{example.name}), .data = try std.json.Stringify.valueAlloc(a, export_value, .{}) });
@@ -3079,13 +3079,13 @@ fn Fields(comptime kind: spec.Kind, value: spec.BusinessValue) @FieldType(spec.C
 /// The title heading `Fixture` gives a source written without one (ADR 0048).
 const fixture_title = "MOCK Specification title";
 const fixture_display_name: spec.DisplayName = .{ .bytes = fixture_title };
-const Fixture = struct {
+pub const Fixture = struct {
     allocator: std.mem.Allocator,
     context: provenance.Context,
     passive: text.Prepared,
     extracted: @import("domain/reference_extraction.zig").Accounted,
     extracted_text: @import("domain/reference_extraction.zig").TextValidated,
-    fn init(a: std.mem.Allocator, bytes: []const u8) !Fixture {
+    pub fn init(a: std.mem.Allocator, bytes: []const u8) !Fixture {
         return initClassified(a, bytes, .business_exact_string);
     }
     fn initClassified(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind) !Fixture {
@@ -3097,7 +3097,7 @@ const Fixture = struct {
     /// The first model claim quotes every line of `bytes` (ADR 0036). Each further claim
     /// quotes its own appended line, so several claims are distinct evidence: identical
     /// claims are one.
-    fn initContent(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, model_claim_count: usize) !Fixture {
+    pub fn initContent(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, model_claim_count: usize) !Fixture {
         return initContentKinds(a, bytes, kind, has_claims, model_claim_count, false);
     }
     fn initContentKinds(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, model_claim_count: usize, include_technical: bool) !Fixture {
@@ -3211,7 +3211,7 @@ const Fixture = struct {
         const complete = (try references.finish(a, global, reconciled, context)).valid;
         return .{ .allocator = a, .extracted = extracted, .extracted_text = extracted_text, .context = .{ .inputs = inputs, .references = complete, .registry = passive.registry, .current = context.current }, .passive = passive };
     }
-    fn deinit(self: *Fixture) void {
+    pub fn deinit(self: *Fixture) void {
         self.passive.deinit();
     }
     fn proposal(self: *const Fixture, bytes: []const u8) !spec.Model.AttributedValue {
@@ -4788,7 +4788,7 @@ test "multiple original sources retain complete evidence while source-specific s
     }
 }
 
-fn reviewFor(a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, sources: @import("domain/reference_evidence.zig").Inputs) !@import("domain/specification_support.zig").Source.Review {
+pub fn reviewFor(a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, sources: @import("domain/reference_evidence.zig").Inputs) !@import("domain/specification_support.zig").Source.Review {
     const support = @import("domain/specification_support.zig").Source;
     const ledger = try @import("domain/required_authority.zig").build(a, inputs);
     const findings = try a.alloc(support.Finding, ledger.requirements.len);
@@ -4803,7 +4803,7 @@ fn reviewFor(a: std.mem.Allocator, inputs: @import("domain/required_authority.zi
     return .{ .entries = findings };
 }
 
-fn bindReviewClaims(allocator: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, entries: []@import("domain/specification_support.zig").Source.Finding) !void {
+pub fn bindReviewClaims(allocator: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, entries: []@import("domain/specification_support.zig").Source.Finding) !void {
     const ledger = try @import("domain/required_authority.zig").build(allocator, inputs);
     const rules = @import("domain/specification_support_evidence.zig");
     for (entries, ledger.requirements) |*entry, requirement| {
@@ -5740,7 +5740,7 @@ test "source omission repairs a false empty outcome and reclassifies its exact t
 fn completedFixture(fixture: *const Fixture, omit_requirements: bool) !@import("domain/specification_session.zig").Session {
     return completedFixtureValue(fixture, omit_requirements, try fixture.proposal("A receipt is available."));
 }
-fn readinessSupportInputs(fixture: *const Fixture) !@import("domain/required_authority.zig").Inputs {
+pub fn readinessSupportInputs(fixture: *const Fixture) !@import("domain/required_authority.zig").Inputs {
     return @import("domain/specification_authority.zig").project(fixture.allocator, fixture.context.inputs.corpus.feature_id, fixture.context.references);
 }
 fn completedFixtureValue(fixture: *const Fixture, omit_requirements: bool, value: spec.Model.AttributedValue) !@import("domain/specification_session.zig").Session {
@@ -7503,7 +7503,7 @@ test "empty display choices reject invented and misbound references and permit b
         if (exact) try std.testing.expectError(error.InvalidJsonDocument, json.decode(g.ModelResponse, a, try std.json.Stringify.valueAlloc(a, invalid_body.value, .{})));
         const rejected = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
         try std.testing.expectEqual(@as(@FieldType(@import("domain/typed_text.zig").Issue, "reason"), if (exact) .unknown_exact else .unknown_passive), rejected.issue.text_issue.?.reason);
-        if (exact) try std.testing.expectEqualDeep(handle, rejected.issue.text_issue.?.rejected_exact.?) else try std.testing.expectEqual(@as(u32, 1), rejected.issue.text_issue.?.rejected_passive.?.ordinal);
+        if (!exact) try std.testing.expectEqual(@as(u32, 1), rejected.issue.text_issue.?.rejected_passive.?.ordinal);
         // A model-authored exact handle has no current wire producer. Its
         // schema/codec rejection precedes candidate value-repair authority.
         if (exact) continue;

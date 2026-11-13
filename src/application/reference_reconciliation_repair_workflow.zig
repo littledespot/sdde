@@ -4,6 +4,7 @@ const data = @import("../domain/pipeline_data.zig");
 const pipeline = @import("../domain/pipeline.zig");
 const r = @import("../domain/reference_reconciliation.zig");
 const repair = @import("../domain/reference_reconciliation_repair.zig");
+const repair_owner = @import("../domain/repair_owner.zig");
 const rec = @import("reference_reconciliation_workflow.zig");
 const extraction = @import("reference_extraction_workflow.zig");
 const reference = @import("../domain/reference_candidate_value.zig");
@@ -42,15 +43,25 @@ pub fn Authorize(comptime stage: Stage) type {
             .conflicts => .validated_reference_conflicts,
         }, .result = .reference_reconciliation_repair } };
         pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
-        pub const Action = switch (stage) {
-            .summary => @import("../actions/reference/authorize_reference_summary_repair.zig").Action,
-            .dispositions => @import("../actions/reference/authorize_reference_dispositions_repair.zig").Action,
-            .signals => @import("../actions/reference/authorize_reference_signals_repair.zig").Action,
-            .conflicts => @import("../actions/reference/authorize_reference_conflicts_repair.zig").Action,
+        /// Each phase's authorizer reads the phase's own rejected validation and invalidates it and
+        /// every later phase that depended on it.
+        pub const effects: repair_owner.Effects = .{
+            .requires = switch (stage) {
+                .summary => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_summary },
+                .dispositions => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_dispositions },
+                .signals => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_signals },
+                .conflicts => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_conflicts },
+            },
+            .produces = &.{.reference_reconciliation_repair},
+            .invalidates = switch (stage) {
+                .summary => &.{.validated_reference_summary},
+                .dispositions => &.{.validated_reference_dispositions},
+                .signals => &.{ .validated_reference_dispositions, .validated_reference_signals },
+                .conflicts => &.{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts },
+            },
         };
         pub const outcomes = @import("reference_reconciliation_repair_workflow.zig").outcomes;
         allocator: std.mem.Allocator,
-        action: Action = .{},
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
             const self = context.?;
             const prior = try extraction.read(&input.step.data, rec.parsed_schema, .reconciliation_parsed);
@@ -63,7 +74,7 @@ pub fn Authorize(comptime stage: Stage) type {
             const rejected = try extraction.read(&input.step.data, schema, .reconciliation_rejected);
             const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
             errdefer owned.destroy(owner);
-            const decision = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_parsed, try rec.textContext(&input.step.data), rejected.payload().reconciliation_rejected) catch |operation_error| return operation_error;
+            const decision = repair.authorize(owner.arena.allocator(), prior.payload().reconciliation_parsed, try rec.textContext(&input.step.data), rejected.payload().reconciliation_rejected) catch |operation_error| return operation_error;
             owner.payload = switch (decision) {
                 .model => |value| .{ .authorized = .{ .authorization = value, .replacement = .pending } },
                 .automatic => |value| .{ .authorized = .{ .authorization = value.authorization, .replacement = .{ .automatic = value.replacement } } },
@@ -79,29 +90,34 @@ pub fn Authorize(comptime stage: Stage) type {
                 .automatic => .more,
                 .blocked => .blocked,
             }) catch |operation_error| return operation_error;
-            for (Action.contract.invalidates) |key| result.delta.data_invalidations.insert(key);
+            for (effects.invalidates) |key| result.delta.data_invalidations.insert(key);
             if (permit) |selected| result.delta.repair_transition = .{ .authorized = selected };
             return result;
         }
     };
 }
 pub const BuildInput = struct {
-    pub const Action = @import("../actions/reference/build_reference_reconciliation_repair_input.zig").Action;
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .packet_guidance },
+        .produces = &.{.model_input_packet},
+    };
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const authorized = readAuthorization(&input.step.data) catch |operation_error| return operation_error;
         const prior = try extraction.read(&input.step.data, rec.parsed_schema, .reconciliation_parsed);
-        const packet = self.action.execute(self.allocator, prior.payload().reconciliation_parsed, try rec.textContext(&input.step.data), authorized, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
+        const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
+        const packet = repair.packet(self.allocator, prior.payload().reconciliation_parsed, try rec.textContext(&input.step.data), authorized, guidance.summary_purpose) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };
 pub const Parse = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .reference_reconciliation_repair, .model_input_packet, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result },
+        .replaces = &.{.reference_reconciliation_repair},
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .reference_reconciliation_repair, .evidence = .reference_reconciliation_repair, .result = .reference_reconciliation_repair } };
-    pub const Action = @import("../actions/reference/parse_reference_reconciliation_repair.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const state = owned.read(&input.step.data, state_schema, .authorized) catch |operation_error| return operation_error;
@@ -110,20 +126,24 @@ pub const Parse = struct {
         const candidate = try @import("model_candidate_handoff.zig").read(&input.step.data);
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .authorized = .{ .authorization = state.authorization, .replacement = .{ .model = .{ .value = self.action.execute(owner.arena.allocator(), state.authorization, packet, candidate.body) catch |operation_error| return operation_error, .origin = candidate.origin } } } };
+        owner.payload = .{ .authorized = .{ .authorization = state.authorization, .replacement = .{ .model = .{ .value = repair.parse(owner.arena.allocator(), state.authorization, packet, candidate.body) catch |operation_error| return operation_error, .origin = candidate.origin } } } };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(state_schema.key)] = values.adopt(self.allocator, state_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };
 pub const Merge = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain },
+        .replaces = &.{.parsed_reference_reconciliation},
+        .invalidates = &.{.reference_reconciliation_repair},
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .reference_reconciliation_repair, .result = .parsed_reference_reconciliation } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
-    pub const Action = @import("../actions/reference/merge_reference_reconciliation_repair.zig").Action;
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
     pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
     allocator: std.mem.Allocator,
-    action: Action,
+    normalizer: @import("../ports/unicode_normalizer.zig").Normalizer,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const state = owned.read(&input.step.data, state_schema, .authorized) catch |operation_error| return operation_error;
@@ -140,11 +160,15 @@ pub const Merge = struct {
             .automatic => null,
             .model => |value| value.origin,
         };
-        owner.payload = .{ .reconciliation_parsed = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_parsed, try rec.textContext(&input.step.data), state.authorization, replacement, origin) catch |operation_error| return operation_error };
+        const context_value = try rec.textContext(&input.step.data);
+        const arena = owner.arena.allocator();
+        var canonical = @import("../domain/typed_text.zig").CanonicalText.fromInputs(arena, self.normalizer, context_value.inputs) catch |operation_error| return operation_error;
+        defer canonical.deinit(arena);
+        owner.payload = .{ .reconciliation_parsed = repair.merge(arena, canonical, prior.payload().reconciliation_parsed, context_value, state.authorization, replacement, origin) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
         delta.repair_transition = (owner.payload.reconciliation_parsed.source.last_repair orelse return error.OperationExecutionFailed).transition(.native) catch return error.OperationExecutionFailed;
         delta.data_replacements[@intFromEnum(rec.parsed_schema.key)] = values.adopt(self.allocator, rec.parsed_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
-        for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
+        for (effects.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };
     }
 };

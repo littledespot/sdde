@@ -97,7 +97,7 @@ test "compiler rejects missing duplicate and invalid data schemas" {
     try std.testing.expect(!fixture.registry.validate());
     var graph = fixture.graph.*;
     graph.authority.data_schemas = &.{input_schema};
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(fixture.arena.allocator(), &.{graph}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(fixture.arena.allocator(), &.{graph}, &fixture.registry));
     fixture.registry.data_schemas = &schemas;
     var entries = operation_entries;
     for (&entries) |*entry| entry.binding.context = &control;
@@ -459,7 +459,7 @@ const Fixture = struct {
         const definitions = try definition_schema.validate(arena.allocator(), raw);
         var result_schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const graphs = try graph_compilation.compile(&registry, result_schema_parser.compiler(), arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
-        _ = try graph_validation.validate(arena.allocator(), graphs);
+        _ = try graph_validation.validate(arena.allocator(), graphs, &registry);
         return .{ .arena = arena, .graph = &graphs[0], .registry = registry };
     }
 

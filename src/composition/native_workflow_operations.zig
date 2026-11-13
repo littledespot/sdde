@@ -33,6 +33,7 @@ const extraction = @import("../application/reference_extraction_workflow.zig");
 const path_tokens = @import("../application/path_token_workflow.zig");
 const passive_literals = @import("../application/passive_literal_workflow.zig");
 const text_repair = @import("../application/reference_text_repair_workflow.zig");
+const generic_repair = @import("../application/repair_workflow.zig");
 const coverage_repair = @import("../application/specification_coverage_repair_workflow.zig");
 const reconciliation_repair = @import("../application/reference_reconciliation_repair_workflow.zig");
 const extraction_repair = @import("../application/reference_extraction_repair_workflow.zig");
@@ -81,21 +82,6 @@ pub const Assembly = struct {
     scan_path_tokens: path_tokens.Scan,
     prepare_reference_tokens: token_preparation.PrepareReferenceTokens,
     validate_token_classifications: extraction.ValidateSelections,
-    authorize_summary_repair: reconciliation_repair.Authorize(.summary),
-    authorize_dispositions_repair: reconciliation_repair.Authorize(.dispositions),
-    authorize_signals_repair: reconciliation_repair.Authorize(.signals),
-    authorize_conflicts_repair: reconciliation_repair.Authorize(.conflicts),
-    build_reconciliation_repair: reconciliation_repair.BuildInput,
-    parse_reconciliation_repair: reconciliation_repair.Parse,
-    merge_reconciliation_repair: reconciliation_repair.Merge,
-    authorize_text_repair: text_repair.Authorize,
-    authorize_extraction_repair: extraction_repair.Authorize,
-    build_text_repair: text_repair.BuildInput,
-    build_extraction_repair: extraction_repair.BuildInput,
-    parse_text_repair: text_repair.Parse,
-    parse_extraction_repair: extraction_repair.Parse,
-    merge_text_repair: text_repair.Merge,
-    merge_extraction_repair: extraction_repair.Merge,
     assign_preserved_tokens: structured_tokens.AssignTokens,
     build_preserved_claims: structured_tokens.BuildClaims,
     build_reconciliation_items: reconciliation.BuildItems,
@@ -153,15 +139,6 @@ pub const Assembly = struct {
     build_scenario_link_packet: scenario_link.BuildInput,
     admit_scenario_link: scenario_link.Admit,
     assemble_specification: specification.Assemble,
-    authorize_support_repair: support_repair.Authorize,
-    build_support_repair: support_repair.BuildInput,
-    parse_support_repair: support_repair.Parse,
-    merge_support_repair: support_repair.Merge,
-    authorize_source_omission: source_omission.Authorize,
-    build_source_omission: source_omission.BuildInput,
-    parse_source_omission: source_omission.Parse,
-    merge_source_extraction: source_omission.Merge(.extraction),
-    merge_source_reconciliation: source_omission.Merge(.reconciliation),
     build_specification_support: specification_support.BuildInput,
     collect_specification_support: specification_support.Collect,
     check_specification_support_localization: specification_support.CheckLocalization,
@@ -171,12 +148,7 @@ pub const Assembly = struct {
     initialize_specification_review: specification_support.Initialize,
     build_authority_observations: authority.BuildObservations,
     retire_authority: authority.Retire,
-    authorize_coverage_repair: coverage_repair.Authorize,
     validate_specification_coverage: specification.ValidateCoverage,
-    authorize_specification_repair: specification_repair.Authorize,
-    build_specification_repair: specification_repair.BuildInput,
-    parse_specification_repair: specification_repair.Parse,
-    merge_specification_repair: specification_repair.Merge,
     project_specification_document: specification_rendering.Project,
     render_specification: specification_rendering.Render,
     validate_specification_rendering: specification_rendering.Validate,
@@ -195,7 +167,13 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 137 + model_request.count]operations.Entry,
+    // The four generic repair operations (ADR 0033). Each holds its owners' bindings, so an owner's
+    // rules exist once, and a repair step names its owner (`owner:`), not a per-owner operation.
+    authorize_repair: generic_repair.AuthorizeRepair,
+    build_repair_input: generic_repair.BuildRepairInput,
+    parse_repair: generic_repair.ParseRepair,
+    merge_repair: generic_repair.MergeRepair,
+    entries: [core.entries.len + 112 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -232,21 +210,6 @@ pub const Assembly = struct {
             .check_reconciliation = .{},
             .collect_reconciliation = .{ .allocator = allocator },
             .validate_token_classifications = .{ .allocator = allocator },
-            .authorize_summary_repair = .{ .allocator = allocator },
-            .authorize_dispositions_repair = .{ .allocator = allocator },
-            .authorize_signals_repair = .{ .allocator = allocator },
-            .authorize_conflicts_repair = .{ .allocator = allocator },
-            .build_reconciliation_repair = .{ .allocator = allocator },
-            .parse_reconciliation_repair = .{ .allocator = allocator },
-            .merge_reconciliation_repair = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
-            .authorize_text_repair = .{ .allocator = allocator },
-            .authorize_extraction_repair = .{ .allocator = allocator },
-            .build_text_repair = .{ .allocator = allocator },
-            .build_extraction_repair = .{ .allocator = allocator },
-            .parse_text_repair = .{ .allocator = allocator },
-            .parse_extraction_repair = .{ .allocator = allocator },
-            .merge_text_repair = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
-            .merge_extraction_repair = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .assign_preserved_tokens = .{ .allocator = allocator },
             .build_preserved_claims = .{ .allocator = allocator },
             .build_reconciliation_items = .{ .allocator = allocator },
@@ -303,21 +266,7 @@ pub const Assembly = struct {
             .prepare_specification_output = .{ .allocator = allocator },
             .render_specification = .{ .allocator = allocator },
             .validate_specification_rendering = .{ .allocator = allocator },
-            .authorize_specification_repair = .{ .allocator = allocator },
-            .build_specification_repair = .{ .allocator = allocator },
-            .parse_specification_repair = .{ .allocator = allocator },
-            .merge_specification_repair = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
-            .authorize_coverage_repair = .{ .allocator = allocator },
             .validate_specification_coverage = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
-            .authorize_support_repair = .{ .allocator = allocator },
-            .build_support_repair = .{ .allocator = allocator },
-            .parse_support_repair = .{ .allocator = allocator },
-            .merge_support_repair = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
-            .authorize_source_omission = .{ .allocator = allocator },
-            .build_source_omission = .{ .allocator = allocator },
-            .parse_source_omission = .{ .allocator = allocator },
-            .merge_source_extraction = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
-            .merge_source_reconciliation = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .build_specification_support = .{ .allocator = allocator },
             .collect_specification_support = .{ .allocator = allocator },
             .check_specification_support_localization = .{},
@@ -338,6 +287,43 @@ pub const Assembly = struct {
             .build_scenario_link_packet = .{ .allocator = allocator },
             .admit_scenario_link = .{ .allocator = allocator },
             .assemble_specification = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
+            .authorize_repair = .{
+                .reference_text = .{ .allocator = allocator },
+                .reference_extraction = .{ .allocator = allocator },
+                .reference_summary = .{ .allocator = allocator },
+                .reference_dispositions = .{ .allocator = allocator },
+                .reference_signals = .{ .allocator = allocator },
+                .reference_conflicts = .{ .allocator = allocator },
+                .source_omission = .{ .allocator = allocator },
+                .specification_unit = .{ .allocator = allocator },
+                .specification_support = .{ .allocator = allocator },
+                .specification_coverage = .{ .allocator = allocator },
+            },
+            .build_repair_input = .{
+                .reference_text = .{ .allocator = allocator },
+                .reference_extraction = .{ .allocator = allocator },
+                .reference_reconciliation = .{ .allocator = allocator },
+                .source_omission = .{ .allocator = allocator },
+                .specification_unit = .{ .allocator = allocator },
+                .specification_support = .{ .allocator = allocator },
+            },
+            .parse_repair = .{
+                .reference_text = .{ .allocator = allocator },
+                .reference_extraction = .{ .allocator = allocator },
+                .reference_reconciliation = .{ .allocator = allocator },
+                .source_omission = .{ .allocator = allocator },
+                .specification_unit = .{ .allocator = allocator },
+                .specification_support = .{ .allocator = allocator },
+            },
+            .merge_repair = .{
+                .reference_text = .{ .allocator = allocator, .normalizer = unicode },
+                .reference_extraction = .{ .allocator = allocator, .normalizer = unicode },
+                .reference_reconciliation = .{ .allocator = allocator, .normalizer = unicode },
+                .source_omission_extraction = .{ .allocator = allocator, .text = .{ .normalizer = unicode, .folder = case_folder } },
+                .source_omission_reconciliation = .{ .allocator = allocator, .text = unicode },
+                .specification_unit = .{ .allocator = allocator, .normalizer = unicode },
+                .specification_support = .{ .allocator = allocator, .normalizer = unicode },
+            },
             .entries = undefined,
             .registry = undefined,
         };
@@ -390,21 +376,7 @@ pub const Assembly = struct {
             entry(scenario_link.BuildInput, &self.build_scenario_link_packet),
             entry(scenario_link.Admit, &self.admit_scenario_link),
             entry(specification.Assemble, &self.assemble_specification),
-            entry(coverage_repair.Authorize, &self.authorize_coverage_repair),
             entry(specification.ValidateCoverage, &self.validate_specification_coverage),
-            entry(specification_repair.Authorize, &self.authorize_specification_repair),
-            entry(specification_repair.BuildInput, &self.build_specification_repair),
-            entry(specification_repair.Parse, &self.parse_specification_repair),
-            entry(specification_repair.Merge, &self.merge_specification_repair),
-            entry(support_repair.Authorize, &self.authorize_support_repair),
-            entry(support_repair.BuildInput, &self.build_support_repair),
-            entry(support_repair.Parse, &self.parse_support_repair),
-            entry(support_repair.Merge, &self.merge_support_repair),
-            entry(source_omission.Authorize, &self.authorize_source_omission),
-            entry(source_omission.BuildInput, &self.build_source_omission),
-            entry(source_omission.Parse, &self.parse_source_omission),
-            entry(source_omission.Merge(.extraction), &self.merge_source_extraction),
-            entry(source_omission.Merge(.reconciliation), &self.merge_source_reconciliation),
             entry(specification_support.BuildInput, &self.build_specification_support),
             entry(specification_support.Collect, &self.collect_specification_support),
             entry(specification_support.CheckLocalization, &self.check_specification_support_localization),
@@ -415,21 +387,10 @@ pub const Assembly = struct {
             entry(authority.BuildObservations, &self.build_authority_observations),
             entry(authority.Retire, &self.retire_authority),
             entry(extraction.ValidateSelections, &self.validate_token_classifications),
-            entry(reconciliation_repair.Authorize(.summary), &self.authorize_summary_repair),
-            entry(reconciliation_repair.Authorize(.dispositions), &self.authorize_dispositions_repair),
-            entry(reconciliation_repair.Authorize(.signals), &self.authorize_signals_repair),
-            entry(reconciliation_repair.Authorize(.conflicts), &self.authorize_conflicts_repair),
-            entry(reconciliation_repair.BuildInput, &self.build_reconciliation_repair),
-            entry(reconciliation_repair.Parse, &self.parse_reconciliation_repair),
-            entry(reconciliation_repair.Merge, &self.merge_reconciliation_repair),
-            entry(text_repair.Authorize, &self.authorize_text_repair),
-            entry(extraction_repair.Authorize, &self.authorize_extraction_repair),
-            entry(text_repair.BuildInput, &self.build_text_repair),
-            entry(extraction_repair.BuildInput, &self.build_extraction_repair),
-            entry(text_repair.Parse, &self.parse_text_repair),
-            entry(extraction_repair.Parse, &self.parse_extraction_repair),
-            entry(text_repair.Merge, &self.merge_text_repair),
-            entry(extraction_repair.Merge, &self.merge_extraction_repair),
+            variantEntry(generic_repair.AuthorizeRepair, &self.authorize_repair),
+            variantEntry(generic_repair.BuildRepairInput, &self.build_repair_input),
+            variantEntry(generic_repair.ParseRepair, &self.parse_repair),
+            variantEntry(generic_repair.MergeRepair, &self.merge_repair),
             entry(structured_tokens.AssignTokens, &self.assign_preserved_tokens),
             entry(structured_tokens.BuildClaims, &self.build_preserved_claims),
             entry(reconciliation.BuildItems, &self.build_reconciliation_items),
@@ -519,7 +480,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_link.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
+pub const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_link.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging },
@@ -551,6 +512,15 @@ fn invocationEntry(comptime T: type, context: *T) operations.Entry {
     result.contract.kind = .invocation;
     result.contract.outcomes = &.{.ok};
     return result;
+}
+
+/// An operation whose one registered contract is made of closed variants (ADR 0030 "Contract
+/// variants"). The type declares that contract, a shell holding only its id, selector and variants,
+/// and its one binding; the registry admits each variant independently and a step's selector picks
+/// one at compile time. The four generic repair operations register this way (ADR 0033).
+pub fn variantEntry(comptime T: type, context: *T) operations.Entry {
+    comptime if (!T.contract.isShell()) @compileError("a contract with variants states every other field in its variants");
+    return .{ .contract = T.contract, .binding = binding.bind(T, context, T.invoke) };
 }
 
 pub fn entry(comptime T: type, context: *T) operations.Entry {

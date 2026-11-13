@@ -127,29 +127,41 @@ test "registered keys follow the native registries and consumers declare their g
     try std.testing.expectEqual(bindings.Inspection{}, comptime bindings.inspect(flow.Capture, &.{}));
     inline for (.{
         @import("actions/reference/build_reference_reconciliation_model_input.zig").Action,
-        @import("actions/reference/build_reference_reconciliation_repair_input.zig").Action,
         @import("actions/specification/build_specification_model_input.zig").Action,
-        @import("actions/specification/build_specification_repair_input.zig").Action,
         @import("actions/specification/build_specification_support_input.zig").Action,
         @import("actions/specification/collect_specification_support.zig").Action,
         @import("actions/specification/build_specification_support_loss_input.zig").Action,
         @import("actions/specification/collect_specification_support_loss.zig").Action,
-        @import("actions/specification/authorize_specification_support_repair.zig").Action,
-        @import("actions/specification/build_specification_support_repair_input.zig").Action,
-        @import("actions/specification/merge_specification_support_repair.zig").Action,
         @import("actions/clarification/build_required_authority_clarification_needs.zig").Action,
-        @import("actions/reference/build_source_omission_repair_input.zig").Action,
-        @import("actions/specification/authorize_specification_repair.zig").Action,
     }) |Action| try std.testing.expect(std.mem.indexOfScalar(pipeline.DataKey, Action.contract.requires, .packet_guidance) != null);
-    // Source-omission repair presents guidance only while building its request.
-    inline for (.{
-        @import("actions/reference/authorize_source_omission_repair.zig").Action,
-        @import("actions/reference/parse_source_omission_repair.zig").Action,
-        @import("actions/reference/merge_source_extraction_repair.zig").Action,
-        @import("actions/reference/merge_source_reconciliation_repair.zig").Action,
-        // Coverage repair places no repair tail.
-        @import("actions/specification/authorize_specification_coverage_repair.zig").Action,
-    }) |Action| try std.testing.expect(std.mem.indexOfScalar(pipeline.DataKey, Action.contract.requires, .packet_guidance) == null);
+    // Repair presents guidance only where the owner's variant reads it: exactly seven (operation, owner)
+    // pairs. Source-omission repair presents guidance only while building its request, and coverage
+    // repair places no repair tail.
+    const repair_owner = @import("domain/repair_owner.zig");
+    const generic = @import("application/repair_workflow.zig");
+    var readers: usize = 0;
+    inline for (@typeInfo(repair_owner.Operation).@"enum".fields) |op_field| {
+        const op: repair_owner.Operation = @enumFromInt(op_field.value);
+        const variants = switch (op) {
+            .authorize => generic.AuthorizeRepair.contract.variants,
+            .build_input => generic.BuildRepairInput.contract.variants,
+            .parse => generic.ParseRepair.contract.variants,
+            .merge => generic.MergeRepair.contract.variants,
+        };
+        for (variants) |variant| {
+            const owner = repair_owner.RepairOwner.parse(variant.value).?;
+            const reads = std.mem.indexOfScalar(pipeline.DataKey, variant.requires, .packet_guidance) != null;
+            const expected = switch (op) {
+                .authorize => owner == .specification_unit or owner == .specification_support,
+                .build_input => owner == .reference_reconciliation or owner == .source_omission or owner == .specification_unit or owner == .specification_support,
+                .parse => false,
+                .merge => owner == .specification_support,
+            };
+            try std.testing.expectEqual(expected, reads);
+            if (reads) readers += 1;
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 7), readers);
 }
 
 test "model input presents stored values with run guidance and keeps every other field" {
@@ -202,8 +214,10 @@ test "a value-choice correction ends with its workflow repair tail" {
     const choices: @import("domain/specification_provenance.zig").ValueChoices = .{ .exact_copy = &.{} };
     const rejected: Issue = .{ .reason = .unknown_passive, .first_node = 0, .last_node = 0, .rejected_passive = .{ .ordinal = 3 } };
     try std.testing.expectEqualStrings("Validation failed: passive reference ID 3 is unavailable for this field's authorized evidence. Return source-backed prose without reference handles. MOCK repair_tails.value_choices", try choices.correction(a, &fixture.marked, rejected));
-    const exact: Issue = .{ .reason = .unknown_exact, .first_node = 0, .last_node = 0, .rejected_exact = .{ .claim_id = .{ .ordinal = 7 } } };
-    try std.testing.expectEqualStrings("Validation failed: exact-copy claim 7 is unavailable for this field's authorized evidence. Return source-backed prose without reference handles. MOCK repair_tails.value_choices", try choices.correction(a, &fixture.marked, exact));
+    // A model cannot author an exact-copy handle (ADR 0020), so an unknown exact copy has no value choices
+    // to offer: its native description stands alone, with no tail.
+    const exact: Issue = .{ .reason = .unknown_exact, .first_node = 0, .last_node = 0 };
+    try std.testing.expectEqualStrings(exact.description(), try choices.correction(a, &fixture.marked, exact));
     // Without a rejected handle the native description stands alone, with no tail.
     const unnamed: Issue = .{ .reason = .unknown_passive, .first_node = 0, .last_node = 0 };
     try std.testing.expectEqualStrings(unnamed.description(), try choices.correction(a, &fixture.marked, unnamed));
@@ -382,7 +396,7 @@ fn compileGuided(a: std.mem.Allocator, yaml: []const u8, resources: []const Reso
     const manifest = try @import("domain/workflow_resource_binding.zig").resolve(a, source, definitions);
     var schemas: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&guided_registry, schemas.compiler(), a, definitions, source, manifest, captures);
-    _ = try @import("domain/workflow_graph_validation.zig").validate(a, graphs);
+    _ = try @import("domain/workflow_graph_validation.zig").validate(a, graphs, &guided_registry);
     return graphs[0];
 }
 

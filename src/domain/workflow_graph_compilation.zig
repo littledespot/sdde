@@ -45,11 +45,15 @@ pub fn compile(
             const entry = registry.resolveOperation(declared.operation_id) orelse return invalid();
             if (entry.contract.kind != .step) return invalid();
             if (!@import("workflow_capability.zig").permits(policy.allowed_capabilities, entry.binding.capabilities())) return invalid();
-            const parameters = try compileParameters(allocator, entry.contract, declared.parameters, resources);
-            const retry_authority = try resolveRetryAuthority(item, declared.id, entry.contract, parameters);
+            // The selector is read and checked first: everything after it, the remaining parameters,
+            // the outcomes, the retry authority and the data effects, is checked against the one
+            // variant it selects (ADR 0030 "Contract variants").
+            const contract = selectDeclared(entry.contract, declared.parameters) orelse return invalid();
+            const parameters = try compileParameters(allocator, contract, declared.parameters, resources);
+            const retry_authority = try resolveRetryAuthority(item, declared.id, contract, parameters);
             transition_count = std.math.add(usize, transition_count, declared.outcomes.len) catch return invalid();
-            try validateDeclaredOutcomes(entry.contract.outcomes, declared.outcomes, item.steps, policy.*);
-            compiled.* = try buildStep(allocator, registry, declared.id, declared.source_chain, declared.operation_id, entry.contract, entry.binding.capabilities(), parameters, retry_authority);
+            try validateDeclaredOutcomes(contract.outcomes, declared.outcomes, item.steps, policy.*);
+            compiled.* = try buildStep(allocator, registry, declared.id, declared.source_chain, declared.operation_id, contract, entry.binding.capabilities(), parameters, retry_authority);
             compiled.request_stages = try compileRequestStages(allocator, registry, item, declared, entry, resources);
         }
 
@@ -81,6 +85,18 @@ pub fn compile(
         @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
     }
     return graphs;
+}
+
+/// The contract a declared step runs against: its registered contract, or the variant its selector
+/// parameter names. A selector is a required closed enumeration, so a missing one, one of another
+/// kind and one that names no variant all reject; a contract without variants takes none.
+fn selectDeclared(contract: operation.Contract, declared: []const workflow.ParameterBinding) ?operation.Contract {
+    const id = contract.selector orelse return contract.resolve(null);
+    const binding = findParameter(declared, id) orelse return null;
+    return switch (binding.value) {
+        .string => |value| contract.resolve(value),
+        .boolean, .integer => null,
+    };
 }
 
 fn buildStep(
@@ -260,8 +276,10 @@ fn deriveResourceKind(
     var found: ?operation.ResourceKind = null;
     for (item.steps) |step| {
         const entry = registry.resolveOperation(step.operation_id) orelse return invalid();
+        // A resource's kind is read from the descriptors of the variant the step selects.
+        const contract = selectDeclared(entry.contract, step.parameters) orelse return invalid();
         for (step.parameters) |parameter| {
-            const descriptor = findDescriptor(entry.contract.parameters, parameter.id.bytes) orelse continue;
+            const descriptor = findDescriptor(contract.parameters, parameter.id.bytes) orelse continue;
             if (descriptor.kind != .resource or parameter.value != .string or
                 !std.mem.eql(u8, parameter.value.string, id.bytes)) continue;
             const kind = descriptor.resource_kind orelse return invalid();

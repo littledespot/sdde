@@ -133,6 +133,60 @@ pub const CompiledWorkflow = struct {
 
 pub const ValidatedGraphs = struct { values: []const CompiledWorkflow };
 
+/// The selector value a compiled step carries for a registered contract's variant (ADR 0030
+/// "Contract variants"), or null when the contract has no selector or the step lacks one.
+pub fn selectorValue(contract: operation.Contract, parameters: []const CompiledParameter) ?[]const u8 {
+    const id = contract.selector orelse return null;
+    for (parameters) |parameter| {
+        if (!std.mem.eql(u8, parameter.id.bytes, id)) continue;
+        return switch (parameter.value) {
+            .enumeration => |value| value,
+            .boolean, .integer, .string, .registered_ref, .resource, .model_slot => null,
+        };
+    }
+    return null;
+}
+
+/// The one contract a compiled step is checked against: its registered contract, or the variant its
+/// selector picks. Null when a contract with variants gets no selector or one with no variant.
+pub fn selectedContract(contract: operation.Contract, parameters: []const CompiledParameter) ?operation.Contract {
+    return contract.resolve(selectorValue(contract, parameters));
+}
+
+/// Whether a compiled step carries exactly the effects, outcomes, role, association and retry
+/// authority of `contract`: the registered contract, or the variant the step selected. The runner
+/// and graph validation both check a step with it, so no check reads a union of variants.
+pub fn matchesContract(contract: operation.Contract, step: CompiledStep) bool {
+    return contract.kind == .step and
+        std.mem.eql(pipeline.DataKey, contract.requires, step.requires) and
+        std.mem.eql(pipeline.DataKey, contract.optional, step.optional) and
+        std.mem.eql(pipeline.DataKey, contract.produces, step.produces) and
+        std.mem.eql(pipeline.DataKey, contract.replaces, step.replaces) and
+        std.mem.eql(pipeline.DataKey, contract.invalidates, step.invalidates) and
+        std.mem.eql(workflow.OutcomeTag, contract.outcomes, step.outcomes) and
+        contract.side_effect == step.side_effect and
+        contract.runner_accounting == step.runner_accounting and
+        contract.repair_role == step.repair_role and
+        contract.outcome_association.eql(step.outcome_association) and
+        std.meta.eql(contract.iteration, step.iteration) and
+        gateIdsMatch(contract.gates, step.gates) and
+        retryContractMatches(contract, step);
+}
+
+fn gateIdsMatch(ids: []const []const u8, gates: []const @import("workflow_gate.zig").Contract) bool {
+    if (ids.len != gates.len) return false;
+    for (ids, gates) |id, gate| if (!std.mem.eql(u8, id, gate.id.bytes)) return false;
+    return true;
+}
+
+fn retryContractMatches(contract: operation.Contract, step: CompiledStep) bool {
+    if (contract.retry_limit == null or step.retry_authority == null) {
+        return contract.retry_limit == null and step.retry_authority == null;
+    }
+    return step.retry_authority.?.limit.within(contract.retry_limit.?.maximum) and
+        step.retry_authority.?.scope == contract.retry_limit.?.scope;
+}
+
 /// Publication includes required observation finalization. No operation may run
 /// afterward, including a pure node that could still emit telemetry or fail.
 pub fn publicationTerminates(authority: SemanticAuthority) bool {

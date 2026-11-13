@@ -136,11 +136,11 @@ request/response hashes, parent, unique replay identities and model controls. It
 recomputes usage, stop reason and final text through the existing Bedrock decoder,
 then checks the native schema, association and current record dispatch. It does
 not trust a replay inspector's claim that the candidate was valid.
-After selected-wire schema validation, it uses the production `constructBound`
-owner to restore engine-determined singleton fields before typed generation
-parsing. Those fields are intentionally absent from the wire schema; echoed IDs
-remain rejected. Construction affects only the transient native candidate and
-never rewrites the original provider response or receipt.
+After selected-wire schema validation, it parses the typed generation candidate
+from the validated wire value directly: the engine constructs no field. The wire
+schema carries no engine-determined fields, and echoed IDs remain rejected. The
+transient native candidate never rewrites the original provider response or
+receipt.
 
 Rerun the offline command to write `admission.json`. With no manifest/receipts,
 all trials are `not_run`. Missing collection members remain `incomplete` and
