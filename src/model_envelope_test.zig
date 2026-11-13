@@ -1,5 +1,5 @@
 const std = @import("std");
-const action = @import("actions/model/decode_model_envelope.zig");
+const decoding = @import("domain/model_envelope.zig");
 const validate = @import("actions/model/validate_provider_invocation_observation.zig");
 const invocation = @import("domain/provider_invocation_validation.zig");
 const schema = @import("domain/model_result_schema.zig");
@@ -43,7 +43,7 @@ test "native prose selectors reject raw question wire syntax and retain independ
         var diagnostic: ?@import("domain/model_envelope.zig").Diagnostic = null;
         defer if (diagnostic) |value| value.deinit(std.testing.allocator);
         if (case.accepted) {
-            var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
+            var decoded = try decoding.decode(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
             defer decoded.deinit();
             try std.testing.expect(diagnostic == null);
             if (std.mem.eql(u8, case.bytes, "{\"question\":{\"kind\":\"exact_copy\"}}")) {
@@ -51,7 +51,7 @@ test "native prose selectors reject raw question wire syntax and retain independ
                 try std.testing.expect(rejection != null);
             }
         } else {
-            try std.testing.expectError(error.InvalidModelEnvelope, (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
+            try std.testing.expectError(error.InvalidModelEnvelope, decoding.decode(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
             try std.testing.expectEqual(.embedded_insertion_syntax, diagnostic.?.composition.fields[0].issue.reason);
             var correction = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .composition = diagnostic.?.composition }, .unconfirmed, "Correct the rejected prose encoding.");
             defer correction.deinit();
@@ -88,11 +88,11 @@ test "model text wire grammar rejects encoded insertions before schema admission
         var diagnostic: ?@import("domain/model_envelope.zig").Diagnostic = null;
         defer if (diagnostic) |value| value.deinit(std.testing.allocator);
         if (case.accepted) {
-            var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
+            var decoded = try decoding.decode(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
             defer decoded.deinit();
             try std.testing.expect(diagnostic == null);
         } else {
-            try std.testing.expectError(error.InvalidModelEnvelope, (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
+            try std.testing.expectError(error.InvalidModelEnvelope, decoding.decode(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
             try std.testing.expectEqual(.embedded_insertion_syntax, diagnostic.?.composition.fields[0].issue.reason);
             try std.testing.expect(diagnostic.?.composition.fields[0].issue.description().len != 0);
             var correction = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .composition = diagnostic.?.composition }, .unconfirmed, "Correct the rejected wire text only.");
@@ -116,7 +116,7 @@ test "adjacent prose fragments cannot split an encoded insertion past the protoc
     defer response.deinit();
     var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer validated.deinit();
-    try std.testing.expectError(error.InvalidModelEnvelope, (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null));
+    try std.testing.expectError(error.InvalidModelEnvelope, decoding.decode(std.testing.allocator, validated.evidence.result().complete, null));
 }
 
 test "source-aware wire scanner preserves ordinary prose and frees every failed allocation" {
@@ -148,7 +148,7 @@ test "fake response decodes one compact object and preserves exact trusted assoc
         const ledger = fixture.base.ledger();
         const attempts = fixture.base.attempts.current();
         {
-            var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
+            var decoded = try decoding.decode(std.testing.allocator, validated.evidence.result().complete, null);
             defer decoded.deinit();
             const association = decoded.candidate.association();
             try std.testing.expect(association == validated.evidence);
@@ -176,7 +176,7 @@ test "read-only views retain decoded keys Unicode scalars arrays and objects" {
     defer response.deinit();
     var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer validated.deinit();
-    var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
+    var decoded = try decoding.decode(std.testing.allocator, validated.evidence.result().complete, null);
     defer decoded.deinit();
     const root = decoded.candidate.root();
     try std.testing.expectEqual(@as(usize, 3), root.count());
@@ -209,7 +209,7 @@ test "decoding preserves exact numeric lexemes without rounding coercion or rang
         defer response.deinit();
         var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer validated.deinit();
-        var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
+        var decoded = try decoding.decode(std.testing.allocator, validated.evidence.result().complete, null);
         defer decoded.deinit();
         try std.testing.expectEqualStrings(number, decoded.candidate.root().get("n").?.number);
     }
@@ -260,7 +260,7 @@ test "approved prefix normalization preserves content evidence and accounting" {
         defer validated.deinit();
         const ledger = fixture.base.ledger();
         const attempts = fixture.base.attempts.current();
-        var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
+        var decoded = try decoding.decode(std.testing.allocator, validated.evidence.result().complete, null);
         defer decoded.deinit();
         try std.testing.expectEqual(case.normalization, decoded.candidate.normalization());
         try std.testing.expectEqualStrings(case.object, decoded.candidate.content());
@@ -472,9 +472,9 @@ test "separate decoded candidates own their trees and retain their own associati
     defer first_validation.deinit();
     var second_validation = try (validate.Action{}).execute(std.testing.allocator, second.call, &second_response);
     defer second_validation.deinit();
-    var one = try (action.Action{}).execute(std.testing.allocator, first_validation.evidence.result().complete, null);
+    var one = try decoding.decode(std.testing.allocator, first_validation.evidence.result().complete, null);
     defer one.deinit();
-    var two = try (action.Action{}).execute(std.testing.allocator, second_validation.evidence.result().complete, null);
+    var two = try decoding.decode(std.testing.allocator, second_validation.evidence.result().complete, null);
     defer two.deinit();
     try std.testing.expect(one.candidate.association() == first_validation.evidence);
     try std.testing.expect(two.candidate.association() == second_validation.evidence);
@@ -518,7 +518,7 @@ test "every decoding allocation failure and syntax rejection frees partial trees
 fn allocationCase(allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate, accepted: bool) !void {
     var diagnostic: ?@import("domain/model_envelope.zig").Diagnostic = null;
     defer if (diagnostic) |value| value.deinit(allocator);
-    var decoded = (action.Action{}).execute(allocator, complete, &diagnostic) catch |err| switch (err) {
+    var decoded = decoding.decode(allocator, complete, &diagnostic) catch |err| switch (err) {
         error.OutOfMemory => {
             try std.testing.expect(diagnostic == null);
             return error.OutOfMemory;

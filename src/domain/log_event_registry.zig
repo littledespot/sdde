@@ -44,12 +44,15 @@ pub const EventDefinition = struct {
 pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
     const none = FieldSet.initEmpty();
     return switch (event_type) {
-        .run_started, .stage_started, .action_started, .review_requested => definition(event_type, level(event_type), &.{}, &.{}),
-        .run_completed, .stage_completed, .action_completed, .task_completed => definition(event_type, level(event_type), &.{.outcome}, &.{.duration_ms}),
+        .run_started, .stage_started, .review_requested => definition(event_type, level(event_type), &.{}, &.{}),
+        // Every event of one stage of a `request-model` step names the stage (ADR 0030).
+        .action_started => definition(event_type, level(event_type), &.{}, &.{.step_id}),
+        .run_completed, .stage_completed, .task_completed => definition(event_type, level(event_type), &.{.outcome}, &.{.duration_ms}),
+        .action_completed => definition(event_type, level(event_type), &.{.outcome}, &.{ .duration_ms, .step_id }),
+        .action_invalid => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.step_id}),
         .run_blocked,
         .run_failed,
         .stage_blocked,
-        .action_invalid,
         .model_protocol_failed,
         .model_schema_failed,
         .repair_rejected,
@@ -65,7 +68,8 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .review_rejected,
         => definition(event_type, level(event_type), &.{.outcome}, &.{}),
         .stage_failed, .task_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.duration_ms}),
-        // A failed stage action may also name the internal step it stopped at (ADR 0031).
+        // A failed stage action may also name the internal step it stopped at (ADR 0031), and any
+        // action event of a `request-model` stage names the stage (ADR 0030).
         .action_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{ .duration_ms, .step_id }),
         .model_requested => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id }, &.{}),
         .model_completed => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id, .outcome }, &.{ .input_tokens, .output_tokens, .duration_ms }),

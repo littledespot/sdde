@@ -1,11 +1,12 @@
 # ADR 0030: One engine-owned step per model request
 
-- **Status:** Accepted amendment, amended 23 October 2026. **Partly implemented:** on
+- **Status:** Accepted amendment, amended 23 October 2026. **Implemented:** on
   24 October 2026 provider token counting was removed ("Token counting is removed") and
   the provider-operation deadline moved to each catalogue entry's required
-  `requestTimeoutMs` ("Request deadline"). The engine, the Specify definition and the
-  packaging fixture still use the explicit request-lifecycle steps until `request-model`
-  lands. Documents that describe those steps carry a pointer to this ADR until then.
+  `requestTimeoutMs` ("Request deadline"). `request-model` is implemented and registered, and
+  the Spec workflow and the packaging fixture use it. The explicit request-lifecycle operations
+  are deleted: the stages are native bindings of the kernel entry, no workflow can select one,
+  and a definition that names a stage's former ID fails to compile.
 - **Date:** 2026-10-22; amended 2026-10-23.
 - **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
   subgraph as suggested, update documentations. do not make any code change yet". It
@@ -66,8 +67,8 @@
 - **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
   October 2026): after a provider `output_limit` stop, the request re-sends the
   identical request once at the configured `temperatureRunawayRetry`, without using the
-  step's `retry-limit`. A runaway on the re-send fails the step. Until
-  `request-model` lands, the explicit request-lifecycle steps carry the re-send.
+  step's `retry-limit`. A runaway on the re-send fails the step. The `request-model`
+  kernel carries the re-send.
 - **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (27 October
   2026; on hold since 30 October 2026, nothing implemented): exhausting a required
   request's correction stays a terminal runner rejection, not a YAML outcome, but after
@@ -270,8 +271,8 @@ This is the one list; other documents refer to it.
 - **Consumers** of an admitted response, which read the retained request as ADR 0012
   describes.
 - **Release.** A site's release step chooses what the following steps keep:
-  `retire-model-request` keeps the input packet for a following request,
-  and `retire-model-transport` and `retire-model-input` drop it. Release is a workflow
+  `release-model-request` keeps the input packet for a following request,
+  and `release-model-transport` drops it. Release is a workflow
   choice, so it stays an explicit step.
 - **JSON-part retention** after a composition request (`retain-json-part`).
 - **Request-ledger initialization** (`build-initial-model-request-identity-ledger`).

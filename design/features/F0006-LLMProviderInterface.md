@@ -5,7 +5,7 @@ provider/model registration, Bedrock and Anthropic configuration, concrete
 authorization/inference wiring, native-schema projection and shared
 fake/real-adapter conformance; [F0007](F0007-AWSBedrockProvider.md) records the
 Bedrock implementation. The ADR 0032 provider-bootstrap routine (Amendment 2) is
-implemented; the ADR 0030 `request-model` step (Amendment 13) is not yet implemented.
+implemented; so is the ADR 0030 `request-model` step (Amendment 13).
 
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md) owns request handoff;
 the [packaging test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml) shows inference,
@@ -140,7 +140,7 @@ requirements; lifecycle facts remain local to the abandoned or completed executi
     ([§6](#6-providermodel-binding-and-workflow-token-accounting)).
 13. Each model request runs as one engine-owned step
     ([ADR 0030](../decisions/0030-engine-owned-model-request.md); the `request-model`
-    step is not yet implemented).
+    step).
 
     - One `request-model` step makes one inference request and declares the slot,
       resources, `retry-limit` and its outcomes (`ok`, `invalid`, `failed`,
@@ -959,9 +959,9 @@ undone; it does not make any candidate workflow output successful.
 - It is engine preparation, not workflow behavior.
 - Provider retry, fallback, and protocol-retry branches must each be visible as YAML
   steps and transitions; their registered generic operations perform one bounded
-  responsibility and never select a successor. Amendment 13 (ADR 0030, not yet
-  implemented) moves a request's protocol retry inside its `request-model` step, bounded
-  by that step's `retry-limit`; fallback stays a visible YAML branch.
+  responsibility and never select a successor. Amendment 13 (ADR 0030, implemented) moves a
+  request's protocol retry inside its `request-model` step, bounded by that step's
+  `retry-limit`; fallback stays a visible YAML branch.
 
 No action invokes another action or selects its successor. Every orchestrator
 receives only runner-owned child bindings and typed outcomes. It has no

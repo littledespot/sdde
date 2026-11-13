@@ -9,7 +9,9 @@ const workflow_retry = @import("../domain/workflow_retry.zig");
 const data = @import("../domain/pipeline_data.zig");
 const gate = @import("../domain/workflow_gate.zig");
 const capability_contract = @import("../domain/workflow_capability.zig");
+const kernel = @import("../domain/model_request_kernel.zig");
 
+pub const Stage = kernel.Stage;
 pub const Error = execution.OperationError;
 
 pub const InvocationInput = struct {
@@ -74,12 +76,28 @@ pub const Binding = struct {
     }
 };
 
+/// One fixed stage of the `request-model` kernel operation (ADR 0030): the stage's own contract
+/// and binding. A stage is no registered operation; no workflow selects it.
+pub const StageEntry = struct {
+    stage: Stage,
+    contract: operation.Contract,
+    binding: Binding,
+};
+
 pub const Entry = struct {
     contract: operation.Contract,
     binding: Binding,
+    /// Only the `request-model` kernel entry has stages. Its binding's capabilities are exactly
+    /// the union of its stages', and only the runner runs it, through the orchestrator.
+    request_stages: []const StageEntry = &.{},
 
     pub fn invoke(self: Entry, input: Input) Error!execution.Candidate {
         return self.binding.invoke(input);
+    }
+
+    pub fn requestStage(self: *const Entry, stage: Stage) ?*const StageEntry {
+        for (self.request_stages) |*entry| if (entry.stage == stage) return entry;
+        return null;
     }
 };
 
@@ -133,9 +151,10 @@ pub const Registry = struct {
         if (!self.validGates(&schemas)) return false;
         for (self.operations, 0..) |entry, index| {
             if (entry.binding.implementation.context_required and entry.binding.context == null) return false;
-            if (workflow.OperationId.parse(entry.contract.id) == null or
-                !validContract(entry.contract, entry.binding.capabilities()))
-                return false;
+            if (workflow.OperationId.parse(entry.contract.id) == null) return false;
+            if (entry.request_stages.len != 0) {
+                if (!validRequestKernel(entry, &schemas)) return false;
+            } else if (!validContract(entry.contract, entry.binding.capabilities())) return false;
             inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
                 for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
             }
@@ -180,11 +199,93 @@ pub const Registry = struct {
             for (self.operations) |entry| {
                 if (std.mem.eql(u8, entry.contract.id, contract.issuer.bytes)) continue;
                 if (containsKey(entry.contract.produces, contract.evidence) or containsKey(entry.contract.replaces, contract.evidence)) return false;
+                // A kernel entry's stages are contracts too: none may write another issuer's evidence.
+                for (entry.request_stages) |stage| {
+                    if (containsKey(stage.contract.produces, contract.evidence) or containsKey(stage.contract.replaces, contract.evidence)) return false;
+                }
             }
         }
         return true;
     }
 };
+
+/// The `request-model` kernel entry (ADR 0030). The operation's contract is the one the domain
+/// fixes; its capabilities are the exact union of its stages', never an asserted list; and its
+/// parameters are the preparation stage's and the accounting stage's `retry-limit`, so no
+/// workflow-visible parameter exists that no stage consumes. Each stage is checked as any
+/// registered contract is.
+fn validRequestKernel(entry: Entry, schemas: *const [data.key_count]?*const data.Schema) bool {
+    if (!kernel.validContract(entry.contract) or entry.binding.implementation.context_required or entry.binding.context != null) return false;
+    const stage_values = std.enums.values(Stage);
+    if (entry.request_stages.len != stage_values.len) return false;
+    var model_provider_stages: usize = 0;
+    for (stage_values, entry.request_stages) |expected, stage| {
+        if (stage.stage != expected or stage.contract.kind != .step or stage.contract.retry_limit != null and expected != kernel.accounting_stage) return false;
+        if ((stage.binding.implementation.context_required and stage.binding.context == null) or
+            !validContract(stage.contract, stage.binding.capabilities()) or
+            !kernel.sameStageOutcomes(expected, stage.contract.outcomes)) return false;
+        inline for (.{ stage.contract.requires, stage.contract.optional, stage.contract.produces, stage.contract.replaces, stage.contract.invalidates }) |keys| {
+            for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
+        }
+        for (stage.contract.gates) |_| return false;
+        for (entry.request_stages[0..@intFromEnum(expected)]) |prior| {
+            if (std.mem.eql(u8, prior.contract.id, stage.contract.id)) return false;
+        }
+        // ADR 0030: no stage both invokes and interprets the model, and none holds both the
+        // `model-provider` and `provider-authorization` capabilities.
+        if (containsString(stage.binding.capabilities(), capability_contract.model_provider) and
+            containsString(stage.binding.capabilities(), capability_contract.provider_authorization)) return false;
+        for (stage.binding.capabilities()) |capability| {
+            if (!containsString(entry.binding.capabilities(), capability)) return false;
+            if (std.mem.eql(u8, capability, capability_contract.model_provider)) model_provider_stages += 1;
+        }
+        for (stage.contract.parameters) |descriptor| {
+            if (kernel.fixedParameter(expected)) |fixed| if (std.mem.eql(u8, fixed.id, descriptor.id)) continue;
+            const declared = findParameter(entry.contract.parameters, descriptor.id) orelse return false;
+            if (!sameDescriptor(declared, descriptor)) return false;
+        }
+    }
+    for (entry.binding.capabilities()) |capability| {
+        const provided = for (entry.request_stages) |stage| {
+            if (containsString(stage.binding.capabilities(), capability)) break true;
+        } else false;
+        if (!provided) return false;
+    }
+    const prepare = (entry.requestStage(.prepare_request) orelse return false).contract.parameters;
+    const accounting = (entry.requestStage(kernel.accounting_stage) orelse return false).contract.parameters;
+    const limit = findParameter(accounting, workflow_retry.parameter_id) orelse return false;
+    if (entry.contract.parameters.len != prepare.len + 1 or !uniqueStrings(entry.binding.capabilities()) or model_provider_stages != 1) return false;
+    for (prepare, entry.contract.parameters[0..prepare.len]) |expected, declared| if (!sameDescriptor(expected, declared)) return false;
+    if (!sameDescriptor(limit, entry.contract.parameters[prepare.len])) return false;
+    if (!@import("../domain/workflow_model.zig").validDescriptors(entry.contract.parameters)) return false;
+    var model_slots: usize = 0;
+    for (entry.contract.parameters, 0..) |descriptor, index| {
+        if (workflow.WorkflowParameterId.parse(descriptor.id) == null or !descriptor.workflow_definition_safe or
+            descriptor.integer_min > descriptor.integer_max or descriptor.string_max_bytes == 0 or descriptor.string_max_bytes > 128 or
+            (descriptor.kind == .resource) != (descriptor.resource_kind != null) or !uniqueStrings(descriptor.allowed_values)) return false;
+        for (entry.contract.parameters[0..index]) |prior| if (std.mem.eql(u8, prior.id, descriptor.id)) return false;
+        if (descriptor.kind == .model_slot) {
+            if (!descriptor.required or descriptor.allowed_values.len != 0 or descriptor.resource_kind != null) return false;
+            model_slots += 1;
+        }
+    }
+    if (model_slots != 1) return false;
+    return limit.kind == .integer and limit.required and limit.integer_min == 0 and limit.integer_max == std.math.maxInt(u32);
+}
+
+fn sameDescriptor(left: operation.ParameterDescriptor, right: operation.ParameterDescriptor) bool {
+    if (!std.mem.eql(u8, left.id, right.id) or left.kind != right.kind or left.required != right.required or
+        left.workflow_definition_safe != right.workflow_definition_safe or left.integer_min != right.integer_min or
+        left.integer_max != right.integer_max or left.string_max_bytes != right.string_max_bytes or
+        left.resource_kind != right.resource_kind or left.allowed_values.len != right.allowed_values.len) return false;
+    for (left.allowed_values, right.allowed_values) |a, b| if (!std.mem.eql(u8, a, b)) return false;
+    return true;
+}
+
+fn containsString(values: []const []const u8, expected: []const u8) bool {
+    for (values) |value| if (std.mem.eql(u8, value, expected)) return true;
+    return false;
+}
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
     if (!@import("../domain/workflow_outcome_association.zig").validDescriptor(contract.outcome_association, contract.requires, contract.optional, contract.produces, contract.replaces, contract.repair_role)) return false;

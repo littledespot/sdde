@@ -35,7 +35,12 @@
   1, 3, 4 and 5", then "Approved five sub-option picks"): a second request per group writes
   one criterion for each claim a behaviour statement names, the engine fixing the claim, and
   an edge case no longer counts as cover (Decisions 2 and 3). Not yet implemented: the code
-  still runs the previous amendment.
+  still runs the previous amendment. Amended on 13 November 2026 (user: "it must use GIVEN,
+  WHEN, THEN, never anything else", one `GIVEN` holding both conditions, then "yes, amendment
+  to ADR 0038, do not make any code changes"): an edge case is printed as a Given/When/Then
+  scenario of the criterion it links to, and the model writes only its own given
+  (Decision 7). Not yet implemented: the code, the workflow assets and the sections this
+  amendment names still state the 8 November rule.
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -87,6 +92,18 @@
     four generation task types). No record shape or content version changes; request
     descriptions, reports, state and packet guidance advance only if implementation changes
     a closed member, in the same change (SPEC01 §2 rule 12).
+  - The edge-case scenario amendment of 13 November 2026, Decision 7: §17.3 (the edge case's
+    one model-written field), §23.1 (the edge-case lines, the separator's use between two
+    texts, and their readback), §24 (the edge-case shape),
+    [text-field-composition.md](../contracts/text-field-composition.md) (the edge-case field
+    row) and F0100 §5; [ADR 0016](0016-configured-json-response-composition.md) (packet
+    guidance loses its `condition` entry);
+    [ADR 0041](0041-failed-run-incomplete-publication.md) (its reserved state version moves
+    on); and every document that states the versions below. The records schema's edge case
+    holds `given` in place of `condition`. In the implementing change the canonical content,
+    the state and the packet guidance advance from the versions then current, and so do the
+    required-authority contract, reports and request descriptions wherever the rename removes
+    or renames one of their closed members; earlier versions reject.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -239,17 +256,33 @@ only block.
      earlier versions reject. `packet-guidance/v4` drops the meaning and relationship
      entries and the entity repair tail; the required-authority contract is 3 and loses
      those slots and the slot member index.
-7. **An edge case's outcome is the Then of a criterion it links to** (8 November 2026; user:
-   "apply recommendations", "recommendations accepted for 1 to 6", then "go"). The model
-   writes an edge case's condition and the claims it supports, and no outcome: the free
+7. **An edge case is a Given/When/Then scenario of the criterion it links to** (8 November
+   2026; user: "apply recommendations", "recommendations accepted for 1 to 6", then "go": its
+   outcome is the criterion's Then. Amended 13 November 2026; user: "it must use GIVEN, WHEN,
+   THEN, never anything else": its Given and When are the criterion's too). The model writes
+   an edge case's own given, the boundary or exceptional situation, and the claims it
+   supports, and no when or then. Before 8 November it also wrote the outcome: the free
    text restated a criterion's result and dropped part of it wherever it stayed open (the
    loan-renewal edge case that extended the due date "by fourteen days", without
    "calendar", "existing" or the new due date, in four of the last six runs; SPEC01 §3).
-   The engine prints the Then of an acceptance criterion the edge case links to as its
-   `EXPECTED OUTCOME` line ([§23.1](../contracts/23-rendering.md)). Like the source line, it
-   is a display, never provenance. The 7 November rejection of an engine-written outcome
-   concerned filling it from source lines; copying a criterion's Then, the only target, is
-   allowed.
+   Before 13 November its one field was `condition`, printed alone above the criterion's
+   Then, so an edge case could pair a situation the criterion doesn't cover with the
+   criterion's result: a loan past its due date printed the refusal the source gives only an
+   inactive or previously renewed loan, a material `unsupported_addition` (evaluation
+   `2026-11-12T20-18-32Z-0e01cf8809886860bdd3257af99631e9`, D2). The engine prints every
+   edge case as three lines labelled `GIVEN`, `WHEN` and `THEN`, and no other label
+   ([§23.1](../contracts/23-rendering.md) follows at implementation). Like the source line,
+   the parts it copies are a
+   display, never provenance, and the edge case's own given is its only content. An edge
+   case so keeps its criterion's whole scenario and adds one circumstance: it shows the
+   criterion's result for a narrower situation. The 7 November rejection of an
+   engine-written outcome concerned filling it from source lines; copying the linked
+   criterion's Given, When and Then, the only targets, is allowed.
+   - **Lines:** `GIVEN` is the linked criterion's Given, then the edge case's own given, in
+     one line. They are joined by the separator §23.1 derives from a clause's ending (`, `,
+     or one space after terminal punctuation), applied here between the two texts, so
+     neither text's bytes change. `WHEN` is the criterion's When and `THEN` its Then. The
+     copied parts are the criterion's own display, exact-value spans included.
    - **Candidates:** the acceptance criteria of the edge case's own records batch that name
      at least one of its claims, across both of its group's responses (Decision 3). They are
      found natively when the scenarios step completes; no link crosses a batch.
@@ -274,7 +307,9 @@ only block.
      edge case keeps its `condition` and holds the ID of the criterion it links to, which
      state readback checks against the same candidate rule. Earlier versions reject.
      `packet-guidance/v5` drops the edge outcome entry; the required-authority contract is 4
-     and loses that slot. ADR 0041's state version moves to v25.
+     and loses that slot. ADR 0041's state version moves to v25. Under the 13 November 2026
+     amendment the edge case holds `given` in place of `condition`; the amendment list above
+     says which versions advance.
 
 ## Consequences
 
@@ -293,6 +328,33 @@ only block.
     (Decision 3), an edge case naming one claim has that claim's criterion as its only
     candidate, and one naming several slot claims has one candidate for each and takes the
     model's closed choice.
+  - **An edge case as a scenario (Decision 7, 13 November 2026).**
+    - The link still decides which scenario an edge case narrows. The model writes the edge
+      case's own given before any criterion exists (Decision 3) and never sees the Given it
+      will follow, and nothing checks that the two are compatible: a wrong link or a
+      contradicting given prints as a `GIVEN` whose two parts disagree, which the human who
+      reviews `spec.md` judges. Where the criterion's Given doesn't carry the condition that
+      governs its Then, an outcome the source doesn't support still prints.
+    - The guidance text for the edge case's `given` is not decided here. Packet guidance
+      holds exactly one text for each registered key (ADR 0016), and the `given` text
+      describes a criterion's whole starting situation, where the edge case's own given is
+      one added circumstance. The implementing change decides the key and its text on
+      repeated runs; how the model phrases a given is unmeasured.
+    - An edge case repeats its criterion's Given and When, so it can't carry a second flow of
+      a claim (a cost of Decision 3's slot criteria, below), and a defect in a criterion's
+      Given or When repeats in each edge case linked to it. The 9 November ruling that files
+      a linked Then's defect once, on the criterion, covers only the Then.
+    - Two edge cases with the same own given and different claims still block as
+      `competing_records` (below), though under different criteria they would print different
+      scenarios.
+    - One line holds a copied part and the edge case's own text, so readback takes the own
+      given as the text after the copied Given and the separator, and a `GIVEN` line that
+      doesn't begin with them rejects. An edit to a criterion's Given or When makes each
+      linked edge case's lines differ from the projection, so readback rejects them.
+    - The amendment rests on one scored run, and hello-world wrote no edge case in the
+      retained runs. Its benefit is not demonstrated, and it is kept or reverted on scored
+      repeated runs of both development cases (AGENTS.md "Model output, prompts and
+      evidence").
   - **Two edge cases with one condition** and different claims are no longer told apart by
     their outcomes: like any single-field record they block as `competing_records`.
   - A lead-in condition is split from the items it governs. "Unless the borrower is
@@ -357,7 +419,9 @@ only block.
   12 November amendment changed no record shape and no specification or state version; the
   recorded admission rule took `model-request-debug/v18`, and the report's closed rejection
   members `spec-e2e-report/v17`. The scenario-slot amendment changes no record shape or
-  content version; the amendment list above says when the other versions advance.
+  content version; the amendment list above says when the other versions advance. The
+  edge-case scenario amendment renames the edge case's one field, and the amendment list
+  says which versions advance.
 - **Tests.**
   - The result-schema rule: admitted (a value only an exclusive item names, ungoverned
     kinds, empty), kept by clones, and invalid configurations rejected; admission
@@ -470,4 +534,22 @@ only block.
       the persisted links read back; and block with the typed rejection when a batch has an
       edge case and no criterion. Each request is projected as a closed choice with its own
       prompt, and offered ids differ from unit positions in the domain cases.
+    - an edge case as a scenario (13 November 2026, not yet implemented):
+      - the rendering shows exactly the `GIVEN`, `WHEN` and `THEN` lines: the `GIVEN` is the
+        linked criterion's Given, the separator and the edge case's own given, and the `WHEN`
+        and `THEN` are the criterion's own, for a native link, for a chosen one and in an
+        unrelated domain; a criterion's Given with and without terminal punctuation each
+        takes the renderer's separator, and no text's bytes change;
+      - the records request projects the edge case's `given` and no `condition`, and the
+        records response rejects a `condition`, a `when` and a `then` on an edge case; a
+        guidance resource that still carries `condition` rejects, and the field inventory
+        covers the edge case's `given`;
+      - readback recovers the own given from the text after the copied Given, also when the
+        own given equals or begins with the copied Given, and in an unrelated domain; it
+        rejects an edited copy of the Given, When or Then, a `GIVEN` line that doesn't begin
+        with the copied Given, and a `CONDITION` or `EXPECTED OUTCOME` line;
+      - the content, state and packet guidance round-trip at their new versions and reject
+        the previous ones;
+      - a scripted run publishes an edge case as its criterion's scenario, for a native link
+        and for a chosen one.
   - The list-item split: its quoting, structure and omission-repair cases (ADR 0036).

@@ -1,8 +1,7 @@
 const std = @import("std");
-const action = @import("actions/model/validate_model_payload_schema.zig");
 const validation = @import("domain/model_payload_schema.zig");
 const observation = @import("actions/model/validate_provider_invocation_observation.zig");
-const decoder = @import("actions/model/decode_model_envelope.zig");
+const decoding = @import("domain/model_envelope.zig");
 const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
 
 const empty = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
@@ -112,7 +111,7 @@ test "loss protocol correction preserves the complete selected contract in both 
     defer response.deinit();
     var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer captured.deinit();
-    var decoded = try (decoder.Action{}).execute(std.testing.allocator, captured.evidence.result().complete, null);
+    var decoded = try decoding.decode(std.testing.allocator, captured.evidence.result().complete, null);
     defer decoded.deinit();
     const diagnostic = validation.validate(decoded.candidate).invalid;
     try std.testing.expectEqual(validation.Rejection.unknown_property, diagnostic.reason);
@@ -168,7 +167,7 @@ test "child requirements stay inside selected definitions parts and repair schem
         defer response.deinit();
         var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer captured.deinit();
-        var decoded = try (decoder.Action{}).execute(std.testing.allocator, captured.evidence.result().complete, null);
+        var decoded = try decoding.decode(std.testing.allocator, captured.evidence.result().complete, null);
         defer decoded.deinit();
         const diagnostic = validation.validate(decoded.candidate).invalid;
         var retry = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = diagnostic }, .unconfirmed, "Correct syntax only.");
@@ -867,12 +866,12 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
     defer response.deinit();
     var validated = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer validated.deinit();
-    var decoded = try (decoder.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
+    var decoded = try decoding.decode(std.testing.allocator, validated.evidence.result().complete, null);
     defer decoded.deinit();
     const ledger = fixture.base.ledger();
     const attempts = fixture.base.attempts.current();
     const count = decoded.candidate.root().count();
-    const result = (action.Action{}).execute(decoded.candidate);
+    const result = validation.validate(decoded.candidate);
     if (case.rejection) |reason| {
         try std.testing.expectEqual(reason, result.invalid.reason);
         if (case.member) |member| try std.testing.expectEqual(@as(?i64, member), result.invalid.member);
@@ -988,7 +987,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
         try std.testing.expectEqual(count, candidate.root().count());
     }
     try std.testing.expectEqual(count, decoded.candidate.root().count());
-    try std.testing.expectEqualDeep(result, (action.Action{}).execute(decoded.candidate));
+    try std.testing.expectEqualDeep(result, validation.validate(decoded.candidate));
     try std.testing.expectEqualStrings(case.bytes, response.completed.raw_result.complete.content.bytes);
     try std.testing.expect(ledger == fixture.base.ledger());
     try std.testing.expect(attempts == fixture.base.attempts.current());

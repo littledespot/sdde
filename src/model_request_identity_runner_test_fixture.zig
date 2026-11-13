@@ -1,24 +1,41 @@
 const std = @import("std");
 const advance_lifecycle = @import("actions/model/advance_model_request_lifecycle.zig");
-const assign_request = @import("actions/model/assign_model_request_id.zig");
 const build_ledger = @import("actions/model/build_initial_model_request_identity_ledger.zig");
-const validate_binding = @import("actions/model/validate_model_request_binding.zig");
 const provider_binding = @import("domain/llm_provider_binding.zig");
 const identity = @import("domain/model_request_identity.zig");
 const pipeline = @import("domain/pipeline.zig");
 const provider_lifecycle = @import("domain/provider_operation_lifecycle.zig");
 const provider_runner = @import("provider_operation_lifecycle_runner_test_fixture.zig");
 
-/// Isolated action-test harness; production request transitions use YAML.
+/// The ledger successor the prepare stage publishes together with its request and binding evidence,
+/// applied on its own so this harness can exercise each identity transition (ADR 0030: no workflow
+/// step selects either transition).
+const assign_contract: pipeline.NodeContract = .{
+    .id = "test.assign-model-request-id",
+    .kind = .action,
+    .requires = &.{.model_request_identity_ledger},
+    .produces = &.{},
+    .replaces = &.{.model_request_identity_ledger},
+    .side_effect = .none,
+};
+
+/// Binding validation reads the ledger and writes nothing.
+const validate_contract: pipeline.NodeContract = .{
+    .id = "test.validate-model-request-binding",
+    .kind = .action,
+    .requires = &.{.model_request_identity_ledger},
+    .produces = &.{},
+    .side_effect = .none,
+};
+
+/// Isolated action-test harness; production request transitions run in the `request-model` kernel.
 pub const Runner = struct {
     allocator: std.mem.Allocator,
     envelope: pipeline.DataShape = pipeline.DataShape.init(&.{}),
     current_owner: ?*identity.Owner = null,
     provider_operations: ?provider_runner.Runner = null,
     build_action: build_ledger.Action = .{},
-    assign_action: assign_request.Action = .{},
     advance_action: advance_lifecycle.Action = .{},
-    validate_action: validate_binding.Action = .{},
 
     pub fn init(allocator: std.mem.Allocator) Runner {
         return .{ .allocator = allocator };
@@ -60,10 +77,10 @@ pub const Runner = struct {
         purpose: identity.RequestPurposeBinding,
     ) identity.Error!*const identity.ModelRequestId {
         const current_owner = self.current_owner orelse return error.ModelRequestBindingInvalid;
-        self.envelope.validateInvocation(assign_request.Action.contract) catch {
+        self.envelope.validateInvocation(assign_contract) catch {
             return error.ModelRequestBindingInvalid;
         };
-        const assignment = try self.assign_action.execute(
+        const assignment = try identity.createSuccessor(
             identity.ledger(current_owner),
             expected_revision,
             unit_owner_id,
@@ -72,8 +89,8 @@ pub const Runner = struct {
         );
         errdefer identity.deinitOwner(assignment.owner);
         self.envelope = self.envelope.apply(
-            assign_request.Action.contract,
-            pipeline.DataEffects.fromContract(assign_request.Action.contract),
+            assign_contract,
+            pipeline.DataEffects.fromContract(assign_contract),
         ) catch return error.ModelRequestBindingInvalid;
         self.current_owner = assignment.owner;
         identity.deinitOwner(current_owner);
@@ -89,10 +106,10 @@ pub const Runner = struct {
         purpose: identity.RequestPurposeBinding,
     ) identity.ValidationError!*const identity.ModelRequestBindingEvidence {
         const owner = self.current_owner orelse return error.ModelRequestBindingInvalid;
-        self.envelope.validateInvocation(validate_binding.Action.contract) catch {
+        self.envelope.validateInvocation(validate_contract) catch {
             return error.ModelRequestBindingInvalid;
         };
-        return self.validate_action.execute(
+        return identity.validateBinding(
             identity.ledger(owner),
             expected_revision,
             request_id,

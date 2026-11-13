@@ -2,7 +2,7 @@ const std = @import("std");
 const action = @import("actions/model/validate_provider_invocation_observation.zig");
 const validation = @import("domain/provider_invocation_validation.zig");
 const provider = @import("domain/llm_provider_operation.zig");
-const build_request = @import("actions/model/build_model_request.zig");
+const preparation = @import("domain/model_request_preparation.zig");
 
 const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
 
@@ -270,7 +270,7 @@ test "retained operation ledger rejects substituted input binding and unavailabl
     try std.testing.expectError(error.InvalidProviderInvocationContext, (action.Action{}).execute(std.testing.allocator, wrong, &response));
     var source = try fixture.requestSource();
     source.model_visible_input_id.bytes = "different-input";
-    var substituted = try (build_request.Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content);
+    var substituted = try preparation.build(std.testing.allocator, source, fixture.prepared.request.content);
     defer substituted.deinit();
     wrong = fixture.call;
     wrong.request = substituted.request;

@@ -747,3 +747,323 @@ claimed; the request projection across the integration matrix is byte-identical 
 - **Found, left:** `source_loss_calibration.zig:351` compares a request's definition with
   `assignment_findings`, which no schema declares, so its early return always runs and the code
   after it never does.
+
+## E1. One engine-owned step per model request (ADR 0030)
+
+**Implemented 13 November 2026** (user: "yes action Step 4", "finalise step 5 and implement step 6";
+DE1, DE1b, DE1c, DE1d, DE1e). Every model request of the Spec workflow and the packaging fixture is
+one `request-model` step; the stages are native bindings of that step's registry entry, no workflow can
+select one, and the explicit lifecycle (26 registry entries, the wrapper subgraphs, the retirement
+operations and the five detailed actions) is deleted. **Defect class named:** none. The change reduces
+brittleness (a mis-wired lifecycle, which only a run failure revealed, cannot be authored) and claims no
+semantic benefit; the request projection is byte-identical to the one taken before E1, so what each
+request sends is unchanged. **Kept 13 November 2026** (user: "for outcomes have improve out brittleness
+has been reduce E1 should be kept"): kept for the reduced brittleness; no outcome improvement is claimed
+(see the live set below: no regression, no demonstrated benefit).
+- **Live set, 13 November 2026** (DE1f: one set, three runs per development case; build `42fe246e`,
+  modified, `spec-e2e-report/v18`): all six runs published and passed adjudication under their case
+  rubrics. hello-world 96.43%, 92.86%, 96.43% (no accuracy defect; quote marks around a code span in all
+  three, an entity on a no-data feature in one); loan-renewal 96.43%, 92.86%, 96.43% (accuracy defects: one
+  minor `unsupported_addition` each in two runs: an overdue-style edge-case condition the source does not
+  state, and "records the loan as renewed"). Every run made 9 sends with no correction, re-send or
+  runaway; tokens 12,667 to 12,762 (hello-world) and 16,562 to 16,636 (loan-renewal), inside the ranges of
+  the two earlier sets on the pre-E1 build (12.7k to 13.1k and 16.2k to 16.8k, apart from an invalid run
+  and a 23k run). Each loan-renewal run had one helpful duplicate-delete repair. The earlier sets each had
+  one non-passing loan-renewal run (20-10 invalid, 20-18 failed on two critical criteria), this set had
+  none; with three runs per case that difference is inside run-to-run variation and E1 changes no request
+  byte, so it is reported as no regression, not as a benefit. The model-output artifact was written for
+  every call and the per-stage measures read correctly under the kernel. No run took a correction or a
+  re-send, so the restored per-attempt rejection evidence is proved offline only. Evaluations:
+  `evaluations/e2e/2026-11-13T08-05-*`; adjudications in `evaluations/adjudications/`.
+- **Measures** (before, from the preflight and the retained 12 November run's installed YAML; after, the
+  final tree):
+  - Spec workflow YAML: 994 lines, 166 `use:` and 66 `call:` entries; the request lifecycle was six
+    subgraphs (`model-request-body` and five wrappers) reached from 17 request sites. After: 883 lines,
+    164 `use:` and 44 `call:` entries, one `request-model` step at each of the 17 sites, no request
+    subgraph.
+  - Registry: 30 entries (26 of them lifecycle operations) to 8 (ledger initialization, the four
+    JSON-composition operations, `release-model-request`, `release-model-transport`, `request-model`);
+    the 17 stages are held only by `request-model`.
+  - Production code deleted: the actions `assign_model_request_id`, `validate_model_request_binding`,
+    `build_model_request`, `decode_model_envelope`, `validate_model_payload_schema` and
+    `retire_model_request`, `retire_model_input`, `retire_model_transport` (8 files); the wrappers
+    `Assign`, `Validate`, `Build`, `Decode` and the payload `Validate`; the `request_decode` association
+    variant; `validateRunawayRoutes` and its two calls; the `payload_schema_requires` branch of
+    `workflow_model_invocation`; `selectionForPacket` and `publish` in `model_request_workflow.zig`.
+    New: `model_request_stage`, `model_request_kernel` (domain), `model_request_orchestrator` and
+    `model_request_child_bindings` (application): the orchestrator has no `anyopaque`, no count and no
+    port.
+  - Tests: `model_request_workflow_test.zig` 196 lifecycle tests to 177 kept (36 ported, 13 re-driven,
+    128 unchanged on the stage seam) plus 32 `request-model` and extraction-evidence tests, 209 in all;
+    `model_request_orchestrator_test.zig` 12 spy tests. The unit suite runs 1,975 tests on the final
+    tree (1,996 before step 5: 10 deleted here, two step-trace tests and one architecture test merged
+    or removed, one rejection test added; then nine YAML-shape tests deleted after the step 5 review).
+- **Stage seam:** the test registries (`loadEntries`) bind each stage's own context as a selectable
+  step, plus two test-owned releases (`test.release-seam-request`, `test.release-seam-transport`) that
+  retire every request key a hand-composed chain of stages leaves current, as `retire-model-*` did. A
+  production registry offers none of them, and `request-model: a workflow cannot select a request stage
+  or an operation of the removed lifecycle` proves it for every stage ID and every removed ID.
+- **Pins:** no runner text-order pin was removed: a stage runs through the same step body
+  (`executeBound`) as any step, so each pin on it still holds and now covers every stage. The pins that
+  named deleted code were replaced: the pure-action pins on `build_model_request`,
+  `decode_model_envelope` and `validate_model_payload_schema` now pin the domain functions they wrapped
+  (`preparation.build`, `envelope.decode`, `validation.validate`: signature, purity, forbidden
+  imports); the identity-ledger pin counts `prepare_model_request` as the one assigning action; the
+  decode-binding and payload-binding pins became one pin on the admission binding (and that no
+  `Decode` or `Validate` binding exists); the assembly pin asserts `Initialize` and `Prepare` and that
+  `Assign`, `Validate` and `Build` are absent. The orchestrator's own pin (`only follows stage
+  outcomes, and only the runner runs a stage`) covers the stage order's owner.
+
+- **Versions (step 6, 13 November 2026):** three persisted contracts advanced and the other candidates judged unmoved (see
+  SPEC01 E1 "step 6"): `spec-e2e-report` v17 to v18, `e2e-step-event` v2 to v3, `specification-state`
+  v25 to v26. Spelling counts: the report version is named on 66 lines in 15 test files, so the bump
+  edited all of them (SPEC01 C45 stays open); the other two are named in one writer each.
+- **`anyopaque` in the E1 files:** 2 lines, both in `model_request_child_bindings.zig` (the runner-owned
+  context and the stage invocation, the same boundary as the other child-binding vtables); none in the
+  orchestrator, the kernel contract or the stage list.
+- **Final proof (step 7, 13 November 2026).** Request projection: `evaluations/request-projection/e1-final`
+  was written by a fresh `test-integration` run on the final tree, and `diff -rq` against `e1-before` is
+  empty, so what each request sends is unchanged. Step trace: `evaluations/step-trace/e1-final` was frozen
+  from the same run (135 scenarios) and compared with `e1-before` by script, every scenario and every file:
+  - `.trace`: 135 of 135 differ only in request-lifecycle lines (a request's stage lines became one
+    `request-model` line, `retain-json-part` its own step, `retire-model-*` became `release-model-*`), and
+    in 21 of them the retry-exhaustion line gained `:stage=advance-attempt`; every other line, in the same
+    order, is identical. No other difference.
+  - Summary `.json`: 135 of 135 equal except `steps` (18,016 fewer in all), `trace_sha256` and `files`;
+    in 21 the `rejection` text differs only by the `:stage=` suffix; the `files` list differs only in
+    `state/workflow.json` in 100 and is identical in 35.
+  - Published files: every file a summary lists is byte-identical except `state/workflow.json`, which
+    persists the compiled steps, in 100 scenarios (the extraction contract, `specification-state` v26).
+  - **Evidence defect in `e1-before`:** it holds four scenarios the current layout cannot produce
+    (`reuse_regeneration-127` and `-128`, `source_preservation-126` and `-127`) and 26 `.files`
+    directories (20 whole, 6 partly) that no summary lists. They are leftovers of an earlier run's
+    numbering: the trace writer never deletes an earlier run's files, and the freeze copied the whole
+    directory (the preflight's "402 files" counted them). They are older than the rest of the freeze and
+    were left as taken; the 135 current scenarios are the comparison.
+
+### Mapping of the 196 lifecycle tests (DE1 decision 6)
+
+**Provenance.** The original file text is not retained (no version control is read), so the table is
+reconstructed from the final file and the changes made while porting. The figures reconcile with the
+preflight's: 196 original tests = 177 kept + 19 deleted (the 10 listed below and the 9 marked `deleted`
+in the table), and 177 + 32 new = the 209 now in the file. **Dispositions:** *seam* = unchanged, one
+stage or a chain of stages driven through the seam registry (a step list lost the removed `validate`
+and `build` steps, or `decode`); *port* = the test body changed because the detailed variant it
+compared or looped over is gone, an assertion was retargeted to the surviving owner, or its YAML
+mutation loop was trimmed; *re-drive* = a cancellation boundary or a release step recomputed for the
+shorter chain. The counts are 36 port, 13 re-drive and 128 seam. **YAML-shape class (DE1 decision 6):**
+the 20 tests marked `YAML-shape class` in the Note column are the ones whose subject was YAML shape
+through the stage seam: parameter, dependency, outcome-mapping or policy mutations of one stage's
+declaration, or a forged compiled step. (An earlier reading counted 27; the count could not be
+reproduced from the test names, and this table marks each one.) A test whose only subject was YAML
+shape is deleted (9: #10, #19, #27, #37, #67, #73, #86, #149, #160), its rows that name a surviving
+parameter moved into `request-model: the compiler rejects what the one contract does not allow`. A
+test that also asserted a forged compiled contract refused where it runs lost its YAML loop and kept
+that half (4 trimmed: #55, #65, #130, #142). A test that asserts a registry contract rule or a forged
+compiled step, or a resource binding the kernel carries, stays (7 kept: #2, #24, #31, #46, #78, #153,
+#163). No test that asserts a lifecycle outcome, accounting, evidence or cleanup was deleted for being
+YAML shape, and no deviation from DE1 decision 6 remains.
+
+| # | Test | Disposition | Note |
+| --- | --- | --- | --- |
+| 1 | static JSON guidance stays separate from dynamic input and source capture | port | looped over both preparation paths; one now |
+| 2 | static context rejects missing resources and conflicting resource kinds before preparation | seam | YAML-shape class, kept: the compiler's resource-kind binding for the `context` parameter, which the kernel carries and no kernel test exercises |
+| 3 | protocol corrections retain static context dynamic input and registered controls | seam | |
+| 4 | preparation publishes the request, its binding evidence and the selected schema in one delta | port | compared the detailed chain with the combined step; asserts the one path |
+| 5 | runner rejects foreign preparation children without accepting the successor | port | renamed; one path |
+| 6 | failed preparation selection publishes neither a ledger successor nor partial preparation | port | renamed; one path |
+| 7 | post-call accounting preserves native invocation failure and reports its own stale revision | seam | |
+| 8 | native domain packets traverse generic fake provider execution without resource or request substitution | port | release asserted on `released_request[_and_input]` |
+| 9 | native YAML preparation retains one generic request across distinct steps | port | release call retargeted |
+| 10 | compiler rejects missing preparation dependencies and consumer rebinding | deleted | YAML-shape class: parameter and dependency mutations of one stage. Its rows that name a surviving parameter moved into `request-model: the compiler rejects what the one contract does not allow` (missing slot and prompt, slot of the wrong kind, a prompt bound to a result resource, an absent result schema) |
+| 11 | one unauthorized slot fails preparation without invoking a consumer | port | one path |
+| 12 | each execution has fresh identities and rejects a foreign retained request | port | one path |
+| 13 | cancellation at every preparation boundary stops the compiled workflow | re-drive | three boundaries |
+| 14 | native preparation releases partial allocations and unapplied deltas | port | one path |
+| 15 | retained request consumers still require policy permission and available workflow tokens | seam | |
+| 16 | consumer contracts cannot replace retained resources controls or retired size policy | seam | |
+| 17 | YAML accounting publishes applied attempt evidence without rebinding or provider work | seam | shorter step list |
+| 18 | YAML accounting permits only the declared retries after the initial execution | seam | |
+| 19 | accounting schema rejects missing invalid excessive hidden and policy retry parameters | deleted | YAML-shape class. The retry-limit rows (missing, negative, overflow, wrong kind, unknown parameters) moved into the kernel compiler test; the policy row was already there |
+| 20 | accounted attempts are isolated and foreign evidence cannot reach a consumer | seam | shorter step list |
+| 21 | accounting cancellation and allocation failures retain no partial evidence | re-drive | boundaries 0..3 |
+| 22 | new logical requests get initial attempts without resetting the YAML operation bound | seam | |
+| 23 | forged accounting transitions and rejected deltas cannot publish attempts | seam | |
+| 24 | runner rejects tampered accounting permissions and registry rejects hidden accounting | seam | YAML-shape class, kept: a forged compiled step and a registry contract rule, not YAML parameter shape |
+| 25 | runner binds retry authority to the accounting step not the request origin | seam | |
+| 26 | YAML assigns the inference operation to the existing attempt without external effects | seam | |
+| 27 | assignment rejects missing dependencies and any parameter | deleted | YAML-shape class: a stage has no YAML parameters; the kernel test rejects an unknown parameter of any kind (`kind: inference`, `attempts`, `transition`) |
+| 28 | an assigned operation blocks a YAML retry even after its pipeline evidence is consumed | seam | |
+| 29 | foreign attempt and assignment evidence never reach an assignment or consumer | seam | |
+| 30 | assignment cancellation and allocation failures publish no partial ledger or evidence | re-drive | boundaries 0..4 |
+| 31 | assignment registration and compiled graphs reject hidden authority | seam | YAML-shape class, kept: registry contract rules and a forged compiled step |
+| 32 | a terminal operation makes retained assignment evidence stale | seam | |
+| 33 | forged assignment proposals and rejected deltas cannot publish an operation | seam | |
+| 34 | assigned evidence retains its canonical record and request until destroyed | seam | |
+| 35 | YAML authorization prepares one private lease for the assigned operation and cleans up | seam | |
+| 36 | authorization failure facts and cancellation stay distinct and follow declared outcomes | seam | |
+| 37 | authorization takes its deadline from the catalogue and rejects any YAML deadline parameter dependencies and capability permission | deleted | YAML-shape class: only YAML parameter and dependency mutations of one stage. The deadline comes from the catalogue (#40 to #42), and the kernel test rejects `timeout-ms` and `requestTimeoutMs` |
+| 38 | duplicate preparation and foreign lease results cannot authorize another operation | seam | |
+| 39 | authorization guards expiration overflow unavailable clocks and absent adapters | seam | |
+| 40 | authorization binds each slot's catalogue entry deadline so two entries get different deadlines | seam | |
+| 41 | authorization fails closed on a zero catalogue deadline the decoder could never admit | seam | |
+| 42 | authorization binds the selected entry deadline to every provider operation including protocol corrections | seam | |
+| 43 | authorization cancellation and allocation faults release all unpublished capabilities | re-drive | boundaries 0..5 |
+| 44 | authorization validates deposited facts and releases backing after mid-preparation cancellation or expiry | seam | |
+| 45 | forged authorization results and rejected deltas publish no lease and destroy backing | seam | |
+| 46 | authorization compiler and registry reject hidden producers and a forged deadline parameter | seam | YAML-shape class, kept: forged compiled steps and registry contract rules, not YAML parameter shape |
+| 47 | YAML pre-call request closure preserves failure and cancellation without provider calls | seam | |
+| 48 | pre-call request closure maps both request states and retains immutable owners after cleanup | seam | |
+| 49 | YAML pre-call request closure after inference preserves its response and single token charge | seam | |
+| 50 | runtime cancellation before pre-call request closure leaves no hidden ledger transition | re-drive | cancel at step 6 |
+| 51 | pre-call request closure rejects missing foreign stale duplicate and prepared evidence | seam | |
+| 52 | pre-call request closure requires every operation terminal | seam | |
+| 53 | pre-call request closure rejects forged successors and cancellation before publication | seam | |
+| 54 | pre-call request closure allocation failures release every owner and deposited capability | seam | |
+| 55 | pre-call request closure rejects YAML assertions missing prerequisites and forged projections | port | YAML-shape class, trimmed: the YAML mutation loop is deleted; what remains is `pre-call request closure refuses a forged compiled contract where it runs` |
+| 56 | YAML pre-call termination preserves authorization failure and cancellation | seam | |
+| 57 | pre-call termination rejects prepared missing duplicate and stale evidence without mutation | seam | |
+| 58 | pre-call termination rejects foreign inputs and invalid authorization facts | seam | |
+| 59 | pre-call termination and terminal-result consumers require no clock or provider deadline | seam | |
+| 60 | authorization result consumers require exactly one current lifecycle phase and prepared leases still need a clock | seam | |
+| 61 | pre-call termination releases deposited backing once and retains evidence after runner cleanup | seam | |
+| 62 | runtime cancellation abandons authorization without hidden pre-call termination | seam | |
+| 63 | pre-call termination rejects forged deltas and cancellation before publication | seam | |
+| 64 | pre-call termination allocation failures release every owner without calls or token usage | seam | |
+| 65 | pre-call termination rejects YAML assertions missing prerequisites and forged compiled contracts | port | YAML-shape class, trimmed: the YAML mutation loop is deleted; what remains is `pre-call termination refuses a forged compiled contract where it runs` |
+| 66 | YAML advances the logical request once while preserving its request attempt operation and lease | seam | |
+| 67 | request lifecycle YAML rejects hidden transitions retry rebinding and absent authorization | deleted | YAML-shape class: `transition` and other parameters of one stage, which the kernel fixes; an unknown parameter is rejected by the kernel test, and absent authorization is #68 |
+| 68 | failed cancelled expired and foreign authorization cannot advance a logical request | seam | |
+| 69 | stale request-ledger snapshots cannot reset invocation or reach later consumers | seam | |
+| 70 | forged lifecycle successors and rejected deltas never publish request invocation | seam | |
+| 71 | request lifecycle cancellation allocation faults and compiler tampering fail closed | re-drive | boundaries 0..6 |
+| 72 | YAML provider invocation publishes canonical evidence with the original lease deadline | seam | |
+| 73 | provider invocation YAML rejects missing unknown hidden and replacement parameters | deleted | YAML-shape class: the `transition` parameter and others of one stage, which the kernel fixes; an unknown parameter is rejected by the kernel test, and the missing authorization is #74 |
+| 74 | provider invocation requires an invoked request and rejects failed cancelled expired and foreign leases | seam | |
+| 75 | provider invocation rejects forged transitions and deltas without publishing state or evidence | seam | |
+| 76 | invoked evidence cannot cross executions or outlive its canonical status | seam | |
+| 77 | provider invocation cancellation allocation failures and retained evidence clean up exactly once | re-drive | boundaries 0..7 |
+| 78 | provider invocation accounting permission and exact compiled profile cannot be hidden or weakened | seam | YAML-shape class, kept: registry contract rules and a forged compiled step |
+| 79 | provider invocation rechecks cancellation and lease deadline after allocating candidate evidence | seam | |
+| 80 | native YAML invokes one model call and retains unparsed output and actual usage | seam | |
+| 81 | YAML invocation preserves every stopped outcome and charges its actual usage | seam | |
+| 82 | runner logs every provider-applied stop with its exact reason and stops on log failure | seam | |
+| 83 | YAML invocation preserves failures and blocks further calls when usage is unavailable | seam | |
+| 84 | YAML invocation accounts exact budget exhaustion and overshoot before blocking subsequent calls | seam | |
+| 85 | YAML invocation cancellation stays distinct without fabricated usage | seam | |
+| 86 | YAML call rejects missing dependencies controls and policy permission | deleted | YAML-shape class: the stage takes no parameters, and the policy-permission rows are in the kernel test (a policy without the model-provider capability) |
+| 87 | workflow result retains the exact budget rejection and does not follow a YAML failure edge | seam | |
+| 88 | YAML call guards cancellation expiry and absent adapters before effects | seam | |
+| 89 | post-call cancellation deadlines malformed associations and usage fail without replay | seam | |
+| 90 | rejected invocation deltas retain actual usage without publishing candidate data | seam | |
+| 91 | YAML invocation owners and token usage are isolated between executions | seam | |
+| 92 | YAML invocation allocation failures release pending responses and consumed or unused leases | seam | |
+| 93 | response admission preserves selected requests captured authority and serialized request sizes | port | compared the detailed and combined chains and wrote a wire dump nothing read; asserts the one chain |
+| 94 | response admission permits only the exact pure output pair | port | the foreign-parameter variant names the preparation parameters |
+| 95 | response admission rejects missing and foreign observation authority without partial publication | seam | |
+| 96 | outcome projection rejects replayed sealed admission outputs from a prior attempt | port | was decode, validate and admit modes; admit only |
+| 97 | stale sealed protocol correction cannot authorize a later rejected attempt | port | one path |
+| 98 | compiler rejects failed request closure routed through unrelated success | seam | |
+| 99 | unrelated successful operation cannot discard a prohibiting workflow outcome | seam | |
+| 100 | runner preserves failed native closure when compiled control flow is forged | seam | |
+| 101 | runner rejects an unrelated filesystem write before invoking its binding | seam | |
+| 102 | runner rejects an unrelated model call before provider invocation | seam | |
+| 103 | bounded protocol assignments continue many valid units and stop repeated or alternating failures | re-drive | seam release; `decode` assertion removed |
+| 104 | native repair progress permits independent requests while retaining the global token budget | re-drive | seam release |
+| 105 | dependent reviews retain parent allowances through initial protocol correction and global accounting | re-drive | seam release |
+| 106 | protocol retries retain only latest repeated or alternating decoder rejection until local exhaustion | port | one path |
+| 107 | selected review nesting and sibling loss retain correction scope through recovery or exhaustion | port | one path; the decode-only assertion removed |
+| 108 | protocol repetition requires the current correction association and same typed rejection | seam | |
+| 109 | correction handoff releases copied rejection context at every allocation failure | port | step list and re-send index recomputed; decode-only expectation removed |
+| 110 | metadata and diagnostic echoes exhaust protocol retries without acceptance or extra accounting | seam | |
+| 111 | a first runaway is re-sent once, even at retry-limit 0, and its admitted response closes the request | seam | |
+| 112 | every runaway re-send is logged before it is sent, and a logging rejection prevents it | seam | |
+| 113 | a re-send refused before it is sent is not logged as re-sent | seam | |
+| 114 | the runner refuses a second re-send of one attempt | seam | |
+| 115 | a re-send keeps the full prepared identity of the attempt it repeats | seam | |
+| 116 | a first runaway is not logged as a missing final answer, and a missing final answer still is | seam | |
+| 117 | a runaway on the re-send fails a required request with its typed diagnostic | seam | |
+| 118 | a re-sent response passes the same admission and its rejection takes a correction at the configured temperature | seam | |
+| 119 | a protocol correction that runs away is re-sent once with its correction intact | seam | |
+| 120 | protocol retry budget overshoot charges the response before decoding and blocks another call | seam | |
+| 121 | corrected protocol responses pass schema validation before request closure | port | one path |
+| 122 | YAML request closure accepts only the schema-valid candidate and preserves content rejection | port | one path |
+| 123 | YAML request closure preserves provider stops failures cancellation and invalid UTF8 | seam | |
+| 124 | request closure rejects every missing input stale ledger and duplicate closure without mutation | seam | |
+| 125 | request closure rejects foreign payload terminal attempt and request evidence | seam | |
+| 126 | request closure refuses an additional assigned or invoked operation despite terminal evidence | seam | |
+| 127 | request closure needs no live lease deadline or remaining token budget and retains ownership | seam | |
+| 128 | request closure rejects forged successors suppressed outcomes and cancelled publication | seam | |
+| 129 | request closure releases owned ledgers and responses on allocation failure for every outcome | seam | |
+| 130 | request closure YAML rejects missing evidence hidden reasons and forged compiled contracts | port | YAML-shape class, trimmed: the YAML mutation loop is deleted; what remains is `request closure refuses a forged compiled contract where it runs` |
+| 131 | YAML provider completion closes only the operation independently of payload validity | seam | |
+| 132 | YAML provider completion preserves stopped failed cancelled and unsafe response facts | seam | |
+| 133 | YAML completion needs no live lease and works at exact token exhaustion | seam | |
+| 134 | YAML completion releases unused authorization after provider-side cancellation exactly once | seam | |
+| 135 | YAML completion rejects duplicate stale and missing evidence without altering the ledger | seam | |
+| 136 | YAML completion rejects foreign observation and invocation evidence | seam | |
+| 137 | terminal evidence cannot authorize a consumer in another execution | seam | |
+| 138 | YAML completion evidence and response owners survive runner cleanup | seam | |
+| 139 | YAML completion rejects unvalidated response associations without inventing a terminal result | seam | |
+| 140 | YAML completion rejects fabricated terminal facts suppressed failures and cancelled publication | seam | |
+| 141 | YAML completion releases all retained owners on every allocation failure and terminal branch | seam | |
+| 142 | completion YAML rejects missing observations and outcome delivery or selection overrides | port | YAML-shape class, trimmed: the YAML mutation loop is deleted; what remains is `provider completion refuses a forged compiled contract where it runs` |
+| 143 | runner logs normalization once with call provenance and stops on log failure | port | one path |
+| 144 | approved repeated and partial field prefixes avoid protocol correction | port | one path |
+| 145 | normalization never bypasses schema rejection or the protocol retry allowance | port | one path |
+| 146 | YAML payload validation uses each exact compiled schema and retains the same candidate | port | one path |
+| 147 | YAML payload validation preserves protocol provider cancellation and observation rejection | port | one path |
+| 148 | YAML schema evidence retains the tree request and response after all upstream cleanup | port | one path |
+| 149 | YAML payload validation rejects missing evidence and hidden schema or retry overrides | deleted | YAML-shape class: the admission stage takes no parameters; an unknown parameter is rejected by the kernel test, and missing evidence is #95 |
+| 150 | YAML payload validation allocation failures release retained candidates on every outcome | port | one path |
+| 151 | YAML payload validation remains available at the token budget without another charge | port | one path |
+| 152 | YAML payload publication rejection and cancellation release evidence without consuming the candidate | port | the spy wraps the admission binding only |
+| 153 | compiled payload validation cannot bypass its candidate or add effects | port | one path; YAML-shape class, kept: a forged compiled step |
+| 154 | YAML validates a complete observation without decoding or charging tokens twice | seam | |
+| 155 | YAML observation validation preserves every stop and provider failure without another charge | seam | |
+| 156 | YAML observation validation retains provider cancellation without fabricating evidence | seam | |
+| 157 | YAML observation validation rejects unsafe UTF-8 after accounting its reported usage | seam | |
+| 158 | YAML observation consumers reject cross-execution results and stale invoked evidence | port | the next stage is the admission step |
+| 159 | validated observation owns its request and response after source values and runner cleanup | seam | |
+| 160 | observation YAML rejects missing inputs hidden operations and parameter overrides | deleted | YAML-shape class: the stage takes no parameters; an unknown parameter is rejected by the kernel test, and missing inputs are #95 and #158 |
+| 161 | observation validation releases all references on every allocation failure | seam | |
+| 162 | rejected validation deltas and runtime cancellation release evidence without changing usage | seam | |
+| 163 | compiled observation validation cannot hide its dependencies or add a capability | seam | YAML-shape class, kept: a forged compiled step |
+| 164 | configured parts keep admitted siblings through protocol recovery and exhaustion with exact accounting | re-drive | seam release |
+| 165 | registered non-Spec typed consumer composes references and enforces its own eligibility | re-drive | seam release |
+| 166 | composition application handoffs release retained parts and requests at every allocation failure | re-drive | seam release |
+| 167 | production request capture failure records non-delivery and response capture failure retains usage | seam | |
+| 168 | production source snapshot capture failure preserves its cause and unsent accounting | seam | |
+| 169 | production capture accepts an authorized repair packet without a single producing call | seam | |
+| 170 | production capture attributes inference bodies to the existing request ledger | seam | |
+| 171 | production Bedrock composition executes inference validation and request closure from YAML | seam | |
+| 172 | production Bedrock YAML records budget overshoot and blocks another call | seam | |
+| 173 | production Bedrock missing credentials follow explicit pre-call termination without effects | seam | |
+| 174 | ADR 0039: a repeated runaway is captured in full at debug before its failure, and only its events survive higher levels | seam | |
+| 175 | production missing-answer observation retains usage and can close without correction | seam | |
+| 176 | missing answers share protocol allowance through mixed failure and successful recovery | port | one path; the decode-only assertion removed |
+| 177 | packet result selection binds one immutable named schema and fails before invocation when absent | seam | |
+| 178 | retained semantic assignments require complete current packet request binding and accepted origin | seam | |
+| 179 | retained semantic assignments preserve the actual accepted correction attempt | seam | |
+| 180 | a request binds native exclusions to the one canonical schema | port | was "detailed and consolidated requests bind native exclusions to the same canonical schema"; one path |
+| 181 | protocol correction retains singleton authority and assembly requirements and rejects echoed determined handles | seam | |
+| 182 | protocol correction retains summary and signal guidance selection bounds categories and evidence | seam | |
+| 183 | composition protocol corrections keep complete assignment and grouped defects through recovery or exhaustion | port | one path |
+| 184 | retained semantic selections bind native exact scope independently of unchanged input bytes | seam | |
+| 185 | a packet request shares the global budget and overshoot fails the run | seam | |
+| 186 | global exhaustion and unknown usage block a packet request before sending | seam | |
+
+**Deleted with the decode, payload-validation and runaway-route stages (10), each with the test that covers its intent:**
+
+| Test | Reason |
+| --- | --- |
+| YAML decoding retains syntax-only evidence and rejected outcomes with exact accounting | asserted a decode step with no schema; the decode stage is part of admission. The syntax matrix is `model_envelope_test.zig`, the rejection and accounting are #147 and #150 |
+| YAML decoder never converts stopped failed cancelled or rejected observations into protocol invalid, except a first runaway for its re-send | #147 runs the same plans through admission |
+| decoded YAML candidate keeps its tree and original evidence after all source-value cleanup | #148 |
+| YAML decoding rejects absent evidence and parameter or outcome overrides before execution | #149 |
+| YAML decoder rejects foreign sealed observations without rebinding or a new provider call | #95 |
+| YAML decoder releases parse trees and retained evidence on every allocation failure | #150 |
+| YAML decoding releases rejected deltas and cancelled trees without consuming its evidence | #152 |
+| compiled decoding contracts cannot bypass evidence or add a provider capability | #153 |
+| YAML payload validation rejects foreign decoded and nondecoded evidence without rebinding | the stage no longer takes decoded evidence as input; #95 and #158 cover foreign observation evidence |
+| the compiler requires every continuing admission to route a runaway to its one re-send | asserted `validateRunawayRoutes`, deleted by DE1 decision 5; the orchestrator's branch tests (`a runaway takes the re-send, not the correction`, `an invalid response takes one protocol correction and returns to attempt accounting`) and #111 to #119 cover the branches |

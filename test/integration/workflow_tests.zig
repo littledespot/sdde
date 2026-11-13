@@ -1299,7 +1299,6 @@ fn writeStepTrace(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir,
         for (runner.selected.graph.authority.steps) |*step| if (std.mem.eql(u8, step.id.bytes, id.model_operation_id.workflow_step_id.bytes)) {
             step_trace.writeCallSite(&site.writer, step) catch |err| return switch (err) {
                 error.WriteFailed => error.OutOfMemory,
-                error.UnwrappedRequestLifecycle => error.UnwrappedRequestLifecycle,
             };
             break;
         };
@@ -1714,7 +1713,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var trace: step_trace.Trace = .init(allocator);
         defer trace.deinit();
         driver.trace = &trace;
-        const result = driver.run();
+        const result = try driver.run();
         cost.enter(.assertions);
         assertion_context = "request-projection";
         try std.testing.expectEqual(fake.invocation_call_count, recorder.recorded);
@@ -2456,7 +2455,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 const exhausted = result.execution_rejected.retry_limit;
                 var matched = false;
                 for (graph.authority.steps) |step| if (std.mem.eql(u8, step.id.bytes, exhausted.operation().bytes)) {
-                    try std.testing.expectEqualStrings("advance-model-attempt-accounting", step.operation_id.bytes);
+                    // The one `request-model` step owns the request; its attempt-accounting stage names the exhaustion.
+                    try std.testing.expectEqualStrings("request-model", step.operation_id.bytes);
+                    try std.testing.expectEqual(@import("../../src/domain/model_request_stage.zig").Stage.advance_attempt, exhausted.stage.?);
                     try std.testing.expectEqual(step.retry_authority.?.limit.value, exhausted.limit.value);
                     try std.testing.expectEqual(@as(u64, exhausted.limit.value) + 1, exhausted.completed_executions);
                     try std.testing.expectEqual(exhausted.completed_executions, driver.fault_calls);
@@ -2618,7 +2619,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 var next_runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = runner.selected.invocation, .graph = next_graph }, &native.registry, next_boot.ready.logs.barrier(), .{}, &services, next_boot.ready.config.config().workflowTokenBudget);
                 defer next_runner.deinit();
                 var next_driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &next_runner, .fake = &fake, .allocator = allocator };
-                const rejected = next_driver.run();
+                const rejected = try next_driver.run();
                 if (rejected != .execution_rejected or rejected.execution_rejected != .operation_failed) std.debug.print("stale extraction contract rerun: outcome={s}, result={s}, operation={s}, calls={d}\n", .{ @tagName(rejected.executionStatus().?), @tagName(rejected), next_driver.rejected_operation orelse "none", next_driver.calls });
                 try std.testing.expect(rejected == .execution_rejected and rejected.execution_rejected == .operation_failed);
                 try std.testing.expectEqual(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, rejected.execution_rejected.operation_failed);
@@ -2654,7 +2655,7 @@ fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, pro
     const step = for (graph.authority.steps) |*current| {
         if (std.mem.eql(u8, current.id.bytes, "g7-extract-content")) break current;
     } else return error.MissingDiagnosticParentStep;
-    try std.testing.expectEqualStrings("prepare-model-request", step.operation_id.bytes);
+    try std.testing.expectEqualStrings("request-model", step.operation_id.bytes);
     try std.testing.expectEqualStrings("spec_generation", step.model.?.slot.bytes);
     const binding = try (@import("../../src/actions/provider/resolve_provider_model_binding.zig").Action{}).execute(graph, step.id, outcome.ready.registry(), outcome.ready.allowlist());
     const configured = configuration.config.models.slots.map.get(binding.slot_id.bytes).?;
@@ -2718,8 +2719,8 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v25", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v25", "specification-state/v24");
+    try std.testing.expectEqualStrings("specification-state/v26", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v26", "specification-state/v25");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
     try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
     const principles = @import("../../src/domain/principle_registry.zig");

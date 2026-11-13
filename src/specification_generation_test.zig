@@ -8493,7 +8493,6 @@ test "source reviewer supplies one obligation and loss review carries it without
 
 fn checkProtocolCorrectionPreservesPacket(a: std.mem.Allocator, packet: *const @import("domain/model_input_packet.zig").Packet, prompt: []const u8, rejected_bytes: []const u8) !void {
     const schemas = @import("domain/model_result_schema.zig");
-    const build_request = @import("actions/model/build_model_request.zig");
     const correction_prompt = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/protocol.prompt.md", a, .limited(1_048_576));
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .limited(1_048_576)));
@@ -8505,7 +8504,7 @@ fn checkProtocolCorrectionPreservesPacket(a: std.mem.Allocator, packet: *const @
     defer provider_fixture.deinit();
     var request_source = try provider_fixture.requestSource();
     request_source.restriction = restricted;
-    const prepared = try (build_request.Action{}).execute(std.testing.allocator, request_source, &.{ .{ .guidance = prompt }, .{ .user = packet.body() } });
+    const prepared = try @import("domain/model_request_preparation.zig").build(std.testing.allocator, request_source, &.{ .{ .guidance = prompt }, .{ .user = packet.body() } });
     provider_fixture.prepared.deinit();
     provider_fixture.prepared = prepared;
     provider_fixture.base.request = prepared.request.*;
@@ -8517,7 +8516,7 @@ fn checkProtocolCorrectionPreservesPacket(a: std.mem.Allocator, packet: *const @
     defer response.deinit();
     var captured = try (@import("actions/model/validate_provider_invocation_observation.zig").Action{}).execute(std.testing.allocator, provider_fixture.call, &response);
     defer captured.deinit();
-    var decoded = try (@import("actions/model/decode_model_envelope.zig").Action{}).execute(std.testing.allocator, captured.evidence.result().complete, null);
+    var decoded = try @import("domain/model_envelope.zig").decode(std.testing.allocator, captured.evidence.result().complete, null);
     defer decoded.deinit();
     const validation = @import("domain/model_payload_schema.zig");
     const diagnostic = validation.validate(decoded.candidate).invalid;

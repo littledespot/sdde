@@ -59,6 +59,7 @@ test {
     _ = @import("llm_provider_interface_test.zig");
     _ = @import("model_provider_bootstrap_test.zig");
     _ = @import("startup_routine_test.zig");
+    _ = @import("model_request_orchestrator_test.zig");
     _ = @import("specification_result_definitions_test.zig");
     _ = @import("bootstrap_root_registry_test.zig");
     _ = @import("runtime_tests.zig");

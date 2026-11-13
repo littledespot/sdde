@@ -418,10 +418,43 @@ test "a failed action's event records the stage step, and no other action event 
     try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").FailureCode, null), capture.action(node, .{ .outcome = .ok }, null, "validate_registry"));
     try std.testing.expectEqual(telemetry.EventType.action_completed, recorder.last.?.fact.event_type);
     try std.testing.expectEqual(@as(?telemetry.Identifier, null), recorder.last.?.fact.fields.step_id);
-    // The registry admits the field on a failed action only.
-    var misplaced = recorder.last.?.fact;
-    misplaced.fields.step_id = failed.fields.step_id;
+    // The field is for action events only: no other event type admits it.
+    var misplaced: telemetry.TelemetryFact = .{ .event_type = .run_completed, .fields = .{ .outcome = .completed, .step_id = failed.fields.step_id } };
     try std.testing.expectError(error.InvalidLogEventFact, registry.validateFact(misplaced));
+    misplaced.event_type = .stage_completed;
+    try std.testing.expectError(error.InvalidLogEventFact, registry.validateFact(misplaced));
+}
+
+test "every event of a request stage names the stage, and a stage action's other events do not" {
+    const telemetry = @import("domain/telemetry.zig");
+    const execution = @import("domain/workflow_execution.zig");
+    const registry = @import("domain/log_event_registry.zig");
+    var recorder: Recorder = .{};
+    const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
+    const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "request" };
+    const failure: ?@import("domain/feature_log_stream.zig").FailureCode = null;
+    // A stage's start and each kind of end name the stage, and the registry admits each fact.
+    const ends = [_]struct { result: ?execution.Applied, event: telemetry.EventType }{
+        .{ .result = null, .event = .action_started },
+        .{ .result = .{ .outcome = .ok }, .event = .action_completed },
+        .{ .result = .{ .outcome = .invalid }, .event = .action_invalid },
+        .{ .result = .{ .outcome = .failed }, .event = .action_failed },
+        .{ .result = .{ .outcome = .cancelled }, .event = .action_failed },
+        .{ .result = .{ .rejected = .authority }, .event = .action_failed },
+    };
+    for (std.enums.values(@import("domain/model_request_stage.zig").Stage)) |request_stage| for (ends) |end| {
+        try std.testing.expectEqual(failure, capture.requestStage(node, request_stage.name(), end.result, null));
+        const fact = recorder.last.?.fact;
+        try std.testing.expectEqual(end.event, fact.event_type);
+        try std.testing.expectEqualStrings(request_stage.name(), fact.fields.step_id.?.bytes);
+        _ = try registry.validateFact(fact);
+    };
+    // The same events of a step that is no stage name nothing unless a stage action failed (ADR 0031).
+    for (ends) |end| {
+        try std.testing.expectEqual(failure, capture.action(node, end.result, null, null));
+        try std.testing.expectEqual(@as(?telemetry.Identifier, null), recorder.last.?.fact.fields.step_id);
+        _ = try registry.validateFact(recorder.last.?.fact);
+    }
 }
 
 test "the binding hands the runner's slot the failing step and propagates the unchanged error" {

@@ -35,7 +35,7 @@ scorer judgment moves one by about ±3.6, and keep decisions use the accuracy co
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
 `00-37-49Z`), the entity and escaping set (`05-5*`) and six edge-case-lever runs on `071ce2b`
 (`09-2*`). Earlier runs are removed; their evaluations and measures stay under `evaluations/`.
-The current build decodes only `spec-e2e-report/v17` (`test/harness/e2e/contracts.zig:140`); earlier runs need their own build.
+The current build decodes only `spec-e2e-report/v18` (`test/harness/e2e/contracts.zig:140`); earlier runs need their own build.
 
 ## 2. Rules for measured phases
 
@@ -579,17 +579,20 @@ Budget-stopped runs publish nothing while it is on hold (none since D13.1).
 
 ### E1. Engine-owned model request (A1, ADR 0030 slice 4)
 
-Not started: the `request-model` step replacing `model-request-body`
-(`spec.workflow.yaml` subgraph `model-request-body`) and its five wrappers
-(`model-request-with-context`, `model-request`, `support-request`, `composition-request` and
-`composition-request-body`), with the contract-variant
-mechanism ADR 0033 reuses. It folds in ADR 0039's re-send and retires `validateRunawayRoutes`
-(`src/domain/workflow_model_request_lifecycle.zig:86`). Retake the slice 1 freeze on the commit
-before it lands (slices 1 and 4: git `194e29a:fixes/Z_FIX05.md:2794`, `:4430`). Slice 1 review
-points: make `extract/content` and `extract/content-request` (steps `content` and `content-request` of `extract-references`) one
-step; port each runner-level lifecycle test in `src/model_request_workflow_test.zig` one for one
-with a mapping table and a reason for any dropped assertion (user decision, 23 October 2026,
-option b). If E1 removes a request-lifecycle `DataKey`, it lands under §2.12.
+**Implemented, 13 November 2026** (all seven steps; the dated notes below are the record, the proof is in
+[Z_SPEC01](Z_SPEC01.md) E1). Open: the harness sees only a kernel step's last-stage effects (step 3
+review finding 7); the packaged smoke cannot tell a kernel failure from another failure (the packaged
+executable prints only `failed`); a cycle bounded only by a kernel step's retry authority ends in an
+untyped rejection at the execution ceiling (the attempt count restarts for an ordinary-scope request
+that revisits a `request-model` step); recorded retention keeps every call's raw exchange for the run
+and its growth is unmeasured; the `action.started`, `action.completed` and `action.invalid` log
+templates were left unbumped (the `step_id` column existed; ADR 0031 added the same optional field to
+`action.failed` without a bump) pending the user's decision; one live set (one run per case) pending
+the user's go-ahead (DE1 decision 7). The `request-model` step replaced the `model-request-body` subgraph
+and its five wrappers (`model-request-with-context`, `model-request`, `support-request`,
+`composition-request` and `composition-request-body`); it folds in ADR 0039's re-send and retired
+`validateRunawayRoutes`. Removing the engine-internal request keys from the `DataKey` enum is a
+follow-up change (DE1b 2); it lands under §2.12.
 
 **DE1 decided 12 November 2026** (user: "yes i accept", to my recommendations on the eight
 questions that the preflight raised; none was in an accepted text):
@@ -653,18 +656,389 @@ questions that the preflight raised; none was in an accepted text):
   [Z_SPEC01](Z_SPEC01.md); (6) versions, harness, docs; (7) the projection and step-trace pairs, then
   `verify`. Steps 3 to 5 hold both paths until step 5, so the change lands whole.
 
-**DE1b: decisions the preflight found** (user's call; recommended answers):
-1. **Mechanism.** ADR 0030:136-160 keeps a runtime orchestrator with runner-owned child bindings.
-   Compiling the fixed stage graph into internal steps would keep the runner, accounting and validators
-   nearly unchanged and cut the work about in half, but it deviates from that text and needs an ADR 0030
-   amendment. *Recommended: follow the ADR (runtime orchestrator); take the expansion only if you
-   amend the ADR.*
-2. **Internal keys.** DE1 decision 2 removes the non-kept request keys from `DataKey`. That needs a
-   typed stage handoff, which rewrites every stage binding. *Recommended: in E1 mark them
-   engine-internal (no YAML-visible contract, dropped when the step ends) and remove them from the
-   enum in a follow-up change; DE1 decision 2 is amended accordingly.*
-3. **Sessions.** The change lands whole, so it is several verified sessions. *Recommended: proceed
-   with steps 2 and 3 first and report at the end of step 3.*
+**DE1b decided 13 November 2026** (user: "yes for all 3 decisions", to my recommendations):
+1. **Mechanism.** Follow ADR 0030:136-160: a runtime orchestrator with runner-owned child bindings,
+   one runner invocation per stage. Compiling the stage graph into internal steps is not taken.
+2. **Internal keys.** In E1 the non-kept request keys become engine-internal (no YAML-visible
+   contract, dropped when the step ends); removing them from the `DataKey` enum is a follow-up
+   change. DE1 decision 2 is amended accordingly.
+3. **Sessions.** Steps 2 and 3 of the ordering first; report at the end of step 3.
+
+**Step 4 review follow-up, 13 November 2026.** The `contract-reviewer` found one major and five
+minor points; all but the packaged-smoke wording are fixed.
+- *Baseline experiment gate (major).* `Trace` reconciled one pending exchange only when a step ended,
+  so a protocol correction, runaway re-send or retry inside one `request-model` step was a harness
+  `ExchangeInFlight` evidence failure and the experiment's send and token limits lagged by a step.
+  `Trace.reconcilePending` now charges the previous exchange, from the usage the runner already
+  accounted for it (`observation.usageOf`), before the next is considered, and the last at step end;
+  `pending` carries its call and receipt. No runner observer was needed. Offline test
+  `provider_compatibility_tests.zig` "every exchange of one kernel step is charged and recorded at
+  its own boundary": corrections, send limit, token limit and a runaway re-send under an experiment
+  gate. The frozen binding still refuses a re-send (its temperature is not the frozen one), so under
+  an experiment a re-send is a harness stop; that predates this step and is unchanged.
+- `request_stage_gate` now returns a closed `Runner.StageStop` (`cancelled`, `failed`), the runner
+  maps it, a runner test proves a stop runs no stage and emits no event while null passes through,
+  and an architecture pin keeps every other file from naming it; recorded in 13-04-model.md.
+- `model_transport.released_keys` is the kernel's `produces`, stated once, with accepted and rejected
+  tests of both release actions.
+- The Spec driver's and the production-run harness test's provider hooks no longer turn failed
+  assertions into panics: the first failure is recorded and returned by `Driver.run` / the test.
+  The assertions in the driver's `step` observer are older than the hooks and are unchanged.
+- The packaged smoke for the `request-model` fixture cannot name a stage: the packaged executable
+  prints only `failed`, so a stage-specific diagnostic needs a production change; left as it is.
+- Doc drift fixed in 13-04-model.md, 22-repair.md and ADR 0030's status header.
+
+**DE1f decided 13 November 2026** (user: "all the decisions are approved", to my recommendations):
+1. `model_payload_schema_result` is a fourth recorded-retention key (DE1c named three; the kept key set
+   is unchanged), because a correction replaces its current value and the harness needs history.
+2. DE1 decision 2 is amended to the implemented rule: a kernel step keeps every one of the five kept
+   keys it had published, on every outcome, and drops the eight internal keys whatever the outcome.
+3. The `action.started`, `action.completed` and `action.invalid` log templates are not bumped (the
+   `step_id` column exists; ADR 0031 precedent for `action.failed`).
+4. One live set, three runs per development case, is approved after landing, to be scored under the
+   case rubrics.
+
+**DE1e decided 13 November 2026** (user: "delete the actions and cleanup the tests"): step 5 deletes
+the five detailed request actions that no production code calls (`assign_model_request_id`,
+`validate_model_request_binding`, `build_model_request`, `decode_model_envelope`,
+`validate_model_payload_schema`) and ports the test files that use them as fixtures onto the stage
+seam or deletes them with a stated reason.
+
+**DE1d decided 13 November 2026** (user: "accept recommendation, and continue implementing"): the
+step 4 release pair `release-model-request` and `release-model-transport` stays and `Retire` is not
+changed; step 5 deletes the old `retire-model-*` operations with the old lifecycle, leaving no
+alias, and step 5 proceeds.
+
+**E1 step 6 done, 13 November 2026** (user: "finalise step 5 and implement step 6"; DE1 decision 8,
+§2.12: the 20-10 and 20-18 sets were adjudicated before this change). Each candidate was judged from its
+actual writer; a contract whose members and decode rules did not change was not bumped.
+- **Bumped, no compatibility reader:**
+  - `spec-e2e-report` v17 to **v18** (`test/harness/e2e/contracts.zig:140`): `retry_error` is
+    `Exhaustion.Description`, which gained `stage` (the stage of a `request-model` step that reached the
+    limit, null otherwise); the writer serialises it, so every report carries the member.
+  - `e2e-step-event` v2 to **v3** (`test/harness/e2e/trace.zig:669`): the event embeds the same
+    `retry_error`. It has no reader; the accepted fixture is the writer's own output.
+  - `specification-state` v25 to **v26** (`src/domain/specification_state.zig:8`): the persisted extraction
+    contract's `parts` are now the `request-model` steps that start each request (review finding 1:
+    `startsRequest`), with that step's operation and parameters, not the preparation step's. A v25 state
+    is rejected (`InvalidSpecificationState`). ADR 0041, on hold, reserves `specification-state/v26` for
+    its own change; when it resumes it takes v27.
+- **Judged unmoved, with the reason:**
+  - `model-request-debug/v18` and `model-call-evidence/v3`: neither record has a step-action or stage
+    member (`model_request_description.zig:9-33`, `call_context.zig:15-30`); only the values of
+    `request_step` follow the compiled step id, and Spec step ids did not change.
+  - `request-source/v1`: `caller` and `preparation` keep their fields and validation
+    (`request_source_snapshot.zig:20-62`); for a `request-model` step the two name the same step. The
+    debugger archive's action rule is `kernel.callActionBelongsTo`, a reader rule, not a shape.
+  - `action.started/v1`, `action.completed/v1`, `action.invalid/v1`: **not bumped, a judgment you may
+    overrule.** DE1c lets them carry the optional `step_id`. The row has the column already
+    (`event-columns/v3`), F0002 fixes `message_template_id` as `<event_type>/v1` for every row, and ADR
+    0031 added the same optional `step_id` to `action.failed` without a bump. A bump needs a per-event
+    template version and an F0002 amendment of that rule. F0002's registry table and prose are updated
+    for the new optional member.
+  - `feature-log/v2` and `event-columns/v3`: no column added, removed or renamed.
+  - `baseline-acquisition/v12`: it embeds the native `Report`, whose own `schema` is now v18; its own
+    members are unchanged, so a retained acquisition holding a v17 report no longer decodes, as after
+    every earlier report bump.
+- **Tools and retained runs:** `zig build e2e-measures` reads a run whose report is v17 or older as
+  "report unavailable" (the version list is derived from the enum, `measures_cli.zig` `reportVersion`),
+  so the retained 20-10 and 20-18 runs still measure, minus their report-derived numbers; the stored
+  `measures.json` of those runs are unchanged. `zig build adjudicate-spec` rejects a v17 report
+  (`InvalidAdjudication`, stage `report`): the applied adjudications under `evaluations/adjudications/`
+  stand, but a corrected record for a retained v17 run can no longer be applied by this build (it needs
+  the build that made the run, as SPEC01 §1 states for earlier runs). The skill scripts and settings
+  hard-code no version; `prepare.py` reads the captured rubric, sources and specification by field.
+  Nothing under `zig-out/` or `evaluations/` was touched.
+- **Harness and docs:** the harness already writes the stage member and the per-stage event names (DE1c);
+  this step moved their versions and tests: `a request-model retry exhaustion names its stage in the
+  report and the step event, and another step names none` (round trip, both versions, null stage), the
+  previous-version rejection cases of the report (`v17`), the state (`v25`) and the measures
+  classification (`v17` is "older", `v19` unknown). Docs: `design/harness/e2e.md` (formats,
+  `retry_error`), `acceptance.md`, F0002 (action events, `step_id`), F0100 and ADR 0023 (state version
+  and the extraction contract's parts). ADR 0038, 0039 and the other ADRs that name `spec-e2e-report/v17`
+  or `specification-state/v25` as the version of their own change are history and stay.
+- **Proof:** `zig build test` 1984/1984, `test-architecture`, `lint`, `test-model-request-workflow`,
+  `test-workflow-graph test-workflow-operation-registry test-atomic-execution`, `test-integration` (144
+  scenario rows passed, none failed) and `smoke` pass; `diff -rq` of `evaluations/request-projection/e1-before`
+  and the interim step 5 retake was empty (the final pair is in step 7 below).
+
+**E1 step 7 done, 13 November 2026** (user: "finalise step 5 and implement step 6", the plan DE1 decision
+7). Proof on the final tree, all offline: `zig build verify` 147/147 steps and 2,100/2,100 tests passed
+(the repository unit tests 1,968, 1,975 with the other test executables; the integration run 125); `test-build-registration` and
+`test-build-isolation` pass. Request projection: `evaluations/request-projection/e1-final` was written by
+a fresh `test-integration` run and `diff -rq` against `e1-before` is empty. Step trace:
+`evaluations/step-trace/e1-final` (135 scenarios) against `e1-before`, classified by script over every
+scenario: all 135 `.trace` files differ only in the request-lifecycle, retain and release lines and the
+`:stage=advance-attempt` suffix (21), every summary equals the old one except `steps`, `trace_sha256`,
+`files` and that suffix, and every file a summary lists is byte-identical except `state/workflow.json`
+(100). The counts per class are in [Z_SPEC01](Z_SPEC01.md) E1. `e1-before` carries four scenarios and 26
+`.files` directories left over from an earlier numbering (the writer never deletes an earlier run's
+files); they are noted there and have no counterpart to compare. The interim projection directories
+`e1-step4` and `e1-step5` are deleted; `e1-before` and `e1-final` stay as the evidence of E1.
+
+**E1 kept, 13 November 2026** (user: "for outcomes have improve out brittleness has been reduce E1 should
+be kept"): kept for the reduced brittleness (the request lifecycle is one engine-owned step, so a
+mis-wired lifecycle cannot be authored); published-output quality is unchanged, with no regression and no
+demonstrated semantic benefit.
+
+**E1 live set, 13 November 2026** (DE1f approved it; recorded in [Z_SPEC01](Z_SPEC01.md) E1): three runs
+per development case on build `42fe246e`; all six published and passed adjudication (hello-world 96.43%,
+92.86%, 96.43%; loan-renewal 96.43%, 92.86%, 96.43%), 9 sends each, no correction or re-send, accuracy
+defects: two minor `unsupported_addition` in loan-renewal, none in hello-world. Reported as no
+regression, not as a benefit: E1 changes no request byte. The per-attempt rejection evidence of a
+corrected or re-sent request is still proved offline only, since no run took a correction.
+
+**E1 final review fixes, 13 November 2026** (the final `contract-reviewer` pass over E1; findings 1-3):
+1. **Stale docs.** Every "not yet implemented" or "until `request-model` lands" statement about ADR 0030 is
+   now "implemented" at its owner (design.md §1 and §12, 14-orchestration, F0005 §7 with its stage
+   bullets, F0006 amendment 13, F0007, ADR 0005's single-request amendment and its example paragraph).
+2. **The step's data contract has an owner.** [model-request-operations.md](../design/contracts/model-request-operations.md)
+   states it once ("The `request-model` step's data contract"): requires, the five kept keys, the eight
+   internal keys, the recorded-retention evidence keys, the per-outcome rule, the allowance and the event
+   naming rule. **Implemented deviation from DE1 decision 2, for the user to confirm:** decision 2 said
+   that on `invalid`, `failed` and `cancelled` only the accounting and evidence keys stay current. The
+   code keeps every kept key a stage had published on every outcome (it drops the same eight internal keys
+   whatever the outcome, and `expectKernelKeys` asserts `prepared_model_request` stays after each); the
+   contract documents the code. No code changed for this.
+3. **Harness evidence of earlier attempts.** A `request-model` step makes every attempt inside one step, so
+   the per-step report read only the last attempt and only when the step ended not `ok`: a request
+   corrected or re-sent and then admitted left no protocol rejection, provider stop or capture-receipt
+   rejection. `Trace.recordStep` now observes every attempt of the step before its last from recorded
+   history (`observation.attemptRejection`, a high-water mark of attempts already observed), in order,
+   into the same last-rejection state and capture receipts the per-attempt steps fed. Schema rejections
+   needed one more recorded key: `model_payload_schema_result` is now recorded retention beside the three
+   DE1c named (a correction replaces its current value; the kept key set is unchanged). No runner change,
+   no observer; the report and step-event shapes only gain values in existing fields, so no version moved.
+   Tests (`provider_compatibility_tests.zig`): a request admitted after a correction, after a runaway
+   re-send, and a run that ends after a schema and a syntax rejection each assert the report and the
+   receipts.
+
+**E1 step 5 done, 13 November 2026** (user: "finalise step 5 and implement step 6"; DE1d, DE1e). The
+explicit request lifecycle is deleted and its tests are ported ([Z_SPEC01](Z_SPEC01.md) E1 has the
+measures and the mapping of the 196 lifecycle tests: 36 ported, 13 re-driven, 128 kept on the stage
+seam, 19 deleted, each with the test that covers it; see "step 5 review fixes" below).
+- **Production:** the registry offers 8 operations (ledger initialization, the four JSON-composition
+  operations, `release-model-request`, `release-model-transport`, `request-model`); the 17 stages are
+  native bindings only the kernel entry holds, so no workflow can select one, and a definition naming a
+  stage, or an operation of the removed lifecycle, fails to compile (accepted and rejected cases:
+  `request-model: a workflow cannot select a request stage or an operation of the removed lifecycle`).
+  Deleted: the actions `assign_model_request_id`, `validate_model_request_binding`,
+  `build_model_request`, `decode_model_envelope`, `validate_model_payload_schema` (DE1e) and
+  `retire_model_request`, `retire_model_input`, `retire_model_transport` (DE1d); the wrappers `Assign`,
+  `Validate`, `Build`, `Decode` and the payload `Validate`; the `request_decode` association variant;
+  `validateRunawayRoutes` (DE1 decision 5) and its calls; the `payload_schema_requires` branch of
+  `workflow_model_invocation`; `selectionForPacket` and `publish` in `model_request_workflow.zig`; the
+  wrapper-collapse code of `workflow_step_trace.zig` (the trace now keys a step by its whole call path).
+  `model_transport.Retirement` keeps `rejected_attempt` and the two releases.
+- **Tests:** the five actions' users were ported to the domain functions they wrapped
+  (`preparation.build`, `envelope.decode`, `validation.validate`, `identity.createSuccessor` and
+  `identity.validateBinding`); the identity runner fixture applies two fixture-owned contracts in place
+  of the deleted assign and validate actions. The test registries gain two seam releases that retire
+  every request key a hand-composed chain of stages leaves current.
+- **Finding 11 (step 3 review):** not changed. The previous attempt made a kernel step guard no cycle;
+  that rejected the Spec workflow (`WORKFLOW_GRAPH_COMPILE_INVALID` in every integration scenario), so
+  `guardsCycle` is `retry_authority != null` again. **Open, precisely:** the step's retry authority
+  bounds attempts inside one step, and its count is kept per request assignment. An atomic-repair
+  request keeps one assignment key, so revisiting the step there is bounded by the allowance. An
+  ordinary-scope request that revisits a `request-model` step starts a new assignment each time (its
+  prepare stage creates it), so the count restarts and only the workflow's execution ceiling bounds
+  such a cycle; the kernel step adds nothing to `calculateExecutionLimit`, so a legitimate bounded
+  loop would end in an untyped `.authority` rejection at the ceiling. Before E1 the accounting step
+  counted per assignment in the same way, but the ceiling then included its retry visits.
+- **Docs:** ADR 0005, 06-pipeline-nodes, the operation catalogue (decode and payload-schema are one
+  admission stage), 12-model-boundary, 13-04-model, 14-orchestration, 21, 25, 27, 07, F0005, F0006,
+  F0100, ADR 0012, 0016, 0030 and design.md no longer call `request-model` unimplemented or name a
+  removed operation as selectable.
+- **Left:** the harness sees only a kernel step's last-stage effects (step 3 review finding 7).
+
+**E1 step 5 review fixes, 13 November 2026** (contract-reviewer findings 1-6; DE1 decision 6 stands,
+no deviation remains):
+- **Packaged smoke:** the 13 denial cases that named stage or removed ids and passed only because the id
+  is unknown are deleted; two remain (an operation of the removed lifecycle, a stage id), each
+  described as rejected as an unknown operation.
+- **Rejection test:** `request-model: a workflow cannot select a request stage or an operation of the
+  removed lifecycle` now pins the production registry's ids to the exact 8, asserts each removed or
+  stage id does not resolve, rejects it at the start of a graph and after a `request-model` step
+  inside a called subgraph, and compiles the same subgraph with a registered release as the control.
+- **YAML-shape tests:** nine deleted, four trimmed to their forged-compiled-contract half, seven kept
+  (marked in the Z_SPEC01 table); their surviving rows moved into the kernel compiler test.
+- **Docs:** ADR 0039 (route rule replaced by the orchestrator's branch tests), 14-orchestration,
+  12-model-boundary, ADR 0012 and the closed-work text in C29; `decode_requires` is now
+  `admission_requires`.
+- **Harness mutation:** the retention-position mutation now uses a registered operation
+  (`release-model-request`), so it proves the composition flow, not the unknown-operation rule.
+- **Runner:** the three prepare-then-commit `catch unreachable` calls carry one stated invariant.
+
+**DE1c decided 13 November 2026** (user: "yes, recommendations approved", to the two questions the
+step 3 review raised):
+1. **Harness evidence.** The three evidence keys the E2E harness reads after a step
+   (`provider_authorization_result`, `model_envelope_result`, `provider_invocation_result`) become
+   recorded-retention keys, so the kernel may drop them from the current envelope when the step ends
+   and the harness reads them through recorded history, as it already reads
+   `provider_invocation_validation_result`. The kept key set stays DE1 decision 2's five. No runner
+   stage observer is added.
+2. **Stage names on every event.** Every stage event of a kernel step carries its stage name:
+   `action_started`, `action_completed` and `action_invalid` gain the optional `step_id` that
+   `action_failed` carries, and `e2e-step-event` advances in step 6.
+
+**E1 steps 2 and 3 done, 13 November 2026** (the Spec workflow, packaging fixture and the 26 lifecycle
+entries are unchanged; the old and the new path coexist until step 5):
+- **Stages.** `src/domain/model_request_stage.zig` fixes 17 stages (ADR 0030's 13 stage list, with the
+  runaway check, correction and re-send, and the two pre-call terminations, each a stage). JSON-part
+  retention and ledger initialization stay YAML steps (ADR 0030 "What stays in YAML"), so no stage retains
+  a part. `model_request_orchestrator.zig` follows only stage outcomes, by the transition table in
+  `model_request_kernel.zig`; the runner owns each stage through `executeBound` and bounds attempt-accounting
+  entries by 2 x (1 + `retry-limit`) (`KernelAdmission`).
+- **Registry.** `Entry.request_stages` (`StageEntry`: stage, contract, binding) marks the one kernel
+  entry, `request-model`. `Registry.validate` checks its contract against `model_request_kernel.zig`,
+  its capabilities as the exact union of its stages' (`bindRequestKernel` derives them from the stage
+  contexts' ports), its parameters as the preparation stage's plus `retry-limit`, and each stage as any
+  contract. Direct invocation of the kernel binding fails; only the runner runs it.
+- **Net contract.** Requires the ledger (optional `model_input_packet`, `json_composition`), replaces it,
+  produces `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation` and
+  `model_payload_schema_result`; outcomes ok, invalid, failed, cancelled; no association (`independent`),
+  so the outcome-flow proof still forces every non-`ok` edge to a matching terminal. The runner drops
+  the engine-internal keys (`model_request_kernel.internal_keys`: eight) in one engine-owned delta
+  when the step ends, whatever the outcome (DE1b 2).
+- **Compiler.** A kernel step also compiles `CompiledStep.request_stages` from the stage contracts (the
+  step's own parameters, plus the engine-fixed `transition`); stages take the step's id for retry and gate
+  identity, are no graph step, and the step contributes nothing to `calculateExecutionLimit` (it counts as
+  one execution). Graph validation runs the stage-level checks on each stage and the kernel projection on
+  the step; the composition flow treats the kernel step as beginning and completing its request.
+- **Runner.** Each stage runs the unchanged step body (capability, authority, gate, token budget,
+  accounting, lease, retention checks) with its own stage entry; the step takes one execution; retry
+  exhaustion carries `Exhaustion.stage` (`atStage`; `describe` returns the name); each stage emits
+  `action_started` and its outcome event under the originating step's id, every one naming the stage
+  (`stage.name()` through `step_id`, DE1c), and the step's failed event names the stage that ended it.
+- **Proof.** Tests in `model_request_workflow_test.zig` ("request-model: ...": success and the kept keys,
+  protocol correction, ADR 0039 re-send and its failure, pre-call termination, provider and runtime
+  cancellation, retry exhaustion naming the stage, token-budget stop, composition-part retention request
+  after request, event counts and stage names, registry/compile/runner rejections) and
+  `model_request_orchestrator_test.zig` (spy child bindings).
+- **Decisions the work needed or leaves** (none changes an accepted text):
+  1. *Stage names on non-failed events.* Decided by DE1c (13 November 2026, yes) and implemented
+     below: `action_started`, `action_completed` and `action_invalid` gain the optional `step_id`.
+  2. *Compile-time rejection of a stage operation id in YAML* needs the stage operations unregistered, so
+     it lands with step 5; until then the 26 entries remain selectable.
+  3. *Release.* `retire-model-request`/`retire-model-transport` (`model_transport.Retire`) invalidate keys
+     the kernel never leaves (the six internal request keys), so a workflow cannot release a kernel step's
+     records with them. Step 5 changes `Retire` to the kept set (plus the packet where it keeps it);
+     the tests use a test-owned release step until then.
+- **Review follow-ups, 13 November 2026** (the step 3 `contract-reviewer` findings that needed no
+  decision; findings 2, 7, 9 and 11 and the event naming stay with DE1c and step 6):
+  - *Extraction evidence.* `reference_extraction_contract.capture` finds a composition part's producer
+    through `workflow_model.startsRequest`, as the composition flow does, so a `request-model` step is
+    captured with its own operation and parameters, alone or beside explicit request steps. The persisted
+    extraction contract changes shape for such workflows, and the `specification-state` bump in step 6
+    carries it. An architecture pin keeps every such consumer on `startsRequest`.
+  - *Outcome sets.* The per-stage transition table is domain data (`model_request_kernel.next`); the
+    registry rejects a stage whose registered outcomes differ from it (`sameStageOutcomes`), so a contract
+    that gains an outcome fails at registration, not as an opaque rejection mid-request.
+  - *Kernel projection.* `validProjection` also fixes the operation id; the generic validators a kernel
+    step does not take are stated once (`takesSingleOperationValidators`). Gate-evidence exclusivity now
+    covers every stage contract.
+  - *Allowance.* The orchestrator holds no count; `KernelAdmission` in the runner counts attempt-accounting
+    entries and refuses the one beyond the allowance as a retry exhaustion naming the stage. No real stage
+    sequence reaches it (the retry authority and ADR 0039's single re-send stop first), so it is proved at
+    its seam.
+  - *Stage names.* A rejection of the step's own closing work names no stage; the step's failed event
+    names the stage that ended it only when it ends with the stage's outcome. That closing work makes no
+    allocation in the proof run, so an unnamed closing failure cannot be induced offline; the invariant
+    that a named step event follows its stage's failed event is swept over every runner allocation.
+  - *Single check owner.* `executeBound` owns the contract, capability and policy checks for a step and
+    for a stage; the shared event bracket is `actionStart`/`actionEnd`. The policy check per stage cannot
+    fail independently of the registry validation every step begins with, so it is proved as a stage's
+    compiled capabilities against its registered ones, at the deepest stage before the call.
+- **DE1c implemented, 13 November 2026.**
+  - *Recorded evidence.* `provider_authorization_result`, `model_envelope_result` and
+    `provider_invocation_result` are recorded information (`.captured().recorded()`, as
+    `provider_invocation_validation_result` already was), so the kernel's closing drop leaves their
+    history. Retention changes no current-value rule: wherever the old lifecycle holds one of them
+    current, history ends at that very value (a per-step probe over the old lifecycle proves it). The
+    E2E harness reads them from history: `observation.capture` the authorization and envelope evidence,
+    and `Trace.recordStep` every recorded raw exchange the step made, each joined to its captured call
+    by origin, so the model-output artifact of every call of one kernel step is written (a legacy step
+    made one call; the same walk finds it). Runner stage observer: none; kept key set: DE1's five.
+  - *Stage names.* The runner's stage events go through `Capture.requestStage`, which names the stage
+    on start, completion, invalid and failure; `Capture.action` keeps ADR 0031's rule (a failed stage
+    action's event only). The step's own start and end events name nothing, but its failed end names
+    the stage that ended it.
+  - *Defect found by the first run of a request-model workflow through the production startup.* The
+    workflow registry's own validation (`graphProjectsDefinition`) took the single-operation validators
+    for a kernel step (graph validation already exempts it), and `cloneGraph` copied `request_stages` as
+    borrowed slices. A project workflow using `request-model` failed to boot with
+    `WORKFLOW_REGISTRY_INVALID`, and a registry that did accept one would have kept stage slices of the
+    compile's arena. Both are fixed at the owner (`kernel.takesSingleOperationValidators` and
+    `validProjection` in the registry check; `cloneStep` deep-copies each stage), proved by a registry
+    test that runs the copy.
+  - *Not proved offline until step 4.* A model call of a kernel step under the harness `Trace` needs the
+    feature log active (the model capture persists into it), which only the Spec flow activates; so the
+    protocol-rejection evidence and the per-call model-output artifacts of a kernel step are covered
+    by the history tests in `model_request_workflow_test.zig` and by the compile-checked reader changes,
+    and are exercised by the existing harness integration tests once step 4 switches the Spec workflow.
+    The authorization-failure report is proved end to end under `Trace` on a project workflow.
+  - *Also found.* A kernel step cannot end a workflow with no consumer (a following step is required,
+    as `kernelObserver` supplies); the one production operation that releases a request
+    (`retire-model-transport`) is not kernel-compatible until step 5 changes `Retire` (decision 3).
+    After a correction, the evidence still current when a retry-limit rejection ends the step depends on
+    where the request stopped, which is why observers read history.
+- **Version bumps for step 6** (named, not made): `spec-e2e-report` (`retry_error` gains `stage`;
+  `Exhaustion.Description.stage`); the feature-log event templates `action.started/v1`,
+  `action.completed/v1` and `action.invalid/v1` (DE1c: they may carry `step_id`; the heading, `feature-log/v2`
+  and `event-columns/v3`, already have the column); `e2e-step-event` carries no log field and is not moved by
+  DE1c, only by step 4's compiled step ids; and the contracts E1's step 4 changes (compiled step ids):
+  `model-request-debug`, `model-call-evidence`, `request-source`, `e2e-step-event`, `specification-state`.
+- **Step 4 done, 13 November 2026** (the Spec workflow and the packaging fixture use `request-model`; the
+  old lifecycle entries, their validators and the 196 lifecycle tests stay until step 5). The five wrapper
+  subgraphs and `model-request-body` are gone from `spec.workflow.yaml`: each of the 17 request call sites is
+  one `request-model` step with the same outcome targets and `retry-limit`; `retain-json-part` is now its own
+  step after each composition request (`retain-content`, `retain-classifications`, `retain-summary`).
+  - *Release.* The old `Retire` contract invalidates keys a kernel step no longer leaves current, and the
+    old lifecycle needs them retired, so one contract cannot serve both until step 5. This step adds
+    `release-model-request` and `release-model-transport` (actions `release_model_request.zig`,
+    `release_model_transport.zig`; `transport.Retirement.released_request[_and_input]`), which retire
+    only the kept keys (`released_keys`); the Spec YAML uses them and the `retire-model-*` operations serve the
+    old lifecycle alone. Step 5 deletes the `retire-model-*` operations with the old lifecycle; no alias.
+    A smaller alternative would change `Retire` itself and port the old-lifecycle tests now; that is step 5.
+  - *Test seams.* Scripted tests chose each answer at a `invoke-model` step boundary, which a kernel step
+    does not have, so `FakeLLMProvider` gained `before_invoke`/`after_invoke` hooks (run around the effect,
+    once the call is validated) and the Spec driver and the harness production driver choose their answer
+    there (`spec_generation_driver.beforeInvoke`, `ProductionRun.beforeInvoke`; the answer outlives the hook
+    in an arena freed by `afterInvoke`). The provider compatibility probe stops after its one exchange at
+    the next step boundary; for a kernel step it needs a stage boundary, so the runner has an optional
+    `request_stage_gate` (consulted before each stage, returns a rejection or null, holds no capability) which
+    `Trace` sets for the single-exchange purpose only. The debugger archive checked that a call's action
+    equals its caller chain's last operation; a `request-model` caller's action is its inference stage
+    (ADR 0030, "its action ID records the stage"), so `kernel.callActionBelongsTo` states that one rule.
+  - *Goldens changed, each the intended effect of the switch.* `workflow_tests.zig`: the parent of the
+    diagnostic preflight is a `request-model` step (was `prepare-model-request`), and the retry exhaustion
+    names the `request-model` step and the `advance-attempt` stage (was the `advance-model-attempt-accounting`
+    step). `harness/integration/tests.zig`: the registry-mutation test looks for the step that starts a
+    request with `startsRequest` (was `assignsRequest`, which a kernel step never satisfies). No assertion was
+    removed or loosened; the packaging fixture `provider-request.workflow.yaml` is the same request as one
+    `request-model` step and a release.
+  - *Proof, offline, on the final tree.* `zig build test` 1993/1993, `test-architecture`, `lint`,
+    `test-model-request-workflow`, `test-workflow-graph test-workflow-operation-registry test-atomic-execution`,
+    `test-integration` (every row passed) and `smoke` pass. Request projection: the pair against
+    `evaluations/request-projection/e1-before` is byte-identical (`diff -rq` empty), so what each request
+    sends is unchanged. Step trace against `evaluations/step-trace/e1-before`, 139 scenarios: every
+    published file is byte-identical except `state/workflow.json` in 100 scenarios, where the persisted
+    compiled steps now name `request-model` and its parameters (the extraction contract; step 6's
+    `specification-state` bump); the summary JSON is identical apart from `steps`, `trace_sha256` and the
+    retry-exhaustion text, which gained `:stage=advance-attempt` (21 scenarios); in the 135 differing
+    `.trace` files every line that is not a request-lifecycle, retain or release line is identical and in the
+    same order. The differences are: the stage lines of a request (`prepare-model-request` through
+    `complete-model-request`) collapse to one `<site>#request-model` line; `retain-json-part` moves from the
+    collapsed wrapper site to its own step (`extract/retain-content`, ...); `retire-model-*` lines become
+    `release-model-*`.
+  - *Versions this step moves, none bumped:* `specification-state` (the persisted extraction contract: compiled
+    step ids and operations), `model-request-debug`, `model-call-evidence` and `request-source` (their records name the
+    `request-model` step, with the stage as the call's action), `e2e-step-event`; plus the step 3 list above.
+    The golden step-trace files are an observation, not a contract (`workflow-step-trace/v1`).
+  - *Left for later steps.* The old lifecycle, its 26 entries, validators, text-order pins and the 196
+    lifecycle tests (step 5); the wrapper-collapse code in `workflow_step_trace.zig` and its three tests,
+    which no workflow uses now (step 5); the version bumps (step 6); the final projection and step-trace
+    pairs and `verify` (step 7).
 
 ### E2. Stage actions (A2, ADR 0031)
 
@@ -1512,13 +1886,11 @@ definition.
 **C29. YAML duplicates, dead edges and one-valued options.** Bare line numbers in this item are
 `spec.workflow.yaml`.
 
-- Identical bodies: the `model-request` and `support-request` subgraphs (`:922-953`; E1 removes
-  both); the `finish-native` and `finish-model` steps (`:348-353`); the `release-signals` and
-  `release-conflicts` steps (`:547-549`, `:567-569`). `repair-source-extraction` and
-  `repair-source-candidate` (`:856-886`) differ in one step. Only the step-trace fixture names
-  any of these: `model-request` and `support-request`
-  (`src/test_fixtures/workflow_step_trace.zig:19`). Whether the join rule
-  (`workflow_data_flow.zig:70`) requires the paired steps wasn't checked.
+- Identical bodies: the `finish-native` and `finish-model` steps (`:348-353`); the
+  `release-signals` and `release-conflicts` steps (`:547-549`, `:567-569`).
+  `repair-source-extraction` and `repair-source-candidate` (`:856-886`) differ in one step.
+  Whether the join rule (`workflow_data_flow.zig:70`) requires the paired steps wasn't
+  checked.
 - `check-reconciliation`'s `ok: end.ok` (`:505-507`) can't be taken. The step runs only after a
   summary response or repair, on the input for which the same check returned `more` at
   `select-composition` (`:460-462`; `check_reference_reconciliation_purpose.zig:5-8`), and that

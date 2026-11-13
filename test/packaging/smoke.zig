@@ -140,10 +140,13 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_unregistered.expectStdOutEqual("");
     denied_unregistered.expectStdErrEqual("WORKFLOW_AUTHORITY_INVENTORY_INVALID\n");
 
-    const missing_request_directory = b.addTempFiles();
-    const missing_request_executable = missing_request_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_request_directory.add(".sddtoolkit.json", configuration);
-    _ = missing_request_directory.add(".sddtoolkit/workflows/account.workflow.yaml",
+    // The request lifecycle is the engine's `request-model` step (ADR 0030): neither an
+    // operation of the removed lifecycle nor one of its stages is a selectable operation.
+    // Each packaged case below is rejected as an unknown operation, not for missing inputs.
+    const removed_id_directory = b.addTempFiles();
+    const removed_id_executable = removed_id_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = removed_id_directory.add(".sddtoolkit.json", configuration);
+    _ = removed_id_directory.add(".sddtoolkit/workflows/account.workflow.yaml",
         \\schema: workflow/v1
         \\id: account
         \\version: 1
@@ -154,302 +157,38 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\steps:
         \\  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
     );
-    const denied_accounting = std.Build.Step.Run.create(b, "reject packaged attempt accounting without a prepared request");
-    denied_accounting.addFileArg(missing_request_executable);
-    denied_accounting.addArg("account");
-    denied_accounting.setCwd(missing_request_directory.getDirectory());
-    denied_accounting.clearEnvironment();
-    denied_accounting.expectExitCode(1);
-    denied_accounting.expectStdOutEqual("");
-    denied_accounting.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    const denied_removed_id = std.Build.Step.Run.create(b, "reject a packaged operation of the removed request lifecycle as an unknown operation");
+    denied_removed_id.addFileArg(removed_id_executable);
+    denied_removed_id.addArg("account");
+    denied_removed_id.setCwd(removed_id_directory.getDirectory());
+    denied_removed_id.clearEnvironment();
+    denied_removed_id.expectExitCode(1);
+    denied_removed_id.expectStdOutEqual("");
+    denied_removed_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
 
-    const missing_attempt_directory = b.addTempFiles();
-    const missing_attempt_executable = missing_attempt_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_attempt_directory.add(".sddtoolkit.json", configuration);
-    _ = missing_attempt_directory.add(".sddtoolkit/workflows/assign.workflow.yaml",
+    const stage_id_directory = b.addTempFiles();
+    const stage_id_executable = stage_id_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = stage_id_directory.add(".sddtoolkit.json", configuration);
+    _ = stage_id_directory.add(".sddtoolkit/workflows/stage.workflow.yaml",
         \\schema: workflow/v1
-        \\id: assign
+        \\id: stage
         \\version: 1
-        \\shortcode: ASGN
+        \\shortcode: STGE
         \\invoke: core.empty-invocation
         \\policy: core.capability-free@1
-        \\start: assign
+        \\start: stage
         \\steps:
-        \\  assign: { use: assign-provider-operation, on: { ok: end.ok, failed: end.failed } }
+        \\  stage: { use: advance-attempt, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
     );
-    const denied_assignment = std.Build.Step.Run.create(b, "reject packaged provider assignment without prepared request and attempt evidence");
-    denied_assignment.addFileArg(missing_attempt_executable);
-    denied_assignment.addArg("assign");
-    denied_assignment.setCwd(missing_attempt_directory.getDirectory());
-    denied_assignment.clearEnvironment();
-    denied_assignment.expectExitCode(1);
-    denied_assignment.expectStdOutEqual("");
-    denied_assignment.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_accounting.step.dependOn(&denied_assignment.step);
-
-    const missing_assignment_directory = b.addTempFiles();
-    const missing_assignment_executable = missing_assignment_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_assignment_directory.add(".sddtoolkit.json", configuration);
-    _ = missing_assignment_directory.add(".sddtoolkit/workflows/authorize.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: authorize
-        \\version: 1
-        \\shortcode: AUTH
-        \\invoke: core.empty-invocation
-        \\policy: core.model-authorization@1
-        \\start: authorize
-        \\steps:
-        \\  authorize: { use: prepare-provider-operation-authorization, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_authorization = std.Build.Step.Run.create(b, "reject packaged authorization without an assigned operation");
-    denied_authorization.addFileArg(missing_assignment_executable);
-    denied_authorization.addArg("authorize");
-    denied_authorization.setCwd(missing_assignment_directory.getDirectory());
-    denied_authorization.clearEnvironment();
-    denied_authorization.expectExitCode(1);
-    denied_authorization.expectStdOutEqual("");
-    denied_authorization.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_assignment.step.dependOn(&denied_authorization.step);
-
-    const missing_authorization_directory = b.addTempFiles();
-    const missing_authorization_executable = missing_authorization_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_authorization_directory.add(".sddtoolkit.json", configuration);
-    _ = missing_authorization_directory.add(".sddtoolkit/workflows/advance.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: advance
-        \\version: 1
-        \\shortcode: ADVN
-        \\invoke: core.empty-invocation
-        \\policy: core.capability-free@1
-        \\start: advance
-        \\steps:
-        \\  advance: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
-    );
-    const denied_request_lifecycle = std.Build.Step.Run.create(b, "reject packaged request invocation without prepared authorization");
-    denied_request_lifecycle.addFileArg(missing_authorization_executable);
-    denied_request_lifecycle.addArg("advance");
-    denied_request_lifecycle.setCwd(missing_authorization_directory.getDirectory());
-    denied_request_lifecycle.clearEnvironment();
-    denied_request_lifecycle.expectExitCode(1);
-    denied_request_lifecycle.expectStdOutEqual("");
-    denied_request_lifecycle.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_authorization.step.dependOn(&denied_request_lifecycle.step);
-
-    const missing_invocation_directory = b.addTempFiles();
-    const missing_invocation_executable = missing_invocation_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_invocation_directory.add(".sddtoolkit.json", configuration);
-    _ = missing_invocation_directory.add(".sddtoolkit/workflows/advance-operation.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: advance-operation
-        \\version: 1
-        \\shortcode: AOPR
-        \\invoke: core.empty-invocation
-        \\policy: core.capability-free@1
-        \\start: advance
-        \\steps:
-        \\  advance: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
-    );
-    const denied_operation_lifecycle = std.Build.Step.Run.create(b, "reject packaged provider invocation without its prepared lease and assigned operation");
-    denied_operation_lifecycle.addFileArg(missing_invocation_executable);
-    denied_operation_lifecycle.addArg("advance-operation");
-    denied_operation_lifecycle.setCwd(missing_invocation_directory.getDirectory());
-    denied_operation_lifecycle.clearEnvironment();
-    denied_operation_lifecycle.expectExitCode(1);
-    denied_operation_lifecycle.expectStdOutEqual("");
-    denied_operation_lifecycle.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_request_lifecycle.step.dependOn(&denied_operation_lifecycle.step);
-
-    const missing_call_inputs = b.addTempFiles();
-    const call_executable = missing_call_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_call_inputs.add(".sddtoolkit.json", configuration);
-    _ = missing_call_inputs.add(".sddtoolkit/workflows/call.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: call
-        \\version: 1
-        \\shortcode: CALL
-        \\invoke: core.empty-invocation
-        \\policy: core.model-inference@1
-        \\start: call
-        \\steps:
-        \\  call: { use: invoke-model, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_call = std.Build.Step.Run.create(b, "reject packaged model call without retained request invocation and authorization");
-    denied_call.addFileArg(call_executable);
-    denied_call.addArg("call");
-    denied_call.setCwd(missing_call_inputs.getDirectory());
-    denied_call.clearEnvironment();
-    denied_call.expectExitCode(1);
-    denied_call.expectStdOutEqual("");
-    denied_call.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_operation_lifecycle.step.dependOn(&denied_call.step);
-
-    const missing_observation_inputs = b.addTempFiles();
-    const observation_executable = missing_observation_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_observation_inputs.add(".sddtoolkit.json", configuration);
-    _ = missing_observation_inputs.add(".sddtoolkit/workflows/observation.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: observation
-        \\version: 1
-        \\shortcode: OBSV
-        \\invoke: core.empty-invocation
-        \\policy: core.model-inference@1
-        \\start: validate
-        \\steps:
-        \\  validate: { use: validate-provider-invocation-observation, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_observation = std.Build.Step.Run.create(b, "reject packaged observation validation without its retained call and response");
-    denied_observation.addFileArg(observation_executable);
-    denied_observation.addArg("observation");
-    denied_observation.setCwd(missing_observation_inputs.getDirectory());
-    denied_observation.clearEnvironment();
-    denied_observation.expectExitCode(1);
-    denied_observation.expectStdOutEqual("");
-    denied_observation.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_call.step.dependOn(&denied_observation.step);
-
-    const missing_decode_inputs = b.addTempFiles();
-    const decode_executable = missing_decode_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_decode_inputs.add(".sddtoolkit.json", configuration);
-    _ = missing_decode_inputs.add(".sddtoolkit/workflows/decode.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: decode
-        \\version: 1
-        \\shortcode: DECO
-        \\invoke: core.empty-invocation
-        \\policy: core.model-inference@1
-        \\start: decode
-        \\steps:
-        \\  decode: { use: decode-model-envelope, on: { ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_decode = std.Build.Step.Run.create(b, "reject packaged decoding without retained complete observation evidence");
-    denied_decode.addFileArg(decode_executable);
-    denied_decode.addArg("decode");
-    denied_decode.setCwd(missing_decode_inputs.getDirectory());
-    denied_decode.clearEnvironment();
-    denied_decode.expectExitCode(1);
-    denied_decode.expectStdOutEqual("");
-    denied_decode.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_observation.step.dependOn(&denied_decode.step);
-
-    const missing_payload_inputs = b.addTempFiles();
-    const payload_executable = missing_payload_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_payload_inputs.add(".sddtoolkit.json", configuration);
-    _ = missing_payload_inputs.add(".sddtoolkit/workflows/payload.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: payload
-        \\version: 1
-        \\shortcode: PAYL
-        \\invoke: core.empty-invocation
-        \\policy: core.model-inference@1
-        \\start: validate
-        \\steps:
-        \\  validate: { use: validate-model-payload-schema, on: { ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_payload = std.Build.Step.Run.create(b, "reject packaged payload validation without its decoded candidate");
-    denied_payload.addFileArg(payload_executable);
-    denied_payload.addArg("payload");
-    denied_payload.setCwd(missing_payload_inputs.getDirectory());
-    denied_payload.clearEnvironment();
-    denied_payload.expectExitCode(1);
-    denied_payload.expectStdOutEqual("");
-    denied_payload.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_decode.step.dependOn(&denied_payload.step);
-
-    const missing_completion_inputs = b.addTempFiles();
-    const completion_executable = missing_completion_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_completion_inputs.add(".sddtoolkit.json", configuration);
-    _ = missing_completion_inputs.add(".sddtoolkit/workflows/complete.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: complete
-        \\version: 1
-        \\shortcode: COMP
-        \\invoke: core.empty-invocation
-        \\policy: core.model-inference@1
-        \\start: complete
-        \\steps:
-        \\  complete: { use: complete-provider-operation, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_completion = std.Build.Step.Run.create(b, "reject packaged provider completion without invocation and observation evidence");
-    denied_completion.addFileArg(completion_executable);
-    denied_completion.addArg("complete");
-    denied_completion.setCwd(missing_completion_inputs.getDirectory());
-    denied_completion.clearEnvironment();
-    denied_completion.expectExitCode(1);
-    denied_completion.expectStdOutEqual("");
-    denied_completion.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_payload.step.dependOn(&denied_completion.step);
-
-    const missing_request_closure = b.addTempFiles();
-    const closure_executable = missing_request_closure.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_request_closure.add(".sddtoolkit.json", configuration);
-    _ = missing_request_closure.add(".sddtoolkit/workflows/close.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: close
-        \\version: 1
-        \\shortcode: CLOS
-        \\invoke: core.empty-invocation
-        \\policy: core.model-inference@1
-        \\start: close
-        \\steps:
-        \\  close: { use: complete-model-request, on: { ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_closure = std.Build.Step.Run.create(b, "reject packaged request closure without terminal operation and payload evidence");
-    denied_closure.addFileArg(closure_executable);
-    denied_closure.addArg("close");
-    denied_closure.setCwd(missing_request_closure.getDirectory());
-    denied_closure.clearEnvironment();
-    denied_closure.expectExitCode(1);
-    denied_closure.expectStdOutEqual("");
-    denied_closure.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_completion.step.dependOn(&denied_closure.step);
-
-    const missing_termination_inputs = b.addTempFiles();
-    const termination_executable = missing_termination_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_termination_inputs.add(".sddtoolkit.json", configuration);
-    _ = missing_termination_inputs.add(".sddtoolkit/workflows/terminate.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: terminate
-        \\version: 1
-        \\shortcode: TERM
-        \\invoke: core.empty-invocation
-        \\policy: core.model-authorization@1
-        \\start: terminate
-        \\steps:
-        \\  terminate: { use: terminate-provider-operation, on: { failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_termination = std.Build.Step.Run.create(b, "reject packaged pre-call termination without assignment and authorization evidence");
-    denied_termination.addFileArg(termination_executable);
-    denied_termination.addArg("terminate");
-    denied_termination.setCwd(missing_termination_inputs.getDirectory());
-    denied_termination.clearEnvironment();
-    denied_termination.expectExitCode(1);
-    denied_termination.expectStdOutEqual("");
-    denied_termination.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_closure.step.dependOn(&denied_termination.step);
-
-    const missing_pre_call_closure = b.addTempFiles();
-    const pre_call_closure_executable = missing_pre_call_closure.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-    _ = missing_pre_call_closure.add(".sddtoolkit.json", configuration);
-    _ = missing_pre_call_closure.add(".sddtoolkit/workflows/close.workflow.yaml",
-        \\schema: workflow/v1
-        \\id: close
-        \\version: 1
-        \\shortcode: CLOS
-        \\invoke: core.empty-invocation
-        \\policy: core.model-authorization@1
-        \\start: close
-        \\steps:
-        \\  close: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
-    );
-    const denied_pre_call_closure = std.Build.Step.Run.create(b, "reject packaged pre-call request closure without terminal operation and authorization evidence");
-    denied_pre_call_closure.addFileArg(pre_call_closure_executable);
-    denied_pre_call_closure.addArg("close");
-    denied_pre_call_closure.setCwd(missing_pre_call_closure.getDirectory());
-    denied_pre_call_closure.clearEnvironment();
-    denied_pre_call_closure.expectExitCode(1);
-    denied_pre_call_closure.expectStdOutEqual("");
-    denied_pre_call_closure.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-    denied_termination.step.dependOn(&denied_pre_call_closure.step);
+    const denied_stage_id = std.Build.Step.Run.create(b, "reject a packaged request stage id as an unknown operation");
+    denied_stage_id.addFileArg(stage_id_executable);
+    denied_stage_id.addArg("stage");
+    denied_stage_id.setCwd(stage_id_directory.getDirectory());
+    denied_stage_id.clearEnvironment();
+    denied_stage_id.expectExitCode(1);
+    denied_stage_id.expectStdOutEqual("");
+    denied_stage_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_removed_id.step.dependOn(&denied_stage_id.step);
 
     for ([_][2][]const u8{
         .{ "build-specification-authority-requirements", "ok: end.ok, blocked: end.blocked" },
@@ -473,7 +212,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         denied.expectExitCode(1);
         denied.expectStdOutEqual("");
         denied.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
-        denied_pre_call_closure.step.dependOn(&denied.step);
+        denied_stage_id.step.dependOn(&denied.step);
     }
 
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
@@ -564,7 +303,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&valid_command.step);
     missing_config_command.step.dependOn(&request_ledger_command.step);
     missing_config_command.step.dependOn(&denied_unregistered.step);
-    missing_config_command.step.dependOn(&denied_accounting.step);
+    missing_config_command.step.dependOn(&denied_removed_id.step);
     missing_config_command.step.dependOn(&denied_toolchain.step);
     missing_config_command.step.dependOn(&toolchain_command.step);
     missing_config_command.step.dependOn(&path_token_command.step);

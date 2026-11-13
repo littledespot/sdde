@@ -4,6 +4,7 @@ const workflow = @import("workflow.zig");
 const definition = @import("workflow_definition.zig");
 const compilation = @import("workflow_compilation.zig");
 const workflow_retry = @import("workflow_retry.zig");
+const kernel = @import("model_request_kernel.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -28,33 +29,13 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
         !compilation.validResourceBindings(graph.authority.resources) or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
     for (steps) |step| {
-        if (!@import("workflow_iteration.zig").validProjection(step)) return invalid();
-        if (!@import("workflow_operation.zig").validRepair(step.repair_role, if (step.retry_authority) |value| value.scope else null, step.runner_accounting, step.side_effect)) return invalid();
-        if (step.repair_role != .none and step.capabilities.len != 0) return invalid();
-        if (!@import("workflow_outcome_association.zig").validDescriptor(step.outcome_association, step.requires, step.optional, step.produces, step.replaces, step.repair_role)) return invalid();
-        if (workflow.WorkflowStepId.parse(step.id.bytes) == null or workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
-        if (!@import("workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
-        if (!@import("workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();
-        if (!@import("workflow_model.zig").validProjection(step)) return invalid();
-        if (!@import("workflow_model_request_lifecycle.zig").validProjection(step)) return invalid();
-        if (!@import("workflow_provider_operation.zig").validProjection(step)) return invalid();
-        if (!@import("workflow_provider_authorization.zig").validProjection(step)) return invalid();
-        if (!@import("workflow_model_invocation.zig").validProjection(step)) return invalid();
-        const retry_parameter = findParameter(step.parameters, workflow_retry.parameter_id);
-        if (step.retry_authority) |authority| {
-            if (!authority.isValid() or
-                !std.mem.eql(u8, authority.workflow_id.bytes, graph.authority.workflow_id.bytes) or
-                authority.workflow_version != graph.authority.workflow_version or
-                !std.mem.eql(u8, authority.operation_instance_id.bytes, step.id.bytes) or
-                retry_parameter == null or retry_parameter.?.value != .integer or
-                retry_parameter.?.value.integer < 0 or
-                authority.limit.value != retry_parameter.?.value.integer)
-            {
-                return invalid();
-            }
-        } else if (retry_parameter != null) {
-            return invalid();
+        if (kernel.isKernel(step)) {
+            // The kernel step's own contract is fixed by the domain; its stages are the steps
+            // the stage-level checks below apply to (ADR 0030).
+            if (!kernel.validProjection(step)) return invalid();
+            for (step.request_stages) |stage| try validateStep(graph, stage.step);
         }
+        try validateStep(graph, step);
     }
     const start = stepIndex(steps, graph.authority.start_step_id.bytes) orelse return invalid();
     try validateReachability(allocator, steps, graph.authority.transitions, start);
@@ -62,22 +43,51 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
     try validateBoundedCycles(allocator, steps, graph.authority.transitions);
     try validateIterationResets(allocator, steps, graph.authority.transitions);
     @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
-    @import("workflow_model_request_lifecycle.zig").validateRunawayRoutes(graph.authority) catch return invalid();
     const flow = @import("workflow_data_flow.zig").analyze(allocator, graph.authority) catch return invalid();
     allocator.free(flow);
+}
+
+/// One compiled step's own checks. The validators a kernel step does not take are stated once,
+/// at `kernel.takesSingleOperationValidators`.
+fn validateStep(graph: compilation.CompiledWorkflow, step: compilation.CompiledStep) Error!void {
+    const single_operation = kernel.takesSingleOperationValidators(step);
+    if (!@import("workflow_iteration.zig").validProjection(step)) return invalid();
+    if (single_operation and !@import("workflow_operation.zig").validRepair(step.repair_role, if (step.retry_authority) |value| value.scope else null, step.runner_accounting, step.side_effect)) return invalid();
+    if (step.repair_role != .none and step.capabilities.len != 0) return invalid();
+    if (!@import("workflow_outcome_association.zig").validDescriptor(step.outcome_association, step.requires, step.optional, step.produces, step.replaces, step.repair_role)) return invalid();
+    if (workflow.WorkflowStepId.parse(step.id.bytes) == null or workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
+    if (single_operation and !@import("workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
+    if (!@import("workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();
+    if (!@import("workflow_model.zig").validProjection(step)) return invalid();
+    if (single_operation) {
+        if (!@import("workflow_model_request_lifecycle.zig").validProjection(step)) return invalid();
+        if (!@import("workflow_provider_operation.zig").validProjection(step)) return invalid();
+        if (!@import("workflow_provider_authorization.zig").validProjection(step)) return invalid();
+        if (!@import("workflow_model_invocation.zig").validProjection(step)) return invalid();
+    }
+    const retry_parameter = findParameter(step.parameters, workflow_retry.parameter_id);
+    if (step.retry_authority) |authority| {
+        if (!authority.isValid() or
+            !std.mem.eql(u8, authority.workflow_id.bytes, graph.authority.workflow_id.bytes) or
+            authority.workflow_version != graph.authority.workflow_version or
+            !std.mem.eql(u8, authority.operation_instance_id.bytes, step.id.bytes) or
+            retry_parameter == null or retry_parameter.?.value != .integer or
+            retry_parameter.?.value.integer < 0 or
+            authority.limit.value != retry_parameter.?.value.integer)
+        {
+            return invalid();
+        }
+    } else if (retry_parameter != null) {
+        return invalid();
+    }
 }
 
 fn validateDataSchemas(authority: compilation.SemanticAuthority) Error!void {
     var required: KeyState = @splat(false);
     for (authority.invocation_outputs) |key| required[@intFromEnum(key)] = true;
     for (authority.steps) |step| {
-        for (step.gates) |gate| {
-            required[@intFromEnum(gate.evidence)] = true;
-            for (gate.authority) |key| required[@intFromEnum(key)] = true;
-        }
-        inline for (.{ step.requires, step.optional, step.produces, step.replaces, step.invalidates }) |keys| {
-            for (keys) |key| required[@intFromEnum(key)] = true;
-        }
+        markKeys(&required, step);
+        for (step.request_stages) |stage| markKeys(&required, stage.step);
     }
     var seen: KeyState = @splat(false);
     for (authority.data_schemas) |schema| {
@@ -86,6 +96,16 @@ fn validateDataSchemas(authority: compilation.SemanticAuthority) Error!void {
         seen[index] = true;
     }
     if (!std.mem.eql(bool, &required, &seen)) return invalid();
+}
+
+fn markKeys(required: *KeyState, step: compilation.CompiledStep) void {
+    for (step.gates) |gate| {
+        required[@intFromEnum(gate.evidence)] = true;
+        for (gate.authority) |key| required[@intFromEnum(key)] = true;
+    }
+    inline for (.{ step.requires, step.optional, step.produces, step.replaces, step.invalidates }) |keys| {
+        for (keys) |key| required[@intFromEnum(key)] = true;
+    }
 }
 
 fn validateReachability(
@@ -158,9 +178,16 @@ fn validateBoundedCycles(
     const colors = allocator.alloc(u2, steps.len) catch return invalid();
     @memset(colors, 0);
     for (steps, 0..) |step, index| {
-        if (step.retry_authority != null or colors[index] != 0) continue;
+        if (guardsCycle(step) or colors[index] != 0) continue;
         try visitUnguarded(steps, transitions, index, colors);
     }
+}
+
+/// A step's retry authority bounds how often a cycle may revisit it. A `request-model` step's
+/// authority does too, as the accounting step it replaces did: it counts attempts per request
+/// assignment, and each execution of the step counts toward the workflow's execution ceiling.
+fn guardsCycle(step: compilation.CompiledStep) bool {
+    return step.retry_authority != null;
 }
 
 fn visitUnguarded(
@@ -170,7 +197,7 @@ fn visitUnguarded(
     colors: []u2,
 ) Error!void {
     if (colors[index] == 1) return invalid();
-    if (colors[index] == 2 or steps[index].retry_authority != null) return;
+    if (colors[index] == 2 or guardsCycle(steps[index])) return;
     colors[index] = 1;
     for (transitions) |transition| {
         if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes) or transition.target != .step) continue;
@@ -178,7 +205,7 @@ fn visitUnguarded(
             if (iteration.kind == .advance and transition.outcome == iteration.outcome) continue;
         }
         const target = stepIndex(steps, transition.target.step.bytes) orelse return invalid();
-        if (steps[target].retry_authority == null) try visitUnguarded(steps, transitions, target, colors);
+        if (!guardsCycle(steps[target])) try visitUnguarded(steps, transitions, target, colors);
     }
     colors[index] = 2;
 }
@@ -197,7 +224,7 @@ fn validateIterationResets(allocator: std.mem.Allocator, steps: []const compilat
 }
 
 fn visitIterationReset(steps: []const compilation.CompiledStep, transitions: []const workflow.Transition, initializer: usize, index: usize, reached: []bool) Error!void {
-    if (reached[index] or steps[index].retry_authority != null) return;
+    if (reached[index] or guardsCycle(steps[index])) return;
     reached[index] = true;
     for (transitions) |transition| {
         if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes) or transition.target != .step) continue;

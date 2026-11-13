@@ -32,6 +32,10 @@ pub const Assembly = struct {
             for (step.produces) |key| if (key == .provider_authorization_result) {
                 required = true;
             };
+            // A `request-model` step authorizes inside its stages (ADR 0030).
+            for (step.request_stages) |stage| for (stage.step.produces) |key| if (key == .provider_authorization_result) {
+                required = true;
+            };
         }
         if (!required) return;
         std.debug.assert(self.provider == null);

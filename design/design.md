@@ -44,7 +44,7 @@ The design has eight defining properties:
    selected validated graph through the common runner. Every workflow operation
    is addressable from concise YAML; the engine contains no hidden workflow
    graph or built-in model-route catalogue. Under
-   [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet implemented),
+   [ADR 0030](decisions/0030-engine-owned-model-request.md),
    the stages of one model request are kernel work behind one YAML-selected
    `request-model` step, not workflow operations. Under
    [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions), the internal
@@ -64,7 +64,7 @@ The resulting boundary is:
 
 - **Workflow YAML owns:** the selected declarative operation graph, operation
   parameters, workflow resources, model slots, and every outcome transition. Under
-  ADR 0030 (not yet implemented), the branches between one model request's
+  ADR 0030, the branches between one model request's
   internal stages are engine-owned; every outcome of the request step stays in YAML.
 - **The engine owns:** closed operation contracts, graph compilation and
   enforcement, policy, facts, identifiers, paths, artifact locations,
@@ -112,9 +112,9 @@ engine fixes them:
   steps of a stage action are not composable on their own; a different combination
   of them needs a new stage action and a rebuild.
 - Keep workflow YAML concise while making every workflow operation, resource,
-  parameter, and outcome transition explicit and configurable. ADR 0030 (not yet
-  implemented) treats one model request's lifecycle stages as engine mechanics, not
-  workflow operations.
+  parameter, and outcome transition explicit and configurable. ADR 0030 (implemented)
+  treats one model request's lifecycle stages as engine mechanics, not workflow
+  operations.
 - Give nano-class models concrete, bounded assignments instead of large agentic prompts.
 - Validate every model-proposed filename and path against a project/environment preset.
 - Repair invalid model output without regenerating valid unrelated work.
@@ -193,7 +193,7 @@ engine fixes them:
     responsibilities named by ADR 0005 remain non-callable. The engine contains
     no built-in model routes, workflow-name branches, or inaccessible domain
     sequence that competes with the compiled YAML graph.
-    [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet implemented)
+    [ADR 0030](decisions/0030-engine-owned-model-request.md)
     adds the fixed stage sequence of one model request to those kernel
     responsibilities. The stage sequence is not a domain sequence; YAML still
     selects each request step and every outcome. Under
@@ -233,9 +233,9 @@ engine fixes them:
   than selecting YAML outcome edges.
 - `invoke-model` accounts actual usage before response publication, cancellation or deadline
   rejection; budget overshoots retain their full usage and exact error.
-- Response decoding and lifecycle terminalization remain explicitly selected operations.
-  [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet implemented) makes
-  them, inference and protocol correction engine-run stages of one `request-model` step.
+- Response decoding and lifecycle terminalization are engine-run stages of one `request-model`
+  step, like inference and protocol correction
+  ([ADR 0030](decisions/0030-engine-owned-model-request.md)).
   The step's `retry-limit` still bounds the correction locally, and usage accounting is
   unchanged.
 
@@ -376,10 +376,11 @@ operation. Planning selects validated identities; later stages consume approved 
 
 ## 12. LLM interaction boundary
 
-Model assignments contain typed data, evidence, guidance, and a closed result schema. Explicit
-workflow operations own preparation, invocation, decoding, review, and repair under the shared
-authority boundary. Under [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet
-implemented), one model request's lifecycle stages run inside one `request-model` step.
+Model assignments contain typed data, evidence, guidance, and a closed result schema. Under
+[ADR 0030](decisions/0030-engine-owned-model-request.md) (implemented), one model request's
+lifecycle stages (preparation, attempt accounting, authorization, invocation, decoding and
+payload validation, protocol correction, closure) run inside one `request-model` step. Explicit
+workflow operations own review and repair under the shared authority boundary.
 
 [Complete §12 contract](contracts/12-model-boundary.md).
 
@@ -1138,7 +1139,7 @@ gives its title and status.
 | [0026](decisions/0026-header-identity-log-retention.md) | Prune prior-run log segments by header identity | Accepted amendment |
 | [0028](decisions/0028-anthropic-messages-provider.md) | Anthropic Messages API provider on shared provider owners | Accepted amendment |
 | [0029](decisions/0029-bedrock-model-families.md) | Bedrock model families | Accepted amendment |
-| [0030](decisions/0030-engine-owned-model-request.md) | One engine-owned step per model request | Accepted amendment, amended 23 October 2026; partly implemented: provider token counting is removed and each catalogue entry requires `requestTimeoutMs`; the `request-model` step is not yet implemented |
+| [0030](decisions/0030-engine-owned-model-request.md) | One engine-owned step per model request | Accepted amendment, amended 23 October 2026; implemented: provider token counting is removed, each catalogue entry requires `requestTimeoutMs`, and the `request-model` step runs every model request of the Spec workflow |
 | [0031](decisions/0031-stage-actions.md) | One action per deterministic stage | Accepted amendment; partly implemented: `prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions; every other stage is not yet converted |
 | [0032](decisions/0032-engine-routines.md) | Typed engine routines for fixed engine sequences | Accepted amendment; startup and provider bootstrap implemented, feature logging not yet |
 | [0033](decisions/0033-generic-repair-operations.md) | Generic repair operations with owner-supplied rules | Accepted amendment; not yet implemented |

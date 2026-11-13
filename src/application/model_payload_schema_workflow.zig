@@ -9,7 +9,9 @@ const observation = @import("provider_observation_workflow.zig");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 
-pub const schema = values.schema(.model_payload_schema_result, Result, 1, null).captured();
+/// Recorded so the harness reads a schema rejection from an earlier attempt of one `request-model`
+/// step after a correction replaced the current value (design/contracts/model-request-operations.md).
+pub const schema = values.schema(.model_payload_schema_result, Result, 1, null).captured().recorded();
 pub const Outcome = union(enum) {
     valid: *const validation.Evidence,
     schema_rejected: validation.Diagnostic,
@@ -24,36 +26,6 @@ pub const Result = opaque {
 
     pub fn outcome(self: *const Result) Outcome {
         return storage(self).outcome;
-    }
-};
-
-pub const Validate = struct {
-    pub const Action = @import("../actions/model/validate_model_payload_schema.zig").Action;
-    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{
-        .id = Action.contract.id,
-        .kind = .step,
-        .requires = Action.contract.requires,
-        .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
-        .side_effect = Action.contract.side_effect,
-        .outcome_association = .{ .request_admission = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_envelope_result, .result = .model_payload_schema_result } },
-    };
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const source = try envelope.readCurrent(&input.step.data);
-        const checked: ?validation.Result = switch (source.outcome()) {
-            .decoded => |candidate| self.action.execute(candidate),
-            .protocol_rejected, .not_decoded => null,
-        };
-        const value = try capture(self.allocator, &input.step.data, checked);
-        errdefer values.destroy(value);
-        var delta: pipeline.NodeDelta = .{};
-        delta.data_writes[@intFromEnum(schema.key)] = value;
-        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch |operation_error| return operation_error;
-        return .{ .outcome = status(result), .delta = delta, .diagnostic = runawayDiagnostic(result) };
     }
 };
 

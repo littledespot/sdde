@@ -209,32 +209,37 @@ subgraphs:
         with: {composition: extraction-composition}
         on: {ok: content, failed: end.failed}
       content:
-        use: prepare-model-request
+        use: request-model
         with:
           slot: spec_generation
           protocol-prompt: protocol-prompt
           context: extraction-context
           prompt: extraction-content-prompt
           composition-part: content
-        on: {ok: content-request, failed: end.failed}
-      content-request:
-        call: composition-request-body
-        with: {retry-limit: 2}
-        on: {ok: force-classifications, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+          retry-limit: 2
+        on: {ok: retain-content, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      retain-content:
+        use: retain-json-part
+        on: {ok: force-classifications, failed: end.failed}
       release-content:
-        use: retire-model-request
+        use: release-model-request
         on: {ok: classifications, failed: end.failed}
       force-classifications:
         use: construct-forced-token-classifications
         with: {source-part: content, native-composition-part: classifications}
         on: {ok: finish-native, more: release-content, failed: end.failed}
       classifications:
-        call: composition-request
+        use: request-model
         with:
+          slot: spec_generation
+          protocol-prompt: protocol-prompt
           prompt: extraction-classifications-prompt
           composition-part: classifications
           retry-limit: 2
-        on: {ok: finish-model, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: retain-classifications, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      retain-classifications:
+        use: retain-json-part
+        on: {ok: finish-model, failed: end.failed}
       finish-native:
         call: finish-extraction-response
         on: {ok: check-extraction, failed: end.failed}
@@ -257,8 +262,8 @@ subgraphs:
         use: build-reference-text-repair-input
         on: {ok: text-repair, failed: end.failed}
       text-repair:
-        call: model-request-with-context
-        with: {slot: repair, context: extraction-context, prompt: repair-prompt, schema: extraction-schema, retry-limit: 1}
+        use: request-model
+        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, result-selection: input, retry-limit: 1}
         on: {ok: parse-text-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-text-repair:
         use: parse-reference-text-repair
@@ -294,8 +299,8 @@ subgraphs:
         use: build-reference-extraction-repair-input
         on: {ok: request, failed: end.failed}
       request:
-        call: model-request-with-context
-        with: {slot: repair, context: extraction-context, prompt: repair-prompt, schema: extraction-schema, retry-limit: 1}
+        use: request-model
+        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, result-selection: input, retry-limit: 1}
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-repair:
         use: parse-reference-extraction-repair
@@ -361,18 +366,23 @@ subgraphs:
         with: {composition: reconciliation-summary}
         on: {ok: summary, failed: end.failed}
       summary:
-        call: composition-request
+        use: request-model
         with:
+          slot: spec_generation
+          protocol-prompt: protocol-prompt
           prompt: reconciliation-prompt
           composition-part: summary
           retry-limit: 2
-        on: {ok: assemble-summary, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: retain-summary, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      retain-summary:
+        use: retain-json-part
+        on: {ok: assemble-summary, failed: end.failed}
       initialize-global:
         use: build-reference-dispositions-assignment
         on: {ok: dispositions, failed: end.failed}
       dispositions:
-        call: model-request
-        with: {slot: spec_generation, prompt: dispositions-prompt, schema: reconciliation-schema, selection: input, retry-limit: 2}
+        use: request-model
+        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: dispositions-prompt, result-schema: reconciliation-schema, result-selection: input, retry-limit: 2}
         on: {ok: collect-dispositions, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-dispositions:
         use: collect-reference-dispositions-candidate
@@ -428,8 +438,8 @@ subgraphs:
         use: build-reference-signals-assignment
         on: {ok: request-signals, failed: end.failed}
       request-signals:
-        call: model-request
-        with: {slot: spec_generation, prompt: signals-prompt, schema: reconciliation-schema, selection: input, retry-limit: 2}
+        use: request-model
+        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: signals-prompt, result-schema: reconciliation-schema, result-selection: input, retry-limit: 2}
         on: {ok: collect-signals, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-signals:
         use: collect-reference-signals-candidate
@@ -448,8 +458,8 @@ subgraphs:
         use: build-reference-conflicts-assignment
         on: {ok: request-conflicts, failed: end.failed}
       request-conflicts:
-        call: model-request
-        with: {slot: spec_generation, prompt: conflicts-prompt, schema: reconciliation-schema, selection: input, retry-limit: 2}
+        use: request-model
+        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: conflicts-prompt, result-schema: reconciliation-schema, result-selection: input, retry-limit: 2}
         on: {ok: collect-conflicts, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-conflicts:
         use: collect-reference-conflicts-candidate
@@ -489,12 +499,13 @@ subgraphs:
         use: build-reference-reconciliation-repair-input
         on: {ok: request, failed: end.failed}
       request:
-        call: model-request
+        use: request-model
         with:
           slot: repair
+          protocol-prompt: protocol-prompt
           prompt: repair-prompt
-          schema: reconciliation-schema
-          selection: input
+          result-schema: reconciliation-schema
+          result-selection: input
           retry-limit: 1
         on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse:
@@ -521,12 +532,13 @@ subgraphs:
         use: build-specification-support-loss-input
         on: {ok: loss-model, failed: end.failed}
       loss-model:
-        call: model-request
+        use: request-model
         with:
           slot: spec_generation
+          protocol-prompt: protocol-prompt
           prompt: loss-prompt
-          schema: support-schema
-          selection: input
+          result-schema: support-schema
+          result-selection: input
           retry-limit: 1
         on: {ok: loss-collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       loss-collect:
@@ -542,12 +554,13 @@ subgraphs:
         use: build-specification-support-input
         on: {ok: model, failed: end.failed}
       model:
-        call: support-request
+        use: request-model
         with:
           slot: spec_generation
+          protocol-prompt: protocol-prompt
           prompt: {param: prompt}
-          schema: support-schema
-          selection: input
+          result-schema: support-schema
+          result-selection: input
           retry-limit: {param: retry-limit}
         on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect:
@@ -566,12 +579,13 @@ subgraphs:
         use: build-specification-support-repair-input
         on: {ok: repair, failed: end.failed}
       repair:
-        call: support-request
+        use: request-model
         with:
           slot: repair
+          protocol-prompt: protocol-prompt
           prompt: {param: prompt}
-          schema: support-schema
-          selection: input
+          result-schema: support-schema
+          result-selection: input
           retry-limit: 1
         on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse:
@@ -613,12 +627,14 @@ subgraphs:
         use: build-specification-model-input
         on: {ok: gen, failed: end.failed}
       gen:
-        call: model-request-with-context
+        use: request-model
         with:
           slot: spec_generation
+          protocol-prompt: protocol-prompt
           context: generation-context
           prompt: {param: prompt}
-          schema: generation-schema
+          result-schema: generation-schema
+          result-selection: input
           retry-limit: 2
         on: {ok: collect-specification, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-specification:
@@ -643,12 +659,14 @@ subgraphs:
         use: build-specification-repair-input
         on: {ok: repair, failed: end.failed}
       repair:
-        call: model-request-with-context
+        use: request-model
         with:
           slot: repair
+          protocol-prompt: protocol-prompt
           context: generation-context
           prompt: repair-prompt
-          schema: generation-schema
+          result-schema: generation-schema
+          result-selection: input
           retry-limit: 1
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-repair:
@@ -675,12 +693,13 @@ subgraphs:
         use: build-scenario-link-input
         on: {ok: choose, failed: end.failed}
       choose:
-        call: model-request
+        use: request-model
         with:
           slot: spec_generation
+          protocol-prompt: protocol-prompt
           prompt: links-prompt
-          schema: links-schema
-          selection: input
+          result-schema: links-schema
+          result-selection: input
           retry-limit: 2
         on: {ok: admit, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       admit:
@@ -750,8 +769,8 @@ subgraphs:
         use: build-source-omission-repair-input
         on: {ok: request, failed: end.failed}
       request:
-        call: model-request-with-context
-        with: {slot: repair, context: extraction-context, prompt: repair-prompt, schema: extraction-schema, retry-limit: 1}
+        use: request-model
+        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, result-selection: input, retry-limit: 1}
         on: {ok: result, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       result:
         call: source-repair-result
@@ -763,12 +782,13 @@ subgraphs:
         use: build-source-omission-repair-input
         on: {ok: request, failed: end.failed}
       request:
-        call: model-request
+        use: request-model
         with:
           slot: repair
+          protocol-prompt: protocol-prompt
           prompt: repair-prompt
-          schema: {param: schema}
-          selection: input
+          result-schema: {param: schema}
+          result-selection: input
           retry-limit: 1
         on: {ok: result, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       result:
@@ -792,142 +812,11 @@ subgraphs:
       validate:
         use: validate-assembled-json
         on: {ok: end.ok, failed: end.failed}
-  model-request-with-context:
-    start: prepare
-    steps:
-      prepare:
-        use: prepare-model-request
-        with:
-          slot: {param: slot}
-          protocol-prompt: protocol-prompt
-          context: {param: context}
-          prompt: {param: prompt}
-          result-schema: {param: schema}
-          result-selection: input
-        on: {ok: request, failed: end.failed}
-      request:
-        call: model-request-body
-        with: {retry-limit: {param: retry-limit}}
-        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-  model-request:
-    start: prepare
-    steps:
-      prepare:
-        use: prepare-model-request
-        with:
-          slot: {param: slot}
-          protocol-prompt: protocol-prompt
-          prompt: {param: prompt}
-          result-schema: {param: schema}
-          result-selection: {param: selection}
-        on: {ok: request, failed: end.failed}
-      request:
-        call: model-request-body
-        with: {retry-limit: {param: retry-limit}}
-        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-  support-request:
-    start: prepare
-    steps:
-      prepare:
-        use: prepare-model-request
-        with:
-          slot: {param: slot}
-          protocol-prompt: protocol-prompt
-          prompt: {param: prompt}
-          result-schema: {param: schema}
-          result-selection: {param: selection}
-        on: {ok: request, failed: end.failed}
-      request:
-        call: model-request-body
-        with: {retry-limit: {param: retry-limit}}
-        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-  composition-request:
-    start: prepare
-    steps:
-      prepare:
-        use: prepare-model-request
-        with:
-          slot: spec_generation
-          protocol-prompt: protocol-prompt
-          prompt: {param: prompt}
-          composition-part: {param: composition-part}
-        on: {ok: request, failed: end.failed}
-      request:
-        call: composition-request-body
-        with: {retry-limit: {param: retry-limit}}
-        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-  composition-request-body:
-    start: request
-    steps:
-      request:
-        call: model-request-body
-        with: {retry-limit: {param: retry-limit}}
-        on: {ok: retain, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      retain:
-        use: retain-json-part
-        on: {ok: end.ok, failed: end.failed}
-  model-request-body:
-    start: account
-    steps:
-      account:
-        use: advance-model-attempt-accounting
-        with:
-          retry-limit: {param: retry-limit}
-        on: {ok: operation, failed: end.failed}
-      operation:
-        use: assign-provider-operation
-        on: {ok: authorize, failed: end.failed}
-      authorize:
-        use: prepare-provider-operation-authorization
-        on: {ok: phase, failed: terminate-operation, cancelled: terminate-operation}
-      phase:
-        use: check-model-request-phase
-        on: {ok: advance-request, more: advance-operation, failed: end.failed}
-      advance-request:
-        use: advance-model-request-lifecycle
-        with:
-          transition: invoked
-        on: {ok: advance-operation, failed: end.failed}
-      advance-operation:
-        use: advance-provider-operation-lifecycle
-        with:
-          transition: invoked
-        on: {ok: call, failed: end.failed}
-      call:
-        use: invoke-model
-        on: {ok: observation, failed: observation, cancelled: observation}
-      observation:
-        use: validate-provider-invocation-observation
-        on: {ok: complete-operation, failed: complete-operation, cancelled: complete-operation}
-      complete-operation:
-        use: complete-provider-operation
-        on: {ok: admit, failed: admit, cancelled: admit}
-      admit:
-        use: admit-model-response
-        on: {ok: close, invalid: runaway, failed: close, cancelled: close}
-      runaway:
-        use: check-model-runaway
-        on: {ok: retry, more: resend}
-      retry:
-        use: build-model-protocol-retry
-        on: {ok: account, failed: end.failed}
-      resend:
-        use: build-model-runaway-resend
-        on: {ok: account, failed: end.failed}
-      close:
-        use: complete-model-request
-        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      terminate-operation:
-        use: terminate-provider-operation
-        on: {failed: terminate-request, cancelled: terminate-request}
-      terminate-request:
-        use: terminate-model-request
-        on: {failed: end.failed, cancelled: end.cancelled}
   release-request:
     start: retire
     steps:
       retire:
-        use: retire-model-transport
+        use: release-model-transport
         on: {ok: end.ok, failed: end.failed}
   authority-gate:
     start: ledger

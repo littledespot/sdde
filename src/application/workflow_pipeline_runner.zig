@@ -38,6 +38,10 @@ const iteration = @import("../domain/workflow_iteration.zig");
 const event_capture = @import("workflow_event_capture.zig");
 const outcome_association = @import("../domain/workflow_outcome_association.zig");
 const outcome_binding = @import("workflow_outcome_binding.zig");
+const kernel = @import("../domain/model_request_kernel.zig");
+const request_stage = @import("../domain/model_request_stage.zig");
+const request_orchestrator = @import("model_request_orchestrator.zig");
+const request_bindings = @import("model_request_child_bindings.zig");
 
 const ExpectedAccounting = union(enum) {
     none,
@@ -70,6 +74,32 @@ pub const Runner = struct {
     /// The internal step a stage action stopped at during the current step invocation.
     stage_step: pipeline.StageStepSlot = .{},
     last_operation_rejection: ?execution.OperationRejection = null,
+    /// A caller that must stop a request at a stage boundary, such as the provider compatibility
+    /// probe, which ends a request once its one exchange is retained. Consulted before each stage of
+    /// a `request-model` step; a stop ends the step there and the stage is not run. It holds no
+    /// capability, runs nothing and can only name one of the two typed stops below; the runner maps
+    /// each to its own rejection. Only the E2E harness `Trace` sets it.
+    request_stage_gate: ?StageGate = null,
+
+    pub const StageGate = struct {
+        context: *anyopaque,
+        stop_fn: *const fn (*anyopaque, request_stage.Stage) ?StageStop,
+    };
+
+    /// Why a gate stops a request before a stage.
+    pub const StageStop = enum {
+        /// The caller has finished with the request: the step is cancelled.
+        cancelled,
+        /// The caller's own evidence failed: the step fails.
+        failed,
+
+        fn rejection(self: StageStop) execution.Rejection {
+            return switch (self) {
+                .cancelled => .cancelled,
+                .failed => .{ .operation_failed = error.OperationExecutionFailed },
+            };
+        }
+    };
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -144,17 +174,39 @@ pub const Runner = struct {
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
         self.last_effects = null;
         self.stage_step = .{};
-        const started = self.eventsActive();
-        if (started) if (self.events().action(id, null, null, null)) |failure| return .{ .rejected = .{ .logging = failure } };
+        var started: bool = undefined;
+        if (self.actionStart(id, &started, null)) |rejection| return .{ .rejected = rejection };
         const result = self.executeStep(id);
-        if (self.eventsActive()) {
-            if (!started) if (self.events().action(id, null, null, null)) |failure| return .{ .rejected = .{ .logging = failure } };
-            if (self.events().action(id, result, if (self.last_effects) |effects| effects.diagnostic else null, self.stage_step.name)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
-            if (result == .rejected and result.rejected == .retry_limit) {
-                if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |failure| return .{ .rejected = .{ .logging = failure } };
-            }
+        if (self.actionEnd(id, started, result, self.stage_step.name, null)) |rejection| return .{ .rejected = rejection };
+        if (self.eventsActive() and result == .rejected and result.rejected == .retry_limit) {
+            if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |failure| return .{ .rejected = .{ .logging = failure } };
         }
         return result;
+    }
+
+    /// The pair of action events around one step or one stage run. The start is logged when the
+    /// run begins, or, when the feature log only becomes active during it, with its end.
+    /// `stage` is the stage this run is, when it is one of a `request-model` step's: every event of
+    /// that run then names it (ADR 0030).
+    fn actionStart(self: *Runner, id: workflow.WorkflowStepId, started: *bool, stage: ?request_stage.Stage) ?execution.Rejection {
+        started.* = self.eventsActive();
+        if (started.*) if (self.logActionStart(id, stage)) |failure| return .{ .logging = failure };
+        return null;
+    }
+
+    /// `stage_name` is the internal step a stage action or a kernel step stopped at; only a failed
+    /// event records it (ADR 0031). A run that is itself a kernel stage names it on every event.
+    fn actionEnd(self: *Runner, id: workflow.WorkflowStepId, started: bool, result: execution.Applied, stage_name: ?[]const u8, stage: ?request_stage.Stage) ?execution.Rejection {
+        if (!self.eventsActive()) return null;
+        if (!started) if (self.logActionStart(id, stage)) |failure| return .{ .logging = failure };
+        const diagnostic = if (self.last_effects) |effects| effects.diagnostic else null;
+        const failure = if (stage) |named| self.events().requestStage(id, named.name(), result, diagnostic) else self.events().action(id, result, diagnostic, stage_name);
+        if (failure) |value| return self.captureRejectionWithLogging(value);
+        return null;
+    }
+
+    fn logActionStart(self: *Runner, id: workflow.WorkflowStepId, stage: ?request_stage.Stage) ?@import("../domain/feature_log_stream.zig").FailureCode {
+        return if (stage) |named| self.events().requestStage(id, named.name(), null, null) else self.events().action(id, null, null, null);
     }
 
     fn eventsActive(self: *const Runner) bool {
@@ -172,11 +224,84 @@ pub const Runner = struct {
         const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .rejected = .authority };
         if (index >= self.retry_execution_counts.len) return .{ .rejected = .authority };
         const step = &self.selected.graph.authority.steps[index];
+        const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .authority };
+        if (kernel.isKernel(step.*)) return self.executeRequestKernel(id, index, step, entry);
+        return self.executeBound(id, index, step, .{ .contract = entry.contract, .binding = entry.binding }, null);
+    }
+
+    /// The contract and binding one compiled step runs: a registered operation's own, or a stage of
+    /// the `request-model` kernel entry's.
+    const Bound = struct {
+        contract: operation.Contract,
+        binding: operations.Binding,
+
+        fn invoke(self: Bound, input: operations.Input) operations.Error!execution.Candidate {
+            return self.binding.invoke(input);
+        }
+    };
+
+    /// One `request-model` step (ADR 0030): the orchestrator runs its fixed stages through
+    /// runner-owned child bindings. The step counts once toward the execution ceiling; its stages
+    /// run through the same checks, accounting and retention as any step, each with its own event.
+    fn executeRequestKernel(self: *Runner, id: workflow.WorkflowStepId, index: usize, step: *const compilation.CompiledStep, entry: *const operations.Entry) execution.Applied {
+        if (!kernel.validProjection(step.*) or !contractMatchesStep(entry.contract, step.*) or
+            !equalStrings(entry.binding.capabilities(), step.capabilities) or
+            !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .authority };
+        if (self.remaining_step_executions == 0) return .{ .rejected = .authority };
+        self.remaining_step_executions -= 1;
+        var context: KernelContext = .{ .runner = self, .id = id, .index = index, .step = step, .entry = entry };
+        const result = request_orchestrator.run(.{ .context = &context, .vtable = &kernel_vtable });
+        if (result == .rejected) return result;
+        // What follows is the step's own work, no stage's: a rejection of it names no stage, though
+        // the step's own failed event names the stage that ended the request.
+        const ended_at = self.stage_step;
+        self.stage_step = .{};
+        // The request's engine-internal keys end with the step; the rest stay current.
+        if (self.dropInternalRequestKeys(result.outcome)) |reason| return .{ .rejected = reason };
+        if (terminalFor(self.selected.graph.authority.transitions, step.id, result.outcome)) |terminal| {
+            if (!self.envelope.outcomes.compatible(terminal)) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } };
+        }
+        self.stage_step = ended_at;
+        return result;
+    }
+
+    const KernelContext = struct {
+        runner: *Runner,
+        id: workflow.WorkflowStepId,
+        index: usize,
+        step: *const compilation.CompiledStep,
+        entry: *const operations.Entry,
+        admission: KernelAdmission = .{},
+    };
+
+    /// One stage of a kernel step. `executeBound` owns every check of the step body, including the
+    /// registered contract, the capabilities and the policy; only the stage's identity is checked
+    /// here, because no other caller has a registered stage to compare it with.
+    fn invokeStage(self: *Runner, context: *KernelContext, stage: request_stage.Stage) execution.Applied {
+        const registered = context.entry.requestStage(stage) orelse return .{ .rejected = .authority };
+        const compiled = kernel.stageStep(context.step.*, stage) orelse return .{ .rejected = .authority };
+        if (!std.mem.eql(u8, compiled.operation_id.bytes, registered.contract.id)) return .{ .rejected = .authority };
+        if (self.request_stage_gate) |gate| if (gate.stop_fn(gate.context, stage)) |stop| return .{ .rejected = stop.rejection() };
+        if (context.admission.admit(context.step.id, context.step.retry_authority.?.limit, stage)) |reason| return .{ .rejected = reason };
+        self.last_effects = null;
+        // The step's own failed event names the stage that stopped the request; every event of
+        // this stage names the stage (ADR 0030).
+        self.stage_step = .{ .name = stage.name() };
+        var started: bool = undefined;
+        if (self.actionStart(context.id, &started, stage)) |rejection| return .{ .rejected = rejection };
+        const result = self.executeBound(context.id, context.index, compiled, .{ .contract = registered.contract, .binding = registered.binding }, stage);
+        if (self.actionEnd(context.id, started, result, stage.name(), stage)) |rejection| return .{ .rejected = rejection };
+        return result;
+    }
+
+    /// Run one compiled step with the contract and binding it is bound to. `stage` is set when the
+    /// step is a stage of a `request-model` step: it takes no execution of its own, has no
+    /// transition, and names its stage in an exhaustion.
+    fn executeBound(self: *Runner, id: workflow.WorkflowStepId, index: usize, step: *const compilation.CompiledStep, entry: Bound, stage: ?request_stage.Stage) execution.Applied {
         if (!@import("../domain/workflow_model_invocation.zig").validProjection(step.*) or
             !operation_selection.validProjection(step.*) or
             !request_lifecycle_selection.validProjection(step.*) or
             !authorization_selection.validProjection(step.*)) return .{ .rejected = .authority };
-        const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .authority };
         if (!contractMatchesStep(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
             !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .authority };
@@ -352,14 +477,14 @@ pub const Runner = struct {
             var admitted_count: u64 = 0;
             if (request_assignment) |assignment| {
                 const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority };
-                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
+                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .authority } } };
                 admitted_count = admitted.allowed;
             } else if (repair_permit) |permit| {
                 const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority };
-                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
+                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .authority } } };
                 admitted_count = admitted.allowed;
             } else {
-                if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, self.retry_execution_counts[index]) orelse return .{ .rejected = .authority } } };
+                if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, self.retry_execution_counts[index], stage) orelse return .{ .rejected = .authority } } };
                 // Compiled limits are u32; exhaustion is checked before increment.
                 self.retry_execution_counts[index] += 1;
                 admitted_count = self.retry_execution_counts[index];
@@ -368,8 +493,10 @@ pub const Runner = struct {
         };
         // The compiler supplies the retry-derived allowance. Only a committed
         // advance through a validated finite population grants another traversal.
-        if (self.remaining_step_executions == 0) return .{ .rejected = .authority };
-        self.remaining_step_executions -= 1;
+        if (stage == null) {
+            if (self.remaining_step_executions == 0) return .{ .rejected = .authority };
+            self.remaining_step_executions -= 1;
+        }
         var authorization: ?authorization_binding.Binding = null;
         var authorization_published = false;
         defer if (authorization) |bound| {
@@ -491,7 +618,8 @@ pub const Runner = struct {
             const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
             break :prepared bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
         } else false;
-        const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected, step.iteration, step.outcome_association, terminalFor(self.selected.graph.authority.transitions, step.id, candidate.outcome));
+        const terminal = if (stage == null) terminalFor(self.selected.graph.authority.transitions, step.id, candidate.outcome) else null;
+        const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected, step.iteration, step.outcome_association, terminal);
         authorization_published = prepared and applied == .outcome and applied.outcome == .ok;
         if (applied == .outcome and self.eventsActive()) {
             if (self.logDiagnostics(step.*, candidate)) |failure| return .{ .rejected = .{ .logging = failure } };
@@ -829,6 +957,9 @@ pub const Runner = struct {
             effects.replacements.insert(@enumFromInt(index));
         };
         self.envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+        // Invariant (this and the two commits below): each was prepared against its owner's current
+        // revision above, nothing has mutated that owner since, and the commit allocates nothing, so
+        // its only failures (a foreign owner or a stale revision) cannot occur.
         self.envelope.outcomes.commit(&outcome_pending) catch unreachable;
         if (iteration_pending) |prepared| {
             const progress = self.envelope.origins[@intFromEnum(iteration_contract.?.progress)].?;
@@ -856,7 +987,30 @@ pub const Runner = struct {
         // and runner transitions have been accepted and applied.
         return .{ .outcome = candidate.outcome };
     }
+
+    /// Invalidate the request keys no step outside the kernel reads, as one runner-owned delta.
+    fn dropInternalRequestKeys(self: *Runner, outcome: workflow.OutcomeTag) ?execution.Rejection {
+        var keys: [kernel.internal_keys.len]pipeline.DataKey = undefined;
+        var count: usize = 0;
+        var delta: pipeline.NodeDelta = .{};
+        for (kernel.internal_keys) |key| if (self.envelope.slots[@intFromEnum(key)] != null) {
+            keys[count] = key;
+            count += 1;
+            delta.data_invalidations.insert(key);
+        };
+        if (count == 0) return null;
+        const contract: pipeline.NodeContract = .{ .id = kernel.operation_id, .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = keys[0..count], .side_effect = .none };
+        const occurrence = self.envelope.beginOccurrence(kernel.operation_id) catch |cause| return .{ .operation_failed = cause };
+        self.envelope.applyOccurrence(occurrence, contract, &delta, outcome) catch |err| return if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority;
+        return null;
+    }
 };
+
+/// A retry exhaustion, naming the stage of a `request-model` step that reached it.
+fn exhaustion(step: workflow.WorkflowStepId, limit: retry.Limit, completed: u64, stage: ?request_stage.Stage) ?retry.Exhaustion {
+    const value = retry.Exhaustion.init(step, limit, completed) orelse return null;
+    return if (stage) |named| value.atStage(named) else value;
+}
 
 fn authorizationRejected(err: lease.Error) execution.Applied {
     return .{ .rejected = switch (err) {
@@ -939,6 +1093,28 @@ fn cast(context: *anyopaque) *Runner {
 const vtable: child_bindings.ChildBindings.VTable = .{
     .invoke_invocation = invokeInvocation,
     .invoke_step = invokeStep,
+};
+
+fn kernelInvokeStage(context: *anyopaque, stage: request_stage.Stage) execution.Applied {
+    const kernel_context: *Runner.KernelContext = @ptrCast(@alignCast(context));
+    return kernel_context.runner.invokeStage(kernel_context, stage);
+}
+const kernel_vtable: request_bindings.ChildBindings.VTable = .{ .invoke_stage = kernelInvokeStage };
+
+/// What the runner tracks of one running `request-model` step: how often it has entered attempt
+/// accounting, bounded by the step's allowance (DE1 decision 4, ADR 0030: the runner owns every
+/// retry count). The orchestrator holds no count.
+pub const KernelAdmission = struct {
+    entered: u64 = 0,
+
+    /// Admit one stage entry. Only attempt accounting is counted; entering it more often than the
+    /// allowance is a retry exhaustion that names the stage.
+    pub fn admit(self: *KernelAdmission, step: workflow.WorkflowStepId, limit: retry.Limit, stage: request_stage.Stage) ?execution.Rejection {
+        if (stage != kernel.accounting_stage) return null;
+        self.entered += 1;
+        if (self.entered <= kernel.attemptAllowance(limit)) return null;
+        return if (exhaustion(step, limit, self.entered, stage)) |value| .{ .retry_limit = value } else .authority;
+    }
 };
 
 fn findStepIndex(steps: []const compilation.CompiledStep, id: workflow.WorkflowStepId) ?usize {

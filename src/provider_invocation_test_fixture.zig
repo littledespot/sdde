@@ -3,7 +3,6 @@ const validation = @import("domain/provider_invocation_validation.zig");
 const provider = @import("domain/llm_provider_operation.zig");
 const preparation = @import("domain/model_request_preparation.zig");
 const compilation = @import("domain/workflow_compilation.zig");
-const build_request = @import("actions/model/build_model_request.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const invoke_model = @import("actions/model/invoke_model.zig");
 const authorization_fixture = @import("provider_authorization_test_fixture.zig");
@@ -62,7 +61,7 @@ pub const Fixture = struct {
         self.base.request.exact_scope = exact_scope orelse .{ .reference_state = .{ .bytes = "TEST-empty-reference" }, .occurrences = &.{} };
         self.resource = .{ .id = .{ .bytes = "result" }, .content = .{ .result_schema = self.base.request.response_schema } };
         const source = try self.requestSource();
-        self.prepared = try (build_request.Action{}).execute(std.testing.allocator, source, self.base.request.content);
+        self.prepared = try preparation.build(std.testing.allocator, source, self.base.request.content);
         errdefer self.prepared.deinit();
         self.base.request = self.prepared.request.*;
         self.authorized = try self.base.startInference();

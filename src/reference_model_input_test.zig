@@ -962,12 +962,12 @@ test "reconciliation phase recreation retains native source exceptions through r
             var diagnostic: ?envelope.Diagnostic = null;
             defer if (diagnostic) |value| value.deinit(std.testing.allocator);
             if (retain_source) {
-                var decoded = try (@import("actions/model/decode_model_envelope.zig").Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
+                var decoded = try envelope.decode(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
                 defer decoded.deinit();
                 try std.testing.expect(diagnostic == null);
                 try std.testing.expect(@import("domain/model_payload_schema.zig").validateValue(envelope.value(decoded.candidate.json()), invoked.prepared.request.response_schema.root()) == null);
             } else {
-                try std.testing.expectError(error.InvalidModelEnvelope, (@import("actions/model/decode_model_envelope.zig").Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
+                try std.testing.expectError(error.InvalidModelEnvelope, envelope.decode(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
                 try std.testing.expectEqual(.embedded_insertion_syntax, diagnostic.?.composition.fields[0].issue.reason);
             }
         }

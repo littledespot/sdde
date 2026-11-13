@@ -12,7 +12,7 @@ const accounting = @import("workflow_model_accounting.zig");
 const authorization = @import("provider_authorization_workflow.zig");
 const selection = @import("../domain/workflow_model_invocation.zig");
 
-pub const schema = values.schema(.provider_invocation_result, results.Result, 1, null).captured();
+pub const schema = values.schema(.provider_invocation_result, results.Result, 1, null).captured().recorded();
 
 pub const Invoke = struct {
     pub const Action = @import("../actions/model/invoke_model.zig").Action;

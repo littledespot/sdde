@@ -499,16 +499,18 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
-> **ADR 0030 amendment (not yet implemented).**
+> **ADR 0030 amendment (implemented).**
 > Under [ADR 0030](../decisions/0030-engine-owned-model-request.md), the compiler accepts one
-> `request-model` step per model request instead of the request-lifecycle bindings described
-> below. A `request-model` step declares the slot, resources and `retry-limit`, and maps
-> `ok`, `invalid`, `failed` and `cancelled`. The step declares no deadline; as for today's
-> authorization-preparation binding, the compiler rejects a `timeout-ms`. A fixed kernel
-> orchestrator runs the bindings' rules as the stages ADR 0030 lists, and YAML can no
-> longer name them. The step's capability set is the exact union of its stage bindings'
-> derived capabilities, and the selected policy must permit each. ADR 0030's "What stays
-> in YAML" list says which steps remain.
+> `request-model` step per model request. A `request-model` step declares the slot,
+> resources and `retry-limit`, and maps `ok`, `invalid`, `failed` and `cancelled`. The step
+> declares no deadline; the compiler rejects a `timeout-ms`. A fixed kernel orchestrator
+> runs the stage bindings' rules as the stages ADR 0030 lists. The compiler derives each
+> stage's parameters and compiles the stages with the step; YAML cannot name a stage, and a
+> stage or removed lifecycle operation id rejects as an unknown operation. The step's
+> capability set is the exact union of its stage bindings' derived capabilities, and the
+> selected policy must permit each. The step's data contract is stated once in the
+> [model-request operation catalogue](../contracts/model-request-operations.md). The bullets
+> below describe the rules each stage binding keeps; none is a YAML-selectable operation.
 
 - Request-origin contracts selecting a model binding declare their typed slot.
   The selected catalogue model owns response mode through its required `json` boolean
@@ -538,8 +540,8 @@ service is published.
 - Registered accounting permissions are compiled alongside data effects and compared
   against the live immutable operation registry at execution.
 - YAML cannot author them.
-- The attempt-accounting binding consumes the retained request, requires an
-  explicit operation-local `retry-limit`, and publishes only runner-applied typed
+- The attempt-accounting stage consumes the retained request, takes the step's
+  `retry-limit` from the compiler, and publishes only runner-applied typed
   attempt evidence.
 - Its next visit requires the previous evidence to have been consumed/invalidated
   through declared data effects.
@@ -573,20 +575,19 @@ service is published.
   completed transport does not.
 - Gate authority itself must use current schemas.
 
-- `check-model-request-phase`, `build-model-protocol-retry`, `retire-model-input` and
-  `retire-model-request` expose explicit lifecycle coordination without a built-in
-  workflow. Under ADR 0030 (not yet implemented), the first two become stages of the
-  `request-model` step; the two retirements stay YAML steps.
+- Under ADR 0030, the request-phase check and the protocol-retry build are stages of the
+  `request-model` step and no workflow can select them; a workflow's own release step is
+  `release-model-request` or `release-model-transport`.
 - Protocol guidance is selected once by the originating assignment's optional
   `protocol-prompt` resource; consumers cannot replace resources, model controls or
   slots.
 - Retry preparation replaces only the prepared transport and retires the rejected
   attempt, retaining the logical request.
-- It rebuilds from the original inputs and latest rejection; only the existing
-  attempt-accounting step and total token budget limit further calls (Design §22.6).
+- It rebuilds from the original inputs and latest rejection; only the attempt-accounting
+  stage and total token budget limit further calls (Design §22.6).
 
-- `advance-model-request-lifecycle` declares a ledger replacement and explicit
-  `transition: invoked`.
+- The request-lifecycle advance stage declares a ledger replacement and the `invoked`
+  transition, which the compiler supplies.
 - Its compiled contract requires the retained request, attempt, assignment and
   authorization result, permits no operational capability or retry, and preserves the
   other values.
@@ -598,7 +599,8 @@ service is published.
   snapshot cannot reset invocation.
 - This is state advancement, not a provider call.
 
-- `advance-provider-operation-lifecycle` also requires explicit `transition: invoked`.
+- The provider-operation advance stage also takes the compiler-supplied `invoked`
+  transition.
 - Its closed accounting contract consumes the assigned operation and requires the same
   request, attempt and prepared authorization.
 - The runner checks the already-invoked request and original lease deadline, applies the

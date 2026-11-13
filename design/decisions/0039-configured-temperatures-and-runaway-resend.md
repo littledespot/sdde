@@ -112,21 +112,21 @@ constant, so projects couldn't choose it.
        [ADR 0041](0041-failed-run-incomplete-publication.md) (on hold) it would publish
        only its validated content, as a failed incomplete specification.
    - Other stop reasons and provider failures are unchanged.
-   - Two new single-responsibility actions carry it. Response admission admits a first
-     runaway (an `output_limit` stop with valid usage, on an attempt that isn't itself a
-     re-send) as `invalid` with no candidate, like a missing final answer, so a later
-     accepted response clears it. `check-model-runaway` then routes a re-sendable
-     runaway to `build-model-runaway-resend`, which builds the re-send, and everything
+   - Two single-responsibility stages of the `request-model` step carry it. Response
+     admission admits a first runaway (an `output_limit` stop with valid usage, on an
+     attempt that isn't itself a re-send) as `invalid` with no candidate, like a missing
+     final answer, so a later accepted response clears it. The runaway check then routes
+     a re-sendable runaway to the re-send stage, which builds the re-send, and everything
      else to the protocol correction. A repeated runaway is admitted as `failed`.
    - Attempt accounting reserves the re-send with its own count, one per attempt, and
-     the compiled step allowance includes one re-send for each attempt it admits. Until
-     ADR 0030's `request-model` step lands, the shared request-lifecycle subgraph routes
-     the re-send back to attempt accounting.
-   - The compiler enforces the route for every workflow: when a response admission's
-     `invalid` continues to another step, that step must be `check-model-runaway`, whose
-     re-send branch must reach `build-model-runaway-resend`, and a re-send is reachable
-     only from that branch. An admission whose `invalid` ends the run directly is
-     exempt, because it continues nothing.
+     the step's allowance is 2 x (1 + `retry-limit`) provider calls: each attempt, with
+     its one re-send. The `request-model` orchestrator returns the re-send to attempt
+     accounting (ADR 0030).
+   - The route is fixed in the orchestrator, not checked per workflow: an admission's
+     `invalid` continues to the runaway check, whose re-send branch reaches the re-send
+     stage, and a re-send is reachable only from that branch. The orchestrator's branch
+     tests (a runaway takes the re-send, not the correction; an invalid response takes one
+     protocol correction) replace the compiler's route rule.
    - A re-send must equal the attempt it repeats in every request field except its
      sampling, and attempt accounting rejects a second re-send of one attempt.
 3. **An advisory runaway is re-sent before it can end advice.** Withdrawn on 1 November

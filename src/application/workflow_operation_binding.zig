@@ -12,19 +12,7 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
         const implementation: operations.Binding.Implementation = .{
             .invoke_fn = call,
             .context_required = T != void,
-            .capabilities = &(if (derived.feature_logging) [_][]const u8{@import("../domain/workflow_capability.zig").feature_logging} else [_][]const u8{}) ++
-                (if (derived.model_provider) [_][]const u8{@import("../domain/workflow_capability.zig").model_provider} else [_][]const u8{}) ++
-                (if (derived.provider_authorization) [_][]const u8{@import("../domain/workflow_capability.zig").provider_authorization} else [_][]const u8{}) ++
-                (if (derived.principle_read) [_][]const u8{@import("../domain/workflow_capability.zig").principle_read} else [_][]const u8{}) ++
-                (if (derived.toolchain_read) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_read} else [_][]const u8{}) ++
-                (if (derived.toolchain_parser) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_parser} else [_][]const u8{}) ++
-                (if (derived.reference_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_read} else [_][]const u8{}) ++
-                (if (derived.feature_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_read} else [_][]const u8{}) ++
-                (if (derived.feature_input_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_input_read} else [_][]const u8{}) ++
-                (if (derived.feature_output_write) [_][]const u8{@import("../domain/workflow_capability.zig").feature_output_write} else [_][]const u8{}) ++
-                (if (derived.reference_content_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_content_read} else [_][]const u8{}) ++
-                (if (derived.reference_decode) [_][]const u8{@import("../domain/workflow_capability.zig").reference_decode} else [_][]const u8{}) ++
-                (if (derived.reference_identity) [_][]const u8{@import("../domain/workflow_capability.zig").reference_identity} else [_][]const u8{}),
+            .capabilities = Capabilities(derived).list,
         };
         fn call(erased: ?*anyopaque, input: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {
             const typed: ?*T = if (erased) |pointer| @ptrCast(@alignCast(pointer)) else null;
@@ -32,6 +20,54 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
         }
     };
     return .{ .context = @ptrCast(context), .implementation = &compiled.implementation };
+}
+
+/// The binding of the `request-model` kernel operation (ADR 0030). Its capabilities are the exact
+/// union of what the stage contexts' reachable ports derive to, never an asserted list. Only the
+/// runner runs the operation, through its orchestrator, so invoking the binding directly fails.
+pub fn bindRequestKernel(comptime stage_types: []const type) operations.Binding {
+    @setEvalBranchQuota(100000);
+    const derived = comptime union_of: {
+        var result: Inspection = .{};
+        for (stage_types) |T| {
+            const stage = inspect(T, &.{});
+            result.valid = result.valid and stage.valid;
+            for (@typeInfo(Inspection).@"struct".fields) |field| {
+                if (field.type == bool and !std.mem.eql(u8, field.name, "valid")) @field(result, field.name) = @field(result, field.name) or @field(stage, field.name);
+            }
+        }
+        break :union_of result;
+    };
+    if (!derived.valid) @compileError("operation contexts require typed data and registered narrow ports; erased capabilities and callbacks are forbidden");
+    const compiled = struct {
+        const implementation: operations.Binding.Implementation = .{
+            .invoke_fn = refuse,
+            .context_required = false,
+            .capabilities = Capabilities(derived).list,
+        };
+        fn refuse(_: ?*anyopaque, _: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {
+            return error.OperationExecutionFailed;
+        }
+    };
+    return .{ .context = null, .implementation = &compiled.implementation };
+}
+
+fn Capabilities(comptime derived: Inspection) type {
+    return struct {
+        const list: []const []const u8 = &(if (derived.feature_logging) [_][]const u8{@import("../domain/workflow_capability.zig").feature_logging} else [_][]const u8{}) ++
+            (if (derived.model_provider) [_][]const u8{@import("../domain/workflow_capability.zig").model_provider} else [_][]const u8{}) ++
+            (if (derived.provider_authorization) [_][]const u8{@import("../domain/workflow_capability.zig").provider_authorization} else [_][]const u8{}) ++
+            (if (derived.principle_read) [_][]const u8{@import("../domain/workflow_capability.zig").principle_read} else [_][]const u8{}) ++
+            (if (derived.toolchain_read) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_read} else [_][]const u8{}) ++
+            (if (derived.toolchain_parser) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_parser} else [_][]const u8{}) ++
+            (if (derived.reference_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_read} else [_][]const u8{}) ++
+            (if (derived.feature_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_read} else [_][]const u8{}) ++
+            (if (derived.feature_input_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_input_read} else [_][]const u8{}) ++
+            (if (derived.feature_output_write) [_][]const u8{@import("../domain/workflow_capability.zig").feature_output_write} else [_][]const u8{}) ++
+            (if (derived.reference_content_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_content_read} else [_][]const u8{}) ++
+            (if (derived.reference_decode) [_][]const u8{@import("../domain/workflow_capability.zig").reference_decode} else [_][]const u8{}) ++
+            (if (derived.reference_identity) [_][]const u8{@import("../domain/workflow_capability.zig").reference_identity} else [_][]const u8{});
+    };
 }
 
 pub const Inspection = struct { valid: bool = true, feature_logging: bool = false, principle_read: bool = false, model_provider: bool = false, provider_authorization: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, feature_output_write: bool = false, reference_content_read: bool = false, reference_decode: bool = false, reference_identity: bool = false };

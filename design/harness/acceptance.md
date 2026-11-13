@@ -148,7 +148,8 @@ and qualification. No real grader is currently qualified by these pending record
   Bedrock family, and explicit grader/acceptance evidence with an always-unresolved
   decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v17`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v18` (v17 plus the `stage` of a `request-model` retry exhaustion): the
+  single total token budget and aggregate actual usage,
   each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance, with ADR 0048's `no_title_heading` and

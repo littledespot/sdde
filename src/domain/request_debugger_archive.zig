@@ -125,7 +125,7 @@ pub const Archive = struct {
                 if (!std.mem.eql(u8, description.workflow_id, destination.workflow) or !std.mem.eql(u8, description.request_step, destination.request_step) or !std.mem.eql(u8, description.model_slot, destination.slot)) return error.InvalidDebugArchive;
             }
             if (destination.source_snapshot) |snapshot| {
-                if (!snapshot.matches(destination.workflow, destination.node, destination.request_step) or !std.mem.eql(u8, snapshot.caller.chain[snapshot.caller.chain.len - 1].target, destination.action)) return error.InvalidDebugArchive;
+                if (!snapshot.matches(destination.workflow, destination.node, destination.request_step) or !@import("model_request_kernel.zig").callActionBelongsTo(snapshot.caller.chain[snapshot.caller.chain.len - 1].target, destination.action)) return error.InvalidDebugArchive;
             }
         }
         try debug.orderCalls(result);

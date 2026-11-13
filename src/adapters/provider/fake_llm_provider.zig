@@ -32,12 +32,24 @@ pub const InvocationPlan = union(enum) {
     cancelled,
 };
 
+/// A test seam run around one provider effect, so a scripted test chooses its response from the
+/// state the engine holds when the call is made (the `request-model` step runs every stage of a
+/// request inside one step, so no step boundary precedes the call).
+pub const Hook = struct {
+    context: *anyopaque,
+    run: *const fn (*anyopaque) void,
+};
+
 pub const FakeLLMProvider = struct {
     allocator: std.mem.Allocator,
     authorization_leases: lease.Port,
     invocation_plan: InvocationPlan,
     invocation_call_count: usize = 0,
     effect_count: usize = 0,
+    /// Run once the call is validated and before the plan answers it.
+    before_invoke: ?Hook = null,
+    /// Run after the plan answered, with the call counted.
+    after_invoke: ?Hook = null,
 
     pub fn interface(self: *FakeLLMProvider) provider_interface.LLMProviderInterface {
         return .{
@@ -66,8 +78,9 @@ pub const FakeLLMProvider = struct {
             invoked_operation,
         )) return invalidInvocationCall(invoked_operation.id);
         self.effect_count += 1;
+        if (self.before_invoke) |hook| hook.run(hook.context);
 
-        return switch (self.invocation_plan) {
+        const observation: provider_interface.Error!operation.ProviderInvocationObservation = switch (self.invocation_plan) {
             .complete => |plan| self.complete(
                 provider_binding,
                 request,
@@ -83,6 +96,8 @@ pub const FakeLLMProvider = struct {
             .failed => |plan| .{ .failed = failure(invoked_operation.id, plan) },
             .cancelled => error.Cancelled,
         };
+        if (self.after_invoke) |hook| hook.run(hook.context);
+        return observation;
     }
 
     fn complete(

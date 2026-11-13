@@ -110,7 +110,7 @@ limits parts/selectors; dependencies and paths validate before inference.
 | Registered operation | Configuration / handoff |
 | --- | --- |
 | `initialize-json-composition` | `composition` resource; binds the current packet and execution epoch. |
-| `prepare-model-request` / `assign-model-request-id` | Select `composition-part`, or the existing `result-schema` path, exclusively. A part cannot override schema, result selection or the native evidence packet. |
+| `request-model` (and its `prepare-model-request` stage) | Select `composition-part`, or the existing `result-schema` path, exclusively. A part cannot override schema, result selection or the native evidence packet. |
 | `retain-json-part` | Retains the exact schema-admitted, terminal-accepted request result and prerequisite placements. |
 | `assemble-json` | Retires staging and installs the complete, unvalidated JSON candidate in one runner delta. |
 | `validate-assembled-json` | Reuses complete schema validation; native consumers require its associated evidence. |

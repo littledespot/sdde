@@ -5,10 +5,10 @@
 - **Decision authority:** Explicit user direction
 - **Amends:** Design Sections 7.3 and 12, ADRs 0004/0005, and F0005/F0006
 - **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026,
-  amended 23 October 2026; partly implemented). Not yet implemented: one `request-model`
-  step replaces the explicit lifecycle operations, which become engine-run stages that
-  YAML cannot name. Request identity, retained inputs, consumers and release are
-  unchanged; the step that owns identity and retries becomes the `request-model` step.
+  amended 23 October 2026; implemented). One `request-model` step replaced the explicit
+  lifecycle operations, which became engine-run stages that YAML cannot name. Request
+  identity, retained inputs, consumers and release are unchanged; the step that owns
+  identity and retries is the `request-model` step.
   Implemented on 24 October 2026: the 23 October amendment removed the
   input-token-count operation kind, leaving inference the only operation kind, and took
   the deadline from the bound catalogue entry's `requestTimeoutMs`, which catalogue
@@ -49,8 +49,8 @@
 - Consumers retain the originating request identity, binding, resources and content;
   they do not rebind to their own step or repeat selection parameters.
 - The existing data-dependency compiler proves the required handoff.
-- There is no new route registry, implicit graph or YAML transport syntax. (ADR 0030,
-  not yet implemented, adds one fixed kernel stage sequence behind each `request-model`
+- There is no new route registry, implicit graph or YAML transport syntax. (ADR 0030
+  adds one fixed kernel stage sequence behind each `request-model`
   step; it routes nothing and adds no YAML syntax.)
 - The internal request content contract is `model-request/v1`; it is not a second YAML
   schema resource.

@@ -30,7 +30,7 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
         }
     }
     const model = step.model orelse return true;
-    if (assignsRequest(step.produces, step.replaces) and !validResultSelection(step.parameters)) return false;
+    if (startsRequest(step) and !validResultSelection(step.parameters)) return false;
     const expected = resolve(step.parameters) orelse return false;
     return model.eql(expected);
 }
@@ -52,6 +52,12 @@ pub fn validDescriptors(descriptors: []const operation.ParameterDescriptor) bool
 pub fn assignsRequest(produces: []const @import("pipeline.zig").DataKey, replaces: []const @import("pipeline.zig").DataKey) bool {
     return std.mem.indexOfScalar(@import("pipeline.zig").DataKey, produces, .assigned_model_request) != null and
         std.mem.indexOfScalar(@import("pipeline.zig").DataKey, replaces, .model_request_identity_ledger) != null;
+}
+
+/// Whether the step begins one model request: it assigns a request, or it is the `request-model`
+/// kernel step, which carries the whole request (ADR 0030).
+pub fn startsRequest(step: compilation.CompiledStep) bool {
+    return assignsRequest(step.produces, step.replaces) or step.request_stages.len != 0;
 }
 
 /// A request has one result authority: a complete schema resource or a part of

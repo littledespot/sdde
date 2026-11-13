@@ -590,11 +590,11 @@ defined response-level correction containing:
 child-object descriptors only.
 
 - The builder owns no retry counter or limit.
-- Each correction returns through the existing `advance-model-attempt-accounting` step, whose
-  compiler-validated local limit owns further attempts of that assignment (§22.7).
+- Each correction returns to the `advance-attempt` stage of its `request-model` step, whose
+  compiler-validated `retry-limit` owns further attempts of that assignment (§22.7).
 - [§22.7](#227-repair-retry-limit-and-escalation) states the
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` counting (not
-  yet implemented); the correction content and its rules here are unchanged.
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` counting, which
+  the Specify definition uses; the correction content and its rules here are unchanged.
 - The [§12.7](12-model-boundary.md#127-workflow-defined-model-operations) token budget
   accounts every request and correction. Native finding-evidence validation and repair
   exhaustion remain terminal.
@@ -711,7 +711,7 @@ Successful repair progress is independent of another target's retry allowance:
   ([ADR 0033](../decisions/0033-generic-repair-operations.md)). Two steps that use the same
   generic repair operation therefore keep separate counts. Ordinary model requests count visits by compiled operation
   and immutable assignment; other operations retain invocation-wide counts. Under
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md), the
   compiled operation for every model request, ordinary, atomic repair or dependent, is its
   `request-model` step. Each keeps its counting scope: assignment, native defect key, or the
   pending native parent key. Protocol correction and its accounting become engine-run stages

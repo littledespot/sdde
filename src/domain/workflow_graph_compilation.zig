@@ -10,6 +10,7 @@ const schema_compiler = @import("../ports/model_result_schema_compiler.zig");
 const provider_identity = @import("llm_provider_identity.zig");
 const workflow_retry = @import("workflow_retry.zig");
 const data = @import("pipeline_data.zig");
+const kernel = @import("model_request_kernel.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -48,30 +49,8 @@ pub fn compile(
             const retry_authority = try resolveRetryAuthority(item, declared.id, entry.contract, parameters);
             transition_count = std.math.add(usize, transition_count, declared.outcomes.len) catch return invalid();
             try validateDeclaredOutcomes(entry.contract.outcomes, declared.outcomes, item.steps, policy.*);
-            compiled.* = .{
-                .id = declared.id,
-                .source_chain = declared.source_chain,
-                .operation_id = declared.operation_id,
-                .parameters = parameters,
-                .requires = entry.contract.requires,
-                .optional = entry.contract.optional,
-                .produces = entry.contract.produces,
-                .replaces = entry.contract.replaces,
-                .invalidates = entry.contract.invalidates,
-                .outcomes = entry.contract.outcomes,
-                .side_effect = entry.contract.side_effect,
-                .runner_accounting = entry.contract.runner_accounting,
-                .repair_role = entry.contract.repair_role,
-                .outcome_association = entry.contract.outcome_association,
-                .gates = try compileGates(allocator, registry, entry.contract.gates),
-                .capabilities = entry.binding.capabilities(),
-                .retry_authority = retry_authority,
-                .iteration = entry.contract.iteration,
-                .model = if (entry.contract.requiresModelBinding())
-                    @import("workflow_model.zig").resolve(parameters) orelse return invalid()
-                else
-                    null,
-            };
+            compiled.* = try buildStep(allocator, registry, declared.id, declared.source_chain, declared.operation_id, entry.contract, entry.binding.capabilities(), parameters, retry_authority);
+            compiled.request_stages = try compileRequestStages(allocator, registry, item, declared, entry, resources);
         }
 
         const transitions = allocator.alloc(workflow.Transition, transition_count) catch return invalid();
@@ -100,9 +79,78 @@ pub fn compile(
             },
         };
         @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
-        @import("workflow_model_request_lifecycle.zig").validateRunawayRoutes(graph.authority) catch return invalid();
     }
     return graphs;
+}
+
+fn buildStep(
+    allocator: std.mem.Allocator,
+    registry: *const operation_registry.Registry,
+    id: workflow.WorkflowStepId,
+    source_chain: []const @import("workflow_source.zig").Entry,
+    operation_id: workflow.OperationId,
+    contract: operation.Contract,
+    capabilities: []const []const u8,
+    parameters: []const compilation.CompiledParameter,
+    retry_authority: ?workflow_retry.CompiledAuthority,
+) Error!compilation.CompiledStep {
+    return .{
+        .id = id,
+        .source_chain = source_chain,
+        .operation_id = operation_id,
+        .parameters = parameters,
+        .requires = contract.requires,
+        .optional = contract.optional,
+        .produces = contract.produces,
+        .replaces = contract.replaces,
+        .invalidates = contract.invalidates,
+        .outcomes = contract.outcomes,
+        .side_effect = contract.side_effect,
+        .runner_accounting = contract.runner_accounting,
+        .repair_role = contract.repair_role,
+        .outcome_association = contract.outcome_association,
+        .gates = try compileGates(allocator, registry, contract.gates),
+        .capabilities = capabilities,
+        .retry_authority = retry_authority,
+        .iteration = contract.iteration,
+        .model = if (contract.requiresModelBinding())
+            @import("workflow_model.zig").resolve(parameters) orelse return invalid()
+        else
+            null,
+    };
+}
+
+/// A `request-model` step also compiles its fixed stages (ADR 0030), each from its own stage
+/// contract exactly as a workflow step compiles: the parameters the stage declares are the
+/// step's own, plus the ones the engine fixes. A stage takes the step's id for retry and gate
+/// identity and has no transition of its own.
+fn compileRequestStages(
+    allocator: std.mem.Allocator,
+    registry: *const operation_registry.Registry,
+    item: definition.Definition,
+    declared: workflow.DeclarativeStep,
+    entry: *const operation_registry.Entry,
+    resources: []const compilation.CompiledResource,
+) Error![]const compilation.RequestStage {
+    if (entry.request_stages.len == 0) return &.{};
+    const stages = allocator.alloc(compilation.RequestStage, entry.request_stages.len) catch return invalid();
+    for (entry.request_stages, stages) |stage, *compiled| {
+        var bindings: std.ArrayList(workflow.ParameterBinding) = .empty;
+        for (stage.contract.parameters) |descriptor| {
+            if (kernel.fixedParameter(stage.stage)) |fixed| if (std.mem.eql(u8, fixed.id, descriptor.id)) {
+                bindings.append(allocator, .{ .id = workflow.WorkflowParameterId.parse(fixed.id) orelse return invalid(), .value = .{ .string = fixed.value } }) catch return invalid();
+                continue;
+            };
+            if (findParameter(declared.parameters, descriptor.id)) |value| bindings.append(allocator, value) catch return invalid();
+        }
+        const parameters = try compileParameters(allocator, stage.contract, bindings.items, resources);
+        const retry_authority = try resolveRetryAuthority(item, declared.id, stage.contract, parameters);
+        compiled.* = .{
+            .stage = stage.stage,
+            .step = try buildStep(allocator, registry, declared.id, declared.source_chain, workflow.OperationId.parse(stage.contract.id) orelse return invalid(), stage.contract, stage.binding.capabilities(), parameters, retry_authority),
+        };
+    }
+    return stages;
 }
 
 fn compileDataSchemas(
@@ -114,13 +162,8 @@ fn compileDataSchemas(
     var used = [_]bool{false} ** data.key_count;
     for (invocation_outputs) |key| used[@intFromEnum(key)] = true;
     for (steps) |step| {
-        for (step.gates) |gate| {
-            used[@intFromEnum(gate.evidence)] = true;
-            for (gate.authority) |key| used[@intFromEnum(key)] = true;
-        }
-        inline for (.{ step.requires, step.optional, step.produces, step.replaces, step.invalidates }) |keys| {
-            for (keys) |key| used[@intFromEnum(key)] = true;
-        }
+        markStepKeys(&used, step);
+        for (step.request_stages) |stage| markStepKeys(&used, stage.step);
     }
     var count: usize = 0;
     for (used) |present| if (present) {
@@ -134,6 +177,16 @@ fn compileDataSchemas(
         index += 1;
     }
     return result;
+}
+
+fn markStepKeys(used: *[data.key_count]bool, step: compilation.CompiledStep) void {
+    for (step.gates) |gate| {
+        used[@intFromEnum(gate.evidence)] = true;
+        for (gate.authority) |key| used[@intFromEnum(key)] = true;
+    }
+    inline for (.{ step.requires, step.optional, step.produces, step.replaces, step.invalidates }) |keys| {
+        for (keys) |key| used[@intFromEnum(key)] = true;
+    }
 }
 
 fn compileGates(allocator: std.mem.Allocator, registry: *const operation_registry.Registry, ids: []const []const u8) Error![]const @import("workflow_gate.zig").Contract {

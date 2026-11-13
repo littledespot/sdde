@@ -177,12 +177,17 @@ pub const Trace = struct {
     request_owner_kind: ?stages.OwnerKind = null,
     request_repair_origin: ?Origin = null,
     request_result_definition: ?@import("../../../src/domain/model_result_schema.zig").DefinitionId = null,
-    pending: ?struct { send: dispatch.Send, origin: Origin, uncertain_delivery: bool = false } = null,
+    /// The one charged exchange not yet reconciled with the experiment ledger. A kernel step makes
+    /// several exchanges inside one step, so each is reconciled at its own boundary: before the
+    /// next exchange is charged (`reconcilePending`), or when the step ends for the last one.
+    pending: ?Pending = null,
     inner_transport: ?transport.Port = null,
     failure: ?anyerror = null,
     calls: usize = 0,
     call_records: std.ArrayList(Call) = .empty,
     last_rejection: @import("observation.zig").LastModelRejection = .{},
+    /// How many of the token ledger's accounted attempts earlier steps have already observed.
+    attempts_observed: usize = 0,
     progress: @import("progress.zig").Progress,
     admission_audit: admission.Tracker,
     sequence: usize = 0,
@@ -190,6 +195,25 @@ pub const Trace = struct {
     last_step: ?workflow.WorkflowStepId = null,
 
     const Call = @import("observation.zig").Call;
+    const Pending = struct { send: dispatch.Send, origin: Origin, call: usize, capture_index: ?usize = null, uncertain_delivery: bool = false };
+
+    /// Reconcile the previous exchange with the experiment ledger from the usage the runner has
+    /// already accounted for it, so a protocol correction, a runaway re-send or a retry inside one
+    /// kernel step is charged against the send and token limits exchange by exchange.
+    fn reconcilePending(self: *Trace) !void {
+        const pending = self.pending orelse return;
+        const usage = try @import("observation.zig").usageOf(&self.invocation.pipeline_runner.?, pending.origin);
+        try self.experiment.?.reconcile(pending.send, usage, pending.uncertain_delivery);
+        self.pending = null;
+        self.settle(pending, usage);
+    }
+
+    fn settle(self: *Trace, pending: Pending, usage: ?operation.ProviderUsage) void {
+        self.call_records.items[pending.call - 1].usage = usage;
+        if (self.capture) |log| if (pending.capture_index) |index| {
+            log.records.items[index].usage = usage;
+        };
+    }
 
     pub fn init(store: evidence.Store, invocation: *@import("../../../src/composition/engine_invocation.zig").Assembly, purpose: Purpose) !Trace {
         try store.run.createDirPath(store.io, "evidence");
@@ -278,6 +302,10 @@ pub const Trace = struct {
                 break;
             }
         }
+        // A `request-model` step runs every stage of its request inside this one step, so the single
+        // exchange the compatibility probe allows is stopped at the next stage boundary, as it is
+        // stopped at the next step boundary above.
+        if (self.purpose == .single_exchange) self.invocation.pipeline_runner.?.request_stage_gate = .{ .context = self, .stop_fn = stageGate };
         const result = self.invocation.bindings().invokeStep(id);
         self.last_step = id;
         self.recordStep(id, result) catch |err| {
@@ -286,6 +314,13 @@ pub const Trace = struct {
         if (self.experiment != null and self.failure != null) return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
         if (self.experimentStopped() and result != .rejected) return .{ .rejected = .cancelled };
         return afterChild(self.purpose, self.boundary, self.failure, result);
+    }
+
+    fn stageGate(context: *anyopaque, _: @import("../../../src/domain/model_request_stage.zig").Stage) ?@import("../../../src/application/workflow_pipeline_runner.zig").Runner.StageStop {
+        const self = cast(context);
+        if (self.failure != null) return .failed;
+        if (self.purpose == .single_exchange and self.boundary != .open) return .cancelled;
+        return null;
     }
 
     fn experimentStopped(self: *const Trace) bool {
@@ -308,6 +343,12 @@ pub const Trace = struct {
     fn exchange(context: *transport.Context, a: std.mem.Allocator, request: transport.Request) transport.Error!transport.Response {
         const self: *Trace = @ptrCast(@alignCast(context));
         if (self.failure != null) return error.Cancelled;
+        // The previous exchange of this step is charged to its own accounting before the next is
+        // considered, so the experiment's limits and halt reasons see it.
+        if (self.experiment != null) self.reconcilePending() catch |err| {
+            self.fail(err);
+            return error.Cancelled;
+        };
         if (self.experiment) |gate| if (gate.snapshot().halt_reason != null) return error.Cancelled;
         if (self.experiment != null) frozen_binding.validateWire(a, request) catch |err| {
             self.experiment.?.stop(.configuration_drift);
@@ -348,9 +389,10 @@ pub const Trace = struct {
             if (err == error.ExchangeInFlight) gate.stop(.evidence_failure);
             return error.Cancelled;
         } else null;
-        if (send) |charged| self.pending = .{ .send = charged, .origin = self.call_records.items[self.calls - 1].origin };
+        if (send) |charged| self.pending = .{ .send = charged, .origin = self.call_records.items[self.calls - 1].origin, .call = self.calls };
         if (self.capture) |log| {
             self.capture_index = log.records.items.len;
+            if (self.pending) |*pending| pending.capture_index = self.capture_index;
             log.records.appendAssumeCapacity(.{
                 .call = self.calls,
                 .origin = self.call_records.items[self.calls - 1].origin,
@@ -561,20 +603,45 @@ pub const Trace = struct {
         return .{ .rejected = .cancelled };
     }
 
+    /// A `request-model` step makes every attempt of its request inside one step, so the step's
+    /// report reads only its last attempt (`observation.capture`). Each earlier attempt of the step
+    /// is observed here from recorded history, in order, as the per-attempt steps once were: its
+    /// rejection becomes the last protocol or provider rejection and reaches the capture receipt of
+    /// its own call. An attempt with no call of its own (never sent) has nothing to attach.
+    fn observeEarlierAttempts(self: *Trace, a: std.mem.Allocator, runner: *const @import("../../../src/application/workflow_pipeline_runner.zig").Runner) !void {
+        const accounted = runner.tokenLedger().accounted_operations.items;
+        if (accounted.len <= self.attempts_observed + 1) return;
+        for (accounted[self.attempts_observed .. accounted.len - 1]) |attempt| {
+            var earlier: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed };
+            try @import("observation.zig").attemptRejection(a, runner, attempt.id, &earlier);
+            if (earlier.provider_diagnostic == null and earlier.model_diagnostic == null) continue;
+            const origin = earlier.last_model_origin orelse continue;
+            const call = for (self.call_records.items, 1..) |record, ordinal| {
+                if (std.meta.eql(record.origin, origin)) break ordinal;
+            } else continue;
+            try self.last_rejection.observe(self.store.allocator, call, earlier);
+            var projected: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed };
+            try self.last_rejection.project(a, call, &projected);
+            if (self.capture) |log| try log.observeRejections(projected);
+        }
+    }
+
     fn recordStep(self: *Trace, id: workflow.WorkflowStepId, result: execution.Applied) !void {
         const runner = &self.invocation.pipeline_runner.?;
         var arena: std.heap.ArenaAllocator = .init(self.store.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
         try @import("observation.zig").capture(a, runner, &report);
         if (self.pending) |pending| {
             const usage = try reconcileExperiment(self.experiment.?, pending.send, pending.origin, report.attempts, pending.uncertain_delivery);
             self.pending = null;
-            if (self.receipt()) |retained| retained.usage = usage;
+            self.settle(pending, usage);
         }
+        try self.observeEarlierAttempts(a, runner);
         try self.last_rejection.observe(self.store.allocator, self.calls, report);
         try self.last_rejection.project(a, self.calls, &report);
+        self.attempts_observed = runner.tokenLedger().accounted_operations.items.len;
         const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
         try self.admission_audit.observe(&view, self.sequence + 1, self.physical_sends);
         if (self.capture) |log| {
@@ -583,23 +650,35 @@ pub const Trace = struct {
             try log.reviews.observe(&view);
         }
         const invocation = @import("../../../src/application/model_invocation_workflow.zig");
-        if (view.slots[@intFromEnum(invocation.schema.key)] != null) {
-            const raw = try values.read(&view, invocation.schema, @import("../../../src/domain/model_invocation_result.zig").Result);
-            if (self.current) |current| if (current.eql(raw.operationId())) {
-                if (self.call_records.items[self.calls - 1].output != .available) if (raw.outcome()) |outcome| {
-                    if (outcome.* == .observation and outcome.observation == .completed and outcome.observation.completed.raw_result == .complete) {
-                        self.store.write(.generation, self.calls, .model_output, outcome.observation.completed.raw_result.complete.content.bytes) catch |err| {
-                            self.call_records.items[self.calls - 1].output = .capture_failed;
-                            return err;
-                        };
-                        self.call_records.items[self.calls - 1].output = .available;
-                        if (self.receipt()) |retained| {
-                            retained.model_output_available = true;
-                            retained.model_output_sha256 = digest(outcome.observation.completed.raw_result.complete.content.bytes);
-                        }
-                    }
+        // DE1c: a kernel step makes every call of its request inside one step and drops the raw
+        // exchanges from the current envelope when it ends, so the model-output artifacts are read
+        // from recorded history, every call the step made, each joined to its own captured call by
+        // its origin. A legacy step makes one call, and the same walk finds just that one.
+        if (view.contains(requests.ledger_schema.key)) {
+            const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+            for (runner.envelope.records.items) |record| {
+                if (record.key() != invocation.schema.key) continue;
+                var recorded: @import("../../../src/domain/pipeline_data.zig").View = .{};
+                recorded.slots[@intFromEnum(invocation.schema.key)] = record.value;
+                const raw = try values.read(&recorded, invocation.schema, @import("../../../src/domain/model_invocation_result.zig").Result);
+                const origin = Origin.from(identities, raw.operationId()) orelse continue;
+                const index = for (self.call_records.items, 0..) |call, position| {
+                    if (std.meta.eql(call.origin, origin)) break position;
+                } else continue;
+                if (self.call_records.items[index].output == .available) continue;
+                const outcome = raw.outcome() orelse continue;
+                if (outcome.* != .observation or outcome.observation != .completed or outcome.observation.completed.raw_result != .complete) continue;
+                const bytes = outcome.observation.completed.raw_result.complete.content.bytes;
+                self.store.write(.generation, index + 1, .model_output, bytes) catch |err| {
+                    self.call_records.items[index].output = .capture_failed;
+                    return err;
                 };
-            };
+                self.call_records.items[index].output = .available;
+                if (index + 1 == self.calls) if (self.receipt()) |retained| {
+                    retained.model_output_available = true;
+                    retained.model_output_sha256 = digest(bytes);
+                };
+            }
         }
         try self.correlate(a, &report);
         self.updateReceipt();
@@ -614,7 +693,7 @@ pub const Trace = struct {
 
     pub fn stepEvent(a: std.mem.Allocator, sequence: usize, id: workflow.WorkflowStepId, result: execution.Applied, report: c.Report) ![]const u8 {
         return std.json.Stringify.valueAlloc(a, .{
-            .schema = "e2e-step-event/v2",
+            .schema = "e2e-step-event/v3",
             .sequence = sequence,
             .step = id.bytes,
             .outcome = result.status(),
@@ -983,7 +1062,7 @@ test "native receipt failure proofs preserve intermediate upstream rejections af
     var log: CaptureLog = .init(std.testing.allocator);
     defer log.deinit();
     for (1..4) |call| try appendReceiptFixture(&log, call);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed };
     report.last_protocol_rejection = .{ .call = 1, .origin = log.records.items[0].origin, .reason = "MOCK initial schema rejection", .json_error = null, .schema_error = .{ .reason = .missing_required_property, .path = "/claims" } };
     try log.observeRejections(report);
     report.last_protocol_rejection = null;
@@ -1009,7 +1088,7 @@ fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
     var log: CaptureLog = .init(a);
     defer log.deinit();
     try appendReceiptFixture(&log, 1);
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
         .call = 1,
         .origin = log.records.items[0].origin,
         .reason = "MOCK malformed JSON",

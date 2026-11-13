@@ -22,8 +22,7 @@ composable definition-local subgraphs expanded by the shared compiler before gra
 validation. ADR 0013’s 2026-09-16 amendment permits nested calls and rejects recursion.
 The existing operation registry and runner remain the execution owners.
 
-**Single-request amendment (22 October 2026, not yet implemented except the
-token-counting removal and the catalogue deadline):**
+**Single-request amendment (22 October 2026, implemented):**
 [ADR 0030](0030-engine-owned-model-request.md) adds the stages of one model request to
 the engine-kernel list below. A workflow makes each request with one `request-model` step
 and still declares its slot, resources, retry limit and outcome transitions. The stage
@@ -78,8 +77,9 @@ workflow behavior without duplicating large resources at every node.
 - Sequencing and branching are visible in the YAML graph.
 - An operation retains one cohesive responsibility and must not conceal a second
   workflow graph. ADR 0030's `request-model` operation runs one fixed kernel stage
-  sequence for one model request; it is not a workflow graph, and its only internal
-  retry is the protocol correction bounded by the step's declared `retry-limit`.
+  sequence for one model request; it is not a workflow graph. Its internal retries are the
+  protocol correction, bounded by the step's declared `retry-limit`, and ADR 0039's one
+  runaway re-send per attempt, which is outside `retry-limit`.
 
 - Engine-kernel enforcement is not workflow functionality and is not callable or
   bypassable from YAML.
@@ -121,9 +121,8 @@ workflow behavior without duplicating large resources at every node.
 
 The exact compact schema is owned by [F0005](../features/F0005-WorkflowDefinitionRegistryService.md#32-root-shape)
 and its formal schema. The [provider-request test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml)
-shows the implemented explicit request operations; the [Specify definition](../workflows/spec.workflow.yaml)
-shows reusable subgraphs. Both show the explicit request steps that ADR 0030 replaces;
-they change when it is implemented.
+shows a `request-model` step with its release; the [Specify definition](../workflows/spec.workflow.yaml)
+shows reusable subgraphs and one `request-model` step per model request (ADR 0030).
 
 Each operation step has one registered reference, optional compact parameters and
 an explicit outcome map. ADR 0013 permits `call` steps expanded by the same compiler.

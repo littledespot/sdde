@@ -17,7 +17,7 @@ An orchestrator “contains” children through composition. It does not contain
   they would duplicate and hide the compiled workflow graph.
 - Only the engine kernel identified by ADR 0005, including the sections explicitly marked
   startup, cleanup, or instrumentation-internal, is not callable from YAML.
-- [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented) adds the
+- [ADR 0030](../decisions/0030-engine-owned-model-request.md) adds the
   stage sequence of one model request to that kernel. The `request-model` step is selected by
   `use` and its successors by `on`; its stages are not.
 
@@ -85,8 +85,8 @@ workflow without branching on workflow names:
   workflow.
 - Each step returns only its registered typed outcomes.
 - The YAML graph declares every branch, including clarification, retry, repair, failure, and
-  cancellation. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet
-  implemented), model invocation is one `request-model` step, and its protocol correction runs
+  cancellation. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md)
+  (implemented), model invocation is one `request-model` step, and its protocol correction runs
   inside that step under its declared `retry-limit`.
 - Every retry-capable operation instance declares its own bounded limit, which the compiler
   binds to monotonic accounting and which no transition cycle can bypass.
@@ -110,7 +110,7 @@ The compiler proves declared part dependencies; the composition resource schedul
 nothing. Generic assembly is a pure child action with no model port or prompt.
 The 1,024-step ceiling (ADR 0016) preserves visible detailed operations and
 independent retry identities; there is no hidden dispatcher. Extraction uses this
-shared implementation. Under ADR 0030 (not yet implemented), each part call site is one
+shared implementation. Under ADR 0030, each part call site is one
 `request-model` step with its `composition-part`; its retry identity stays independent.
 Under [ADR 0031](../decisions/0031-stage-actions.md), deterministic operations that a stage
 action absorbs are no longer visible operations: the nine toolchain operations are the internal
@@ -197,15 +197,14 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
 ### 14.6 Protocol-retry operation
 
 > [§22.7](22-repair.md#227-repair-retry-limit-and-escalation) states the
-> [ADR 0030](../decisions/0030-engine-owned-model-request.md) change (not yet implemented);
-> the rules below then apply to the `request-model` step's correction stage.
+> [ADR 0030](../decisions/0030-engine-owned-model-request.md) change;
+> the rules below apply to the `request-model` step's correction stage.
 
 - This YAML-selected operation handles decoding/schema rejection and the approved
   missing-final-answer case under [§22.6](22-repair.md#226-unparseable-output).
-- Its compiled subgraph uses the existing `build-model-protocol-retry` action to
-  prepare correction content. Runner-owned bindings then reuse ordinary attempt
-  and token accounting, provider invocation, observation validation and response
-  admission; detailed decoding and schema-validation operations remain available.
+- Its correction stage prepares correction content. Runner-owned bindings then reuse
+  ordinary attempt and token accounting, provider invocation, observation validation and
+  response admission (decoding and schema validation are one admission stage).
 - [Explicit error guidance](22-repair.md#2262-explicit-error-guidance) changes
   request preparation, not orchestration authority. The orchestrator follows typed
   outcomes; it neither derives explanations nor compares rejection evidence.

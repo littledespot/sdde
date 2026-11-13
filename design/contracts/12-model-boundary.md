@@ -19,21 +19,20 @@ LLM interaction is deliberately split across actions:
 
 No one action both invokes and interprets the model. No model action reads or writes the workspace directly.
 
-Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
-request-lifecycle actions run as fixed stages of one `request-model` step. A capability-free
-kernel orchestrator coordinates them through runner-owned child bindings. The split above is
-unchanged: each stage is still a separate action with its own narrow ports.
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md), the request-lifecycle
+actions run as fixed stages of one `request-model` step. A capability-free kernel orchestrator
+coordinates them through runner-owned child bindings. The split above is unchanged: each stage
+is still a separate action with its own narrow ports.
 
 Independently valid usage survives invalid answer content through the shared
 provider observation contract, including missing final text. Only complete content
 reaches decoding. The envelope retains declared observation history for reporting;
 storage does not change retry eligibility or the execution-wide token ledger.
 
-Step 5 is the YAML operation `validate-provider-invocation-observation`; step 6 is
-`decode-model-envelope` and `validate-model-payload-schema`, or the consolidated
-`admit-model-response` that combines them. The
-[operation catalogue](model-request-operations.md) owns their inputs, outcomes and
-ownership rules.
+Step 5 is the observation-validation stage (`validate-provider-invocation-observation`); step 6
+is the response-admission stage (`admit-model-response`), which decodes and schema-validates in
+one binding. The [operation catalogue](model-request-operations.md) owns their inputs, outcomes
+and ownership rules.
 
 - The sole approved prefix-normalization exception to strict decoding and its logging
   are defined in [§22.6](22-repair.md#226-unparseable-output).
@@ -336,8 +335,8 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 ### 12.7 Workflow-defined model operations
 
-> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) (the `request-model`
-> step is not yet implemented).** One `request-model` step replaces the preparation step
+> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented.** One
+> `request-model` step replaces the preparation step
 > and every explicit request-lifecycle step of this section and the
 > [operation catalogue](model-request-operations.md). A fixed kernel orchestrator runs
 > them as the stages ADR 0030 lists, through runner-owned child bindings. Where a rule
@@ -376,9 +375,9 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   packaged route descriptor, prompt, schema, slot assignment, or fallback.
 - Under ADR 0012, later YAML operations consume the same immutable request through their typed
   data dependencies.
-- Preparation may use detailed operations or the pure `prepare-model-request`
-  operation. Both reuse the same identity, binding and construction owners; the
-  consolidated form publishes their typed values together through runner validation.
+- Preparation is the `request-model` step's first stage, which reuses the identity,
+  binding and construction owners and publishes their typed values together through
+  runner validation.
 - They retain its slot, resources, controls and identity; they do not declare replacement
   selections for their own step.
 - The internal `model-request/v1` content contract is not a YAML resource; the workflow supplies

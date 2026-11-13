@@ -273,15 +273,16 @@ Every orchestrator must:
   a domain stage. An [ADR 0031](../decisions/0031-stage-actions.md) stage action is not a child
   graph: its stage is its declared responsibility, and its internal steps are functions with no
   routed outcomes.
-- [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented) names the
-  stage sequence of one model request as an ADR 0005 kernel responsibility. A fixed,
-  capability-free kernel orchestrator implements the registered `request-model` operation,
-  with each request stage's action as a runner-owned child binding (these are not ADR 0031
-  stage actions).
-  ADR 0030 narrowly amends the previous rule for it: its child graph may contain exactly one
-  retry, the request's protocol correction, bounded by the step's declared `retry-limit`. It
-  still cannot conceal workflow transitions, repair policy, slot or resource selection, or a
-  domain stage. Each stage keeps its own narrow ports.
+- [ADR 0030](../decisions/0030-engine-owned-model-request.md) names the stage sequence of one
+  model request as an ADR 0005 kernel responsibility. A fixed, capability-free kernel
+  orchestrator implements the registered `request-model` operation, with each request stage's
+  action as a runner-owned child binding (these are not ADR 0031 stage actions).
+  ADR 0030 narrowly amends the previous rule for it: its child graph may contain exactly two
+  retries, the request's protocol correction, bounded by the step's declared `retry-limit`, and
+  [ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)'s runaway re-send,
+  one per attempt and outside `retry-limit`. It still cannot conceal workflow transitions, repair
+  policy, slot or resource selection, or a domain stage. Each stage keeps its own narrow ports,
+  and the runner owns every retry count.
 
 - Architecture tests fail the build if an action field or constructor parameter is a
   `PipelineNode`, `Action`, `Orchestrator`, dispatcher, executor callback, node runner, or

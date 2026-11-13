@@ -98,6 +98,15 @@ pub const CompiledStep = struct {
     // Compiler-proven immutable model-binding requirements, including for pure
     // preparation steps without a provider-call capability.
     model: ?@import("workflow_model.zig").Requirements = null,
+    /// A `request-model` step carries its fixed stages here, one compiled step per stage, in
+    /// stage order. They are no graph steps: no transition reaches them, they take the step's own
+    /// id for retry and gate identity, and they never count against the step limit (ADR 0030).
+    request_stages: []const RequestStage = &.{},
+};
+
+pub const RequestStage = struct {
+    stage: @import("model_request_stage.zig").Stage,
+    step: CompiledStep,
 };
 
 pub const SemanticAuthority = struct {
@@ -149,6 +158,9 @@ pub fn calculateExecutionLimit(steps: []const CompiledStep) ?usize {
     if (steps.len == 0) return null;
     var total_retry_limit: usize = 0;
     for (steps) |step| {
+        // A `request-model` step runs its attempts inside one step execution (ADR 0030), so its
+        // retry limit adds no step executions to the workflow ceiling.
+        if (step.request_stages.len != 0) continue;
         if (step.retry_authority) |authority| {
             const keys: usize = if (authority.scope == .operation) 1 else std.math.add(usize, workflow_retry.maximum_repair_keys, if (authority.scope == .model_request) workflow_retry.maximum_request_assignments else 0) catch return null;
             const per_key = std.math.add(usize, authority.limit.value, 1) catch return null;

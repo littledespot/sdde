@@ -159,8 +159,9 @@ without adding an assessment model, configuration option or principle loader.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v25` (v24 until the
-display name became the sources' heading, [ADR 0048](0048-engine-derived-specification-title.md);
+Completed and clarification-pending state use `specification-state/v26` (v25 until the
+extraction contract's parts became the `request-model` steps, [ADR 0030](0030-engine-owned-model-request.md);
+v24 until the display name became the sources' heading, [ADR 0048](0048-engine-derived-specification-title.md);
 v23 until an edge case's outcome became a link to an acceptance criterion, [ADR 0038](0038-record-claims-and-scenario-coverage.md)
 Decision 7; v22 until the entity lost its meaning and relationships, Decision 6; v21 until the principle category policy was removed,
 [ADR 0015](0015-specification-principle-review.md)): it holds

@@ -2,9 +2,8 @@
 //! equivalence evidence (ADR 0030 "Freeze first"). It is an observation, not an
 //! assertion: tests never compare it. Each executed step becomes one line keyed
 //! by its source call path, so a structural conversion can be compared with the
-//! trace recorded before it. A request-lifecycle step inside a model-request
-//! wrapper collapses to the wrapper's call site plus the stage's operation ID,
-//! the form ADR 0030's `request-model` step keeps.
+//! trace recorded before it. A model request is one `request-model` step, so its
+//! line is its own call site plus that operation ID (ADR 0030).
 const std = @import("std");
 const compilation = @import("../domain/workflow_compilation.zig");
 const execution = @import("../domain/workflow_execution.zig");
@@ -14,12 +13,7 @@ const filesystem = @import("../domain/filesystem_identity.zig");
 pub const schema = "workflow-step-trace/v1";
 pub const directory = ".zig-cache/workflow-step-trace";
 
-/// The subgraphs that wrap one model request's lifecycle today, as ADR 0030's
-/// Context names them.
-const request_wrappers = [_][]const u8{ "model-request", "model-request-with-context", "support-request", "composition-request", "composition-request-body" };
-const request_body = "model-request-body";
-
-pub const Error = std.mem.Allocator.Error || error{UnwrappedRequestLifecycle};
+pub const Error = std.mem.Allocator.Error;
 
 pub const Trace = struct {
     lines: std.Io.Writer.Allocating,
@@ -40,32 +34,21 @@ pub const Trace = struct {
     pub fn record(self: *Trace, step: *const compilation.CompiledStep, applied: execution.Applied) Error!void {
         writeLine(&self.lines.writer, step, applied) catch |err| return switch (err) {
             error.WriteFailed => error.OutOfMemory,
-            error.UnwrappedRequestLifecycle => error.UnwrappedRequestLifecycle,
         };
         self.steps += 1;
     }
 };
 
-fn wrapper(entry: source.Entry) bool {
-    if (entry.kind != .subgraph) return false;
-    for (request_wrappers) |name| if (std.mem.eql(u8, entry.target, name)) return true;
-    return false;
-}
-
-/// Writes the step's source call path, stopping at a request wrapper. A request
-/// body reached without a wrapper is an error, so a renamed or new wrapper can
-/// never produce a key that silently stops matching.
-pub fn writeCallSite(w: *std.Io.Writer, step: *const compilation.CompiledStep) (std.Io.Writer.Error || error{UnwrappedRequestLifecycle})!void {
+/// Writes the step's source call path.
+pub fn writeCallSite(w: *std.Io.Writer, step: *const compilation.CompiledStep) std.Io.Writer.Error!void {
     if (step.source_chain.len == 0) return w.writeAll(step.id.bytes);
     for (step.source_chain, 0..) |entry, index| {
-        if (entry.kind == .subgraph and std.mem.eql(u8, entry.target, request_body)) return error.UnwrappedRequestLifecycle;
         if (index != 0) try w.writeByte('/');
         try w.writeAll(entry.id);
-        if (wrapper(entry)) return;
     }
 }
 
-fn writeLine(w: *std.Io.Writer, step: *const compilation.CompiledStep, applied: execution.Applied) (std.Io.Writer.Error || error{UnwrappedRequestLifecycle})!void {
+fn writeLine(w: *std.Io.Writer, step: *const compilation.CompiledStep, applied: execution.Applied) std.Io.Writer.Error!void {
     try writeCallSite(w, step);
     try w.print("#{s}\t", .{step.operation_id.bytes});
     switch (applied) {
@@ -80,6 +63,8 @@ fn writeLine(w: *std.Io.Writer, step: *const compilation.CompiledStep, applied: 
 pub fn writeRejection(w: *std.Io.Writer, reason: execution.Rejection) std.Io.Writer.Error!void {
     try w.print("rejected:{s}:{s}", .{ @tagName(reason), reason.diagnostic() });
     if (reason == .retry_limit) try w.print(":executions={d}", .{reason.retry_limit.completed_executions});
+    // A `request-model` step's exhaustion names the stage that reached the limit (ADR 0030).
+    if (reason == .retry_limit) if (reason.retry_limit.stage) |stage| try w.print(":stage={s}", .{stage.name()});
 }
 
 /// One accounted inference, in accounting order.
@@ -227,59 +212,37 @@ fn testStep(chain: []const source.Entry, operation: []const u8) compilation.Comp
     return .{ .source_chain = chain, .id = .{ .bytes = "g1-step" }, .operation_id = .{ .bytes = operation }, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{}, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
 }
 
-test "a lifecycle step collapses to its wrapper call site and stage operation" {
+test "a step in a nested subgraph is keyed by its whole call path and its operation" {
     var trace: Trace = .init(std.testing.allocator);
     defer trace.deinit();
     const chain = [_]source.Entry{
-        chainEntry(null, "reconcile", .subgraph, "reconciliation"),
-        chainEntry("reconciliation", "dispositions", .subgraph, "model-request"),
-        chainEntry("model-request", "request", .subgraph, "model-request-body"),
-        chainEntry("model-request-body", "account", .operation, "advance-model-attempt-accounting"),
-    };
-    const step = testStep(&chain, "advance-model-attempt-accounting");
-    try trace.record(&step, .{ .outcome = .ok });
-    try trace.record(&step, .{ .rejected = .authority });
-    try std.testing.expectEqualStrings("reconcile/dispositions#advance-model-attempt-accounting\tok\nreconcile/dispositions#advance-model-attempt-accounting\trejected:authority:failed\n", trace.written());
-    try std.testing.expectEqual(@as(usize, 2), trace.steps);
-}
-
-test "nested and direct composition bodies collapse at the outermost wrapper" {
-    var trace: Trace = .init(std.testing.allocator);
-    defer trace.deinit();
-    const nested = [_]source.Entry{
-        chainEntry(null, "summary", .subgraph, "composition-request"),
-        chainEntry("composition-request", "request", .subgraph, "composition-request-body"),
-        chainEntry("composition-request-body", "request", .subgraph, "model-request-body"),
-        chainEntry("model-request-body", "invoke", .operation, "invoke-model"),
-    };
-    const direct = [_]source.Entry{
         chainEntry(null, "extract", .subgraph, "extraction"),
-        chainEntry("extraction", "content-request", .subgraph, "composition-request-body"),
-        chainEntry("composition-request-body", "retain", .operation, "retain-json-part"),
+        chainEntry("extraction", "content-request", .subgraph, "retention"),
+        chainEntry("retention", "retain", .operation, "retain-json-part"),
     };
-    try trace.record(&testStep(&nested, "invoke-model"), .{ .outcome = .ok });
-    try trace.record(&testStep(&direct, "retain-json-part"), .{ .outcome = .ok });
-    try std.testing.expectEqualStrings("summary#invoke-model\tok\nextract/content-request#retain-json-part\tok\n", trace.written());
+    try trace.record(&testStep(&chain, "retain-json-part"), .{ .outcome = .ok });
+    try std.testing.expectEqualStrings("extract/content-request/retain#retain-json-part\tok\n", trace.written());
 }
 
-test "a request body without a wrapper is an error, not a silent key" {
+test "a request-model step is one line at its own call site" {
     var trace: Trace = .init(std.testing.allocator);
     defer trace.deinit();
     const chain = [_]source.Entry{
-        chainEntry(null, "review", .subgraph, "renamed-request"),
-        chainEntry("renamed-request", "request", .subgraph, "model-request-body"),
-        chainEntry("model-request-body", "close", .operation, "complete-model-request"),
+        chainEntry(null, "review", .subgraph, "assess-support"),
+        chainEntry("assess-support", "model", .operation, "request-model"),
     };
-    try std.testing.expectError(error.UnwrappedRequestLifecycle, trace.record(&testStep(&chain, "complete-model-request"), .{ .outcome = .ok }));
-    try std.testing.expectEqual(@as(usize, 0), trace.steps);
+    try trace.record(&testStep(&chain, "request-model"), .{ .outcome = .ok });
+    try trace.record(&testStep(&chain, "request-model"), .{ .rejected = .cancelled });
+    try std.testing.expectEqualStrings("review/model#request-model\tok\nreview/model#request-model\trejected:cancelled:cancelled\n", trace.written());
+    try std.testing.expectEqual(@as(usize, 2), trace.steps);
 }
 
 test "a step without a source chain keys by its compiled ID and rejections use the canonical diagnostic" {
     var trace: Trace = .init(std.testing.allocator);
     defer trace.deinit();
-    const step = testStep(&.{}, "retire-model-transport");
+    const step = testStep(&.{}, "release-model-transport");
     try trace.record(&step, .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } });
-    try std.testing.expectEqualStrings("g1-step#retire-model-transport\trejected:operation_failed:OperationExecutionFailed\n", trace.written());
+    try std.testing.expectEqualStrings("g1-step#release-model-transport\trejected:operation_failed:OperationExecutionFailed\n", trace.written());
 }
 
 test "observed files exclude log components, mask the run identity and sort by path" {

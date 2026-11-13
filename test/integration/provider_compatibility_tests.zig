@@ -127,7 +127,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     var prefix_cancellation: PrefixCancellation = .{ .wire = &wire };
     var probe: invoke.Probe = .{};
     var report: contracts.Report = .{
-        .schema = .@"spec-e2e-report/v17",
+        .schema = .@"spec-e2e-report/v18",
         .started_at_utc = "2026-10-15T00:00:00Z",
         .case_id = selected.id,
         .workflow_id = selected.workflow_id,
@@ -542,7 +542,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         .delivery = .accepted_or_unknown,
     } } else .{ .received = .{ .status = 200, .body = response } };
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
-    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
     const published = invoke.run(io, a, project, selected, captured, @import("../harness/environment.zig").bedrockOnly(key), store, &report, .{
         .purpose = .whole_workflow,
@@ -601,6 +601,210 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         try std.testing.expect(receipt.model_output_available);
     }
     try fixture.verifySources(io, a, .cwd(), captured);
+}
+
+const KernelExchanges = enum { corrections, send_limit, token_limit, runaway_resend };
+
+/// A `request-model` step makes every call of its request inside one step, so a protocol correction
+/// or a runaway re-send is a second exchange of the same step. Each exchange is charged to the
+/// experiment ledger at its own boundary, before the next is considered.
+fn runKernelExchanges(case_path: []const u8, scenario: KernelExchanges) !void {
+    const dispatch = @import("../harness/baseline/dispatch.zig");
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var temporary = std.testing.tmpDir(.{});
+    defer temporary.cleanup();
+    try temporary.dir.createDirPath(io, "project");
+    const project = try temporary.dir.openDir(io, "project", .{});
+    defer project.close(io);
+    const selected = try @import("frozen_protocol_fixture.zig").select(a, try contracts.parse(a, try files.read(io, a, .cwd(), case_path)));
+    const captured = try fixture.capture(io, a, .cwd(), selected);
+    try fixture.materialize(io, project, captured);
+    var gate = try dispatch.Gate.init(switch (scenario) {
+        .corrections, .runaway_resend => .{ .maximum_sends = 10, .maximum_actual_tokens = 2_000_000 },
+        .send_limit => .{ .maximum_sends = 2, .maximum_actual_tokens = 2_000_000 },
+        .token_limit => .{ .maximum_sends = 10, .maximum_actual_tokens = 20 },
+    });
+    var log = @import("../harness/e2e/trace.zig").CaptureLog.init(a);
+    defer log.deinit();
+    // A response that is not the requested object is a protocol failure, which the request corrects
+    // within its retry limit; a response stopped at its output limit is a runaway.
+    var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = try body(a, if (scenario == .runaway_resend) .noncandidate_stop else .malformed_candidate) };
+    const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    const run = invoke.run(io, a, project, selected, captured, @import("../harness/environment.zig").bedrockOnly(key), store, &report, .{
+        .purpose = .whole_workflow,
+        .experiment = &gate,
+        .capture = &log,
+        .transport = wire.port(),
+    });
+    const snapshot = gate.snapshot();
+    switch (scenario) {
+        .corrections => {
+            // The request's own retry limit bounds its exchanges; every one was sent, charged and recorded.
+            _ = try run;
+            try std.testing.expect(wire.calls > 1);
+            try std.testing.expectEqual(@as(u64, wire.calls), snapshot.physical_sends);
+            try std.testing.expectEqual(snapshot.physical_sends, snapshot.reconciled_sends);
+            try std.testing.expectEqual(wire.calls, log.records.items.len);
+            try std.testing.expectEqual(@as(u128, 12 * wire.calls), snapshot.total_accounted_tokens);
+            try std.testing.expect(snapshot.usage_complete and snapshot.halt_reason == null);
+            for (log.records.items, 1..) |receipt, ordinal| {
+                try std.testing.expectEqual(ordinal, receipt.call);
+                try std.testing.expectEqual(@as(u64, ordinal), receipt.experiment_send.?.ordinal);
+                try std.testing.expectEqual(@as(u64, 12), receipt.usage.?.total_tokens);
+            }
+        },
+        .send_limit => {
+            _ = try run;
+            try std.testing.expectEqual(@as(usize, 2), wire.calls);
+            try std.testing.expectEqual(@as(u64, 2), snapshot.physical_sends);
+            try std.testing.expectEqual(@as(u64, 2), snapshot.reconciled_sends);
+            try std.testing.expectEqual(@as(?dispatch.Reason, .send_limit), snapshot.halt_reason);
+            try std.testing.expectEqual(@as(usize, 2), log.records.items.len);
+        },
+        .token_limit => {
+            // The second exchange's usage is charged before a third is considered, so the limit stops it.
+            _ = try run;
+            try std.testing.expectEqual(@as(usize, 2), wire.calls);
+            try std.testing.expectEqual(@as(u128, 24), snapshot.total_accounted_tokens);
+            try std.testing.expectEqual(@as(?dispatch.Reason, .token_limit), snapshot.halt_reason);
+            try std.testing.expect(snapshot.overshot);
+        },
+        .runaway_resend => {
+            // The frozen protocol binds the configured temperature, so the re-send is refused before it
+            // is sent. The runaway exchange before it is already charged with its own usage.
+            // The refused re-send is a harness evidence stop, not a model result: the run ends in an
+            // error and the experiment is halted, whatever the harness names the stop.
+            if (run) |_| return error.TestExpectedError else |err| try std.testing.expect(err == error.EvidenceCaptureFailed or err == error.MissingRequestEvidence);
+            try std.testing.expectEqual(@as(usize, 1), wire.calls);
+            try std.testing.expectEqual(@as(u64, 1), snapshot.physical_sends);
+            try std.testing.expectEqual(@as(u64, 1), snapshot.reconciled_sends);
+            try std.testing.expectEqual(@as(u128, 12), snapshot.total_accounted_tokens);
+            try std.testing.expect(snapshot.usage_complete);
+            try std.testing.expectEqual(@as(?dispatch.Reason, .configuration_drift), snapshot.halt_reason);
+        },
+    }
+}
+
+test "test.integration.provider_compatibility every exchange of one kernel step is charged and recorded at its own boundary" {
+    for (cases) |case_path| for (std.enums.values(KernelExchanges)) |scenario| try runKernelExchanges(case_path, scenario);
+}
+
+const Transport = @import("../../src/adapters/provider/model_http_transport.zig");
+
+/// Answers each exchange from its list, then cancels, so a workflow's later requests end the run
+/// without adding a rejection of their own.
+const Sequence = struct {
+    bodies: []const []const u8,
+    calls: usize = 0,
+
+    fn port(self: *Sequence) Transport.Port {
+        return .{ .context = @ptrCast(self), .exchange_fn = exchange };
+    }
+
+    fn exchange(context: *Transport.Context, _: std.mem.Allocator, _: Transport.Request) Transport.Error!Transport.Response {
+        const self: *Sequence = @ptrCast(@alignCast(context));
+        defer self.calls += 1;
+        if (self.calls >= self.bodies.len) return error.Cancelled;
+        return .{ .received = .{ .status = 200, .body = self.bodies[self.calls] } };
+    }
+};
+
+const trace_module = @import("../harness/e2e/trace.zig");
+
+/// Run the case's workflow against a scripted sequence of responses and hand the final report (and
+/// the experiment's capture log, when asked for) to `check` before the run directory is removed.
+fn runSequence(
+    case_path: []const u8,
+    scenarios: []const Scenario,
+    capture: bool,
+    check: *const fn (std.mem.Allocator, contracts.Report, ?*trace_module.CaptureLog) anyerror!void,
+) !void {
+    const dispatch = @import("../harness/baseline/dispatch.zig");
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var temporary = std.testing.tmpDir(.{});
+    defer temporary.cleanup();
+    try temporary.dir.createDirPath(io, "project");
+    const project = try temporary.dir.openDir(io, "project", .{});
+    defer project.close(io);
+    const selected = try @import("frozen_protocol_fixture.zig").select(a, try contracts.parse(a, try files.read(io, a, .cwd(), case_path)));
+    const captured = try fixture.capture(io, a, .cwd(), selected);
+    try fixture.materialize(io, project, captured);
+    const bodies = try a.alloc([]const u8, scenarios.len);
+    for (scenarios, bodies) |scenario, *bytes| bytes.* = try body(a, scenario);
+    var sequence: Sequence = .{ .bodies = bodies };
+    var gate = try dispatch.Gate.init(.{ .maximum_sends = 20, .maximum_actual_tokens = 2_000_000 });
+    var log = trace_module.CaptureLog.init(a);
+    defer log.deinit();
+    const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    _ = try invoke.run(io, a, project, selected, captured, @import("../harness/environment.zig").bedrockOnly(key), store, &report, .{
+        .purpose = .whole_workflow,
+        .experiment = if (capture) &gate else null,
+        .capture = if (capture) &log else null,
+        .transport = sequence.port(),
+    });
+    try std.testing.expect(report.workflow_outcome != null and report.workflow_outcome.? != .ok);
+    try check(a, report, if (capture) &log else null);
+}
+
+fn checkCorrectedRequest(a: std.mem.Allocator, report: contracts.Report, log: ?*trace_module.CaptureLog) !void {
+    // The request's first response was rejected and its correction admitted, inside one step: the
+    // earlier rejection is still reported, with its own call, origin and diagnostic.
+    try std.testing.expect(report.attempts.len >= 3);
+    const rejection = report.last_protocol_rejection.?;
+    try std.testing.expectEqual(@as(usize, 1), rejection.call);
+    try std.testing.expectEqualDeep(report.attempts[0].origin, rejection.origin);
+    try std.testing.expectEqualStrings("InvalidModelEnvelope", rejection.reason);
+    try std.testing.expect(rejection.json_error != null);
+    try std.testing.expect(report.last_model_call.? > rejection.call);
+    const markdown = try @import("../harness/e2e/report.zig").renderMarkdown(a, report);
+    try std.testing.expect(std.mem.indexOf(u8, markdown, "Earlier protocol rejection") != null);
+    try std.testing.expect(log.?.records.items[0].mechanical_rejection.? == .protocol);
+    try std.testing.expect(log.?.records.items[1].mechanical_rejection == null);
+}
+
+fn checkResentRunaway(_: std.mem.Allocator, report: contracts.Report, _: ?*trace_module.CaptureLog) !void {
+    // The first response stopped at its output limit and the one re-send was admitted: the provider
+    // stop is still reported against the call that hit it, and it is no protocol rejection.
+    try std.testing.expect(report.attempts.len >= 3);
+    try std.testing.expect(report.attempts[1].resends != null);
+    const provider = report.last_provider_rejection.?;
+    try std.testing.expectEqualStrings("output_limit", provider.reason);
+    try std.testing.expectEqual(@as(?usize, 1), provider.call);
+    try std.testing.expectEqualDeep(report.attempts[0].origin, provider.origin.?);
+    try std.testing.expect(report.last_protocol_rejection == null);
+}
+
+fn checkEndedAfterCorrections(_: std.mem.Allocator, report: contracts.Report, log: ?*trace_module.CaptureLog) !void {
+    // A schema rejection, then a syntax rejection, then the run ends: each earlier attempt keeps its
+    // own mechanical rejection, and the last protocol rejection is the later one.
+    const schema = log.?.records.items[0].mechanical_rejection.?.protocol;
+    try std.testing.expectEqual(@as(usize, 1), schema.call);
+    try std.testing.expect(schema.schema_error != null and schema.json_error == null);
+    const syntax = log.?.records.items[1].mechanical_rejection.?.protocol;
+    try std.testing.expectEqual(@as(usize, 2), syntax.call);
+    try std.testing.expect(syntax.json_error != null and syntax.schema_error == null);
+    try std.testing.expectEqual(@as(usize, 2), report.last_protocol_rejection.?.call);
+    try std.testing.expectEqualDeep(report.attempts[1].origin, report.last_protocol_rejection.?.origin);
+}
+
+test "test.integration.provider_compatibility a request admitted after a protocol correction still reports the rejection that caused it" {
+    for (cases) |case_path| try runSequence(case_path, &.{ .malformed_candidate, .complete }, true, checkCorrectedRequest);
+}
+
+test "test.integration.provider_compatibility a request admitted after a runaway re-send still reports the provider stop" {
+    for (cases) |case_path| try runSequence(case_path, &.{ .noncandidate_stop, .complete }, false, checkResentRunaway);
+}
+
+test "test.integration.provider_compatibility a run that ends after corrections keeps each earlier attempt's rejection" {
+    for (cases) |case_path| try runSequence(case_path, &.{ .schema_invalid, .malformed_candidate }, true, checkEndedAfterCorrections);
 }
 
 test "test.integration.provider_compatibility experiment gate retains authentic-boundary receipts and native accounting before stops" {

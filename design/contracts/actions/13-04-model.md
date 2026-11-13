@@ -19,8 +19,19 @@ production caller.
 [§12](../12-model-boundary.md) owns the model boundary and
 [model-request-operations.md](../model-request-operations.md) the request lifecycle these
 operations implement. Under [ADR 0030](../../decisions/0030-engine-owned-model-request.md)
-(not yet implemented) the request-lifecycle operations become stages of one `request-model`
-step. Entries marked "Proposed, no code" are named elsewhere but have no registered operation.
+the request-lifecycle entries below (attempt accounting, provider operation, authorization,
+phase check, invocation, observation, completion, admission, correction, re-send, closure and
+termination) are the **stages** of one `request-model` step, which the Spec workflow and the
+packaging fixture use. A stage is a native binding held by the `request-model` registry entry,
+not an operation a workflow can select: a definition that names a stage's ID fails to compile.
+Entries marked "Proposed, no code" are named elsewhere but have no registered operation.
+
+The runner has one seam beside the stages: an optional stage gate, consulted before each stage
+of a `request-model` step, that a caller such as the provider compatibility probe uses to end a
+request once its one exchange is retained. It names one of two typed stops (`cancelled` or
+`failed`), which the runner maps to its own rejection; the stage it precedes does not run and
+emits no event. It holds no capability and runs nothing. Only the E2E harness `Trace` sets it,
+and an architecture test pins that.
 
 ## Request identity and preparation
 
@@ -37,30 +48,6 @@ step. Entries marked "Proposed, no code" are named elsewhere but have no registe
 - **Reads:** none · **Writes:** none (returns the owner) · **Side effect:** `none`
 - **Does:** Validates one immutable unit-owner descriptor and returns it unchanged.
 - **Rejects:** `InvalidImmutableUnitOwnerId`.
-
-## `AssignModelRequestIdAction` (`assign-model-request-id`)
-
-- **Owner:** [`src/actions/model/assign_model_request_id.zig`](../../../src/actions/model/assign_model_request_id.zig)
-- **Reads:** `model_request_identity_ledger` · **Writes:** replaces `model_request_identity_ledger` · **Side effect:** `none`
-- **Does:** Allocates one logical request ordinal for a unit owner, model operation and purpose binding at the expected ledger revision; protocol retries reuse the identity.
-- **Registered step:** reads `model_request_identity_ledger` (optional: `model_input_packet`, `json_composition`), writes `assigned_model_request` and replaces the ledger, with the request-preparation parameters.
-- **Rejects:** `ModelRequestRevisionConflict`, `InvalidRequestPurposeBinding`, `RequestPurposeNotRegistered`, ordinal or revision exhaustion.
-
-## `ValidateModelRequestBindingAction` (`validate-model-request-binding`)
-
-- **Owner:** [`src/actions/model/validate_model_request_binding.zig`](../../../src/actions/model/validate_model_request_binding.zig)
-- **Reads:** `model_request_identity_ledger` · **Writes:** none (returns binding evidence) · **Side effect:** `none`
-- **Does:** Proves a request ID's ledger membership, unit owner, model operation and purpose at the expected revision.
-- **Registered step:** reads `model_request_identity_ledger`, `assigned_model_request` and writes `validated_model_request`.
-- **Rejects:** `ModelRequestBindingInvalid`, `ModelRequestNotFound`, `ModelRequestRevisionConflict`.
-
-## `BuildModelRequestAction` (`build-model-request`)
-
-- **Owner:** [`src/actions/model/build_model_request.zig`](../../../src/actions/model/build_model_request.zig)
-- **Reads:** `model_request_identity_ledger`, `validated_provider_model_binding` · **Writes:** none (returns the prepared request) · **Side effect:** `none`
-- **Does:** Builds one identified provider-neutral request from a validated source and its model-visible content.
-- **Registered step:** reads `model_request_identity_ledger`, `validated_model_request` and writes `prepared_model_request`.
-- **Rejects:** `InvalidModelRequestSource`, `ModelRequestAssociationInvalid`, `ModelRequestBindingInvalid`.
 
 ## `PrepareModelRequestAction` (`prepare-model-request`)
 
@@ -190,20 +177,6 @@ These steps bind the two lifecycle actions above to fixed transitions; their rul
 - **Does:** Proves call association, delivery, stop and usage before any decode.
 - **Rejects:** `InvalidProviderInvocationContext`, `ProviderInvocationAssociationInvalid`, `InvalidProviderTokenUsage`.
 
-## `DecodeModelEnvelopeAction` (`decode-model-envelope`)
-
-- **Owner:** [`src/actions/model/decode_model_envelope.zig`](../../../src/actions/model/decode_model_envelope.zig)
-- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `provider_invocation_validation_result` · **Writes:** `model_envelope_result` · **Side effect:** `none`
-- **Does:** Parses the complete candidate as one JSON object with its syntax diagnostic.
-- **Rejects:** `InvalidModelEnvelope`.
-
-## `ValidateModelPayloadSchemaAction` (`validate-model-payload-schema`)
-
-- **Owner:** [`src/actions/model/validate_model_payload_schema.zig`](../../../src/actions/model/validate_model_payload_schema.zig)
-- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `model_envelope_result` · **Writes:** `model_payload_schema_result` · **Side effect:** `none`
-- **Does:** Applies only the bound closed result schema; parsing and call association are earlier steps.
-- **Rejects:** a schema diagnostic in the result.
-
 ## `AdmitModelResponseAction` (`admit-model-response`)
 
 - **Owner:** [`src/actions/model/admit_model_response.zig`](../../../src/actions/model/admit_model_response.zig)
@@ -232,38 +205,14 @@ These steps bind the two lifecycle actions above to fixed transitions; their rul
 - **Does:** Builds the correction request for a rejected response under the same request identity, with the diagnostic and repetition fact ([§22.6](../22-repair.md#226-unparseable-output)).
 - **Rejects:** the request-preparation errors (`ModelRequestAssociationInvalid`, `InvalidModelRequestSource`).
 
-## Retirement
+## Release
 
-The three retirement operations read `model_request_identity_ledger`, `prepared_model_request`,
-`accounted_model_attempt`, `terminal_provider_operation` and `model_payload_schema_result`, have
-side effect `none`, write nothing but invalidations, and reject `InvalidTransportRetirement`
-unless the request is terminal. The **attempt keys** are `accounted_model_attempt`,
-`terminal_provider_operation`, `provider_authorization_result`, `provider_invocation_result`,
-`provider_invocation_validation_result`, `model_envelope_result` and
-`model_payload_schema_result`; the **request keys** are those plus `assigned_model_request`,
-`validated_model_request` and `prepared_model_request`
-([`model_transport.zig`](../../../src/domain/model_transport.zig)).
+## `ReleaseModelRequestAction` (`release-model-request`) and `ReleaseModelTransportAction` (`release-model-transport`)
 
-## `RetireModelInputAction` (`retire-model-input`)
-
-- **Owner:** [`src/actions/model/retire_model_input.zig`](../../../src/actions/model/retire_model_input.zig)
-- **Reads:** as above · **Writes:** invalidates `model_input_packet` · **Side effect:** `none`
-- **Does:** Releases the model input packet of a terminal request.
-- **Rejects:** `InvalidTransportRetirement`.
-
-## `RetireModelRequestAction` (`retire-model-request`)
-
-- **Owner:** [`src/actions/model/retire_model_request.zig`](../../../src/actions/model/retire_model_request.zig)
-- **Reads:** as above · **Writes:** invalidates the attempt keys and the assigned, validated and prepared request · **Side effect:** `none`
-- **Does:** Releases a terminal request's transport data.
-- **Rejects:** `InvalidTransportRetirement`.
-
-## `RetireModelTransportAction` (`retire-model-transport`)
-
-- **Owner:** [`src/actions/model/retire_model_transport.zig`](../../../src/actions/model/retire_model_transport.zig)
-- **Reads:** as above · **Writes:** invalidates the request keys and `model_input_packet` · **Side effect:** `none`
-- **Does:** Releases a terminal request's transport data and its input packet together.
-- **Rejects:** `InvalidTransportRetirement`.
+- **Owners:** [`src/actions/model/release_model_request.zig`](../../../src/actions/model/release_model_request.zig), [`src/actions/model/release_model_transport.zig`](../../../src/actions/model/release_model_transport.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** invalidate the **released keys** (`accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result`, `prepared_model_request`), and `release-model-transport` also `model_input_packet` ([`model_transport.zig`](../../../src/domain/model_transport.zig)) · **Side effect:** `none`
+- **Does:** Release a closed [ADR 0030](../../decisions/0030-engine-owned-model-request.md) `request-model` request's kept keys; the ledger is replaced, never retired, and the other request keys ended with the step.
+- **Rejects:** `InvalidTransportRetirement` unless the request is terminal.
 
 ## JSON composition
 

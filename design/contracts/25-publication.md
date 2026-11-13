@@ -73,7 +73,7 @@ create intermediate publication or restart checkpoints.
   replay-approval gate.
 - Within one execution, retries remain explicit YAML transitions with the owning operation's
   declared `retry-limit` ([§22.7](22-repair.md#227-repair-retry-limit-and-escalation), which
-  also states the ADR 0030 change, not yet implemented).
+  also states the ADR 0030 change).
 
 Logs are observations, never completion or continuation authority. This does not
 authorize additional external effects or weaken command

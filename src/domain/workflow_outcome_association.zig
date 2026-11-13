@@ -20,7 +20,6 @@ pub const Descriptor = union(enum) {
     independent,
     observe: Binding,
     preserve: Binding,
-    request_decode: Binding,
     request_admission: Binding,
     request_protocol: Binding,
     /// ADR 0039's one re-send of a first runaway, beside protocol correction.
@@ -401,7 +400,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
             },
             .missing_final_text, .runaway => |evidence| {
                 const correctable = if (classification == .missing_final_text) evidence.missingFinalText() else evidence.runaway() == .first;
-                if ((descriptor != .request_decode and descriptor != .request_admission) or outcome != .invalid or !correctable) return error.InvalidOutcomeAssociation;
+                if (descriptor != .request_admission or outcome != .invalid or !correctable) return error.InvalidOutcomeAssociation;
                 const operation = evidence.operationId();
                 const subject: Subject = .{ .request = operation };
                 for (entries.items) |*entry| if (entry.observation.subject.eql(subject)) {
@@ -589,7 +588,7 @@ pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKe
         !declared(binding.evidence, requires, optional, produces, replaces)) return false;
     if (binding.result) |result| if (!contains(produces, result) and !contains(replaces, result)) return false;
     return switch (descriptor) {
-        .request_decode, .request_admission, .request_protocol, .request_resend, .request_closure => binding.kind == .request and binding.subject == .prepared_model_request,
+        .request_admission, .request_protocol, .request_resend, .request_closure => binding.kind == .request and binding.subject == .prepared_model_request,
         .repair_authorize => (binding.kind == .candidate or binding.kind == .authority) and repair_role == .authorize,
         .repair_merge => binding.kind == .candidate and (repair_role == .merge or repair_role == .merge_validate),
         .repair_validate => binding.kind == .candidate and (repair_role == .validate or repair_role == .merge_validate),

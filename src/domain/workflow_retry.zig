@@ -20,6 +20,9 @@ pub const Exhaustion = struct {
     completed_executions: u64,
     reason: Reason,
     defect: ?Key,
+    /// The stage of a `request-model` step that exhausted the allowance (ADR 0030: "It names the
+    /// step and the stage"); null for any other step.
+    stage: ?@import("model_request_stage.zig").Stage = null,
 
     pub const Reason = enum { retry_limit, unchanged_repair };
     pub const Description = struct {
@@ -28,6 +31,7 @@ pub const Exhaustion = struct {
         completed_executions: u64,
         reason: Reason,
         defect: ?Key,
+        stage: ?[]const u8 = null,
     };
 
     pub fn init(step: workflow.WorkflowStepId, limit: Limit, completed: u64) ?Exhaustion {
@@ -50,8 +54,15 @@ pub const Exhaustion = struct {
         return .{ .bytes = self.operation_name[0..self.operation_name_len] };
     }
 
+    /// The same exhaustion, attributed to the stage of a `request-model` step that reached it.
+    pub fn atStage(self: Exhaustion, stage: @import("model_request_stage.zig").Stage) Exhaustion {
+        var result = self;
+        result.stage = stage;
+        return result;
+    }
+
     pub fn describe(self: *const Exhaustion, allocator: std.mem.Allocator) std.mem.Allocator.Error!Description {
-        return .{ .operation_instance_id = .{ .bytes = try allocator.dupe(u8, self.operation().bytes) }, .retry_limit = self.limit.value, .completed_executions = self.completed_executions, .reason = self.reason, .defect = self.defect };
+        return .{ .operation_instance_id = .{ .bytes = try allocator.dupe(u8, self.operation().bytes) }, .retry_limit = self.limit.value, .completed_executions = self.completed_executions, .reason = self.reason, .defect = self.defect, .stage = if (self.stage) |stage| stage.name() else null };
     }
 };
 

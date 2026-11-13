@@ -474,23 +474,20 @@ The closed model classifications are:
   their existing relevance/kind rules. Classification repair and stored
   validation enforce this same native predicate.
 
-Specify reuses model-request/release subgraphs and compact outcome maps for its
-repair routes within the compiler's 1,024-step ceiling
+Specify uses the release subgraph and compact outcome maps for its repair routes
+within the compiler's 1,024-step ceiling
 ([§14.1](../contracts/14-orchestration.md#141-model-operation-composition),
 [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation)).
-The request subgraph uses ADR 0012's pure `prepare-model-request` operation;
-detailed assignment, binding validation and request construction remain available.
-Both paths use the same native owners and produce identical model-visible content.
-The request body also uses pure `admit-model-response`, retaining detailed decoder
-and schema-validator operations. Pre-generation source review has its own
-request/repair call sites; shared bodies do not share their retry counters.
+Pre-generation source review has its own request/repair call sites, and no call site
+shares a retry counter with another.
 
-Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
-`model-request-body` subgraph and its wrappers (`model-request`,
-`model-request-with-context`, `support-request`, `composition-request` and
-`composition-request-body`) are removed. Each request call site becomes one
-`request-model` step, followed by its consumers, any `retain-json-part` and its release
-step, and each call site keeps its own retry counter.
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) each model request is
+one `request-model` step, followed by its consumers, any `retain-json-part` step and its
+`release-model-request` or `release-model-transport` step; each call site keeps its own
+retry counter. The engine runs the request's stages (preparation, attempt accounting,
+authorization, inference, observation, completion, admission, correction and closure) in
+a fixed order; the workflow sees only the step's outcome and the request keys the
+release step retires.
 
 No call site declares a deadline: the body's authorization step takes no parameter, and
 each model's catalogue entry carries `requestTimeoutMs`
@@ -821,8 +818,8 @@ validators:
   assignment cannot alias an earlier candidate's repair scope.
 - Existing domain validators still own interpretation/accounting.
 
-- `assign-model-request-id` accepts either a native `model_input_packet` or the declared
-  static input resource, never both.
+- `request-model` (its preparation stage) accepts either a native `model_input_packet` or the
+  declared static input resource, never both.
 - The packet supplies an engine-owned unit and purpose key, not a prompt, result schema
   or provider selection; purpose text comes from the workflow's packet guidance
   (`capture-packet-guidance`; ADR 0016 packet-guidance amendment).
@@ -834,9 +831,9 @@ validators:
 
 - The ordinary [Specify definition](../workflows/spec.workflow.yaml) connects
   these operations, workflow-owned resources and the shared required-authority review.
-- `retire-model-transport` releases completed request and input slots through the
-  existing retirement owner. Detailed `retire-model-input` and
-  `retire-model-request` operations remain available.
+- `release-model-transport` releases a completed `request-model` request's kept keys and
+  its input slot through the retirement owner; `release-model-request` releases the
+  request alone.
 - Native captured evidence keeps its current domain-source lineage, not the replaceable
   transport slot; source changes and mixed-generation joins still reject.
 - The request ledger is runner-validated execution control, not business authority.
@@ -850,8 +847,7 @@ validators:
   lifecycle and accounting.
 - [§22.6–§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation) own
   correction accounting and exhaustion, including the
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` form (not
-  yet implemented).
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` form.
 
 - Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR 0006's
   closed `kind` alternatives, including nested typed values.
@@ -928,10 +924,11 @@ validators:
   clarification binding/open IDs and prior ID ledger; it cannot supply completed content.
   The specified variant contains the feature key,
   revision, `specified` stage, captured reference sources/chunks/claims/citations,
-  exact compiled extraction-contract comparison evidence, reconciliation and
+  exact compiled extraction-contract comparison evidence (each part is the `request-model`
+  step that makes its request, with that step's own parameters), reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v25`). Neither variant holds review evidence.
+  registry identity (`specification-state/v26`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton
@@ -1338,8 +1335,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   authorization IDs also bind the repair owner.
 - Native domain actions select and apply their typed units.
 - Generation, reference and source-omission repairs use the shared repair prompt through
-  `model-request` or `model-request-with-context`; source-review repairs reuse the
-  support prompt through `support-request`.
+  `request-model`; source-review repairs reuse the support prompt through the same step.
 - Request release occurs before shared model/automatic reconciliation and specification
   merge routes.
 - Deterministic repair loops have explicit runner-owned execution bounds.

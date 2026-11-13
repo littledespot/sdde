@@ -151,29 +151,7 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
         if (latest(ledger, result.operationId())) {
             const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
             const origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, result.operationId()) orelse return error.MissingProviderEvidence;
-            switch (result.outcome()) {
-                .validated => |evidence| {
-                    report.last_model_origin = origin;
-                    report.last_model_usage = evidence.usage();
-                    switch (evidence.result()) {
-                        .failed => |failure| {
-                            report.provider_diagnostic = @tagName(failure.cause);
-                            report.provider_origin = origin;
-                            report.provider_content_diagnostic = failure.content;
-                        },
-                        .stopped => |reason| {
-                            report.provider_diagnostic = @tagName(reason);
-                            report.provider_origin = origin;
-                        },
-                        .complete => {},
-                    }
-                },
-                .rejected => |reason| {
-                    report.provider_diagnostic = @errorName(reason);
-                    report.provider_origin = origin;
-                },
-                .cancelled => {},
-            }
+            applyProviderEvidence(result, origin, report);
         }
     }
     if (view.slots[@intFromEnum(requests.prepared_schema.key)] != null) {
@@ -188,8 +166,12 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
             .model = try allocator.dupe(u8, binding.registry_entry.model.bytes),
         });
         if (report.workflow_outcome != .ok) {
-            if (view.slots[@intFromEnum(authorization.schema.key)] != null) {
-                const result = try values.read(&view, authorization.schema, @import("../../../src/domain/provider_authorization_result.zig").Result);
+            // DE1c: a kernel step ends by dropping this evidence from the current envelope, so it is
+            // read from recorded history. The request and operation identity checks below keep an
+            // older request's evidence out.
+            const authorized = runner.envelope.latestInformation(authorization.schema.key);
+            if (authorized.contains(authorization.schema.key)) {
+                const result = try values.read(&authorized, authorization.schema, @import("../../../src/domain/provider_authorization_result.zig").Result);
                 switch (result.outcome().*) {
                     .failed => |failure| if (failure.operation_id.model_request_id == request.id()) {
                         report.provider_diagnostic = @tagName(failure.cause);
@@ -202,8 +184,9 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
                 }
             }
             const envelope = @import("../../../src/application/model_envelope_workflow.zig");
-            if (view.slots[@intFromEnum(envelope.schema.key)] != null) {
-                const result = try values.read(&view, envelope.schema, envelope.Result);
+            const decoded = runner.envelope.latestInformation(envelope.schema.key);
+            if (decoded.contains(envelope.schema.key)) {
+                const result = try values.read(&decoded, envelope.schema, envelope.Result);
                 if (latest(ledger, result.source().operationId())) switch (result.outcome()) {
                     .protocol_rejected => |rejection| {
                         report.model_diagnostic = @errorName(rejection.reason);
@@ -229,6 +212,86 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
         }
     }
     report.models = try used.toOwnedSlice(allocator);
+}
+
+/// The provider-side evidence of one validated observation, as the report names it.
+fn applyProviderEvidence(result: *const @import("../../../src/application/provider_observation_workflow.zig").Result, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin, report: *c.Report) void {
+    switch (result.outcome()) {
+        .validated => |evidence| {
+            report.last_model_origin = origin;
+            report.last_model_usage = evidence.usage();
+            switch (evidence.result()) {
+                .failed => |failure| {
+                    report.provider_diagnostic = @tagName(failure.cause);
+                    report.provider_origin = origin;
+                    report.provider_content_diagnostic = failure.content;
+                },
+                .stopped => |reason| {
+                    report.provider_diagnostic = @tagName(reason);
+                    report.provider_origin = origin;
+                },
+                .complete => {},
+            }
+        },
+        .rejected => |reason| {
+            report.provider_diagnostic = @errorName(reason);
+            report.provider_origin = origin;
+        },
+        .cancelled => {},
+    }
+}
+
+/// One recorded occurrence of a recorded-retention key, read back as its own value. The recorded
+/// history is the only place a `request-model` step's earlier attempts keep their evidence: the step
+/// replaces or drops the current slots as it goes and when it ends (DE1c).
+fn recordedValue(record: *const @import("../../../src/application/pipeline_envelope.zig").Record, schema: @import("../../../src/domain/pipeline_data.zig").Schema, comptime T: type) !*const T {
+    var held: @import("../../../src/domain/pipeline_data.zig").View = .{};
+    held.slots[@intFromEnum(schema.key)] = record.value;
+    return values.read(&held, schema, T);
+}
+
+/// Fill `report` with the rejection the attempt `id` left behind, read from recorded history, as the
+/// report would have shown it when each attempt was its own step: the provider stop or failure, or the
+/// protocol or schema rejection, with the attempt's own origin. An attempt that was admitted, or one
+/// that never left a recorded observation, leaves the report's diagnostics empty.
+pub fn attemptRejection(allocator: std.mem.Allocator, runner: *const @import("../../../src/application/workflow_pipeline_runner.zig").Runner, id: @import("../../../src/domain/llm_provider_operation.zig").ProviderOperationId, report: *c.Report) !void {
+    const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+    const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+    const origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, id) orelse return error.MissingProviderEvidence;
+    report.last_model_origin = origin;
+    const observed = @import("../../../src/application/provider_observation_workflow.zig");
+    const envelope = @import("../../../src/application/model_envelope_workflow.zig");
+    const payload = @import("../../../src/application/model_payload_schema_workflow.zig");
+    for (runner.envelope.records.items) |record| {
+        const key = record.key();
+        if (key == observed.schema.key) {
+            const result = try recordedValue(record, observed.schema, observed.Result);
+            if (result.operationId().eql(id)) applyProviderEvidence(result, origin, report);
+        } else if (key == envelope.schema.key) {
+            const result = try recordedValue(record, envelope.schema, envelope.Result);
+            if (!result.source().operationId().eql(id)) continue;
+            switch (result.outcome()) {
+                .protocol_rejected => |rejection| {
+                    report.model_diagnostic = @errorName(rejection.reason);
+                    switch (rejection.diagnostic) {
+                        .decoder => |diagnostic| report.json_error = try diagnostic.copy(allocator),
+                        .composition => |diagnostic| report.composition_error = try diagnostic.copy(allocator),
+                    }
+                },
+                .decoded, .not_decoded => {},
+            }
+        } else if (key == payload.schema.key) {
+            const result = try recordedValue(record, payload.schema, payload.Result);
+            if (!result.source().source().operationId().eql(id)) continue;
+            switch (result.outcome()) {
+                .schema_rejected => |diagnostic| {
+                    report.model_diagnostic = @tagName(diagnostic.reason);
+                    report.schema_error = try diagnostic.describe(allocator);
+                },
+                .valid, .not_validated => {},
+            }
+        }
+    }
 }
 
 /// Captured exchange metadata. Trace owns step bytes; projections copy them.
@@ -262,6 +325,25 @@ pub fn usageFor(attempts: []const c.Attempt, origin: @import("../../../src/domai
         found = true;
         usage = attempt.usage;
     };
+    return usage;
+}
+
+/// The exact usage the runner's token ledger holds for one exchange, read between two stages of a
+/// kernel step. A kernel step makes every call of its request inside one step, so an exchange is
+/// reconciled with the experiment ledger at its own boundary, before the next exchange is charged,
+/// not when the step ends. No record means unknown usage, never another exchange's.
+pub fn usageOf(runner: *const @import("../../../src/application/workflow_pipeline_runner.zig").Runner, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin) !?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage {
+    const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+    const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+    var found = false;
+    var usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null;
+    for (runner.tokenLedger().accounted_operations.items) |accounted| {
+        const accounted_origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, accounted.id) orelse return error.MissingProviderEvidence;
+        if (!std.meta.eql(accounted_origin, origin)) continue;
+        if (found) return error.MissingRequestEvidence;
+        found = true;
+        usage = if (accounted.reconciliation == .exact_usage) accounted.reconciliation.exact_usage else null;
+    }
     return usage;
 }
 
