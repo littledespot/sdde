@@ -652,7 +652,8 @@ change covers all three sequences: provider-config, provider bootstrap after sel
 before selection. No behaviour changes: public error codes, the cancel-versus-fail mapping, the
 services built, the absence of a lock, and nothing registered or selectable are as before. No
 published-output defect class is named and no semantic benefit is claimed; offline evidence
-stands in for a live run (DE3), and no live set was taken. **Not yet kept.** ADR 0032's status
+stands in for a live run (DE3), and no live set was taken. **Kept 14 November 2026** (user: "yes", to
+keeping E3 for its reduced brittleness; no outcome improvement is claimed). ADR 0032's status
 is "partly implemented" and the design pointers say so; feature logging stays unconverted.
 - **Owners:**
   - `src/application/startup_routine.zig`: 29 steps in a closed `Step` enum, a routine-owned
@@ -710,7 +711,8 @@ is "partly implemented" and the design pointers say so; feature logging stays un
 
 ## E8. Spec request builders select result definitions through closed enums
 
-**Implemented 12 November 2026** (user: "implement E8"); not yet kept. No request, model-facing
+**Implemented 12 November 2026** (user: "implement E8"); **kept 14 November 2026** (user: "yes", to keeping E8
+for its reduced brittleness; no outcome improvement is claimed). No request, model-facing
 text or behaviour changes, so no published-output defect class is named and no semantic benefit is
 claimed; the request projection across the integration matrix is byte-identical to `q14b3-after`.
 - **Owner:** `src/domain/specification_result_definitions.zig`: one closed enum per Spec schema
@@ -1074,6 +1076,21 @@ YAML shape, and no deviation from DE1 decision 6 remains.
 **Kept 14 November 2026** (user: "yes", to keeping E4 for its reduced brittleness; no outcome improvement is
 claimed). The `reference-text` and `specification-support` routes stay registered, and `model_text_wire.zig`
 `insertion` keeps recognising and rejecting a model-authored `{"kind":"exact_copy"}`: only its comment changed.
+
+**Live set, 14 November 2026** (build `dbebf8ce`, modified, `spec-e2e-report/v18`; three runs per
+development case): all six runs published (9 sends each, 11 in one); five passed adjudication and one
+failed on a critical criterion. hello-world 96.43%, 100%, 96.43% (no accuracy defect; quote marks around a
+code span in one, an entity on a no-data feature in another); loan-renewal 96.43% (one minor
+`unsupported_addition`, "records the loan as renewed"), 85.71% **failed** (`successful-renewal` 2: AC-001
+states "fourteen days" and drops "calendar", a `weakened_obligation` from the records generation, the
+recorded 'lossy repeats' model limitation, SPEC01 §3, not a repair defect: the run's one repair inserted
+a clean AC-002), 100%. Tokens 12,704 to 12,820 (hello-world) and 16,388 to 19,350 (loan-renewal; 19,350 is
+the run with the insert repair and two more sends). Three repairs ran live through the generic operations
+(two deletes, one insert, all on the specification-unit route, all helpful); no run took the
+`reference-text` or `specification-support` routes. The E1 set passed all six runs and each pre-E1 set had
+one non-passing loan-renewal run; at three runs per case none of this is a difference, and E4 changes no
+request byte, so it is reported as no regression, not as a benefit. Evaluations:
+`evaluations/e2e/2026-11-13T23-47-*`; adjudications in `evaluations/adjudications/`.
 
 **Step 5 implemented 14 November 2026** (user: "yes implement step 5"; DE4, the ten decisions approved).
 The 29 per-owner repair operations, their 29 action files and the seven owner bindings' action wrappers

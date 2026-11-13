@@ -1194,8 +1194,10 @@ generic `OperationExecutionFailed`, `MissingRequiredData` or `InvalidRequiredAut
 `InvalidAtomicRepair` from the domain), pinned per owner in the tests, and E5 can give it a closed reason; (4) the
 wider no-invention keep-or-remove question (§10: C12, C22, design.md invariant 18, `code.md`; DE4 5 settled
 only ADR 0033); (5) `Registry.validate()` runs every step and its cost with 29 variants is not measured; (6)
-a gate issuer must be a single-shape operation (ADR 0030 states it); (7) the live set's result is recorded in
-Z_SPEC01 E4 when taken.
+a gate issuer must be a single-shape operation (ADR 0030 states it); (7) the live set (14 November 2026) is
+recorded in Z_SPEC01 E4: five of six runs passed and one failed on 'lossy repeats' ("calendar" dropped from an
+AC, a recorded model limitation); no regression is claimed, and no run took the `reference-text` or
+`specification-support` routes.
 
 ### E5. Rejections say why (A4)
 
