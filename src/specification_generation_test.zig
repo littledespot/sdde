@@ -1151,6 +1151,8 @@ test "authoring schema reuse keeps positive support separate from open question 
         wrong.content.brief.description.provenance.claim_ids = &.{.{ .ordinal = 2 }};
         const wrong_wire = try json.encode(g.ModelResponse, a, try g.ModelResponse.from(a, fixture.context, wrong));
         try checkDocument(selected.selected().modelBytes(), .{ .bytes = wrong_wire, .rejection = .enum_mismatch, .path = "/description/signal_ids/0" });
+        // The same rejection runs the real correction, which names the signal that was given and the signals that exist.
+        try @import("model_payload_schema_test.zig").checkCorrection(selected.selected(), packet, .{ .bytes = wrong_wire, .rejection = .enum_mismatch, .path = "/description/signal_ids/0" });
         const bound = try sessions.currentBinding(a, current, fixture.context);
         try std.testing.expectError(error.InvalidSpecificationUnit, g.parse(a, wrong_wire, bound));
         try std.testing.expectEqual(.provenance, (try g.validate(a, text.validator, fixture.context, .brief, wrong)).invalid.rule);
@@ -9133,6 +9135,8 @@ fn checkPreparedExtractionOmission(a: std.mem.Allocator, packet: *const @import(
         } else try check(contract, .{ .bytes = try std.fmt.allocPrint(a, "{{\"category\":\"business\",\"citations\":[{d}]}}", .{line.object.get("id").?.integer}), .rejection = .enum_mismatch, .path = "/citations/0" });
     }
     try check(contract, .{ .bytes = "{\"category\":\"business\",\"citations\":[999]}", .rejection = .enum_mismatch, .path = "/citations/0" });
+    // A source line that does not exist is corrected with the lines that do.
+    try @import("model_payload_schema_test.zig").checkCorrection(restricted.selected(), packet, .{ .bytes = "{\"category\":\"business\",\"citations\":[999]}", .rejection = .enum_mismatch, .path = "/citations/0" });
     var excess: std.ArrayList(u8) = .empty;
     try excess.appendSlice(a, "{\"category\":\"business\",\"citations\":[1");
     for (0..supplied) |_| try excess.appendSlice(a, ",1");
@@ -9393,6 +9397,10 @@ test "records name the claims they support from their group, requirements own th
             if (case.path.len != 0) try std.testing.expectEqualStrings(case.path, (try result.?.describe(a)).path);
         } else try std.testing.expect(result == null);
     }
+    // A claim that does not exist is corrected with the claims that do (22-repair.md §22.6): the real
+    // correction names the claim given and the claims the records schema lists, and a response
+    // that takes the first of them is admitted.
+    try @import("model_payload_schema_test.zig").checkCorrection(restricted.selected(), packet, .{ .bytes = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"business_rule\",\"text\":\"MOCK x\"},\"claim_ids\":[999]}]}", .rejection = .enum_mismatch, .path = "/records/0/claim_ids/0" });
     // The partly taken correction resolves against the real records schema, as the
     // protocol correction does: the record node is located and outlined, the rule is the
     // compiled one, and the taken naming is the one listed.

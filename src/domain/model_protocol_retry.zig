@@ -61,6 +61,11 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
             if ((reason.coverage != null) != (reason.reason == .shared_member)) return error.ModelRequestAssociationInvalid;
             // Exactly a missing member's correction names the member no item names.
             if ((reason.member != null) != (reason.reason == .missing_member)) return error.ModelRequestAssociationInvalid;
+            // Exactly an integer enumeration's mismatch names the value the candidate gave and
+            // the set it missed (22-repair.md §22.6): the value from admission, the set from the
+            // compiled node the request itself carries.
+            const allowed = projection.allowedIntegers(reason.expected);
+            if ((reason.rejected != null) != (reason.reason == .enum_mismatch and allowed != null)) return error.ModelRequestAssociationInvalid;
             const Exclusive = struct { kind_property: []const u8, kinds: []const []const u8, owning: []const []const u8 };
             // ADR 0038 Decision 5: a partly taken item's correction lists every taken
             // value's naming in such items, found by the admission owner from the same rule.
@@ -81,6 +86,8 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
                 .exclusive = @as(?Exclusive, if (reason.reason == .shared_member) .{ .kind_property = reason.coverage.?.rule.kind_property, .kinds = reason.coverage.?.rule.exclusive, .owning = reason.coverage.?.rule.owning } else null),
                 .shared = shared,
                 .member = reason.member,
+                .rejected = reason.rejected,
+                .allowed = if (reason.rejected != null) allowed else null,
             }, .{ .emit_null_optional_fields = false });
         },
     };

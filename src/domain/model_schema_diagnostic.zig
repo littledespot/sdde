@@ -15,6 +15,9 @@ pub const Diagnostic = struct {
     coverage: ?schema.Coverage = null,
     /// For `missing_member`, the first assigned member no item names.
     member: ?i64 = null,
+    /// For `enum_mismatch` on an integer enumeration, the out-of-set integer the candidate
+    /// gave, so a correction can name it beside the node's allowed set.
+    rejected: ?i64 = null,
     // Compiler depth bounds traversal; this is not a response size/token limit.
     segments: [schema.max_depth + 2]Segment = @splat(.{ .property = "" }),
     length: usize = 0,
@@ -61,7 +64,7 @@ pub const Diagnostic = struct {
     pub fn eql(self: Diagnostic, other: Diagnostic) bool {
         if (self.reason != other.reason or self.expected != other.expected or
             self.expected_location != other.expected_location or self.length != other.length or
-            !std.meta.eql(self.coverage, other.coverage) or self.member != other.member) return false;
+            !std.meta.eql(self.coverage, other.coverage) or self.member != other.member or self.rejected != other.rejected) return false;
         for (self.segments[0..self.length], other.segments[0..other.length]) |left, right| {
             if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
             switch (left) {

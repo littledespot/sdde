@@ -404,44 +404,8 @@ line means beyond the advisory evaluate-e2e link check.
   it doesn't test, `2026-11-07T01-19-36Z-728d…`), so it pairs with Q14 b3; entities cite whole
   groups (R1); semantic checking rests on adjudication (H1).
 
-**D13.6 — decided 1 November 2026** (user: "the review repair should check that the claim
-exists, if the claim supplied by the LLM does not exist then is should attempt to get the LLM
-to repair with guidance on the error"). Every claim a model supplies must exist; a
-non-existent claim is rejected and the model is asked to repair it, with guidance on the
-error.
-
-- **Already in place:** every claim, signal and line ID a model supplies is a closed integer
-  choice (for example records' `claim_ids`, `specification_session.zig:405`). A non-existent
-  ID fails response admission as `enum_mismatch` (`model_payload_schema.zig:181-188`) and gets a
-  protocol correction within the step's retry limit. No such correction has fired in any
-  measured run.
-- **Gap, the guidance:** the correction says only "this value is not among the allowed
-  values" (`model_schema_diagnostic.zig:34`), and its expected shape for an ID choice is
-  `{"type":"integer"}` (`model_schema_projection.zig:75-79`). It names neither the rejected
-  ID nor the IDs that exist; the rejected response travels with the correction
-  (`model_protocol_retry.zig:94`). The correction request does carry the complete schema,
-  which lists every allowed ID (`model_schema_projection.zig:154-158`), so the change adds
-  locality, not new information.
-- **Change: approved 12 November 2026 (user: "yes, update documentation, do not make any
-  code changes"); contract amended in 22-repair.md (§22.6 correction clause); code
-  go-ahead given 14 November 2026 (user: "recommendation accepted"); code not yet implemented,
-  to land between sets before b4's build (§2 rule 1 lets it share that build only if the §2.10
-  projection proves every first request byte-identical).** The `enum_mismatch` correction for an integer ID choice carries
-  `rejected` and `allowed` beside the existing locator, both from the compiled choice,
-  never hard-coded; a string enumeration keeps its correction. It changes model-visible
-  correction text only; first requests stay byte-identical (§2.10).
-  - **Shape:** structured guidance fields like `member` and `shared`, not text in the
-    explanation, which stays as it is (`model_payload_schema_test.zig:961` pins it). The
-    rejected value is captured at admission as `member` is (`rejected: ?i64` on the
-    diagnostic, copied and compared with it).
-  - **Before editing:** inspect how the request debugger records and replays correction
-    guidance (`request_debugger_test.zig:1229` records its own allowed lists).
-  - **Tests, at the owning boundary:** the guidance test (`model_payload_schema_test.zig`
-    :940-968) gains the two fields for an integer enum and their absence for every other
-    reason and for string enums; two schemas with different allowed sets give different
-    lists; a scripted non-existent claim (`claim_ids:[999]`) gets the named correction and
-    an accepted retry. A set can't measure it, since it hasn't fired live: report
-    implementation and mechanical checks only, semantic benefit not demonstrated.
+**D13.6** (a claim a model supplies must exist; decided 1 November 2026): implemented 14 November 2026;
+record in [Z_SPEC01](Z_SPEC01.md) Q13 D13.6.
 
 ### Q14. Scenarios bound to their claims
 
@@ -465,8 +429,9 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
   names; D21.1 is not the slot source. ADR 0038 Decisions 2 and 3 record the design. At
   implementation b3's insert goes, with its content-only definition and fixed-claim policy
   (no remaining use: a text defect in a written criterion takes the field-level value
-  repair); the records prompt loses its scenario sentence; and the generation schema,
-  packet guidance, the Spec workflow YAML and a scenarios prompt change. Risk: each added
+  repair); the records prompt loses its scenario sentence; the generation schema,
+  packet guidance, the Spec workflow YAML and a scenarios prompt change; and the scenarios
+  response gains D14.2's equal-criteria correction. Risk: each added
   scenario is another restatement that can lose part of its claim, and a claim has one
   criterion (risk analysis below).
   - **Measure** (§2 rule 6): target lost source requirement; guards lost source
@@ -481,11 +446,11 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
     - **Watch items**, with the effect size that blocks: unsupported addition in
       loan-renewal (reference: the recording clause, 1 in E5's 2 publications), above one per
       publication or any other addition traced to a call b4 changes; harmful repair, any
-      repair of a scenarios criterion graded harmful; D14.2's correction, if adopted, any
+      repair of a scenarios criterion graded harmful; D14.2's correction, any
       addition traced to a corrected scenarios response. No critical criterion applies:
       neither case's rubric marks one.
     - **Reported**, blocking nothing beyond the guards: `competing_records` blocks (each a
-      lost publication) and link choices per run.
+      lost publication), D14.2 equal-criteria corrections and link choices per run.
   - **Risk analysis** (14 November 2026, offline): the 74 hello-world and 70 loan-renewal
     publications evaluated since ADR 0047 (`evaluations/e2e/`), with claims read from cited
     source lines, one claim per list line in both cases.
@@ -493,8 +458,9 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
       naming all three claims; loan-renewal 5 in 67 of 70, against 2.6 ACs on average (2 or 3
       in 63), with AC-001 naming claims 1-3. b4 writes 2 or 3 more criteria per run, each for
       one claim, where the model has almost always written one scenario for several.
-    1. **Equal criteria block the run** (ADR 0038 Consequences, slot criteria;
-       `specification_generation.zig:310-326`). The only per-claim publication (hello-world
+    1. **Equal criteria** take D14.2's correction, and exhaustion fails the run; across groups
+       they block as `competing_records` (ADR 0038 Consequences, slot criteria;
+       `duplicateRecordIssue` in `specification_generation.zig`). The only per-claim publication (hello-world
        `2026-11-09T21-31-48Z-f99e…`, a modified build) shared its Given and When byte for byte
        across three ACs, so only the Thens kept them apart. Most exposed are claims that state
        no result of their own (loan-renewal 1 "able to renew" and 4 "renewed only once",
@@ -515,8 +481,8 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
     4. **Claim 5 has two conditions and one criterion.** 43 of 70 publications split it
        (inactive; previously renewed) over 2 or 3 ACs, and 13 ACs held both conditions in one
        Given with no scored defect. Claim 4's criterion will likely carry the
-       previously-renewed refusal. If claim 5's repeats it, the run blocks (1) or the inactive
-       refusal has no scenario: the target class.
+       previously-renewed refusal. If claim 5's repeats it, the correction (1) fails the run or the
+       inactive refusal has no scenario: the target class.
     5. **A claim named only by a scenario loses it.** Such a claim has no slot (ADR 0038
        Decision 3) and publishes only in the story (Q21's gap). Today a records response can
        name it in an AC alone: 1 of 70 loan-renewal publications
@@ -543,22 +509,25 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
       - new T6 counts for these risks: risk 5 is too rare for a screen to see (1 in 70), a
         scenarios count can't run before a capture, and an equal-content count reads prose,
         which the measures contract excludes (design/harness/e2e.md:145-146).
-  - **D14.2 (Decision):** equal-content items in one scenarios response take the request's
-    protocol correction, naming both numbers, in place of the `competing_records` block.
-    - **Scope:** equality is the duplicate rule's (`equalContent`,
-      `specification_generation.zig:310-312`), applied at admission to the response's items
-      only. Equal criteria across groups, and equal records of other kinds, still block.
+  - **D14.2: decided 14 November 2026** (user: "update the documentation with the
+    recommendation"; ADR 0038 Decision 3 owns the rule, and its Consequences, Tests and
+    "Amends" list name the contracts; code not implemented, part of b4's change set, §2 rule 1).
+    The correction names every number of each equal set, not only a pair (picked, as
+    `shared_member` lists every location: ADR 0038 Decision 5).
     - **Cost:** an admission rule recorded with the request (`model-request-debug` advances,
       and a report version if its rejection reason is a closed report member, §2 rule 12). It
-      amends ADR 0038 Decision 3, Consequences (slot criteria) and Tests, and uses the step's
-      existing retry limit. A correction can push the model to invent a difference between
-      two claims that state no result of their own (risk 1): a watch item above.
-    - **Recommended, decided before implementation so it joins b4's change set** (§2 rule 1).
-      Identical criteria for different claims never publish, so the block only loses the
-      run. The response's other structural defects (missing, repeated or foreign numbers)
-      already take the correction, and no screen can show a pair first. Without it, a block
-      in the set is a lost publication, and adding it after a failed set means a new change
-      set on a reverted b4.
+      uses the step's existing retry limit. A correction can push the model to invent a
+      difference between two claims that state no result of their own (risk 1): a watch item
+      above.
+    - **Implementation:** the session's earlier-batch duplicate check runs only while the
+      records unit is the current one (`specification_session.zig:550`), and under b4 the
+      criteria arrive after that unit completes, where `revalidate` returns
+      `InvalidSpecificationUnit` for a duplicate rather than a typed block (`:658-661`). So the
+      merge must run the check, with a test that a cross-group equal criterion still blocks as
+      `competing_records`.
+    - **Why:** identical criteria for different claims never publish, so the block only loses
+      the run. The response's other structural defects (missing, repeated or foreign numbers)
+      already take the correction, and no screen can show a pair first.
 
 ### Q17. Principles as Spec context
 
@@ -759,9 +728,9 @@ November 2026, user: "yes", to the E5 preflight's ten recommendations). Open:
   counterpart.
 - **Producerless rejection** (fixed, [Z_SPEC01](Z_SPEC01.md)). **Decided no** (user, 14 November
   2026): a classification entry missing at first generation does not name its chunk's
-  classification producer; the validator's `producerless` rule and `candidate` attribution stand.
-  Still open: contract 27 (27-observability.md:45-50) names only coverage as an assembled-candidate
-  example (design edit awaiting approval: add `producerless` as a second example);
+  classification producer; the validator's `producerless` rule and `candidate` attribution stand,
+  and contract 27 (27-observability.md:45-50) now names `producerless` beside coverage as an
+  assembled-candidate example (user, 14 November 2026: "approved"). Still open:
   `observation.capture`'s candidate arm (`test/harness/e2e/observation.zig:132-133`) has no direct
   test.
 
@@ -1032,10 +1001,9 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
   (user: "only spec for now"): 22-repair.md's principle-citation diagnostics sentence belonged to
   Spec's removed principle review (its code is gone, Z_SPEC01 "Dead code"), so it is removed.
   09-configuration.md:339 and 18-plan.md:174 keep the exact-citation rule; the stage design that
-  opens under ADR 0034 decides its diagnostic facts. **Decision** (open): the same paragraph
-  (22-repair.md:423-427) still names "source-line bounds" and an "invalid model-proposed citation",
-  which no other text or code carries; trim them to the permitted references Spec's evidence repair
-  projects, or keep them for Plan?
+  opens under ADR 0034 decides its diagnostic facts. The same paragraph's "source-line bounds"
+  and "invalid model-proposed citation" clauses, which no other text or code carried, are
+  trimmed too (user, 14 November 2026: "yes trim the clauses").
 - **F0002 event registry** against `src/domain/log_event_registry.zig`. **Decided** (9 November
   2026): F0002 stays the target (F0002 §4 says so); the code change is open. F0002 requires
   `repair_unit_kind` on `repair.applied` and `task_id` on `task.completed` and `task.failed`

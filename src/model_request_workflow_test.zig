@@ -4478,6 +4478,50 @@ test "protocol repetition requires the current correction association and same t
     try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
 }
 
+test "a repeated correction of an integer choice is confirmed only for the same integer at the same path" {
+    const integer_schema = "{\"type\":\"object\",\"properties\":{\"value\":{\"enum\":[1,2]}},\"required\":[\"value\"],\"additionalProperties\":false}";
+    const Case = struct { second: []const u8, repeated: bool };
+    for ([_]Case{
+        // The same path with the same integer is the same defect again: the notice is added.
+        .{ .second = "{\"value\":3}", .repeated = true },
+        // The same path with another integer is another defect: no notice.
+        .{ .second = "{\"value\":4}", .repeated = false },
+    }) |case| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compileWithSchema(try protocolRetryYaml(&fixture), integer_schema);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        for ([_][]const u8{ "{\"value\":3}", case.second }, 0..) |body, index| {
+            fake.invocation_plan.complete.content = body;
+            try prepareProtocolAttempt(&runner, index != 0);
+            const request = try currentRequest(&runner);
+            for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+            try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+            const evidence = (try observationResult(&runner)).outcome().validated;
+            const rejection = (try payloadResult(&runner)).outcome().schema_rejected;
+            // Both attempts leave the enumeration at the same path, each with the integer its response gave.
+            try std.testing.expectEqual(.enum_mismatch, rejection.reason);
+            try std.testing.expectEqual(@as(?i64, if (index == 0 or case.repeated) 3 else 4), rejection.rejected);
+            const described = try rejection.describe(std.testing.allocator);
+            defer std.testing.allocator.free(described.path);
+            try std.testing.expectEqualStrings("/value", described.path);
+            const repetition = try request.protocolRepetition(evidence, .{ .schema = rejection });
+            try std.testing.expectEqual(@as(@import("domain/model_protocol_retry.zig").Repetition, if (index == 1 and case.repeated) .confirmed else .unconfirmed), repetition);
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+            const correction = try currentRequest(&runner);
+            const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .converse, .{ .tokens = 16000 });
+            defer std.testing.allocator.free(wire);
+            // The notice is the handoff's repetition, which the builder renders and never decides.
+            try std.testing.expectEqual(@as(usize, if (index == 1 and case.repeated) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
+        }
+    }
+}
+
 test "correction handoff releases copied rejection context at every allocation failure" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);

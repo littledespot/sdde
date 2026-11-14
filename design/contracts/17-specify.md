@@ -356,7 +356,9 @@ For each feature-brief or specification unit other than the engine-composed stor
   offers the slots numbered from one, each with its claim's source text and exact values,
   and no statement, entity, story or other batch (SPEC01 D12.1). Its result schema admits
   one item per slot, the slot's number and a content-only acceptance criterion, each number
-  exactly once (`exact_members`), with no claim, kind or group. The engine fixes each
+  exactly once (`exact_members`), with no claim, kind or group. Items with equal content
+  take the request's protocol correction, which names the number of every item in each equal
+  set. The engine fixes each
   criterion's kind, claim and group and appends the criteria to the group's batch in slot
   order; full unit validation and the field-level value repair then apply (§22.3), which
   never changes a criterion's claim. The session's scenario-coverage check requires at

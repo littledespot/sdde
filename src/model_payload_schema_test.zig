@@ -600,9 +600,10 @@ test "boolean null constants and enumerations reject wrong values and types with
         .{ .bytes = "\"e\\u0301\"", .rejection = .enum_mismatch }, .{ .bytes = "true", .rejection = .type_mismatch },
     });
     try checkField("{\"enum\":[-9223372036854775808,2,9223372036854775807]}", &.{
-        .{ .bytes = "2" },                                  .{ .bytes = "2.0" },                              .{ .bytes = "2e0" },
-        .{ .bytes = "-9223372036854775808" },               .{ .bytes = "9223372036854775807" },              .{ .bytes = "1", .rejection = .enum_mismatch },
-        .{ .bytes = "\"2\"", .rejection = .type_mismatch }, .{ .bytes = "2.5", .rejection = .type_mismatch }, .{ .bytes = "9223372036854775808", .rejection = .integer_range },
+        .{ .bytes = "2" },                                  .{ .bytes = "2.0" },                               .{ .bytes = "2e0" },
+        .{ .bytes = "-9223372036854775808" },               .{ .bytes = "9223372036854775807" },               .{ .bytes = "1", .rejection = .enum_mismatch },
+        .{ .bytes = "\"2\"", .rejection = .type_mismatch }, .{ .bytes = "2.5", .rejection = .type_mismatch },  .{ .bytes = "9223372036854775808", .rejection = .integer_range },
+        .{ .bytes = "3.0", .rejection = .enum_mismatch },   .{ .bytes = "-1e0", .rejection = .enum_mismatch },
     });
 }
 
@@ -703,12 +704,135 @@ pub fn checkCompiled(contract: *const @import("domain/model_result_schema.zig").
         try std.testing.expect(result != null);
         try std.testing.expectEqual(reason, result.?.reason);
         if (case.member) |member| try std.testing.expectEqual(@as(?i64, member), result.?.member);
+        try checkRejected(result.?, case.bytes);
         if (case.path) |path| {
             const description = try result.?.describe(std.testing.allocator);
             defer std.testing.allocator.free(description.path);
             try std.testing.expectEqualStrings(path, description.path);
         }
     } else try std.testing.expect(result == null);
+}
+
+/// Exactly an integer enumeration's out-of-set value is captured, and it is the integer
+/// the response holds at the diagnostic's own path, read by the owner's integer rule.
+fn checkRejected(diagnostic: validation.Diagnostic, bytes: []const u8) !void {
+    const integer_choice = diagnostic.reason == .enum_mismatch and diagnostic.expected.* == .integer_enumeration;
+    try std.testing.expectEqual(integer_choice, diagnostic.rejected != null);
+    const rejected = diagnostic.rejected orelse return;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqual(try integerAt(a, bytes, (try diagnostic.describe(a)).path), rejected);
+}
+
+/// The integer a response holds at a JSON Pointer, read by the owner's integer rule.
+fn integerAt(a: std.mem.Allocator, bytes: []const u8, path: []const u8) !i64 {
+    const pointer = @import("domain/json_pointer.zig");
+    const tree = try std.json.parseFromSlice(std.json.Value, a, bytes, .{ .parse_numbers = false });
+    return validation.exactInteger(pointer.lookup(tree.value, try pointer.parse(a, path)).?.number_string);
+}
+
+/// The guidance a protocol correction sends for a response `fixture`'s schema rejects.
+fn correctionOf(fixture: *Fixture, bytes: []const u8) !std.json.Parsed(std.json.Value) {
+    fixture.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 10, .output_tokens = 2 } };
+    var response = try fixture.response();
+    defer response.deinit();
+    var validated = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
+    defer validated.deinit();
+    var decoded = try decoding.decode(std.testing.allocator, validated.evidence.result().complete, null);
+    defer decoded.deinit();
+    const result = validation.validate(decoded.candidate);
+    var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .schema = result.invalid }, .unconfirmed, "Correct syntax only.");
+    defer retried.deinit();
+    const parts = retried.request.content;
+    return std.json.parseFromSlice(std.json.Value, std.testing.allocator, parts[parts.len - 2].guidance, .{});
+}
+
+/// A request for the compiled schema `selected` with the native text context of the packet that
+/// offered it, so a real production schema, prose fields and exact scope included, is admitted.
+fn initNative(fixture: *Fixture, selected: *const @import("domain/model_result_schema.zig").Schema, packet: *const @import("domain/model_input_packet.zig").Packet) !void {
+    try fixture.initWithNativeTextContext(selected, packet.originalSources(), packet.proseFields(), packet.fieldPolicies(), packet.exactScope() orelse .{ .reference_state = .{ .bytes = "TEST-empty-reference" }, .occurrences = &.{} });
+}
+
+/// A rejected integer choice runs through the real protocol correction, with every guidance
+/// check of `checkFixture`, and the response is admitted again with the rejected integer
+/// replaced by the first value the correction names. `case.path` locates the integer.
+pub fn checkCorrection(selected: *const @import("domain/model_result_schema.zig").Schema, packet: *const @import("domain/model_input_packet.zig").Packet, case: Case) !void {
+    var fixture: Fixture = undefined;
+    try initNative(&fixture, selected, packet);
+    defer fixture.deinit();
+    try checkFixture(&fixture, case);
+    var named: Fixture = undefined;
+    try initNative(&named, selected, packet);
+    defer named.deinit();
+    var guidance = try correctionOf(&named, case.bytes);
+    defer guidance.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tree = try std.json.parseFromSlice(std.json.Value, a, case.bytes, .{});
+    var cursor: *std.json.Value = &tree.value;
+    for ((try @import("domain/json_pointer.zig").parse(a, case.path.?)).segments) |segment| cursor = switch (cursor.*) {
+        .object => cursor.object.getPtr(segment).?,
+        .array => &cursor.array.items[try std.fmt.parseInt(usize, segment, 10)],
+        else => return error.NotAContainer,
+    };
+    cursor.* = .{ .integer = guidance.value.object.get("allowed").?.array.items[0].integer };
+    var retried: Fixture = undefined;
+    try initNative(&retried, selected, packet);
+    defer retried.deinit();
+    try checkFixture(&retried, .{ .bytes = try std.json.Stringify.valueAlloc(a, tree.value, .{}) });
+}
+
+test "a correction names the integer set a choice missed, and a retry that takes it is admitted" {
+    const Set = struct { field: []const u8, given: i64, allowed: []const i64 };
+    for ([_]Set{
+        .{ .field = "{\"enum\":[2,4]}", .given = 3, .allowed = &.{ 2, 4 } },
+        .{ .field = "{\"enum\":[3,5,7]}", .given = 4, .allowed = &.{ 3, 5, 7 } },
+    }) |set| {
+        const contract = try std.fmt.allocPrint(std.testing.allocator, "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{set.field});
+        defer std.testing.allocator.free(contract);
+        const bytes = try std.fmt.allocPrint(std.testing.allocator, "{{\"value\":{d}}}", .{set.given});
+        defer std.testing.allocator.free(bytes);
+        var fixture: Fixture = undefined;
+        try fixture.initWithSchema(contract);
+        defer fixture.deinit();
+        var guidance = try correctionOf(&fixture, bytes);
+        defer guidance.deinit();
+        try std.testing.expectEqual(set.given, guidance.value.object.get("rejected").?.integer);
+        const named = guidance.value.object.get("allowed").?.array.items;
+        try std.testing.expectEqual(set.allowed.len, named.len);
+        for (set.allowed, named) |wanted, listed| try std.testing.expectEqual(wanted, listed.integer);
+        // The correction's own first value is a value the schema admits.
+        const retry = try std.fmt.allocPrint(std.testing.allocator, "{{\"value\":{d}}}", .{named[0].integer});
+        defer std.testing.allocator.free(retry);
+        var retried: Fixture = undefined;
+        try retried.initWithSchema(contract);
+        defer retried.deinit();
+        try checkFixture(&retried, .{ .bytes = retry });
+    }
+}
+
+test "an integer enumeration's rejected value is part of the diagnostic's identity and survives its copy" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try adapter.compiler().compile(arena.allocator(), "{\"type\":\"object\",\"properties\":{\"value\":{\"enum\":[1,2]}},\"required\":[\"value\"],\"additionalProperties\":false}");
+    var third = try decoding.parseContent(std.testing.allocator, "{\"value\":3}", null);
+    defer third.deinit();
+    var fourth = try decoding.parseContent(std.testing.allocator, "{\"value\":4.0}", null);
+    defer fourth.deinit();
+    const first = validation.validateValue(decoding.value(&third.parsed.value), compiled.root()).?;
+    const other = validation.validateValue(decoding.value(&fourth.parsed.value), compiled.root()).?;
+    try std.testing.expectEqual(@as(?i64, 3), first.rejected);
+    try std.testing.expectEqual(@as(?i64, 4), other.rejected);
+    // Two responses that differ only in the rejected integer are two defects.
+    try std.testing.expect(!first.eql(other));
+    try std.testing.expect(first.eql(first));
+    const copied = try first.copy(std.testing.allocator);
+    defer copied.deinit(std.testing.allocator);
+    try std.testing.expectEqual(first.rejected, copied.rejected);
+    try std.testing.expect(first.eql(copied));
 }
 
 test "provider schema rejection proofs and protocol corrections retain every diagnostic kind" {
@@ -721,6 +845,12 @@ test "provider schema rejection proofs and protocol corrections retain every dia
         .{ .field = "{\"type\":\"array\",\"minItems\":1,\"maxItems\":2,\"items\":{\"type\":\"boolean\"}}", .value = "[]", .rejection = .array_length },
         .{ .field = "{\"const\":1}", .value = "2", .rejection = .constant_mismatch },
         .{ .field = "{\"enum\":[\"yes\",\"no\"]}", .value = "\"other\"", .rejection = .enum_mismatch },
+        // An integer enumeration's mismatch names the value and the set; its other rejections do not.
+        .{ .field = "{\"enum\":[1,2]}", .value = "3", .rejection = .enum_mismatch },
+        .{ .field = "{\"enum\":[1,2]}", .value = "\"2\"", .rejection = .type_mismatch },
+        .{ .field = "{\"enum\":[1,2]}", .value = "9223372036854775808", .rejection = .integer_range },
+        // A schema with two integer enumerations: the failed one's set, not the first's.
+        .{ .field = "{\"type\":\"object\",\"properties\":{\"first\":{\"enum\":[1,2]},\"second\":{\"enum\":[3,5,7]}},\"required\":[\"first\",\"second\"],\"additionalProperties\":false}", .value = "{\"first\":1,\"second\":4}", .rejection = .enum_mismatch, .path = "/value/second" },
         .{ .field = variants, .value = "{\"kind\":\"other\"}", .rejection = .unknown_variant, .path = "/value/kind" },
         .{ .field = variants, .value = "{\"kind\":0}", .rejection = .type_mismatch, .path = "/value/kind" },
     }) |case| {
@@ -860,6 +990,63 @@ test "only a shared value's correction carries a cross-item rule, and only a mis
     }
 }
 
+test "a correction lists the whole set of the enumeration that failed, whatever else the schema holds" {
+    const schema = @import("domain/model_result_schema.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Two enumerations with different sets: the correction lists the failed node's, not another's.
+    const two = "{\"type\":\"object\",\"properties\":{\"first\":{\"enum\":[1,2]},\"second\":{\"enum\":[3,5,7]}},\"required\":[\"first\",\"second\"],\"additionalProperties\":false}";
+    var fixture: Fixture = undefined;
+    try fixture.initWithSchema(two);
+    defer fixture.deinit();
+    var second = try correctionOf(&fixture, "{\"first\":1,\"second\":4}");
+    defer second.deinit();
+    try std.testing.expectEqual(@as(i64, 4), second.value.object.get("rejected").?.integer);
+    const listed = second.value.object.get("allowed").?.array.items;
+    try std.testing.expectEqual(@as(usize, 3), listed.len);
+    for ([_]i64{ 3, 5, 7 }, listed) |wanted, named| try std.testing.expectEqual(wanted, named.integer);
+    // An enumeration at the owner's bound lists every value: no cap shortens it.
+    var values: std.Io.Writer.Allocating = .init(a);
+    for (0..schema.max_choices) |index| try values.writer.print("{s}{d}", .{ if (index == 0) "" else ",", index });
+    const bounded = try std.fmt.allocPrint(a, "{{\"type\":\"object\",\"properties\":{{\"value\":{{\"enum\":[{s}]}}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{values.written()});
+    var full: Fixture = undefined;
+    try full.initWithSchema(bounded);
+    defer full.deinit();
+    var whole = try correctionOf(&full, try std.fmt.allocPrint(a, "{{\"value\":{d}}}", .{schema.max_choices}));
+    defer whole.deinit();
+    try std.testing.expectEqual(@as(i64, schema.max_choices), whole.value.object.get("rejected").?.integer);
+    const every = whole.value.object.get("allowed").?.array.items;
+    try std.testing.expectEqual(@as(usize, schema.max_choices), every.len);
+    for (every, 0..) |named, index| try std.testing.expectEqual(@as(i64, @intCast(index)), named.integer);
+}
+
+test "only an integer enumeration's mismatch carries a rejected value, and it must carry one" {
+    const contract = "{\"type\":\"object\",\"properties\":{\"value\":{\"enum\":[1,2]}},\"required\":[\"value\"],\"additionalProperties\":false}";
+    var fixture: Fixture = undefined;
+    try fixture.initWithSchema(contract);
+    defer fixture.deinit();
+    fixture.fake.invocation_plan = .{ .complete = .{ .content = "{\"value\":3}", .input_tokens = 10, .output_tokens = 2 } };
+    var response = try fixture.response();
+    defer response.deinit();
+    var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
+    defer captured.deinit();
+    const root = fixture.prepared.request.response_schema.root();
+    const node = root.object[0].schema;
+    const retry = @import("actions/model/build_model_protocol_retry.zig").Action{};
+    // The mismatch with its value builds; every other pairing is a foreign association.
+    var built = try retry.execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = .{ .reason = .enum_mismatch, .expected = node, .rejected = 3 } }, .unconfirmed, "Correct the response.");
+    built.deinit();
+    for ([_]validation.Diagnostic{
+        .{ .reason = .enum_mismatch, .expected = node },
+        .{ .reason = .type_mismatch, .expected = node, .rejected = 3 },
+        .{ .reason = .integer_range, .expected = node, .rejected = 3 },
+        .{ .reason = .enum_mismatch, .expected = root, .rejected = 3 },
+    }) |schema_diagnostic| {
+        try std.testing.expectError(error.ModelRequestAssociationInvalid, retry.execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = schema_diagnostic }, .unconfirmed, "Correct the response."));
+    }
+}
+
 fn checkFixture(fixture: *Fixture, case: Case) !void {
     fixture.fake.invocation_plan = .{ .complete = .{ .content = case.bytes, .input_tokens = 10, .output_tokens = 2 } };
     var response = try fixture.response();
@@ -875,6 +1062,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
     if (case.rejection) |reason| {
         try std.testing.expectEqual(reason, result.invalid.reason);
         if (case.member) |member| try std.testing.expectEqual(@as(?i64, member), result.invalid.member);
+        try checkRejected(result.invalid, case.bytes);
         if (case.path) |path| {
             const description = try result.invalid.describe(std.testing.allocator);
             defer std.testing.allocator.free(description.path);
@@ -911,8 +1099,11 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             for (request.value.object.get("system").?.array.items) |part|
                 occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
             try std.testing.expectEqual(@as(usize, 1), occurrences);
+            // 22-repair.md §22.6: exactly an integer enumeration's mismatch names the value the
+            // response gave and the set the complete schema lists for that node.
+            const integer_choice = reason == .enum_mismatch and result.invalid.expected.* == .integer_enumeration;
             // ADR 0038 Decision 5: only a shared value's correction names the exclusive kinds.
-            try std.testing.expectEqual(@as(usize, 3) + 2 * @as(usize, @intFromBool(reason == .shared_member)) + @intFromBool(reason == .missing_member), guidance.value.object.count());
+            try std.testing.expectEqual(@as(usize, 3) + 2 * @as(usize, @intFromBool(reason == .shared_member)) + @intFromBool(reason == .missing_member) + 2 * @as(usize, @intFromBool(integer_choice)), guidance.value.object.count());
             // ADR 0038 Decision 5: a partly taken item's correction lists every taken value's naming.
             if (reason == .shared_member) {
                 const listed = guidance.value.object.get("shared").?.array.items;
@@ -934,6 +1125,18 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             if (result.invalid.member) |member| {
                 try std.testing.expectEqual(member, guidance.value.object.get("member").?.integer);
             } else try std.testing.expect(!guidance.value.object.contains("member"));
+            if (integer_choice) {
+                try std.testing.expectEqual(try integerAt(a, case.bytes, path), guidance.value.object.get("rejected").?.integer);
+                // The allowed set travels in `allowed`, never in the outline (22-repair.md §22.6).
+                try std.testing.expect(!expected.get("shape").?.object.contains("enum"));
+                const wanted = located.object.get("enum").?.array.items;
+                const named = guidance.value.object.get("allowed").?.array.items;
+                try std.testing.expectEqual(wanted.len, named.len);
+                for (wanted, named) |listed, given| try std.testing.expectEqual(listed.integer, given.integer);
+            } else {
+                try std.testing.expect(!guidance.value.object.contains("rejected"));
+                try std.testing.expect(!guidance.value.object.contains("allowed"));
+            }
             try std.testing.expect(!guidance.value.object.contains("covering"));
             if (reason == .shared_member) {
                 const rule = result.invalid.coverage.?.rule;

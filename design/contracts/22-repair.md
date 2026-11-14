@@ -421,12 +421,11 @@ citations from permitted selections; it never chooses semantic support to make
 a repair pass.
 
 Evidence repair obtains the diagnostic and permitted references from their existing
-validator/registry, including any applicable source-line bounds. The request builder
-projects those facts; it does not revalidate citations or select supporting evidence.
-Registry/selection integrity failures remain engine failures, distinct from an
-invalid model-proposed citation. The projected facts reach repair and reports; they
-are not a second persisted authority. JSON/schema correction (§22.6) does not replace
-native evidence repair, change retry limits, reconsider verdicts or persist new policy.
+validator/registry. The request builder projects those facts; it does not revalidate
+citations or select supporting evidence. Registry/selection integrity failures remain
+engine failures. The projected facts reach repair and reports; they are not a second
+persisted authority. JSON/schema correction (§22.6) does not replace native evidence
+repair, change retry limits, reconsider verdicts or persist new policy.
 
 Example:
 
@@ -573,9 +572,9 @@ defined response-level correction containing:
   (`exclusive`: `kind_property`, `kinds` and `owning`) and lists every taken value's
   naming in such records (`shared`; SPEC01 D16.1 and D16.2, 2 November 2026). An
   `enum_mismatch` correction for an integer ID choice names the rejected value
-  (`rejected`) and lists the choice's allowed IDs (`allowed`), both taken from the compiled
-  choice and never hard-coded (SPEC01 D13.6, 12 November 2026); a string enumeration keeps
-  its correction. No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
+  (`rejected`: the response's own integer, captured at admission) and lists the choice's
+  allowed IDs (`allowed`: taken from the compiled choice and never hard-coded) (SPEC01
+  D13.6, 12 November 2026); a string enumeration keeps its correction. No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
   (`repeated_statement`, ADR 0038 Decision 5), without judging its text, unless it holds
   the only copy of an exact value, which keeps it and its text under the usual rules. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
@@ -680,7 +679,9 @@ actions. Its single responsibility remains preparing the corrected request.
   immediately preceding rejection failed with the same diagnostic identity.
   Confirm the same execution, immutable assignment and selected schema; compare
   diagnostic kind/reason and location/context, including schema scope/locator
-  where applicable. An attempt ordinal alone proves no recurrence. Same diagnostic
+  where applicable and, for an integer ID choice, the rejected value (a moved ID is a
+  different diagnostic and gets no repetition notice). An attempt ordinal alone proves no
+  recurrence. Same diagnostic
   does not prove identical response bytes, and different errors receive only the
   current error guidance.
 - The request handoff owns a copy of the rejection addressed by each prepared

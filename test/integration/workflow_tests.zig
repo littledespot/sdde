@@ -1458,6 +1458,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .scenario_links => costs.len,
     };
     defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
+    // Scripted corrections of a value outside an integer enumeration that the driver checked.
+    var choice_corrections: usize = 0;
     for (case_range_begin..case_range_end) |scenario| {
         var cost = timing.Timer.start(io, &costs[scenario]);
         defer cost.finish();
@@ -2634,8 +2636,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 try std.testing.expectEqual(@as(u128, 0), next_runner.tokenLedger().committed());
             }
         } else if (expected != .needs_user) try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+        choice_corrections += driver.choice_corrections;
         cost.passed();
     }
+    // The main matrix scripts such corrections, so the driver's check of each one was not vacuous.
+    if (workflow_cases == .existing) try std.testing.expect(choice_corrections > 0);
 }
 
 // Offline authorization preflight for the Phase 5 diagnostic launcher. Resolve

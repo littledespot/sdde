@@ -185,7 +185,9 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                 error.IntegerOutOfRange => reject(.integer_range, node),
             };
             for (choices) |choice| if (choice == number) return null;
-            return reject(.enum_mismatch, node);
+            var diagnostic = reject(.enum_mismatch, node);
+            diagnostic.rejected = number;
+            return diagnostic;
         },
         .array => |contract| {
             if (value != .array) return reject(.type_mismatch, node);

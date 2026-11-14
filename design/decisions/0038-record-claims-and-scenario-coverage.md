@@ -40,7 +40,11 @@
   to ADR 0038, do not make any code changes"): an edge case is printed as a Given/When/Then
   scenario of the criterion it links to, and the model writes only its own given
   (Decision 7). Not yet implemented: the code, the workflow assets and the sections this
-  amendment names still state the 8 November rule.
+  amendment names still state the 8 November rule. Amended on 14 November 2026 (SPEC01 Q14
+  b4, D14.2; user: "update the documentation with the recommendation"): items of one
+  scenarios response with equal content take the request's protocol correction, naming every
+  item's number, in place of the `competing_records` block (Decision 3). To be implemented
+  with the b4 amendment.
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -104,6 +108,13 @@
     the state and the packet guidance advance from the versions then current, and so do the
     required-authority contract, reports and request descriptions wherever the rename removes
     or renames one of their closed members; earlier versions reject.
+  - The equal-criteria amendment of 14 November 2026, Decision 3: §12.2 (the admission
+    constraints that stay native), §17.3 (the scenarios response's admission), §22.6 (the
+    corrections that name extra fields), [ADR 0019](0019-single-request-debugger.md) (the
+    request description records the rule) and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
+    (a re-sent scenarios response passes the same checks). In the implementing change,
+    request descriptions advance, and reports advance if its rejection reason is a closed
+    report member.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -165,7 +176,13 @@ only block.
      criterion's given, when and then. The result schema selects the numbers as an
      `exact_members` set, so each appears exactly once, and carries no claim, kind or
      group. A missing, repeated or foreign number, or any other property, takes the
-     request's protocol correction.
+     request's protocol correction. So do items of the response as returned that share
+     equal content (the duplicate rule's `equalContent`): the correction names the number
+     of every item in each equal set, so one retry can fix them all, as Decision 5's
+     `shared_member` does, in place of the `competing_records` block they would meet after
+     the merge (14 November 2026). It covers one response's own items as returned: equal
+     criteria across groups, equal records of other kinds, and equality a field-level
+     value repair produces still block.
    - **The engine binds** each criterion's kind (`acceptance_criterion`), claims (the
      slot's one claim) and group (the batch's), and appends the criteria to the group's
      batch in slot order, so the batch spans both responses. The merged batch takes full
@@ -399,10 +416,11 @@ only block.
     uniqueness) and ends the unit at parsing, as a repeated `signal_ids` entry does.
   - **The slot criteria (Decision 3)** link their claim without checking meaning, like any
     record. A criterion whose content equals another record's with other claims blocks as
-    `competing_records` under the existing duplicate rule. Binding the claim before the model
-    writes closes the routes where the batch names a claim in a statement and no scenario,
-    and where one criterion names every claim of its batch without testing each one (SPEC01
-    Q14 b4). It costs three things:
+    `competing_records` under the existing duplicate rule, except criteria of one
+    scenarios response as returned, which take the protocol correction (Decision 3). Binding the claim
+    before the model writes closes the routes where the batch names a claim in a statement
+    and no scenario, and where one criterion names every claim of its batch without testing
+    each one (SPEC01 Q14 b4). It costs four things:
     - each criterion is another restatement, written without the statement, that can lose
       part of its claim or add what the source doesn't state;
     - the engine writes one criterion per claim, so a prose claim holding several flows,
@@ -410,7 +428,9 @@ only block.
       the same claim can only be an edge case, whose outcome is a criterion's Then. Whether
       a criterion carries every flow of its claim is judged by the human who reviews
       `spec.md`;
-    - a compound claim is one slot, so one criterion carries all its parts.
+    - a compound claim is one slot, so one criterion carries all its parts;
+    - the correction for equal criteria can push the model to invent a difference between
+      two claims that state no result of their own, an addition no check sees.
 - **Persistence.** Decisions 1 to 5 left the canonical record shape unchanged, so they
   changed no specification or state version; the generation schema's records gained a
   required `claim_ids`. Decision 6 changed the entity shape, so it took
@@ -446,10 +466,15 @@ only block.
       selects the numbers as an exact-member set and carries no claim, kind or group; a
       missing, repeated or foreign number, or a claim, kind or group, rejects, and replay
       restores the selection;
+    - items of one scenarios response with equal content, a pair and a set of three, take
+      one protocol correction naming every number of each set, and an accepted retry
+      publishes; items that differ in any of given, when or then don't; equal criteria
+      across groups, and a pair a field-level value repair makes equal, still block as
+      `competing_records`;
     - the engine fixes each criterion's kind, claim and group and appends the criteria to
       the batch in slot order; the merged batch validates, equal content naming other
-      claims blocks as `competing_records`, and a text defect in a written criterion takes
-      the field-level value repair and keeps its claim;
+      claims in an earlier batch blocks as `competing_records`, and a text defect in a
+      written criterion takes the field-level value repair and keeps its claim;
     - an edge case is not cover: a claim only an edge case names has no slot, and the edge
       case still blocks with `edge_case_without_criterion`, while an edge case naming one
       behaviour claim links natively to that claim's criterion with no model request;

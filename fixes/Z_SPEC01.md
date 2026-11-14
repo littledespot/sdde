@@ -54,6 +54,45 @@ line ranges computed from the item's claims and their citations; several files j
 - The lines reduce no scored defect class; they make each record's links visible to the human
   reviewer (SPEC01 H1). Proof limit: SPEC01 T3.
 
+## Q13 D13.6. A non-existent integer ID is corrected with the rejected value and the allowed set
+
+**Implemented 14 November 2026.** Decided 1 November 2026 (user: "the review repair should check that the
+claim exists, if the claim supplied by the LLM does not exist then is should attempt to get the LLM to repair
+with guidance on the error"); approved 12 November 2026 (user: "yes, update documentation, do not make any
+code changes": 22-repair.md §22.6 amended); code go-ahead 14 November 2026 (user: "recommendation
+accepted"). Implementation and mechanical checks only; semantic benefit not demonstrated (it has never fired
+live, so no set can measure it). Defect class named: none scored (run completion).
+- **Change:** an `enum_mismatch` on an integer enumeration (every claim, signal, line, group and link ID a
+  model supplies) is corrected with guidance ending `"rejected":N,"allowed":[...]` beside the existing
+  locator. A string enumeration and every other reason keep their correction, and the explanation text is
+  unchanged. One `rejected` per correction, the first out-of-set value; `allowed` is the whole set, never
+  truncated.
+- **Owners and rule:** `Diagnostic.rejected` (`model_schema_diagnostic.zig`; part of `eql`, copied with the
+  value) is captured at admission by `validateValue` (`model_payload_schema.zig`, the integer-enumeration
+  arm). `allowedIntegers` (`model_schema_projection.zig`) returns the compiled node's own set, borrowed, in
+  schema order, keyed on node kind and never on a field name or producer. `model_protocol_retry.build` emits
+  both and refuses any other pairing (`ModelRequestAssociationInvalid`). A moved ID changes the diagnostic's
+  identity, so it resets the repeated-correction notice (22-repair.md §22.6).
+- **No persisted contract changes, no version:** reports copy only a diagnostic's reason and path, so the
+  report, step event, baseline, call-diagnostic, provider-compatibility, request-debug, replay and
+  prompt-column contracts and the event registry are unchanged, and the retained v19 runs stay readable. The
+  request debugger records a correction as opaque content and needs nothing.
+- **Request projection** (§2.10): `evaluations/request-projection/d136-before` (the e5-final tree's) and
+  `d136-final`, 1,635 files each. The manifest and the 135 first requests are byte-identical. Eight
+  corrections differ, exactly the scripted integer-choice corrections (scenario 058 calls 0009 and 0010, 061
+  call 0004, 062/0006, 063/0007, 064/0007, 082/0008, 083/0008), each only by the appended `rejected` and
+  `allowed` members; a read-only script checked each value and set against the request's own rejected
+  response and schema. The step trace is identical to `e5-final`.
+- **Tests:** `model_payload_schema_test.zig`: admission captures the integer a response gave (`3.0` and `-1e0`
+  forms too) and only for an integer enumeration's mismatch; `eql` differs on it and `copy` keeps it; every
+  correction is checked against the schema's own `enum` at its pointer and the response's own value, and the
+  fields are absent for a string enumeration, a type mismatch, an integer range, an array length, an unknown
+  variant and a duplicate or missing member; schemas with different sets give different lists; a retry that
+  takes the first allowed value is admitted; the pairing guard. `checkCorrection` runs the real correction on
+  a signal row, a citation-line row and the `claim_ids:[999]` row of the real generation schemas
+  (`specification_generation_test.zig`) and admits a corrected body. The Spec driver asserts every scripted
+  `enum_mismatch` correction, and the main integration matrix proves at least one ran (`choice_corrections`).
+
 ## Q12 D12.1. Records requests receive no unpublished drafts
 
 **Committed in `6e543e6`; kept with D16.2 on 2 November 2026** as part of the D12.1 + Q16

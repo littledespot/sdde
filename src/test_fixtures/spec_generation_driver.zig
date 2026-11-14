@@ -52,6 +52,9 @@ pub const Driver = struct {
     reconciliation_fault: ?@import("spec_generation_responses.zig").ReconciliationFault = null,
     disposition_sequence: @FieldType(@import("spec_generation_responses.zig").Options, "disposition_sequence") = null,
     disposition_member_corrections: usize = 0,
+    /// Corrections of a value outside an integer enumeration whose guidance named the value
+    /// the rejected response gave and the set its schema lists (22-repair.md §22.6).
+    choice_corrections: usize = 0,
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     reconciliation_protocol_fault: ?enum { envelope_once, envelope_then_json, foreign_content_once, foreign_content_always } = null,
@@ -283,6 +286,8 @@ pub const Driver = struct {
                     const repeated = std.fmt.allocPrint(arena.allocator(), "{s}\nThe previous correction still failed this validation.", .{prompt}) catch unreachable;
                     std.testing.expectEqualStrings(repeated, content[base.len].guidance) catch |err| return self.hookFailed(err);
                 }
+                // Every scripted correction of a value outside an integer enumeration names it and its set.
+                self.choice_corrections += assertChoiceCorrection(arena.allocator(), content[base.len + 1].guidance, current_request.prepared().?.response_schema.modelBytes(), if (content.len > base.len + 2) content[base.len + 2].evidence else null) catch |err| return self.hookFailed(err);
             }
             self.fake.invocation_plan.complete.content_diagnostic = null;
             if (current_request.id().purpose == .semantic_review) {
@@ -770,6 +775,35 @@ fn assertSupportMerge(allocator: std.mem.Allocator, before: *const data.View, af
 }
 
 /// ADR 0047: the engine composes the story, so no generation request carries one.
+/// A scripted correction of a value outside an integer enumeration names the integer the rejected
+/// response gave at the diagnostic's path and the set the request's own complete schema lists for
+/// that node; every other correction names neither (22-repair.md §22.6). Returns 1 for the former.
+fn assertChoiceCorrection(a: std.mem.Allocator, guidance_bytes: []const u8, schema_bytes: []const u8, evidence_bytes: ?[]const u8) !usize {
+    const guidance = (try std.json.parseFromSlice(std.json.Value, a, guidance_bytes, .{})).value.object;
+    const pointer = @import("../domain/json_pointer.zig");
+    var listed: []const std.json.Value = &.{};
+    if (guidance.get("diagnostic").?.object.get("schema")) |diagnostic| {
+        if (std.mem.eql(u8, diagnostic.object.get("reason").?.string, "enum_mismatch")) {
+            const complete = try std.json.parseFromSlice(std.json.Value, a, schema_bytes, .{});
+            const node = pointer.lookup(complete.value, try pointer.parse(a, guidance.get("expected").?.object.get("schema_pointer").?.string)).?;
+            listed = node.object.get("enum").?.array.items;
+        }
+    }
+    if (listed.len == 0 or listed[0] != .integer) {
+        try std.testing.expect(!guidance.contains("rejected") and !guidance.contains("allowed"));
+        return 0;
+    }
+    const rejected_response = (try std.json.parseFromSlice(std.json.Value, a, evidence_bytes.?, .{})).value.object.get("rejected_response").?.string;
+    const response = try std.json.parseFromSlice(std.json.Value, a, rejected_response, .{ .parse_numbers = false });
+    const path = guidance.get("diagnostic").?.object.get("schema").?.object.get("path").?.string;
+    const given = pointer.lookup(response.value, try pointer.parse(a, path)).?;
+    try std.testing.expectEqual(try @import("../domain/model_payload_schema.zig").exactInteger(given.number_string), guidance.get("rejected").?.integer);
+    const named = guidance.get("allowed").?.array.items;
+    try std.testing.expectEqual(listed.len, named.len);
+    for (listed, named) |wanted, value| try std.testing.expectEqual(wanted.integer, value.integer);
+    return 1;
+}
+
 fn generationPrompt(unit: @import("../domain/specification_generation.zig").Unit) error{UnexpectedStoryRequest}![]const u8 {
     return switch (unit) {
         .brief => "design/workflows/spec/generation.prompt.md",

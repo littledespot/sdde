@@ -43,11 +43,13 @@ binds newly created roots to subsequent reads and publication.
 
 - Candidate diagnostics retain typed rule, target, rejected value and admissible scope.
 - The shared diagnostic projection distinguishes a response origin, an assembled-candidate
-  diagnostic, and missing required response provenance. Coverage validation initially
-  describes the assembled candidate; repair authorization supplies a producer only after
-  selecting a supported replacement. Observers retain the native revision, dependencies
-  and targets without inventing a call association. Missing required or ambiguous response
-  associations still reject; diagnostic attribution grants no repair authority.
+  diagnostic, and missing required response provenance. Coverage validation and a
+  producerless rejection (a classification rejection naming only missing entries, which
+  have no producer) initially describe the assembled candidate; repair authorization
+  supplies a producer only after selecting a supported replacement. Observers retain the
+  native revision, dependencies and targets without inventing a call association. Missing
+  required or ambiguous response associations still reject; diagnostic attribution grants
+  no repair authority.
 - The producing request's assignment position in the existing identity ledger, attempt ordinal
   and operation kind survive request-body release and join only to the current execution's
   operation ledger.
