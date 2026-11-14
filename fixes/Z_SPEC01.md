@@ -25,7 +25,7 @@ decision and what it removed are ADR 0023's removal amendment (0023:25-42).
 ## Q7 D7.4. No engine code span where the text already delimits an exact value
 
 **Committed in `340261e`** (user, 1 November 2026: "implement Q7 D7.4."; ADR 0036 records the
-authority); the user's ruling that D7.4 is not a punctuation rule stays in SPEC01 Q7.
+authority). Decided 1 November 2026: D7.4 is not a punctuation rule (AGENTS.md "Prose heuristic").
 `delimitedByText` (`specification_projection.zig`) gives an exact copy no code span when only
 literal text touches it and that text is directly one balanced pair from the closed wrapper
 table (`exact_value_boundary.zig`), unless the copy ends in terminal punctuation; passive values
@@ -116,13 +116,15 @@ no claim an unchanged merge). The rule is ADR 0036 Decisions 3 and 4 (16-referen
 extraction text validation and `reference_extraction_repair.Omission.merge`; the merge reports
 `changed = false` when its insertion adds no claim. Defect: `2026-11-07T06-11-33Z-6897…`'s five
 identical extraction claims, which the story repeated five times. Every offline request is
-byte-identical, so the proof is the accepted and rejected owner tests.
+byte-identical, so the proof is the accepted and rejected owner tests. Semantic benefit is not demonstrated: no
+live run since has duplicated an extraction claim.
 
 ## Bare-value `reference_only` correction
 
 **Implemented 7 November 2026** (user: "fix the bare-message failure"); **kept 12 November
-2026** (user: "yes", to recording it kept). No set could measure it: it has fired once live,
-changing nothing, so the keep rests on the mechanism. Native recognition makes text that is exactly a source value one
+2026** (user: "yes", to recording it kept). No set could measure it: it has fired once live (8 November,
+`2026-11-07T20-44-15Z-9273…`, uncommitted tree), changing nothing, since all three records attempts returned the
+same bare outcomes and the run exhausted its retries, so the keep rests on the mechanism. Native recognition makes text that is exactly a source value one
 exact-value node, so a prose-required field holding only it rejects as `reference_only` (ADR
 0036:156-158). The field registry's explanation (`text_field_policy.referenceOnly`) is derived
 from the exact-copy role: where recognition runs it says an exact source value or supplied
@@ -168,8 +170,10 @@ beyond those named.
 ## Repeated statement text is not judged
 
 **Implemented 8 November 2026** (user: "yes as per recommendation"); **kept 14 November 2026**
-(user: "the above recommendations are approved"; SPEC01 §3 Next 1); offline only, no request,
-report or state version. Defect class: run completion (a loan-renewal run exhausting the
+(user: "the above recommendations are approved"); offline only, no request, report or state version. The
+keep rests on the mechanism, the offline proof and the native deletes that ran in the HEAD set (thirteen), the
+Q22 set (nine) and the Q14 b3 set (ten), all helpful, with no guard failing; the original failure hasn't
+recurred, so a benefit on the target defect isn't demonstrated. Defect class: run completion (a loan-renewal run exhausting the
 records retry limit on `reference_only` for a bare outcome that repeated another record's
 value). `statement_ownership.zig` is the one rule for which statement a batch deletes; payload
 admission (`shared_member`), the session's delete, the records validator (`inspectRecords`,
@@ -183,6 +187,13 @@ that every exemption at the wire is a validator delete.
 
 ## H1. Adjudication and `spec-e2e-report/v15`
 
+- **Decided 3 November 2026** (user: "yes", to "should the evaluator's rubric scores decide acceptance instead of
+  your record?"): the `/evaluate-e2e` skill writes each published run's `spec-adjudication-record/v1` from its
+  rubric scores and applies it with `zig build adjudicate-spec` (AGENTS.md "Testing expectations"; ADR 0034 and
+  design/harness/acceptance.md amended). Only the user triggers or approves the skill (AGENTS.md states the
+  rule).
+- **Decided 3 November 2026** (user: "YES", "YES approved"): a run's first adjudication under a skill version
+  counts (R8, design/harness/acceptance.md).
 - **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…`): the D12.2
   set's publications and the first six ADR 0047 runs (`evaluations/e2e/<run>/`,
   `evaluations/adjudications/`). One applied decision is open (SPEC01 §7 H1).
@@ -201,9 +212,10 @@ count as one evaluator:
 - `0b552067…` and `1d66d882…` changed no scoring rule (user, 7 November 2026: "approved"; 8
   November 2026: "recommendations accepted for 1 to 6", which also treats the one divergence,
   a missing refusal scenario scored in `728d…` but not `fa03…`, as evaluator variance);
-- `3c74781e…` added the title ruling (SPEC01 §7 H1), a new scoring rule; the reference was
-  re-scored under it on 9 November 2026 (SPEC01 §3 Next item 3), and no title in it drops a
-  value;
+- `3c74781e…` added the title ruling (SPEC01 §7 H1; decided 8 November 2026, user: "recommendations
+  accepted for 1 to 6"), a new scoring rule; the reference was re-scored under it on 9 November 2026
+  (`evaluations/e2e/<run>/`), no title in it drops a value, and its re-score records stay unapplied
+  (`adjudication-record.3c74781e-unapplied.json`, SPEC01 §2 rule 12);
 - `185b9bc6…` (user, 9 November 2026: "Once, same evaluator, no re-score") files a defect in an
   edge case's linked Then once, on the criterion (ADR 0038 Decision 7); no reference run has an
   outcome link.
@@ -315,7 +327,9 @@ later runs (p = 0.062, under the evidence floor); the change is deterministic.
 **Implemented 8 November 2026** (user: "go", after "apply recommendations" and "recommendations
 accepted for 1 to 6"); **kept 9 November 2026** with Next 6 on the HEAD set: loan-renewal lost
 requirements 0 against 3 in the reference, 3 of 3 pass. Defect class: `lost_source_requirement`
-and `weakened_obligation` in an edge case's free-text outcome. ADR 0038 Decision 7 records the
+and `weakened_obligation` in an edge case's free-text outcome (EC-001's outcome dropped "calendar",
+"existing" or the new due date, failing `successful-renewal` in 4 of the 6 loan-renewal runs before 8
+November and 2 of the 3 that day). ADR 0038 Decision 7 records the
 design, candidate rule and versions. Owners: `scenario_link.zig` (candidates, links,
 stored-link check), `scenario_link_request.zig` (the closed request and its admission), the
 `link-scenarios` subgraph of `spec.workflow.yaml` (on `links.prompt.md` and
@@ -415,7 +429,11 @@ capture was `model-request-debug/v16`, which the build refuses.
 2026** (user: "keep B3"). Defect class: lost source requirement, a behaviour claim no scenario
 tests, reached when the whole-response correction answered a scenario gap by adding the
 claim to an unrelated criterion or exhausted the records retries (SPEC01 Q14). ADR 0038
-Decision 3 records the decision, its derived choices and the versions.
+Decision 3 records the decision, its derived choices and the versions. **D14.1:** b3, not b2 (decided 1
+November 2026); b2, that the scenarios naming a claim must together contain every exact value its quoted text
+requires, misses claim 4 and business-rule-only cases. b3 was held until lost source requirement recurs
+(re-decided 3 November 2026), a condition since met, and held again with b4 not started (8 November 2026);
+it was released on 12 November 2026.
 - **Owners:** `specification_session.scenarioCoverageIssue` (after the duplicate,
   restatement and repeated-statement checks, on the batch their deletes leave);
   `specification_candidate.GroupPolicy.scenario`, a fixed record beside entity membership;
@@ -746,8 +764,12 @@ claimed; the request projection across the integration matrix is byte-identical 
   disjointness test and the generic-owner import check.
 - **Measures:** raw-string schema-name branches in production 19 to 0 (tests 89 to 69; the rest are
   schema-file tests that take definition names as data).
-- **Not done, decided 14 November 2026** (user: "recommendation accepted"): a generic compile-time
-  rule (SPEC01 E8). None is added; the shipped-schema test is the load-time check.
+- **Not done, decided 14 November 2026** (user: "recommendation accepted"): a generic compile-time rule, so E8
+  is closed. The check stays at request preparation (ADR 0012:68, ADR 0013:81, 12-model-boundary.md), and ADR
+  0013's shipped-schema test is the load-time check; a target project's own schema copy that lacks a member
+  still fails at preparation, after earlier calls. If a rule is wanted later, declare the definitions on the
+  packet-building operations, not as a list on the request step, which invariant 29 and the scalar-only
+  parameter schema forbid.
 - **Found, left:** `source_loss_calibration.zig:351` compares a request's definition with
   `assignment_findings`, which no schema declares, so its early return always runs and the code
   after it never does.
@@ -819,7 +841,6 @@ has been reduce E1 should be kept"): kept for the reduced brittleness; no outcom
   `Decode` or `Validate` binding exists); the assembly pin asserts `Initialize` and `Prepare` and that
   `Assign`, `Validate` and `Build` are absent. The orchestrator's own pin (`only follows stage
   outcomes, and only the runner runs a stage`) covers the stage order's owner.
-
 - **Decisions** (user, on my recommendations; the ones still open are in SPEC01 E1):
   - **DE1, 12 November 2026** ("yes i accept", on the eight questions the preflight raised): ADR 0030's
     Acceptance list is the full contract; `input` carries over and E8's definition declaration is not added
@@ -858,8 +879,10 @@ has been reduce E1 should be kept"): kept for the reduced brittleness; no outcom
     `model_request_orchestrator.zig` follows only stage outcomes; the runner owns each stage through
     `executeBound` and bounds attempt-accounting entries by 2 × (1 + `retry-limit`) (`KernelAdmission`, proved
     at its seam: no real stage sequence reaches it, since the retry authority and ADR 0039's single re-send
-    stop first); `Entry.request_stages` marks the one kernel entry, whose contract, capabilities and
-    parameters `Registry.validate` derives from its stages; `release-model-request` and
+    stop first); `Entry.request_stages` marks the one kernel entry, and `Registry.validate` checks its contract
+    against `model_request_kernel.zig`, its capabilities as the exact union of its stages' (`bindRequestKernel`
+    derives them from the stage contexts' ports) and its parameters as the preparation stage's plus
+    `retry-limit`; `release-model-request` and
     `release-model-transport` retire exactly `model_transport.released_keys`, the kernel's `produces`, stated
     once.
   - A consumer that finds a request's producer goes through `workflow_model.startsRequest` (an architecture
@@ -883,7 +906,8 @@ has been reduce E1 should be kept"): kept for the reduced brittleness; no outcom
     rejected as an unknown operation; the 13 that passed only because the id is unknown are deleted.
 - **Versions (step 6, 13 November 2026; SPEC01 §2.12):** the 20-10 and 20-18 sets were adjudicated before
   this change (DE1 decision 8). Each candidate was judged from its actual writer, and a contract whose
-  members and decode rules did not change was not bumped. Advanced, with no compatibility reader: `spec-e2e-report` v17 to v18 (`retry_error` is `Exhaustion.Description`, which gained `stage`),
+  members and decode rules did not change was not bumped. Advanced, with no compatibility reader:
+  `spec-e2e-report` v17 to v18 (`retry_error` is `Exhaustion.Description`, which gained `stage`),
   `e2e-step-event` v2 to v3 (it embeds the same `retry_error`) and `specification-state` v25 to v26 (the
   persisted extraction contract's `parts` are now the `request-model` steps that start each request, with
   that step's operation and parameters; a v25 state is rejected with `InvalidSpecificationState`; ADR 0041,
@@ -1157,6 +1181,46 @@ YAML shape, and no deviation from DE1 decision 6 remains.
 claimed). The `reference-text` and `specification-support` routes stay registered, and `model_text_wire.zig`
 `insertion` keeps recognising and rejecting a model-authored `{"kind":"exact_copy"}`: only its comment changed.
 
+**Built** (steps 1 to 7): the contract-variant mechanism (ADR 0030 "Contract variants": registry admission per
+variant, selection before compilation, graph and publication rechecks, the runner's `Entry.contractFor`); the
+four generic repair operations with 13 owners and 29 variants (`repair_owner.zig`, `repair_workflow.zig`, each
+owner binding's `effects`); the Spec workflow's 32 repair steps run them with `owner`. Only Specify's 13
+owners exist; Plan, Tasks and Implement owners wait for the quality gate (ADR 0034). ADR 0033 and its
+pointers read implemented, and one specification of the four operations replaces the per-owner entries in
+[13-04](../design/contracts/actions/13-04-model.md#generic-repair-operations). Q14 b3 extended the
+specification-unit repair route these operations replace, and b4 will remove its insert; E4 is a prerequisite
+of neither (SPEC01 Q14). It landed under §2.12, as retained reports carry repair keys; no persisted contract
+moved.
+
+**Decisions** (user, on my recommendations):
+- **DE4, 13 November 2026** ("yes to all 10 decisions", to the E4 preflight's ten recommendations; E1 was
+  kept, so ADR 0033's precondition 1 held):
+  1. E4 builds ADR 0030's contract-variant mechanism (registry, compiler, runner) as its own early steps, with
+     ADR 0030:428-445 as its test list, in the same landing; E1 built none.
+  2. ADR 0033's choices 2-3 are confirmed: the 13 owners, source omission's merges split in two. `owner` is
+     checked against native facts, at compilation where the variant's required keys prove it, otherwise by a
+     terminal runner rejection with a closed diagnostic. It selects no policy, scope or defect identity.
+  3. Choices 4-5 are confirmed (already in 22-repair.md:15-19 and :709-712): a "compiled operation" is the
+     compiled step instance; §22.1's "distinct" means authorization categories and owners, not operation IDs.
+  4. Choices 7-8 are confirmed: all Specify owners convert in one change on offline evidence; one live set
+     follows landing only on the user's go-ahead (ADR 0033 choice 6 is moot).
+  5. The no-invention branch is removed from ADR 0033:138-139 and its acceptance list (no owner has it); the
+     wider design text followed on 14 November 2026 (SPEC01 §8).
+  6. Variant retry maxima equal today's YAML values (128, 1, 1, 64, 2); the text and extraction merges still
+     forbid `retry-limit`; native key populations are unchanged.
+  7. The dispositions authorizer drops its unreachable `more` and the matching YAML edge (ADR 0046).
+  8. The freeze compares defect-key bytes (the repair `Family` type names are not renamed) and the step trace
+     prints the owner; repair evidence per scenario is frozen too.
+  9. The owner is shown through the step's declared parameters; no new report field and no version bump.
+  10. The change edits the accepted ADRs' pointers and stale prose (ADR 0005, 0023, 0031, 0033 "three
+     reconciliation authorizers", 0030 "two users"), design.md §22 and §32, and deletes or updates the
+     per-owner entries in contracts 13-03 and 13-05.
+- **14 November 2026** ("yes", to my recommendations): the `reference-text` and `specification-support`
+  routes stay registered (against removing two owners and 8 variants); `model_text_wire.zig` `insertion` keeps
+  recognising `{"kind":"exact_copy"}` with no `claim_id` and rejecting it as an encoded insertion, and only
+  its stale comment was reworded; one live set (3 runs per case) on this build; E4 is kept; the E5 preflight
+  starts.
+
 **Live set, 14 November 2026** (build `dbebf8ce`, modified, `spec-e2e-report/v18`; three runs per
 development case): all six runs published (9 sends each, 11 in one); five passed adjudication and one
 failed on a critical criterion. hello-world 96.43%, 100%, 96.43% (no accuracy defect; quote marks around a
@@ -1228,7 +1292,7 @@ every other trace file is identical to step 4's.
 | none | architecture pin `no per-owner repair operation remains: the four generic operations are the only registered repair operations`: four `variantEntry(generic_repair.` and none of the per-owner `entry(` families in the composition; no owner binding imports an action, names `Action.contract` or holds an `action` field; no file under `src/actions` has `repair` in its name |
 | packet-guidance pin listing the per-owner repair actions that require `.packet_guidance` | the pin walks the four operations' variants and asserts exactly seven (operation, owner) readers: authorize for specification-unit and specification-support; build-input for reference-reconciliation, source-omission, specification-unit and specification-support; merge for specification-support |
 | `reference_reconciliation_test.zig` read the per-owner action contracts | reads `repairs.Authorize(.summary).effects` and `repairs.BuildInput.effects` under the generic ids |
-- **E9 (applied):** deleted `ValueChoices.permits`, the `unknown_exact` arm of `ValueChoices.correction`
+- **E9 (applied), the superseded exact-handle correction:** deleted `ValueChoices.permits`, the `unknown_exact` arm of `ValueChoices.correction`
   (the issue's own description is used, as for every other reason), `typed_text.Issue.rejected_exact` and its
   two assignments (the text validator and `recognizeInspected`), and the assertions that read it
   (`typed_text_test.zig`, `packet_guidance_test.zig`, `specification_generation_test.zig`). Kept: the
@@ -1262,7 +1326,7 @@ every other trace file is identical to step 4's.
   still accepts an `exact_copy` object with only its `kind` (its comment names the deleted singleton);
   whether prose holding such an object is still recognised as a wire object is a model-output admission
   decision, so it is not changed here.
-- **Versions this step moves:** none (see SPEC01 E4 step 5). **Remains for step 6:** the docs that still
+- **Versions this step moves:** none (the final measures below). **Remains for step 6:** the docs that still
   describe the 29 operations or the singleton: C13-03 and C13-05 per-owner entries, the "not yet
   implemented" pointers and the three-reconciliation-authorizers prose of ADR 0005, 0023, 0031 and 0033,
   ADR 0030 "two users", design.md §22 and §32, C22, F0005, F0100, and
@@ -1280,7 +1344,10 @@ benefit; its defect class is none (ADR 0033's structural-only evidence, an appro
   line identical and in order); 65 summaries that differ only in `trace_sha256`; 9 `.repairs` files that
   differ only in the authorization and permit digests (E9, accepted). Nothing else differs, including
   outcomes, retry counts, token totals, defect-key bytes, executions, retained merges and every
-  `state/workflow.json`.
+  `state/workflow.json`. `<scenario>.repairs` (`workflow-repair-evidence/v1`, a trace-fixture file kind, not a
+  persisted engine contract) records each retry-bearing step's limit, scope and executions, its defect keys and
+  the retained native merges; it cannot record a merge no final candidate retains or a repair attempt's
+  request bytes.
 - **Sizes** (`wc -l` on 14 November 2026; the pre-E4 sizes of the mechanism files were not recorded and no
   version control is read, so their line changes are not stated): registered repair operations 29 to 4;
   native registry entries 137 to 112 against the tree before E4 (141 to 112 against the end of step 4);
@@ -1307,14 +1374,15 @@ benefit; its defect class is none (ADR 0033's structural-only evidence, an appro
   the outcome, the exact keys of the delta and the value against the domain function: the text route's
   authorize, input, parse (after a real request answered through the stage seam) and merge; the support
   route's four operations over a whole and a focused rejected review (merge `ok` and `more`), merge
-  `invalid` and authorize `blocked`. Not covered by such a test: the support authorize `more` (a delete).
+  `invalid` and authorize `blocked`. Not covered by such a test: the support authorize `more` (a delete) and support merge `more` through a whole
+  review (only a focused candidate yields it).
   The other eleven owners run in the scripted matrix. Owner mismatch is pinned for absent keys and for keys
   that hold another kind of value. `Registry.validate()` runs on every step and now checks 112 entries and 29
   variants; its cost is not measured.
 
 ## E5. Rejections say why
 
-**Implemented 14 November 2026** (user: "yes", to the ten DE5 recommendations; SPEC01 E5, steps 1 to 7).
+**Implemented 14 November 2026** (user: "yes", to the ten DE5 recommendations; steps 1 to 7).
 **Kept 14 November 2026** (user: "keep E5, update docs", after the live set below; no outcome improvement is
 claimed, and the keep rests on the closed reasons and causes and on unchanged request bytes). **Defect class
 named:** none. A rejection names the authority check,
@@ -1322,6 +1390,33 @@ the operation cause and the earlier failure that stopped the run, so a failed ru
 event, log and trace instead of from a re-run; no request byte, prompt, admission rule or published output
 changes, and no semantic benefit is claimed. ADR 0041's publish rules are as they were: every `authority` reason
 publishes nothing.
+- **Decisions** (DE5, 14 November 2026, "yes", to the E5 preflight's ten recommendations; E1 to E4 were
+  implemented and kept):
+  1-4. The unchanged `Rejection` tags, the one closed `AuthorityReason` enum grouped by cause class (about 24
+     groups, never per line or caller), the report's closed `reason` member with its version bumps and no
+     compatibility reader, and the `OperationExecutionFailed` split are stated under Owners and Versions
+     below.
+  5. A later failure no longer replaces the first; the report carries the first cause beside the terminal one
+     (as `model_capture` already does for a later logging failure, its `subsequent_logging_failure`). A
+     rejection formed from the result of a call whose capture failed is not carried: the capture failure is
+     the call's one cause (user, 14 November 2026: "4 recommendations are approved", the first of which
+     accepts that loss; 27-observability.md states the rule). The harness report carries the first cause in a
+     type of its own, with no capture-failure kind and a retry exhaustion's facts, and `first_native_rejection`
+     names it (the same approval).
+  6. The execution ceiling gets its own reason. The clause that the packaged smoke pins the reason name
+     instead of a bare `failed` is dropped (user, 14 November 2026: "4 recommendations are approved"): a case
+     that routes a `request-model` step's `failed` to itself cannot be built (it ends at
+     `WORKFLOW_GRAPH_COMPILE_INVALID`), so no packaged project reaches an authority rejection, and the CLI is
+     pinned by `Rejection.diagnostic()` over every reason and by the packaged pins that already print a runner
+     rejection through it (`InvalidToolchain`, `InvalidReferenceAccounting`, `InvalidClarificationInput`,
+     `InvalidReferenceSelector`). The decision to count the kernel step's retry authority in the ceiling is a
+     separate change (SPEC01 E1).
+  7. and 8. (the §22.6 correction location; the evaluator partial-body retention and F0005 §9's
+     workflow-definition rejection detail) are separate items, open in SPEC01 E5.
+  9. Reasons are emitted as upper-cased names under the current token rule; enumerating the closed
+     `diagnostic_code` set (F0002's open item) is separate (SPEC01 §8).
+  10. The change edits the ADR 0033, 0030 and 0041 pointers and text, contracts 06, 08, 22 and 27,
+      `design/harness/e2e.md` and the E5 record.
 - **Owners:**
   - `src/domain/workflow_execution.zig`: `AuthorityReason`, one member per cause class, each documented where
     it is defined, is the payload of `Rejection.authority`; a bare `.authority` no longer compiles. The tags,
@@ -1365,7 +1460,7 @@ publishes nothing.
     failure that wins over a reconciled rejection (the capture is the earlier failure), a non-model operation error
     replaced by the runtime's stop (the stop caused it), and a logging failure after an applied outcome (it
     replaces an outcome, not a rejection). A rejection formed from the result of a call whose capture failed is
-    not carried: the capture failure is the call's one cause (SPEC01 DE5 5; 27-observability.md states the rule).
+    not carried: the capture failure is the call's one cause (DE5 5 above; 27-observability.md states the rule).
   - Surfaces: the CLI prints the reason where it printed `failed`; the `run.failed` and action events carry it
     upper-cased under the existing `diagnostic_code` token rule (no new `LOG_*` code, no F0002 or `event-columns`
     change); the step-trace line gains `:first=<tag>:<diagnostic>` only when a first cause was kept, followed by
@@ -1457,7 +1552,7 @@ publishes nothing.
   finalizer directly and keep nothing; production goes through `Runner.finish`, pinned in `architecture_test.zig`.
   The producer scan reads source text, so a producer that builds a reason through `@FieldType` and `@enumFromInt`
   would pass it; none exists. The packaged smoke pins no authority reason: no packaged project reaches one, and
-  DE5 6's clause was dropped (SPEC01 DE5 6).
+  DE5 6's clause was dropped (DE5 6 above).
 - **Reported separately** (AGENTS.md "Model output, prompts and evidence"): implementation complete (steps 1 to
   7); mechanical checks passed (above); semantic benefit none claimed and none demonstrated: the live set (below)
   shows no difference from the E4 set at three runs per case, and no scored defect is E5's; brittleness: the one
@@ -1530,3 +1625,11 @@ publishes nothing.
   a recorded limit of the tool
   (short absence literals match by substring). E5's gain is in payload-free failure names, which no T5 count
   measures.
+
+## R-A1. Engine-owned release is not adopted
+
+**Not adopted 14 November 2026** (user: "recommendation accepted"; ADR 0030 decision 4a records it): release stays
+an explicit YAML step. Engine-owned release needs compiler-derived lifetimes, which are path-sensitive across
+loops and joins; it would amend ADRs 0005, 0012, 0030 and 0033 and invariants 25 and 28; and it has no
+published-output benefit. About 54 lines of release steps remain in the Spec YAML (E4 rewrote the repair routes
+that hold ten of the release sites).

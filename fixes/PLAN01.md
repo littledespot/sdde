@@ -68,7 +68,7 @@ authority (intent.md:3-9).
 | Multi-workflow selection, compiler, runner | Generic | `workflow_tests.zig:341-366`; no `spec-generation` literal in production code |
 | One `request-model` step per model request (E1) | Generic | Later workflow files copy no request subgraph (ADR 0030:388-389) |
 | Integer-choice and exact-member restrictions | Generic; Spec and reference users | 12-model-boundary.md:100, :118 (ADR 0046); `src/domain/model_result_schema.zig` |
-| Generic repair operations and contract variants (E4) | Generic; 13 Specify owners, 29 variants | A new owner adds its binding, one `RepairOwner` arm, one arm per generic operation it joins, one `frozen` row and its YAML steps (Z_SPEC01:1120-1125); `atomic_repair.zig:81` |
+| Generic repair operations and contract variants (E4) | Generic; 13 Specify owners, 29 variants | A new owner adds its binding, one `RepairOwner` arm, one arm per generic operation it joins, one `frozen` row and its YAML steps (Z_SPEC01 E4); `atomic_repair.zig:81` |
 | Stage actions (E2) | Generic; four Spec stage actions | ADR 0031 |
 | Required-authority ledger, reconcile, routing, gate | Generic; Plan kinds declared; no Plan seed producer | `required_authority.zig:14`, `:57-59`, `:357-361`; seeds only `specification_authority.zig`, `source_preservation.zig` |
 | Clarification registry, `PNN` IDs, forms, refresh | Generic for S/P/T; answers rejected for every stage | `clarification_inputs.zig:16`; `clarification_refresh.zig:64-66`, `:105-113` |
@@ -120,7 +120,7 @@ change, not a Plan-local one:
   - ADR 0023 removed post-generation review for Spec and says "no other review policy
     exists" (0023:46, :60-62).
   - On the configured model, the 26 October source review caught 1 of 28 defects by unconfirmed
-    labels (SPEC01:416-418).
+    labels (SPEC01 Q13, "Reopening link checks").
   - SPEC01 §8 removed the no-invention replacement from the design text (14 November 2026) and
     kept this semantic-review wording for Plan to decide, here.
   - **Recommended:** no model review; the semantic remainders rest on the user at plan review
@@ -145,7 +145,7 @@ change, not a Plan-local one:
   - §18.1 reads an edit back as authority (18-plan.md:52-79; 24-workflow-state.md:150).
   - A Spec rerun overwrites it (§4), so no edit becomes authority anywhere yet, although
     invariant 16 makes `spec.md` the one editable stage artifact (design.md:158).
-  - SPEC01 D13.7 (SPEC01:424-432) is open for edited derived lines.
+  - SPEC01 Q13 D13.7 is open for edited derived lines.
   - **Recommended for a first slice:** Plan accepts only an unedited `spec.md`, the "equal
     content" branch (18-plan.md:56-57), and blocks on any edit. The check is byte equality
     between `spec.md` and a fresh render of the validated stored specification through the
@@ -177,7 +177,7 @@ change, not a Plan-local one:
   - §18 adds about ten persisted registries and states (18-plan.md:113-131, :207, :242-244,
     :297; 24-workflow-state.md:170; 13-05:352-353). No version migrates
     (24-workflow-state.md:41-42), and Spec's one state contract moved five times within a week,
-    v21 to v26, the last with E1 (ADR 0023:162-166; ADR 0015:16-22; SPEC01:606); a persisted
+    v21 to v26, the last with E1 (ADR 0023:162-166; ADR 0015:16-22; Z_SPEC01 E1); a persisted
     shape that embeds another contract's goes stale with it.
   - **Recommended:** one Plan state document beside Spec's, with its own version, written last.
     It holds what later gates and later plan revisions read: the specification it planned from,
@@ -250,10 +250,10 @@ change, not a Plan-local one:
   - 18-plan.md:128-129 and :152 say "selection".
   - ADR 0015:22-23 says any filter needs its own decision, and 09-configuration.md:336-337
     sends every chunk, untruncated.
-  - The case principles are 28,067 and 29,399 bytes, about 7k tokens (SPEC01:531-532). Each
+  - The case principles are 28,067 and 29,399 bytes, about 7k tokens (SPEC01 Q17). Each
     Plan request that carries them adds that much against the 125,000-token workflow budget;
     the HEAD set's Spec runs used 12,971 to 17,037 tokens and the highest measured run 67,448
-    (SPEC01:218-220).
+    (SPEC01 §3, Robustness track).
   - **Recommended:** every chunk, to every Plan model request; the measured sets report the
     tokens, and a narrower per-step binding is decided only on a measured set.
 - **PD9. External evidence and dependencies.**
@@ -295,8 +295,8 @@ change, not a Plan-local one:
     model-assisted judgment (09-configuration.md:339) that adjudication scores.
 - **PD13. Shared items SPEC01 and the ADRs already list:**
   - upstream rework as a form, to settle before a downstream stage detects gaps
-    (SPEC01:1594-1602);
-  - the renderer version (SPEC01:1603-1608; 23-rendering.md:46-50, :98-100); until it exists,
+    (SPEC01 §8, Design–code conflicts);
+  - the renderer version (SPEC01 §8, Design–code conflicts; 23-rendering.md:46-50, :98-100); until it exists,
     PD4's byte check blocks on any renderer change;
   - Plan repair owner enums, deferred to the gate (ADR 0033:359-360).
 - **PD16. Artifact applicability.**
@@ -342,31 +342,31 @@ ask the LLM to answer it" (design.md:266). Applied to §18 with the mechanisms t
 | Approach, minimal change, task-generation approach | Nothing | All of it | 21-validation.md:121 |
 
 - **Restated text is rendered, not generated.** A model that restates a requirement drops or
-  weakens part of it, Spec's open "lossy repeats" problem (SPEC01:247-249); the levers that held
+  weakens part of it, Spec's open "lossy repeats" problem (SPEC01 §3, "Lossy repeats"); the levers that held
   were engine-composed text (ADR 0047) and a link whose target's text is printed (ADR 0038
   Decision 7). This is not the rejected lever, filling a record from its cited source lines
-  (SPEC01:257-260): Plan prints a linked specification record, never source lines.
+  (SPEC01 §3, "Lossy repeats", edge-case outcomes): Plan prints a linked specification record, never source
+  lines.
 - **Coverage and quickstart share one answer per obligation,** rendered twice, so they can't
   disagree and no obligation is asked twice.
 
 ## 7. Sequencing
 
-- **E1 (ADR 0030): implemented and kept** (SPEC01:230, :604-606). Plan's model requests are
+- **E1 (ADR 0030): implemented and kept** (SPEC01 §3, Engine track; Z_SPEC01 E1). Plan's model requests are
   `request-model` steps.
-- **E4 (ADR 0033): implemented and kept 14 November 2026** (SPEC01:1109-1112); its live set is
-  approved and isn't a landing condition (SPEC01:197-199, :1111-1112). Plan's repairs join the
+- **E4 (ADR 0033): implemented and kept 14 November 2026** (Z_SPEC01 E4); its live set was taken
+  the same day (Z_SPEC01 E4). Plan's repairs join the
   four generic operations as owners and variants (ADR 0033:248-250); the Plan owner enums wait
   for the gate (:359-360).
 - **E2 (ADR 0031): stops at the three preparation stages, now four stage actions** (decided 14
-  November 2026, "Revisit when Plan work begins", SPEC01:1091-1096). Plan's deterministic
+  November 2026, "Revisit when Plan work begins", SPEC01 E2). Plan's deterministic
   sequences are stage actions from the start (PD11), so none waits for a conversion.
-- **E7 (ADR 0025): last** (SPEC01:234, :1288-1302). It gates `PNN` answers (PD3), not the first
+- **E7 (ADR 0025): last** (SPEC01 §3, Engine track; E7). It gates `PNN` answers (PD3), not the first
   slice.
-- **Gate re-run decided 14 November 2026** (SPEC01:18-22): one closing set on the build after
-  E1–E4 land and the output-track changes are each kept or reverted (SPEC01:194-202), so the
+- **Gate re-run decided 14 November 2026** (SPEC01 §1): one closing set on the build after
+  E1–E4 land and the output-track changes are each kept or reverted (SPEC01 §3, Set order), so the
   evidence comes from the build Plan work would start from (ADR 0034:89, :93-95, :103-104).
-- Nothing in E1–E4 blocks Plan design any longer; E4's live set and the closing set come first
-  under ADR 0034.
+- Nothing in E1–E5 blocks Plan design any longer; the closing set comes first under ADR 0034.
 
 ## 8. Evaluation gap
 
@@ -374,7 +374,7 @@ ask the LLM to answer it" (design.md:266). Applied to §18 with the mechanisms t
   - case `spec-e2e-case/v3`, which requires Spec's four artifacts
     (`test/harness/e2e/contracts.zig:4`, `:23-26`);
   - report `spec-e2e-report/v19` (`:161`): changing a closed member needs a new version
-    (SPEC01:128-131), and earlier runs need their own build (SPEC01:42). **Recommended:** a Plan
+    (SPEC01 §2 rule 12), and earlier runs need their own build (SPEC01 §1, Retained runs). **Recommended:** a Plan
     report of its own, which leaves Spec's decoder unchanged;
   - adjudication `spec-adjudication-record/v1` (`test/harness/adjudication.zig:13`, `:69`);
   - stage measures, which count `plan_unit` as `other` (`test/harness/baseline/stages.zig:94`);
