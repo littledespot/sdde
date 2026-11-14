@@ -453,8 +453,8 @@ Decision 3 records the decision, its derived choices and the versions.
 
 ## E2. `prepare-toolchain` is one stage action (ADR 0031)
 
-**Implemented 12 November 2026** (user: "yes" confirming DE2, then "approved" to the preflight,
-including the ADR 0031 status edit). The first stage conversion, as the proof of the pattern. No
+**Implemented 12 November 2026** (user: "yes" confirming DE2, ADR 0031's derived choices 1–3 and 6–8
+(:268-290), then "approved" to the preflight, including the ADR 0031 status edit). The first stage conversion, as the proof of the pattern. No
 behaviour, model request, report, log or state version changes, so no published-output defect
 class is named and no semantic benefit is claimed (ADR 0031:250-252); no live run (choice 7).
 - **Owners:** `src/actions/toolchain/prepare_toolchain.zig` (the closed `Step` enum, the
@@ -647,8 +647,9 @@ best practice recommendations", 12 November 2026).
 
 ## E3. Startup and provider bootstrap are ADR 0032 engine routines
 
-**Implemented 12 November 2026** (user: "apply recommendations and implement", after DE3). One
-change covers all three sequences: provider-config, provider bootstrap after selection, and startup
+**Implemented 12 November 2026** (user: "apply recommendations and implement", after DE3, which the
+user confirmed with "yes" on 12 November 2026: ADR 0032's derived choices 1–8 (:231-248), including offline
+evidence). One change covers all three sequences: provider-config, provider bootstrap after selection, and startup
 before selection. No behaviour changes: public error codes, the cancel-versus-fail mapping, the
 services built, the absence of a lock, and nothing registered or selectable are as before. No
 published-output defect class is named and no semantic benefit is claimed; offline evidence

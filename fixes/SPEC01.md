@@ -639,33 +639,22 @@ Implemented and kept 13 November 2026; record in [Z_SPEC01](Z_SPEC01.md) E1. Ope
 
 ### E2. Stage actions (A2, ADR 0031)
 
-**`prepare-toolchain` converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E2; DE2 confirmed,
-user: "yes": ADR 0031's derived choices 1–3 and 6–8 (:268-290), including that choice 7's
-offline evidence replaces the live run). Its measures are recorded there; they decide whether
-the next stage converts (ADR 0031:236-238, the user's call). §10 C32 records what the stage feeds
-today.
-
-**`prepare-inputs` converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E2b; the user's "yes").
-**`prepare-references` converted 12 November 2026** as two stages,
-`prepare-reference-evidence` and `prepare-reference-tokens`, with `compile-naming-policy` a
-separate step between them ([Z_SPEC01](Z_SPEC01.md) E2c; the user's "apply best recommendations").
-The three preparation subgraphs the E2 preflight named (`prepare-toolchain`, `prepare-inputs`,
-`prepare-references`) are now stage actions; converting any other subgraph is a separate decision.
-**Decided 14 November 2026** (user: "recommendation accepted"): no further conversion before the
-closing set (§1). The remaining chains are short or excluded by ADR 0031: publication, clarification
-output and the authority gate write, branch or issue a gate, and the assemble subgraph has a repair
-step. The only eligible candidates, read from the YAML with no freeze taken, are two pure
-five-step tails (before publish, and in clarification output). A conversion changes the build
-before the closing set. Revisit when Plan work begins (ADR 0034).
+Implemented 12 November 2026 (the three preparation stages; E2b and E2c kept the same day); record in
+[Z_SPEC01](Z_SPEC01.md) E2, E2b and E2c. Open: converting any other subgraph is a separate decision, and
+**decided 14 November 2026** (user: "recommendation accepted") none converts before the closing set
+(§1). The remaining chains are short or excluded by ADR 0031: publication, clarification output and
+the authority gate write, branch or issue a gate, and the assemble subgraph has a repair step. The
+only eligible candidates, read from the YAML with no freeze taken, are two pure five-step tails
+(before publish, and in clarification output). A conversion changes the build before the closing set.
+Revisit when Plan work begins (ADR 0034).
 
 ### E3. Engine routines (A3, ADR 0032)
 
-**Startup and provider bootstrap converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E3; the
-user's "apply recommendations and implement"). Still open: feature logging, which waits on its
-preconditions (ADR 0032:152-179): no test covers cancellation under a log lock, and no test counts the
-emergency lines. The policy-transition coordinator's authority is decided on both sides (prior-run
-finalization's, ADR 0026; the same-run transition's, ADR 0032, decided 14 November 2026, §8). **DE3 confirmed 12 November
-2026** (user: "yes"): ADR 0032's derived choices 1–8 (:231-248), including offline evidence.
+Startup and provider bootstrap implemented 12 November 2026 and kept 14 November 2026; record in
+[Z_SPEC01](Z_SPEC01.md) E3. Open: feature logging, which waits on its preconditions (ADR
+0032:152-179): no test covers cancellation under a log lock, and no test counts the emergency lines.
+The policy-transition coordinator's authority is decided on both sides (prior-run finalization's, ADR
+0026; the same-run transition's, ADR 0032, decided 14 November 2026, §8).
 
 ### E4. Generic repair operations (W3, ADR 0033)
 
