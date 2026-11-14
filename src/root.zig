@@ -62,6 +62,7 @@ test {
     _ = @import("model_request_orchestrator_test.zig");
     _ = @import("repair_operations_test.zig");
     _ = @import("repair_routes_test.zig");
+    _ = @import("binding_failure_cause_test.zig");
     _ = @import("specification_result_definitions_test.zig");
     _ = @import("bootstrap_root_registry_test.zig");
     _ = @import("runtime_tests.zig");

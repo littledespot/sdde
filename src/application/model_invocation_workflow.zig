@@ -32,12 +32,15 @@ pub const Invoke = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-        const prepared = request.prepared() orelse return error.OperationExecutionFailed;
+        // The runner refuses this step before it runs when the retained request has no prepared form
+        // (`request_state_missing`) or the authorization was not prepared (`authorization_denied` for a
+        // failed preparation, `cancelled` for a cancelled one).
+        const prepared = request.prepared().?;
         const invoked = (values.read(&input.step.data, accounting.invoked_schema, lifecycle.InvokedOperation) catch |operation_error| return operation_error).operation();
         const authorization_result = values.read(&input.step.data, authorization.schema, @import("../domain/provider_authorization_result.zig").Result) catch |operation_error| return operation_error;
         const reference = switch (authorization_result.outcome().*) {
             .prepared => |*reference| reference,
-            .failed, .cancelled => return error.OperationExecutionFailed,
+            .failed, .cancelled => unreachable,
         };
         const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const owner = self.allocator.create(Owner) catch |operation_error| return operation_error;

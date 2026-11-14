@@ -22,7 +22,7 @@ pub const Activate = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = values.read(&input.step.data, @import("feature_directory_workflow.zig").directory, feature.Directory) catch |operation_error| return operation_error;
-        const activator = self.activator orelse return error.OperationExecutionFailed;
+        const activator = self.activator orelse return error.FeatureLoggingActivatorUnbound;
         return switch (activator.activate(prior.*, input.step.log.workflow_shortcode)) {
             .ready => |current| ready: {
                 var delta: @import("../domain/pipeline.zig").NodeDelta = .{};

@@ -88,4 +88,8 @@ pub const Error = @import("pipeline_data.zig").ValueError ||
     @import("workflow_token_accounting.zig").BudgetError ||
     @import("specification_state.zig").Error ||
     @import("incomplete_specification.zig").Error ||
-    error{OperationExecutionFailed};
+    @import("step_binding_error.zig").RequestPreparation ||
+    @import("step_binding_error.zig").ProviderLifecycle ||
+    @import("step_binding_error.zig").StepBinding ||
+    @import("step_binding_error.zig").Invocation ||
+    @import("repair_owner.zig").Error;

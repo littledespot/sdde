@@ -24,22 +24,22 @@ pub fn rejection(view: *const data.View) values.Error!?Rejection {
     return if (value.* == .rejected) value.rejected else null;
 }
 pub fn read(view: *const data.View) operations.Error!loss.Repair {
-    return owned.read(view, schema, .repair) catch |operation_error| operation_error;
+    return owned.readNative(view, schema, .repair) catch |operation_error| operation_error;
 }
 pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
 fn support(view: *const data.View) operations.Error!loss.Support {
     const review = authority_values.read(view, @import("specification_support_workflow.zig").schema, .support) catch |operation_error| return operation_error;
-    if (review != .accepted) return error.OperationExecutionFailed;
+    if (review != .accepted) return error.RepairOwnerMismatch;
     return .{ .repair_phase = (try @import("specification_generation_facts.zig").read(view)).phase(), .review = review.accepted.candidate, .inputs = authority_values.read(view, authority.inputs_schema, .inputs) catch |operation_error| return operation_error, .observations = authority_values.read(view, authority.observations_schema, .observations) catch |operation_error| return operation_error, .result = authority_values.read(view, authority.result_schema, .result) catch |operation_error| return operation_error };
 }
 fn facts(view: *const data.View) operations.Error!ex.Facts {
     const source = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
     const candidates = values.read(view, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
-    const candidate = try extraction.read(view, extraction.text_schema, .text_validated);
+    const candidate = try extraction.readNative(view, extraction.text_schema, .text_validated);
     return .{ .extraction = .{ .inputs = source.*, .candidates = candidates.*, .candidate = candidate.payload().text_validated }, .support = try support(view) };
 }
 fn parsed(view: *const data.View) operations.Error!@import("../domain/reference_reconciliation.zig").Parsed {
-    return (try extraction.read(view, rec.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
+    return (try extraction.readNative(view, rec.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
 }
 /// What every source-omission step reads besides its own repair state: the phase witness's optional
 /// facts, present only while the specification is being generated.
@@ -67,7 +67,7 @@ pub const Authorize = struct {
         };
         owner.payload = .{ .repair = state };
         const permit = switch (state.authorization) {
-            inline else => |auth| auth.retry orelse return error.OperationExecutionFailed,
+            inline else => |auth| auth.retry orelse return error.RepairPermitMissing,
         };
         var result = owned.publish(self.allocator, schema, owner, if (state.authorization == .extraction) .ok else .more) catch |operation_error| return operation_error;
         result.delta.repair_transition = .{ .authorized = permit };
@@ -83,7 +83,7 @@ pub const BuildInput = struct {
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
+        const state = owned.readNative(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
         const packet = source_repair.packet(self.allocator, try facts(&input.step.data), try parsed(&input.step.data), try rec.textContext(&input.step.data), state, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
@@ -97,7 +97,7 @@ pub const Parse = struct {
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
+        const state = owned.readNative(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
         const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
         const handoff = try @import("model_candidate_handoff.zig").read(&input.step.data);
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
@@ -141,15 +141,14 @@ pub fn Merge(comptime kind: enum { extraction, reconciliation }) type {
         },
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
             const self = context.?;
-            const state = owned.read(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
+            const state = owned.readNative(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
             const target = if (kind == .extraction) extraction.text_schema else rec.parsed_schema;
-            const prior = try extraction.read(&input.step.data, target, if (kind == .extraction) .text_validated else .reconciliation_parsed);
+            const prior = try extraction.readNative(&input.step.data, target, if (kind == .extraction) .text_validated else .reconciliation_parsed);
             const owner = reference.create(self.allocator, prior) catch |operation_error| return operation_error;
             errdefer reference.destroy(owner);
             owner.payload = if (kind == .extraction) .{ .text_validated = source_repair.mergeExtraction(owner.arena.allocator(), self.text, try facts(&input.step.data), try rec.textContext(&input.step.data), state) catch |operation_error| return operation_error } else .{ .reconciliation_parsed = source_repair.mergeReconciliation(owner.arena.allocator(), self.text, try parsed(&input.step.data), try rec.textContext(&input.step.data), try support(&input.step.data), state) catch |operation_error| return operation_error };
             var delta: pipeline.NodeDelta = .{};
-            const merged = (if (kind == .extraction) owner.payload.text_validated.last_repair else owner.payload.reconciliation_parsed.source.last_repair) orelse return error.OperationExecutionFailed;
-            delta.repair_transition = merged.transition(.dependent_review) catch return error.OperationExecutionFailed;
+            delta.repair_transition = try repair_owner.mergeTransition(if (kind == .extraction) owner.payload.text_validated.last_repair else owner.payload.reconciliation_parsed.source.last_repair, .dependent_review);
             delta.data_replacements[@intFromEnum(target.key)] = values.adopt(self.allocator, target, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
             for (effects.invalidates) |key| delta.data_invalidations.insert(key);
             return .{ .outcome = .ok, .delta = delta };

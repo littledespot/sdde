@@ -14,10 +14,18 @@ Representative codes include:
   `WORKFLOW_DEFINITION_SCHEMA_INVALID`, `WORKFLOW_GRAPH_COMPILE_INVALID` and
   `BOOTSTRAP_ROOT_RESOLUTION_ERROR`;
 - retry and repair: `RETRY_LIMIT_EXHAUSTED`, `REPAIR_RECURRING`;
+- runner authority: the closed reasons of
+  [§6](06-pipeline-nodes.md#runner-rejection-reasons), upper-cased in events, such as
+  `REGISTRY_DRIFT` and `STEP_EXECUTION_CEILING`;
 - model response: `MISSING_FINAL_TEXT`;
 - model-exchange capture: `MODEL_CAPTURE_PERSISTENCE_FAILURE` and the other
   `MODEL_CAPTURE_*` failures;
 - feature logging: `LOG_LOCK_TIMEOUT`, `LOG_SINK_FAILURE`, `LOG_SEGMENT_LIMIT_EXHAUSTED`.
+
+A runner rejection names its tag and, for `authority`, one closed reason, which is its
+diagnostic on every surface and so never reduces to `failed`. When a later failure
+replaces an earlier one, the run keeps the earlier rejection beside the terminal one
+([§27](27-observability.md#complete-execution-evidence)).
 
 Diagnostics are sorted deterministically by stage, artifact, location, validator priority, and code. Human-facing messages are rendered from codes and fields; repair logic does not parse prose.
 

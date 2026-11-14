@@ -205,10 +205,8 @@ Every diagnostic declares one class:
 Configuration and environment errors never consume LLM repair attempts.
 
 - A missing or unreconciled authority is not a malformed candidate value and therefore is never
-  repaired by generating a convenient replacement.
-- The existing one-shot whole-operation-result no-invention replacement may yield
-  `clarification_needed` only when §12.8.1 admits a genuine authority gap. Candidate
-  loss or inconclusive review retains its own repair/rejection outcome.
+  repaired by generating a convenient replacement. Candidate loss or inconclusive review
+  retains its own repair/rejection outcome.
 - If a later stage detects the gap, repair stops and the shared reconciliation router selects
   upstream rework.
 - Local repair resumes only after the owning stage has regenerated, passed reconciliation, and
@@ -426,10 +424,8 @@ Evidence repair obtains the diagnostic and permitted references from their exist
 validator/registry, including any applicable source-line bounds. The request builder
 projects those facts; it does not revalidate citations or select supporting evidence.
 Registry/selection integrity failures remain engine failures, distinct from an
-invalid model-proposed citation. Principle citation diagnostics identify the citation
-index, rejected chunk/line field and value, using the existing selection for allowed
-IDs and the captured span for inclusive line bounds. These same facts reach repair
-and reports; they are not a second persisted authority. JSON/schema correction (§22.6) does not replace
+invalid model-proposed citation. The projected facts reach repair and reports; they
+are not a second persisted authority. JSON/schema correction (§22.6) does not replace
 native evidence repair, change retry limits, reconsider verdicts or persist new policy.
 
 Example:
@@ -619,7 +615,9 @@ before continuation under §12.7's budget.
 Ordinary runner retry exhaustion retains the owning compiled operation, declared
 limit and completed execution count alongside the last response diagnostic. It is
 a typed terminal rejection, never an ordinary YAML outcome that could continue
-to success or `needs_user`. If JSON decoding or schema validation still fails when correction is unavailable
+to success or `needs_user`. A retry allowance that cannot be admitted, or whose exhaustion
+cannot be described, is not an exhaustion: the runner stops on its own authority with the
+`retry_admission` reason ([§6](06-pipeline-nodes.md#runner-rejection-reasons)). If JSON decoding or schema validation still fails when correction is unavailable
 or exhausted, the run reports an error, exits nonzero and publishes nothing
 ([§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)'s
 precedence table, which also records what

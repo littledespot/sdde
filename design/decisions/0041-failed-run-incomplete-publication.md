@@ -86,8 +86,8 @@ incomplete specification when a run pauses for clarification.
 
    These still publish nothing:
    - cancellation (`cancelled`);
-   - security, path, trusted-association or forged-evidence failures (`authority`),
-     because the content can't be trusted;
+   - security, path, trusted-association or forged-evidence failures (`authority`, every
+     reason, Decision 7.7), because the content can't be trusted;
    - a runner gate rejection (`gate`);
    - logging and model-capture failures (`logging`, `model_capture`), because the
      publication couldn't be recorded;
@@ -183,8 +183,15 @@ incomplete specification when a run pauses for clarification.
       mode; the engine returns the original failure, and ADR 0009's rule covers files
       already written.
    7. **Tests.** The publishing list's "authority block" is a YAML administrative block;
-      the runner's `authority` rejection publishes nothing. A `model_capture` exclusion
-      test is added.
+      the runner's `authority` rejection publishes nothing, whatever its reason. The closed
+      reasons ([§6](../contracts/06-pipeline-nodes.md#runner-rejection-reasons)) sit
+      beside the tag: none adds, merges or splits a tag, and none moves a failure across
+      the publish line. Some are operational rather than untrusted content (for example
+      `step_execution_ceiling`, `authorization_clock_unavailable` and `kernel_key_drop`).
+      `authorization_denied` spans a foreign or mismatched lease, which is untrusted
+      content, a stale or already consumed one, which is operational, and a failed
+      preparation result; one reason covers all three, and it publishes nothing either
+      way. E0 may revisit them when it resumes. A `model_capture` exclusion test is added.
    8. **Rendering.** `spec.md`: the title first, then the failure line. The failure line is `**Status: Incomplete — the run
       failed.**` or `**Status: Incomplete — the run was blocked.**`, followed by one
       sentence naming the authored step ID and the diagnostic code. A section the run

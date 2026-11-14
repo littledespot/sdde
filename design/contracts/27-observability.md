@@ -62,7 +62,12 @@ binds newly created roots to subsequent reads and publication.
   source-snapshot projection, serialization, redaction, chunking and persistence
   failures remain distinguishable without recording credentials or raw bodies in
   diagnostics. A subsequent logging/finalization failure cannot replace the first
-  capture cause; both remain failed evidence.
+  capture cause; both remain failed evidence. A capture failure is the call's one cause: a
+  rejection formed from that call's result (its own error, an accounting failure raised before
+  usage is applied, an unreadable result) is not kept beside it, and the report shows the
+  capture failure alone. A blocked request capture leaves the call `not_sent` in the token
+  ledger and a blocked response capture still accounts the call's usage, including a budget
+  overshoot, so only a second fault in the same call can leave its usage unaccounted.
   CLI failure output and terminal reports expose the typed diagnostic. Action and
   terminal event codes retain the boundary and closed cause; the terminal event
   retains the call correlation and attempt when known.
@@ -81,6 +86,18 @@ An earlier error remains inspectable after recovery. Capture every available mod
 body under ADR 0018; retain partial/no-response provenance and credential redaction.
 Diagnostic runs must enable full capture. Console output is a mirror, not a substitute
 for persisted records. A harness-only trace does not satisfy production logging.
+
+A later failure does not erase an earlier one. The terminal rejection stays the later
+failure, with its own status and diagnostic, which is all
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) reads. The runner
+keeps the first rejection it replaced as the run's first cause, whole, with an `authority`
+reason ([§6](06-pipeline-nodes.md#runner-rejection-reasons)) when it has one, set once so
+the earliest replacement wins. A capture failure is recorded while its call runs, so it is never kept
+as a first cause (its terminal carries a later logging failure), and one failure seen twice, such as a
+sink that stays broken, replaced nothing. The
+E2E report (`first_cause`), the step event of the rejected step and the offline step trace
+(`:first=`) carry both; the feature log's terminal event keeps the terminal code only and
+gains no event, column or code.
 
 Reuse the closed event registry and shared logging lifecycle. The runner owns
 execution/transition facts, validators supply typed diagnostics, and the existing

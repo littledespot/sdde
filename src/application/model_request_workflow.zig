@@ -86,18 +86,18 @@ fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: op
 }
 
 fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: operations.StepInput, packet: ?*const packets.Packet) operations.Error!Selection {
-    if (!@import("../domain/workflow_model.zig").validResultSelection(step.step.parameters)) return error.OperationExecutionFailed;
-    const selected = step.model_binding orelse return error.OperationExecutionFailed;
+    if (!@import("../domain/workflow_model.zig").validResultSelection(step.step.parameters)) return error.RequestDeclarationInvalid;
+    const selected = step.model_binding orelse return error.RequestModelBindingMissing;
     const static_input = resource(step, "input");
-    if (packet != null and static_input != null) return error.OperationExecutionFailed;
+    if (packet != null and static_input != null) return error.RequestDeclarationInvalid;
     var selection: handoff.ResultSelection = .resource;
     for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, "result-selection")) {
-        if (parameter.value != .enumeration) return error.OperationExecutionFailed;
-        selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.OperationExecutionFailed;
+        if (parameter.value != .enumeration) return error.RequestDeclarationInvalid;
+        selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.RequestDeclarationInvalid;
     };
     var result: handoff.Selection = .{
         .binding = selected.*,
-        .prompt = resource(step, "prompt") orelse return error.OperationExecutionFailed,
+        .prompt = resource(step, "prompt") orelse return error.RequestResourceMissing,
         .context = resource(step, "context"),
         .result = undefined,
         .input = if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null,
@@ -107,8 +107,8 @@ fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: o
     const part_id = parameterString(step, "composition-part");
     if (part_id) |id| {
         const state = try compositions.readState(&step.data);
-        if (state.base != packet) return error.OperationExecutionFailed;
-        const part = state.plan.part(@import("../domain/workflow.zig").WorkflowResourceId.parse(id) orelse return error.OperationExecutionFailed) orelse return error.OperationExecutionFailed;
+        if (state.base != packet) return error.RequestCompositionConflict;
+        const part = state.plan.part(@import("../domain/workflow.zig").WorkflowResourceId.parse(id) orelse return error.RequestDeclarationInvalid) orelse return error.RequestCompositionConflict;
         const binding = state.select(scratch, part) catch |operation_error| return operation_error;
         result.composition = binding;
         result.result = .{ .id = state.plan.resultAlias(), .content = .{ .result_schema = state.plan.resultSchema() } };
@@ -116,8 +116,8 @@ fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: o
         result.input = .{ .packet = derived };
         return .{ .value = result, .owned_packet = derived };
     } else {
-        if (step.data.contains(.json_composition)) return error.OperationExecutionFailed;
-        result.result = resource(step, "result-schema") orelse return error.OperationExecutionFailed;
+        if (step.data.contains(.json_composition)) return error.RequestCompositionConflict;
+        result.result = resource(step, "result-schema") orelse return error.RequestResourceMissing;
     }
     return .{ .value = result };
 }
@@ -153,7 +153,7 @@ fn publishAssignment(allocator: std.mem.Allocator, owner: *identity.Owner, reque
 pub fn readCurrent(view: *const data.View, schema: data.Schema) operations.Error!*const handoff.Request {
     const current = values.read(view, ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
     const request = values.read(view, schema, handoff.Request) catch |operation_error| return operation_error;
-    if (!current.containsRequest(request.id()) or !current.stageRunEpochId().eql(request.ledger().stageRunEpochId())) return error.OperationExecutionFailed;
+    if (!current.containsRequest(request.id()) or !current.stageRunEpochId().eql(request.ledger().stageRunEpochId())) return error.RequestLedgerForeign;
     return request;
 }
 

@@ -440,7 +440,7 @@ test "every event of a request stage names the stage, and a stage action's other
         .{ .result = .{ .outcome = .invalid }, .event = .action_invalid },
         .{ .result = .{ .outcome = .failed }, .event = .action_failed },
         .{ .result = .{ .outcome = .cancelled }, .event = .action_failed },
-        .{ .result = .{ .rejected = .authority }, .event = .action_failed },
+        .{ .result = .{ .rejected = .{ .authority = .kernel_stage } }, .event = .action_failed },
     };
     for (std.enums.values(@import("domain/model_request_stage.zig").Stage)) |request_stage| for (ends) |end| {
         try std.testing.expectEqual(failure, capture.requestStage(node, request_stage.name(), end.result, null));
@@ -455,6 +455,55 @@ test "every event of a request stage names the stage, and a stage action's other
         try std.testing.expectEqual(@as(?telemetry.Identifier, null), recorder.last.?.fact.fields.step_id);
         _ = try registry.validateFact(recorder.last.?.fact);
     }
+}
+
+/// Keeps the event type and diagnostic code of the last fact it is handed, copied while the fact's
+/// own buffers are live, and refuses a fact the event registry does not admit.
+const CodeRecorder = struct {
+    event: ?@import("domain/telemetry.zig").EventType = null,
+    code: [96]u8 = undefined,
+    code_len: usize = 0,
+
+    fn port(self: *CodeRecorder) @import("ports/telemetry_barrier.zig").Barrier {
+        return .{ .context = self, .process_fn = process };
+    }
+    fn process(context: *anyopaque, fact: @import("domain/telemetry.zig").WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+        const self: *CodeRecorder = @ptrCast(@alignCast(context));
+        _ = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        const bytes = (fact.fact.fields.diagnostic_code orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE }).bytes;
+        self.event = fact.fact.event_type;
+        @memcpy(self.code[0..bytes.len], bytes);
+        self.code_len = bytes.len;
+        return .{ .persisted = .{ .segment_ordinal = 1, .sequence = 1, .bytes_written = 1, .flushed = true } };
+    }
+    fn written(self: *const CodeRecorder) []const u8 {
+        return self.code[0..self.code_len];
+    }
+};
+
+test "an authority rejection's events carry its reason as their diagnostic code" {
+    const telemetry = @import("domain/telemetry.zig");
+    const execution = @import("domain/workflow_execution.zig");
+    var recorder: CodeRecorder = .{};
+    const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
+    const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "request" };
+    const accepted: ?@import("domain/feature_log_stream.zig").FailureCode = null;
+    for (std.enums.values(execution.AuthorityReason)) |reason| {
+        // The existing token rule upper-cases the reason: no new code family, and each reason is its own code.
+        var upper: [64]u8 = undefined;
+        const expected = std.ascii.upperString(&upper, @tagName(reason));
+        try std.testing.expectEqual(accepted, capture.action(node, .{ .rejected = .{ .authority = reason } }, null, null));
+        try std.testing.expectEqual(@as(?telemetry.EventType, .action_failed), recorder.event);
+        try std.testing.expectEqualStrings(expected, recorder.written());
+        try std.testing.expectEqual(accepted, capture.terminal(.{ .execution_rejected = .{ .authority = reason } }));
+        try std.testing.expectEqual(@as(?telemetry.EventType, .run_failed), recorder.event);
+        try std.testing.expectEqualStrings(expected, recorder.written());
+    }
+    // Every other tag keeps the code it had, so the reason sits beside the tag and changes none of them.
+    try std.testing.expectEqual(accepted, capture.terminal(.{ .execution_rejected = .deadline_exhausted }));
+    try std.testing.expectEqualStrings("FAILED", recorder.written());
+    try std.testing.expectEqual(accepted, capture.terminal(.{ .execution_rejected = .{ .operation_failed = error.InvalidToolchain } }));
+    try std.testing.expectEqualStrings("INVALIDTOOLCHAIN", recorder.written());
 }
 
 test "the binding hands the runner's slot the failing step and propagates the unchanged error" {

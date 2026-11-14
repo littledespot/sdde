@@ -23,9 +23,11 @@ pub const Assign = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-        const prepared = request.prepared() orelse return error.OperationExecutionFailed;
+        // The runner refuses this step before it runs when the retained request has no prepared form
+        // (`request_state_missing`).
+        const prepared = request.prepared().?;
         const attempt = accounting.readAttempt(&input.step.data) catch |operation_error| return operation_error;
-        const facts = input.step.provider_operation orelse return error.OperationExecutionFailed;
+        const facts = input.step.provider_operation orelse return error.ProviderOperationFactsMissing;
         const assignment: lifecycle.Assignment = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id, .sampling = prepared.sampling };
         const delta = self.action.execute(facts.ledger, facts.authority, facts.ledger.revision(), .{
             .model_request_id = request.id(),

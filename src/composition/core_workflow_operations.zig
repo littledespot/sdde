@@ -51,16 +51,16 @@ pub const registry: operations.Registry = .{
 fn emptyInvocation(_: ?*void, input: operations.Input) operations.Error!execution.Candidate {
     const invocation = switch (input) {
         .invocation => |value| value,
-        .step => return error.OperationExecutionFailed,
+        .step => return error.OperationWrongKind,
     };
-    if (invocation.arguments.len != 0) return error.OperationExecutionFailed;
+    if (invocation.arguments.len != 0) return error.InvocationArgumentsInvalid;
     return .{ .outcome = .ok, .delta = .{} };
 }
 
 fn noop(_: ?*void, input: operations.Input) operations.Error!execution.Candidate {
     switch (input) {
         .step => {},
-        .invocation => return error.OperationExecutionFailed,
+        .invocation => return error.OperationWrongKind,
     }
     return .{ .outcome = .ok, .delta = .{} };
 }

@@ -211,7 +211,7 @@ Before any invocation/step executes, typed compiled output/replacement keys and
 side-effect policy are checked for publication capability. A publication-capable
 child stops at `publication_prohibited`, even before the first exchange.
 
-Each invocation retains `report.json` (`provider-compatibility-report/v1`) and
+Each invocation retains `report.json` (`provider-compatibility-report/v2`) and
 `report.md` beneath `zig-out/provider-compatibility/<UTC-date-time>-<unique-id>/`.
 The report links available immutable request/response captures and records the
 revision, exact model/settings, request/response identity and bytes, protocol and
@@ -353,7 +353,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v18`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v19`; it stays null until ADR 0041 is
   implemented (SPEC01 E0).
 
 ### Rubric assessment
@@ -485,7 +485,18 @@ The terminal prints the development acceptance result explicitly.
 - A candidate can come from an older call.
 - Missing, ambiguous or foreign joins fail evidence capture.
 - Reports retain `terminal_step` and the typed `terminal_rejection` independently of
-  `last_model_*`; unavailable output text is stated explicitly.
+  `last_model_*`; unavailable output text is stated explicitly. A `terminal_rejection` of
+  kind `authority` names its closed `reason`
+  ([§6](../contracts/06-pipeline-nodes.md#runner-rejection-reasons)); no other kind carries
+  one, and the typed decode rejects any other pairing. `first_cause` keeps the rejection a
+  later one replaced, whole, read from the runner beside `last_operation_rejection`; it is
+  null for a lone failure. Its closed type has no capture-failure kind, so a report that names
+  one does not decode
+  ([§27](../contracts/27-observability.md#complete-execution-evidence)). It pairs `reason` with
+  the kind `authority` as `terminal_rejection` does, and carries an `exhaustion` member exactly
+  when its kind is `retry_limit`: the operation instance, retry limit, completed executions,
+  reason, defect and stage that `retry_error` gives a terminal exhaustion. The step event of a
+  rejected step carries it beside its `rejection`.
 - These are opt-in harness diagnostics.
 - Production metadata logging does not gain raw prompts, source text or candidate
   values.
@@ -553,7 +564,9 @@ revision, outstanding candidate-defect requirements and review origin. A review
 origin is not attributed as the producer of the generation defect.
 
 `first_native_rejection` identifies the earliest captured native rejection and event sequence,
-not a proven initial semantic cause. `corrections` project accepted native repair
+not a proven initial semantic cause. Where a later failure replaced a rejection within the
+step, the `runner` evidence it names is that `first_cause`, not the terminal rejection (an
+exhaustion's facts stay in `first_cause`). `corrections` project accepted native repair
 permits, target keys, revisions and actual invalidation/rebuild links. `outstanding_work`
 lists invalidated data keys not rebuilt, with the event that invalidated each; it may
 include intentionally retired transport data and does not independently determine
@@ -592,10 +605,10 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v18`,
-`e2e-step-event/v3`, `baseline-freeze/v3`, `baseline-acquisition/v12`,
-`baseline-score/v4`, `baseline-budget-feasibility/v2`, the evaluator packets'
-`baseline-assessment-inputs/v2` and `provider-compatibility-report/v1`; assessor
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v19`,
+`e2e-step-event/v4`, `baseline-freeze/v3`, `baseline-acquisition/v13`,
+`baseline-score/v5`, `baseline-budget-feasibility/v2`, the evaluator packets'
+`baseline-assessment-inputs/v2` and `provider-compatibility-report/v2`; assessor
 documents use numeric schema `3`. Current readers reject superseded versions and
 fields: retained runs and captures of an earlier version stay immutable evidence,
 readable only by the build that made them. Feasibility evidence retains the single

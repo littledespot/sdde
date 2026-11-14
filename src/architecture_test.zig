@@ -1480,6 +1480,201 @@ test "provider requirement derives only from one exactly selected compiled workf
     try std.testing.expect(derive_type.params[0].type.? == *const workflow_execution.SelectedWorkflow);
 }
 
+test "an authority rejection names its reason from one closed enum, raised only where the runner owns the check" {
+    // `Rejection.authority` carries the reason, so a bare `.authority` cannot be built (the type refuses it).
+    try std.testing.expect(@FieldType(workflow_execution.Rejection, "authority") == workflow_execution.AuthorityReason);
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("domain/workflow_execution.zig"), "pub const AuthorityReason = enum"));
+    const producers = .{
+        @embedFile("application/workflow_pipeline_runner.zig"),
+        @embedFile("application/model_request_orchestrator.zig"),
+        @embedFile("application/workflow_model_invocation.zig"),
+    };
+    // Every reason has a producer: a member nothing raises is dead vocabulary. A reason counts as a
+    // whole token, so `kernel_stage` is not raised by a `kernel_stage_outcome`.
+    inline for (@typeInfo(workflow_execution.AuthorityReason).@"enum".fields) |reason| {
+        var raised: usize = 0;
+        inline for (producers) |source| raised += countReasonProducers(source, reason.name);
+        try std.testing.expect(raised > 0);
+    }
+    // Only the runner, the request orchestrator and the model-invocation reconciliation raise one: an action
+    // proposes a candidate, and no other production file under `src` (an adapter, port, domain value or
+    // another application workflow) stops a run on the runner's authority. A reason named in any
+    // `.authority = .<reason>`, whether the rejection is an anonymous literal or a named `Rejection{`, is a
+    // producer. A reason built any other way (a variable, a cast, a function result) has to name the reason
+    // type, which no other production file does.
+    const owners = [_][]const u8{ "application/workflow_pipeline_runner.zig", "application/model_request_orchestrator.zig", "application/workflow_model_invocation.zig" };
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    var reached_application = false;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        if (std.mem.indexOf(u8, entry.basename, "_test") != null or std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const owner = for (owners) |path| {
+            if (std.mem.eql(u8, entry.path, path)) break true;
+        } else false;
+        if (owner) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        inline for (@typeInfo(workflow_execution.AuthorityReason).@"enum".fields) |reason| {
+            try std.testing.expectEqual(@as(usize, 0), countReasonProducers(source, reason.name));
+        }
+        if (!std.mem.eql(u8, entry.path, "domain/workflow_execution.zig")) try std.testing.expectEqual(@as(usize, 0), countOccurrences(source, "AuthorityReason"));
+        // The scan reached an application workflow that is no owner, which is where a second producer
+        // would be added.
+        if (std.mem.eql(u8, entry.path, "application/model_request_workflow.zig")) reached_application = true;
+    }
+    try std.testing.expect(reached_application);
+}
+
+/// Whether `source` returns `error.<name>`, naming the cause as a whole token in code: outside every
+/// comment (a whole line or a trailing one), every string literal and every `test` block (a formatted
+/// file opens one with `test "` and closes it with `}`, both at the start of a line).
+fn returnsError(source: []const u8, comptime name: []const u8) bool {
+    const needle = "error." ++ name;
+    var from: usize = 0;
+    while (std.mem.indexOfPos(u8, source, from, needle)) |index| : (from = index + needle.len) {
+        const after = index + needle.len;
+        if (after < source.len and (std.ascii.isAlphanumeric(source[after]) or source[after] == '_')) continue;
+        if (index > 0 and (std.ascii.isAlphanumeric(source[index - 1]) or source[index - 1] == '_')) continue;
+        if (!inCode(source, index)) continue;
+        const before = source[0..index];
+        const opened = std.mem.lastIndexOf(u8, before, "\ntest \"");
+        const closed = std.mem.lastIndexOf(u8, before, "\n}");
+        if (opened != null and (closed == null or closed.? < opened.?)) continue;
+        return true;
+    }
+    return false;
+}
+
+/// Whether the byte at `index` is code of its own line: after no `//` and inside no string literal or
+/// multiline string. A quote in a character literal opens no string.
+fn inCode(source: []const u8, index: usize) bool {
+    const line_start = if (std.mem.lastIndexOfScalar(u8, source[0..index], '\n')) |newline| newline + 1 else 0;
+    const line = source[line_start..index];
+    if (std.mem.startsWith(u8, std.mem.trimStart(u8, line, " "), "\\\\")) return false;
+    var in_string = false;
+    var position: usize = 0;
+    while (position < line.len) : (position += 1) {
+        const byte = line[position];
+        if (in_string) {
+            if (byte == '\\') position += 1 else if (byte == '"') in_string = false;
+            continue;
+        }
+        switch (byte) {
+            '"' => in_string = true,
+            '\'' => position = closingQuote(line, position),
+            '/' => if (position + 1 < line.len and line[position + 1] == '/') return false,
+            else => {},
+        }
+    }
+    return !in_string;
+}
+
+/// The position of the quote that closes the character literal opened at `open`, or `open` when none does.
+fn closingQuote(line: []const u8, open: usize) usize {
+    var position = open + 1;
+    if (position < line.len and line[position] == '\\') position += 1;
+    position += 1;
+    return if (position < line.len and line[position] == '\'') position else open;
+}
+
+/// How often `source` raises `.authority = .<reason>`, counting the reason as a whole token.
+fn countReasonProducers(source: []const u8, comptime reason: []const u8) usize {
+    const needle = ".authority = ." ++ reason;
+    var count: usize = 0;
+    var remaining = source;
+    while (std.mem.indexOf(u8, remaining, needle)) |index| {
+        const after = index + needle.len;
+        const longer = after < remaining.len and (std.ascii.isAlphanumeric(remaining[after]) or remaining[after] == '_');
+        if (!longer) count += 1;
+        remaining = remaining[after..];
+    }
+    return count;
+}
+
+test "a reason counts as produced only as a whole token, and a cause as returned only outside comments and test blocks" {
+    try std.testing.expectEqual(@as(usize, 1), countReasonProducers(".{ .authority = .kernel_stage }", "kernel_stage"));
+    try std.testing.expectEqual(@as(usize, 1), countReasonProducers("execution.Rejection{ .authority = .kernel_stage }", "kernel_stage"));
+    try std.testing.expectEqual(@as(usize, 0), countReasonProducers(".{ .authority = .kernel_stage_outcome }", "kernel_stage"));
+    try std.testing.expectEqual(@as(usize, 0), countReasonProducers(".{ .authority = .gate_drift }", "kernel_stage"));
+    try std.testing.expect(returnsError("fn f() !void { return error.Foo; }", "Foo"));
+    try std.testing.expect(returnsError("\ntest \"t\" {\n}\n\nfn f() !void { return error.Foo; }\n", "Foo"));
+    try std.testing.expect(!returnsError("fn f() !void { return error.FooBar; }", "Foo"));
+    try std.testing.expect(!returnsError("// raised as error.Foo\n", "Foo"));
+    try std.testing.expect(!returnsError("fn f() void {}\n\ntest \"t\" {\n    try expectError(error.Foo, f());\n}\n", "Foo"));
+    // A cause named after a comment opens, inside a string literal or on a multiline string line is not
+    // returned; a quote in a character literal or an escaped quote in a string hides no code after it.
+    try std.testing.expect(!returnsError("fn f() !void { return error.Other; } // would return error.Foo\n", "Foo"));
+    try std.testing.expect(!returnsError("const s = \"return error.Foo\";\n", "Foo"));
+    try std.testing.expect(!returnsError("const s =\n    \\\\return error.Foo\n;\n", "Foo"));
+    try std.testing.expect(returnsError("fn f() !void { _ = '\"'; return error.Foo; }\n", "Foo"));
+    try std.testing.expect(returnsError("const s = \"a\\\"b\"; fn f() !void { return error.Foo; }\n", "Foo"));
+}
+
+test "the reasons the runner contract tabulates are the reasons the enum declares" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    const document = try std.Io.Dir.cwd().readFileAlloc(io, "design/contracts/06-pipeline-nodes.md", allocator, .limited(4 * 1024 * 1024));
+    defer allocator.free(document);
+    const heading = "#### Runner rejection reasons";
+    const start = std.mem.indexOf(u8, document, heading) orelse return error.ReasonTableMissing;
+    const after = document[start + heading.len ..];
+    const section = after[0 .. std.mem.indexOf(u8, after, "\n#### ") orelse after.len];
+    const reasons = @typeInfo(workflow_execution.AuthorityReason).@"enum".fields;
+    var listed = [_]usize{0} ** reasons.len;
+    var rows: usize = 0;
+    var lines = std.mem.splitScalar(u8, section, '\n');
+    while (lines.next()) |line| {
+        // A row of the table opens with its reason in code ticks.
+        if (!std.mem.startsWith(u8, line, "| `")) continue;
+        const name = line["| `".len..][0 .. std.mem.indexOfScalar(u8, line["| `".len..], '`') orelse return error.ReasonTableMalformed];
+        const known = inline for (reasons, 0..) |reason, index| {
+            if (std.mem.eql(u8, name, reason.name)) {
+                listed[index] += 1;
+                break true;
+            }
+        } else false;
+        // A row names a reason the enum declares; the enum has no member the table lacks, or lists twice.
+        try std.testing.expect(known);
+        rows += 1;
+    }
+    try std.testing.expectEqual(reasons.len, rows);
+    for (listed) |count| try std.testing.expectEqual(@as(usize, 1), count);
+}
+
+test "a first cause is one closed type, kept by the runner alone and built only where a replacement happens" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    var defined: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        if (std.mem.indexOf(u8, entry.basename, "_test") != null or std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        defined += countOccurrences(source, "pub const FirstCause = ");
+        // Only the runner sets the record, in one place where the earliest replacement wins; the log
+        // finalizer reports what it replaced and the runner decides whether to keep it.
+        const runner = std.mem.eql(u8, entry.path, "application/workflow_pipeline_runner.zig");
+        try std.testing.expectEqual(@as(usize, if (runner) 1 else 0), countOccurrences(source, ".first_cause = "));
+        // Only a place that replaces a rejection builds one: the runner's one replacement and the log finalizer's.
+        const builds: usize = if (runner or std.mem.eql(u8, entry.path, "composition/feature_logging_runtime.zig")) 1 else 0;
+        try std.testing.expectEqual(builds, countOccurrences(source, "FirstCause.replacedBy("));
+    }
+    try std.testing.expectEqual(@as(usize, 1), defined);
+    // The engine finalizes through the runner that keeps it, falling back to the bare finalizer only when no runner exists.
+    const assembly = @embedFile("composition/engine_invocation.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(assembly, "runner.finish(outcome)"));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(assembly, "finalizer.finish(outcome)"));
+}
+
 test "workflow compiler and service preserve their authority boundaries" {
     switch (@typeInfo(workflow_registry.ValidatedWorkflowDefinitionRegistry)) {
         .@"opaque" => {},
@@ -2764,7 +2959,25 @@ test "no per-owner repair operation remains: the four generic operations are the
         try expectAbsent(source, "@import(\"../actions/");
         try expectAbsent(source, "Action.contract");
         try expectAbsent(source, "action: Action");
+        // A merge's retry accounting goes through the shared `repair_owner` transition, which keeps its
+        // causes: no binding calls the domain transition itself or discards a cause it returns.
+        try expectAbsent(source, ".transition(");
+        try expectAbsent(source, ".validatedTransition(");
+        try expectAbsent(source, "catch return error.");
     }
+    // Each of the six bindings that merge reaches its merge transition through the shared helper exactly
+    // once, so the cause it forwards is the helper's (tested once, and through the real text and support
+    // bindings): a binding that built a transition by hand would leave this count at zero.
+    inline for (.{
+        @embedFile("application/reference_text_repair_workflow.zig"),
+        @embedFile("application/reference_extraction_repair_workflow.zig"),
+        @embedFile("application/reference_reconciliation_repair_workflow.zig"),
+        @embedFile("application/source_omission_repair_workflow.zig"),
+        @embedFile("application/specification_repair_workflow.zig"),
+    }) |source| {
+        try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "repair_owner.mergeTransition("));
+    }
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("application/specification_support_repair_workflow.zig"), "repair_owner.validatedMergeTransition("));
     // No action file declares a repair step, and no domain code reaches a repair rule through an action.
     const io = std.testing.io;
     var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
@@ -2799,5 +3012,61 @@ test "principle root access stays in its narrow source adapter and shares physic
     inline for (.{ @embedFile("adapters/filesystem/principle_source.zig"), @embedFile("adapters/filesystem/reference_corpus_source.zig") }) |source| {
         try std.testing.expect(std.mem.indexOf(u8, source, "directory_inventory.zig") != null);
         try std.testing.expect(std.mem.indexOf(u8, source, "files.capture(") != null);
+    }
+}
+
+test "every binding failure cause is closed, declared once in its owner area and returned by production code" {
+    const step_binding = @import("domain/step_binding_error.zig");
+    @setEvalBranchQuota(20_000);
+    const sets = .{ step_binding.RequestPreparation, step_binding.ProviderLifecycle, step_binding.StepBinding, step_binding.Invocation, @import("domain/repair_owner.zig").Error };
+    const Code = @import("domain/operation_error.zig").Code(@import("domain/workflow_execution.zig").OperationError);
+    const names = comptime blk: {
+        var total: usize = 0;
+        for (sets) |Set| total += @typeInfo(Set).error_set.?.len;
+        var list: [total][]const u8 = undefined;
+        var at: usize = 0;
+        for (sets) |Set| for (@typeInfo(Set).error_set.?) |cause| {
+            list[at] = cause.name;
+            at += 1;
+        };
+        break :blk list;
+    };
+    // Closed: each cause is a member of the serialized operation set, which names no generic failure.
+    try std.testing.expect(!@hasField(Code, "OperationExecutionFailed"));
+    inline for (names) |name| try std.testing.expect(@hasField(Code, name));
+    // Declared once: the same cause is never named by two area sets.
+    for (names, 0..) |name, index| for (names[index + 1 ..]) |other| try std.testing.expect(!std.mem.eql(u8, name, other));
+    // Returned by production code, so none is dead, and the removed generic failure is named nowhere.
+    var returned = [_]bool{false} ** names.len;
+    const io = std.testing.io;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(std.testing.allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        if (std.mem.indexOf(u8, entry.basename, "_test") != null or std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        try expectAbsent(source, "OperationExecutionFailed");
+        inline for (names, 0..) |name, index| {
+            if (returnsError(source, name)) returned[index] = true;
+        }
+    }
+    // The E2E harness stops its own run with one cause that no production file raises, so the engine's
+    // closed set carries it for the harness alone (its trace names it, and a `Rejection.operation_failed`
+    // can hold only a member of that set). That one cause is pinned to the harness; every other cause
+    // must be returned by production code, and the harness's word never counts for it.
+    const harness_only = "HarnessFailureStopped";
+    const trace = try std.Io.Dir.cwd().readFileAlloc(io, "test/harness/e2e/trace.zig", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(trace);
+    inline for (names, 0..) |name, index| {
+        if (comptime std.mem.eql(u8, name, harness_only)) {
+            try std.testing.expect(returnsError(trace, name));
+            try std.testing.expect(!returned[index]);
+        } else {
+            if (!returned[index]) std.debug.print("binding failure cause never returned by production code: {s}\n", .{name});
+            try std.testing.expect(returned[index]);
+        }
     }
 }

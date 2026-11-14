@@ -515,7 +515,7 @@ const binding_only_registry: operations.Registry = .{
 };
 
 fn unusedOperation(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
-    return error.OperationExecutionFailed;
+    return error.InvocationFailureUnrecorded;
 }
 
 const provider_id = identity.ProviderId.parse("compiled-provider").?;

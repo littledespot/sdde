@@ -27,7 +27,7 @@ pub const Complete = struct {
         const facts = try readCurrent(&input.step.data);
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
-        const operation_ledger = input.step.model_request_lifecycle orelse return error.OperationExecutionFailed;
+        const operation_ledger = input.step.model_request_lifecycle orelse return error.RequestLifecycleLedgerMissing;
         const owner = self.action.execute(current, operation_ledger, current.revision(), request.id(), facts.expected_status, .{ .terminal = facts.reason }) catch |operation_error| return operation_error;
         errdefer identity.deinitOwner(owner);
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
@@ -41,10 +41,11 @@ pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) ope
     const result = try payload.readCurrent(view);
     const source = result.source().source();
     const terminal = values.read(view, @import("workflow_model_accounting.zig").terminal_schema, lifecycle.TerminalOperation) catch |operation_error| return operation_error;
-    if (!terminal.record().id.eql(source.operationId()) or source.outcome() == .rejected) return error.OperationExecutionFailed;
+    if (!terminal.record().id.eql(source.operationId())) return error.LifecycleEvidenceForeign;
+    if (source.outcome() == .rejected) return error.ObservationNotValidated;
     const current = values.read(view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
-    const record = current.record(source.operationId().model_request_id) orelse return error.OperationExecutionFailed;
-    if (record.status != .invoked) return error.OperationExecutionFailed;
+    const record = current.record(source.operationId().model_request_id) orelse return error.LifecycleRecordMissing;
+    if (record.status != .invoked) return error.LifecycleStatusConflict;
     const outcome = payload.status(result);
     return .{
         .expected_status = .invoked,
@@ -53,7 +54,7 @@ pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) ope
             // Explicit closure abandons invalid content; it does not assert retry exhaustion.
             .invalid, .failed => .failed,
             .cancelled => .cancelled,
-            .more, .needs_user, .blocked => return error.OperationExecutionFailed,
+            .more, .needs_user, .blocked => return error.RequestOutcomeNotTerminal,
         },
         .outcome = outcome,
     };

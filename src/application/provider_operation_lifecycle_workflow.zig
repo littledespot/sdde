@@ -25,10 +25,10 @@ pub const Advance = struct {
 
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        if (!selection.invokesTransition(input.step.step.parameters)) return error.OperationExecutionFailed;
+        if (!selection.invokesTransition(input.step.step.parameters)) return error.LifecycleTransitionInvalid;
         const assigned = values.read(&input.step.data, accounting.operation_schema, lifecycle.AssignedOperation) catch |operation_error| return operation_error;
-        const facts = input.step.provider_operation orelse return error.OperationExecutionFailed;
-        const invocation = facts.invocation orelse return error.OperationExecutionFailed;
+        const facts = input.step.provider_operation orelse return error.ProviderOperationFactsMissing;
+        const invocation = facts.invocation orelse return error.ProviderInvocationFactsMissing;
         const record = assigned.record();
         var delta = self.action.execute(facts.ledger, facts.authority, facts.ledger.revision(), record.id, record.revision, .{ .invoke = invocation }) catch |operation_error| return operation_error;
         delta.data_invalidations.insert(.assigned_provider_operation);

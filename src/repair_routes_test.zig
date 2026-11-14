@@ -260,7 +260,7 @@ test "each reference-text operation fails closed over data that is not its nativ
     var authorize_context: generic.AuthorizeRepair = undefined;
     authorize_context.reference_text = .{ .allocator = std.testing.allocator };
     // The text key is present and holds a valid text, not a rejection: the owner finds no native fact.
-    try std.testing.expectError(error.OperationExecutionFailed, call(generic.AuthorizeRepair, .authorize, .reference_text, &authorize_context, accepted.view));
+    try std.testing.expectError(error.RepairOwnerMismatch, call(generic.AuthorizeRepair, .authorize, .reference_text, &authorize_context, accepted.view));
     // The text key is absent.
     var without_text = rejected.view;
     without_text.slots[@intFromEnum(native.text_schema.key)] = null;
@@ -528,12 +528,12 @@ test "each specification-support operation fails closed over data that is not it
     defer values.destroy(pending);
     var holding_pending = world.view;
     holding_pending.slots[review_key] = pending;
-    try std.testing.expectError(error.OperationExecutionFailed, call(generic.AuthorizeRepair, .authorize, .specification_support, &authorize_context, holding_pending));
+    try std.testing.expectError(error.RepairOwnerMismatch, call(generic.AuthorizeRepair, .authorize, .specification_support, &authorize_context, holding_pending));
     const initial = try world.authorityValue(support_workflow.schema, .support_initial);
     defer values.destroy(initial);
     var holding_initial = world.view;
     holding_initial.slots[review_key] = initial;
-    try std.testing.expectError(error.OperationExecutionFailed, call(generic.AuthorizeRepair, .authorize, .specification_support, &authorize_context, holding_initial));
+    try std.testing.expectError(error.RepairOwnerMismatch, call(generic.AuthorizeRepair, .authorize, .specification_support, &authorize_context, holding_initial));
 
     // Input, parse and merge each read the repair state authorize wrote: absent, then of another kind.
     const wrong_state = try world.authorityValue(support_binding.schema, .support_initial);
@@ -549,7 +549,7 @@ test "each specification-support operation fails closed over data that is not it
     try std.testing.expectError(error.MissingRequiredData, call(generic.BuildRepairInput, .build_input, .specification_support, &input_context, world.view));
     try std.testing.expectError(error.MissingRequiredData, call(generic.ParseRepair, .parse, .specification_support, &parse_context, world.view));
     try std.testing.expectError(error.MissingRequiredData, call(generic.MergeRepair, .merge, .specification_support, &merge_context, world.view));
-    try std.testing.expectError(error.InvalidRequiredAuthority, call(generic.BuildRepairInput, .build_input, .specification_support, &input_context, holding_wrong));
-    try std.testing.expectError(error.InvalidRequiredAuthority, call(generic.ParseRepair, .parse, .specification_support, &parse_context, holding_wrong));
-    try std.testing.expectError(error.InvalidRequiredAuthority, call(generic.MergeRepair, .merge, .specification_support, &merge_context, holding_wrong));
+    try std.testing.expectError(error.RepairOwnerMismatch, call(generic.BuildRepairInput, .build_input, .specification_support, &input_context, holding_wrong));
+    try std.testing.expectError(error.RepairOwnerMismatch, call(generic.ParseRepair, .parse, .specification_support, &parse_context, holding_wrong));
+    try std.testing.expectError(error.RepairOwnerMismatch, call(generic.MergeRepair, .merge, .specification_support, &merge_context, holding_wrong));
 }

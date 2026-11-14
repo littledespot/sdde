@@ -6,9 +6,39 @@
 //! it grants no policy, scope or defect identity (ADR 0033, ADR 0023).
 const std = @import("std");
 const pipeline = @import("pipeline.zig");
+const retry = @import("workflow_retry.zig");
 
 /// The one closed enumeration parameter that selects a repair operation's variant.
 pub const selector = "owner";
+
+/// Why a generic repair operation cannot run for its step (ADR 0033). An absent required key stays the
+/// data-flow error it is; these name what the owner bindings find wrong once the data is there.
+pub const Error = error{
+    /// The compiled `owner` disagrees with the native owner the authorization, diagnostic or context
+    /// determines, or the owner has no variant of the operation (ADR 0033: terminal, never routable).
+    RepairOwnerMismatch,
+    /// The step carries no `owner` selector, or its value names no owner.
+    RepairOwnerUnresolved,
+    /// The authorization carries no repair permit.
+    RepairPermitMissing,
+    /// The repaired candidate records no merge to continue from.
+    LastRepairMissing,
+    /// The retained state is not in the state this repair operation consumes.
+    RepairStateMismatch,
+    /// The rejected state holds no candidate to repair.
+    RepairCandidateMissing,
+};
+
+/// The retry accounting's view of the merge a repair step just made. A missing record and a record
+/// without its permit each fail the step with their own cause, never with a generic failure.
+pub fn mergeTransition(last: ?@import("atomic_repair.zig").Merge, validation: retry.ValidationMode) error{ LastRepairMissing, InvalidAtomicRepair }!retry.Transition {
+    return (last orelse return error.LastRepairMissing).transition(validation);
+}
+
+/// `mergeTransition` for a merge that validates in the same step and reports its result.
+pub fn validatedMergeTransition(last: ?@import("atomic_repair.zig").Merge, result: retry.Validation) error{ LastRepairMissing, InvalidAtomicRepair }!retry.Transition {
+    return (last orelse return error.LastRepairMissing).validatedTransition(result);
+}
 
 /// The data one owner's step reads, publishes, replaces and invalidates, stated once, beside the
 /// owner's rules (the owner's binding declares it, and its variant of the generic operation is built

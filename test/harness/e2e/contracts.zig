@@ -1,6 +1,8 @@
 const std = @import("std");
 const evaluator = @import("../contracts.zig");
 const relative = @import("../../../src/domain/relative_directory_path.zig");
+const execution = @import("../../../src/domain/workflow_execution.zig");
+const workflow_retry = @import("../../../src/domain/workflow_retry.zig");
 pub const Artifact = enum { specification, reference_context, clarification_state, workflow_state };
 pub const ExpectedOutcome = enum { publication, clarification };
 pub const Copy = struct { source: []const u8, destination: []const u8 };
@@ -66,21 +68,102 @@ pub const Status = enum {
     threshold_unconfigured,
 };
 
+/// What a rejection adds to its tag in a report: the same for every projection of one, so each is said once.
+fn reasonOf(value: execution.Rejection) ?execution.AuthorityReason {
+    return if (value == .authority) value.authority else null;
+}
+
+fn detailOf(value: execution.Rejection) ?[]const u8 {
+    return switch (value) {
+        .gate => |reason| @tagName(reason),
+        .logging => |reason| @tagName(reason),
+        .token_budget => |reason| @errorName(reason),
+        .operation_failed => value.diagnostic(),
+        .model_capture => |reason| reason.diagnostic(),
+        .authority, .cancelled, .deadline_exhausted, .retry_limit => null,
+    };
+}
+
+/// An authority reason sits beside the kind `authority` and nowhere else.
+fn reasonPaired(is_authority: bool, reason: ?execution.AuthorityReason) bool {
+    return is_authority == (reason != null);
+}
+
 /// Serializable projection of a native rejection; no inferred domain verdict.
 pub const TerminalRejection = struct {
-    kind: std.meta.Tag(@import("../../../src/domain/workflow_execution.zig").Rejection),
+    kind: std.meta.Tag(execution.Rejection),
+    /// Why the runner stopped on its own authority: non-null exactly when `kind` is `authority`.
+    reason: ?execution.AuthorityReason = null,
     detail: ?[]const u8 = null,
     capture_failure: ?@import("../../../src/domain/model_capture_failure.zig").Failure = null,
 
-    pub fn fromNative(value: @import("../../../src/domain/workflow_execution.zig").Rejection) TerminalRejection {
-        return .{ .kind = std.meta.activeTag(value), .detail = switch (value) {
-            .gate => |reason| @tagName(reason),
-            .logging => |reason| @tagName(reason),
-            .token_budget => |reason| @errorName(reason),
-            .operation_failed => value.diagnostic(),
-            .model_capture => |reason| reason.diagnostic(),
-            .authority, .cancelled, .deadline_exhausted, .retry_limit => null,
-        }, .capture_failure = if (value == .model_capture) value.model_capture else null };
+    pub fn fromNative(value: execution.Rejection) TerminalRejection {
+        return .{ .kind = std.meta.activeTag(value), .reason = reasonOf(value), .detail = detailOf(value), .capture_failure = if (value == .model_capture) value.model_capture else null };
+    }
+
+    /// Decoding rejects a reason on any other kind, and an authority rejection that names none.
+    pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!TerminalRejection {
+        const wire = try std.json.innerParse(Wire, a, source, options);
+        if (!reasonPaired(wire.kind == .authority, wire.reason)) return error.UnexpectedToken;
+        return .{ .kind = wire.kind, .reason = wire.reason, .detail = wire.detail, .capture_failure = wire.capture_failure };
+    }
+
+    /// The same members without the pairing check; decoding only.
+    const Wire = struct {
+        kind: std.meta.Tag(execution.Rejection),
+        reason: ?execution.AuthorityReason = null,
+        detail: ?[]const u8 = null,
+        capture_failure: ?@import("../../../src/domain/model_capture_failure.zig").Failure = null,
+    };
+    comptime {
+        for (std.meta.fields(TerminalRejection)) |field| std.debug.assert(@FieldType(Wire, field.name) == field.type);
+        std.debug.assert(std.meta.fields(Wire).len == std.meta.fields(TerminalRejection).len);
+    }
+};
+
+/// Serializable projection of the rejection a later one replaced. A capture failure is recorded while its
+/// call runs, so it is its own first cause and never one that was replaced: the kind is over the writer's
+/// `execution.FirstCause`, which has no such member, so a report cannot name one.
+pub const FirstCause = struct {
+    kind: std.meta.Tag(execution.FirstCause),
+    /// Why the runner stopped on its own authority: non-null exactly when `kind` is `authority`.
+    reason: ?execution.AuthorityReason = null,
+    detail: ?[]const u8 = null,
+    /// What an exhausted retry limit counted, as `Report.retry_error` gives it for a terminal one:
+    /// non-null exactly when `kind` is `retry_limit`.
+    exhaustion: ?workflow_retry.Exhaustion.Description = null,
+
+    /// The allocator owns the exhaustion's operation name.
+    pub fn fromNative(a: std.mem.Allocator, value: execution.FirstCause) std.mem.Allocator.Error!FirstCause {
+        const rejected = value.rejection();
+        return .{ .kind = std.meta.activeTag(value), .reason = reasonOf(rejected), .detail = detailOf(rejected), .exhaustion = if (value == .retry_limit) try value.retry_limit.describe(a) else null };
+    }
+
+    /// The same cause as the projection of a rejection, which has no place for an exhaustion's facts.
+    pub fn asTerminal(self: FirstCause) TerminalRejection {
+        return .{ .kind = switch (self.kind) {
+            inline else => |tag| @field(std.meta.Tag(execution.Rejection), @tagName(tag)),
+        }, .reason = self.reason, .detail = self.detail };
+    }
+
+    /// Decoding rejects a reason on any other kind, an authority cause that names none, exhaustion facts on
+    /// any other kind and a retry exhaustion without them.
+    pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!FirstCause {
+        const wire = try std.json.innerParse(Wire, a, source, options);
+        if (!reasonPaired(wire.kind == .authority, wire.reason) or (wire.kind == .retry_limit) != (wire.exhaustion != null)) return error.UnexpectedToken;
+        return .{ .kind = wire.kind, .reason = wire.reason, .detail = wire.detail, .exhaustion = wire.exhaustion };
+    }
+
+    /// The same members without the pairing checks; decoding only.
+    const Wire = struct {
+        kind: std.meta.Tag(execution.FirstCause),
+        reason: ?execution.AuthorityReason = null,
+        detail: ?[]const u8 = null,
+        exhaustion: ?workflow_retry.Exhaustion.Description = null,
+    };
+    comptime {
+        for (std.meta.fields(FirstCause)) |field| std.debug.assert(@FieldType(Wire, field.name) == field.type);
+        std.debug.assert(std.meta.fields(Wire).len == std.meta.fields(FirstCause).len);
     }
 };
 pub const Attempt = struct {
@@ -137,7 +220,7 @@ pub const ExchangeEvidence = struct {
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
 };
 pub const Report = struct {
-    schema: enum { @"spec-e2e-report/v18" },
+    schema: enum { @"spec-e2e-report/v19" },
     origin: enum { live } = .live,
     started_at_utc: []const u8,
     build: ?struct {
@@ -160,6 +243,9 @@ pub const Report = struct {
     clarifications: []const @import("../../../src/domain/run_outcome.zig").Clarification = &.{},
     terminal_step: ?[]const u8 = null,
     terminal_rejection: ?TerminalRejection = null,
+    /// The rejection a later one replaced during the run, kept whole beside the terminal one.
+    /// Null for a lone failure; never a capture failure, which is its own first cause.
+    first_cause: ?FirstCause = null,
     last_operation_rejection: ?@import("../../../src/domain/workflow_execution.zig").OperationRejection = null,
     /// Reconciled inference operations, including proven non-delivery.
     model_calls: usize = 0,

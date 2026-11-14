@@ -2,6 +2,7 @@ const std = @import("std");
 const pipeline = @import("../domain/pipeline.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const workflow = @import("../domain/workflow.zig");
+const run_outcome = @import("../domain/run_outcome.zig");
 const definition = @import("../domain/workflow_definition.zig");
 const compilation = @import("../domain/workflow_compilation.zig");
 const operation = @import("../domain/workflow_operation.zig");
@@ -74,6 +75,9 @@ pub const Runner = struct {
     /// The internal step a stage action stopped at during the current step invocation.
     stage_step: pipeline.StageStepSlot = .{},
     last_operation_rejection: ?execution.OperationRejection = null,
+    /// The rejection a later one replaced, kept beside the terminal rejection (27-observability.md). The earliest
+    /// replacement sets it; a later one never overwrites it, and a lone failure leaves it unset.
+    first_cause: ?execution.FirstCause = null,
     /// A caller that must stop a request at a stage boundary, such as the provider compatibility
     /// probe, which ends a request once its one exchange is retained. Consulted before each stage of
     /// a `request-model` step; a stop ends the step there and the stage is not run. It holds no
@@ -96,7 +100,7 @@ pub const Runner = struct {
         fn rejection(self: StageStop) execution.Rejection {
             return switch (self) {
                 .cancelled => .cancelled,
-                .failed => .{ .operation_failed = error.OperationExecutionFailed },
+                .failed => .{ .operation_failed = error.RequestStageStopped },
             };
         }
     };
@@ -140,19 +144,40 @@ pub const Runner = struct {
         return .{ .context = self, .vtable = &vtable };
     }
 
+    /// The run ends with `outcome`. The finalizer closes the feature log first and may replace a
+    /// rejection with its own logging failure; the rejection it replaced is kept, unless an earlier
+    /// replacement during the run came first.
+    pub fn finish(self: *Runner, outcome: run_outcome.Outcome) run_outcome.Outcome {
+        const finalizer = self.publication_finalizer orelse return outcome;
+        const finished = finalizer.finish(outcome);
+        self.keepFirstCause(finalizer.replaced());
+        return finished;
+    }
+
+    /// `terminal` replaces `replaced` when there is one: that rejection is kept beside it.
+    fn replacing(self: *Runner, replaced: ?execution.Rejection, terminal: execution.Rejection) execution.Rejection {
+        if (replaced) |earlier| self.keepFirstCause(execution.FirstCause.replacedBy(earlier, terminal));
+        return terminal;
+    }
+
+    /// The one place `first_cause` is set: the earliest replacement wins.
+    fn keepFirstCause(self: *Runner, cause: ?execution.FirstCause) void {
+        if (self.first_cause == null) self.first_cause = cause;
+    }
+
     fn invokeInvocation(self: *Runner) execution.Applied {
         self.last_effects = null;
         if (self.repair_retry.terminal_exhaustion) |exhausted| return .{ .rejected = .{ .retry_limit = exhausted } };
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        if (!self.authorityMatches()) return .{ .rejected = .authority };
+        if (!self.authorityMatches()) return .{ .rejected = .{ .authority = .registry_drift } };
         const authority = self.selected.graph.authority;
         const entry = self.operation_registry.resolveOperation(authority.invocation_operation_id) orelse {
-            return .{ .rejected = .authority };
+            return .{ .rejected = .{ .authority = .registry_drift } };
         };
         if (entry.contract.kind != .invocation or
             !std.mem.eql(pipeline.DataKey, entry.contract.produces, authority.invocation_outputs))
         {
-            return .{ .rejected = .authority };
+            return .{ .rejected = .{ .authority = .registry_drift } };
         }
         const occurrence = self.envelope.beginOccurrence(authority.invocation_operation_id.bytes) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
         var candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch |err| {
@@ -160,7 +185,7 @@ pub const Runner = struct {
         };
         defer self.envelope.discard(&candidate.delta);
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        if (!containsOutcome(entry.contract.outcomes, candidate.outcome)) return .{ .rejected = .authority };
+        if (!containsOutcome(entry.contract.outcomes, candidate.outcome)) return .{ .rejected = .{ .authority = .outcome_undeclared } };
         const contract: pipeline.NodeContract = .{
             .id = authority.invocation_operation_id.bytes,
             .kind = .action,
@@ -179,7 +204,7 @@ pub const Runner = struct {
         const result = self.executeStep(id);
         if (self.actionEnd(id, started, result, self.stage_step.name, null)) |rejection| return .{ .rejected = rejection };
         if (self.eventsActive() and result == .rejected and result.rejected == .retry_limit) {
-            if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |failure| return .{ .rejected = self.replacing(result.rejected, .{ .logging = failure }) };
         }
         return result;
     }
@@ -198,10 +223,12 @@ pub const Runner = struct {
     /// event records it (ADR 0031). A run that is itself a kernel stage names it on every event.
     fn actionEnd(self: *Runner, id: workflow.WorkflowStepId, started: bool, result: execution.Applied, stage_name: ?[]const u8, stage: ?request_stage.Stage) ?execution.Rejection {
         if (!self.eventsActive()) return null;
-        if (!started) if (self.logActionStart(id, stage)) |failure| return .{ .logging = failure };
+        // A logging failure here replaces the step's own rejection, when it ended in one.
+        const replaced: ?execution.Rejection = if (result == .rejected) result.rejected else null;
+        if (!started) if (self.logActionStart(id, stage)) |failure| return self.replacing(replaced, .{ .logging = failure });
         const diagnostic = if (self.last_effects) |effects| effects.diagnostic else null;
         const failure = if (stage) |named| self.events().requestStage(id, named.name(), result, diagnostic) else self.events().action(id, result, diagnostic, stage_name);
-        if (failure) |value| return self.captureRejectionWithLogging(value);
+        if (failure) |value| return self.replacing(replaced, self.captureRejectionWithLogging(value));
         return null;
     }
 
@@ -220,15 +247,15 @@ pub const Runner = struct {
     fn executeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
         if (self.repair_retry.terminal_exhaustion) |exhausted| return .{ .rejected = .{ .retry_limit = exhausted } };
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        if (!self.authorityMatches()) return .{ .rejected = .authority };
-        const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .rejected = .authority };
-        if (index >= self.retry_execution_counts.len) return .{ .rejected = .authority };
+        if (!self.authorityMatches()) return .{ .rejected = .{ .authority = .registry_drift } };
+        const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .rejected = .{ .authority = .step_unresolved } };
+        if (index >= self.retry_execution_counts.len) return .{ .rejected = .{ .authority = .step_unresolved } };
         const step = &self.selected.graph.authority.steps[index];
-        const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .authority };
+        const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .{ .authority = .step_unresolved } };
         if (kernel.isKernel(step.*)) return self.executeRequestKernel(id, index, step, entry);
         // The step runs against its own variant of the registered contract, never a union of them
         // (ADR 0030 "Contract variants"): a step whose selector picks none is rejected.
-        const contract = entry.contractFor(step.parameters) orelse return .{ .rejected = .authority };
+        const contract = entry.contractFor(step.parameters) orelse return .{ .rejected = .{ .authority = .step_unresolved } };
         return self.executeBound(id, index, step, .{ .contract = contract, .binding = entry.binding }, null);
     }
 
@@ -249,8 +276,8 @@ pub const Runner = struct {
     fn executeRequestKernel(self: *Runner, id: workflow.WorkflowStepId, index: usize, step: *const compilation.CompiledStep, entry: *const operations.Entry) execution.Applied {
         if (!kernel.validProjection(step.*) or !compilation.matchesContract(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
-            !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .authority };
-        if (self.remaining_step_executions == 0) return .{ .rejected = .authority };
+            !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
+        if (self.remaining_step_executions == 0) return .{ .rejected = .{ .authority = .step_execution_ceiling } };
         self.remaining_step_executions -= 1;
         var context: KernelContext = .{ .runner = self, .id = id, .index = index, .step = step, .entry = entry };
         const result = request_orchestrator.run(.{ .context = &context, .vtable = &kernel_vtable });
@@ -281,9 +308,9 @@ pub const Runner = struct {
     /// registered contract, the capabilities and the policy; only the stage's identity is checked
     /// here, because no other caller has a registered stage to compare it with.
     fn invokeStage(self: *Runner, context: *KernelContext, stage: request_stage.Stage) execution.Applied {
-        const registered = context.entry.requestStage(stage) orelse return .{ .rejected = .authority };
-        const compiled = kernel.stageStep(context.step.*, stage) orelse return .{ .rejected = .authority };
-        if (!std.mem.eql(u8, compiled.operation_id.bytes, registered.contract.id)) return .{ .rejected = .authority };
+        const registered = context.entry.requestStage(stage) orelse return .{ .rejected = .{ .authority = .kernel_stage } };
+        const compiled = kernel.stageStep(context.step.*, stage) orelse return .{ .rejected = .{ .authority = .kernel_stage } };
+        if (!std.mem.eql(u8, compiled.operation_id.bytes, registered.contract.id)) return .{ .rejected = .{ .authority = .kernel_stage } };
         if (self.request_stage_gate) |gate| if (gate.stop_fn(gate.context, stage)) |stop| return .{ .rejected = stop.rejection() };
         if (context.admission.admit(context.step.id, context.step.retry_authority.?.limit, stage)) |reason| return .{ .rejected = reason };
         self.last_effects = null;
@@ -304,28 +331,28 @@ pub const Runner = struct {
         if (!@import("../domain/workflow_model_invocation.zig").validProjection(step.*) or
             !operation_selection.validProjection(step.*) or
             !request_lifecycle_selection.validProjection(step.*) or
-            !authorization_selection.validProjection(step.*)) return .{ .rejected = .authority };
+            !authorization_selection.validProjection(step.*)) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         if (!compilation.matchesContract(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
-            !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .authority };
+            !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         switch (step.side_effect) {
             .filesystem_read, .filesystem_write => if (self.envelope.outcomes.firstUnresolved() != null) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } },
             .none, .model_call, .workflow_publication => {},
         }
         for (step.gates) |gate| {
             if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-            const current = self.operation_registry.resolveGate(gate.id) orelse return .{ .rejected = .authority };
-            if (!gate.eql(current.*)) return .{ .rejected = .authority };
+            const current = self.operation_registry.resolveGate(gate.id) orelse return .{ .rejected = .{ .authority = .gate_drift } };
+            if (!gate.eql(current.*)) return .{ .rejected = .{ .authority = .gate_drift } };
             if (self.envelope.checkGate(gate)) |reason| return .{ .rejected = .{ .gate = reason } };
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (entry.contract.requiresModelBinding()) {
             const expected = @import("../domain/workflow_model.zig").resolve(
                 step.parameters,
-            ) orelse return .{ .rejected = .authority };
-            if (!expected.eql(step.model orelse return .{ .rejected = .authority })) return .{ .rejected = .authority };
-        } else if (step.model != null) return .{ .rejected = .authority };
-        const input_data = self.envelope.view(stepPipelineContract(step.*)) catch return .{ .rejected = .authority };
+            ) orelse return .{ .rejected = .{ .authority = .model_binding_mismatch } };
+            if (!expected.eql(step.model orelse return .{ .rejected = .{ .authority = .model_binding_mismatch } })) return .{ .rejected = .{ .authority = .model_binding_mismatch } };
+        } else if (step.model != null) return .{ .rejected = .{ .authority = .model_binding_mismatch } };
+        const input_data = self.envelope.view(stepPipelineContract(step.*)) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
         const advances_request = request_lifecycle_selection.advances(step.replaces, step.produces);
         const completes_request = advances_request and request_lifecycle_selection.completes(step.requires);
         const invokes_operation = operation_selection.invokes(step.produces);
@@ -334,8 +361,8 @@ pub const Runner = struct {
         const validates_observation = @import("../domain/workflow_model_invocation.zig").validates(step.produces);
         if (self.model_accounting) |state| {
             if (input_data.contains(.model_request_identity_ledger)) {
-                const current = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
-                if (current != identity.ledger(state.requests)) return .{ .rejected = .authority };
+                const current = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
+                if (current != identity.ledger(state.requests)) return .{ .rejected = .{ .authority = .input_view_unavailable } };
             }
         }
         var resource_buffer: [definition.max_parameters]compilation.CompiledResource = undefined;
@@ -343,13 +370,13 @@ pub const Runner = struct {
             step.parameters,
             self.selected.graph.authority.resources,
             &resource_buffer,
-        ) orelse return .{ .rejected = .authority };
+        ) orelse return .{ .rejected = .{ .authority = .input_view_unavailable } };
         const retained_request = if (entry.contract.consumesPreparedRequest())
-            @import("model_request_workflow.zig").readCurrent(&input_data, @import("model_request_workflow.zig").prepared_schema) catch return .{ .rejected = .authority }
+            @import("model_request_workflow.zig").readCurrent(&input_data, @import("model_request_workflow.zig").prepared_schema) catch return .{ .rejected = .{ .authority = .input_view_unavailable } }
         else
             null;
         if (retained_request) |request| {
-            if (request.prepared() == null) return .{ .rejected = .authority };
+            if (request.prepared() == null) return .{ .rejected = .{ .authority = .request_state_missing } };
         }
         // Every model send shares the same execution budget. Native completion
         // steps need no remaining tokens, but cannot authorize another send.
@@ -357,56 +384,58 @@ pub const Runner = struct {
             self.token_accounting.check() catch |err| return .{ .rejected = .{ .token_budget = err } };
         };
         if (input_data.slots[@intFromEnum(pipeline.DataKey.accounted_model_attempt)] != null) {
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            const request = retained_request orelse return .{ .rejected = .authority };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
+            const request = retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } };
             const current = attempt.accounting(state.attempts);
-            const evidence = model_accounting.readAttempt(&input_data) catch return .{ .rejected = .authority };
-            if (evidence.requestId() != request.id() or current.attemptsReserved(request.id()) != evidence.ordinal().value or
-                !current.stageRunEpochId().eql(request.id().stage_run_epoch_id)) return .{ .rejected = .authority };
+            const evidence = model_accounting.readAttempt(&input_data) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            // Attempt accounting of another stage run counts no attempt of this request, so its epoch is
+            // told apart before the evidence is compared with what it counts.
+            if (!current.stageRunEpochId().eql(request.id().stage_run_epoch_id)) return .{ .rejected = .{ .authority = .accounting_transition } };
+            if (evidence.requestId() != request.id() or current.attemptsReserved(request.id()) != evidence.ordinal().value) return .{ .rejected = .{ .authority = .lifecycle_evidence } };
         }
         var operation_id: ?provider.ProviderOperationId = null;
         var authorization_deadline: ?u64 = null;
         if (input_data.contains(.assigned_provider_operation)) {
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
-            const request = retained_request orelse return .{ .rejected = .authority };
-            state.validateAssignment(evidence, request.prepared().?) catch return .{ .rejected = .authority };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
+            const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            const request = retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } };
+            state.validateAssignment(evidence, request.prepared().?) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
             operation_id = evidence.record().id;
         }
         if (input_data.contains(.invoked_provider_operation)) {
-            if (operation_id != null) return .{ .rejected = .authority };
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            const evidence = (values.read(&input_data, model_accounting.invoked_schema, lifecycle.InvokedOperation) catch return .{ .rejected = .authority }).operation();
-            state.validateInvocation(evidence, (retained_request orelse return .{ .rejected = .authority }).prepared().?) catch return .{ .rejected = .authority };
+            if (operation_id != null) return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
+            const evidence = (values.read(&input_data, model_accounting.invoked_schema, lifecycle.InvokedOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } }).operation();
+            state.validateInvocation(evidence, (retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } }).prepared().?) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
             operation_id = evidence.id;
         }
         if (input_data.contains(.terminal_provider_operation)) {
-            if (operation_id != null) return .{ .rejected = .authority };
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            const evidence = values.read(&input_data, model_accounting.terminal_schema, lifecycle.TerminalOperation) catch return .{ .rejected = .authority };
-            state.validateTerminal(evidence, (retained_request orelse return .{ .rejected = .authority }).prepared().?) catch return .{ .rejected = .authority };
+            if (operation_id != null) return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
+            const evidence = values.read(&input_data, model_accounting.terminal_schema, lifecycle.TerminalOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            state.validateTerminal(evidence, (retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } }).prepared().?) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
             operation_id = evidence.record().id;
         }
         if (completes_request) {
-            _ = request_lifecycle_binding.readClosure(&input_data) catch return .{ .rejected = .authority };
-            self.model_accounting.?.current_operations.validateRequestClosure(retained_request.?.id()) catch return .{ .rejected = .authority };
+            _ = request_lifecycle_binding.readClosure(&input_data) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            self.model_accounting.?.current_operations.validateRequestClosure(retained_request.?.id()) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
         }
         if (input_data.contains(.provider_authorization_result)) {
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
-            authorization_deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, retained_request orelse return .{ .rejected = .authority }, operation_id orelse return .{ .rejected = .authority }, self.provider_clock, self.runtime) catch |err| return authorizationRejected(err);
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
+            const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .{ .authority = .authorization_evidence } };
+            authorization_deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } }, operation_id orelse return .{ .rejected = .{ .authority = .lifecycle_evidence } }, self.provider_clock, self.runtime) catch |err| return authorizationRejected(err);
             if ((advances_request and !completes_request) or invokes_operation or calls_model) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
         }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
-            return .{ .rejected = .authority };
+            return .{ .rejected = .{ .authority = .model_binding_mismatch } };
         };
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         const call: ?invocation_validation.Call = if (calls_model or validates_observation) call: {
-            const request = retained_request orelse return .{ .rejected = .authority };
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            const id_value = operation_id orelse return .{ .rejected = .authority };
-            const invoked = state.current_operations.requireInvoked(id_value) catch return .{ .rejected = .authority };
-            if (!provider.validateInferenceInvocation(request.binding(), request.prepared().?, invoked)) return .{ .rejected = .authority };
+            const request = retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
+            const id_value = operation_id orelse return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            const invoked = state.current_operations.requireInvoked(id_value) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            if (!provider.validateInferenceInvocation(request.binding(), request.prepared().?, invoked)) return .{ .rejected = .{ .authority = .lifecycle_evidence } };
             break :call .{ .request = request.prepared().?, .provider_binding = request.binding(), .operations = state.current_operations, .operation_id = id_value };
         } else null;
         if (calls_model and !outcome_binding.permitsModel(&self.envelope, retained_request.?, &self.repair_retry)) {
@@ -416,25 +445,25 @@ pub const Runner = struct {
         const token_revision = self.token_accounting.current().revision();
         const repair_permit: ?retry.Permit = if (step.retry_authority) |authority| switch (authority.scope) {
             .operation => null,
-            .repair => self.repair_retry.currentPermit() orelse return .{ .rejected = .authority },
+            .repair => self.repair_retry.currentPermit() orelse return .{ .rejected = .{ .authority = .repair_permit_mismatch } },
             .model_request => permit: {
-                const request = retained_request orelse return .{ .rejected = .authority };
+                const request = retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } };
                 if (request.id().purpose != .atomic_repair) {
                     break :permit self.repair_retry.currentDependentPermit();
                 }
-                const packet = request.packet() orelse return .{ .rejected = .authority };
-                const value = packet.repairPermit() orelse return .{ .rejected = .authority };
+                const packet = request.packet() orelse return .{ .rejected = .{ .authority = .repair_permit_mismatch } };
+                const value = packet.repairPermit() orelse return .{ .rejected = .{ .authority = .repair_permit_mismatch } };
                 var authorization: [32]u8 = undefined;
                 std.crypto.hash.sha2.Sha256.hash(request.id().purpose.atomic_repair.bytes, &authorization, .{});
-                if (!std.meta.eql(authorization, value.authorization)) return .{ .rejected = .authority };
+                if (!std.meta.eql(authorization, value.authorization)) return .{ .rejected = .{ .authority = .repair_permit_mismatch } };
                 break :permit value;
             },
         } else null;
         const request_assignment: ?retry.Assignment = if (step.retry_authority) |authority| assignment: {
             if (authority.scope != .model_request) break :assignment null;
-            const request = retained_request orelse return .{ .rejected = .authority };
+            const request = retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } };
             if (request.id().purpose == .atomic_repair) break :assignment null;
-            break :assignment .{ .request = request.id(), .record = request.ledger().indexOf(request.id()) orelse return .{ .rejected = .authority }, .parent = if (repair_permit) |permit| permit.key else null };
+            break :assignment .{ .request = request.id(), .record = request.ledger().indexOf(request.id()) orelse return .{ .rejected = .{ .authority = .repair_permit_mismatch } }, .parent = if (repair_permit) |permit| permit.key else null };
         } else null;
         var attempt_input: @FieldType(operations.StepInput, "model_attempt") = null;
         var provider_input: @FieldType(operations.StepInput, "provider_operation") = null;
@@ -442,18 +471,18 @@ pub const Runner = struct {
         // ADR 0039: a runaway's one re-send is its own attempt, outside `retry-limit`.
         var runaway_resend: ?provider.ProviderOperationId = null;
         if (step.runner_accounting == .increment_model_attempt) {
-            const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
+            const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
             if (self.model_accounting == null) self.model_accounting = model_accounting.State.init(self.allocator, current_requests) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
             const state = &self.model_accounting.?;
             const current = attempt.accounting(state.attempts);
-            if (!current.stageRunEpochId().eql(current_requests.stageRunEpochId())) return .{ .rejected = .authority };
-            const authority = step.retry_authority orelse return .{ .rejected = .authority };
+            if (!current.stageRunEpochId().eql(current_requests.stageRunEpochId())) return .{ .rejected = .{ .authority = .accounting_transition } };
+            const authority = step.retry_authority orelse return .{ .rejected = .{ .authority = .retry_admission } };
             const executions = if (request_assignment) |assignment| self.repair_retry.completedAssignmentAttempts(step.id, assignment) else if (repair_permit) |permit| self.repair_retry.completedAttempts(step.id, permit.key) else self.retry_execution_counts[index];
-            const request = retained_request orelse return .{ .rejected = .authority };
+            const request = retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } };
             const reserved = current.attemptsReserved(request.id());
             // A re-send directly follows the runaway it repeats, so it is reserved once.
             runaway_resend = if (reserved == 0) null else request.runawayResend();
-            if (runaway_resend) |repeated| if (repeated.model_attempt_ordinal.value != reserved) return .{ .rejected = .authority };
+            if (runaway_resend) |repeated| if (repeated.model_attempt_ordinal.value != reserved) return .{ .rejected = .{ .authority = .accounting_transition } };
             attempt_input = .{
                 .accounting = current,
                 .operations = state.current_operations,
@@ -462,16 +491,16 @@ pub const Runner = struct {
             expected = .{ .attempt = attempt_input.?.attempt };
         }
         if (step.runner_accounting == .advance_provider_operation) {
-            const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
             provider_input = .{ .ledger = state.current_operations, .authority = state.operationAuthority(current_requests) };
             if (invokes_operation) {
-                if (!operation_selection.invokesTransition(step.parameters)) return .{ .rejected = .authority };
-                const invocation: lifecycle.Invocation = .{ .deadline_monotonic_ms = authorization_deadline orelse return .{ .rejected = .authority } };
+                if (!operation_selection.invokesTransition(step.parameters)) return .{ .rejected = .{ .authority = .accounting_transition } };
+                const invocation: lifecycle.Invocation = .{ .deadline_monotonic_ms = authorization_deadline orelse return .{ .rejected = .{ .authority = .authorization_evidence } } };
                 provider_input.?.invocation = invocation;
                 expected = .{ .invocation = invocation };
             } else if (completes_operation) {
-                expected = .{ .completion = (if (operation_selection.terminatesAssigned(step.requires)) operation_termination.readCurrent(&input_data) else operation_completion.readCurrent(&input_data)) catch return .{ .rejected = .authority } };
+                expected = .{ .completion = (if (operation_selection.terminatesAssigned(step.requires)) operation_termination.readCurrent(&input_data) else operation_completion.readCurrent(&input_data)) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } } };
             } else {
                 expected = .assignment;
             }
@@ -479,15 +508,15 @@ pub const Runner = struct {
         if (step.retry_authority) |authority| if (runaway_resend == null) {
             var admitted_count: u64 = 0;
             if (request_assignment) |assignment| {
-                const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority };
-                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .authority } } };
+                const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .{ .authority = .retry_admission } };
+                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 admitted_count = admitted.allowed;
             } else if (repair_permit) |permit| {
-                const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority };
-                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .authority } } };
+                const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .{ .authority = .retry_admission } };
+                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 admitted_count = admitted.allowed;
             } else {
-                if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, self.retry_execution_counts[index], stage) orelse return .{ .rejected = .authority } } };
+                if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, self.retry_execution_counts[index], stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 // Compiled limits are u32; exhaustion is checked before increment.
                 self.retry_execution_counts[index] += 1;
                 admitted_count = self.retry_execution_counts[index];
@@ -497,7 +526,7 @@ pub const Runner = struct {
         // The compiler supplies the retry-derived allowance. Only a committed
         // advance through a validated finite population grants another traversal.
         if (stage == null) {
-            if (self.remaining_step_executions == 0) return .{ .rejected = .authority };
+            if (self.remaining_step_executions == 0) return .{ .rejected = .{ .authority = .step_execution_ceiling } };
             self.remaining_step_executions -= 1;
         }
         var authorization: ?authorization_binding.Binding = null;
@@ -506,9 +535,9 @@ pub const Runner = struct {
             if (!authorization_published) bound.cancel();
         };
         if (authorization_selection.prepares(step.produces)) {
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
-            authorization = authorization_binding.Binding.allocate(&state.authorization_leases, retained_request orelse return .{ .rejected = .authority }, evidence.record().id, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return switch (err) {
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
+            const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+            authorization = authorization_binding.Binding.allocate(&state.authorization_leases, retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } }, evidence.record().id, self.provider_clock orelse return .{ .rejected = .{ .authority = .authorization_clock_unavailable } }, self.runtime) catch |err| return switch (err) {
                 error.OutOfMemory => .{ .rejected = .{ .operation_failed = error.OutOfMemory } },
                 else => |failure| authorizationRejected(failure),
             };
@@ -522,7 +551,7 @@ pub const Runner = struct {
                 if (self.logRunawayResend(id, retained_request.?, repeated)) |failure| return .{ .rejected = .{ .logging = failure } };
             };
             const ledger = identity.ledger(self.model_accounting.?.requests);
-            const origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, invoked.operation_id) orelse return .{ .rejected = .authority };
+            const origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, invoked.operation_id) orelse return .{ .rejected = .{ .authority = .lifecycle_evidence } };
             self.model_capture.begin(.{
                 .workflow = self.selected.graph.shortcode,
                 .workflow_id = .{ .bytes = self.selected.graph.authority.workflow_id.bytes },
@@ -555,13 +584,13 @@ pub const Runner = struct {
         }
         defer if (calls_model) self.model_capture.end();
         if (step.side_effect == .workflow_publication) {
-            const prepared_output = values.read(&input_data, @import("workflow_output_binding.zig").prepared_schema, @import("../domain/workflow_output.zig").Prepared) catch return .{ .rejected = .authority };
+            const prepared_output = values.read(&input_data, @import("workflow_output_binding.zig").prepared_schema, @import("../domain/workflow_output.zig").Prepared) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
             if (!outcome_binding.permitsPublication(&self.envelope, prepared_output)) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } };
             self.events_closed = true;
             if (self.publication_finalizer) |finalizer| switch (finalizer.beforePublication(prepared_output.terminal_outcome)) {
-                .execution => |outcome| if (outcome != .ok and outcome != .needs_user) return .{ .rejected = .authority },
+                .execution => |outcome| if (outcome != .ok and outcome != .needs_user) return .{ .rejected = .{ .authority = .publication_finalizer } },
                 .execution_rejected => |reason| return .{ .rejected = reason },
-                .bootstrap_failed, .invocation_invalid => return .{ .rejected = .authority },
+                .bootstrap_failed, .invocation_invalid => return .{ .rejected = .{ .authority = .publication_finalizer } },
             };
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
@@ -583,42 +612,41 @@ pub const Runner = struct {
         } }) catch |err| {
             if (calls_model) {
                 const invoked = call.?;
-                const rejection = model_invocation.reconcile(&self.token_accounting, token_revision, invoked, .{ .failed = err });
-                if (self.logModelCompletion(id, invoked, .failed)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
-                if (self.captureRejection()) |reason| return .{ .rejected = reason };
-                if (rejection) |reason| return .{ .rejected = reason };
+                const reconciled = model_invocation.reconcile(&self.token_accounting, token_revision, invoked, .{ .failed = err });
+                if (self.logModelCompletion(id, invoked, .failed)) |failure| return .{ .rejected = self.replacing(reconciled.earliest(), self.captureRejectionWithLogging(failure)) };
+                if (self.captureRejection()) |reason| return .{ .rejected = self.replacing(reconciled.earliest(), reason) };
+                if (reconciled.rejection) |reason| return .{ .rejected = self.replacing(reconciled.replaced, reason) };
             }
-            if (calls_model) if (self.captureRejection()) |reason| return .{ .rejected = reason };
             // A non-model operation that stopped because the runtime did reports that stop, as the
-            // checks before and after the invocation do. An allocation failure stays itself, and a
-            // model call keeps its own reconciled and logged status above.
-            if (!calls_model and err != error.OutOfMemory) if (runtimeTerminal(self.runtime)) |terminal| return .{ .rejected = terminal };
+            // checks before and after the invocation do. An allocation failure stays itself. A model
+            // call returned above: reconciling a failed call always leaves its rejection.
+            if (err != error.OutOfMemory) if (runtimeTerminal(self.runtime)) |terminal| return .{ .rejected = terminal };
             return .{ .rejected = .{ .operation_failed = err } };
         };
         defer self.envelope.discard(&candidate.delta);
         if (calls_model) {
             const invoked = call.?;
-            const rejection = model_invocation.reconcile(&self.token_accounting, token_revision, invoked, .{ .candidate = &candidate });
-            const retained = values.read(&.{ .slots = candidate.delta.data_writes }, @import("model_invocation_workflow.zig").schema, @import("../domain/model_invocation_result.zig").Result) catch return .{ .rejected = .authority };
+            const reconciled = model_invocation.reconcile(&self.token_accounting, token_revision, invoked, .{ .candidate = &candidate });
+            const retained = values.read(&.{ .slots = candidate.delta.data_writes }, @import("model_invocation_workflow.zig").schema, @import("../domain/model_invocation_result.zig").Result) catch return .{ .rejected = self.replacing(reconciled.earliest(), .{ .authority = .invocation_result }) };
             if (retained.accountingStop() != null) candidate.outcome = .failed;
             const provider_stop = providerStop(retained);
-            const status = if (rejection) |reason| reason.status() else candidate.outcome;
-            if (self.logModelCompletion(id, invoked, status)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
-            if (provider_stop) |stop| if (self.logProviderStop(id, invoked, status, stop)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
-            if (self.captureRejection()) |reason| return .{ .rejected = reason };
-            if (rejection) |reason| return .{ .rejected = reason };
+            const status = if (reconciled.rejection) |reason| reason.status() else candidate.outcome;
+            if (self.logModelCompletion(id, invoked, status)) |failure| return .{ .rejected = self.replacing(reconciled.earliest(), self.captureRejectionWithLogging(failure)) };
+            if (provider_stop) |stop| if (self.logProviderStop(id, invoked, status, stop)) |failure| return .{ .rejected = self.replacing(reconciled.earliest(), self.captureRejectionWithLogging(failure)) };
+            if (self.captureRejection()) |reason| return .{ .rejected = self.replacing(reconciled.earliest(), reason) };
+            if (reconciled.rejection) |reason| return .{ .rejected = self.replacing(reconciled.replaced, reason) };
             if (candidate.outcome != .cancelled) authorization_binding.checkDeadline(self.provider_clock.?, self.runtime, authorization_deadline.?) catch |err| return authorizationRejected(err);
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .rejected = .authority };
+        if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .rejected = .{ .authority = .outcome_undeclared } };
         if (advances_request and !completes_request) {
-            const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
-            const assigned = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
+            const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .{ .authority = .authorization_evidence } };
+            const assigned = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
             const deadline = authorization_binding.validateConsumer(&self.model_accounting.?.authorization_leases, result, retained_request.?, assigned.record().id, self.provider_clock.?, self.runtime) catch |err| return authorizationRejected(err);
-            if (deadline != authorization_deadline) return .{ .rejected = .authority };
+            if (deadline != authorization_deadline) return .{ .rejected = .{ .authority = .authorization_evidence } };
         }
         const prepared = if (authorization) |bound| prepared: {
-            const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
+            const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .{ .authority = .authorization_evidence } };
             break :prepared bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
         } else false;
         const terminal = if (stage == null) terminalFor(self.selected.graph.authority.transitions, step.id, candidate.outcome) else null;
@@ -846,43 +874,43 @@ pub const Runner = struct {
         if (candidate.diagnostic != null and switch (candidate.outcome) {
             .invalid, .blocked, .failed => false,
             .ok, .more, .needs_user, .cancelled => true,
-        }) return .{ .rejected = .authority };
+        }) return .{ .rejected = .{ .authority = .candidate_delta } };
         var iteration_pending: ?iteration.Pending = null;
         var remaining_after = self.remaining_step_executions;
         if (iteration_contract) |descriptor| {
             if (candidate.outcome == descriptor.outcome) {
-                const transition = candidate.iteration orelse return .{ .rejected = .authority };
-                const scope = self.envelope.origins[@intFromEnum(descriptor.scope)] orelse return .{ .rejected = .authority };
+                const transition = candidate.iteration orelse return .{ .rejected = .{ .authority = .iteration_contract } };
+                const scope = self.envelope.origins[@intFromEnum(descriptor.scope)] orelse return .{ .rejected = .{ .authority = .iteration_contract } };
                 const progress_index = @intFromEnum(descriptor.progress);
                 const progress_origin = self.envelope.origins[progress_index];
-                if (self.envelope.checkCurrentAuthority(descriptor.scope) != null) return .{ .rejected = .authority };
+                if (self.envelope.checkCurrentAuthority(descriptor.scope) != null) return .{ .rejected = .{ .authority = .iteration_contract } };
                 if (candidate.delta.data_invalidations.contains(descriptor.scope) or
                     candidate.delta.data_replacements[@intFromEnum(descriptor.scope)] != null or
-                    candidate.delta.data_invalidations.contains(descriptor.progress)) return .{ .rejected = .authority };
+                    candidate.delta.data_invalidations.contains(descriptor.progress)) return .{ .rejected = .{ .authority = .iteration_contract } };
                 switch (descriptor.kind) {
-                    .initialize => if (candidate.delta.data_writes[progress_index] == null) return .{ .rejected = .authority },
+                    .initialize => if (candidate.delta.data_writes[progress_index] == null) return .{ .rejected = .{ .authority = .iteration_contract } },
                     .advance => {
                         if (candidate.delta.data_replacements[progress_index] == null or
-                            self.envelope.checkCurrentAuthority(descriptor.progress) != null) return .{ .rejected = .authority };
-                        remaining_after = std.math.add(usize, remaining_after, self.selected.graph.authority.steps.len) catch return .{ .rejected = .authority };
+                            self.envelope.checkCurrentAuthority(descriptor.progress) != null) return .{ .rejected = .{ .authority = .iteration_contract } };
+                        remaining_after = std.math.add(usize, remaining_after, self.selected.graph.authority.steps.len) catch return .{ .rejected = .{ .authority = .iteration_contract } };
                     },
                 }
-                iteration_pending = self.native_iteration.prepare(descriptor, transition, scope.generation, if (progress_origin) |origin| origin.generation else null) catch return .{ .rejected = .authority };
-            } else if (candidate.iteration != null) return .{ .rejected = .authority };
-        } else if (candidate.iteration != null) return .{ .rejected = .authority };
+                iteration_pending = self.native_iteration.prepare(descriptor, transition, scope.generation, if (progress_origin) |origin| origin.generation else null) catch return .{ .rejected = .{ .authority = .iteration_contract } };
+            } else if (candidate.iteration != null) return .{ .rejected = .{ .authority = .iteration_contract } };
+        } else if (candidate.iteration != null) return .{ .rejected = .{ .authority = .iteration_contract } };
         var request_owner: ?*identity.Owner = null;
         defer if (request_owner) |owner| identity.deinitOwner(owner);
         if (candidate.delta.data_replacements[@intFromEnum(pipeline.DataKey.model_request_identity_ledger)] != null) {
-            const input = self.envelope.view(contract) catch return .{ .rejected = .authority };
-            const successor = request_lifecycle_binding.validateReplacement(&input, contract, &candidate.delta, candidate.outcome, if (self.model_accounting) |state| state.current_operations else null) catch return .{ .rejected = .authority };
+            const input = self.envelope.view(contract) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
+            const successor = request_lifecycle_binding.validateReplacement(&input, contract, &candidate.delta, candidate.outcome, if (self.model_accounting) |state| state.current_operations else null) catch return .{ .rejected = .{ .authority = .candidate_delta } };
             if (self.model_accounting != null) request_owner = identity.retainLedger(successor) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
         }
         var pending: ?model_accounting.Pending = null;
         defer if (pending) |unapplied| unapplied.discard();
         if (expected != .none) {
             const expected_outcome: workflow.OutcomeTag = if (expected == .completion) expected.completion.outcome else .ok;
-            if (candidate.outcome != expected_outcome) return .{ .rejected = .authority };
-            const transition = candidate.delta.runner_accounting_transition orelse return .{ .rejected = .authority };
+            if (candidate.outcome != expected_outcome) return .{ .rejected = .{ .authority = .accounting_transition } };
+            const transition = candidate.delta.runner_accounting_transition orelse return .{ .rejected = .{ .authority = .accounting_transition } };
             const key = @intFromEnum(@as(pipeline.DataKey, switch (expected) {
                 .attempt => .accounted_model_attempt,
                 .assignment => .assigned_provider_operation,
@@ -891,48 +919,48 @@ pub const Runner = struct {
                 .none => unreachable,
             }));
             // Only application of the declared runner transition creates evidence.
-            if (candidate.delta.data_writes[key] != null or candidate.delta.data_replacements[key] != null) return .{ .rejected = .authority };
-            const view = self.envelope.view(contract) catch return .{ .rejected = .authority };
-            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .{ .rejected = .authority };
-            const current = values.read(&view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
-            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            if (candidate.delta.data_writes[key] != null or candidate.delta.data_replacements[key] != null) return .{ .rejected = .{ .authority = .accounting_transition } };
+            const view = self.envelope.view(contract) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
+            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
+            const current = values.read(&view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .{ .authority = .input_view_unavailable } };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
             switch (expected) {
                 .attempt => |classification| {
-                    if (transition != .increment_model_attempt) return .{ .rejected = .authority };
-                    pending = state.prepare(current, request.id(), classification, transition.increment_model_attempt) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+                    if (transition != .increment_model_attempt) return .{ .rejected = .{ .authority = .accounting_transition } };
+                    pending = state.prepare(current, request.id(), classification, transition.increment_model_attempt) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .{ .authority = .accounting_transition } };
                 },
                 .assignment => {
-                    if (transition != .advance_provider_operation) return .{ .rejected = .authority };
-                    pending = state.prepareAssignment(current, request.prepared().?, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+                    if (transition != .advance_provider_operation) return .{ .rejected = .{ .authority = .accounting_transition } };
+                    pending = state.prepareAssignment(current, request.prepared().?, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .{ .authority = .accounting_transition } };
                 },
                 .invocation => |invocation| {
-                    if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(.assigned_provider_operation)) return .{ .rejected = .authority };
-                    const assigned = values.read(&view, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
-                    pending = state.prepareInvocation(current, request.prepared().?, assigned, invocation, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+                    if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(.assigned_provider_operation)) return .{ .rejected = .{ .authority = .accounting_transition } };
+                    const assigned = values.read(&view, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+                    pending = state.prepareInvocation(current, request.prepared().?, assigned, invocation, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .{ .authority = .accounting_transition } };
                 },
                 .completion => |facts| {
-                    if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(facts.source.key())) return .{ .rejected = .authority };
-                    pending = state.prepareCompletion(current, request.prepared().?, facts, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+                    if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(facts.source.key())) return .{ .rejected = .{ .authority = .accounting_transition } };
+                    pending = state.prepareCompletion(current, request.prepared().?, facts, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .{ .authority = .accounting_transition } };
                 },
                 .none => unreachable,
             }
             candidate.delta.data_writes[key] = pending.?.value;
             if (expected == .invocation) {
-                const result = values.read(&view, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
-                const assigned = values.read(&view, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
-                const deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, request, assigned.record().id, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return authorizationRejected(err);
-                if (deadline != expected.invocation.deadline_monotonic_ms) return .{ .rejected = .authority };
+                const result = values.read(&view, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .{ .authority = .authorization_evidence } };
+                const assigned = values.read(&view, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
+                const deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, request, assigned.record().id, self.provider_clock orelse return .{ .rejected = .{ .authority = .authorization_clock_unavailable } }, self.runtime) catch |err| return authorizationRejected(err);
+                if (deadline != expected.invocation.deadline_monotonic_ms) return .{ .rejected = .{ .authority = .authorization_evidence } };
             }
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        if (!retry.permitsTransition(contract.repair_role, candidate.delta.repair_transition)) return .{ .rejected = .authority };
+        if (!retry.permitsTransition(contract.repair_role, candidate.delta.repair_transition)) return .{ .rejected = .{ .authority = .repair_transition } };
         const repair_required = switch (contract.repair_role) {
             .none, .validate => false,
             .authorize => candidate.outcome == .ok or candidate.outcome == .more,
             .merge => candidate.outcome == .ok or candidate.outcome == .more,
             .merge_validate => candidate.outcome == .ok or candidate.outcome == .invalid,
         };
-        if (repair_required and candidate.delta.repair_transition == null) return .{ .rejected = .authority };
+        if (repair_required and candidate.delta.repair_transition == null) return .{ .rejected = .{ .authority = .repair_transition } };
         if (candidate.delta.repair_transition) |transition| {
             const unchanged = switch (transition) {
                 .merged => |value| !value.changed,
@@ -940,15 +968,15 @@ pub const Runner = struct {
                 .authorized, .validated => false,
             };
             if (unchanged) {
-                const exhausted = self.repair_retry.unchangedExhaustion(transition) catch return .{ .rejected = .authority };
-                return .{ .rejected = .{ .retry_limit = exhausted orelse return .{ .rejected = .authority } } };
+                const exhausted = self.repair_retry.unchangedExhaustion(transition) catch return .{ .rejected = .{ .authority = .repair_transition } };
+                return .{ .rejected = .{ .retry_limit = exhausted orelse return .{ .rejected = .{ .authority = .repair_transition } } } };
             }
         }
         const repair_pending = if (candidate.delta.repair_transition) |transition|
-            self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority }
+            self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .{ .authority = .repair_transition } }
         else
             null;
-        self.envelope.validateDelta(contract, &candidate.delta) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+        self.envelope.validateDelta(contract, &candidate.delta) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .{ .authority = .candidate_delta } };
         var outcome_pending = outcome_binding.prepare(&self.envelope, occurrence, association, candidate) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
         defer outcome_pending.deinit();
         if (terminal) |tag| if (!outcome_pending.compatible(tag)) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } };
@@ -959,7 +987,7 @@ pub const Runner = struct {
         for (candidate.delta.data_replacements, 0..) |value, index| if (value != null) {
             effects.replacements.insert(@enumFromInt(index));
         };
-        self.envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+        self.envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .{ .authority = .candidate_delta } };
         // Invariant (this and the two commits below): each was prepared against its owner's current
         // revision above, nothing has mutated that owner since, and the commit allocates nothing, so
         // its only failures (a foreign owner or a stale revision) cannot occur.
@@ -1004,7 +1032,7 @@ pub const Runner = struct {
         if (count == 0) return null;
         const contract: pipeline.NodeContract = .{ .id = kernel.operation_id, .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = keys[0..count], .side_effect = .none };
         const occurrence = self.envelope.beginOccurrence(kernel.operation_id) catch |cause| return .{ .operation_failed = cause };
-        self.envelope.applyOccurrence(occurrence, contract, &delta, outcome) catch |err| return if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority;
+        self.envelope.applyOccurrence(occurrence, contract, &delta, outcome) catch |err| return if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .{ .authority = .kernel_key_drop };
         return null;
     }
 };
@@ -1019,7 +1047,8 @@ fn authorizationRejected(err: lease.Error) execution.Applied {
     return .{ .rejected = switch (err) {
         error.Cancelled => .cancelled,
         error.AuthorizationExpired => .deadline_exhausted,
-        error.AuthorizationDenied, error.ClockUnavailable => .authority,
+        error.AuthorizationDenied => .{ .authority = .authorization_denied },
+        error.ClockUnavailable => .{ .authority = .authorization_clock_unavailable },
     } };
 }
 
@@ -1085,7 +1114,7 @@ pub const KernelAdmission = struct {
         if (stage != kernel.accounting_stage) return null;
         self.entered += 1;
         if (self.entered <= kernel.attemptAllowance(limit)) return null;
-        return if (exhaustion(step, limit, self.entered, stage)) |value| .{ .retry_limit = value } else .authority;
+        return if (exhaustion(step, limit, self.entered, stage)) |value| .{ .retry_limit = value } else .{ .authority = .retry_admission };
     }
 };
 

@@ -52,7 +52,9 @@ The owner in code is `src/domain/model_request_kernel.zig`.
   attempt-accounting step it replaced did (not yet implemented: the compiler skips these steps
   today). An ordinary-scope request that a workflow revisits starts a new request assignment,
   which restarts the attempt count, so across visits only this allowance and native iteration
-  bound it. The stage bound above is separate from that allowance.
+  bound it. That allowance is the finite ceiling [§6.3](06-pipeline-nodes.md) item 7 asks of a
+  cycle through the step, which declares its own finite `retry-limit`. The stage bound above
+  is separate from that allowance.
 - **Events.** Every event of a stage names the stage (its dashed `Stage` name in `step_id`). The
   step's own start and end events name none, except that a failed end names the stage that ended
   the request. Retry exhaustion names the step and the stage.
@@ -74,7 +76,7 @@ The owner in code is `src/domain/model_request_kernel.zig`.
   [§22.7](22-repair.md#227-repair-retry-limit-and-escalation). Other retry-capable
   operations retain invocation-wide counts. Request ordinals never become a second
   retry counter or reset history.
-- Retry authority names the accounting step, not the request origin.
+- Retry authority names the `request-model` step, not the request origin.
 - Consumers retain that original request and must invalidate consumed attempt evidence
   before a YAML retry revisits the accounting step.
 - Foreign or stale evidence and a second initial attempt cannot reset an existing

@@ -64,6 +64,11 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try std.json.Stringify.value(rejection, .{}, writer);
         try writer.writeAll("\n\n");
     }
+    if (report.first_cause) |cause| {
+        try writer.writeAll("First cause, replaced by the runner rejection: ");
+        try std.json.Stringify.value(cause, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
     if (report.retry_error) |diagnostic| {
         try writeRetryError(writer, diagnostic);
         try writer.writeByte('\n');
@@ -170,6 +175,11 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     if (report.terminal_rejection) |rejection| {
         try writer.writeAll("Runner rejection: ");
         try std.json.Stringify.value(rejection, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.first_cause) |cause| {
+        try writer.writeAll("First cause, replaced by the runner rejection: ");
+        try std.json.Stringify.value(cause, .{}, writer);
         try writer.writeAll("\n\n");
     }
     if (report.retry_error) |diagnostic| {

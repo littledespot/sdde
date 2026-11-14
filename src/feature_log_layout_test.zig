@@ -53,6 +53,19 @@ fn observe(allocator: std.mem.Allocator, project: std.Io.Dir, registry: *const r
     return port.inspect(allocator, selected);
 }
 
+/// A stream close that fails on request, so finalization records a logging failure of its own.
+const CloseFault = struct {
+    original: @import("ports/feature_log_sink.zig").StreamCloser,
+    fail: bool,
+    calls: usize = 0,
+    fn close(context: *anyopaque, selected: *const log_binding.ValidatedFeatureLogBinding, stream: @import("domain/feature_log_stream.zig").Stream, state: @import("domain/feature_log_stream.zig").StreamState, trailer: []const u8) @import("ports/feature_log_sink.zig").Error!void {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        if (self.fail) return error.FlushFailure;
+        return self.original.close(selected, stream, state, trailer);
+    }
+};
+
 test "production finalization preserves capture cause through close failure and repeated cleanup" {
     const io = std.testing.io;
     const a = std.testing.allocator;
@@ -75,17 +88,6 @@ test "production finalization preserves capture cause through close failure and 
         const shortcode = try @import("domain/telemetry.zig").WorkflowShortcode.parse("TEST");
         try std.testing.expectEqual(.ready, std.meta.activeTag(assembly.activator().activate(prior, shortcode)));
         const log_runner = @import("composition/active_feature_log_runtime.zig").runner(assembly.runtime_owner.?);
-        const CloseFault = struct {
-            original: @import("ports/feature_log_sink.zig").StreamCloser,
-            fail: bool,
-            calls: usize = 0,
-            fn close(context: *anyopaque, selected: *const log_binding.ValidatedFeatureLogBinding, stream: @import("domain/feature_log_stream.zig").Stream, state: @import("domain/feature_log_stream.zig").StreamState, trailer: []const u8) @import("ports/feature_log_sink.zig").Error!void {
-                const self: *@This() = @ptrCast(@alignCast(context));
-                self.calls += 1;
-                if (self.fail) return error.FlushFailure;
-                return self.original.close(selected, stream, state, trailer);
-            }
-        };
         var close_fault: CloseFault = .{ .original = log_runner.actions.close_stream.sink, .fail = fail_close };
         log_runner.actions.close_stream.sink = .{ .context = &close_fault, .close_fn = CloseFault.close };
         var capture: @import("application/model_exchange_capture.zig").Capture = .{ .allocator = a, .logs = logs.barrier() };
@@ -112,10 +114,51 @@ test "production finalization preserves capture cause through close failure and 
         try std.testing.expectEqualDeep(expected, finalized.execution_rejected.model_capture);
         try std.testing.expectEqual(.blocked, finalized.executionStatus().?);
         try std.testing.expect(assembly.finalized and logs.lifecycle.active == null);
+        // A capture failure keeps the logging failure itself; it is not replaced, so no first cause is kept.
+        try std.testing.expect(assembly.finalizer().replaced() == null);
         const calls_before = close_fault.calls;
         try std.testing.expectEqualDeep(finalized, assembly.finalizer().finish(finalized));
         try std.testing.expectEqual(calls_before, close_fault.calls);
     }
+}
+
+test "production finalization keeps the rejection its own logging failure replaces, and only that" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const run_outcome = @import("domain/run_outcome.zig");
+    const execution = @import("domain/workflow_execution.zig");
+    const rejected: run_outcome.Outcome = .{ .execution_rejected = .{ .operation_failed = error.InvalidCandidatePayload } };
+    for ([_]bool{ false, true }) |fail_close| for ([_]run_outcome.Outcome{ rejected, .{ .execution = .ok } }) |input| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var run: Run = undefined;
+        try std.testing.expectEqual(.ready, std.meta.activeTag(try run.start(a, io, project.dir)));
+        defer run.finish();
+        const log_runner = @import("composition/active_feature_log_runtime.zig").runner(run.assembly.runtime_owner.?);
+        var close_fault: CloseFault = .{ .original = log_runner.actions.close_stream.sink, .fail = fail_close };
+        log_runner.actions.close_stream.sink = .{ .context = &close_fault, .close_fn = CloseFault.close };
+        const finalizer = run.assembly.finalizer();
+        const finished = finalizer.finish(input);
+        if (!fail_close) {
+            // No failure of its own: the outcome passes unchanged and nothing was replaced.
+            try std.testing.expectEqualDeep(input, finished);
+            try std.testing.expect(finalizer.replaced() == null);
+            continue;
+        }
+        // The terminal is the log's own later failure, classified as any logging rejection is (ADR 0041).
+        try std.testing.expectEqual(execution.Rejection{ .logging = .LOG_FLUSH_FAILURE }, finished.execution_rejected);
+        try std.testing.expectEqual(.blocked, finished.executionStatus().?);
+        try std.testing.expectEqualStrings("blocked", finished.execution_rejected.diagnostic());
+        // A rejection is kept beside it; an outcome that was no rejection leaves a lone failure.
+        if (input == .execution_rejected) {
+            try std.testing.expectEqual(input.execution_rejected.operation_failed, finalizer.replaced().?.operation_failed);
+        } else try std.testing.expect(finalizer.replaced() == null);
+        // Finishing the finished outcome again replaces nothing and keeps the same first cause.
+        const replaced = finalizer.replaced();
+        try std.testing.expectEqualDeep(finished, finalizer.finish(finished));
+        try std.testing.expectEqualDeep(replaced, finalizer.replaced());
+    };
 }
 
 test "feature log layout activates absent and present directories without changing bootstrap observations" {

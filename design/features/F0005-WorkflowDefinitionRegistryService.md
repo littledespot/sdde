@@ -744,7 +744,8 @@ The `validate_workflow_graphs` step proves at least:
   workflow policy cannot supply or default it. Registered repair scopes retain
   monotonic counts per native key under [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation).
   Execution bounds multiply their allowances by the finite native key population;
-  request-accounting sites also include their ordinary-request population. Under
+  a `request-model` step's allowance follows
+  [model-request-operations.md](../contracts/model-request-operations.md) "Allowance". Under
   ADR 0033, a generic repair step's role and `retry-limit` maximum come from its owner's
   contract variant, its key population is the scope's engine-wide population, and its
   retry count stays bound to that step instance. Arithmetic

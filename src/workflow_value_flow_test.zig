@@ -60,9 +60,10 @@ test "runtime rejects schema drift and releases candidates on cancellation inval
         defer runner.deinit();
         var children: EngineBindings = .{ .runner = &runner, .graph = fixture.graph };
         const expected: execution.Rejection = switch (@as(Fault, fault)) {
-            .schema_version, .undeclared_outcome => .authority,
+            .schema_version => .{ .authority = .candidate_delta },
+            .undeclared_outcome => .{ .authority = .outcome_undeclared },
             .cancel_after_allocation => .cancelled,
-            .throw_after_allocation => .{ .operation_failed = error.OperationExecutionFailed },
+            .throw_after_allocation => .{ .operation_failed = error.InvocationFailureUnrecorded },
             .deadline_after_allocation => .deadline_exhausted,
             .none => unreachable,
         };
@@ -115,7 +116,7 @@ test "runner checks required inputs before invoking an operation" {
     defer fixture.deinit();
     var runner = fixture.runner(&control);
     defer runner.deinit();
-    try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
+    try std.testing.expectEqual(execution.Rejection{ .authority = .input_view_unavailable }, runner.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
     try std.testing.expectEqual(@as(usize, 0), control.observations);
 }
 
@@ -311,7 +312,11 @@ test "runner rejects changed gate contracts policy ceilings and compiled capabil
         }
         try std.testing.expect(fixture.registry.validate());
         const result = runner.bindings().invokeStep(.{ .bytes = "guarded" });
-        try std.testing.expect(result.rejected == .authority);
+        try std.testing.expectEqual(execution.Rejection{ .authority = switch (drift) {
+            .gate_authority => .gate_drift,
+            .policy_ceiling => .registry_drift,
+            .compiled_capabilities => .step_contract_mismatch,
+        } }, result.rejected);
         try std.testing.expectEqual(@as(usize, 0), control.observations);
     }
 }
@@ -365,22 +370,22 @@ const Control = struct {
     fn invoke(context: ?*Control, input: registry_module.Input) registry_module.Error!execution.Candidate {
         const self = context.?;
         self.invocations += 1;
-        const invocation = (parse_invocation.Action{}).execute(input.invocation.arguments) catch return error.OperationExecutionFailed;
-        if (invocation.arguments.len != 1) return error.OperationExecutionFailed;
+        const invocation = (parse_invocation.Action{}).execute(input.invocation.arguments) catch return error.InvocationFailureUnrecorded;
+        if (invocation.arguments.len != 1) return error.InvocationFailureUnrecorded;
         var delta: pipeline.NodeDelta = .{};
-        delta.data_writes[@intFromEnum(input_schema.key)] = values.create(std.testing.allocator, input_schema, execution.Invocation, invocation) catch return error.OperationExecutionFailed;
+        delta.data_writes[@intFromEnum(input_schema.key)] = values.create(std.testing.allocator, input_schema, execution.Invocation, invocation) catch return error.InvocationFailureUnrecorded;
         return .{ .outcome = .ok, .delta = delta };
     }
 
     fn normalize(context: ?*Control, input: registry_module.Input) registry_module.Error!execution.Candidate {
         const self = context.?;
-        const invocation = values.read(&input.step.data, input_schema, execution.Invocation) catch return error.OperationExecutionFailed;
-        const level = log_policy.canonicalizeConfiguredLevel(invocation.arguments[0]) catch return error.OperationExecutionFailed;
+        const invocation = values.read(&input.step.data, input_schema, execution.Invocation) catch return error.InvocationFailureUnrecorded;
+        const level = log_policy.canonicalizeConfiguredLevel(invocation.arguments[0]) catch return error.InvocationFailureUnrecorded;
         var schema = level_schema;
         if (self.fault == .schema_version) schema.version += 1;
-        const value = values.create(std.testing.allocator, schema, log_policy.CanonicalizedLevel, level) catch return error.OperationExecutionFailed;
+        const value = values.create(std.testing.allocator, schema, log_policy.CanonicalizedLevel, level) catch return error.InvocationFailureUnrecorded;
         errdefer values.destroy(value);
-        if (self.fault == .throw_after_allocation) return error.OperationExecutionFailed;
+        if (self.fault == .throw_after_allocation) return error.InvocationFailureUnrecorded;
         if (self.fault == .cancel_after_allocation) self.status = .cancelled;
         if (self.fault == .deadline_after_allocation) self.status = .deadline_exhausted;
         var delta: pipeline.NodeDelta = .{};
@@ -389,21 +394,21 @@ const Control = struct {
     }
 
     fn replace(_: ?*Control, input: registry_module.Input) registry_module.Error!execution.Candidate {
-        const current = values.read(&input.step.data, level_schema, log_policy.CanonicalizedLevel) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, level_schema, log_policy.CanonicalizedLevel) catch return error.InvocationFailureUnrecorded;
         var delta: pipeline.NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(level_schema.key)] = values.create(std.testing.allocator, level_schema, log_policy.CanonicalizedLevel, current.*) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(level_schema.key)] = values.create(std.testing.allocator, level_schema, log_policy.CanonicalizedLevel, current.*) catch return error.InvocationFailureUnrecorded;
         return .{ .outcome = .ok, .delta = delta };
     }
 
     fn route(context: ?*Control, input: registry_module.Input) registry_module.Error!execution.Candidate {
         const self = context.?;
-        if (input.step.data.contains(.canonical_log_level)) return error.OperationExecutionFailed;
+        if (input.step.data.contains(.canonical_log_level)) return error.InvocationFailureUnrecorded;
         return .{ .outcome = self.branch, .delta = .{} };
     }
 
     fn observe(context: ?*Control, input: registry_module.Input) registry_module.Error!execution.Candidate {
         const self = context.?;
-        const level = values.read(&input.step.data, level_schema, log_policy.CanonicalizedLevel) catch return error.OperationExecutionFailed;
+        const level = values.read(&input.step.data, level_schema, log_policy.CanonicalizedLevel) catch return error.InvocationFailureUnrecorded;
         self.observations += 1;
         self.observed = level.threshold;
         self.inputs_hidden = !input.step.data.contains(.workflow_invocation);
@@ -415,10 +420,10 @@ const Control = struct {
     }
 
     fn validate(context: ?*Control, input: registry_module.Input) registry_module.Error!execution.Candidate {
-        _ = values.read(&input.step.data, input_schema, execution.Invocation) catch return error.OperationExecutionFailed;
+        _ = values.read(&input.step.data, input_schema, execution.Invocation) catch return error.InvocationFailureUnrecorded;
         var delta: pipeline.NodeDelta = .{};
-        input.step.log.log(&delta, .{ .event_type = .action_completed }) catch return error.OperationExecutionFailed;
-        delta.data_writes[@intFromEnum(evidence_schema.key)] = values.create(std.testing.allocator, evidence_schema, gate.Decision, context.?.decision) catch return error.OperationExecutionFailed;
+        input.step.log.log(&delta, .{ .event_type = .action_completed }) catch return error.InvocationFailureUnrecorded;
+        delta.data_writes[@intFromEnum(evidence_schema.key)] = values.create(std.testing.allocator, evidence_schema, gate.Decision, context.?.decision) catch return error.InvocationFailureUnrecorded;
         return .{ .outcome = .ok, .delta = delta };
     }
 

@@ -22,12 +22,12 @@ pub fn authorizationBlocked(view: *const @import("../domain/pipeline_data.zig").
 }
 
 fn read(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!repair.State {
-    return owned.read(view, schema, .support_repair) catch |operation_error| operation_error;
+    return owned.readNative(view, schema, .support_repair) catch |operation_error| operation_error;
 }
 /// The current rejected review the repair addresses.
 fn rejected(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!@FieldType(@import("../domain/specification_support.zig").Source.Collection, "rejected") {
     const progress = try support.progress(view);
-    if (progress != .source or progress.source != .rejected) return error.OperationExecutionFailed;
+    if (progress != .source or progress.source != .rejected) return error.RepairOwnerMismatch;
     return progress.source.rejected;
 }
 pub const Authorize = struct {
@@ -51,7 +51,7 @@ pub const Authorize = struct {
             owner.rejection = err;
             return owned.publish(self.allocator, schema, owner, outcome) catch |operation_error| operation_error;
         };
-        const permit = authorization.retry orelse return error.OperationExecutionFailed;
+        const permit = authorization.retry orelse return error.RepairPermitMissing;
         owner.payload = .{ .support_repair = .{ .authorization = authorization } };
         var candidate = owned.publish(self.allocator, schema, owner, if (authorization.operation == .delete) .more else .ok) catch |operation_error| return operation_error;
         candidate.delta.repair_transition = .{ .authorized = permit };
@@ -73,7 +73,7 @@ pub const BuildInput = struct {
         const self = context.?;
         const source = try support.inputs(&input.step.data);
         const state = try read(&input.step.data);
-        const candidate = (try rejected(&input.step.data)).candidate orelse return error.OperationExecutionFailed;
+        const candidate = (try rejected(&input.step.data)).candidate orelse return error.RepairCandidateMissing;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, repair.packet(self.allocator, source, try spec.readContext(&input.step.data), try @import("packet_guidance_workflow.zig").read(&input.step.data), candidate, state.authorization) catch |operation_error| return operation_error);
     }
 };
@@ -121,7 +121,7 @@ pub const Merge = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const source = try support.inputs(&input.step.data);
-        const current = (try rejected(&input.step.data)).candidate orelse return error.OperationExecutionFailed;
+        const current = (try rejected(&input.step.data)).candidate orelse return error.RepairCandidateMissing;
         const state = try read(&input.step.data);
         const context_value = try spec.readContext(&input.step.data);
         const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
@@ -135,10 +135,9 @@ pub const Merge = struct {
         const repaired = switch (result) {
             .accepted => |value| value.candidate,
             .pending => |value| value,
-            .rejected => |value| value.candidate orelse return error.OperationExecutionFailed,
+            .rejected => |value| value.candidate orelse return error.RepairCandidateMissing,
         };
-        const merge = repaired.last_repair orelse return error.OperationExecutionFailed;
-        candidate.delta.repair_transition = merge.validatedTransition(repair.progress(state.authorization, result)) catch return error.OperationExecutionFailed;
+        candidate.delta.repair_transition = try repair_owner.validatedMergeTransition(repaired.last_repair, repair.progress(state.authorization, result));
         for (effects.invalidates) |key| candidate.delta.data_invalidations.insert(key);
         return candidate;
     }

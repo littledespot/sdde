@@ -129,7 +129,9 @@ entry's `requestTimeoutMs` (see "Request deadline"). A `timeout-ms` parameter is
 
 Every step maps `ok`, `invalid`, `failed` and `cancelled`. Exhausting a request's
 protocol correction remains a terminal runner rejection, not a YAML outcome. It names
-the step and the stage.
+the step and the stage. A stop on the runner's own authority, such as spending the step
+ceiling that each execution of the step counts toward once, names its closed reason
+([§6](../contracts/06-pipeline-nodes.md#runner-rejection-reasons)).
 
 A definition may still fix repeated parameters and routing, such as `protocol-prompt`,
 once in a thin definition-local subgraph (ADR 0013). This ADR adds no workflow-level

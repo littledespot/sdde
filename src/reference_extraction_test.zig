@@ -744,6 +744,9 @@ test "a generic authorize-repair step runs the reference text owner over a real 
     view.slots[@intFromEnum(@import("application/toolchain_workflow_values.zig").valid.key)] = current;
     view.slots[@intFromEnum(native.parsed_schema.key)] = parsed_value;
     view.slots[@intFromEnum(native.text_schema.key)] = rejected_value;
+    // A value of another stage at the key is the stage mismatch the extraction owner's native read maps to its own
+    // cause, and any other reader of the stage keeps.
+    try std.testing.expectError(error.ReferenceStageMismatch, native.read(&view, native.text_schema, .text_validated));
 
     var generic_context: generic.AuthorizeRepair = undefined;
     inline for (@typeInfo(generic.AuthorizeRepair).@"struct".fields) |field| @field(generic_context, field.name).allocator = std.testing.allocator;
@@ -765,7 +768,7 @@ test "a generic authorize-repair step runs the reference text owner over a real 
             // extraction owner reads the same parsed and text keys and finds a text rejection where it
             // needs its own; every other owner finds no key of its own.
             try std.testing.expect(owner != .reference_text);
-            try std.testing.expectEqual(if (owner == .reference_extraction) error.OperationExecutionFailed else error.MissingRequiredData, err);
+            try std.testing.expectEqual(if (owner == .reference_extraction) error.RepairOwnerMismatch else error.MissingRequiredData, err);
         }
     }
     try std.testing.expectEqual(@as(usize, 1), found);

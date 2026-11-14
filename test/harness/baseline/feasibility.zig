@@ -131,7 +131,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBudgetEvidence,
     };
-    if (report.schema != .@"spec-e2e-report/v18" or report.origin != .live or report.build == null or report.evidence_error != null or
+    if (report.schema != .@"spec-e2e-report/v19" or report.origin != .live or report.build == null or report.evidence_error != null or
         report.case_id == null or report.execution_id == null or report.workflow_id == null or report.model_calls == 0 or report.attempts.len != report.model_calls) return error.InvalidBudgetEvidence;
     const source = report.build.?;
     if (source.reconstruction != .captured or source.inputs_file == null) return error.InvalidBudgetEvidence;
@@ -531,6 +531,40 @@ test "external budget evidence rejects unknown native report fields before any u
     try std.testing.expectError(error.InvalidBudgetEvidence, evaluate(std.testing.io, a, temporary.dir, plan, protocol, testBuild(false), 100000));
 }
 
+test "external budget evidence reads only a report of the current version" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const protocol = try comparison.parseProtocol(a, @embedFile("../../calibration/semantic-simplicity/protocol.json"));
+    const origin: @import("../../../src/domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const attempts = [_]native.Attempt{.{ .origin = origin, .step = "generate", .purpose = .initial_generation, .owner_kind = .reference_chunk, .accounting = .exact_usage, .usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage.init(4, 3, 7).? }};
+    const report: native.Report = .{
+        .schema = .@"spec-e2e-report/v19",
+        .started_at_utc = "2026-10-17T00:00:00Z",
+        .build = .{ .source = testBuild(false), .zig_version = "0.16.0", .target = "native", .optimize = "Debug", .inputs_file = "build-inputs.json", .reconstruction = .captured },
+        .case_id = "case",
+        .execution_id = "execution",
+        .workflow_id = "workflow",
+        .status = .generated,
+        .model_calls = 1,
+        .attempts = &attempts,
+    };
+    const current = try std.json.Stringify.valueAlloc(a, report, .{});
+    const previous = try std.mem.replaceOwned(u8, a, current, "spec-e2e-report/v19", "spec-e2e-report/v18");
+    try std.testing.expect(!std.mem.eql(u8, current, previous));
+    var temporary = std.testing.tmpDir(.{});
+    defer temporary.cleanup();
+    try temporary.dir.createDir(std.testing.io, "run", .default_dir);
+    var plan = testPlan();
+    plan.evidence_runs = &.{"run"};
+    // The current report passes every check of the report itself and stops at the build inputs it names,
+    // which this run does not hold; the previous version is refused before that read.
+    try temporary.dir.writeFile(std.testing.io, .{ .sub_path = "run/report.json", .data = current });
+    try std.testing.expectError(error.InputUnavailable, evaluate(std.testing.io, a, temporary.dir, plan, protocol, testBuild(false), 100000));
+    try temporary.dir.writeFile(std.testing.io, .{ .sub_path = "run/report.json", .data = previous });
+    try std.testing.expectError(error.InvalidBudgetEvidence, evaluate(std.testing.io, a, temporary.dir, plan, protocol, testBuild(false), 100000));
+}
+
 test "an early legitimate clarification cannot prove full product review and repair cost feasibility" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -612,7 +646,7 @@ test "budget evidence joins physical origins independently of native unsent oper
         .{ .call = 1, .origin = first, .usage = usage },
         .{ .call = 2, .origin = second, .usage = usage },
     };
-    const report: native.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
+    const report: native.Report = .{ .schema = .@"spec-e2e-report/v19", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
     const joined = try capturedAttempts(a, report);
     try std.testing.expectEqual(@as(usize, 2), joined.len);
     try std.testing.expectEqual(@as(usize, 1), joined[0].ordinal);

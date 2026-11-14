@@ -25,8 +25,8 @@ pub const Advance = struct {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
-        const operation_ledger = input.step.model_request_lifecycle orelse return error.OperationExecutionFailed;
-        const selected = selection.transition(input.step.step.parameters) orelse return error.OperationExecutionFailed;
+        const operation_ledger = input.step.model_request_lifecycle orelse return error.RequestLifecycleLedgerMissing;
+        const selected = selection.transition(input.step.step.parameters) orelse return error.LifecycleTransitionInvalid;
         const owner = self.action.execute(current, operation_ledger, current.revision(), request.id(), .assigned, selected) catch |operation_error| return operation_error;
         errdefer identity.deinitOwner(owner);
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};

@@ -50,14 +50,14 @@ pub fn capture(allocator: std.mem.Allocator, view: *const data.View, decoded: ?e
     var outcome: Decoded = if (decoded) |result| decoded_result: {
         const owned = result catch |err| break :decoded_result switch (err) {
             error.OutOfMemory => return error.OutOfMemory,
-            error.InvalidModelEnvelope => .{ .protocol_rejected = .{ .reason = error.InvalidModelEnvelope, .diagnostic = diagnostic orelse return error.OperationExecutionFailed } },
+            error.InvalidModelEnvelope => .{ .protocol_rejected = .{ .reason = error.InvalidModelEnvelope, .diagnostic = diagnostic orelse return error.ProtocolDiagnosticMissing } },
         };
         break :decoded_result .{ .decoded = owned };
     } else .not_decoded;
     errdefer release(allocator, &outcome);
     const source = try observation.readCurrent(view);
-    if ((complete(source) != null) != (decoded != null)) return error.OperationExecutionFailed;
-    if (outcome == .decoded and outcome.decoded.candidate.association() != complete(source).?.association()) return error.OperationExecutionFailed;
+    if ((complete(source) != null) != (decoded != null)) return error.DecodeEvidenceInconsistent;
+    if (outcome == .decoded and outcome.decoded.candidate.association() != complete(source).?.association()) return error.DecodeEvidenceInconsistent;
     const owner = allocator.create(Owner) catch |operation_error| return operation_error;
     errdefer allocator.destroy(owner);
     const retained = values.retain(view.slots[@intFromEnum(observation.schema.key)].?) catch |operation_error| return operation_error;

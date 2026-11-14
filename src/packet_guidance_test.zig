@@ -284,9 +284,9 @@ test "capture publishes its bound compiled guidance as owned run data and reject
     try std.testing.expectEqualDeep(compiled.guidance, published.*);
     try std.testing.expect(published.summary_purpose.ptr != compiled.guidance.summary_purpose.ptr);
     step.parameters = &.{.{ .id = .{ .bytes = "guidance" }, .value = .{ .resource = .{ .bytes = "prompt" } } }};
-    try std.testing.expectError(error.OperationExecutionFailed, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } }));
+    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } }));
     step.parameters = &.{};
-    try std.testing.expectError(error.OperationExecutionFailed, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } }));
+    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } }));
 }
 
 test "the compiler binds packet guidance only through its capture step and checked resource" {
@@ -406,7 +406,7 @@ fn replace(a: std.mem.Allocator, source: []const u8, needle: []const u8, replace
 }
 
 fn unusedOperation(_: ?*void, _: operations.Input) operations.Error!@import("domain/workflow_execution.zig").Candidate {
-    return error.OperationExecutionFailed;
+    return error.InvocationFailureUnrecorded;
 }
 
 fn expectMarks(a: std.mem.Allocator, comptime T: type, value: T, path: []const u8) !void {

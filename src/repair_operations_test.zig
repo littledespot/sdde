@@ -239,7 +239,7 @@ test "the owners' retry maxima are the YAML values the per-owner merges declare 
 // ---- registry, compiler and graph validation ----
 
 fn unused(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
-    return error.OperationExecutionFailed;
+    return error.InvocationFailureUnrecorded;
 }
 
 /// A registry holding one generic operation, an invocation that produces what a variant requires, and
@@ -692,18 +692,47 @@ test "a tampered step is never run: a missing selector, an unknown owner or one 
         for ([_]?[]const u8{ null, "", "nope", "reference_text", "Reference-Text" }) |value| {
             var storage: [1]compilation.CompiledParameter = undefined;
             const step = stepFor(op, value, &storage);
-            try std.testing.expectEqual(@as(?operations.Error, error.OperationExecutionFailed), failure(GenericOf(op).invoke(&context, inputFor(&step))));
+            try std.testing.expectEqual(@as(?operations.Error, error.RepairOwnerUnresolved), failure(GenericOf(op).invoke(&context, inputFor(&step))));
         }
         inline for (@typeInfo(RepairOwner).@"enum".fields) |field| {
             const owner: RepairOwner = @enumFromInt(field.value);
             if (comptime owner.serves(op)) continue;
             var storage: [1]compilation.CompiledParameter = undefined;
             const step = stepFor(op, owner.id(), &storage);
-            try std.testing.expectEqual(@as(?operations.Error, error.OperationExecutionFailed), failure(GenericOf(op).invoke(&context, inputFor(&step))));
+            try std.testing.expectEqual(@as(?operations.Error, error.RepairOwnerMismatch), failure(GenericOf(op).invoke(&context, inputFor(&step))));
         }
         // An invocation input is not a step: nothing is selected.
-        try std.testing.expectEqual(@as(?operations.Error, error.OperationExecutionFailed), failure(GenericOf(op).invoke(&context, .{ .invocation = .{ .arguments = &.{} } })));
+        try std.testing.expectEqual(@as(?operations.Error, error.OperationWrongKind), failure(GenericOf(op).invoke(&context, .{ .invocation = .{ .arguments = &.{} } })));
     }
+}
+
+test "the core operations refuse an input of the wrong kind or arguments they do not take, each with its own cause" {
+    var storage: [1]compilation.CompiledParameter = undefined;
+    const step = stepFor(.authorize, null, &storage);
+    const empty_invocation = core.entries[0];
+    const noop = core.entries[1];
+    try std.testing.expectEqual(.ok, (try empty_invocation.invoke(.{ .invocation = .{ .arguments = &.{} } })).outcome);
+    try std.testing.expectError(error.OperationWrongKind, empty_invocation.invoke(inputFor(&step)));
+    try std.testing.expectError(error.InvocationArgumentsInvalid, empty_invocation.invoke(.{ .invocation = .{ .arguments = &.{"extra"} } }));
+    try std.testing.expectEqual(.ok, (try noop.invoke(inputFor(&step))).outcome);
+    try std.testing.expectError(error.OperationWrongKind, noop.invoke(.{ .invocation = .{ .arguments = &.{} } }));
+}
+
+test "a merge that cannot continue its retry accounting fails with its own cause and forwards the domain's" {
+    const atomic = @import("domain/atomic_repair.zig");
+    var merge: atomic.Merge = .{ .authorization = .{ .bytes = "authorization" }, .owner = .workflow_step, .operation = .replace, .revision_before = 1, .revision_after = 2, .changed = true, .origin = null };
+    // No record of the merge: the repaired candidate cannot name what to continue from.
+    try std.testing.expectError(error.LastRepairMissing, repair_owner.mergeTransition(null, .native));
+    try std.testing.expectError(error.LastRepairMissing, repair_owner.validatedMergeTransition(null, .resolved));
+    // A record without its permit is the domain's own `InvalidAtomicRepair`, reaching the report as it is.
+    try std.testing.expectError(error.InvalidAtomicRepair, repair_owner.mergeTransition(merge, .native));
+    try std.testing.expectError(error.InvalidAtomicRepair, repair_owner.validatedMergeTransition(merge, .recurring));
+    merge.retry = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
+    const native_merge = try repair_owner.mergeTransition(merge, .dependent_review);
+    try std.testing.expectEqual(retry.ValidationMode.dependent_review, native_merge.merged.validation);
+    try std.testing.expect(native_merge.merged.changed and native_merge.merged.revision_after == 2);
+    const validated = try repair_owner.validatedMergeTransition(merge, .recurring);
+    try std.testing.expectEqual(retry.Validation.recurring, validated.merged_validated.result);
 }
 
 fn coveredBy(inner: []const pipeline.DataKey, outer: []const pipeline.DataKey) bool {

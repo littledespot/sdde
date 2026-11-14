@@ -25,7 +25,7 @@ pub const Prepare = struct {
 
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {
         const self = context.?;
-        const bound = input.step.provider_authorization orelse return error.OperationExecutionFailed;
+        const bound = input.step.provider_authorization orelse return error.ProviderAuthorizationFactsMissing;
         const outcome: @import("../actions/model/prepare_provider_operation_authorization.zig").Outcome = if (self.action) |action| action.execute(bound.facts, bound.slot, bound.runtime) catch |operation_error| return operation_error else .{
             .failed = .{ .operation_id = bound.facts.operation_id, .cause = .authorization_denied, .retry_class = .never, .delivery = .not_sent },
         };
@@ -33,7 +33,7 @@ pub const Prepare = struct {
         defer if (native) |value| values.destroy(value);
         const payload: result.Outcome = switch (outcome) {
             .prepared => |delta| prepared: {
-                native = delta.data_writes[@intFromEnum(@import("../domain/pipeline.zig").DataKey.validated_provider_authorization)] orelse return error.OperationExecutionFailed;
+                native = delta.data_writes[@intFromEnum(@import("../domain/pipeline.zig").DataKey.validated_provider_authorization)] orelse return error.ProviderAuthorizationResultMissing;
                 const reference = values.read(&.{ .slots = delta.data_writes }, preparation.value_schema, provider.ValidatedProviderAuthorizationLeaseRef) catch |operation_error| return operation_error;
                 break :prepared .{ .prepared = reference.* };
             },

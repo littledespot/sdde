@@ -1,6 +1,7 @@
 const feature = @import("../domain/feature_directory.zig");
 const telemetry = @import("../domain/telemetry.zig");
 const run = @import("../domain/run_outcome.zig");
+const execution = @import("../domain/workflow_execution.zig");
 
 pub const Context = opaque {};
 pub const Outcome = union(enum) {
@@ -35,9 +36,15 @@ pub const Finalizer = struct {
     };
     context: *Context,
     finish_fn: *const fn (*Context, Reason) run.Outcome,
+    /// The rejection `finish_fn` replaced with its own logging failure, when it did (27-observability.md). A
+    /// finalizer that never replaces a rejection leaves it unset.
+    replaced_fn: ?*const fn (*Context) ?execution.FirstCause = null,
 
     pub fn finish(self: Finalizer, outcome: run.Outcome) run.Outcome {
         return self.finish_fn(self.context, .{ .terminal = outcome });
+    }
+    pub fn replaced(self: Finalizer) ?execution.FirstCause {
+        return if (self.replaced_fn) |query| query(self.context) else null;
     }
     pub fn beforePublication(self: Finalizer, outcome: @import("../domain/workflow_output.zig").TerminalOutcome) run.Outcome {
         return self.finish_fn(self.context, .{ .publication = outcome });

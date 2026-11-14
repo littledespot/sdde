@@ -159,10 +159,10 @@ fn shell(comptime op: Operation, comptime list: []const operation.Variant) opera
 fn ownerOf(comptime contract: operation.Contract, input: operations.Input) operations.Error!RepairOwner {
     const step = switch (input) {
         .step => |value| value.step,
-        .invocation => return error.OperationExecutionFailed,
+        .invocation => return error.OperationWrongKind,
     };
-    const value = compilation.selectorValue(contract, step.parameters) orelse return error.OperationExecutionFailed;
-    return RepairOwner.parse(value) orelse error.OperationExecutionFailed;
+    const value = compilation.selectorValue(contract, step.parameters) orelse return error.RepairOwnerUnresolved;
+    return RepairOwner.parse(value) orelse error.RepairOwnerUnresolved;
 }
 
 pub const AuthorizeRepair = struct {
@@ -192,7 +192,7 @@ pub const AuthorizeRepair = struct {
             .specification_unit => specification_repair.Authorize.invoke(&self.specification_unit, input),
             .specification_support => support_repair.Authorize.invoke(&self.specification_support, input),
             .specification_coverage => coverage_repair.Authorize.invoke(&self.specification_coverage, input),
-            .reference_reconciliation, .source_omission_extraction, .source_omission_reconciliation => error.OperationExecutionFailed,
+            .reference_reconciliation, .source_omission_extraction, .source_omission_reconciliation => error.RepairOwnerMismatch,
         };
     }
 };
@@ -216,7 +216,7 @@ pub const BuildRepairInput = struct {
             .source_omission => source_omission.BuildInput.invoke(&self.source_omission, input),
             .specification_unit => specification_repair.BuildInput.invoke(&self.specification_unit, input),
             .specification_support => support_repair.BuildInput.invoke(&self.specification_support, input),
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => error.OperationExecutionFailed,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => error.RepairOwnerMismatch,
         };
     }
 };
@@ -240,7 +240,7 @@ pub const ParseRepair = struct {
             .source_omission => source_omission.Parse.invoke(&self.source_omission, input),
             .specification_unit => specification_repair.Parse.invoke(&self.specification_unit, input),
             .specification_support => support_repair.Parse.invoke(&self.specification_support, input),
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => error.OperationExecutionFailed,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => error.RepairOwnerMismatch,
         };
     }
 };
@@ -266,7 +266,7 @@ pub const MergeRepair = struct {
             .source_omission_reconciliation => source_omission.Merge(.reconciliation).invoke(&self.source_omission_reconciliation, input),
             .specification_unit => specification_repair.Merge.invoke(&self.specification_unit, input),
             .specification_support => support_repair.Merge.invoke(&self.specification_support, input),
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission, .specification_coverage => error.OperationExecutionFailed,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission, .specification_coverage => error.RepairOwnerMismatch,
         };
     }
 };

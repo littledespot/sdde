@@ -70,8 +70,8 @@ pub const Admit = struct {
 /// Retains the exact envelope; schema evidence borrows its parsed candidate.
 fn capture(allocator: std.mem.Allocator, view: *const data.View, checked: ?validation.Result) operations.Error!*data.Value {
     const source = try envelope.readCurrent(view);
-    if ((source.outcome() == .decoded) != (checked != null)) return error.OperationExecutionFailed;
-    if (checked) |result| if (result == .valid and result.valid.candidate() != source.outcome().decoded) return error.OperationExecutionFailed;
+    if ((source.outcome() == .decoded) != (checked != null)) return error.PayloadCheckInconsistent;
+    if (checked) |result| if (result == .valid and result.valid.candidate() != source.outcome().decoded) return error.PayloadCheckInconsistent;
     const owner = allocator.create(Owner) catch |operation_error| return operation_error;
     errdefer allocator.destroy(owner);
     const retained = values.retain(view.slots[@intFromEnum(envelope.schema.key)].?) catch |operation_error| return operation_error;

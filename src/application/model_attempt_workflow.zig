@@ -26,7 +26,7 @@ pub const Advance = struct {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const current = @import("pipeline_values.zig").read(&input.step.data, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch |operation_error| return operation_error;
-        const facts = input.step.model_attempt orelse return error.OperationExecutionFailed;
+        const facts = input.step.model_attempt orelse return error.ModelAttemptFactsMissing;
         const delta = self.action.execute(facts.accounting, facts.accounting.revision(), current, facts.operations, current.revision(), request.id(), facts.attempt) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }

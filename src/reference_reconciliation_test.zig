@@ -1292,6 +1292,28 @@ test "reference candidate ownership retains predecessors and cleans deep histori
     try std.testing.expectEqualStrings("retained-reference-state", current.payload.reconciliation_items.state_id.bytes);
 }
 
+test "the reconciliation partition binding needs the group size its step declares" {
+    const owned = @import("domain/reference_candidate_value.zig");
+    const native = @import("application/reference_extraction_workflow.zig");
+    const workflow = @import("application/reference_reconciliation_workflow.zig");
+    const values = @import("application/pipeline_values.zig");
+    const compilation = @import("domain/workflow_compilation.zig");
+    const owner = try owned.create(std.testing.allocator, null);
+    errdefer owned.destroy(owner);
+    owner.payload = .{ .reconciliation_items = .{ .state_id = .{ .bytes = "retained-reference-state" }, .entries = &.{} } };
+    const items = (try native.publish(std.testing.allocator, workflow.items_schema, owner, .ok)).delta.data_writes[@intFromEnum(workflow.items_schema.key)].?;
+    defer values.destroy(items);
+    var view: @import("domain/pipeline_data.zig").View = .{};
+    view.slots[@intFromEnum(workflow.items_schema.key)] = items;
+    var step: compilation.CompiledStep = .{ .id = .{ .bytes = "partition" }, .operation_id = .{ .bytes = "partition-reference-reconciliation-items" }, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+    var partition: workflow.Partition = .{ .allocator = std.testing.allocator };
+    const log: @import("domain/pipeline.zig").WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN"));
+    // No size declared, or one of another kind, is no size to partition by.
+    try std.testing.expectError(error.ReconciliationSizeMissing, workflow.Partition.invoke(&partition, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = log } }));
+    step.parameters = &.{.{ .id = .{ .bytes = "group-size" }, .value = .{ .string = "two" } }};
+    try std.testing.expectError(error.ReconciliationSizeMissing, workflow.Partition.invoke(&partition, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = log } }));
+}
+
 test "overlapping conflicts conserve every declared conflict relationship" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -1822,6 +1844,14 @@ test "a generic authorize-repair step runs only the owner whose native facts the
             try std.testing.expectEqual(repair_owner.RepairOwner.reference_summary, owner);
             try std.testing.expectEqual(.ok, authorized.outcome);
             const state = authorized.delta.data_writes[@intFromEnum(repairs.state_schema.key)].?;
+            // The authorizer leaves the model's replacement pending, and a merge that finds it still pending
+            // is refused with the state cause, as the parse of any other stage of that state is.
+            var merge_view = view;
+            merge_view.slots[@intFromEnum(repairs.state_schema.key)] = state;
+            const merge_effects = repairs.Merge.effects;
+            const merge_step: compilation.CompiledStep = .{ .id = .{ .bytes = "merge" }, .operation_id = .{ .bytes = "merge-repair" }, .parameters = &.{}, .requires = merge_effects.requires, .produces = merge_effects.produces, .replaces = merge_effects.replaces, .invalidates = merge_effects.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+            var merge: repairs.Merge = .{ .allocator = std.testing.allocator, .normalizer = text.normalizer };
+            try std.testing.expectError(error.RepairStateMismatch, repairs.Merge.invoke(&merge, .{ .step = .{ .data = merge_view, .step = &merge_step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } }));
             values.destroy(state);
             try std.testing.expect(authorized.delta.repair_transition != null and authorized.delta.repair_transition.? == .authorized);
             found += 1;
@@ -1830,12 +1860,22 @@ test "a generic authorize-repair step runs only the owner whose native facts the
             // key holds a valid result finds the wrong kind of value; every other owner finds no key.
             try std.testing.expect(owner != .reference_summary);
             try std.testing.expectEqual(switch (owner) {
-                .reference_dispositions, .reference_signals, .reference_conflicts => error.OperationExecutionFailed,
+                .reference_dispositions, .reference_signals, .reference_conflicts => error.RepairOwnerMismatch,
                 else => error.MissingRequiredData,
             }, err);
         }
     }
     try std.testing.expectEqual(@as(usize, 1), found);
+    // A phase check needs a phase of the phase set to check against: the step names none, or names another.
+    const phases = @import("application/reference_reconciliation_stage_workflow.zig");
+    var check: phases.Check = .{};
+    var phase_step: compilation.CompiledStep = .{ .id = .{ .bytes = "phase" }, .operation_id = .{ .bytes = "check-reference-reconciliation-phase" }, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .more, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+    const phase_log: @import("domain/pipeline.zig").WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN"));
+    try std.testing.expectError(error.ReconciliationPhaseInvalid, phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null, .log = phase_log } }));
+    phase_step.parameters = &.{.{ .id = .{ .bytes = "phase" }, .value = .{ .enumeration = "no-such-phase" } }};
+    try std.testing.expectError(error.ReconciliationPhaseInvalid, phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null, .log = phase_log } }));
+    phase_step.parameters = &.{.{ .id = .{ .bytes = "phase" }, .value = .{ .enumeration = "dispositions" } }};
+    _ = try phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null, .log = phase_log } });
 }
 
 test "native reuse binding retains its child after the preceding pipeline value is released" {

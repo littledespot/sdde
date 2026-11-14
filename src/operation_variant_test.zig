@@ -37,7 +37,7 @@ const schemas = [_]data.Schema{ raw_schema, engine_schema, evidence_schema };
 const policies = [_]operation.PolicyProfile{.{ .id = "variant.policy@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{ .ok, .failed, .invalid } }};
 
 fn unused(_: ?*void, _: operation_registry.Input) operation_registry.Error!execution.Candidate {
-    return error.OperationExecutionFailed;
+    return error.InvocationFailureUnrecorded;
 }
 
 /// The test contract's variants. Each one is a complete contract.
@@ -588,7 +588,7 @@ const Script = struct {
 
     fn input(_: ?*Script, _: operation_registry.Input) operation_registry.Error!execution.Candidate {
         var delta: pipeline.NodeDelta = .{};
-        delta.data_writes[@intFromEnum(raw_schema.key)] = values.create(std.testing.allocator, raw_schema, u32, 7) catch return error.OperationExecutionFailed;
+        delta.data_writes[@intFromEnum(raw_schema.key)] = values.create(std.testing.allocator, raw_schema, u32, 7) catch return error.InvocationFailureUnrecorded;
         return .{ .outcome = .ok, .delta = delta };
     }
 
@@ -596,8 +596,8 @@ const Script = struct {
         const self = context.?;
         self.shape_calls += 1;
         var delta: pipeline.NodeDelta = .{};
-        if (self.write) delta.data_writes[@intFromEnum(engine_schema.key)] = values.create(std.testing.allocator, engine_schema, u32, 9) catch return error.OperationExecutionFailed;
-        if (self.replace) delta.data_replacements[@intFromEnum(engine_schema.key)] = values.create(std.testing.allocator, engine_schema, u32, 11) catch return error.OperationExecutionFailed;
+        if (self.write) delta.data_writes[@intFromEnum(engine_schema.key)] = values.create(std.testing.allocator, engine_schema, u32, 9) catch return error.InvocationFailureUnrecorded;
+        if (self.replace) delta.data_replacements[@intFromEnum(engine_schema.key)] = values.create(std.testing.allocator, engine_schema, u32, 11) catch return error.InvocationFailureUnrecorded;
         return .{ .outcome = self.outcome, .delta = delta };
     }
 
@@ -642,16 +642,17 @@ test "the runner checks every delta, outcome and retry authority against the com
     const retrying = try compileYaml(a, &registry, retrying_workflow);
 
     const Case = struct { graph: *const compilation.CompiledWorkflow, outcome: workflow.OutcomeTag, write: bool, replace: bool, expected: execution.Applied };
-    const rejected: execution.Applied = .{ .rejected = .authority };
+    const undeclared: execution.Applied = .{ .rejected = .{ .authority = .outcome_undeclared } };
+    const rejected: execution.Applied = .{ .rejected = .{ .authority = .candidate_delta } };
     const cases = [_]Case{
         // What the selected variant allows runs, and nothing else.
         .{ .graph = &plain[0], .outcome = .ok, .write = true, .replace = false, .expected = .{ .outcome = .ok } },
         .{ .graph = &retrying[0], .outcome = .ok, .write = true, .replace = false, .expected = .{ .outcome = .ok } },
         .{ .graph = &retrying[0], .outcome = .failed, .write = true, .replace = false, .expected = .{ .outcome = .failed } },
         // An outcome that fits another variant (`retrying` declares `failed`) but not the compiled one.
-        .{ .graph = &plain[0], .outcome = .failed, .write = true, .replace = false, .expected = rejected },
+        .{ .graph = &plain[0], .outcome = .failed, .write = true, .replace = false, .expected = undeclared },
         // An outcome no variant declares for it.
-        .{ .graph = &retrying[0], .outcome = .invalid, .write = true, .replace = false, .expected = rejected },
+        .{ .graph = &retrying[0], .outcome = .invalid, .write = true, .replace = false, .expected = undeclared },
         // A delta that fits another variant (`merging` replaces `engine_config`) but not the compiled one.
         .{ .graph = &plain[0], .outcome = .ok, .write = false, .replace = true, .expected = rejected },
         .{ .graph = &retrying[0], .outcome = .ok, .write = true, .replace = true, .expected = rejected },
@@ -697,7 +698,12 @@ test "the runner rejects a compiled step whose effects or authority fit another 
         var runner = startRunner(&registry, &tampered, &script);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Applied{ .outcome = .ok }, runner.bindings().invokeInvocation());
-        try std.testing.expectEqualDeep(execution.Applied{ .rejected = .authority }, runner.bindings().invokeStep(steps[0].id));
+        // A selector no variant has resolves no contract; every other fault leaves a resolved variant that disagrees with the step.
+        const reason: execution.AuthorityReason = switch (fault) {
+            3, 4 => .step_unresolved,
+            else => .step_contract_mismatch,
+        };
+        try std.testing.expectEqualDeep(execution.Applied{ .rejected = .{ .authority = reason } }, runner.bindings().invokeStep(steps[0].id));
         try std.testing.expectEqual(@as(usize, 0), script.shape_calls);
     }
 }

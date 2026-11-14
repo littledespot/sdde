@@ -29,7 +29,7 @@ pub const SourcePreservationPolicy = struct {
 
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const policy = self.policy orelse return error.OperationExecutionFailed;
+        const policy = self.policy orelse return error.RequiredAuthorityPolicyUnbound;
         if (input.step.repair_permit) |permit| {
             const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
             var arena: std.heap.ArenaAllocator = .init(self.allocator);

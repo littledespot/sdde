@@ -716,7 +716,7 @@ and import only domain and port modules.
 - Implement invocation/identity and reference preflight.
 - Add the initial reader registry and citation system.
 - Implement the structured reference/spec operations declared by their workflow YAML definitions.
-- Add specification/reference-context validators, no-invention routing, atomic repair, rendering, and commit.
+- Add specification/reference-context validators, atomic repair, rendering, and commit.
 - Integrate the shared reconciliation boundary for every specification-owned field, reference-meaning decision, and preserved obligation; specification-local rules may contribute requirements/candidates only.
 - Capture principles canonically (ADR 0015); Spec runs no principle
   assessment. Native required policy and actionable missing decisions retain their
@@ -950,10 +950,8 @@ The new engine is ready for production evaluation when all of the following are 
 17. Persisted reference citations, provenance, claims, conflicts, and exact preserved tokens are
     mechanically verifiable across restart without a content fingerprint.
 
-18. The one-use no-invention repair may produce `clarification_needed` only for an
-    admitted authority gap under §12.8.1. Native defects retain their owning
-    repair/rejection outcome. Neither engine nor model invents a
-    requirement, architecture decision, task fact, path, command or resolution.
+18. Native defects retain their owning repair/rejection outcome. Neither engine nor model
+    invents a requirement, architecture decision, task fact, path, command or resolution.
 
 19. **Clarification identity and stage gates.**
     - Clarifications use only registered `<feature>/clarify/S01..S99.md`, `P01..P99.md`, and

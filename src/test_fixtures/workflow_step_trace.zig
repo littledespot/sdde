@@ -33,8 +33,9 @@ pub const Trace = struct {
         return self.lines.written();
     }
 
-    pub fn record(self: *Trace, step: *const compilation.CompiledStep, applied: execution.Applied) Error!void {
-        writeLine(&self.lines.writer, step, applied) catch |err| return switch (err) {
+    /// `first` is the runner's first cause when the step ended a run, which the rejected line names.
+    pub fn record(self: *Trace, step: *const compilation.CompiledStep, applied: execution.Applied, first: ?execution.FirstCause) Error!void {
+        writeLine(&self.lines.writer, step, applied, first) catch |err| return switch (err) {
             error.WriteFailed => error.OutOfMemory,
         };
         self.steps += 1;
@@ -67,25 +68,35 @@ fn selectedVariant(step: *const compilation.CompiledStep) ?[]const u8 {
     return null;
 }
 
-fn writeLine(w: *std.Io.Writer, step: *const compilation.CompiledStep, applied: execution.Applied) std.Io.Writer.Error!void {
+fn writeLine(w: *std.Io.Writer, step: *const compilation.CompiledStep, applied: execution.Applied, first: ?execution.FirstCause) std.Io.Writer.Error!void {
     try writeCallSite(w, step);
     try w.print("#{s}", .{step.operation_id.bytes});
     if (selectedVariant(step)) |variant| try w.print("@{s}", .{variant});
     try w.writeByte('\t');
     switch (applied) {
         .outcome => |tag| try w.writeAll(@tagName(tag)),
-        .rejected => |reason| try writeRejection(w, reason),
+        .rejected => |reason| try writeRejection(w, reason, first),
     }
     try w.writeByte('\n');
 }
 
-/// The canonical rejection diagnostic, plus the executions a retry exhaustion
-/// counted.
-pub fn writeRejection(w: *std.Io.Writer, reason: execution.Rejection) std.Io.Writer.Error!void {
+/// The canonical rejection diagnostic, which names an authority rejection's reason, plus the facts of a
+/// retry exhaustion and, only when a later failure replaced one, the first cause, with its own facts
+/// when it was an exhaustion. A line without a suffix reads as it always did.
+pub fn writeRejection(w: *std.Io.Writer, reason: execution.Rejection, first: ?execution.FirstCause) std.Io.Writer.Error!void {
     try w.print("rejected:{s}:{s}", .{ @tagName(reason), reason.diagnostic() });
-    if (reason == .retry_limit) try w.print(":executions={d}", .{reason.retry_limit.completed_executions});
-    // A `request-model` step's exhaustion names the stage that reached the limit (ADR 0030).
-    if (reason == .retry_limit) if (reason.retry_limit.stage) |stage| try w.print(":stage={s}", .{stage.name()});
+    if (reason == .retry_limit) try writeRetryFacts(w, reason.retry_limit);
+    if (first) |cause| {
+        try w.print(":first={s}:{s}", .{ @tagName(cause), cause.rejection().diagnostic() });
+        if (cause == .retry_limit) try writeRetryFacts(w, cause.retry_limit);
+    }
+}
+
+/// The executions a retry exhaustion counted and, for a `request-model` step, the stage that reached the
+/// limit (ADR 0030).
+fn writeRetryFacts(w: *std.Io.Writer, exhaustion: workflow_retry.Exhaustion) std.Io.Writer.Error!void {
+    try w.print(":executions={d}", .{exhaustion.completed_executions});
+    if (exhaustion.stage) |stage| try w.print(":stage={s}", .{stage.name()});
 }
 
 /// One accounted inference, in accounting order.
@@ -265,7 +276,7 @@ test "a step in a nested subgraph is keyed by its whole call path and its operat
         chainEntry("extraction", "content-request", .subgraph, "retention"),
         chainEntry("retention", "retain", .operation, "retain-json-part"),
     };
-    try trace.record(&testStep(&chain, "retain-json-part"), .{ .outcome = .ok });
+    try trace.record(&testStep(&chain, "retain-json-part"), .{ .outcome = .ok }, null);
     try std.testing.expectEqualStrings("extract/content-request/retain#retain-json-part\tok\n", trace.written());
 }
 
@@ -276,8 +287,8 @@ test "a request-model step is one line at its own call site" {
         chainEntry(null, "review", .subgraph, "assess-support"),
         chainEntry("assess-support", "model", .operation, "request-model"),
     };
-    try trace.record(&testStep(&chain, "request-model"), .{ .outcome = .ok });
-    try trace.record(&testStep(&chain, "request-model"), .{ .rejected = .cancelled });
+    try trace.record(&testStep(&chain, "request-model"), .{ .outcome = .ok }, null);
+    try trace.record(&testStep(&chain, "request-model"), .{ .rejected = .cancelled }, null);
     try std.testing.expectEqualStrings("review/model#request-model\tok\nreview/model#request-model\trejected:cancelled:cancelled\n", trace.written());
     try std.testing.expectEqual(@as(usize, 2), trace.steps);
 }
@@ -286,8 +297,50 @@ test "a step without a source chain keys by its compiled ID and rejections use t
     var trace: Trace = .init(std.testing.allocator);
     defer trace.deinit();
     const step = testStep(&.{}, "release-model-transport");
-    try trace.record(&step, .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } });
-    try std.testing.expectEqualStrings("g1-step#release-model-transport\trejected:operation_failed:OperationExecutionFailed\n", trace.written());
+    try trace.record(&step, .{ .rejected = .{ .operation_failed = error.RepairOwnerMismatch } }, null);
+    try std.testing.expectEqualStrings("g1-step#release-model-transport\trejected:operation_failed:RepairOwnerMismatch\n", trace.written());
+}
+
+test "an authority rejection names its reason, and a first cause is named only when one was kept" {
+    var trace: Trace = .init(std.testing.allocator);
+    defer trace.deinit();
+    const step = testStep(&.{}, "request-model");
+    // Every reason is its own line, which carries no suffix: the trace of a lone failure is as it was.
+    for (std.enums.values(execution.AuthorityReason)) |reason| {
+        try trace.record(&step, .{ .rejected = .{ .authority = reason } }, null);
+        var expected: [96]u8 = undefined;
+        const line = try std.fmt.bufPrint(&expected, "g1-step#request-model\trejected:authority:{s}\n", .{@tagName(reason)});
+        try std.testing.expect(std.mem.endsWith(u8, trace.written(), line));
+    }
+    try std.testing.expectEqual(std.enums.values(execution.AuthorityReason).len, trace.steps);
+    // A rejection that replaced another names it last, by its tag and its own diagnostic, whatever the
+    // terminal rejection is; a retry exhaustion keeps its own counts before it.
+    var replaced: Trace = .init(std.testing.allocator);
+    defer replaced.deinit();
+    try replaced.record(&step, .{ .rejected = .{ .logging = .LOG_FLUSH_FAILURE } }, .{ .authority = .invocation_result });
+    try replaced.record(&step, .{ .rejected = .{ .retry_limit = workflow_retry.Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).? } }, .{ .operation_failed = error.InvalidCandidatePayload });
+    try std.testing.expectEqualStrings(
+        "g1-step#request-model\trejected:logging:blocked:first=authority:invocation_result\n" ++
+            "g1-step#request-model\trejected:retry_limit:RetryLimitExhausted:executions=2:first=operation_failed:InvalidCandidatePayload\n",
+        replaced.written(),
+    );
+    // A retry exhaustion that a later failure replaced gives its own counts and stage after its name,
+    // where the terminal one gives them before the first cause.
+    var exhausted: Trace = .init(std.testing.allocator);
+    defer exhausted.deinit();
+    const exhaustion = workflow_retry.Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).?.atStage(.advance_attempt);
+    try exhausted.record(&step, .{ .rejected = .{ .logging = .LOG_FLUSH_FAILURE } }, .{ .retry_limit = exhaustion });
+    try exhausted.record(&step, .{ .rejected = .{ .retry_limit = workflow_retry.Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 3).? } }, .{ .retry_limit = exhaustion });
+    try std.testing.expectEqualStrings(
+        "g1-step#request-model\trejected:logging:blocked:first=retry_limit:RetryLimitExhausted:executions=2:stage=advance-attempt\n" ++
+            "g1-step#request-model\trejected:retry_limit:RetryLimitExhausted:executions=3:first=retry_limit:RetryLimitExhausted:executions=2:stage=advance-attempt\n",
+        exhausted.written(),
+    );
+    // A first cause rides only a rejected line: an outcome has none to name.
+    var outcome: Trace = .init(std.testing.allocator);
+    defer outcome.deinit();
+    try outcome.record(&step, .{ .outcome = .failed }, .{ .authority = .invocation_result });
+    try std.testing.expectEqualStrings("g1-step#request-model\tfailed\n", outcome.written());
 }
 
 test "a step that selects a contract variant names it and every other step's line is unchanged" {
@@ -301,9 +354,9 @@ test "a step that selects a contract variant names it and every other step's lin
     var other = testStep(&.{}, "merge-repair");
     // A string parameter of the same name is not a selector: only a closed enumeration selects.
     other.parameters = &.{.{ .id = .{ .bytes = selector_parameter }, .value = .{ .string = "specification-unit" } }};
-    try trace.record(&selecting, .{ .outcome = .ok });
-    try trace.record(&other, .{ .outcome = .ok });
-    try trace.record(&testStep(&.{}, "merge-repair"), .{ .outcome = .ok });
+    try trace.record(&selecting, .{ .outcome = .ok }, null);
+    try trace.record(&other, .{ .outcome = .ok }, null);
+    try trace.record(&testStep(&.{}, "merge-repair"), .{ .outcome = .ok }, null);
     try std.testing.expectEqualStrings("g1-step#merge-repair@specification-unit\tok\ng1-step#merge-repair\tok\ng1-step#merge-repair\tok\n", trace.written());
 }
 

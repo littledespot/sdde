@@ -263,8 +263,6 @@ Proposed, no code: build a unit's deterministic initial guidance packet ([§12](
 > [ADR 0033](../../decisions/0033-generic-repair-operations.md)'s four generic repair operations
 > (`authorize-repair`, `build-repair-input`, `parse-repair`, `merge-repair`), whose per-owner
 > variants are specified once, in [Generic repair operations](#generic-repair-operations) below.
-> Whether the no-invention and semantic-review branches stay in the design text is an open
-> decision (SPEC01 "Design–code conflicts"); the generic operations have none.
 
 ## Generic repair operations
 
@@ -384,17 +382,9 @@ the keys they replace, their authorization or repair key and the shared inputs
 (`citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, and for the
 specification owners `accounted_reference_reconciliation`).
 
-## `ClassifyRepairAuthorizationPurposeAction`
-
-Proposed, no code: choose ordinary atomic repair or the no-invention replacement for a selected diagnostic ([§14](../14-orchestration.md), [§22](../22-repair.md)).
-
 ## `CreateRepairAuthorizationAction`
 
 Proposed, no code: bind one closed repair operation to current values, preconditions and cited rules ([§22](../22-repair.md)).
-
-## `CreateNoInventionClarificationReplacementAuthorizationAction`
-
-Proposed, no code: authorize the one-shot whole-result replacement of unsupported content by a clarification ([§14](../14-orchestration.md)).
 
 ## `BuildAtomicRepairGuidanceAction`
 

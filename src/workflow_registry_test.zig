@@ -17,7 +17,7 @@ const operation_registry = @import("ports/workflow_operation_registry.zig");
 const no_operations: operation_registry.Registry = .{ .operations = &.{}, .policies = &.{}, .gates = &.{} };
 
 fn unusedOperation(_: ?*void, _: operation_registry.Input) operation_registry.Error!@import("domain/workflow_execution.zig").Candidate {
-    return error.OperationExecutionFailed;
+    return error.InvocationFailureUnrecorded;
 }
 
 /// A registry whose `core.noop` is a contract made of variants, so a compiled step of `core.noop`

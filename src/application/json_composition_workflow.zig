@@ -23,8 +23,8 @@ pub const Initialize = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const selected = requests.resource(input.step, "composition") orelse return error.OperationExecutionFailed;
-        if (selected.content != .json_composition) return error.OperationExecutionFailed;
+        const selected = requests.resource(input.step, "composition") orelse return error.CompositionResourceInvalid;
+        if (selected.content != .json_composition) return error.CompositionResourceInvalid;
         const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
         const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const owner = try Owner.create(self.allocator, &input.step.data, &.{ .model_input_packet, .model_request_identity_ledger });
@@ -43,7 +43,7 @@ pub const Retain = struct {
         const self = context.?;
         const state = try readState(&input.step.data);
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-        const part = request.part() orelse return error.OperationExecutionFailed;
+        const part = request.part() orelse return error.CompositionPartMissing;
         const accepted = try @import("model_candidate_handoff.zig").readAccepted(&input.step.data);
         const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const owner = try Owner.create(self.allocator, &input.step.data, &.{ .json_composition, .model_payload_schema_result });
@@ -76,9 +76,9 @@ pub const Validate = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const source = try read(&input.step.data, assembled_schema);
-        if (source.payload != .candidate) return error.OperationExecutionFailed;
+        if (source.payload != .candidate) return error.CompositionStateMismatch;
         const candidate = &source.payload.candidate;
-        if (self.action.execute(candidate) != null) return error.OperationExecutionFailed;
+        if (self.action.execute(candidate) != null) return error.InvalidAssembledCandidate;
         const owner = try Owner.create(self.allocator, &input.step.data, &.{.assembled_json});
         errdefer owner.destroy();
         owner.payload = .{ .validated = candidate };
@@ -88,12 +88,12 @@ pub const Validate = struct {
 
 pub fn readState(view: *const data.View) operations.Error!*const runtime.State {
     const owner = try read(view, state_schema);
-    return if (owner.payload == .state) &owner.payload.state else error.OperationExecutionFailed;
+    return if (owner.payload == .state) &owner.payload.state else error.CompositionStateMismatch;
 }
 pub fn readValidated(view: *const data.View) operations.Error!*const runtime.Candidate {
     const source = try read(view, assembled_schema);
     const checked = try read(view, validated_schema);
-    if (source.payload != .candidate or checked.payload != .validated or checked.payload.validated != &source.payload.candidate) return error.OperationExecutionFailed;
+    if (source.payload != .candidate or checked.payload != .validated or checked.payload.validated != &source.payload.candidate) return error.CompositionStateMismatch;
     return checked.payload.validated;
 }
 fn read(view: *const data.View, schema: data.Schema) operations.Error!*const Owner {
@@ -119,7 +119,7 @@ pub const Owner = struct {
         const owner = allocator.create(Owner) catch |operation_error| return operation_error;
         owner.* = .{ .allocator = allocator, .arena = .init(allocator), .payload = undefined };
         errdefer owner.destroy();
-        for (keys, 0..) |key, index| owner.retained[index] = values.retain(source.slots[@intFromEnum(key)] orelse return error.OperationExecutionFailed) catch |operation_error| return operation_error;
+        for (keys, 0..) |key, index| owner.retained[index] = values.retain(source.slots[@intFromEnum(key)] orelse return error.CompositionRetainedValueMissing) catch |operation_error| return operation_error;
         return owner;
     }
     fn view(self: *const Owner) *const Value {

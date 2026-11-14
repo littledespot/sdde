@@ -753,7 +753,7 @@ const operations: operation_registry.Registry = .{
 };
 
 fn unusedOperation(_: ?*void, _: operation_registry.Input) operation_registry.Error!execution.Candidate {
-    return error.OperationExecutionFailed;
+    return error.InvocationFailureUnrecorded;
 }
 
 const reusable_workflow =

@@ -76,6 +76,7 @@ pub const LastModelRejection = struct {
 
 pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../src/application/workflow_pipeline_runner.zig").Runner, report: *c.Report) !void {
     report.last_operation_rejection = runner.last_operation_rejection;
+    report.first_cause = if (runner.first_cause) |first| try c.FirstCause.fromNative(allocator, first) else null;
     const ledger = runner.tokenLedger();
     report.model_calls = ledger.accounted_operations.items.len;
     report.not_sent_operations = 0;

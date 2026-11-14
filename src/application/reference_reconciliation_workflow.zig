@@ -55,7 +55,7 @@ pub const Partition = struct {
         }
         const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reconciliation_layout = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_items, size orelse return error.OperationExecutionFailed) catch |operation_error| return operation_error };
+        owner.payload = .{ .reconciliation_layout = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_items, size orelse return error.ReconciliationSizeMissing) catch |operation_error| return operation_error };
         return extraction.publish(self.allocator, layout_schema, owner, .ok);
     }
 };
@@ -252,7 +252,7 @@ pub fn textContext(view: *const data.View) operations.Error!validation.TextConte
 /// A scripted or future provider producer attaches bytes to the exact engine
 /// input. Models cannot choose a partition, current state, or canonical identity.
 pub fn capture(allocator: std.mem.Allocator, input: *const owned.Value, bytes: []const u8) operations.Error!*owned.Owner {
-    if (input.payload().* != .reconciliation_input) return error.OperationExecutionFailed;
+    if (input.payload().* != .reconciliation_input) return error.ReferenceStageMismatch;
     const owner = owned.create(allocator, input) catch |operation_error| return operation_error;
     errdefer owned.destroy(owner);
     owner.payload = .{ .reconciliation_raw = .{ .input = input.payload().reconciliation_input, .bytes = owner.arena.allocator().dupe(u8, bytes) catch |operation_error| return operation_error } };

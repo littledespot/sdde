@@ -151,8 +151,8 @@ beyond those named.
   in the action, adapter, application and composition layers. The harness and build tools that
   read their own reports were not swept.
 - **Dead code:** the principle-citation validator and the principle registry's selection and
-  guidance functions, with their tests. 22-repair.md:417-419 still describes principle citation
-  diagnostics (SPEC01 §8 "Design–code conflicts").
+  guidance functions, with their tests. 22-repair.md's principle-citation diagnostics sentence
+  is removed (SPEC01 §8 "Design–code conflicts").
 - **Principles section removed** (user: "if it unused and brings no value then remove it"): the
   `principles` configuration section, `principle_policy.zig` and the category fields;
   `specification-state` moved to v22, and a `principles` member rejects as unknown. Amended:
@@ -226,7 +226,7 @@ exactly; the run publishes with no correction, and no batch keeps two records of
 
 **Committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes them to the
 `brittleness` member of `code-heuristics/v2` (`build/code_heuristics/brittleness.zig`). Latest
-counts and when they are due: SPEC01 T5.
+counts: E5 below; when they are due: SPEC01 T5.
 - **Definitions** (approved 1 November 2026; exact matches only):
   - A is every `.md` and JSON string value under `design/workflows/`, whitespace-collapsed.
   - M is production literals outside tests, of 3+ whitespace-separated runs, whose decoded
@@ -792,7 +792,9 @@ has been reduce E1 should be kept"): kept for the reduced brittleness; no outcom
     `retire_model_request`, `retire_model_input`, `retire_model_transport` (8 files); the wrappers
     `Assign`, `Validate`, `Build`, `Decode` and the payload `Validate`; the `request_decode` association
     variant; `validateRunawayRoutes` and its two calls; the `payload_schema_requires` branch of
-    `workflow_model_invocation`; `selectionForPacket` and `publish` in `model_request_workflow.zig`.
+    `workflow_model_invocation`; `selectionForPacket` and `publish` in `model_request_workflow.zig`; the
+    wrapper-collapse code of `workflow_step_trace.zig` (the trace keys a step by its whole call path).
+    `model_transport.Retirement` keeps `rejected_attempt` and the two releases.
     New: `model_request_stage`, `model_request_kernel` (domain), `model_request_orchestrator` and
     `model_request_child_bindings` (application): the orchestrator has no `anyopaque`, no count and no
     port.
@@ -817,14 +819,91 @@ has been reduce E1 should be kept"): kept for the reduced brittleness; no outcom
   `Assign`, `Validate` and `Build` are absent. The orchestrator's own pin (`only follows stage
   outcomes, and only the runner runs a stage`) covers the stage order's owner.
 
-- **Versions (step 6, 13 November 2026):** three persisted contracts advanced and the other candidates judged unmoved (see
-  SPEC01 E1 "step 6"): `spec-e2e-report` v17 to v18, `e2e-step-event` v2 to v3, `specification-state`
-  v25 to v26. Spelling counts: the report version is named on 66 lines in 15 test files, so the bump
+- **Decisions** (user, on my recommendations; the ones still open are in SPEC01 E1):
+  - **DE1, 12 November 2026** ("yes i accept", on the eight questions the preflight raised): ADR 0030's
+    Acceptance list is the full contract; `input` carries over and E8's definition declaration is not added
+    to the step; a `request-model` step counts once toward the 1,024-step limit and once toward the
+    workflow's execution ceiling, its stages bounded by its own allowance of at most 2 × (1 + `retry-limit`)
+    provider calls; ADR 0039's route rule (`validateRunawayRoutes`) is replaced by branch tests on the kernel
+    orchestrator, and ADR 0005:80-82 and `06-pipeline-nodes.md:281-282` ("exactly one retry") are amended; the
+    test port rule is the mapping below; the proof that gates landing is offline (the request-projection
+    pair, the step-trace pair and named integration assertions) and one live set follows on the user's
+    go-ahead; the report and step-event versions advance in the change with no compatibility reader
+    (SPEC01 §2.12).
+  - **DE1b, 13 November 2026** ("yes for all 3 decisions"): a runtime orchestrator with runner-owned child
+    bindings and one runner invocation per stage (ADR 0030:136-160), not a compiled stage graph; the non-kept
+    request keys are engine-internal in E1 and their removal from the `DataKey` enum is a follow-up (open,
+    SPEC01 E1); steps 2 and 3 first, reported at the end of step 3.
+  - **DE1c, 13 November 2026** ("yes, recommendations approved"): the three evidence keys the E2E harness
+    reads after a step (`provider_authorization_result`, `model_envelope_result`,
+    `provider_invocation_result`) are recorded-retention keys, read through history, and every stage event of
+    a kernel step carries its stage name (`action_started`, `action_completed` and `action_invalid` gain the
+    optional `step_id` of `action_failed`).
+  - **DE1d** ("accept recommendation, and continue implementing") **and DE1e** ("delete the actions and
+    cleanup the tests"), 13 November 2026: `release-model-request` and `release-model-transport` stay,
+    `Retire` is unchanged and the `retire-model-*` operations go with the old lifecycle, no alias; the five
+    detailed request actions no production code calls are deleted, and the test files that used them as
+    fixtures are ported onto the stage seam or deleted with a stated reason.
+  - **DE1f, 13 November 2026** ("all the decisions are approved"): `model_payload_schema_result` is a fourth
+    recorded-retention key; DE1's data-key rule is amended to the implemented one, a kernel step keeps every
+    kept key it had published on every outcome and drops the eight internal keys whatever the outcome (stated
+    once in `model-request-operations.md`, "The `request-model` step's data contract"); the `action.started`,
+    `action.completed` and `action.invalid` log templates are not bumped; one live set, three runs per case,
+    after landing.
+- **Owners and rules:**
+  - `src/domain/model_request_stage.zig` fixes the 17 stages (ADR 0030's 13, with the runaway check, the
+    correction, the re-send and the two pre-call terminations each a stage); `model_request_kernel.zig` holds
+    the step's contract, the transition table (`next`) and the eight engine-internal keys;
+    `model_request_orchestrator.zig` follows only stage outcomes; the runner owns each stage through
+    `executeBound` and bounds attempt-accounting entries by 2 × (1 + `retry-limit`) (`KernelAdmission`, proved
+    at its seam: no real stage sequence reaches it, since the retry authority and ADR 0039's single re-send
+    stop first); `Entry.request_stages` marks the one kernel entry, whose contract, capabilities and
+    parameters `Registry.validate` derives from its stages; `release-model-request` and
+    `release-model-transport` retire exactly `model_transport.released_keys`, the kernel's `produces`, stated
+    once.
+  - A consumer that finds a request's producer goes through `workflow_model.startsRequest` (an architecture
+    pin); a kernel step cannot end a workflow with no consumer.
+  - An observer reads the evidence keys and `model_payload_schema_result` from recorded history, not from the
+    current keys: after a correction the evidence still current when a retry-limit rejection ends the step
+    depends on where the request stopped. `Trace.recordStep` observes every attempt of a step before its last
+    (`observation.attemptRejection`), so a request admitted after a correction or a re-send still reports its
+    protocol rejection, provider stop and capture receipts.
+  - Under a baseline experiment a runaway re-send is a harness stop: the frozen binding's temperature is not
+    the re-send's (unchanged by E1).
+  - A rejection of the step's own closing work names no stage, and no offline run can induce one (that work
+    makes no allocation in the proof run). The debugger archive accepts a call's action when it equals its
+    caller chain's last operation or, for a `request-model` caller, its inference stage
+    (`kernel.callActionBelongsTo`, a reader rule, not a shape).
+  - Scripted tests choose each answer in `FakeLLMProvider`'s `before_invoke` and `after_invoke` hooks, the
+    seam a kernel step has in place of an `invoke-model` step boundary; the runner's optional
+    `request_stage_gate` (consulted before each stage, no capability) stops the provider compatibility probe
+    after its one exchange, and only `Trace` sets it.
+  - The packaged smoke keeps two denial cases (an operation of the removed lifecycle, a stage id), each
+    rejected as an unknown operation; the 13 that passed only because the id is unknown are deleted.
+- **Versions (step 6, 13 November 2026; SPEC01 §2.12):** the 20-10 and 20-18 sets were adjudicated before
+  this change (DE1 decision 8). Each candidate was judged from its actual writer, and a contract whose
+  members and decode rules did not change was not bumped. Advanced, with no compatibility reader: `spec-e2e-report` v17 to v18 (`retry_error` is `Exhaustion.Description`, which gained `stage`),
+  `e2e-step-event` v2 to v3 (it embeds the same `retry_error`) and `specification-state` v25 to v26 (the
+  persisted extraction contract's `parts` are now the `request-model` steps that start each request, with
+  that step's operation and parameters; a v25 state is rejected with `InvalidSpecificationState`; ADR 0041,
+  on hold, names v26 for its own change and takes v27 when it resumes, SPEC01 E0). Judged unmoved:
+  `model-request-debug/v18` and `model-call-evidence/v3` (neither record has a step-action or stage member;
+  only the values of `request_step` follow compiled step ids, and Spec's did not change), `request-source/v1`
+  (`caller` and `preparation` keep their fields; for a `request-model` step the two name the same step),
+  `feature-log/v2` and `event-columns/v3` (no column changed), `baseline-acquisition/v12` (it embeds the
+  report, so a retained acquisition holding a v17 report no longer decodes, as after every earlier bump) and
+  `action.started/v1`, `action.completed/v1` and `action.invalid/v1` (not bumped, DE1f: the row has the
+  `step_id` column, F0002 fixes `message_template_id` as `<event_type>/v1` for every row, and ADR 0031 added
+  the same optional member to `action.failed` without a bump; a bump needs a per-event template version and
+  an F0002 amendment). Spelling counts: the report version is named on 66 lines in 15 test files, so the bump
   edited all of them (SPEC01 C45 stays open); the other two are named in one writer each.
 - **`anyopaque` in the E1 files:** 2 lines, both in `model_request_child_bindings.zig` (the runner-owned
   context and the stage invocation, the same boundary as the other child-binding vtables); none in the
   orchestrator, the kernel contract or the stage list.
-- **Final proof (step 7, 13 November 2026).** Request projection: `evaluations/request-projection/e1-final`
+- **Final proof (step 7, 13 November 2026).** `zig build verify` passes on the final tree (147 of 147 steps,
+  2,100 tests, the unit suite 1,975), as do `test-build-registration` and `test-build-isolation`. The interim
+  projection retakes `e1-step4` and `e1-step5` are deleted; `e1-before` and `e1-final` stay as the evidence of
+  E1. Request projection: `evaluations/request-projection/e1-final`
   was written by a fresh `test-integration` run on the final tree, and `diff -rq` against `e1-before` is
   empty, so what each request sends is unchanged. Step trace: `evaluations/step-trace/e1-final` was frozen
   from the same run (135 scenarios) and compared with `e1-before` by script, every scenario and every file:
@@ -1231,3 +1310,222 @@ benefit; its defect class is none (ADR 0033's structural-only evidence, an appro
   The other eleven owners run in the scripted matrix. Owner mismatch is pinned for absent keys and for keys
   that hold another kind of value. `Registry.validate()` runs on every step and now checks 112 entries and 29
   variants; its cost is not measured.
+
+## E5. Rejections say why
+
+**Implemented 14 November 2026** (user: "yes", to the ten DE5 recommendations; SPEC01 E5, steps 1 to 7).
+**Kept 14 November 2026** (user: "keep E5, update docs", after the live set below; no outcome improvement is
+claimed, and the keep rests on the closed reasons and causes and on unchanged request bytes). **Defect class
+named:** none. A rejection names the authority check,
+the operation cause and the earlier failure that stopped the run, so a failed run is read from its report, step
+event, log and trace instead of from a re-run; no request byte, prompt, admission rule or published output
+changes, and no semantic benefit is claimed. ADR 0041's publish rules are as they were: every `authority` reason
+publishes nothing.
+- **Owners:**
+  - `src/domain/workflow_execution.zig`: `AuthorityReason`, one member per cause class, each documented where
+    it is defined, is the payload of `Rejection.authority`; a bare `.authority` no longer compiles. The tags,
+    `status()` and ADR 0041 are unchanged, and `Rejection.diagnostic()` of an authority rejection is the reason's
+    tag name. `FirstCause` is a closed union of every `Rejection` member but `model_capture`, with the same
+    payloads, and `FirstCause.replacedBy` is the one rule for what is kept: nothing when either rejection is a
+    capture failure or both are the same.
+  - The producers are `workflow_pipeline_runner.zig`, `workflow_model_invocation.zig` (`invocation_result`) and
+    `model_request_orchestrator.zig` (`kernel_stage_outcome`). A denied lease is told from an unavailable clock,
+    and the execution ceiling has its own reason, `step_execution_ceiling`. A reason names the invariant, so every
+    site of one invariant raises one reason: a ledger, view or retained request a step cannot read is
+    `input_view_unavailable` wherever the runner reads it, a retained request that holds no prepared form is
+    `request_state_missing`, the attempt accounting of another stage run than the request's is
+    `accounting_transition` at every step that reads it, and an exhaustion the runner cannot name is
+    `retry_admission` for a kernel stage as for any step.
+  - `error.OperationExecutionFailed` is deleted. Its uses became closed causes in five owner-area sets:
+    `src/domain/step_binding_error.zig` (`RequestPreparation`, `ProviderLifecycle`, `StepBinding` and
+    `Invocation`) and `repair_owner.Error`; a site whose cause an existing error already names uses that error. The six
+    `catch return error.OperationExecutionFailed` sites that discarded `InvalidAtomicRepair` go through
+    `repair_owner.mergeTransition` and `validatedMergeTransition`, which return `LastRepairMissing` for a merge
+    with no record and the domain's `InvalidAtomicRepair` for a record without its permit. `RepairOwnerMismatch`
+    replaces the four generic forms where an owner's binding finds another kind of value at a key it reads and
+    where a generic operation does not serve the owner; an absent key stays `MissingRequiredData`, and an absent or
+    unparsable `owner` is `RepairOwnerUnresolved`.
+  - Two causes were dropped as dead: the runner refuses a step whose retained request has no prepared form
+    (`request_state_missing`) or whose authorization was not prepared before a call (`authorization_denied` for a
+    failed preparation, `cancelled` for a cancelled one) before any binding runs, so `PreparedRequestMissing` and
+    `InvocationAuthorizationNotPrepared` only duplicated those refusals; the bindings state the invariant
+    (`prepared().?`, an `unreachable` arm), and runner-level tests pin both refusals (a call step given a failed and
+    a cancelled authorization; assign-operation, call and runaway given a retained request that holds no prepared
+    form, each with a control that runs). The rule applied, from the contract review and not a user decision: a
+    binding asserts an input only behind a runner refusal that a runner-level test pins, and every other check of
+    an input stays a typed cause (`step_binding_error.zig` states it). Two sites changed cause: a rejected
+    observation at request completion is `ObservationNotValidated` (it was `LifecycleEvidenceForeign`), and a
+    reconciliation merge that finds its replacement still pending is `RepairStateMismatch`, as the parse of that
+    state is (it was `RepairCandidateMissing`).
+  - First cause: `Runner.first_cause` is set in one place, `keepFirstCause` (the earliest replacement wins, and a
+    lone failure leaves it unset), from `model_invocation.reconcile` (`Reconciled { rejection, replaced }`), the
+    runner's post-call error and candidate paths, `actionEnd` for steps and kernel stages, the retry-exhaustion
+    event and the feature-log finalizer (`Finalizer.replaced_fn`, kept by `Runner.finish`). Not sites: a capture
+    failure that wins over a reconciled rejection (the capture is the earlier failure), a non-model operation error
+    replaced by the runtime's stop (the stop caused it), and a logging failure after an applied outcome (it
+    replaces an outcome, not a rejection). A rejection formed from the result of a call whose capture failed is
+    not carried: the capture failure is the call's one cause (SPEC01 DE5 5; 27-observability.md states the rule).
+  - Surfaces: the CLI prints the reason where it printed `failed`; the `run.failed` and action events carry it
+    upper-cased under the existing `diagnostic_code` token rule (no new `LOG_*` code, no F0002 or `event-columns`
+    change); the step-trace line gains `:first=<tag>:<diagnostic>` only when a first cause was kept, followed by
+    a retry exhaustion's counts and stage as the terminal line gives them
+    (`workflow-step-trace/v1` stays: an optional suffix of an observation, like `:stage=`). The harness report
+    has `TerminalRejection.reason` (the closed `AuthorityReason`, non-null exactly when the kind is `authority`;
+    the typed decode rejects a reason on another kind, an authority rejection without one and an unknown reason)
+    and `Report.first_cause`, a record of its own (`FirstCause` in `test/harness/e2e/contracts.zig`) read from
+    `runner.first_cause` by `observation.capture`: its kind is over the writer's `FirstCause`, so a capture
+    failure is unrepresentable and a report that names one does not decode; it pairs `reason` as the terminal
+    record does and carries `exhaustion`, what `retry_error` gives a terminal exhaustion, exactly for the kind
+    `retry_limit`. The step event carries it for a rejected step and both Markdown views print it, and
+    `first_native_rejection` names it (widened to a `TerminalRejection`) in place of the terminal rejection when
+    one was kept.
+- **Rules** (`architecture_test.zig`): one declaration of the enum and a producer for every member (a reason
+  counts as a whole token), none in any production file under `src` but the runner, the request orchestrator and
+  the model-invocation reconciliation (a reason named in any `.authority = .<reason>` elsewhere fails, as does any
+  other production file that names the reason type, and the scan must reach an application workflow); the enum's
+  names are the rows of the 06 table; the old error named nowhere in production, and every cause returned by
+  production code (as a whole token, outside comments, string literals and test blocks) except `HarnessFailureStopped`, which only the harness raises (pinned to it); each of the five
+  merging bindings calls `repair_owner.mergeTransition(` once
+  and the support binding `repair_owner.validatedMergeTransition(` once, so a hand-built transition fails; one
+  `FirstCause` definition, one assignment, and the two places that build one. `src/binding_failure_cause_test.zig`
+  accounts for every cause exactly once (the evidence limits below).
+- **Decided 14 November 2026** (user: "implement the best option"): the shared-helper test (both causes and the
+  accepted transition of `mergeTransition` and `validatedMergeTransition`) and the pin that each merging binding
+  calls the helper stand in place of a per-owner merge fixture for the four owners without a real-fact fixture
+  (extraction, reconciliation, source omission, specification unit): the integration matrix runs their merges, the
+  failure path is the same helper code for every owner, and the text and support bindings run through the helper
+  with real facts in `repair_routes_test.zig`.
+- **Versions.** Advanced: `spec-e2e-report` v18 to v19, `e2e-step-event` v3 to v4, `baseline-acquisition` v12 to
+  v13 (`Facts.workflow` embeds the report), `baseline-score` v4 to v5 (`Row.first_native_rejection` embeds
+  `TerminalRejection`) and, not named by DE5 3, `provider-compatibility-report` v1 to v2 (its
+  `terminal_rejection` is a `TerminalRejection`). Unmoved: `baseline-budget-feasibility/v2`, `baseline-freeze/v3`,
+  `baseline-assessment-inputs/v2`, `e2e-measures/v2`, `e2e-measures-set/v2`, `call-diagnostic-report/v3`,
+  `spec-adjudication-record/v1`, `spec-adjudication/v3`, `event-columns/v3` and `workflow-step-trace/v1`. There is
+  no compatibility reader, so every retained `spec-e2e-report/v18` run (the 20-10, 20-18, E1 and E4 live sets) is
+  unreadable by `e2e-measures` ("report unavailable") and rejected by `adjudicate-spec` at stage `report`, and a
+  baseline acquisition v12, or a plan naming such a run as feasibility evidence, does not decode; the
+  adjudications already applied stand. No skill script, setting or viewer hard-codes a version, and no reader
+  exists for a step event or a baseline score, so the writers' tests pin v4 and v5. No artifact of v19, v4, v13 or v5 has been
+  written (every retained run is v18), so reshaping `first_cause` into its own record and having
+  `first_native_rejection` read it needs no bump. Spellings (C45):
+  `spec-e2e-report/v19` on 77 lines in 16 test files, 7 more naming a superseded version in rejection tests, and
+  13 for the other four.
+- **Evidence (offline; no live run).** Request projection: `evaluations/request-projection/e5-before` (the E4
+  tree's, byte-identical to `e4-final`) and `e5-final` (1,635 files, written by a fresh `test-integration` run on
+  the final tree): `diff -rq` is empty, so what each request sends is unchanged; the four interim retakes (after
+  steps 2 to 5) matched `e5-before` too and are deleted. Step trace: `evaluations/step-trace/e5-before` and
+  `e5-final` (135 scenarios, 817 files): every file is identical, by script and by `diff -rq`. The frozen traces
+  hold only `rejected:retry_limit:*` rejection lines, so none holds an authority reason, an operation cause or a
+  first cause: the identity shows that nothing else moved, not that the new output is right. Unit suite 2,012
+  (end of E4) to 2,056; `test-integration` 128 to 130. The new tests: every reason is its own lower-case
+  diagnostic with status `failed`, and only `authority` carries one; the cause-set and merge-helper tests; first
+  cause pairs (a call error then a stale revision, a refused result that also overshoots the budget, a call error
+  then a failing completion event with a persistent sink failure, a step's rejection then its end event, an
+  exhausted retry allowance then its event, the finalizer and `Runner.finish`) beside lone-failure assertions
+  that no first cause is set; the event test pins each upper-cased code on the action and terminal events; the
+  step-trace test pins the reason line and the `:first=` suffix; the harness tests project one rejection of every
+  tag and every reason through the real writer and strict reader, reject the three bad pairings, read a real
+  runner's first cause into the report and reject the superseded report versions; the first-cause record
+  round-trips every kind and rejects a capture failure, a reason or exhaustion facts beside another kind and an
+  authority or retry kind without them; the first native rejection names the first cause when one was kept; the
+  trace test gives a replaced exhaustion's counts. `zig build verify --summary
+  all` on the final tree: 147 of 147 steps, 2,186 tests passed. The review's fixes (reason moves, two dropped
+  causes, the fault, guard and cause tests, the pins) and the first-cause record leave the request projection (a
+  fresh `test-integration` run) and the step trace (compared in place) identical to `e5-final` (`diff -rq`).
+- **Evidence limits, stated plainly.** Every reason has a test that raises it through the runner (for
+  `kernel_stage_outcome`, the request orchestrator), and `Rejection.diagnostic()` is pinned over every reason.
+  Four of the six reason moves the review asked for (the re-reads of a ledger or view for an accounting
+  transition, and of the view for the ledger-replacement check, now `input_view_unavailable`) are definitional:
+  by the reviewer's trace an earlier check in the same call reads the same view, so no test reaches them; the
+  other two (the attempt accounting of another stage run, and the kernel exhaustion the runner cannot name) are
+  pinned. Of the 57 causes, 13 are raised by an executable test through the production check that names them (the
+  rows of `src/binding_failure_cause_test.zig` and the runner-level rows `withheld_causes`), 27 are named by a
+  test file that mentions them (`asserted_elsewhere`, a naming pin only: it proves the file mentions the cause,
+  not that a test asserts it) and 17 are named by no test. The 17 are listed in `not_triggered` of
+  `src/binding_failure_cause_test.zig`, which a pin keeps complete: a cause joins a set only with a test or a
+  place on that list. The 17 are checks that need state no fixture builds
+  (composition and reference owner state, a specification publication, a repair authorization without its
+  permit), checks of inputs no producer can build (`RequestOutcomeNotTerminal`, `PayloadCheckInconsistent`,
+  `ProviderAuthorizationResultMissing`, `InvocationFailureUnrecorded`) and checks the call chain refuses first
+  (`ObservationNotValidated`, `LifecycleRecordMissing`). The first-cause path is proved by pair tests at the reconcile,
+  runner and finalizer seams; no scripted scenario produces two failures, so none shows it end to end, and the
+  live set's six reports carry `reason` and `first_cause` as null (no authority rejection or replaced failure
+  occurred), so a populated one has not been seen. The harness trace keeps one cause,
+  `HarnessFailureStopped`, for every failure it retains, so the underlying harness error (an `anyerror`) stays in
+  the harness report. The two test glues that finalize (`TestEngineBindings`, the generation `Driver`) call the
+  finalizer directly and keep nothing; production goes through `Runner.finish`, pinned in `architecture_test.zig`.
+  The producer scan reads source text, so a producer that builds a reason through `@FieldType` and `@enumFromInt`
+  would pass it; none exists. The packaged smoke pins no authority reason: no packaged project reaches one, and
+  DE5 6's clause was dropped (SPEC01 DE5 6).
+- **Reported separately** (AGENTS.md "Model output, prompts and evidence"): implementation complete (steps 1 to
+  7); mechanical checks passed (above); semantic benefit none claimed and none demonstrated: the live set (below)
+  shows no difference from the E4 set at three runs per case, and no scored defect is E5's; brittleness: the one
+  name for an operation failure became closed causes and the one `authority` reason became a closed set (counts
+  in the table below), a diagnosability gain that no T5 count measures; scope qualified: one live set of six runs,
+  some causes named by no test (listed and pinned).
+- **Live set, 14 November 2026** (user: "yes perform a live test for E5", scored on "score the run"; build
+  `5b7d56e4`, modified, `spec-e2e-report/v19`; three runs per development case): five of six runs published and
+  passed adjudication; one loan-renewal run did not publish. hello-world 96.43%, 96.43%, 96.43% (no accuracy
+  defect; quote marks around a code span in all three, in one of three in the E4 set); loan-renewal 100% and 96.43%
+  (one minor `unsupported_addition`, "records the loan as renewed", as in one E4 run) and one run unpublished:
+  `invalid` at `repair-source` after 22 sends and 59,703 tokens, because the disposition call marked claims 4 and 5
+  `conflicting` against its instruction and the source review echoed it, ending in `UnlocalizedSourceOmission` (a
+  model limitation; the second retained run to end so, the first on 12 November before E1; it counts as an
+  attempted workload). Tokens 12,712 to 12,781 (hello-world) and 16,426 to 16,675 (published loan-renewal). Three
+  repairs ran, one `delete` each in a hello-world run and both published loan-renewal runs, on the
+  specification-unit route, all helpful. E5 changes no prompt, schema, admission rule or repair decision, so this
+  is no difference at three runs per case, not a benefit. The new report shape held: `e2e-measures` read all six
+  reports and `adjudicate-spec` accepted the five published ones; `reason` and `first_cause` are null in all
+  six, as no authority rejection or replaced failure occurred. Evaluations: `evaluations/e2e/2026-11-14T06-58-*`;
+  adjudications in `evaluations/adjudications/`.
+- **Brittleness counts, E1 to E5 and E8.** "Before" and "Recorded after" are the values the change's own entry
+  records; "Now" was measured on 14 November 2026 on the final E5 tree. A cell that says "not recorded" has no
+  recorded value.
+
+  | Change | Measure | Before | Recorded after | Now |
+  | --- | --- | --- | --- | --- |
+  | E1 | Spec YAML lines (`grep -c ""`) | 994 | 883 | 910 |
+  | E1 | `use:` lines and `call:` lines in the YAML (`grep -c`) | 166 and 66 | 164 and 44 | 165 and 44 |
+  | E1 | Request-lifecycle subgraphs (`model-request-body` references, and `use: request-model` lines) | 6 subgraphs, reached from 17 request sites | none; 17 `request-model` steps | 0 references; 17 steps |
+  | E1 | `anyopaque` lines in `model_request_child_bindings.zig` | not recorded | 2 | 2 |
+  | E2 | Spec YAML lines | 1,104 | 994 | 910 |
+  | E2 | `DataKey` members (`src/domain/pipeline.zig`) | 194 | 170 | 142 |
+  | E2 | `entry(` lines in `src/composition/native_workflow_operations.zig` | 166 | 136 | 107 |
+  | E3 | Startup and provider-bootstrap sequencing, files and lines | 14 files, 2,157 lines | 2 files, 810 lines | 2 files, 813 lines |
+  | E3 | `anyopaque` lines in those sequences' files | 130 | 2 | 2 |
+  | E3 | `anyopaque` lines in `src/application/` | not recorded | 105 | 111 |
+  | E4 | Registered repair operations (`variantEntry(generic_repair.` lines) | 29 | 4 | 4 |
+  | E4 | Action files (`.zig` files under `src/actions`) | 188 | 159 | 159 |
+  | E5 | Names for an operation failure, and uses of the old name | 1 name (`OperationExecutionFailed`), 138 uses (40 production files, 3 harness lines) | 57 names; 0 uses of the old name | 57 names; 0 uses of the old name |
+  | E5 | `authority` rejection producers, and the reasons they name | 148 sites, no reason | 149 sites, 24 reasons | 149 sites, 24 reasons |
+  | E8 | T5.2 raw-string schema-name branches in production (tests) | 19 (89) | 0 (69) | 0 (68) |
+
+  The `code-heuristics` counts, taken with `zig build code-heuristics -- --freeze
+  evaluations/request-projection/e5-final` (T5.4 by hand). No retake exists between the one below and now except
+  E8's T5.2, so each change's share of these is not recorded.
+
+  | Count (report member) | 2 November 2026, `b38628c` (recorded, SPEC01 T5) | Now |
+  | --- | --- | --- |
+  | T5.1 model-facing text in tests (`tests_copying_model_text`) | 19 | 19 |
+  | T5.2 raw-string schema-name branches (`schema_name_branches`) | 20 (tests 88) | 0 (tests 68) |
+  | T5.3 instructions with more than one site (`repeated_instructions`) | 5 at 11 sites | 5 at 11 sites |
+  | T5.4 repair steps whose prompt no non-repair step binds | 6 | 6 |
+  | T5.5 model- or case-specific branches (`model_or_case_branches`) | 0 | 0 |
+  | T5.6 model-facing English outside its owner (`model_text_outside_owner`) | 13 in 4 files | 12 in 4 files |
+
+  **Method.** The `grep -c` and `wc` counts use the pattern in the row on the file named; the `DataKey` members,
+  the `src/actions` files, the `anyopaque` lines, the `.authority = .<reason>` producers and the `error{}` members
+  were counted by a short script over the same files and patterns; the T5 counts are the tool's, and T5.4 is the
+  six `repair-prompt` bindings in `spec.workflow.yaml`, each in a `slot: repair` step, with no non-repair step
+  binding it.
+  **Reading it.** A later change moves what an earlier one measured, so "Now" minus "Recorded after" is not that
+  change's. The YAML's 27 lines between E1's 883 and today's 910 are not attributed in the records (E4 records
+  910 after its edits). `anyopaque` lines in `src/application/` rose by 6 since E3: E1 recorded 2 of them (the
+  runner-owned child-binding context), and the other 4 are not attributed, because no per-file record exists; the
+  files E5 added or rewrote hold none (`step_binding_error.zig`, `workflow_execution.zig`, `repair_owner.zig`,
+  `workflow_model_invocation.zig`, `feature_log_activation.zig`, `feature_logging_runtime.zig`), apart from the
+  runner's 6 that E4 recorded. T5.1's 19 now include two architecture pins whose literal is a word that also
+  occurs in a prompt (the result-schema authority test, E8's rule, and the generic repair operations test, E4's),
+  a recorded limit of the tool
+  (short absence literals match by substring). E5's gain is in payload-free failure names, which no T5 count
+  measures.

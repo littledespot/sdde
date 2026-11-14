@@ -13,14 +13,14 @@ pub const Build = struct {
         const self = context.?;
         const current = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const validated = try requests.readCurrent(&input.step.data, requests.validated_schema);
-        if (current.id() != validated.id()) return error.OperationExecutionFailed;
+        if (current.id() != validated.id()) return error.LifecycleEvidenceForeign;
         const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const payload = try @import("model_payload_schema_workflow.zig").readCurrent(&input.step.data);
         var delta = @import("../domain/model_transport.zig").retire(.rejected_attempt, ledger, current.id(), @import("model_payload_schema_workflow.zig").status(payload)) catch |operation_error| return operation_error;
         const observation = payload.source().source().outcome();
-        if (observation != .validated) return error.OperationExecutionFailed;
+        if (observation != .validated) return error.ObservationNotValidated;
         const rejected = observation.validated;
-        if (rejected.request() != current.prepared()) return error.OperationExecutionFailed;
+        if (rejected.request() != current.prepared()) return error.LifecycleEvidenceForeign;
         const diagnostic: @import("../domain/model_protocol_retry.zig").Diagnostic = switch (payload.outcome()) {
             .schema_rejected => |reason| .{ .schema = reason },
             .not_validated => |source| switch (source.outcome()) {
@@ -28,15 +28,15 @@ pub const Build = struct {
                     .decoder => |failure| .{ .decoder = failure },
                     .composition => |failure| .{ .composition = failure },
                 },
-                .not_decoded => if (rejected.missingFinalText()) .missing_final_text else return error.OperationExecutionFailed,
-                .decoded => return error.OperationExecutionFailed,
+                .not_decoded => if (rejected.missingFinalText()) .missing_final_text else return error.ProtocolRetryNotApplicable,
+                .decoded => return error.ProtocolRetryNotApplicable,
             },
-            .valid => return error.OperationExecutionFailed,
+            .valid => return error.ProtocolRetryNotApplicable,
         };
         var input_id: [64]u8 = undefined;
         const input_bytes = std.fmt.bufPrint(&input_id, "protocol-{d}", .{ledger.revision().value}) catch |operation_error| return operation_error;
         const source = validated.source(.{ .bytes = input_bytes }) catch |operation_error| return operation_error;
-        const prompt = current.protocolPrompt() orelse return error.OperationExecutionFailed;
+        const prompt = current.protocolPrompt() orelse return error.ProtocolPromptMissing;
         var parts: @import("../domain/model_request_handoff.zig").ContentBuffer = undefined;
         const repetition = current.protocolRepetition(rejected, diagnostic) catch |operation_error| return operation_error;
         var prepared = self.action.execute(self.allocator, source, validated.content(&parts), rejected, diagnostic, repetition, prompt) catch |operation_error| return operation_error;
@@ -67,13 +67,15 @@ pub const Runaway = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const current = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-        const prepared = current.prepared() orelse return error.OperationExecutionFailed;
+        // The runner refuses this step before it runs when the retained request has no prepared form
+        // (`request_state_missing`).
+        const prepared = current.prepared().?;
         const payload = try @import("model_payload_schema_workflow.zig").readCurrent(&input.step.data);
         const rejected = switch (payload.source().source().outcome()) {
             .validated => |evidence| evidence,
             .rejected, .cancelled => null,
         };
-        if (rejected) |evidence| if (evidence.request() != prepared) return error.OperationExecutionFailed;
+        if (rejected) |evidence| if (evidence.request() != prepared) return error.LifecycleEvidenceForeign;
         return .{ .outcome = context.?.action.execute(prepared, rejected), .delta = .{} };
     }
 };
@@ -90,9 +92,9 @@ pub const Resend = struct {
         const payload = try @import("model_payload_schema_workflow.zig").readCurrent(&input.step.data);
         var delta = @import("../domain/model_transport.zig").retire(.rejected_attempt, ledger, current.id(), @import("model_payload_schema_workflow.zig").status(payload)) catch |operation_error| return operation_error;
         const observation = payload.source().source().outcome();
-        if (observation != .validated) return error.OperationExecutionFailed;
+        if (observation != .validated) return error.ObservationNotValidated;
         const runaway = observation.validated;
-        if (runaway.request() != current.prepared()) return error.OperationExecutionFailed;
+        if (runaway.request() != current.prepared()) return error.LifecycleEvidenceForeign;
         var prepared = self.action.execute(self.allocator, runaway) catch |operation_error| return operation_error;
         const next = @import("../domain/model_request_handoff.zig").resent(current, prepared, runaway) catch |native_failure| {
             prepared.deinit();

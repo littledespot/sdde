@@ -27,7 +27,7 @@ pub const Terminate = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const facts = try readCurrent(&input.step.data);
-        const authority = input.step.provider_operation orelse return error.OperationExecutionFailed;
+        const authority = input.step.provider_operation orelse return error.ProviderOperationFactsMissing;
         const record = facts.source.assigned.record();
         var delta = self.action.execute(authority.ledger, authority.authority, authority.ledger.revision(), record.id, record.revision, .{ .terminate = facts.terminal }) catch |operation_error| return operation_error;
         delta.data_invalidations.insert(.assigned_provider_operation);
@@ -47,7 +47,7 @@ pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completio
         .cancelled => |cancelled| if (cancelled.eql(id))
             .{ .source = .{ .assigned = assigned }, .terminal = .{ .cancelled = .not_sent }, .outcome = .cancelled }
         else
-            error.OperationExecutionFailed,
-        .prepared => error.OperationExecutionFailed,
+            error.LifecycleEvidenceForeign,
+        .prepared => error.OperationOutcomeNotAdmitted,
     };
 }

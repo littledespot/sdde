@@ -33,15 +33,15 @@ pub const Authorize = struct {
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const rejection = owned.read(&input.step.data, spec.checked_schema, .unit_rejected) catch |operation_error| return operation_error;
-        const candidate = owned.read(&input.step.data, spec.parsed_schema, .parsed) catch |operation_error| return operation_error;
+        const rejection = owned.readNative(&input.step.data, spec.checked_schema, .unit_rejected) catch |operation_error| return operation_error;
+        const candidate = owned.readNative(&input.step.data, spec.parsed_schema, .parsed) catch |operation_error| return operation_error;
         const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const authorized = repair.authorize(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, rejection, guidance) catch |err| return reject(self.allocator, authorization_schema, owner, err);
         owner.payload = .{ .repair_authorization = .{ .authorization = authorized } };
         var result = owned.publish(self.allocator, authorization_schema, owner, if (authorized.operation == .delete) .more else .ok) catch |operation_error| return operation_error;
-        result.delta.repair_transition = .{ .authorized = authorized.retry orelse return error.OperationExecutionFailed };
+        result.delta.repair_transition = .{ .authorized = authorized.retry orelse return error.RepairPermitMissing };
         return result;
     }
 };
@@ -53,7 +53,7 @@ pub const BuildInput = struct {
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
+        const state = owned.readNative(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
         const packet = repair.packet(self.allocator, try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), state.authorization, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
@@ -67,7 +67,7 @@ pub const Parse = struct {
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
+        const state = owned.readNative(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
         const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
@@ -92,8 +92,8 @@ pub const Merge = struct {
     normalizer: @import("../ports/unicode_normalizer.zig").Normalizer,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
-        const candidate = owned.read(&input.step.data, spec.parsed_schema, .parsed) catch |operation_error| return operation_error;
+        const state = owned.readNative(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
+        const candidate = owned.readNative(&input.step.data, spec.parsed_schema, .parsed) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const context_value = try spec.readContext(&input.step.data);
@@ -104,7 +104,7 @@ pub const Merge = struct {
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(spec.parsed_schema.key)] = values.adopt(self.allocator, spec.parsed_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (effects.invalidates) |key| delta.data_invalidations.insert(key);
-        delta.repair_transition = (owner.payload.parsed.last_repair orelse return error.OperationExecutionFailed).transition(.native) catch return error.OperationExecutionFailed;
+        delta.repair_transition = try repair_owner.mergeTransition(owner.payload.parsed.last_repair, .native);
         return .{ .outcome = .ok, .delta = delta };
     }
 };

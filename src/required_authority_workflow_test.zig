@@ -39,18 +39,18 @@ const Script = struct {
     calls: usize = 0,
     fn inputs(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, input.step.data) catch return error.InvocationFailureUnrecorded;
         errdefer owned.destroy(owner);
-        var source = test_data.fixture(owner.arena.allocator(), self.kind) catch return error.OperationExecutionFailed;
+        var source = test_data.fixture(owner.arena.allocator(), self.kind) catch return error.InvocationFailureUnrecorded;
         switch (self.fault) {
             .none, .malformed => {},
             .missing_support => source.evidence = &.{},
             .conflict => {
-                source.forced_gaps = owner.arena.allocator().dupe(a.ForcedGap, &.{.{ .requirement = source.seeds[0].id, .reason = .conflicting }}) catch return error.OperationExecutionFailed;
+                source.forced_gaps = owner.arena.allocator().dupe(a.ForcedGap, &.{.{ .requirement = source.seeds[0].id, .reason = .conflicting }}) catch return error.InvocationFailureUnrecorded;
             },
             .stale => source.candidates = &.{},
             .unknown => {
-                const seeds = owner.arena.allocator().dupe(a.Seed, source.seeds) catch return error.OperationExecutionFailed;
+                const seeds = owner.arena.allocator().dupe(a.Seed, source.seeds) catch return error.InvocationFailureUnrecorded;
                 seeds[0].id.contract_version = 999;
                 source.seeds = seeds;
                 source.evidence = &.{};
@@ -58,16 +58,16 @@ const Script = struct {
             },
         }
         owner.payload = .{ .inputs = source };
-        return owned.publish(self.allocator, native.inputs_schema, owner, .ok) catch return error.OperationExecutionFailed;
+        return owned.publish(self.allocator, native.inputs_schema, owner, .ok) catch return error.InvocationFailureUnrecorded;
     }
     fn observation(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, input.step.data) catch return error.InvocationFailureUnrecorded;
         errdefer owned.destroy(owner);
-        const source = owned.read(&input.step.data, native.inputs_schema, .inputs) catch return error.OperationExecutionFailed;
-        const observations = test_data.observe(owner.arena.allocator(), source) catch return error.OperationExecutionFailed;
-        owner.payload = .{ .raw = if (self.fault == .malformed) "{\"score\":100,\"passed\":true}" else std.json.Stringify.valueAlloc(owner.arena.allocator(), observations, .{}) catch return error.OperationExecutionFailed };
-        return owned.publish(self.allocator, native.raw_schema, owner, .ok) catch return error.OperationExecutionFailed;
+        const source = owned.read(&input.step.data, native.inputs_schema, .inputs) catch return error.InvocationFailureUnrecorded;
+        const observations = test_data.observe(owner.arena.allocator(), source) catch return error.InvocationFailureUnrecorded;
+        owner.payload = .{ .raw = if (self.fault == .malformed) "{\"score\":100,\"passed\":true}" else std.json.Stringify.valueAlloc(owner.arena.allocator(), observations, .{}) catch return error.InvocationFailureUnrecorded };
+        return owned.publish(self.allocator, native.raw_schema, owner, .ok) catch return error.InvocationFailureUnrecorded;
     }
     fn protected(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
         context.?.calls += 1;

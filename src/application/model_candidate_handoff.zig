@@ -9,7 +9,7 @@ pub const Accepted = struct { candidate: Candidate, evidence: *const @import("..
 pub fn read(view: *const data.View) @import("../ports/workflow_operation_registry.zig").Error!Candidate {
     const request = try requests.readCurrent(view, requests.prepared_schema);
     const packet = @import("pipeline_values.zig").read(view, requests.packet_schema, packets.Packet) catch |operation_error| return operation_error;
-    if (request.packet() != packet) return error.OperationExecutionFailed;
+    if (request.packet() != packet) return error.CandidatePacketForeign;
     return (try readAdmitted(view)).candidate;
 }
 
@@ -17,7 +17,7 @@ pub fn read(view: *const data.View) @import("../ports/workflow_operation_registr
 pub fn readAccepted(view: *const data.View) @import("../ports/workflow_operation_registry.zig").Error!Accepted {
     const admitted = try readAdmitted(view);
     const ledger = @import("pipeline_values.zig").read(view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch |operation_error| return operation_error;
-    _ = @import("../domain/model_candidate_origin.zig").Origin.fromAccepted(ledger, admitted.evidence) orelse return error.OperationExecutionFailed;
+    _ = @import("../domain/model_candidate_origin.zig").Origin.fromAccepted(ledger, admitted.evidence) orelse return error.CandidateOriginUnavailable;
     return admitted;
 }
 fn readAdmitted(view: *const data.View) @import("../ports/workflow_operation_registry.zig").Error!Accepted {
@@ -25,9 +25,9 @@ fn readAdmitted(view: *const data.View) @import("../ports/workflow_operation_reg
     const ledger = @import("pipeline_values.zig").read(view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch |operation_error| return operation_error;
     return switch (result.outcome()) {
         .valid => |proof| switch (proof.candidate().association().result()) {
-            .complete => |complete| .{ .evidence = proof, .candidate = .{ .body = proof.candidate().content(), .origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, complete.association().operationId()) orelse return error.OperationExecutionFailed } },
-            .stopped, .failed => error.OperationExecutionFailed,
+            .complete => |complete| .{ .evidence = proof, .candidate = .{ .body = proof.candidate().content(), .origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, complete.association().operationId()) orelse return error.CandidateOriginUnavailable } },
+            .stopped, .failed => error.CandidateNotAdmitted,
         },
-        .schema_rejected, .not_validated => error.OperationExecutionFailed,
+        .schema_rejected, .not_validated => error.CandidateNotAdmitted,
     };
 }

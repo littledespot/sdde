@@ -561,7 +561,7 @@ pub const Driver = struct {
         const accounted_before = self.runner.tokenLedger().accounted_operations.items.len;
         const result = self.runner.bindings().invokeStep(id);
         if (self.trace) |trace| for (self.runner.selected.graph.authority.steps) |*entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes)) {
-            trace.record(entry, result) catch |err| std.debug.panic("step trace: {s}", .{@errorName(err)});
+            trace.record(entry, result, self.runner.first_cause) catch |err| std.debug.panic("step trace: {s}", .{@errorName(err)});
             break;
         };
         // A native candidate rejection is an applied invalid outcome, whereas

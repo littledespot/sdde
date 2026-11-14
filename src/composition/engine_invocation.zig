@@ -116,7 +116,10 @@ pub const Assembly = struct {
         return cast(context).pipeline_runner.?.bindings().invokeStep(id);
     }
     fn finalize(context: *anyopaque, outcome: run_outcome.Outcome) run_outcome.Outcome {
-        return if (cast(context).finalizer) |finalizer| finalizer.finish(outcome) else outcome;
+        const self = cast(context);
+        // The runner holds the same finalizer and keeps what it replaces; without a runner nothing ran.
+        if (self.pipeline_runner) |*runner| return runner.finish(outcome);
+        return if (self.finalizer) |finalizer| finalizer.finish(outcome) else outcome;
     }
     fn cast(context: *anyopaque) *Assembly {
         return @ptrCast(@alignCast(context));

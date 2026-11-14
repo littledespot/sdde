@@ -46,7 +46,7 @@ pub fn bindRequestKernel(comptime stage_types: []const type) operations.Binding 
             .capabilities = Capabilities(derived).list,
         };
         fn refuse(_: ?*anyopaque, _: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {
-            return error.OperationExecutionFailed;
+            return error.KernelBindingNotInvocable;
         }
     };
     return .{ .context = null, .implementation = &compiled.implementation };

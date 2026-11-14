@@ -165,10 +165,15 @@ and produces no `NodeDelta`.
    - **Cancellation mapping.** Cancellation under a lock is still reported as a logging
      failure; fixing that is separate known work. A cancellation check between steps
      never skips a lock release.
-   - **The policy-transition coordinator** converts only once its deferred historical
-     authority (§14.10) is decided. Prior-run crash finalization's authority is
-     [ADR 0026](0026-header-identity-log-retention.md)'s (amended 14 November 2026); the
-     same-run transition's is not.
+   - **The policy-transition coordinator.** Prior-run crash finalization's authority is
+     [ADR 0026](0026-header-identity-log-retention.md)'s (amended 14 November 2026). The
+     same-run transition's authority is decided (user, 14 November 2026, approving the
+     recommendation): its successor is execution-local, as §9.4 keeps every changed candidate,
+     so no committed bootstrap authority, durable lineage or pointer commit precedes the
+     switch ([ADR 0009](0009-atomic-workflow-execution.md)). The validator's checks (same
+     feature and run, new binding and policy IDs, a transition-compatible policy) are the
+     whole authority for it. No production code switches policy mid-run today, and no text
+     says which event would produce a changed logging candidate during a run.
    - **Logging-internal pipeline data.** The logging envelope and its compiler-locked
      `DataKey`s (§6) are replaced by function-local values only in the logging change
      itself.
@@ -309,7 +314,8 @@ All offline, for each conversion:
 
 ## Not decided here
 
-- The policy-transition coordinator's deferred historical authority (§14.10).
+- The order of prior-run crash finalization against the current activation
+  ([ADR 0026](0026-header-identity-log-retention.md)).
 - Reporting cancellation under a log lock as cancellation instead of a logging failure.
   That is separate known work, and it changes the shared sink contract.
 - The order of the remaining logging conversions after startup has been measured.

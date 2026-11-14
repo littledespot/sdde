@@ -527,7 +527,8 @@ and [§11](../11-path-validation.md); Plan design writes their entries.
 Proposed, no code — shared: the broader preset-registry design (identity ledgers, capture
 budgets, package and asset records; [§10](../10-toolchain-presets.md)), the persisted bootstrap
 authority state with its compiled engine policy and change routing
-([§9](../09-configuration.md); the mid-run logging transition is an open decision in SPEC01).
+([§9](../09-configuration.md); the mid-run logging transition's successor is execution-local,
+[ADR 0032](../../decisions/0032-engine-routines.md)).
 The earlier feature state-ID ledger is superseded: no project state-ID ledger exists, and
 identities are execution-local and published with the output
 ([§7.3](../07-domain-representations.md#73-canonical-state-and-model-request-identity)). The earlier preset tie-break `(layerRank, presetId,

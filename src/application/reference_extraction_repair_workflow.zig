@@ -30,16 +30,16 @@ pub const Authorize = struct {
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const prior = try extraction.read(&input.step.data, extraction.text_schema, .text_validated);
+        const prior = try extraction.readNative(&input.step.data, extraction.text_schema, .text_validated);
         const rejected = values.read(&input.step.data, extraction.selections_schema, reference.Value) catch |operation_error| return operation_error;
         const rejection: repair.Rejection = switch (rejected.payload().*) {
             .token_classification_rejected => |diagnostic| .{ .token_classifications = diagnostic },
-            else => return error.OperationExecutionFailed,
+            else => return error.RepairOwnerMismatch,
         };
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         owner.payload = .{ .authorization = repair.authorize(owner.arena.allocator(), try facts(&input.step.data, prior.payload().text_validated), rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err) };
-        const permit = owner.payload.authorization.retry orelse return error.OperationExecutionFailed;
+        const permit = owner.payload.authorization.retry orelse return error.RepairPermitMissing;
         var result = owned.publish(self.allocator, authorization_schema, owner, .ok) catch |operation_error| return operation_error;
         result.delta.repair_transition = .{ .authorized = permit };
         return result;
@@ -53,8 +53,8 @@ pub const BuildInput = struct {
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const authorization = owned.read(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
-        const prior = try extraction.read(&input.step.data, extraction.text_schema, .text_validated);
+        const authorization = owned.readNative(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
+        const prior = try extraction.readNative(&input.step.data, extraction.text_schema, .text_validated);
         const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
         const candidates = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
         const literals = values.read(&input.step.data, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
@@ -72,7 +72,7 @@ pub const Parse = struct {
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const authorization = owned.read(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
+        const authorization = owned.readNative(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
         const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
@@ -94,9 +94,9 @@ pub const Merge = struct {
     normalizer: @import("../ports/unicode_normalizer.zig").Normalizer,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const authorization = owned.read(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
-        const replacement = owned.read(&input.step.data, result_schema, .replacement) catch |operation_error| return operation_error;
-        const prior = try extraction.read(&input.step.data, extraction.text_schema, .text_validated);
+        const authorization = owned.readNative(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
+        const replacement = owned.readNative(&input.step.data, result_schema, .replacement) catch |operation_error| return operation_error;
+        const prior = try extraction.readNative(&input.step.data, extraction.text_schema, .text_validated);
         const owner = reference.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer reference.destroy(owner);
         const current = try facts(&input.step.data, prior.payload().text_validated);
@@ -105,7 +105,7 @@ pub const Merge = struct {
         defer canonical.deinit(arena);
         owner.payload = .{ .text_validated = repair.merge(arena, canonical, current, authorization, replacement.value, replacement.origin) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
-        delta.repair_transition = (owner.payload.text_validated.last_repair orelse return error.OperationExecutionFailed).transition(.native) catch return error.OperationExecutionFailed;
+        delta.repair_transition = try repair_owner.mergeTransition(owner.payload.text_validated.last_repair, .native);
         delta.data_replacements[@intFromEnum(extraction.text_schema.key)] = values.adopt(self.allocator, extraction.text_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
         for (effects.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };

@@ -15,7 +15,7 @@ pub fn run(children: bindings.ChildBindings) execution.Applied {
             .rejected => return applied,
             .outcome => |tag| tag,
         };
-        switch (kernel.next(stage, outcome) orelse return .{ .rejected = .authority }) {
+        switch (kernel.next(stage, outcome) orelse return .{ .rejected = .{ .authority = .kernel_stage_outcome } }) {
             .stage => |following| stage = following,
             .finish => |tag| return .{ .outcome = tag },
         }

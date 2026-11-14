@@ -153,7 +153,7 @@ test "a stage that fails before the call ends the request without closing it" {
 }
 
 test "a runner rejection ends the request at once and is returned unchanged" {
-    const rejections = [_]execution.Rejection{ .cancelled, .deadline_exhausted, .authority, .{ .operation_failed = error.OperationExecutionFailed } };
+    const rejections = [_]execution.Rejection{ .cancelled, .deadline_exhausted, .{ .authority = .kernel_stage }, .{ .operation_failed = error.InvocationFailureUnrecorded } };
     for (rejections) |rejection| {
         for ([_]Stage{ .prepare_request, .invoke_model, .admit_response, .close_request, .build_protocol_retry }) |stage| {
             // Only the correction stage needs an invalid response to be reached.
@@ -190,7 +190,7 @@ test "an outcome a stage's contract does not allow is an authority rejection and
         } };
         defer spy.deinit();
         const result = orchestrator.run(spy.children());
-        try std.testing.expectEqualDeep(execution.Applied{ .rejected = .authority }, result);
+        try std.testing.expectEqualDeep(execution.Applied{ .rejected = .{ .authority = .kernel_stage_outcome } }, result);
         try std.testing.expectEqual(case.stage, spy.seen.items[spy.seen.items.len - 1]);
     }
 }

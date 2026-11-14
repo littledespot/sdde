@@ -152,22 +152,16 @@ The persisted stage status is advisory until these current artifacts pass. This 
 ### 14.4 Atomic-repair operation
 
 - The YAML-selected repair operation invokes ordering and selection, then
-  `ClassifyRepairAuthorizationPurposeAction`.
-- The ordinary branch invokes `CreateRepairAuthorizationAction`; the runner applies
+  `CreateRepairAuthorizationAction`; the runner applies
   native progress and operation/defect accounting under [§22.7](22-repair.md#227-repair-retry-limit-and-escalation).
-  The unsupported-content branch invokes
-  `CreateNoInventionClarificationReplacementAuthorizationAction` and consumes only its
-  unit-local one-shot flag during scope validation. No owner of the generic operations has
-  this branch (ADR 0033, DE4 5); SPEC01 §10 keeps the wider keep-or-remove question for
-  this design text.
 - It performs one authorized repair attempt and returns its typed result.
 - A further attempt, candidate validation, clarification, or terminal outcome is a YAML
   transition, not an internal successor choice.
 - Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (implemented), this
   repair operation is a sequence of YAML steps: `authorize-repair`, `build-repair-input`,
   `request-model` (ADR 0030, which takes no `owner`), `parse-repair` and `merge-repair`.
-  The four repair operations each take the route's `owner`. The ordering, selection and
-  classification above run inside `authorize-repair`. It is still one authorized attempt.
+  The four repair operations each take the route's `owner`. The ordering and selection
+  above run inside `authorize-repair`. It is still one authorized attempt.
 
 ### 14.5 User-review operation
 
@@ -264,21 +258,22 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
 
 ### 14.10 `FeatureLogPolicyTransitionOrchestrator`
 
-- This instrumentation-only orchestrator switches an existing run after **any** committed
-  successor bootstrap authority whose validated change plan sets `transitionFeatureLogging:
-  true`, including mixed specification/planning changes.
-- Before refresh, startup reconstructs the historical policy solely from the current persisted
-  `BootstrapAuthorityState.components.compiledEnginePolicy.loggingPolicyFragment`; until
-  that authority validation finishes, only bounded content-free emergency telemetry is
-  available.
-- Ordinary feature events continue under that historical binding while the successor bootstrap
-  candidate is evaluated.
+- This instrumentation-only orchestrator switches an existing run to a changed logging policy
+  after a route adopts the changed candidate ([§9.4](09-configuration.md)), when the validated
+  change plan sets `transitionFeatureLogging: true`, including mixed specification/planning
+  changes.
+- The successor is execution-local ([ADR 0032](../decisions/0032-engine-routines.md), decided
+  14 November 2026, with [ADR 0009](../decisions/0009-atomic-workflow-execution.md)): no
+  bootstrap authority is committed for it, no pointer advances and no durable lineage is
+  written. The run's current policy and binding are the ones its activation built in memory.
+  `ValidateFeatureLogPolicyTransitionAction`
+  ([13-09](actions/13-09-logging.md)) is its whole authority.
+- Ordinary feature events continue under the current binding while the successor candidate is
+  evaluated.
 
-- After the validated policy handoff, the runner pauses new workflow nodes and buffers only
+- After the route adopts the changed candidate, the runner pauses new workflow nodes and buffers only
   bounded typed `WorkflowTelemetryFact` values, preserving each active compiled workflow's
   registry-validated shortcode.
-- The successor state's durable lineage supplies the exact parent ID and materialized change
-  plan.
 - In the same live run, the orchestrator builds/validates both policies/bindings, then visits
   each enabled stream in fixed `event`, then `prompt` order.
 - It acquires the physical lock from the historical binding and converts that single token into
@@ -289,7 +284,8 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
 - After all per-stream locks are released, the mixed-state assembler builds/validates one
   complete successor sink; only then does `ActivateFeatureLogPolicyTransitionAction` swap the
   run-local observer and flush buffered facts through the new definitions/policy.
-- No normal event/model/node occurs between bootstrap-pointer commit and this switch.
+- No normal event/model/node occurs between the route's adoption of the changed candidate and
+  this switch.
 - Any failure emits the one fixed emergency record and enters `block_new_work`; the engine never
   continues on an obsolete or partially switched policy.
 

@@ -175,6 +175,47 @@ foreign key; only that key's native validated resolution can do so. The canonica
 retry owner's suspended-parent relation may permit a child repair to continue,
 but grants no resolution of its parent.
 
+#### Runner rejection reasons
+
+The runner and a kernel binding stop a run on their own authority with the `authority`
+rejection, which carries one closed reason (`AuthorityReason`,
+`src/domain/workflow_execution.zig`). A reason names the invariant that was checked,
+never a call site or a caller, so one reason covers every producer of its class. It
+sits beside the tag, which keeps its status (`failed`) and its publish rule
+([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 7.7): no
+tag is added, merged or split. The reason is the rejection's diagnostic, so the command
+line, the report, the step event and trace, and the action and terminal events name it;
+an event upper-cases it under the existing `diagnostic_code` token rule (for example
+`REGISTRY_DRIFT`) and gains no code family. The enum's documentation states each
+member's exact cases.
+
+| Reason | Class | The run stops when |
+| --- | --- | --- |
+| `registry_drift` | registry and graph | the registry, compiled graph or invocation operation drifted from what was compiled |
+| `step_unresolved` | registry and graph | a compiled step names no step, operation or contract variant the registry holds |
+| `step_contract_mismatch` | step binding | a step's projection, contract, capabilities or permission disagree with its registered operation |
+| `gate_drift` | step binding | a gate a step carries is no longer the registered gate |
+| `model_binding_mismatch` | step binding | a step's model binding disagrees with its parameters or does not resolve |
+| `input_view_unavailable` | request state | a step's input view, request ledger, resources or retained request cannot be built, or the ledger or request it carries is not the runner's own |
+| `request_state_missing` | request state | the retained request holds no prepared form, or the runner's model accounting is absent |
+| `lifecycle_evidence` | request state | attempt, operation, closure, call-context or origin evidence is missing or disagrees with the request |
+| `authorization_evidence` | authorization | authorization evidence is unreadable, carries no bound deadline or disagrees with the deadline it bound |
+| `authorization_denied` | authorization | the authorization's preparation failed, or its lease is foreign, mismatched, stale or already consumed (a cancelled preparation is `cancelled`) |
+| `authorization_clock_unavailable` | authorization | the authorization clock is unavailable |
+| `repair_permit_mismatch` | repair and retry | a retry-bearing step's repair permit or request assignment does not match |
+| `repair_transition` | repair and retry | a repair transition is missing, forbidden by the step's repair role or unchanged beyond its limit |
+| `retry_admission` | repair and retry | a retry allowance cannot be admitted or its exhaustion described |
+| `accounting_transition` | accounting | a runner-owned attempt or provider-operation transition cannot be prepared or applied, or the attempt accounting belongs to another stage run than the request |
+| `step_execution_ceiling` | ceiling | the step execution ceiling is spent |
+| `publication_finalizer` | publication | the publication finalizer refused to let publication proceed |
+| `invocation_result` | invocation | a model invocation result is unreadable or disagrees with the call it records |
+| `outcome_undeclared` | outcome and delta | an operation returned an outcome its contract does not declare |
+| `candidate_delta` | outcome and delta | a candidate's diagnostic, ledger replacement, delta or application is not accepted |
+| `iteration_contract` | iteration | an iteration descriptor and the candidate's iteration transition disagree |
+| `kernel_stage` | kernel | a kernel stage does not match its registered stage |
+| `kernel_stage_outcome` | kernel | a kernel stage answered with an outcome its stage table does not allow |
+| `kernel_key_drop` | kernel | the kernel's engine-internal keys cannot be dropped at the end of the step |
+
 #### Execution-local information stack
 
 Configured response composition (ADR 0016) uses this same envelope; there is no

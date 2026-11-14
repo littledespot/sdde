@@ -173,6 +173,40 @@ test "runner-owned grammar retains rules reference names and exact identity afte
     try std.testing.expectError(error.StaleNamingPolicy, naming.validateBinding(std.testing.allocator, compiled.policy, safety.value(successor), normalize, fold));
 }
 
+test "the path-token scan binding needs the data resource its step names" {
+    const values = @import("application/pipeline_values.zig");
+    const path_token = @import("application/path_token_workflow.zig");
+    const compilation = @import("domain/workflow_compilation.zig");
+    const owner = try authority(std.testing.allocator);
+    const current = try values.adopt(std.testing.allocator, @import("application/toolchain_workflow_values.zig").valid, safety.ValidToolchain, safety.Owner, owner, safety.value, safety.deinitOwner, safety.retainedBytes(owner));
+    defer values.destroy(current);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ids: fixture.IdSource = .{};
+    const inputs = try fixture.prepare(arena.allocator(), &ids, try ingest(arena.allocator(), "notes.md", "source\n"));
+    const compiled = try steps.buildGrammar(normalize, fold, arena.allocator(), try compile_action.execute(arena.allocator(), safety.value(owner)), safety.value(owner), inputs);
+    const grammar_value = try values.create(std.testing.allocator, path_token.grammar_schema, grammar.Grammar, compiled);
+    defer values.destroy(grammar_value);
+    const inputs_value = try values.create(std.testing.allocator, @import("application/reference_evidence_workflow.zig").inputs_schema, @import("domain/reference_evidence.zig").Inputs, inputs);
+    defer values.destroy(inputs_value);
+    var view: @import("domain/pipeline_data.zig").View = .{};
+    view.slots[@intFromEnum(@import("application/toolchain_workflow_values.zig").valid.key)] = current;
+    view.slots[@intFromEnum(path_token.grammar_schema.key)] = grammar_value;
+    view.slots[@intFromEnum(@import("application/reference_evidence_workflow.zig").inputs_schema.key)] = inputs_value;
+    const parameters = [_]compilation.CompiledParameter{.{ .id = .{ .bytes = "text" }, .value = .{ .resource = .{ .bytes = "text" } } }};
+    const step: compilation.CompiledStep = .{ .id = .{ .bytes = "scan" }, .operation_id = .{ .bytes = "scan-path-tokens" }, .parameters = &parameters, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{.ok}, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+    var scan: path_token.Scan = .{ .allocator = std.testing.allocator, .action = scan_action };
+    const log: @import("domain/pipeline.zig").WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("PATH"));
+    // The text is the step's data resource: none bound, or a resource of another kind, is no text to scan.
+    const prompt = [_]compilation.CompiledResource{.{ .id = .{ .bytes = "text" }, .content = .{ .prompt = "a prompt is no data resource" } }};
+    for ([_][]const compilation.CompiledResource{ &.{}, &prompt }) |resources| {
+        try std.testing.expectError(error.PathTokenTextMissing, path_token.Scan.invoke(&scan, .{ .step = .{ .data = view, .step = &step, .resources = resources, .model_binding = null, .log = log } }));
+    }
+    const data_resource = [_]compilation.CompiledResource{.{ .id = .{ .bytes = "text" }, .content = .{ .data = "Dockerfile" } }};
+    const scanned = try path_token.Scan.invoke(&scan, .{ .step = .{ .data = view, .step = &step, .resources = &data_resource, .model_binding = null, .log = log } });
+    values.destroy(scanned.delta.data_writes[@intFromEnum(path_token.scan_schema.key)].?);
+}
+
 test "basename glob matching is whole-token Unicode-aware and has no regex fallback" {
     const rule: rules.Rule = .{ .id = .{ .bytes = "r" }, .kind = .glob, .value = "file[0-9]?*", .case_sensitive = true };
     try rules.validate(&.{rule});

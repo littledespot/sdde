@@ -17,7 +17,7 @@ pub fn validateReplacement(input: *const data.View, contract: pipeline.NodeContr
         if (selection.completes(contract.requires)) {
             const facts = try readClosure(input);
             if (outcome != facts.outcome) return error.InvalidModelRequestLifecycleTransition;
-            try (operations orelse return error.OperationExecutionFailed).validateRequestClosure(request.id());
+            try (operations orelse return error.RequestLifecycleLedgerMissing).validateRequestClosure(request.id());
             try identity.validateLifecycleSuccessor(current, next, request.id(), facts.expected_status, .{ .terminal = facts.reason });
         } else {
             if (outcome != .ok) return error.InvalidModelRequestLifecycleTransition;

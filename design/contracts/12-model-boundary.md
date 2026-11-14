@@ -502,9 +502,8 @@ findings. Only complete native collection validation permits authority advanceme
 - An admitted need is a normal semantic pause, consumes no operation-local retry,
   and is never sent through repair to manufacture content. Returning the model's
   clarification variant alone does not admit the need.
-- A malformed need is an invalid model candidate. The existing one-use no-invention
-  replacement may yield a clarification only for an identifiable authority gap;
-  it cannot turn an interpretation failure into a request for user information.
+- A malformed need is an invalid model candidate. An interpretation failure never becomes a
+  request for user information.
 - The engine validates/deduplicates the need, assigns an `SNN`, `PNN`, or `TNN` ID when
   necessary, persists its form under `clarify/`, and enters the matching clarification-pending
   state.

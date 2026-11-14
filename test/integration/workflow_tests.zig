@@ -890,7 +890,7 @@ const ReferenceCitationTestProducer = struct {
     const evidence = @import("../../src/domain/reference_evidence.zig");
     const values = @import("../../src/application/pipeline_values.zig");
     fn propose(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
-        const source = values.read(&input.step.data, bindings.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, bindings.inputs_schema, evidence.Inputs) catch return error.InvocationFailureUnrecorded;
         const chunk = source.chunks.entries[0];
         const proposal: evidence.CitationProposal = .{
             .source_id = chunk.source_id,
@@ -904,8 +904,8 @@ const ReferenceCitationTestProducer = struct {
         });
     }
     fn observe(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
-        const result = values.read(&input.step.data, bindings.citations_schema, evidence.ValidatedCitations) catch return error.OperationExecutionFailed;
-        if (result.entries.len != 1) return error.OperationExecutionFailed;
+        const result = values.read(&input.step.data, bindings.citations_schema, evidence.ValidatedCitations) catch return error.InvocationFailureUnrecorded;
+        if (result.entries.len != 1) return error.InvocationFailureUnrecorded;
         context.?.observed += 1;
         return .{ .outcome = .ok, .delta = .{} };
     }
@@ -919,11 +919,11 @@ const ReferenceExtractionTestProducer = struct {
     const owned = @import("../../src/domain/reference_candidate_value.zig");
     fn propose(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
         const allocator = std.testing.allocator;
-        const source = ReferenceCitationTestProducer.values.read(&input.step.data, ReferenceCitationTestProducer.bindings.inputs_schema, ReferenceCitationTestProducer.evidence.Inputs) catch return error.OperationExecutionFailed;
+        const source = ReferenceCitationTestProducer.values.read(&input.step.data, ReferenceCitationTestProducer.bindings.inputs_schema, ReferenceCitationTestProducer.evidence.Inputs) catch return error.InvocationFailureUnrecorded;
         var arena: std.heap.ArenaAllocator = .init(allocator);
         defer arena.deinit();
         const scratch = arena.allocator();
-        const entries = scratch.alloc(extraction.RawResult, if (context.?.mode == .missing) 0 else source.chunks.entries.len) catch return error.OperationExecutionFailed;
+        const entries = scratch.alloc(extraction.RawResult, if (context.?.mode == .missing) 0 else source.chunks.entries.len) catch return error.InvocationFailureUnrecorded;
         for (entries, 0..) |*entry, index| {
             const chunk = source.chunks.entries[if (context.?.mode == .duplicate) 0 else index];
             entry.* = .{
@@ -935,7 +935,7 @@ const ReferenceExtractionTestProducer = struct {
                     // Claim wording is quoted from the source (ADR 0036); the reason is model text.
                     .unbound => .{ .response = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"Read src/main.zig.\"},\"token_classifications\":[]}" },
                     .passive, .unknown_literal => response: {
-                        const registry = ReferenceCitationTestProducer.values.read(&input.step.data, @import("../../src/application/passive_literal_workflow.zig").registry_schema, @import("../../src/domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
+                        const registry = ReferenceCitationTestProducer.values.read(&input.step.data, @import("../../src/application/passive_literal_workflow.zig").registry_schema, @import("../../src/domain/passive_literals.zig").Registry) catch return error.InvocationFailureUnrecorded;
                         var ordinal: u32 = if (context.?.mode == .unknown_literal) std.math.maxInt(u32) else 0;
                         if (context.?.mode == .passive) for (registry.occurrences) |occurrence| {
                             if (occurrence.origin.source_id.ordinal == chunk.source_id.ordinal and occurrence.origin.block_id.ordinal == chunk.block_id.ordinal) {
@@ -943,47 +943,47 @@ const ReferenceExtractionTestProducer = struct {
                                 break;
                             }
                         };
-                        break :response .{ .response = @import("../../src/reference_extraction_test.zig").passiveReply(scratch, ordinal) catch return error.OperationExecutionFailed };
+                        break :response .{ .response = @import("../../src/reference_extraction_test.zig").passiveReply(scratch, ordinal) catch return error.InvocationFailureUnrecorded };
                     },
                     .legacy => .{ .response = "{\"kind\":\"no_feature_claim\",\"reason\":\"Old raw text\",\"token_classifications\":[]}" },
                     .preserved, .missing_classification, .positive_empty_preserved, .irrelevant => response: {
                         const token_values = @import("../../src/application/structured_token_workflow.zig");
                         const token_fixture = @import("../../src/test_fixtures/reference_tokens.zig");
-                        const candidates = ReferenceCitationTestProducer.values.read(&input.step.data, token_values.candidates_schema, extraction.tokens.Candidates) catch return error.OperationExecutionFailed;
-                        const choices = token_fixture.classifications(scratch, candidates.*, chunk) catch return error.OperationExecutionFailed;
-                        const decisions = scratch.dupe(extraction.tokens.Classification, choices) catch return error.OperationExecutionFailed;
+                        const candidates = ReferenceCitationTestProducer.values.read(&input.step.data, token_values.candidates_schema, extraction.tokens.Candidates) catch return error.InvocationFailureUnrecorded;
+                        const choices = token_fixture.classifications(scratch, candidates.*, chunk) catch return error.InvocationFailureUnrecorded;
+                        const decisions = scratch.dupe(extraction.tokens.Classification, choices) catch return error.InvocationFailureUnrecorded;
                         if (context.?.mode == .irrelevant) for (decisions) |*decision| {
                             decision.* = .{ .irrelevant = decision.id() };
                         };
-                        const body = if (context.?.mode == .positive_empty_preserved or context.?.mode == .irrelevant) @import("../../src/reference_extraction_test.zig").no_claim else @import("../../src/reference_extraction_test.zig").reply(scratch, source.*, chunk) catch return error.OperationExecutionFailed;
-                        break :response .{ .response = token_fixture.wire(scratch, body, if (context.?.mode == .missing_classification) &.{} else decisions) catch return error.OperationExecutionFailed };
+                        const body = if (context.?.mode == .positive_empty_preserved or context.?.mode == .irrelevant) @import("../../src/reference_extraction_test.zig").no_claim else @import("../../src/reference_extraction_test.zig").reply(scratch, source.*, chunk) catch return error.InvocationFailureUnrecorded;
+                        break :response .{ .response = token_fixture.wire(scratch, body, if (context.?.mode == .missing_classification) &.{} else decisions) catch return error.InvocationFailureUnrecorded };
                     },
                     // A citation outside the supplied lines bypasses admission here.
                     .invalid_citation => .{ .response = "{\"kind\":\"claims\",\"claims\":[{\"category\":\"business\",\"citations\":[999]}],\"token_classifications\":[]}" },
-                    .claims, .missing, .duplicate, .reconciled, .conflict, .bad_reconciliation => .{ .response = @import("../../src/reference_extraction_test.zig").reply(scratch, source.*, chunk) catch return error.OperationExecutionFailed },
+                    .claims, .missing, .duplicate, .reconciled, .conflict, .bad_reconciliation => .{ .response = @import("../../src/reference_extraction_test.zig").reply(scratch, source.*, chunk) catch return error.InvocationFailureUnrecorded },
                 },
             };
             switch (context.?.mode) {
                 .claims, .no_claim, .passive, .invalid_citation, .duplicate => {
                     const token_fixture = @import("../../src/test_fixtures/reference_tokens.zig");
-                    const candidates = ReferenceCitationTestProducer.values.read(&input.step.data, @import("../../src/application/structured_token_workflow.zig").candidates_schema, extraction.tokens.Candidates) catch return error.OperationExecutionFailed;
-                    const choices = token_fixture.classifications(scratch, candidates.*, chunk) catch return error.OperationExecutionFailed;
-                    const decisions = scratch.dupe(extraction.tokens.Classification, choices) catch return error.OperationExecutionFailed;
+                    const candidates = ReferenceCitationTestProducer.values.read(&input.step.data, @import("../../src/application/structured_token_workflow.zig").candidates_schema, extraction.tokens.Candidates) catch return error.InvocationFailureUnrecorded;
+                    const choices = token_fixture.classifications(scratch, candidates.*, chunk) catch return error.InvocationFailureUnrecorded;
+                    const decisions = scratch.dupe(extraction.tokens.Classification, choices) catch return error.InvocationFailureUnrecorded;
                     if (context.?.mode == .no_claim) for (decisions) |*decision| {
                         decision.* = .{ .irrelevant = decision.id() };
                     };
-                    entry.result.response = token_fixture.wire(scratch, entry.result.response, decisions) catch return error.OperationExecutionFailed;
+                    entry.result.response = token_fixture.wire(scratch, entry.result.response, decisions) catch return error.InvocationFailureUnrecorded;
                 },
                 else => {},
             }
         }
-        const owner = owned.capture(allocator, .{ .entries = entries }) catch return error.OperationExecutionFailed;
+        const owner = owned.capture(allocator, .{ .entries = entries }) catch return error.InvocationFailureUnrecorded;
         errdefer owned.destroy(owner);
         return bindings.publish(allocator, bindings.raw_schema, owner, .ok);
     }
     fn observe(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
         const result = try bindings.read(&input.step.data, bindings.accounted_schema, .accounted);
-        if (result.payload().accounted.outcome != .complete) return error.OperationExecutionFailed;
+        if (result.payload().accounted.outcome != .complete) return error.InvocationFailureUnrecorded;
         context.?.observed += 1;
         return .{ .outcome = .ok, .delta = .{} };
     }
@@ -999,13 +999,13 @@ const ReferenceReconciliationTestProducer = struct {
         const allocator = std.testing.allocator;
         const current = try prior.read(&input.step.data, native.input_schema, .reconciliation_input);
         const packet = current.payload().reconciliation_input;
-        const owner = @import("../../src/domain/reference_candidate_value.zig").create(allocator, current) catch return error.OperationExecutionFailed;
+        const owner = @import("../../src/domain/reference_candidate_value.zig").create(allocator, current) catch return error.InvocationFailureUnrecorded;
         errdefer @import("../../src/domain/reference_candidate_value.zig").destroy(owner);
         const scratch = owner.arena.allocator();
         const proposal: @FieldType(fixture.r.Parsed, "proposal") = if (packet.purpose == .summary)
-            .{ .summary = fixture.summary(scratch, packet) catch return error.OperationExecutionFailed }
+            .{ .summary = fixture.summary(scratch, packet) catch return error.InvocationFailureUnrecorded }
         else final: {
-            var value = if (context.?.mode == .conflict) @import("../../src/reference_reconciliation_test.zig").conflicting(scratch, packet) catch return error.OperationExecutionFailed else fixture.global(scratch, packet) catch return error.OperationExecutionFailed;
+            var value = if (context.?.mode == .conflict) @import("../../src/reference_reconciliation_test.zig").conflicting(scratch, packet) catch return error.InvocationFailureUnrecorded else fixture.global(scratch, packet) catch return error.InvocationFailureUnrecorded;
             if (context.?.mode == .bad_reconciliation) value.claim_dispositions = value.claim_dispositions[1..];
             break :final .{ .global = value };
         };
@@ -1014,11 +1014,11 @@ const ReferenceReconciliationTestProducer = struct {
     }
     fn observe(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
         const result = try prior.read(&input.step.data, native.accounted_schema, .reconciliation_accounted);
-        if (result.payload().reconciliation_accounted.outcome != .complete) return error.OperationExecutionFailed;
+        if (result.payload().reconciliation_accounted.outcome != .complete) return error.InvocationFailureUnrecorded;
         const authority = @import("../../src/application/required_authority_workflow.zig");
-        const ledger = @import("../../src/application/required_authority_values.zig").read(&input.step.data, authority.ledger_schema, .ledger) catch return error.OperationExecutionFailed;
-        if (ledger.requirements.len < 3 or ledger.inputs.projection != .source_readiness or ledger.inputs.evidence.len != 0) return error.OperationExecutionFailed;
-        if (!ledger.inputs.references.?.items.state_id.eql(result.payload().reconciliation_accounted.records.assignments.checked.prior.prior.input.progress.plan.layout.items.state_id)) return error.OperationExecutionFailed;
+        const ledger = @import("../../src/application/required_authority_values.zig").read(&input.step.data, authority.ledger_schema, .ledger) catch return error.InvocationFailureUnrecorded;
+        if (ledger.requirements.len < 3 or ledger.inputs.projection != .source_readiness or ledger.inputs.evidence.len != 0) return error.InvocationFailureUnrecorded;
+        if (!ledger.inputs.references.?.items.state_id.eql(result.payload().reconciliation_accounted.records.assignments.checked.prior.prior.input.progress.plan.layout.items.state_id)) return error.InvocationFailureUnrecorded;
         context.?.observed += 1;
         return .{ .outcome = .ok, .delta = .{} };
     }
@@ -1288,7 +1288,7 @@ fn writeStepTrace(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir,
     const ledger = runner.tokenLedger();
     var rejection: std.Io.Writer.Allocating = .init(a);
     const rejected: ?[]const u8 = if (result == .execution_rejected) written: {
-        step_trace.writeRejection(&rejection.writer, result.execution_rejected) catch return error.OutOfMemory;
+        step_trace.writeRejection(&rejection.writer, result.execution_rejected, runner.first_cause) catch return error.OutOfMemory;
         break :written rejection.written();
     } else null;
     const requests = try a.alloc(step_trace.RequestAttempt, ledger.accounted_operations.items.len);
@@ -3818,7 +3818,7 @@ const InvocationPreparationProbe = struct {
             .step => {
                 self.step_calls += 1;
                 if (self.requires_provider and !self.provider_ready) {
-                    return error.OperationExecutionFailed;
+                    return error.InvocationFailureUnrecorded;
                 }
             },
         }

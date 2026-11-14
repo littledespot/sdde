@@ -130,9 +130,13 @@ The YAML `owner` value is a typed selector, not a policy choice:
   native diagnostic, authorization and context determine: the selected owner's binding
   reads only its own keys and the native facts they carry, so another owner's facts do not
   satisfy it. A mismatch is a **terminal runner rejection**, not a YAML outcome that a
-  workflow could route. It ends through the existing closed errors
-  (`OperationExecutionFailed` or `InvalidAtomicRepair`); a distinct closed reason for it
-  belongs to E5 (SPEC01 §5).
+  workflow could route. It ends with the one closed cause `RepairOwnerMismatch`
+  (`src/domain/repair_owner.zig`) when the owner's binding finds another kind of value at its
+  key or the compiled owner has no variant of the operation; an absent key stays
+  `MissingRequiredData`, and a step with no resolvable `owner` is `RepairOwnerUnresolved`.
+  These are `operation_failed` causes, which every surface names; the runner's own
+  `authority` reasons are a separate closed set
+  ([§6](../contracts/06-pipeline-nodes.md#runner-rejection-reasons)).
 - **No policy, scope or defect identity.** `owner` grants none of these. YAML supplies
   allowances, not defect identity (ADR 0005). Caller flags cannot select a policy
   (ADR 0023).

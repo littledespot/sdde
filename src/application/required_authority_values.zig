@@ -22,6 +22,7 @@ pub const payload = storage.payload;
 pub const rejection = storage.rejection;
 pub const retainsCurrentInputs = storage.retainsCurrentInputs;
 pub const publish = storage.publish;
+pub const readNative = storage.readNative;
 pub fn read(inputs: *const @import("../domain/pipeline_data.zig").View, schema: @import("../domain/pipeline_data.zig").Schema, comptime tag: @import("std").meta.Tag(Payload)) !@FieldType(Payload, @tagName(tag)) {
     return storage.read(inputs, schema, tag) catch |err| switch (err) {
         error.InvalidCandidatePayload => error.InvalidRequiredAuthority,

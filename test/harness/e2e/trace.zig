@@ -311,7 +311,7 @@ pub const Trace = struct {
         self.recordStep(id, result) catch |err| {
             self.fail(err);
         };
-        if (self.experiment != null and self.failure != null) return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
+        if (self.experiment != null and self.failure != null) return .{ .rejected = .{ .operation_failed = error.HarnessFailureStopped } };
         if (self.experimentStopped() and result != .rejected) return .{ .rejected = .cancelled };
         return afterChild(self.purpose, self.boundary, self.failure, result);
     }
@@ -576,7 +576,7 @@ pub const Trace = struct {
     }
 
     fn beforeChild(purpose: Purpose, boundary: Boundary, failure: ?anyerror) ?execution.Applied {
-        if (failure != null) return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
+        if (failure != null) return .{ .rejected = .{ .operation_failed = error.HarnessFailureStopped } };
         if (purpose == .single_exchange and boundary != .open) return .{ .rejected = .cancelled };
         return null;
     }
@@ -598,7 +598,7 @@ pub const Trace = struct {
         // The provider-owning child has reconciled actual usage and retained
         // its native result. Stop before validation, correction or publication.
         // Preserve an existing runner rejection rather than discard its failure.
-        if (failure != null) return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
+        if (failure != null) return .{ .rejected = .{ .operation_failed = error.HarnessFailureStopped } };
         if (result == .rejected) return result;
         return .{ .rejected = .cancelled };
     }
@@ -612,7 +612,7 @@ pub const Trace = struct {
         const accounted = runner.tokenLedger().accounted_operations.items;
         if (accounted.len <= self.attempts_observed + 1) return;
         for (accounted[self.attempts_observed .. accounted.len - 1]) |attempt| {
-            var earlier: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed };
+            var earlier: c.Report = .{ .schema = .@"spec-e2e-report/v19", .started_at_utc = "", .status = .workflow_failed };
             try @import("observation.zig").attemptRejection(a, runner, attempt.id, &earlier);
             if (earlier.provider_diagnostic == null and earlier.model_diagnostic == null) continue;
             const origin = earlier.last_model_origin orelse continue;
@@ -620,7 +620,7 @@ pub const Trace = struct {
                 if (std.meta.eql(record.origin, origin)) break ordinal;
             } else continue;
             try self.last_rejection.observe(self.store.allocator, call, earlier);
-            var projected: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed };
+            var projected: c.Report = .{ .schema = .@"spec-e2e-report/v19", .started_at_utc = "", .status = .workflow_failed };
             try self.last_rejection.project(a, call, &projected);
             if (self.capture) |log| try log.observeRejections(projected);
         }
@@ -631,7 +631,7 @@ pub const Trace = struct {
         var arena: std.heap.ArenaAllocator = .init(self.store.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v19", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
         try @import("observation.zig").capture(a, runner, &report);
         if (self.pending) |pending| {
             const usage = try reconcileExperiment(self.experiment.?, pending.send, pending.origin, report.attempts, pending.uncertain_delivery);
@@ -693,11 +693,12 @@ pub const Trace = struct {
 
     pub fn stepEvent(a: std.mem.Allocator, sequence: usize, id: workflow.WorkflowStepId, result: execution.Applied, report: c.Report) ![]const u8 {
         return std.json.Stringify.valueAlloc(a, .{
-            .schema = "e2e-step-event/v3",
+            .schema = "e2e-step-event/v4",
             .sequence = sequence,
             .step = id.bytes,
             .outcome = result.status(),
             .rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null,
+            .first_cause = if (result == .rejected) report.first_cause else null,
             .exchange = if (report.last_model_call) |call| .{ .call = call, .origin = report.last_model_origin, .request_step = report.last_model_step, .usage = report.last_model_usage, .output = report.last_model_output } else null,
             .candidate_source = if (report.candidate_model_call) |call| .{ .call = call, .origin = report.candidate_error.?.origin(), .request_step = report.candidate_model_step, .output = report.candidate_model_output } else null,
             .provider_error = report.provider_diagnostic,
@@ -863,12 +864,15 @@ test "single-exchange child boundary terminates before successors while retainin
         const after = Trace.afterChild(.single_exchange, boundary, null, .{ .outcome = .ok });
         try std.testing.expectEqual(.cancelled, std.meta.activeTag(after.rejected));
     }
-    for ([_]execution.Rejection{ .authority, .cancelled, .deadline_exhausted, .{ .operation_failed = error.OperationExecutionFailed } }) |failure| {
+    for ([_]execution.Rejection{ .{ .authority = .kernel_stage }, .cancelled, .deadline_exhausted, .{ .operation_failed = error.HarnessFailureStopped } }) |failure| {
         const retained: execution.Applied = .{ .rejected = failure };
         try std.testing.expectEqualDeep(retained, Trace.afterChild(.single_exchange, .exchange_finished, null, retained));
     }
     const failed = Trace.afterChild(.single_exchange, .exchange_finished, error.MissingRequestEvidence, .{ .outcome = .ok });
     try std.testing.expectEqual(.operation_failed, std.meta.activeTag(failed.rejected));
+    // The harness's own stop of a child after a failure is the cause the engine's closed set names for it.
+    try std.testing.expectEqual(error.HarnessFailureStopped, failed.rejected.operation_failed);
+    try std.testing.expectEqual(error.HarnessFailureStopped, Trace.beforeChild(.single_exchange, .open, error.MissingRequestEvidence).?.rejected.operation_failed);
 }
 
 test "single-exchange publication guard rejects invocation outputs replacements and typed publication effects" {
@@ -1062,7 +1066,7 @@ test "native receipt failure proofs preserve intermediate upstream rejections af
     var log: CaptureLog = .init(std.testing.allocator);
     defer log.deinit();
     for (1..4) |call| try appendReceiptFixture(&log, call);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v19", .started_at_utc = "", .status = .workflow_failed };
     report.last_protocol_rejection = .{ .call = 1, .origin = log.records.items[0].origin, .reason = "MOCK initial schema rejection", .json_error = null, .schema_error = .{ .reason = .missing_required_property, .path = "/claims" } };
     try log.observeRejections(report);
     report.last_protocol_rejection = null;
@@ -1088,7 +1092,7 @@ fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
     var log: CaptureLog = .init(a);
     defer log.deinit();
     try appendReceiptFixture(&log, 1);
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v18", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v19", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
         .call = 1,
         .origin = log.records.items[0].origin,
         .reason = "MOCK malformed JSON",
