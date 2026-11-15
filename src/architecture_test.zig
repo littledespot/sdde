@@ -3061,6 +3061,38 @@ test "the engine binds each acceptance criterion to its slot, and the scenarios 
     try std.testing.expect(generate_at < scenarios_at and scenarios_at < link_at);
 }
 
+test "the scenarios context repeats the generation context's shared rules and offers no answer its schema lacks" {
+    // A request takes one context resource, so the scenarios context carries copies of the generation
+    // context's rules. They must not drift apart, and it must leave out the answers a scenarios response
+    // cannot take. This compares the two resources with each other; it names no wording.
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    const generation_bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/generation.context.json", allocator, .limited(64 * 1024));
+    defer allocator.free(generation_bytes);
+    const scenarios_bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/scenarios.context.json", allocator, .limited(64 * 1024));
+    defer allocator.free(scenarios_bytes);
+    var generation = try std.json.parseFromSlice(std.json.Value, allocator, generation_bytes, .{});
+    defer generation.deinit();
+    var scenarios = try std.json.parseFromSlice(std.json.Value, allocator, scenarios_bytes, .{});
+    defer scenarios.deinit();
+    const owner = generation.value.object;
+    const copy = scenarios.value.object;
+    // The scenarios context holds exactly the rules a scenarios request can use: how values are written,
+    // how references are used and what the sources establish; never the clarification or inconclusive answers.
+    try std.testing.expectEqual(@as(usize, 3), copy.count());
+    for ([_][]const u8{ "business_value", "references", "sources" }) |key| try std.testing.expect(copy.contains(key) and owner.contains(key));
+    for ([_][]const u8{ "clarification", "inconclusive" }) |key| try std.testing.expect(!copy.contains(key));
+    for ([_][]const u8{ "business_value", "references" }) |key| {
+        const shared = owner.get(key) orelse return error.TestUnexpectedResult;
+        const repeated = copy.get(key) orelse return error.TestUnexpectedResult;
+        try std.testing.expectEqualStrings(shared.string, repeated.string);
+    }
+    // Its sources rule is the generation rule's opening, without the part about fields a scenarios request lacks.
+    const full = (owner.get("sources") orelse return error.TestUnexpectedResult).string;
+    const opening = (copy.get("sources") orelse return error.TestUnexpectedResult).string;
+    try std.testing.expect(opening.len < full.len and std.mem.startsWith(u8, full, opening));
+}
+
 test "principle root access stays in its narrow source adapter and shares physical traversal" {
     inline for (.{ @import("actions/principle/inventory_principle_sources.zig").Action, @import("actions/principle/capture_principle_sources.zig").Action, @import("actions/principle/capture_principle_registry.zig").Action }) |Action| {
         try std.testing.expectEqual(.filesystem_read, Action.contract.side_effect);
