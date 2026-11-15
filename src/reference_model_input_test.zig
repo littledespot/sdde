@@ -84,11 +84,39 @@ test "reconciliation assignments scope instructions while retaining complete sou
     }
 }
 
+test "no rule text the model reads carries engine vocabulary" {
+    // These are engine-authored rule texts, not model output (SPEC01 Q4, D4.1's extension).
+    const diagnostic = @import("domain/reference_reconciliation_diagnostic.zig");
+    const scopes = [_]diagnostic.Constraint.Scope{
+        .all,
+        .summary,
+        .conflict_detail,
+        .{ .selection = .statement },
+        .{ .selection = .signal },
+        .{ .selection = .conflict },
+        .{ .disposition = .rules },
+        .{ .assignment = .summary },
+        .{ .assignment = .dispositions },
+        .{ .assignment = .signals },
+        .{ .assignment = .conflicts },
+    };
+    const barred = [_][]const u8{ "native", "engine", "projection kind", "projected" };
+    for (std.enums.values(diagnostic.Constraint)) |constraint| {
+        for (scopes) |scope| {
+            for (barred) |word| try std.testing.expect(std.ascii.indexOfIgnoreCase(constraint.descriptionFor(scope), word) == null);
+        }
+        for (barred) |word| try std.testing.expect(std.ascii.indexOfIgnoreCase(constraint.description(), word) == null);
+    }
+}
+
 test "summary purpose and union claim coverage apply across every summary level" {
     const r = reconciliation.r;
     // Marked guidance proves the workflow-owned entry reaches exactly this position.
     const purpose = guidance.marked.summary_purpose;
-    const coverage = "Each statement must select a nonempty, unique subset of assignment.claim_ids. Together, the statements must cover every assigned claim ID. Claims may be combined, split across statements or selected by overlapping statements. Other claims are supporting evidence; native code adds exact-text statements.";
+    // The summary scope presents the union-coverage rule, not the complete assembled result's selection rule.
+    const diagnostic = @import("domain/reference_reconciliation_diagnostic.zig");
+    const coverage = diagnostic.Constraint.nonempty_unique_allowed_claims.descriptionFor(.{ .assignment = .summary });
+    try std.testing.expect(!std.mem.eql(u8, coverage, diagnostic.Constraint.nonempty_unique_allowed_claims.description()));
     for ([_][5][]const u8{
         .{ "MOCK Start the application.\n", "MOCK Display the greeting.\n", "MOCK Show the UTC time.\n", "MOCK Refresh when requested.\n", "MOCK Display `Ready!`.\n" },
         .{ "MOCK Renew eligible loans.\n", "MOCK Keep overdue loans unchanged.\n", "MOCK Show the new deadline.\n", "MOCK Notify the borrower after renewal.\n", "MOCK Display `Renewed!`.\n" },
@@ -251,7 +279,9 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "accepted.signals") != null);
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Together, the statements must cover every assigned claim ID") == null);
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Different sets may overlap") != null);
-            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, encoded_rules, "native code"));
+            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "token_projected") != null);
+            // The rule texts the model reads carry no engine vocabulary (SPEC01 Q4, D4.1's extension).
+            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "native code") == null);
             try checkSemanticAssignment(a, selected, global.items, dispositions.dispositions);
         }
         if (std.mem.eql(u8, id, "conflicts")) {

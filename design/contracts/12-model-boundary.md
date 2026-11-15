@@ -372,8 +372,8 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   [ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance
   amendment owns its keys, validation, placement and repair-tail composition. Native
   code keeps rules, mechanical diagnostics and composition frames, including
-  clarification question frames that embed a subject's task. A moved entry still
-  restates some native rules, which SPEC01 Q4 removes there. Retained evidence holds no
+  clarification question frames that embed a subject's task. SPEC01 Q4 removed the
+  engine vocabulary and one schema-stated rule from the moved entries. Retained evidence holds no
   guidance text: a retained evidence type whose request form shows guidance, such as a
   source-omission comparison, requires presentation, and model input encodes only its
   presented form. No native copy of an entry remains, so editing the resource entry

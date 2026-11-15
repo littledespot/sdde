@@ -156,8 +156,9 @@ tail when it authorizes, and the run-local authorization carries the composed
 requirement. Native code keeps rule ownership, mechanical diagnostics, identity, coverage and sibling-order
 requirements, composition frames and the user-facing clarification question
 frames; a question about a record or reference subject embeds that subject's task
-from the guidance. Mechanical sentences inside a moved entry move with it until
-SPEC01 Q4 removes them.
+from the guidance. Mechanical sentences inside a moved entry move with it; SPEC01 Q4
+removed the engine vocabulary and the one schema-stated rule that the entries and rule
+texts the model reads carried.
 
 Request preparation selects either its existing schema/definition binding or one
 sealed composition-part binding. The latter resolves the complete schema through

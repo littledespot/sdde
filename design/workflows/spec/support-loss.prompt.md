@@ -19,6 +19,6 @@ omit unrelated spans. Briefly explain where that meaning survives or what is mis
 from the complete assigned collection. Empty collections cannot be preserved.
 Do not select a culprit or repair operation.
 
-comparison_id identifies the complete native-assigned collection in comparisons[].id;
+comparison_id identifies the complete assigned collection in comparisons[].id;
 the response does not select its members. Source spans select sources[].chunk_id and inclusive
 first/last IDs from its lines. Supporting evidence supplies no selectable IDs.

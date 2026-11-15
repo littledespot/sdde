@@ -1964,6 +1964,47 @@ display and UTC statements having been deleted as repeated.
 only. The tree is back to Q17's state. **Left open:** SPEC01 Q7. A retry needs a reason to expect the model to
 behave the same on the smaller schema, or repeated runs showing the reasoning-only responses were chance.
 
+## Q4. Engine vocabulary out of model-visible texts (kept 16 November 2026)
+
+**Decided:** the first attempt was reverted on 31 October 2026 (it removed the second `citations` sentence, and
+hello-world's first extraction returned `no_feature_claim` in 5 of 6 runs); D4.1's extension 3 November (the rule
+covers native rule and correction texts, and a sentence that says what a field, claim or response contains
+stays); the retry's screens and set approved 15 November (user: "1. Approved, 2. No as per recommendation, 3.
+update as per recommendation"); **kept** 16 November (user: "keep the changes, and update the documentation"),
+over the recommendation to run 3 more loan-renewal runs first. **Defect class:** none published; AGENTS.md
+compliance ("prompts carry no engine vocabulary").
+
+**Built:** engine vocabulary reworded in place in `reconciliation-dispositions.prompt.md`,
+`extraction-classifications.prompt.md`, `records.prompt.md`, `support-loss.prompt.md`, the support
+evidence entry of `packet-guidance.json`, the "native code …" rule texts in
+`reference_reconciliation_diagnostic.zig` (and `unique_members`' "projection kind", which the list missed) and
+`typed_text.zig:155`; `support.prompt.md`'s sentence "The engine binds claim evidence … never return provenance or
+claim IDs" removed, since `support.schema.json` has no such property. Kept on purpose: both `citations`
+sentences, the `claim_ids` definition and the "at most one record" sentence (ADR 0038 Decision 5). Of 1,900
+scripted requests, 756 are identical and 1,144 differ only by these texts; `zig build verify` 147 steps, 2,225
+tests; a test now keeps engine vocabulary out of the rule texts and the summary rule's expected text derives from
+its owner. An independent review found no blocker; ADR 0016:159-160 and 12-model-boundary.md:375-376 now say Q4
+removed them.
+
+**Screens** (`zig-out/e2e-call/2026-11-15T20-20-*` and `20-23-*`, 10 replays per case and call kind): 120 of 120
+completed. Classifications gave the retained decisions in all 20 trials; summary, signals and conflicts kept
+their shape; dispositions declared no conflict group in 20 trials (retained call 4: 3 of 12 declared the false
+4/5 conflict); records 18 of 20 as retained.
+
+**Set** (`2026-11-15T20-25-*`, build `7c853658…`, modified; skill `3fe52a92…`, evaluated automatically): 6 of 6
+published, 5 passed and 1 critical failure; no corrections, rejections, runaways, re-sends or repairs.
+Hello-world 89.3, 92.9, 89.3 (0 / 0 / 0 / 0, 0 / 0 / 0 / 0 and 0 / 0 / 1 / 0, the greeting-then-timestamp
+order); loan-renewal 92.9, 92.9 and 85.7 (0 / 0 / 0 / 0, 0 / 0 / 0 / 0 and 0 / 1 / 0 / 0). **Vocabulary:**
+"native", "engine" and "projection kind" are absent as engine vocabulary from all 60 calls (the only hits are a
+heading and substrings in the case's own principle files); Q17's requests held about 10 occurrences each. Call 1
+never returned `no_feature_claim`; call 2 matched Q17. Cost unchanged (18.8k and 22.4k to 22.7k tokens). **Not
+clean:** loan-renewal `7452…` wrote one bundled FR with "A borrower may renew" for "must be able to renew" (a
+weakened obligation; renewal-eligibility 2, a critical failure). All three loan-renewal runs bundled the FR
+(list markers kept inline, `&#10;` entities, or the paraphrase), where Q17's four published runs did not; the
+same "may renew" bundle appeared on the reverted D7.5 build, which had none of Q4's texts, and the one
+differing sentence in the records request (Q4's) is not shown to cause it, so the guard (an established
+trace to a changed call) is read as not isolating Q4. Open parts: SPEC01 Q4 and the §3 watch on bundled FRs.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a
