@@ -1928,6 +1928,42 @@ records call (two objects in one conflicts answer).
 demonstrated** (the model ignores the principle text, and no criterion scores it); brittleness unchanged;
 scope qualified (records call only, guards only). Open parts: SPEC01 Q17, Q14 and C6.
 
+## Q7 D7.5. A plain string where a field offers no inserted reference (built, not kept, 15 November 2026)
+
+**Decided** 3 November 2026 (yes, a conformance fix with no contract amendment: 07-domain-representations.md
+"Model-facing text", ADR 0006:302-316, 12-model-boundary.md:199-203, text-field-composition.md:21-22); built,
+measured and **reverted** 15 November (user: "apply recommendations", on the recommendation to revert).
+**Defect class:** none scored; rendering artefact C (joined fragments) has not been published since ADR 0047
+composes the story, so it was conformance only.
+
+**Built** (`walk` in `model_text_field.zig`, with its test): after a request's own exclusions, a text field that
+keeps no insertion alternative takes the plain string alone. Of 1,900 scripted requests, 869 were identical,
+1,022 differed only in the response schema (3,295 text values collapsed), 8 corrections described the new
+shape and 1 scripted case got a `type_mismatch` correction for a fragments object sent to a plain-string
+field; `zig build verify` 147 steps, 2,225 tests; an independent review found no blocker.
+
+**Set** (`2026-11-15T09-04-*`, build `51c5afc7…`, modified; skill `3fe52a92…`, evaluated automatically): 5 of 6
+published, 4 passed and 1 critical failure. Hello-world 85.7 and 85.7 (0 / 0 / 2 / 0 and 0 / 0 / 3 / 0; one run
+ended invalid), loan-renewal 96.4, 89.3 and 82.1 (0 / 0 / 0 / 0, 0 / 0 / 1 / 0 and 0 / 1 / 1 / 0, the last a
+critical failure: renewal-eligibility 2). Against Q17's set (hello-world 92.9, 92.9, 89.3; loan-renewal 92.9,
+89.3, 100, 92.9; 7 of 9 published, 2 unsupported additions, no weakened obligation). **Rule held:** no fragments
+object reached a plain-string field in any of the 6 runs, no `type_mismatch` and no schema rejection; tokens fell
+5 to 8%. **Guards did not:** 2 of the 6 first-attempt records calls ended with reasoning only
+(`missing_final_text`), against 0 of 42 on seven earlier builds (exact one-sided probability about 0.013, a
+post-hoc cut on non-random runs); one such run's correction wrote no `functional_requirement`, so the records
+progress check ended it invalid; the other run's correction wrote "A borrower may renew" for "must be able to
+renew" and added an order the source doesn't state, and its brief call had a max-tokens runaway (16,384 output
+tokens looping on a repeating `signal_ids`, the one re-send succeeded). Unsupported additions rose to 7 over the
+published runs. The records requests were byte-identical to Q17's apart from the response schema (4,305 to 2,497
+characters), and no evaluator could tie any of it to the schema, so causation is not established. **Judgement
+calls:** hello-world `cf8e…` AC-001 "starts successfully and exits without error" as a minor addition (a
+material reading is a critical failure); `5566…` FR-001 states only the start while naming claims 1 to 3, the
+display and UTC statements having been deleted as repeated.
+
+**Why reverted:** no scored defect class to reduce, a guard hit with a plausible harm signal, and a hygiene gain
+only. The tree is back to Q17's state. **Left open:** SPEC01 Q7. A retry needs a reason to expect the model to
+behave the same on the smaller schema, or repeated runs showing the reasoning-only responses were chance.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a
