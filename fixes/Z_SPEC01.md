@@ -1870,6 +1870,24 @@ same text as a one-fragment object still block as `competing_records`; ADR 0038 
 
 Open parts: SPEC01 Q14.
 
+## Q22. Entity applicability and naming (recorded as a model limitation, 15 November 2026)
+
+**Decided** 15 November 2026 (user: "apply recommendation option A", after "record it as a model limitation, or
+try one wording change"). **Defect:** `invented_or_restating_entity`, minor: the entities call records an entity
+for a feature with no business data (hello-world: "Hello World Application") or names the feature as the entity
+(loan-renewal: "Loan Renewal", where "Loan" is right). It costs at most one `proportionate-business-scope` point
+and is no b4 call: ADR 0038 Decision 6 owns the shape (a name and its groups), the model decides `required` or
+`not_applicable`, and no engine rule can judge applicability or a name (prose heuristic). The guidance already
+says an entity is "a business data concept" and the prompt says not to invent entities. **Rate**,
+`evaluations/e2e/` since 9 November: hello-world 25 of 47 runs, loan-renewal 3 of about 46; E5 0 of 3 and 0 of 3;
+b4's first set 1 of 3 and 0 of 2, its second 3 of 3 and 2 of 3. **Screen** (entities call 8 of three
+second-set runs, 10 replays each, `zig-out/e2e-call/2026-11-15T04-49-11Z…`, `…04-52-05Z…`, `…04-52-24Z…`):
+hello-world 5 `required` and 5 `not_applicable` on one request; loan-renewal request A 10 of 10 "Loan", request B
+8 "Loan" and 2 "Loan Renewal". The second set's 2 of 3 lies within one request's spread, and b4 changes no
+entities request. **Why no prompt change:** the contract is coherent, the cost is one point, and two earlier
+prompt changes on entity fields (their meaning, since removed) did not help (SPEC01 §3). Reopen if a set shows the
+cost above one point.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a

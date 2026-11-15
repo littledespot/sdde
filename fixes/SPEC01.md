@@ -221,6 +221,11 @@ or the user records it as a model limitation.
     targets it. Two prompt changes, Q20's entity-meaning purpose and the one-owner hygiene
     change, didn't stop it and were reverted (7 November 2026). The structural lever, ADR 0038
     Decision 6, is kept ([Z_SPEC01](Z_SPEC01.md) Next 6).
+  - **Entity applicability and naming: recorded as a model limitation** (user, 15 November 2026:
+    "apply recommendation option A"): the entities call picks `required` and an entity for a feature
+    with no business data in about half of hello-world runs, and sometimes names the feature itself.
+    No b4 call is involved, the cost is at most one point, and no prompt change targets it
+    ([Z_SPEC01](Z_SPEC01.md) Q22).
   - **Edge-case outcomes:** ADR 0038 Decision 7, kept ([Z_SPEC01](Z_SPEC01.md) Next 8). **Not
     accepted** (user, 7 November 2026: "that is a poor idea and I will not accept it"): the
     engine filling `then` and `expected_outcome` from the record's cited source lines. ADR 0038
@@ -400,9 +405,7 @@ line means beyond the advisory evaluate-e2e link check.
   gets a full scenario; an edge case naming only a scope-only claim blocks late at the link step
   (`edge_case_without_criterion`); equal criteria across groups with generic wording block as
   `competing_records`; one group with many claims makes one long answer.
-- **Entities call** invents a business entity for a feature with no business data (hello-world 3 of 3 in
-  the second set, 1 of 3 in the first, 0 of 3 in E5; loan-renewal names the feature, "Loan Renewal", in 2 of
-  3): not a b4 call, and its request is unchanged; it needs its own item.
+- **Entities call** invents or misnames an entity: not a b4 call, recorded as a model limitation (§3).
 
 ### Q17. Principles as Spec context
 
