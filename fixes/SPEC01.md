@@ -22,20 +22,21 @@ gate is re-run on the build after E1–E4 land, as one closing set after the out
 (ADR 0034, derived item 7). E1's live set (3 per case, 6 of 6 published and passed) is a
 no-regression check, not the closing set.
 
-**Reference** for quality phases (§2 rule 7): b4's second set (`2026-11-15T04-01-*`, build
-`a349a72a…`, modified), the last kept state ([Z_SPEC01](Z_SPEC01.md) Q14 b4). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
+**Reference** for quality phases (§2 rule 7): Q17's set (`2026-11-15T07-50-*` and `08-11-*`, build
+`08ef5d5d…`, modified), the last kept state ([Z_SPEC01](Z_SPEC01.md) Q17). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
 as one evaluator ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
 | --- | --- | --- | --- | --- |
-| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 1 / 0 (the greeting-then-timestamp order) | 92.9 (89.3–96.4) |
-| Loan-renewal | 3 of 3 | 3 of 3 | 0 / 0 / 0 / 0 | 89.3 (85.7–92.9) |
+| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 2 / 0 (the greeting-then-timestamp order, twice) | 91.7 (89.3–92.9) |
+| Loan-renewal | 4 of 6 (a false conflict failed one; an edge case naming claim 4 alone blocked one, §4 Q14) | 4 of 4 | 0 / 0 / 0 / 0 | 93.8 (89.3–100) |
 
 Advisory scores are scored against the case rubrics (`evaluations/e2e/<run>/evaluation.json`);
 scorer judgment moves one by about ±3.6, and keep decisions use the accuracy counts (§2 rule 6).
 
-**Retained runs:** `zig-out/e2e-spec/` holds the HEAD set and twenty runs of 8 November 2026
+**Retained runs:** `zig-out/e2e-spec/` holds Q17's set (and six zero-token `input_invalid` runs of
+`07-48-*`), the HEAD set and twenty runs of 8 November 2026
 (report v15, `build.source.modified` true): the `5b34dbc` "Repeated-statement text not
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
 `00-37-49Z`), the entity and escaping set (`05-5*`) and six edge-case-lever runs on `071ce2b`
@@ -162,26 +163,25 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
 **Next:** items 1 to 8 are implemented, kept or closed (records in [Z_SPEC01](Z_SPEC01.md)): Q14 b4
 (item 4) was kept 15 November 2026, and item 8 (ADR 0038's edge-case outcome limit) needed no change,
 since b4 gives each criterion one claim and neither set printed a success Then for a refusal edge case.
+Q17 was kept 15 November 2026 too.
 
 **Set order, decided 14 November 2026** (user: "the above recommendations are approved"). Each
 change set is measured on its own committed build (§2.1, §2.3), against the previous item's
-kept state (§2 rule 7); b4's second set is the reference for the next one ([Z_SPEC01](Z_SPEC01.md)
-Q14 b4):
-1. **Q17,** then **Q7 D7.5,** then **Q4** (the table below): screens, then a set each.
+kept state (§2 rule 7); Q17's set is the reference for the next one ([Z_SPEC01](Z_SPEC01.md) Q17):
+1. **Q7 D7.5,** then **Q4** (the table below): screens, then a set each.
 2. **The closing set** (§1).
 
 The order is approved, not a blanket go-ahead: each screen batch and live set still needs its
 own approval when it is ready (AGENTS.md; the project settings prompt for every live step).
 
 **Output track** (rank order of the table; each item's screens and set follow the set order
-above, inside the decided constraints: D17.1 puts Q17 after D12.2):
+above, inside the decided constraints):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Q17** principles as records-call context | none scored; guards only unless the rubrics gain a principle criterion | M | Records screen, then a set | D17.1 |
-| 2 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
-| 3 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
-| 4 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
+| 1 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
+| 2 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
+| 3 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
 **Robustness track** (run completion and budget; no scored defect): the §22.6 correction
 location, outside E5 since DE5 7. Since D13.1 the measured runs show 0 runaways and 0 re-sends; the highest used 67,448
@@ -393,58 +393,44 @@ line means beyond the advisory evaluate-e2e link check.
 
 **Kept 15 November 2026** (record: [Z_SPEC01](Z_SPEC01.md) Q14 b4). Open parts only:
 
-- **Watch, from the second set:** the one-renewal criterion (claim 4) is a bare rule or changes modality in
-  3 of 3 loan-renewal runs; AC-001 repeats other requirements' results in 2 of 3 (its Source then cites
-  two of three claims), a **Decision** on ADR 0038 (an exact copy in a criterion must belong to the slot's
-  own claims) only if it repeats in the next set; a Given that already holds the event its When names in
-  2 of 3 hello-world runs.
+- **Watch, from Q17's set** (second b4 set in brackets): the one-renewal criterion (claim 4) is a bare rule
+  or changes modality in 3 of 4 published loan-renewal runs (3 of 3); AC-001 repeats other requirements'
+  results in 3 of 4 (2 of 3), its Source then citing two of three claims. That is the "next set" the
+  **Decision** on ADR 0038 waited for (an exact copy in a criterion must belong to the slot's own claims),
+  so it is due. A Given that already holds the event its When names is in 3 of 3 hello-world runs (2 of
+  3). Run `2026-11-15T08-11-10Z-f080…` wrote "The loan is renewed only once." for claim 4, a judgement call
+  between a minor ambiguity and a weakened limit, the same as `91f4`'s.
 - **Restated edge cases** from the records call recur (loan-renewal EC-001 and EC-002 repeat AC-005) and
   cost `organization` only; they wait for the 13 November edge-case amendment (ADR 0038 Decision 7,
   unbuilt), then re-measure.
+- **Late block, shown once** (`2026-11-15T07-50-08Z-f971…`, a Q17 run): the records call put claim 4
+  ("A loan may be renewed only once.") only in an edge case, so no behaviour statement names it, it gets
+  no slot and no criterion, and linking stops with `edge_case_without_criterion` (ADR 0038 Decisions 3
+  and 7: `scenario_slots.zig:70`, `scenario_link.zig:25-53`). It covers any behaviour claim that only an
+  edge case names, not only a scope-only claim. 1 of 5 loan-renewal records calls that carried principles
+  and 0 of 16 earlier (no rate).
 - **Not shown by the sets** (one group each): a heading or lead-in claim that a behaviour statement names
-  gets a full scenario; an edge case naming only a scope-only claim blocks late at the link step
-  (`edge_case_without_criterion`); equal criteria across groups with generic wording block as
-  `competing_records`; one group with many claims makes one long answer.
+  gets a full scenario; equal criteria across groups with generic wording block as `competing_records`; one
+  group with many claims makes one long answer.
 - **Entities call** invents or misnames an entity: not a b4 call, recorded as a model limitation (§3).
 
 ### Q17. Principles as Spec context
 
-**Decided 1 November 2026** (user): "the workflow must never modify principles - NEVER" and
-principles "should be used for context when executing the spec workflow".
+**Kept 15 November 2026** (record: [Z_SPEC01](Z_SPEC01.md) Q17). Open parts only:
 
-- **Never modified:** holds today. Principles are read through a read-only source adapter
+- **Never modified:** holds. Principles are read through a read-only source adapter
   (`src/adapters/filesystem/principle_source.zig`), the only principle capability is
   `principle_read` (`workflow_capability.zig:18`), and path validation rejects every project
   operation against the semantic-principles root (11-path-validation.md:20). Every future step
   (Plan, Implement, init, repair) keeps it. ADR 0015 records it (0015:36); design.md §3.3
   doesn't (adding it is a design edit awaiting approval).
-- **D17.1 decided 1 November 2026:** the records call only (it writes the FR, AC, BR and other
-  statement records principles constrain), with the principle files as the registry captures
-  them, unnumbered (items never cite principles). The case principles are 28,067 (hello-world)
-  and 29,399 (loan-renewal) bytes, about 7k tokens per records request (one per group, and
-  again on a correction or re-send). A measurement set, with
-  unsupported addition and invented entity as watch items (§2 rule 6; decided 3 November
-  2026, user: "Yes, watch items"). D12.2 is kept.
-- **Built offline, 15 November 2026; awaits its screen and set.** The records request, and no
-  other (not brief, entities, scenarios or an atomic repair), carries each principle file's
-  text as `principles` (`specification_principles.zig`; `build-specification-model-input`
-  requires `principle_registry`), and the records prompt says how to read them. A project with
-  no principle files gets no key. The freeze over 1,900 scripted requests: 1,888 identical, 12
-  records requests in 5 scenarios gain the key, nothing else changes. Amended: ADR 0015, ADR
-  0023, 17-specify.md, 09-configuration.md (:337, :354), 13-05 and F0100.
-- **Target and risk:** no current rubric criterion scores principle consistency, so a set can
-  show only guards (unsupported addition and invented entity from principle text,
-  publication) unless the case rubrics gain a criterion. Principle text is no source: a record
-  that copies a principle's literal gets no passive or exact authorisation. The case
-  principles are technology, security and architecture standards, so the records prompt calls
-  them "principles, given as context" and says they add no requirement; stack or technology
-  content in a record is an unsupported addition (watch item).
+- **Watch:** stack or technology content in a record, and an invented entity from principle text, are
+  unsupported additions; none appeared in 9 runs. The benefit is not demonstrated, since no rubric
+  criterion scores principle consistency; a criterion would be a rubric change. Each records request
+  costs about 5.5k to 6k tokens more, once per group.
 - **Open (Plan gate, ADR 0034):** whether a Spec generated under an older principle registry
   is stale at Plan's gate. A changed registry already invalidates plan and task approvals
   (09-configuration.md:367); Spec regenerates every run.
-- **Sequence (recommended, not decided):** a records screen first: the loan-renewal rubric's
-  proportionate-scope criterion penalises principle-derived prescriptions, so its guards need a
-  settled reference.
 
 ### Q21. Behaviour claims need statements
 
@@ -1017,7 +1003,17 @@ again after each failure.
 hard-coded tables that end `else => return error.InvalidOutcomeAssociation`
 (`authorizationBlocked` in `workflow_outcome_binding.zig`; also the `clarification_route` branch
 and `diagnosticAdmission`). Giving another authorizer a `blocked` outcome compiles, validates and
-then rejects the first run that takes it. Not executed. **Owner:** `workflow_outcome_binding.zig`.
+then rejects the first run that takes it. **Executed twice** (`2026-11-15T02-30-17Z-2fa4…` and
+`07-50-06Z-dc98…`, both a model-declared claims 4 and 5 conflict at reconciliation): the stage's own
+authorizer returns `blocked` (`no_independent_target`, `reference_reconciliation_repair.zig:197`) but
+invalidates its own `validated_reference_dispositions`
+(`reference_reconciliation_repair_workflow.zig:56-61`), so the binding reads its retained state from a view
+where the slot is already null, `retainsCurrentInputs` (`retained_candidate.zig:41-49`) reports it stale,
+and `workflow_outcome_binding.zig:433` returns `InvalidOutcomeAssociation` where the run should end
+`blocked`. The evaluator read this from code; it is not reproduced. Fix not scheduled: read the blocked
+decision against the view before the authorizer's invalidations, with no per-stage branch and a test per
+stage (summary, dispositions, signals, conflicts); the other authorizers and
+`specification_repair_workflow.zig:85,104` may do the same. **Owner:** `workflow_outcome_binding.zig`.
 
 **C7. A stray entry in `clarify/` fails the run, even after every model call**
 (`adapters/filesystem/feature_input_source.zig:83-85`; the publish step repeats the capture; class:
