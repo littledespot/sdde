@@ -1864,7 +1864,9 @@ likely one; no scenarios criterion needed a repair). Against E5 the rubric score
 mean 92.9 against 96.4, loan-renewal 89.3 against 98.2) from minor ambiguity, restatement and entity
 points, and cost is 10 sends against 9 and 3 to 9% more tokens. **Judgement call:** loan-renewal run `91f4`
 scored AC-004 "The loan is renewed only once." as a minor ambiguity; read as a weakened limit in a checkable
-outcome it is a critical failure for that run. Evaluations: `evaluations/e2e/<run>/`.
+outcome it is a critical failure for that run. Evaluations: `evaluations/e2e/<run>/`. **Comparator decided**
+15 November (user: "action recommendations"): the correction compares as returned, so a plain `given` and the
+same text as a one-fragment object still block as `competing_records`; ADR 0038 Decision 3 says so.
 
 Open parts: SPEC01 Q14.
 

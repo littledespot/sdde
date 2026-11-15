@@ -176,13 +176,15 @@ only block.
      criterion's given, when and then. The result schema selects the numbers as an
      `exact_members` set, so each appears exactly once, and carries no claim, kind or
      group. A missing, repeated or foreign number, or any other property, takes the
-     request's protocol correction. So do items of the response as returned that share
-     equal content (the duplicate rule's `equalContent`): the correction names the number
+     request's protocol correction. So do items of the response that return equal values
+     for given, when and then, compared as returned: the correction names the number
      of every item in each equal set, so one retry can fix them all, as Decision 5's
      `shared_member` does, in place of the `competing_records` block they would meet after
-     the merge (14 November 2026). It covers one response's own items as returned: equal
-     criteria across groups, equal records of other kinds, and equality a field-level
-     value repair produces still block.
+     the merge (14 November 2026; compared as returned, 15 November 2026). It covers one
+     response's own items as returned: equal criteria across groups, equal records of other
+     kinds, equality a field-level value repair produces, and items equal only after the
+     typed duplicate rule (`equalContent`) normalizes them, such as a string and the same
+     text as a one-fragment object, still block.
    - **The engine binds** each criterion's kind (`acceptance_criterion`), claims (the
      slot's one claim) and group (the batch's), and appends the criteria to the group's
      batch in slot order, so the batch spans both responses. The merged batch takes full

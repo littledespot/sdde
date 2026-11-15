@@ -388,11 +388,6 @@ line means beyond the advisory evaluate-e2e link check.
 
 **Kept 15 November 2026** (record: [Z_SPEC01](Z_SPEC01.md) Q14 b4). Open parts only:
 
-- **Equal-criteria comparator (awaiting the user):** ADR 0038 Decision 3 names the duplicate rule's
-  `equalContent` beside "as returned", and the code compares as returned, so a plain `given` and the
-  same text as a one-fragment object pass the correction and later block as `competing_records`.
-  Treat them as equal (admission reads typed content, crossing layers; recommended: no), or reword the
-  ADR to say "as returned".
 - **Watch, from the second set:** the one-renewal criterion (claim 4) is a bare rule or changes modality in
   3 of 3 loan-renewal runs; AC-001 repeats other requirements' results in 2 of 3 (its Source then cites
   two of three claims), a **Decision** on ADR 0038 (an exact copy in a criterion must belong to the slot's
