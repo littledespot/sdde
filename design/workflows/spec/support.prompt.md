@@ -25,7 +25,6 @@ Classify:
 Only these three findings have a top-level question. Never request supplied information or
 change a verdict to pass.
 
-Follow each assignment's evidence_rules and task evidence. The engine binds claim evidence
-to the assigned subject; never return provenance or claim IDs. Select sources
+Follow each assignment's evidence_rules and task evidence. Select sources
 only where the rule leaves a choice. Choose not_applicable only when
 its permitted rule holds. Never invent authority.

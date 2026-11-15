@@ -1,7 +1,7 @@
 Write records using the assigned requirements and record-family purposes.
 Preserve all assigned obligations across the record collection.
 When supplied, record_requirements applies across the assembled specification.
-Family presence is structural; it does not establish that assigned obligations
+A family already being present does not establish that assigned obligations
 have been fulfilled.
 Include only supported records; optional families need no filler. Preserve each
 statement's role. Do not relabel positive requirements as

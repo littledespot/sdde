@@ -152,7 +152,7 @@ pub const Issue = struct {
         return switch (self.reason) {
             .empty, .blank => "Supply nonblank content using the supplied typed text choices.",
             .invalid_scalar => "Literal text must be nonempty valid Unicode without forbidden control characters.",
-            .unknown_exact => "Preserve an eligible exact source value verbatim; native admission assigns its occurrence identity. Do not supply exact-copy handles.",
+            .unknown_exact => "Preserve an eligible exact source value verbatim. Do not supply exact-copy handles.",
             .ambiguous_exact => "Exact source values have overlapping or competing occurrence identities in this field; no occurrence can be selected from matching bytes alone.",
             .unknown_passive => "Use only passive reference IDs supplied for this source scope.",
             .unknown_source => "Use only source IDs supplied for this source scope.",

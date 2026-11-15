@@ -22,21 +22,21 @@ gate is re-run on the build after E1–E4 land, as one closing set after the out
 (ADR 0034, derived item 7). E1's live set (3 per case, 6 of 6 published and passed) is a
 no-regression check, not the closing set.
 
-**Reference** for quality phases (§2 rule 7): Q17's set (`2026-11-15T07-50-*` and `08-11-*`, build
-`08ef5d5d…`, modified), the last kept state ([Z_SPEC01](Z_SPEC01.md) Q17). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
+**Reference** for quality phases (§2 rule 7): Q4's set (`2026-11-15T20-25-*`, build `7c853658…`,
+modified), the last kept state ([Z_SPEC01](Z_SPEC01.md) Q4). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
 as one evaluator ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
 | --- | --- | --- | --- | --- |
-| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 2 / 0 (the greeting-then-timestamp order, twice) | 91.7 (89.3–92.9) |
-| Loan-renewal | 4 of 6 (a false conflict failed one; an edge case naming claim 4 alone blocked one, §4 Q14) | 4 of 4 | 0 / 0 / 0 / 0 | 93.8 (89.3–100) |
+| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 1 / 0 (the greeting-then-timestamp order) | 90.5 (89.3–92.9) |
+| Loan-renewal | 3 of 3 | 2 of 3 (a bundled FR wrote "may renew", a critical failure) | 0 / 1 / 0 / 0 | 90.5 (85.7–92.9) |
 
 Advisory scores are scored against the case rubrics (`evaluations/e2e/<run>/evaluation.json`);
 scorer judgment moves one by about ±3.6, and keep decisions use the accuracy counts (§2 rule 6).
 
-**Retained runs:** `zig-out/e2e-spec/` holds Q17's set (and six zero-token `input_invalid` runs of
-`07-48-*`), the HEAD set and twenty runs of 8 November 2026
+**Retained runs:** `zig-out/e2e-spec/` holds Q4's set, the reverted D7.5 set (`09-04-*`), Q17's set
+(and six zero-token `input_invalid` runs of `07-48-*`), the HEAD set and twenty runs of 8 November 2026
 (report v15, `build.source.modified` true): the `5b34dbc` "Repeated-statement text not
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
 `00-37-49Z`), the entity and escaping set (`05-5*`) and six edge-case-lever runs on `071ce2b`
@@ -101,8 +101,8 @@ governs; these add what the phases need.
    - **Guards** (amended 3 November 2026, H6.2): any rise in lost source requirement per
      publication blocks a keep; the publication rate per case doesn't fall; and no class absent
      from the reference appears with an `established` trace to the changed owner. A watch item
-     blocks only when it crosses the effect size recorded before the set. Hygiene phases (Q4's
-     retry, Q7 D7.5) are kept on guards alone plus their **Keep if** measures.
+     blocks only when it crosses the effect size recorded before the set. Hygiene phases (such as
+     Q4's retry and Q7 D7.5) are kept on guards alone plus their **Keep if** measures.
    - **Sampling:** look after three runs per case, then extend by two or three with approval;
      never sample until a preferred answer emerges.
    - **Evidence floor:** fewer than about ten events across both states, or undecided at the
@@ -163,13 +163,12 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
 **Next:** items 1 to 8 are implemented, kept or closed (records in [Z_SPEC01](Z_SPEC01.md)): Q14 b4
 (item 4) was kept 15 November 2026, and item 8 (ADR 0038's edge-case outcome limit) needed no change,
 since b4 gives each criterion one claim and neither set printed a success Then for a refusal edge case.
-Q17 was kept 15 November 2026 too.
+Q17 was kept 15 November 2026, Q7 D7.5 was built and not kept the same day, and Q4 was kept 16
+November 2026.
 
-**Set order, decided 14 November 2026** (user: "the above recommendations are approved"). Each
-change set is measured on its own committed build (§2.1, §2.3), against the previous item's
-kept state (§2 rule 7); Q17's set is the reference for the next one ([Z_SPEC01](Z_SPEC01.md) Q17):
-1. **Q7 D7.5,** then **Q4** (the table below): screens, then a set each.
-2. **The closing set** (§1).
+**Set order, decided 14 November 2026** (user: "the above recommendations are approved"): the output-track
+items Q17, Q7 D7.5 and Q4 are done, so **the closing set** (§1) is next, on the user's approval. Each change set was measured on its own build against the previous item's kept state (§2
+rule 7); Q4's set is the reference now ([Z_SPEC01](Z_SPEC01.md) Q4).
 
 The order is approved, not a blanket go-ahead: each screen batch and live set still needs its
 own approval when it is ready (AGENTS.md; the project settings prompt for every live step).
@@ -179,9 +178,7 @@ above, inside the decided constraints):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
-| 2 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
-| 3 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
+| 1 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
 **Robustness track** (run completion and budget; no scored defect): the §22.6 correction
 location, outside E5 since DE5 7. Since D13.1 the measured runs show 0 runaways and 0 re-sends; the highest used 67,448
@@ -194,7 +191,12 @@ exhaustion, never budget, in two modes, each reported with no lever:
   non-scenario record naming its claim, so that case still fails;
 - reconcile dispositions (`2026-11-07T20-44-02Z-9d7f…`, hello-world): the model answered with
   prose and no JSON on all three attempts, from a request byte-identical to one that succeeded:
-  the model's variance under a coherent contract.
+  the model's variance under a coherent contract;
+- records, a reasoning-only first answer (`missing_final_text`) in 2 of 6 first attempts of D7.5's set
+  and none in 42 earlier (`2026-11-15T09-04-19Z-f51f…`, `…09-04-22Z-3edb…`): a correction that wrote no
+  `functional_requirement` ended one run invalid (the records progress check, no repair route for an
+  aggregate family), and a correction that wrote a weakened "may renew" failed one adjudication. Reverted
+  with D7.5, the build it appeared on; a model limitation until it recurs on another build.
 
 **Engine track, in gaps:** E1's `DataKey` removal (§5 E1); E2 stops
 at its three preparation stages (decided 14 November 2026); E3's feature logging waits on E6; E6
@@ -226,6 +228,15 @@ or the user records it as a model limitation.
     with no business data in about half of hello-world runs, and sometimes names the feature itself.
     No b4 call is involved, the cost is at most one point, and no prompt change targets it
     ([Z_SPEC01](Z_SPEC01.md) Q22).
+  - **One bundled FR for several requirements, sometimes weakened** (watch, from the D7.5 and Q4 sets;
+    no owner chosen): the records call writes a single FR that bundles the loan-renewal requirements
+    (list markers kept inline, or a paraphrase that says "may renew" for "must be able to renew").
+    Q4's set: 3 of 3 loan-renewal runs bundled, one a critical failure; D7.5's set: 1 of 3 (the critical
+    failure); Q17's set: 0 of 4 published runs; Q17's own records screen: one FR in 5 of 10 trials, Q4's
+    screen 1 of 10. The same
+    paraphrase appeared on a build without Q4's texts, and nothing isolates it to a change, so it is
+    a model limitation until it recurs on a build that explains it. A structural lever would be a
+    **Decision** on ADR 0036 Decision 2 (list markers in the model-facing requirement meaning).
   - **Edge-case outcomes:** ADR 0038 Decision 7, kept ([Z_SPEC01](Z_SPEC01.md) Next 8). **Not
     accepted** (user, 7 November 2026: "that is a poor idea and I will not accept it"): the
     engine filling `then` and `expected_outcome` from the record's cited source lines. ADR 0038
@@ -276,39 +287,18 @@ follow-ups:
 Out of scope unless harm appears: the statement, signal and conflict coverage inserts and
 token classifications.
 
-### Q4. Remove engine vocabulary and schema-stated rules from prompts (retry)
+### Q4. Engine vocabulary left in model-visible texts
 
-The first attempt removed the second `citations` sentence (`extraction.context.json:14`) and
-was reverted on 31 October 2026 after hello-world's first extraction returned
-`no_feature_claim` in 5 of 6 runs (`evaluations/q4/measures-set.json`), so the retry keeps it.
-12-model-boundary.md:369-370 and ADR 0016:159-160 say SPEC01 Q4 removes the restated rules. No
-published spec contains engine vocabulary, so this is AGENTS.md compliance, not an output
-target.
-
-**D4.1's extension** (decided 3 November 2026; D4.1's own correction left with Q14 b3): the rule covers
-native rule and correction texts too, and a sentence that says what a field, claim or response
-contains stays even when the engine enforces or transforms it.
-
-**Scope still model-visible:** `support.prompt.md:28-29` (bound for pre-generation source
-review); `packet-guidance.json:61`; `reconciliation-dispositions.prompt.md:2-4`;
-`extraction-classifications.prompt.md:2-5`; `records.prompt.md:4-5`;
-`support-loss.prompt.md:22`; the "native code …" texts in
-`src/domain/reference_reconciliation_diagnostic.zig` (lines 101, 106, 119, 122, 124, 132, 134),
-which reach requests through `descriptionFor` (`reference_model_input.zig:297`);
-`src/domain/typed_text.zig:156` (no projected request carries it, but
-`specification_repair.zig:81` can send it). Reword engine vocabulary in place; remove a
-restated rule only when the schema or its correction states all of it; keep task semantics the
-engine doesn't check (both `citations` sentences and the `claim_ids` definition).
-`records.prompt.md:9-11` states an "at most one record" rule (ADR 0038 Decision 5); the engine
-checks it only for non-requirement statements (ADR 0038:155-158), and the sentence is kept as
-written on purpose (:163-164). It stays as the rule's only carrier on a first attempt, since the
-provider schema can't express it.
-
-**Validation:** projection shows only the listed texts change; scripted missing and repeated
-members get the `array_length` and `duplicate_member` corrections; then a set, with the
-extraction requests screened first (§2 rule 4). **Keep if** engine vocabulary stays absent and
-no guard blocks (§2 rule 6); corrections, rejections, defect classes and cost are watch items.
-Never rename a field to chase a leak.
+**Kept 16 November 2026** (record: [Z_SPEC01](Z_SPEC01.md) Q4). **Not widened** (user, 15 November 2026,
+"No as per recommendation"): the review found engine vocabulary the original list missed, still in
+model-visible texts, reworded in place only if the user later asks (D4.1's extension): the protocol
+correction texts (`model_protocol_retry.zig:55,57` "Final-answer admission", "Model-text composition");
+typed-text rules (`typed_text.zig:156,163` "occurrence identities", "insertion nodes");
+`specification_provenance.zig:173-180` ("handles", "authorized evidence"); `text_field_policy.zig:70`;
+`specification_repair.zig:84-86,131-133`; and workflow-asset words ("canonical", "Readiness", "authorize
+operations", "fixed associations", "feature-wide entities unit", "exact-token obligations").
+`Constraint.native_token_disposition` is a key name and stays (never rename a field to chase a leak).
+Each change is a request change and needs its own set.
 
 ### Q7. Exact values
 
@@ -325,23 +315,14 @@ D16.1 and D16.2 sets:
   meaning (ADR 0038 Decision 6).
 - **C. Fragments joined without a separator:** the schema keeps the fragments option when no
   reference is offered, and fragments join with no separator
-  (`model_candidate_json.zig:251-253`). D7.5 owns it.
-
-- **D7.5** (decided 3 November 2026: yes, a conformance fix with no contract amendment, since
-  07-domain-representations.md:74-79, ADR 0006:302-316, 12-model-boundary.md:199-203 and
-  text-field-composition.md:21-22 already reserve fragments for composition around typed
-  insertions): where a field offers no inserted reference, its schema offers only the plain
-  string (`model_text_field.zig:174-190`; `textContract`, `model_text_wire.zig:277-292`). Schema
-  bytes change in every generation request, so a screen, then a set. Admission validates the
-  response against the schema the model receives (`admit_model_response.zig:19-21`) before the
-  codec runs (`model_candidate_handoff.zig:24-32`), so a fragments object against a
-  plain-string field fails as `type_mismatch` with a protocol correction. Effort S: `walk` in
-  `model_text_field.zig` and its tests; `generation.context.json:2` still describes fragments.
-  Since ADR 0047 composes the story, the only fragments object seen was in a reconciliation
-  signal (`2026-11-03T04-13-31Z-fa03…` call 5, unpublished), so D7.5 is a hygiene phase (§2
-  rule 6). **Keep if** no fragments object appears where no reference is offered and no guard
-  blocks; admission rejections, protocol corrections, runaways and unsupported addition are
-  watch items.
+  (`model_candidate_json.zig:251-253`). Since ADR 0047 composes the story, the only fragments
+  object seen was in a reconciliation signal (`2026-11-03T04-13-31Z-fa03…` call 5, unpublished).
+  **D7.5** (a plain string where a field offers no inserted reference, decided 3 November 2026)
+  was built and **not kept** 15 November 2026 ([Z_SPEC01](Z_SPEC01.md) Q7 D7.5): the 6-run set
+  showed 2 reasoning-only first-attempt records calls against 0 of 42 earlier, a critical
+  failure and an invalid run, with causation not established. C stays open as a conformance
+  gap (07-domain-representations.md "Model-facing text"; `generation.context.json:2` still
+  describes fragments). The user decides whether to retry it.
 - **Not recommended:** typed exact-value references inserted by the model (ADR 0020 replaced
   them after 4 of 5 hello-world runs failed, and the model's quotes would still double);
   removing the model's quotes (rewrites model bytes); a prompt asking for no quotes.

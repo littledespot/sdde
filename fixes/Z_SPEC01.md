@@ -1928,6 +1928,83 @@ records call (two objects in one conflicts answer).
 demonstrated** (the model ignores the principle text, and no criterion scores it); brittleness unchanged;
 scope qualified (records call only, guards only). Open parts: SPEC01 Q17, Q14 and C6.
 
+## Q7 D7.5. A plain string where a field offers no inserted reference (built, not kept, 15 November 2026)
+
+**Decided** 3 November 2026 (yes, a conformance fix with no contract amendment: 07-domain-representations.md
+"Model-facing text", ADR 0006:302-316, 12-model-boundary.md:199-203, text-field-composition.md:21-22); built,
+measured and **reverted** 15 November (user: "apply recommendations", on the recommendation to revert).
+**Defect class:** none scored; rendering artefact C (joined fragments) has not been published since ADR 0047
+composes the story, so it was conformance only.
+
+**Built** (`walk` in `model_text_field.zig`, with its test): after a request's own exclusions, a text field that
+keeps no insertion alternative takes the plain string alone. Of 1,900 scripted requests, 869 were identical,
+1,022 differed only in the response schema (3,295 text values collapsed), 8 corrections described the new
+shape and 1 scripted case got a `type_mismatch` correction for a fragments object sent to a plain-string
+field; `zig build verify` 147 steps, 2,225 tests; an independent review found no blocker.
+
+**Set** (`2026-11-15T09-04-*`, build `51c5afc7…`, modified; skill `3fe52a92…`, evaluated automatically): 5 of 6
+published, 4 passed and 1 critical failure. Hello-world 85.7 and 85.7 (0 / 0 / 2 / 0 and 0 / 0 / 3 / 0; one run
+ended invalid), loan-renewal 96.4, 89.3 and 82.1 (0 / 0 / 0 / 0, 0 / 0 / 1 / 0 and 0 / 1 / 1 / 0, the last a
+critical failure: renewal-eligibility 2). Against Q17's set (hello-world 92.9, 92.9, 89.3; loan-renewal 92.9,
+89.3, 100, 92.9; 7 of 9 published, 2 unsupported additions, no weakened obligation). **Rule held:** no fragments
+object reached a plain-string field in any of the 6 runs, no `type_mismatch` and no schema rejection; tokens fell
+5 to 8%. **Guards did not:** 2 of the 6 first-attempt records calls ended with reasoning only
+(`missing_final_text`), against 0 of 42 on seven earlier builds (exact one-sided probability about 0.013, a
+post-hoc cut on non-random runs); one such run's correction wrote no `functional_requirement`, so the records
+progress check ended it invalid; the other run's correction wrote "A borrower may renew" for "must be able to
+renew" and added an order the source doesn't state, and its brief call had a max-tokens runaway (16,384 output
+tokens looping on a repeating `signal_ids`, the one re-send succeeded). Unsupported additions rose to 7 over the
+published runs. The records requests were byte-identical to Q17's apart from the response schema (4,305 to 2,497
+characters), and no evaluator could tie any of it to the schema, so causation is not established. **Judgement
+calls:** hello-world `cf8e…` AC-001 "starts successfully and exits without error" as a minor addition (a
+material reading is a critical failure); `5566…` FR-001 states only the start while naming claims 1 to 3, the
+display and UTC statements having been deleted as repeated.
+
+**Why reverted:** no scored defect class to reduce, a guard hit with a plausible harm signal, and a hygiene gain
+only. The tree is back to Q17's state. **Left open:** SPEC01 Q7. A retry needs a reason to expect the model to
+behave the same on the smaller schema, or repeated runs showing the reasoning-only responses were chance.
+
+## Q4. Engine vocabulary out of model-visible texts (kept 16 November 2026)
+
+**Decided:** the first attempt was reverted on 31 October 2026 (it removed the second `citations` sentence, and
+hello-world's first extraction returned `no_feature_claim` in 5 of 6 runs); D4.1's extension 3 November (the rule
+covers native rule and correction texts, and a sentence that says what a field, claim or response contains
+stays); the retry's screens and set approved 15 November (user: "1. Approved, 2. No as per recommendation, 3.
+update as per recommendation"); **kept** 16 November (user: "keep the changes, and update the documentation"),
+over the recommendation to run 3 more loan-renewal runs first. **Defect class:** none published; AGENTS.md
+compliance ("prompts carry no engine vocabulary").
+
+**Built:** engine vocabulary reworded in place in `reconciliation-dispositions.prompt.md`,
+`extraction-classifications.prompt.md`, `records.prompt.md`, `support-loss.prompt.md`, the support
+evidence entry of `packet-guidance.json`, the "native code …" rule texts in
+`reference_reconciliation_diagnostic.zig` (and `unique_members`' "projection kind", which the list missed) and
+`typed_text.zig:155`; `support.prompt.md`'s sentence "The engine binds claim evidence … never return provenance or
+claim IDs" removed, since `support.schema.json` has no such property. Kept on purpose: both `citations`
+sentences, the `claim_ids` definition and the "at most one record" sentence (ADR 0038 Decision 5). Of 1,900
+scripted requests, 756 are identical and 1,144 differ only by these texts; `zig build verify` 147 steps, 2,225
+tests; a test now keeps engine vocabulary out of the rule texts and the summary rule's expected text derives from
+its owner. An independent review found no blocker; ADR 0016:159-160 and 12-model-boundary.md:375-376 now say Q4
+removed them.
+
+**Screens** (`zig-out/e2e-call/2026-11-15T20-20-*` and `20-23-*`, 10 replays per case and call kind): 120 of 120
+completed. Classifications gave the retained decisions in all 20 trials; summary, signals and conflicts kept
+their shape; dispositions declared no conflict group in 20 trials (retained call 4: 3 of 12 declared the false
+4/5 conflict); records 18 of 20 as retained.
+
+**Set** (`2026-11-15T20-25-*`, build `7c853658…`, modified; skill `3fe52a92…`, evaluated automatically): 6 of 6
+published, 5 passed and 1 critical failure; no corrections, rejections, runaways, re-sends or repairs.
+Hello-world 89.3, 92.9, 89.3 (0 / 0 / 0 / 0, 0 / 0 / 0 / 0 and 0 / 0 / 1 / 0, the greeting-then-timestamp
+order); loan-renewal 92.9, 92.9 and 85.7 (0 / 0 / 0 / 0, 0 / 0 / 0 / 0 and 0 / 1 / 0 / 0). **Vocabulary:**
+"native", "engine" and "projection kind" are absent as engine vocabulary from all 60 calls (the only hits are a
+heading and substrings in the case's own principle files); Q17's requests held about 10 occurrences each. Call 1
+never returned `no_feature_claim`; call 2 matched Q17. Cost unchanged (18.8k and 22.4k to 22.7k tokens). **Not
+clean:** loan-renewal `7452…` wrote one bundled FR with "A borrower may renew" for "must be able to renew" (a
+weakened obligation; renewal-eligibility 2, a critical failure). All three loan-renewal runs bundled the FR
+(list markers kept inline, `&#10;` entities, or the paraphrase), where Q17's four published runs did not; the
+same "may renew" bundle appeared on the reverted D7.5 build, which had none of Q4's texts, and the one
+differing sentence in the records request (Q4's) is not shown to cause it, so the guard (an established
+trace to a changed call) is read as not isolating Q4. Open parts: SPEC01 Q4 and the §3 watch on bundled FRs.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a
