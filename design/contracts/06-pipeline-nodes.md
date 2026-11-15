@@ -162,7 +162,7 @@ Packet scope alone cannot permit a model call after a native failure.
 Composed packets retain their exact current native base, plan, epoch and
 prerequisite snapshots; arbitrary derived packets do not establish scope.
 A retained native blocked-authorization result, with its exact current retained
-inputs, may reclassify its associated invalid rejection
+inputs (read before the same step's own invalidations), may reclassify its associated invalid rejection
 as blocked, without clearing that subject or its repair key. Neither disposition
 allows an unrelated, failed, cancelled or needs-user outcome to be relabelled.
 Incomplete publication requires current native clarification evidence carried into

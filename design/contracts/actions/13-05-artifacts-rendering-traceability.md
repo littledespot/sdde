@@ -34,7 +34,8 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
   Admitted review questions and details are carried under §12.7; a descriptor question serves
   only a `missing` or `stale` gap.
 - **Rejects:** `InvalidRequiredAuthority` for an invalid ledger, a candidate defect, an
-  administrative block, an owner mismatch, or a semantic gap with no review question.
+  administrative block, an upstream-rework entry, an owner mismatch, or a semantic gap with no
+  review question.
 
 ## `BuildResolvedClarificationNeedsAction` (`build-resolved-clarification-needs`)
 

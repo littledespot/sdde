@@ -20,22 +20,23 @@ started. **Re-run decided 14 November 2026** (user: "the above recommendations a
 gate is re-run on the build after E1–E4 land, as one closing set after the output-track changes
 (§3) are each kept or reverted, so the evidence comes from the build Plan work would start from
 (ADR 0034, derived item 7). E1's live set (3 per case, 6 of 6 published and passed) is a
-no-regression check, not the closing set.
+no-regression check, not the closing set. **Closing set run 16 November 2026** (`2026-11-15T21-47-*`,
+build `ac1c8b80…`, every report `build.source.modified: true`; [Z_SPEC01](Z_SPEC01.md) "Closing set"):
+6 of 6 published and passed, no lost or weakened requirement; the gate stays the user's to declare.
 
-**Reference** for quality phases (§2 rule 7): Q4's set (`2026-11-15T20-25-*`, build `7c853658…`,
-modified), the last kept state ([Z_SPEC01](Z_SPEC01.md) Q4). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
+**Reference** for quality phases (§2 rule 7): the closing set, the last kept state. Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
 as one evaluator ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
 | --- | --- | --- | --- | --- |
-| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 1 / 0 (the greeting-then-timestamp order) | 90.5 (89.3–92.9) |
-| Loan-renewal | 3 of 3 | 2 of 3 (a bundled FR wrote "may renew", a critical failure) | 0 / 1 / 0 / 0 | 90.5 (85.7–92.9) |
+| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 2 / 0 (the greeting-then-timestamp order, twice) | 89.3 (85.7–92.9) |
+| Loan-renewal | 3 of 3 | 3 of 3 | 0 / 0 / 0 / 0 | 94.0 (89.3–100) |
 
 Advisory scores are scored against the case rubrics (`evaluations/e2e/<run>/evaluation.json`);
 scorer judgment moves one by about ±3.6, and keep decisions use the accuracy counts (§2 rule 6).
 
-**Retained runs:** `zig-out/e2e-spec/` holds Q4's set, the reverted D7.5 set (`09-04-*`), Q17's set
+**Retained runs:** `zig-out/e2e-spec/` holds the closing set (`21-47-*`), Q4's set, the reverted D7.5 set (`09-04-*`), Q17's set
 (and six zero-token `input_invalid` runs of `07-48-*`), the HEAD set and twenty runs of 8 November 2026
 (report v15, `build.source.modified` true): the `5b34dbc` "Repeated-statement text not
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
@@ -167,8 +168,8 @@ Q17 was kept 15 November 2026, Q7 D7.5 was built and not kept the same day, and 
 November 2026.
 
 **Set order, decided 14 November 2026** (user: "the above recommendations are approved"): the output-track
-items Q17, Q7 D7.5 and Q4 are done, so **the closing set** (§1) is next, on the user's approval. Each change set was measured on its own build against the previous item's kept state (§2
-rule 7); Q4's set is the reference now ([Z_SPEC01](Z_SPEC01.md) Q4).
+items Q17, Q7 D7.5 and Q4 are done and **the closing set** (§1) was run on 16 November 2026. Each change set was measured on its own build against the previous item's kept state (§2
+rule 7); the closing set is the reference now ([Z_SPEC01](Z_SPEC01.md) "Closing set").
 
 The order is approved, not a blanket go-ahead: each screen batch and live set still needs its
 own approval when it is ready (AGENTS.md; the project settings prompt for every live step).
@@ -196,7 +197,9 @@ exhaustion, never budget, in two modes, each reported with no lever:
   and none in 42 earlier (`2026-11-15T09-04-19Z-f51f…`, `…09-04-22Z-3edb…`): a correction that wrote no
   `functional_requirement` ended one run invalid (the records progress check, no repair route for an
   aggregate family), and a correction that wrote a weakened "may renew" failed one adjudication. Reverted
-  with D7.5, the build it appeared on; a model limitation until it recurs on another build.
+  with D7.5, the build it appeared on. It recurred once on another build, at the first extraction call of
+  closing-set run `2026-11-15T21-47-31Z-863a…` (the one protocol correction fixed it): 3 reasoning-only
+  first answers in 24 runs of three builds, a model limitation under a coherent contract.
 
 **Engine track, in gaps:** E1's `DataKey` removal (§5 E1); E2 stops
 at its three preparation stages (decided 14 November 2026); E3's feature logging waits on E6; E6
@@ -820,14 +823,9 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
   `TelemetryFact` is one variant per event (F0002:193-217), but one struct with `event_type`
   and `fields` in code (`telemetry.zig:205-212`). **Next:** the code change, recording any
   event-row or report version it moves (§2 rule 12).
-- **Upstream rework as a form (decided 15 November 2026):** `required_authority_clarifications.build`
-  turns an `upstream_rework_required` entry into a form (`:15`), where §14.14 and invariant 22 send an
-  earlier-owner gap to §24.5's rework route. The gate blocks such a set before `build` runs
-  (`required_authority.zig:276`), so only `required_authority_test.zig:517-561` exercises the branch,
-  and Spec detects only at `spec` (`specification_authority.zig:58`). The design wins: delete that
-  branch and move its test to `.spec` detection, in a gap before the closing set; no design edit, so
-  ADR 0034 is untouched. No test covers two same-stage `clarification_required` gaps becoming two
-  forms (§14.14).
+- **Two same-stage `clarification_required` gaps becoming two forms (§14.14):** no test covers it.
+  (The upstream-rework branch of `required_authority_clarifications.build` is deleted,
+  [Z_SPEC01](Z_SPEC01.md) "Upstream rework".)
 - **Renderer version (decided 15 November 2026):** §23.1's version rules stay the target for stages
   that get approvals (23-rendering.md:49 cites this entry); build or delete nothing now.
 - **Mid-run logging transition:** decided (ADR 0032, §14.10). Open only when a route needs the
@@ -984,17 +982,9 @@ again after each failure.
 hard-coded tables that end `else => return error.InvalidOutcomeAssociation`
 (`authorizationBlocked` in `workflow_outcome_binding.zig`; also the `clarification_route` branch
 and `diagnosticAdmission`). Giving another authorizer a `blocked` outcome compiles, validates and
-then rejects the first run that takes it. **Executed twice** (`2026-11-15T02-30-17Z-2fa4…` and
-`07-50-06Z-dc98…`, both a model-declared claims 4 and 5 conflict at reconciliation): the stage's own
-authorizer returns `blocked` (`no_independent_target`, `reference_reconciliation_repair.zig:197`) but
-invalidates its own `validated_reference_dispositions`
-(`reference_reconciliation_repair_workflow.zig:56-61`), so the binding reads its retained state from a view
-where the slot is already null, `retainsCurrentInputs` (`retained_candidate.zig:41-49`) reports it stale,
-and `workflow_outcome_binding.zig:433` returns `InvalidOutcomeAssociation` where the run should end
-`blocked`. The evaluator read this from code; it is not reproduced. Fix not scheduled: read the blocked
-decision against the view before the authorizer's invalidations, with no per-stage branch and a test per
-stage (summary, dispositions, signals, conflicts); the other authorizers and
-`specification_repair_workflow.zig:85,104` may do the same. **Owner:** `workflow_outcome_binding.zig`.
+then rejects the first run that takes it. Not executed. The one way a registered authorizer's
+`blocked` was rejected, a stage that retires its own judged evidence with the decision, is fixed
+([Z_SPEC01](Z_SPEC01.md) C6). **Owner:** `workflow_outcome_binding.zig`.
 
 **C7. A stray entry in `clarify/` fails the run, even after every model call**
 (`adapters/filesystem/feature_input_source.zig:83-85`; the publish step repeats the capture; class:

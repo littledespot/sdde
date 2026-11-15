@@ -524,7 +524,7 @@ test "authority clarification subjects preserve earliest owner and remain stable
     const two = try fixture(allocator, .design_decision);
     var inputs = one;
     inputs.feature = source_inputs.corpus.feature_id;
-    inputs.detected_at = .tasks;
+    inputs.detected_at = .spec;
     inputs.seeds = try allocator.dupe(a.Seed, &.{ one.seeds[0], two.seeds[0] });
     const proofs = try allocator.dupe(a.Evidence, &.{ one.evidence[0], two.evidence[0] });
     proofs[1].id.ordinal = 2;
@@ -557,6 +557,12 @@ test "authority clarification subjects preserve earliest owner and remain stable
         try std.testing.expectEqualStrings(before.id, after.id);
     }
     try std.testing.expectError(error.ProtectedClarification, refresh.refresh(allocator, .{ .state = .{ .value = first.state.value }, .submissions = &.{}, .protected_forms = &.{.{ .id = c.Id.parse(first.state.value.?.records[0].id).?, .bytes = "protected" }} }, again));
+    // The same gaps found by a later stage are earlier owners' rework, which no form carries.
+    var later = inputs;
+    later.detected_at = .tasks;
+    const rework = try run(allocator, later);
+    try std.testing.expect(rework.entries[0].outcome == .upstream_rework_required);
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.build(allocator, source_inputs, later, try observe(allocator, later), rework, &packet_guidance.marked));
 }
 
 test "current contradictory assessments fail while genuine missing decisions retain their questions" {

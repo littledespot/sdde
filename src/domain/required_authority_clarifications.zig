@@ -12,8 +12,8 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
     for (result.entries) |entry| {
         const gap: a.Gap = switch (entry.outcome) {
             .clarification_required => |value| value,
-            .upstream_rework_required => |value| .{ .owner = value.owner, .reason = value.reason },
-            .administrative_block => return error.InvalidRequiredAuthority,
+            // An earlier owner's gap is the rework route's (§14.14, §24.5), not a form; the gate blocks such a set first.
+            .upstream_rework_required, .administrative_block => return error.InvalidRequiredAuthority,
             .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => continue,
         };
         const registered = a.policy(entry.requirement) orelse return error.InvalidRequiredAuthority;

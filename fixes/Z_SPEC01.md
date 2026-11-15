@@ -2005,6 +2005,57 @@ same "may renew" bundle appeared on the reverted D7.5 build, which had none of Q
 differing sentence in the records request (Q4's) is not shown to cause it, so the guard (an established
 trace to a changed call) is read as not isolating Q4. Open parts: SPEC01 Q4 and the §3 watch on bundled FRs.
 
+## C6. A blocked repair authorization stays decided though it retires the evidence it judged (16 November 2026)
+
+**Approved** 16 November 2026 (user: "1. yes", on the recommendation to fix it first). **Defect:** successful
+completion: a reconciliation authorizer that returned `blocked` also retired its own judged evidence (its
+`effects.invalidates`, applied for every outcome, e.g. `validated_reference_dispositions`), and the outcome
+binding read the retained decision against the post-delta view, where `retainsCurrentInputs` saw the retired slot
+gone and called the decision stale, so the run failed with `InvalidOutcomeAssociation` where it should end
+`blocked`. Two real runs: `2026-11-15T02-30-17Z-2fa4…` and `07-50-06Z-dc98…`, both with the model declaring claims 4
+and 5 in conflict at call 4. **Fix** (`workflow_outcome_binding.zig`): the `repair_authorize` branch reads the
+blocked decision through `decidedView`, the proposed view with each slot the same candidate invalidates put back
+from the view before; it names no stage and serves all four registered authorizers. **Test** (in
+`reference_reconciliation_repair_workflow.zig`): for each phase (summary, dispositions, signals, conflicts) a
+blocked decision that retires its own evidence is accepted, and a decision made against other evidence than the run
+holds is still rejected; it fails with `decidedView` disabled, at the check the real runs hit. `zig build verify`
+147 steps, 2,226 tests; no model request changes.
+
+## Upstream rework. A form never carries an earlier owner's gap (16 November 2026)
+
+**Decided** 15 November 2026 (the design wins: §14.14 and invariant 22 send an earlier-owner gap to §24.5's rework
+route), **approved to build** 16 November. `required_authority_clarifications.build` turned an
+`upstream_rework_required` entry into a form; the gate blocks such a set before `build` runs
+(`required_authority.zig:276`) and Spec detects only at `spec`, so only a test reached the branch. **Fix:** the
+branch is deleted and `build` rejects it with `InvalidRequiredAuthority`; the test that exercised it
+("authority clarification subjects preserve earliest owner …") now detects at `.spec`, where the same two
+gaps are `clarification_required` and keep their earliest owners and stable subjects, and gains the rejected
+case (the same gaps detected at `.tasks` are rework and build no form), which fails with the old branch
+restored. No design edit; ADR 0034 untouched.
+
+## Closing set (16 November 2026)
+
+**Run** after the output track and the two engine items were done ("implement Suggested order: C6, then the
+upstream-rework deletion, then the closing set", user, 16 November 2026): `2026-11-15T21-47-*`, 3 runs per case,
+none retried, build `ac1c8b80…` (the Q4 build plus C6 and the upstream-rework deletion, neither of which changes a
+model request; every report records `build.source.modified: true`), skill `3fe52a92…`, evaluated automatically.
+**Result:** 6 of 6 published, 6 of 6 passed, no critical failure; **lost source requirement 0, weakened obligation
+0, contradiction 0**, unsupported addition 2 (both minor, in hello-world: AC-003's Given adds "has displayed
+`Hello, World!`", the greeting-then-timestamp order). Hello-world 92.9, 89.3, 85.7 (0 / 0 / 0 / 0, 0 / 0 / 1 / 0,
+0 / 0 / 1 / 0); loan-renewal 89.3, 92.9, 100 (0 / 0 / 0 / 0 each). Q4's set: hello-world 90.5 and loan-renewal
+90.5 with one critical failure (a bundled FR wrote "may renew"); it did not recur. **Defects**, all minor and all
+seen before: the Given that already holds the event its When names (hello-world 3 of 3), an entity for a feature with
+no business data (1 of 3), the model's quote marks around the engine's code span (4 of 6), AC-001 repeating other
+requirements' results (loan-renewal 2 of 3), AC-004 as the bare source sentence (2 of 3), and one bundled FR in 2
+of 3 loan-renewal runs (list markers and `&#10;` entities in one; clean prose in another; five FRs in the third).
+No step ended `blocked` or `failed`, with 0 runaways, 0 re-sends and 0 repairs; the one correction was a
+reasoning-only first answer at extraction (run `863a…`, 11 calls, 5.5% of its tokens). **Not exercised:** C6's
+path (no authorizer blocked) and the deleted upstream-rework branch, so both rest on their offline tests.
+Cost: hello-world 18.7k to 18.8k tokens, loan-renewal 22.6k to 24.1k. **Judgement calls:** loan-renewal
+`e66c…` scored renewal-eligibility 3 on AC-004's text (as `f080` was; a stricter reading fails it), and
+hello-world `fdfd…` carries four minor defects in one run. The evidence supports the gate; declaring it stays
+the user's (ADR 0034). SPEC01 §1 now takes this set as the reference.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a
