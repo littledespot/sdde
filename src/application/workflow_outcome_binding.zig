@@ -154,7 +154,8 @@ pub fn prepare(
                 try changes.add(.{ .authorize = .{ .subject = subject, .transition = transition } });
             } else if (candidate.outcome == .blocked) {
                 const result_key = binding.result orelse return error.InvalidOutcomeAssociation;
-                if (!changed(candidate, result_key) or !try authorizationBlocked(&after, result_key)) return error.InvalidOutcomeAssociation;
+                const decided = decidedView(&before, &after, candidate);
+                if (!changed(candidate, result_key) or !try authorizationBlocked(&decided, result_key)) return error.InvalidOutcomeAssociation;
                 const result = try nativeSubject(envelope, occurrence, candidate, binding.kind, result_key, true);
                 try changes.add(.{ .reclassify = .{ .repair_blocked = .{ .subject = subject.native, .result = result.native } } });
             }
@@ -305,6 +306,17 @@ fn proposedView(envelope: *const envelope_module.PipelineEnvelope, candidate: *c
         if (candidate.delta.data_invalidations.contains(@enumFromInt(index))) result.slots[index] = null;
         if (write) |value| result.slots[index] = value;
         if (replacement) |value| result.slots[index] = value;
+    }
+    return result;
+}
+
+/// The view an authorizer decided against: the proposed view with the slots the same candidate retires
+/// put back. An authorizer retires the evidence it judged for the repair that follows, even when it
+/// blocks, and a decision that retained its inputs while they were current is not stale for that.
+fn decidedView(before: *const data.View, after: *const data.View, candidate: *const execution.Candidate) data.View {
+    var result = after.*;
+    for (&result.slots, before.slots, 0..) |*slot, prior, index| {
+        if (slot.* == null and candidate.delta.data_invalidations.contains(@enumFromInt(index))) slot.* = prior;
     }
     return result;
 }

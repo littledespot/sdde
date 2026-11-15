@@ -177,3 +177,65 @@ pub fn diagnostic(view: *const data.View) values.Error!?r.diagnostic.Rejection {
 pub fn readAuthorization(view: *const data.View) operations.Error!repair.Authorization {
     return (try owned.readNative(view, state_schema, .authorized)).authorization;
 }
+
+test "a blocked authorization of any phase stays decided though it retires the evidence it judged" {
+    const binding = @import("workflow_outcome_binding.zig");
+    const envelope_module = @import("pipeline_envelope.zig");
+    inline for ([_]Stage{ .summary, .dispositions, .signals, .conflicts }) |stage| {
+        const authorize = Authorize(stage);
+        const descriptor = authorize.outcome_association;
+        const evidence_key = descriptor.repair_authorize.evidence;
+        const subject_schema = values.schema(.parsed_reference_reconciliation, u8, 1, 16).captured();
+        const evidence_schema = values.schema(evidence_key, u8, 1, 16).captured();
+        var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ subject_schema, evidence_schema, state_schema });
+        defer envelope.deinit();
+        var subject_delta: pipeline.NodeDelta = .{};
+        defer envelope.discard(&subject_delta);
+        subject_delta.data_writes[@intFromEnum(subject_schema.key)] = try values.create(std.testing.allocator, subject_schema, u8, 1);
+        try envelope.apply(.{ .id = "test.subject", .kind = .action, .requires = &.{}, .produces = &.{subject_schema.key}, .side_effect = .none }, &subject_delta, .ok);
+        var evidence_delta: pipeline.NodeDelta = .{};
+        defer envelope.discard(&evidence_delta);
+        evidence_delta.data_writes[@intFromEnum(evidence_schema.key)] = try values.create(std.testing.allocator, evidence_schema, u8, 2);
+        try envelope.apply(.{ .id = "test.evidence", .kind = .action, .requires = &.{subject_schema.key}, .produces = &.{evidence_schema.key}, .side_effect = .none }, &evidence_delta, .ok);
+        const read: data.View = .{ .slots = envelope.slots };
+        // The phase's validation rejected the candidate: the run is invalid until the authorizer reclassifies it.
+        const validation_occurrence = try envelope.beginOccurrence("test.validate");
+        var rejection: execution.Candidate = .{ .outcome = .invalid, .delta = .{} };
+        var rejected = try binding.prepare(&envelope, validation_occurrence, .{ .observe = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key } }, &rejection);
+        defer rejected.deinit();
+        try envelope.outcomes.commit(&rejected);
+        try std.testing.expect(!envelope.outcomes.compatible(.blocked));
+        const occurrence = try envelope.beginOccurrence("test.authorize");
+        // The decision was made against the current evidence and retires it, as every authorizer does. Its
+        // rejection is never read here, only that the decision is a block.
+        const owner = try owned.create(std.testing.allocator, read);
+        owner.payload = .{ .blocked = .{ .reason = .no_independent_target, .rejection = undefined } };
+        var decided = try owned.publish(std.testing.allocator, state_schema, owner, .blocked);
+        defer envelope.discard(&decided.delta);
+        for (authorize.effects.invalidates) |key| decided.delta.data_invalidations.insert(key);
+        try std.testing.expect(decided.delta.data_invalidations.contains(evidence_key));
+        var prepared = try binding.prepare(&envelope, occurrence, descriptor, &decided);
+        defer prepared.deinit();
+        try std.testing.expect(prepared.compatible(.blocked));
+        // A decision made against other evidence than the run holds is still stale.
+        const other = try values.create(std.testing.allocator, evidence_schema, u8, 9);
+        defer values.destroy(other);
+        var foreign = read;
+        foreign.slots[@intFromEnum(evidence_key)] = other;
+        const stale_owner = try owned.create(std.testing.allocator, foreign);
+        stale_owner.payload = .{ .blocked = .{ .reason = .no_independent_target, .rejection = undefined } };
+        var stale = try owned.publish(std.testing.allocator, state_schema, stale_owner, .blocked);
+        defer envelope.discard(&stale.delta);
+        for (authorize.effects.invalidates) |key| stale.delta.data_invalidations.insert(key);
+        try std.testing.expectError(error.InvalidOutcomeAssociation, binding.prepare(&envelope, occurrence, descriptor, &stale));
+        // Only the evidence the step retires is put back: an input it replaces stays stale.
+        const successor = try values.create(std.testing.allocator, subject_schema, u8, 7);
+        const replacing_owner = try owned.create(std.testing.allocator, read);
+        replacing_owner.payload = .{ .blocked = .{ .reason = .no_independent_target, .rejection = undefined } };
+        var replacing = try owned.publish(std.testing.allocator, state_schema, replacing_owner, .blocked);
+        defer envelope.discard(&replacing.delta);
+        replacing.delta.data_replacements[@intFromEnum(subject_schema.key)] = successor;
+        for (authorize.effects.invalidates) |key| replacing.delta.data_invalidations.insert(key);
+        try std.testing.expectError(error.InvalidOutcomeAssociation, binding.prepare(&envelope, occurrence, descriptor, &replacing));
+    }
+}
