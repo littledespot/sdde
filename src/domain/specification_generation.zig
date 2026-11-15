@@ -141,14 +141,33 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("sp
         } else error.InvalidSpecificationUnit,
         .records => |batch| if (bound == .records) records: {
             const records = try allocator.alloc(spec.Values(.model).RecordProposal, batch.records.len);
-            const ids = try allocator.dupe(@import("reference_reconciliation.zig").SignalId, &.{bound.records.signal});
             for (batch.records, records) |wire, *record| {
-                if (wire.content == .entity) return error.InvalidSpecificationUnit;
-                record.* = .{ .content = wire.content, .source_group_ids = ids, .provenance = .{ .claim_ids = try groupSubset(allocator, bound.records.selection.claim_ids, wire.claim_ids), .clarification_response_ids = bound.records.selection.clarification_response_ids } };
+                // The entities unit owns the entity family, and the engine writes every acceptance
+                // criterion from its claim's slot (ADR 0038 Decision 3): a records response holds neither.
+                if (wire.content == .entity or std.meta.activeTag(wire.content) == spec.scenario_family) return error.InvalidSpecificationUnit;
+                record.* = try batchRecord(allocator, bound.records, wire.content, try groupSubset(allocator, bound.records.selection.claim_ids, wire.claim_ids));
             }
             break :records .{ .content = .{ .records = records } };
         } else error.InvalidSpecificationUnit,
     };
+}
+
+/// ADR 0038 Decision 1: a record of a source-group batch binds exactly that group, the claims
+/// `claim_ids` and the group's clarification responses. The engine, never the model, sets all three:
+/// the one writer for a record the model authored (`parse`) and a criterion the engine bound to its
+/// slot (`scenario_request.parse`).
+pub fn batchRecord(a: std.mem.Allocator, bound: @import("specification_source_binding.zig").RecordBound, content: spec.Content(spec.BusinessValue), claim_ids: []const @import("reference_identity.zig").ClaimId) std.mem.Allocator.Error!spec.Values(.model).RecordProposal {
+    return .{
+        .content = content,
+        .source_group_ids = try a.dupe(@import("reference_reconciliation.zig").SignalId, &.{bound.signal}),
+        .provenance = .{ .claim_ids = claim_ids, .clarification_response_ids = bound.selection.clarification_response_ids },
+    };
+}
+
+/// Whether `record` belongs to the records batch of `group`: it binds that one group and is no entity.
+/// The one statement of the rule that the session's admission and the scenario planner both apply.
+pub fn inBatch(record: spec.RecordProposal, group: @import("reference_reconciliation.zig").SignalId) bool {
+    return record.content != .entity and record.source_group_ids.len == 1 and record.source_group_ids[0].ordinal == group.ordinal;
 }
 /// The named claims in the group's accepted order. Each must belong to the group,
 /// once; model order never becomes canonical order.
@@ -176,7 +195,6 @@ pub fn validate(allocator: std.mem.Allocator, validator: @import("typed_text.zig
 pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: candidate.Candidate) Error!Validation {
     if (proposed.group_repair) |group| if (std.meta.activeTag(unit) != @as(std.meta.Tag(Unit), switch (group.policy) {
         .membership => .entities,
-        .scenario => .records,
     })) return error.InvalidSpecificationUnit;
     const result = try validate(a, validator, context, unit, proposed.response);
     if (result != .valid) return result;

@@ -35,7 +35,7 @@ pub fn apply(input: State, step: compilation.CompiledStep, resources: []const co
         } else return invalid();
         state = .{ .plan = plan };
     }
-    const starts_request = model.assignsRequest(step.produces, step.replaces);
+    const starts_request = model.startsRequest(step);
     if (starts_request) {
         const selected = parameter(step.parameters, "composition-part");
         if (selected) |part| {
@@ -52,6 +52,8 @@ pub fn apply(input: State, step: compilation.CompiledStep, resources: []const co
     if (state.request_part != null and request_lifecycle.advances(step.replaces, step.produces) and request_lifecycle.completes(step.requires)) {
         state.request_completed = outcome == .ok and !request_lifecycle.terminates(step.requires);
     }
+    // The kernel step begins and completes its request in one step (ADR 0030).
+    if (state.request_part != null and step.request_stages.len != 0) state.request_completed = outcome == .ok;
     if (contains(step.replaces, .json_composition)) {
         if (parameter(step.parameters, "native-composition-part")) |native| {
             // A registered native producer declares one structural placement.

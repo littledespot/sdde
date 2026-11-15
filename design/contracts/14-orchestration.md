@@ -17,7 +17,7 @@ An orchestrator “contains” children through composition. It does not contain
   they would duplicate and hide the compiled workflow graph.
 - Only the engine kernel identified by ADR 0005, including the sections explicitly marked
   startup, cleanup, or instrumentation-internal, is not callable from YAML.
-- [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented) adds the
+- [ADR 0030](../decisions/0030-engine-owned-model-request.md) adds the
   stage sequence of one model request to that kernel. The `request-model` step is selected by
   `use` and its successors by `on`; its stages are not.
 
@@ -85,8 +85,8 @@ workflow without branching on workflow names:
   workflow.
 - Each step returns only its registered typed outcomes.
 - The YAML graph declares every branch, including clarification, retry, repair, failure, and
-  cancellation. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet
-  implemented), model invocation is one `request-model` step, and its protocol correction runs
+  cancellation. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md)
+  (implemented), model invocation is one `request-model` step, and its protocol correction runs
   inside that step under its declared `retry-limit`.
 - Every retry-capable operation instance declares its own bounded limit, which the compiler
   binds to monotonic accounting and which no transition cycle can bypass.
@@ -110,7 +110,7 @@ The compiler proves declared part dependencies; the composition resource schedul
 nothing. Generic assembly is a pure child action with no model port or prompt.
 The 1,024-step ceiling (ADR 0016) preserves visible detailed operations and
 independent retry identities; there is no hidden dispatcher. Extraction uses this
-shared implementation. Under ADR 0030 (not yet implemented), each part call site is one
+shared implementation. Under ADR 0030, each part call site is one
 `request-model` step with its `composition-part`; its retry identity stays independent.
 Under [ADR 0031](../decisions/0031-stage-actions.md), deterministic operations that a stage
 action absorbs are no longer visible operations: the nine toolchain operations are the internal
@@ -152,21 +152,16 @@ The persisted stage status is advisory until these current artifacts pass. This 
 ### 14.4 Atomic-repair operation
 
 - The YAML-selected repair operation invokes ordering and selection, then
-  `ClassifyRepairAuthorizationPurposeAction`.
-- The ordinary branch invokes `CreateRepairAuthorizationAction`; the runner applies
+  `CreateRepairAuthorizationAction`; the runner applies
   native progress and operation/defect accounting under [§22.7](22-repair.md#227-repair-retry-limit-and-escalation).
-  The unsupported-content branch invokes
-  `CreateNoInventionClarificationReplacementAuthorizationAction` and consumes only its
-  unit-local one-shot flag during scope validation.
 - It performs one authorized repair attempt and returns its typed result.
 - A further attempt, candidate validation, clarification, or terminal outcome is a YAML
   transition, not an internal successor choice.
-- Under ADRs [0030](../decisions/0030-engine-owned-model-request.md) and
-  [0033](../decisions/0033-generic-repair-operations.md) (not yet implemented), this repair
-  operation is a sequence of YAML steps: `authorize-repair`, `build-repair-input`,
-  `request-model`, `parse-repair` and `merge-repair`, each with the route's `owner`. The
-  ordering, selection, classification and no-invention branch above run inside
-  `authorize-repair`. It is still one authorized attempt.
+- Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (implemented), this
+  repair operation is a sequence of YAML steps: `authorize-repair`, `build-repair-input`,
+  `request-model` (ADR 0030, which takes no `owner`), `parse-repair` and `merge-repair`.
+  The four repair operations each take the route's `owner`. The ordering and selection
+  above run inside `authorize-repair`. It is still one authorized attempt.
 
 ### 14.5 User-review operation
 
@@ -197,15 +192,14 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
 ### 14.6 Protocol-retry operation
 
 > [§22.7](22-repair.md#227-repair-retry-limit-and-escalation) states the
-> [ADR 0030](../decisions/0030-engine-owned-model-request.md) change (not yet implemented);
-> the rules below then apply to the `request-model` step's correction stage.
+> [ADR 0030](../decisions/0030-engine-owned-model-request.md) change;
+> the rules below apply to the `request-model` step's correction stage.
 
 - This YAML-selected operation handles decoding/schema rejection and the approved
   missing-final-answer case under [§22.6](22-repair.md#226-unparseable-output).
-- Its compiled subgraph uses the existing `build-model-protocol-retry` action to
-  prepare correction content. Runner-owned bindings then reuse ordinary attempt
-  and token accounting, provider invocation, observation validation and response
-  admission; detailed decoding and schema-validation operations remain available.
+- Its correction stage prepares correction content. Runner-owned bindings then reuse
+  ordinary attempt and token accounting, provider invocation, observation validation and
+  response admission (decoding and schema validation are one admission stage).
 - [Explicit error guidance](22-repair.md#2262-explicit-error-guidance) changes
   request preparation, not orchestration authority. The orchestrator follows typed
   outcomes; it neither derives explanations nor compares rejection evidence.
@@ -264,21 +258,22 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
 
 ### 14.10 `FeatureLogPolicyTransitionOrchestrator`
 
-- This instrumentation-only orchestrator switches an existing run after **any** committed
-  successor bootstrap authority whose validated change plan sets `transitionFeatureLogging:
-  true`, including mixed specification/planning changes.
-- Before refresh, startup reconstructs the historical policy solely from the current persisted
-  `BootstrapAuthorityState.components.compiledEnginePolicy.loggingPolicyFragment`; until
-  that authority validation finishes, only bounded content-free emergency telemetry is
-  available.
-- Ordinary feature events continue under that historical binding while the successor bootstrap
-  candidate is evaluated.
+- This instrumentation-only orchestrator switches an existing run to a changed logging policy
+  after a route adopts the changed candidate ([§9.4](09-configuration.md)), when the validated
+  change plan sets `transitionFeatureLogging: true`, including mixed specification/planning
+  changes.
+- The successor is execution-local ([ADR 0032](../decisions/0032-engine-routines.md), decided
+  14 November 2026, with [ADR 0009](../decisions/0009-atomic-workflow-execution.md)): no
+  bootstrap authority is committed for it, no pointer advances and no durable lineage is
+  written. The run's current policy and binding are the ones its activation built in memory.
+  `ValidateFeatureLogPolicyTransitionAction`
+  ([13-09](actions/13-09-logging.md)) is its whole authority.
+- Ordinary feature events continue under the current binding while the successor candidate is
+  evaluated.
 
-- After the validated policy handoff, the runner pauses new workflow nodes and buffers only
+- After the route adopts the changed candidate, the runner pauses new workflow nodes and buffers only
   bounded typed `WorkflowTelemetryFact` values, preserving each active compiled workflow's
   registry-validated shortcode.
-- The successor state's durable lineage supplies the exact parent ID and materialized change
-  plan.
 - In the same live run, the orchestrator builds/validates both policies/bindings, then visits
   each enabled stream in fixed `event`, then `prompt` order.
 - It acquires the physical lock from the historical binding and converts that single token into
@@ -289,7 +284,8 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
 - After all per-stream locks are released, the mixed-state assembler builds/validates one
   complete successor sink; only then does `ActivateFeatureLogPolicyTransitionAction` swap the
   run-local observer and flush buffered facts through the new definitions/policy.
-- No normal event/model/node occurs between bootstrap-pointer commit and this switch.
+- No normal event/model/node occurs between the route's adoption of the changed candidate and
+  this switch.
 - Any failure emits the one fixed emergency record and enters `block_new_work`; the engine never
   continues on an obsolete or partially switched policy.
 
@@ -299,8 +295,9 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
   `WorkflowArtifactRegistry` and active-feature capability; it does **not** build the current
   run's policy or binding merely to discover history.
 - It scans/validates all bounded prior-run binding groups, resolves each historical policy
-  solely through its `segment_header` control row's policy identity and readable bootstrap
-  lineage, and processes groups in deterministic `(runId, bindingId, stream rank)` order.
+  solely through its `segment_header` control row's policy identity
+  ([ADR 0026](../decisions/0026-header-identity-log-retention.md), amended 14 November 2026),
+  and processes groups in deterministic `(runId, bindingId, stream rank)` order.
 - For an active prior tail it acquires that prior run's ordinary single-binding physical lock,
   recovers the tail, invokes `FeatureLogPort.closeHistoricalTailAfterCrash`, validates the
   close, and releases; for a closed-only group it validates the durable `segment_trailer`
@@ -314,11 +311,11 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
   initialization.
 - Thus crash recovery needs no durable run-local transition pointer, and neither a current
   binding nor a dual-binding capability is misapplied to a historical run.
-- Not yet implemented: no persisted bootstrap authority supplies historical policy
-  lineage. Retention uses segment-header identity instead
-  ([ADR 0026](../decisions/0026-header-identity-log-retention.md)). It runs after the
-  current activation and before `run.started`, and every prior group must still
-  validate. A prior run with an active tail is kept whole and unfinalized.
+- Not yet implemented: prior-run finalization. The order above, relative to the current
+  activation, is undecided, and its preconditions are in
+  [ADR 0026](../decisions/0026-header-identity-log-retention.md). Retention runs after the
+  current activation and before `run.started`, and every prior group must still validate. A
+  prior run with an active tail is kept whole and unfinalized.
 
 ### 14.11 Implementation workflow composition
 

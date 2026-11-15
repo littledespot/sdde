@@ -163,9 +163,6 @@ gives each operation's runner accounting transition and the writers of
 `model_request_identity_ledger`. Kept here, flagged, because the native types lack them:
 
 - side effect `command`, for proposed Implement commands ([§26](design.md#26-security-and-safety));
-- runner accounting `consume_no_invention_replacement`, emitted only by the proposed
-  `ValidateRepairScopeAction` when its authorization purpose is
-  `no_invention_to_clarification` ([§14.4](contracts/14-orchestration.md#144-atomic-repair-operation));
 - `orderingBarriers[]` ([§6.3](contracts/06-pipeline-nodes.md#63-reordering-and-composition-rules)).
 
 ```text
@@ -213,8 +210,7 @@ PipelineEnvelope {
       modelAttemptOrdinalsByRequestId: Map<ModelRequestId, NonnegativeInteger>,
       operationRetryCounts:
         Map<{ operation: CompiledWorkflowOperationInstanceId,
-              nativeDefectKey? }, NonnegativeInteger>,
-      noInventionReplacementUsedByUnitId: Set<ImmutableUnitOwnerId>
+              nativeDefectKey? }, NonnegativeInteger>
     },
     workflowTokenAccounting: {
       workflowTokenBudget,
@@ -289,15 +285,6 @@ Outcome {
 // NodeDelta fields with no native counterpart:
 evidenceAdded: Evidence[]
 diagnosticsAdded: Diagnostic[]
-
-// Proposed fourth runner accounting transition, for the no-invention
-// replacement in §14.4:
-ConsumeNoInventionReplacement {
-  stageRunEpochId,
-  immutableUnitOwnerId,
-  expectedAbsent: true,
-  nextPresent: true
-}
 ```
 
 ---
@@ -2027,25 +2014,6 @@ RepairAuthorization =
       operation: replace_group,
       unitId,
       targets: { targetId, pointer, expectedValue, replacementSchema }[]
-    }
-  | NoInventionClarificationReplacementAuthorization {
-      authorizationId,
-      diagnosticId,
-      purpose: no_invention_to_clarification,
-      operation: replace,
-      sourceSemanticFinding: SemanticFinding,
-      candidateId,
-      candidateRevision,
-      immutableUnitOwnerId: ImmutableUnitOwnerId,
-      targetPointer,
-      expectedOperationResultKind: content,
-      replacementSchema: {
-        schemaId,
-        requiredKind: clarification_needed,
-        additionalProperties: false
-      },
-      impactedValidatorIds[],
-      oneShotOrdinal: 1
     }
 
 RepairResponse =

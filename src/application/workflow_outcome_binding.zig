@@ -110,12 +110,6 @@ pub fn prepare(
         .preserve => {
             if (subject == .request) try changes.add(.{ .preserve = subject });
         },
-        .request_decode => {
-            const result = decoded.readCurrent(&after) catch return error.InvalidOutcomeAssociation;
-            if (!result.source().operationId().eql(subject.request)) return error.InvalidOutcomeAssociation;
-            if (decoded.status(result) != candidate.outcome) return error.InvalidOutcomeAssociation;
-            try missingFinalText(&changes, result.source(), candidate.outcome);
-        },
         .request_admission => {
             const result = payload.readCurrent(&after) catch return error.InvalidOutcomeAssociation;
             if (!result.source().source().operationId().eql(subject.request)) return error.InvalidOutcomeAssociation;
@@ -124,7 +118,7 @@ pub fn prepare(
                 if (result.outcome() != .valid) return error.InvalidOutcomeAssociation;
                 try changes.add(.{ .resolve = .{ .request_admitted = subject } });
             } else {
-                // Consolidated admission retains the same sealed decode source.
+                // Admission retains the sealed decode source.
                 try missingFinalText(&changes, result.source().source(), candidate.outcome);
             }
         },

@@ -76,7 +76,7 @@ pub const Render = struct {
         const self = context.?;
         const captured = values.read(&input.step.data, inputs.inputs_schema, c.Inputs) catch |operation_error| return operation_error;
         const state = values.read(&input.step.data, state_schema, refresh.Result) catch |operation_error| return operation_error;
-        if (state.* != .ready) return error.OperationExecutionFailed;
+        if (state.* != .ready) return error.ClarificationStateNotReady;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
         const result = self.action.execute(arena.allocator(), state.ready, captured.*) catch |operation_error| return operation_error;

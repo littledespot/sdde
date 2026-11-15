@@ -9,7 +9,9 @@ const workflow_retry = @import("../domain/workflow_retry.zig");
 const data = @import("../domain/pipeline_data.zig");
 const gate = @import("../domain/workflow_gate.zig");
 const capability_contract = @import("../domain/workflow_capability.zig");
+const kernel = @import("../domain/model_request_kernel.zig");
 
+pub const Stage = kernel.Stage;
 pub const Error = execution.OperationError;
 
 pub const InvocationInput = struct {
@@ -74,12 +76,35 @@ pub const Binding = struct {
     }
 };
 
+/// One fixed stage of the `request-model` kernel operation (ADR 0030): the stage's own contract
+/// and binding. A stage is no registered operation; no workflow selects it.
+pub const StageEntry = struct {
+    stage: Stage,
+    contract: operation.Contract,
+    binding: Binding,
+};
+
 pub const Entry = struct {
     contract: operation.Contract,
     binding: Binding,
+    /// Only the `request-model` kernel entry has stages. Its binding's capabilities are exactly
+    /// the union of its stages', and only the runner runs it, through the orchestrator.
+    request_stages: []const StageEntry = &.{},
 
     pub fn invoke(self: Entry, input: Input) Error!execution.Candidate {
         return self.binding.invoke(input);
+    }
+
+    pub fn requestStage(self: *const Entry, stage: Stage) ?*const StageEntry {
+        for (self.request_stages) |*entry| if (entry.stage == stage) return entry;
+        return null;
+    }
+
+    /// The one contract a step with these compiled parameters runs against: the registered contract,
+    /// or the variant its selector picks (ADR 0030 "Contract variants"). Null when the contract has
+    /// variants and the step carries no selector value that picks one.
+    pub fn contractFor(self: Entry, parameters: []const compilation.CompiledParameter) ?operation.Contract {
+        return compilation.selectedContract(self.contract, parameters);
     }
 };
 
@@ -133,9 +158,14 @@ pub const Registry = struct {
         if (!self.validGates(&schemas)) return false;
         for (self.operations, 0..) |entry, index| {
             if (entry.binding.implementation.context_required and entry.binding.context == null) return false;
-            if (workflow.OperationId.parse(entry.contract.id) == null or
-                !validContract(entry.contract, entry.binding.capabilities()))
-                return false;
+            if (workflow.OperationId.parse(entry.contract.id) == null) return false;
+            if (entry.request_stages.len != 0) {
+                // A kernel entry is one fixed contract with stages; it has no variants.
+                if (entry.contract.hasVariants() or entry.contract.selector != null) return false;
+                if (!validRequestKernel(entry, &schemas)) return false;
+            } else if (entry.contract.hasVariants() or entry.contract.selector != null) {
+                if (!self.validVariants(entry, &schemas)) return false;
+            } else if (!validContract(entry.contract, entry.binding.capabilities())) return false;
             inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
                 for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
             }
@@ -159,6 +189,51 @@ pub const Registry = struct {
 
     const SchemaIndex = [data.key_count]?*const data.Schema;
 
+    /// A contract with variants (ADR 0030 "Contract variants"): one registered contract made of
+    /// closed variants, selected per step at compile time. The contract itself is a shell with no
+    /// shape of its own; each variant is admitted independently, with the same checks as any
+    /// registered contract, against the entry's one binding.
+    fn validVariants(self: *const Registry, entry: Entry, schemas: *const SchemaIndex) bool {
+        const shell = entry.contract;
+        const selector = shell.selector orelse return false;
+        if (!shell.isShell() or shell.kind != .step or workflow.WorkflowParameterId.parse(selector) == null) return false;
+        for (shell.variants, 0..) |variant, index| {
+            if (variant.value.len == 0 or variant.value.len > 128) return false;
+            for (shell.variants[0..index]) |prior| if (std.mem.eql(u8, prior.value, variant.value)) return false;
+        }
+        for (shell.variants) |variant| {
+            const flat = shell.resolve(variant.value) orelse return false;
+            // The selector is the one closed enumeration parameter of every variant, and its allowed
+            // values are exactly the variants: a value outside them, or one without a variant, has no
+            // way to reach compilation.
+            const descriptor = findParameter(flat.parameters, selector) orelse return false;
+            if (descriptor.kind != .enumeration or !descriptor.required or !descriptor.workflow_definition_safe or
+                descriptor.allowed_values.len != shell.variants.len) return false;
+            for (shell.variants) |other| if (!containsString(descriptor.allowed_values, other.value)) return false;
+            if (!validContract(flat, entry.binding.capabilities())) return false;
+            inline for (.{ flat.requires, flat.optional, flat.produces, flat.replaces, flat.invalidates }) |keys| {
+                for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
+            }
+            for (flat.gates) |id| if (self.resolveGate(.{ .bytes = id }) == null) return false;
+        }
+        return true;
+    }
+
+    /// Whether every step of `steps` that runs a contract with variants carries the selector value of
+    /// one of its variants and exactly that variant's effects, outcomes, role, association and retry
+    /// authority. Graph validation and registry publication both recheck compiled steps with it
+    /// (ADR 0030 "Contract variants"). A step of an operation this registry does not hold is the
+    /// compiler's to reject, as before; a step of a single-shape operation is checked by the runner.
+    pub fn stepsMatchVariants(self: *const Registry, steps: []const compilation.CompiledStep) bool {
+        for (steps) |step| {
+            const entry = self.resolveOperation(step.operation_id) orelse continue;
+            if (!entry.contract.hasVariants()) continue;
+            const selected = entry.contractFor(step.parameters) orelse return false;
+            if (!compilation.matchesContract(selected, step)) return false;
+        }
+        return true;
+    }
+
     fn validGates(self: *const Registry, schemas: *const SchemaIndex) bool {
         for (self.gates, 0..) |contract, index| {
             if (workflow.RegisteredRef.parse(contract.id.bytes) == null or
@@ -168,6 +243,9 @@ pub const Registry = struct {
                 if (prior.evidence == contract.evidence or std.mem.eql(u8, prior.id.bytes, contract.id.bytes)) return false;
             }
             const issuer = self.resolveOperation(contract.issuer) orelse return false;
+            // A gate names its issuer by operation, so an issuer is a single-shape contract: with
+            // variants, "the issuer's effects" would be ambiguous.
+            if (issuer.contract.hasVariants() or issuer.contract.selector != null) return false;
             if (issuer.contract.kind != .step or issuer.binding.capabilities().len != 0 or issuer.contract.side_effect != .none or
                 (!containsKey(issuer.contract.produces, contract.evidence) and !containsKey(issuer.contract.replaces, contract.evidence))) return false;
             for (contract.authority) |key| if (!containsKey(issuer.contract.requires, key)) return false;
@@ -180,11 +258,101 @@ pub const Registry = struct {
             for (self.operations) |entry| {
                 if (std.mem.eql(u8, entry.contract.id, contract.issuer.bytes)) continue;
                 if (containsKey(entry.contract.produces, contract.evidence) or containsKey(entry.contract.replaces, contract.evidence)) return false;
+                // Every variant is a contract too: none, first or later, may write another issuer's evidence.
+                for (entry.contract.variants) |variant| {
+                    if (containsKey(variant.produces, contract.evidence) or containsKey(variant.replaces, contract.evidence)) return false;
+                }
+                // A kernel entry's stages are contracts too: none may write another issuer's evidence.
+                for (entry.request_stages) |stage| {
+                    if (containsKey(stage.contract.produces, contract.evidence) or containsKey(stage.contract.replaces, contract.evidence)) return false;
+                }
             }
         }
         return true;
     }
 };
+
+/// The `request-model` kernel entry (ADR 0030). The operation's contract is the one the domain
+/// fixes; its capabilities are the exact union of its stages', never an asserted list; and its
+/// parameters are the preparation stage's and the accounting stage's `retry-limit`, so no
+/// workflow-visible parameter exists that no stage consumes. Each stage is checked as any
+/// registered contract is.
+fn validRequestKernel(entry: Entry, schemas: *const [data.key_count]?*const data.Schema) bool {
+    if (!kernel.validContract(entry.contract) or entry.binding.implementation.context_required or entry.binding.context != null) return false;
+    const stage_values = std.enums.values(Stage);
+    if (entry.request_stages.len != stage_values.len) return false;
+    var model_provider_stages: usize = 0;
+    for (stage_values, entry.request_stages) |expected, stage| {
+        if (stage.stage != expected or stage.contract.kind != .step or stage.contract.retry_limit != null and expected != kernel.accounting_stage) return false;
+        if ((stage.binding.implementation.context_required and stage.binding.context == null) or
+            !validContract(stage.contract, stage.binding.capabilities()) or
+            !kernel.sameStageOutcomes(expected, stage.contract.outcomes)) return false;
+        inline for (.{ stage.contract.requires, stage.contract.optional, stage.contract.produces, stage.contract.replaces, stage.contract.invalidates }) |keys| {
+            for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
+        }
+        for (stage.contract.gates) |_| return false;
+        for (entry.request_stages[0..@intFromEnum(expected)]) |prior| {
+            if (std.mem.eql(u8, prior.contract.id, stage.contract.id)) return false;
+        }
+        // ADR 0030: no stage both invokes and interprets the model, and none holds both the
+        // `model-provider` and `provider-authorization` capabilities.
+        if (containsString(stage.binding.capabilities(), capability_contract.model_provider) and
+            containsString(stage.binding.capabilities(), capability_contract.provider_authorization)) return false;
+        for (stage.binding.capabilities()) |capability| {
+            if (!containsString(entry.binding.capabilities(), capability)) return false;
+            if (std.mem.eql(u8, capability, capability_contract.model_provider)) model_provider_stages += 1;
+        }
+        for (stage.contract.parameters) |descriptor| {
+            if (kernel.fixedParameter(expected)) |fixed| if (std.mem.eql(u8, fixed.id, descriptor.id)) continue;
+            const declared = findParameter(entry.contract.parameters, descriptor.id) orelse return false;
+            if (!sameDescriptor(declared, descriptor)) return false;
+        }
+    }
+    for (entry.binding.capabilities()) |capability| {
+        const provided = for (entry.request_stages) |stage| {
+            if (containsString(stage.binding.capabilities(), capability)) break true;
+        } else false;
+        if (!provided) return false;
+    }
+    const prepare = (entry.requestStage(.prepare_request) orelse return false).contract.parameters;
+    const accounting_contract = (entry.requestStage(kernel.accounting_stage) orelse return false).contract;
+    const limit = findParameter(accounting_contract.parameters, workflow_retry.parameter_id) orelse return false;
+    const stage_limit = accounting_contract.retry_limit orelse return false;
+    if (entry.contract.parameters.len != prepare.len + 1 or !uniqueStrings(entry.binding.capabilities()) or model_provider_stages != 1) return false;
+    for (prepare, entry.contract.parameters[0..prepare.len]) |expected, declared| if (!sameDescriptor(expected, declared)) return false;
+    if (!sameDescriptor(limit, entry.contract.parameters[prepare.len])) return false;
+    if (!@import("../domain/workflow_model.zig").validDescriptors(entry.contract.parameters)) return false;
+    var model_slots: usize = 0;
+    for (entry.contract.parameters, 0..) |descriptor, index| {
+        if (workflow.WorkflowParameterId.parse(descriptor.id) == null or !descriptor.workflow_definition_safe or
+            descriptor.integer_min > descriptor.integer_max or descriptor.string_max_bytes == 0 or descriptor.string_max_bytes > 128 or
+            (descriptor.kind == .resource) != (descriptor.resource_kind != null) or !uniqueStrings(descriptor.allowed_values)) return false;
+        for (entry.contract.parameters[0..index]) |prior| if (std.mem.eql(u8, prior.id, descriptor.id)) return false;
+        if (descriptor.kind == .model_slot) {
+            if (!descriptor.required or descriptor.allowed_values.len != 0 or descriptor.resource_kind != null) return false;
+            model_slots += 1;
+        }
+    }
+    if (model_slots != 1) return false;
+    // The one maximum the domain fixes, in every place the kernel declares it: the operation's
+    // descriptor (`kernel.validContract`), the parameter's range and the accounting stage's descriptor.
+    return limit.kind == .integer and limit.required and limit.integer_min == 0 and
+        limit.integer_max == kernel.maximum_retry_limit and stage_limit.maximum == kernel.maximum_retry_limit;
+}
+
+fn sameDescriptor(left: operation.ParameterDescriptor, right: operation.ParameterDescriptor) bool {
+    if (!std.mem.eql(u8, left.id, right.id) or left.kind != right.kind or left.required != right.required or
+        left.workflow_definition_safe != right.workflow_definition_safe or left.integer_min != right.integer_min or
+        left.integer_max != right.integer_max or left.string_max_bytes != right.string_max_bytes or
+        left.resource_kind != right.resource_kind or left.allowed_values.len != right.allowed_values.len) return false;
+    for (left.allowed_values, right.allowed_values) |a, b| if (!std.mem.eql(u8, a, b)) return false;
+    return true;
+}
+
+fn containsString(values: []const []const u8, expected: []const u8) bool {
+    for (values) |value| if (std.mem.eql(u8, value, expected)) return true;
+    return false;
+}
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
     if (!@import("../domain/workflow_outcome_association.zig").validDescriptor(contract.outcome_association, contract.requires, contract.optional, contract.produces, contract.replaces, contract.repair_role)) return false;

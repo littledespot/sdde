@@ -16,7 +16,7 @@ const json = @import("model_candidate_json.zig");
 pub const Error = session.Error || link.Error || projection.Error;
 
 /// The result definition of `links.schema.json`.
-pub const definition = "scenario_link";
+pub const definition = @import("specification_result_definitions.zig").Links.scenario_link;
 
 /// An offered criterion's id within one request; it is not a record ID.
 pub const CriterionId = struct {
@@ -96,11 +96,11 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     const body = try json.encodeEvidence(@TypeOf(payload), a, payload);
     const ids = try a.alloc(i64, offered.len);
     for (offered, ids) |entry, *id| id.* = entry.id.ordinal;
-    const base = try packets.create(allocator, body, try owner(a, current, chosen), .initial_generation, .{ .bytes = definition });
+    const base = try packets.create(allocator, body, try owner(a, current, chosen), .initial_generation, definition.id());
     defer packets.release(base);
     return packets.withIntegerChoices(allocator, base, &.{.{
         .target = .{ .path = &.{.{ .property = "criterion" }} },
-        .definition = .{ .bytes = definition },
+        .definition = definition.id(),
         .allowed = ids,
     }});
 }

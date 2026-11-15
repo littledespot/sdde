@@ -13,7 +13,7 @@ blocked outcomes; valid citations or model-assisted comparisons do not establish
 semantic corroboration. A genuine native authority gap remains typed, never an
 automatic upstream rebuild after generation. Pre-generation source repair and
 native generation/protocol repair remain distinct authorized operations. Under
-[ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
+[ADR 0033](../decisions/0033-generic-repair-operations.md) (implemented),
 "distinct" means distinct authorization categories and owners, each with its own rules
 and phase witness. Both run through the four generic repair operations, with distinct
 `owner` values, not distinct operation IDs.
@@ -205,10 +205,8 @@ Every diagnostic declares one class:
 Configuration and environment errors never consume LLM repair attempts.
 
 - A missing or unreconciled authority is not a malformed candidate value and therefore is never
-  repaired by generating a convenient replacement.
-- The existing one-shot whole-operation-result no-invention replacement may yield
-  `clarification_needed` only when §12.8.1 admits a genuine authority gap. Candidate
-  loss or inconclusive review retains its own repair/rejection outcome.
+  repaired by generating a convenient replacement. Candidate loss or inconclusive review
+  retains its own repair/rejection outcome.
 - If a later stage detects the gap, repair stops and the shared reconciliation router selects
   upstream rework.
 - Local repair resumes only after the owning stage has regenerated, passed reconciliation, and
@@ -286,16 +284,15 @@ whole-record assignment and retry bound. Reuse the native repair owner, selected
 schema definitions, runner and accounting. Full unit validation, source/claim and
 exact-token coverage and publication validation remain required.
 
-**Claim-bound scenario insertion**
-([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3): in a
-records batch, a claim a behaviour statement names that no acceptance criterion or edge
-case names, decided on the batch the native deletes leave, authorizes insertion of one
-acceptance criterion at the end of the batch. The engine fixes its kind, its authored
-selection `S` (that one claim) and the batch's source group; the response is its content
-only, through the criterion's content-only repair definition. Bound, packet, merge, retry
-and validation follow conditional entity membership above. It may not insert an edge case,
-name another claim, change siblings or infer semantics; each further uncovered claim takes
-its own insertion.
+**Slot criteria**
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3): an acceptance
+criterion for a claim a behaviour statement names is written by the scenarios request as
+an initial generation, never inserted by repair. The engine fixes its kind, its authored
+selection `S` (its slot's one claim) and the batch's source group; the response is its
+content only. A defect in a written criterion's text takes the field-level value repair above,
+which never changes that association. No repair inserts or replaces a whole criterion or
+inserts an edge case, and a claim without its criterion after the merge is an engine
+defect that takes no repair.
 
 The repair algebra is closed:
 
@@ -381,8 +378,8 @@ correlation and readback checks; a membership enum alone cannot authorize a merg
 
 Selected source-review and generation repair responses reject `provenance`,
 including record insertion and coupled record repair. The engine reconstructs
-canonical `provenance.claim_ids` from the bound source group, the claim a scenario
-insertion fixes, or the selected diagnostic producer before old-value/revision and
+canonical `provenance.claim_ids` from the bound source group or the selected
+diagnostic producer before old-value/revision and
 full-candidate checks.
 Source-ID or detail corrections remain in their existing selected repair
 families; source-omission detail correction uses the coupled explanation and
@@ -423,14 +420,11 @@ citations from permitted selections; it never chooses semantic support to make
 a repair pass.
 
 Evidence repair obtains the diagnostic and permitted references from their existing
-validator/registry, including any applicable source-line bounds. The request builder
-projects those facts; it does not revalidate citations or select supporting evidence.
-Registry/selection integrity failures remain engine failures, distinct from an
-invalid model-proposed citation. Principle citation diagnostics identify the citation
-index, rejected chunk/line field and value, using the existing selection for allowed
-IDs and the captured span for inclusive line bounds. These same facts reach repair
-and reports; they are not a second persisted authority. JSON/schema correction (§22.6) does not replace
-native evidence repair, change retry limits, reconsider verdicts or persist new policy.
+validator/registry. The request builder projects those facts; it does not revalidate
+citations or select supporting evidence. Registry/selection integrity failures remain
+engine failures. The projected facts reach repair and reports; they are not a second
+persisted authority. JSON/schema correction (§22.6) does not replace native evidence
+repair, change retry limits, reconsider verdicts or persist new policy.
 
 Example:
 
@@ -569,29 +563,35 @@ defined response-level correction containing:
   schema, and concise schema-derived immediate fields, required fields and allowed
   discriminator values. The single complete schema retains every alternative and
   every constraint that schema syntax can express; [§12.2](12-model-boundary.md#122-initial-guidance-packet)
-  owns the admission constraints that stay native, and `duplicate_member` is reported
-  with parent scope on the enclosing array.
+  owns the admission constraints that stay native, and `duplicate_member` and `equal_items`
+  are reported with parent scope on the enclosing array.
   A `missing_member` correction also names the first omitted member (`member`), and a
   `shared_member` correction, located at
   the partly taken record and offering its shape, names its exclusive and owning kinds
   (`exclusive`: `kind_property`, `kinds` and `owning`) and lists every taken value's
-  naming in such records (`shared`; SPEC01 D16.1 and D16.2, 2 November 2026); no other
-  correction changes. A wholly taken record is never corrected: the records validator deletes it natively
+  naming in such records (`shared`; SPEC01 D16.1 and D16.2, 2 November 2026). An
+  `enum_mismatch` correction for an integer ID choice names the rejected value
+  (`rejected`: the response's own integer, captured at admission) and lists the choice's
+  allowed IDs (`allowed`: taken from the compiled choice and never hard-coded) (SPEC01
+  D13.6, 12 November 2026); a string enumeration keeps its correction. An `equal_items`
+  correction, located at the first item of the first equal set, names the key and the compared
+  properties of the rule and lists, for each equal set, the key of every item in it (`equal`:
+  `key`, `compared` and `sets`; ADR 0038 Decision 3). No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
   (`repeated_statement`, ADR 0038 Decision 5), without judging its text, unless it holds
   the only copy of an exact value, which keeps it and its text under the usual rules. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
-  synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
-  the allowed-ID list from the complete selected schema into the outline.
+  synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline;
+  the allowed IDs travel in `allowed`, never in the outline.
 
 [§22.6.1](#2261-child-object-requirements) adds required names to immediate
 child-object descriptors only.
 
 - The builder owns no retry counter or limit.
-- Each correction returns through the existing `advance-model-attempt-accounting` step, whose
-  compiler-validated local limit owns further attempts of that assignment (§22.7).
+- Each correction returns to the `advance-attempt` stage of its `request-model` step, whose
+  compiler-validated `retry-limit` owns further attempts of that assignment (§22.7).
 - [§22.7](#227-repair-retry-limit-and-escalation) states the
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` counting (not
-  yet implemented); the correction content and its rules here are unchanged.
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` counting, which
+  the Specify definition uses; the correction content and its rules here are unchanged.
 - The [§12.7](12-model-boundary.md#127-workflow-defined-model-operations) token budget
   accounts every request and correction. Native finding-evidence validation and repair
   exhaustion remain terminal.
@@ -616,7 +616,9 @@ before continuation under §12.7's budget.
 Ordinary runner retry exhaustion retains the owning compiled operation, declared
 limit and completed execution count alongside the last response diagnostic. It is
 a typed terminal rejection, never an ordinary YAML outcome that could continue
-to success or `needs_user`. If JSON decoding or schema validation still fails when correction is unavailable
+to success or `needs_user`. A retry allowance that cannot be admitted, or whose exhaustion
+cannot be described, is not an exhaustion: the runner stops on its own authority with the
+`retry_admission` reason ([§6](06-pipeline-nodes.md#runner-rejection-reasons)). If JSON decoding or schema validation still fails when correction is unavailable
 or exhausted, the run reports an error, exits nonzero and publishes nothing
 ([§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)'s
 precedence table, which also records what
@@ -679,7 +681,9 @@ actions. Its single responsibility remains preparing the corrected request.
   immediately preceding rejection failed with the same diagnostic identity.
   Confirm the same execution, immutable assignment and selected schema; compare
   diagnostic kind/reason and location/context, including schema scope/locator
-  where applicable. An attempt ordinal alone proves no recurrence. Same diagnostic
+  where applicable and, for an integer ID choice, the rejected value (a moved ID is a
+  different diagnostic and gets no repetition notice). An attempt ordinal alone proves no
+  recurrence. Same diagnostic
   does not prove identical response bytes, and different errors receive only the
   current error guidance.
 - The request handoff owns a copy of the rejection addressed by each prepared
@@ -708,7 +712,7 @@ Successful repair progress is independent of another target's retry allowance:
   ([ADR 0033](../decisions/0033-generic-repair-operations.md)). Two steps that use the same
   generic repair operation therefore keep separate counts. Ordinary model requests count visits by compiled operation
   and immutable assignment; other operations retain invocation-wide counts. Under
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md), the
   compiled operation for every model request, ordinary, atomic repair or dependent, is its
   `request-model` step. Each keeps its counting scope: assignment, native defect key, or the
   pending native parent key. Protocol correction and its accounting become engine-run stages
@@ -745,9 +749,12 @@ Successful repair progress is independent of another target's retry allowance:
   corrections for the same parent/assignment retain their counts. The runner's native repair phase supplies this association,
   never a model value or a new request ordinal.
 - Each native scope freezes its finite target/family population at first authorization;
-  model replacements cannot enlarge it. The shared u32 key representation bounds the
-  execution's distinct keys. Assignment counters have the same finite u32 population
-  bound. Both use the existing runner-owned retry state and report projections,
+  model replacements cannot enlarge it. One execution holds at most 128 distinct keys,
+  across every native scope, and at most 128 request-assignment counters, one for each compiled
+  step and request assignment (`maximum_population` in `workflow_retry.zig`): a run that creates
+  more is a runaway whatever its token budget, and a new member past the bound is a typed
+  `PopulationError` refusal that never weakens a policy and reports as `repair_key_population`
+  or `request_assignment_population` ([§6](06-pipeline-nodes.md#runner-rejection-reasons)). Both use the existing runner-owned retry state and report projections,
   never a builder/provider counter. The compiler uses these bounds and declared per-operation
   allowances to retain a finite execution guard, including pure loops. The compiler's
   1,024-step expansion ceiling does not change per-operation retry or token budgets.
@@ -808,6 +815,6 @@ Across §22, repairs of typed specification content use the
 coverage rule is owned by
 [F0100 §5.7](../features/F0100-SpecWorkflow.md#57-generation-coverage-and-repair):
 its mechanical claim/token coverage defects have no independently supported repair
-target and block, while an
-[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) scenario gap is
-a records-unit defect repaired by the claim-bound scenario insertion above.
+target and block, and an
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) scenario gap takes no
+repair either: the claim-bound slots above leave it unreachable.

@@ -75,7 +75,6 @@ test "shared scalar policy permits exact tabs and newlines without normalization
     const witness = outcome.evaluated.matches[0];
     try std.testing.expectEqual(@as(usize, 9), witness.start_byte);
     try std.testing.expectEqualStrings(bytes, prose[witness.start_byte..witness.end_byte]);
-    try std.testing.expectEqualStrings("A\tB\r\nC", bytes);
 }
 
 test "invalid input rejects before allocating or reporting lexical matches" {

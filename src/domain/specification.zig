@@ -71,8 +71,9 @@ pub const Kind = enum {
         return self == .edge_case;
     }
 
-    /// The families an entity's related-statements line may list: the requirement and
-    /// behaviour statements (§23).
+    /// The requirement and behaviour statements: the families an entity's related-statements
+    /// line may list (§23), and the families that make a scenario slot of each claim they name
+    /// (ADR 0038 Decision 2).
     pub fn isStatement(self: Kind) bool {
         return switch (self.role()) {
             .requirement, .behaviour => true,
@@ -84,6 +85,17 @@ pub const Kind = enum {
 /// Mandatory business-content families; optional section presence never changes
 /// this contract. Semantic support and completeness remain authority obligations.
 pub const required_record_families = [_]Kind{ .acceptance_criterion, .functional_requirement };
+
+/// The family the scenarios step writes (ADR 0038 Decision 3). A records response holds none of it,
+/// its request neither offers nor requires it, and the assembled specification is checked for it once
+/// the scenarios are written; every other mandatory family is the records step's.
+pub const scenario_family: Kind = .acceptance_criterion;
+
+/// Whether the records step authors `kind` and the assembled specification must hold it: every
+/// mandatory family but the scenarios'.
+pub fn requiredByRecords(kind: Kind) bool {
+    return requiresRecords(kind) and kind != scenario_family;
+}
 
 /// Structural mapping permission; semantic support still requires review.
 pub fn permitsPositiveMapping(content: reference.ClaimContent) bool {

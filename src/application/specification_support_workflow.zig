@@ -18,7 +18,7 @@ pub fn progress(view: *const @import("../domain/pipeline_data.zig").View) operat
     return switch (current.*) {
         .support_initial => .initial,
         .support => |value| .{ .source = value },
-        else => error.OperationExecutionFailed,
+        else => error.InvalidCandidatePayload,
     };
 }
 pub fn inputs(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!a.Inputs {
@@ -122,7 +122,7 @@ pub const BuildLossInput = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const current = try progress(&input.step.data);
-        if (current != .source) return error.OperationExecutionFailed;
+        if (current != .source) return error.SupportReviewStateInvalid;
         return requests.publishPacket(self.allocator, self.action.execute(self.allocator, try inputs(&input.step.data), try spec.readContext(&input.step.data), try @import("packet_guidance_workflow.zig").read(&input.step.data), current.source) catch |operation_error| return operation_error);
     }
 };
@@ -135,7 +135,7 @@ pub const CollectLoss = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const current = try progress(&input.step.data);
-        if (current != .source) return error.OperationExecutionFailed;
+        if (current != .source) return error.SupportReviewStateInvalid;
         const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
         const handoff = try @import("model_candidate_handoff.zig").read(&input.step.data);
         const source = try inputs(&input.step.data);

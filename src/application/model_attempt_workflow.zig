@@ -2,6 +2,7 @@ const std = @import("std");
 const requests = @import("model_request_workflow.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
+const kernel = @import("../domain/model_request_kernel.zig");
 const operation = @import("../domain/workflow_operation.zig");
 
 /// A single pure action call. The runner supplies immutable accounting inputs
@@ -16,8 +17,8 @@ pub const Advance = struct {
         .outcomes = &.{ .ok, .failed },
         .side_effect = Action.contract.side_effect,
         .runner_accounting = Action.contract.runner_accounting,
-        .parameters = &.{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }},
-        .retry_limit = .{ .maximum = std.math.maxInt(u32), .scope = .model_request },
+        .parameters = &.{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = kernel.maximum_retry_limit }},
+        .retry_limit = .{ .maximum = kernel.maximum_retry_limit, .scope = .model_request },
     };
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -26,7 +27,7 @@ pub const Advance = struct {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const current = @import("pipeline_values.zig").read(&input.step.data, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch |operation_error| return operation_error;
-        const facts = input.step.model_attempt orelse return error.OperationExecutionFailed;
+        const facts = input.step.model_attempt orelse return error.ModelAttemptFactsMissing;
         const delta = self.action.execute(facts.accounting, facts.accounting.revision(), current, facts.operations, current.revision(), request.id(), facts.attempt) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }

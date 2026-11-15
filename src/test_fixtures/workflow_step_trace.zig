@@ -2,24 +2,20 @@
 //! equivalence evidence (ADR 0030 "Freeze first"). It is an observation, not an
 //! assertion: tests never compare it. Each executed step becomes one line keyed
 //! by its source call path, so a structural conversion can be compared with the
-//! trace recorded before it. A request-lifecycle step inside a model-request
-//! wrapper collapses to the wrapper's call site plus the stage's operation ID,
-//! the form ADR 0030's `request-model` step keeps.
+//! trace recorded before it. A model request is one `request-model` step, so its
+//! line is its own call site plus that operation ID (ADR 0030).
 const std = @import("std");
 const compilation = @import("../domain/workflow_compilation.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const source = @import("../domain/workflow_source.zig");
 const filesystem = @import("../domain/filesystem_identity.zig");
+const workflow_retry = @import("../domain/workflow_retry.zig");
+const atomic_repair = @import("../domain/atomic_repair.zig");
 
 pub const schema = "workflow-step-trace/v1";
 pub const directory = ".zig-cache/workflow-step-trace";
 
-/// The subgraphs that wrap one model request's lifecycle today, as ADR 0030's
-/// Context names them.
-const request_wrappers = [_][]const u8{ "model-request", "model-request-with-context", "support-request", "composition-request", "composition-request-body" };
-const request_body = "model-request-body";
-
-pub const Error = std.mem.Allocator.Error || error{UnwrappedRequestLifecycle};
+pub const Error = std.mem.Allocator.Error;
 
 pub const Trace = struct {
     lines: std.Io.Writer.Allocating,
@@ -37,49 +33,70 @@ pub const Trace = struct {
         return self.lines.written();
     }
 
-    pub fn record(self: *Trace, step: *const compilation.CompiledStep, applied: execution.Applied) Error!void {
-        writeLine(&self.lines.writer, step, applied) catch |err| return switch (err) {
+    /// `first` is the runner's first cause when the step ended a run, which the rejected line names.
+    pub fn record(self: *Trace, step: *const compilation.CompiledStep, applied: execution.Applied, first: ?execution.FirstCause) Error!void {
+        writeLine(&self.lines.writer, step, applied, first) catch |err| return switch (err) {
             error.WriteFailed => error.OutOfMemory,
-            error.UnwrappedRequestLifecycle => error.UnwrappedRequestLifecycle,
         };
         self.steps += 1;
     }
 };
 
-fn wrapper(entry: source.Entry) bool {
-    if (entry.kind != .subgraph) return false;
-    for (request_wrappers) |name| if (std.mem.eql(u8, entry.target, name)) return true;
-    return false;
-}
-
-/// Writes the step's source call path, stopping at a request wrapper. A request
-/// body reached without a wrapper is an error, so a renamed or new wrapper can
-/// never produce a key that silently stops matching.
-pub fn writeCallSite(w: *std.Io.Writer, step: *const compilation.CompiledStep) (std.Io.Writer.Error || error{UnwrappedRequestLifecycle})!void {
+/// Writes the step's source call path.
+pub fn writeCallSite(w: *std.Io.Writer, step: *const compilation.CompiledStep) std.Io.Writer.Error!void {
     if (step.source_chain.len == 0) return w.writeAll(step.id.bytes);
     for (step.source_chain, 0..) |entry, index| {
-        if (entry.kind == .subgraph and std.mem.eql(u8, entry.target, request_body)) return error.UnwrappedRequestLifecycle;
         if (index != 0) try w.writeByte('/');
         try w.writeAll(entry.id);
-        if (wrapper(entry)) return;
     }
 }
 
-fn writeLine(w: *std.Io.Writer, step: *const compilation.CompiledStep, applied: execution.Applied) (std.Io.Writer.Error || error{UnwrappedRequestLifecycle})!void {
+/// The closed enumeration parameter that selects an operation's contract variant (ADR 0030
+/// "Contract variants"; `owner` for ADR 0033's repair operations).
+pub const selector_parameter = "owner";
+
+/// The step's selected variant, when it declares one; absent for every operation that has a single
+/// contract, so such a step's line is unchanged.
+fn selectedVariant(step: *const compilation.CompiledStep) ?[]const u8 {
+    for (step.parameters) |parameter| {
+        if (!std.mem.eql(u8, parameter.id.bytes, selector_parameter)) continue;
+        return switch (parameter.value) {
+            .enumeration => |value| value,
+            .boolean, .integer, .string, .registered_ref, .resource, .model_slot => null,
+        };
+    }
+    return null;
+}
+
+fn writeLine(w: *std.Io.Writer, step: *const compilation.CompiledStep, applied: execution.Applied, first: ?execution.FirstCause) std.Io.Writer.Error!void {
     try writeCallSite(w, step);
-    try w.print("#{s}\t", .{step.operation_id.bytes});
+    try w.print("#{s}", .{step.operation_id.bytes});
+    if (selectedVariant(step)) |variant| try w.print("@{s}", .{variant});
+    try w.writeByte('\t');
     switch (applied) {
         .outcome => |tag| try w.writeAll(@tagName(tag)),
-        .rejected => |reason| try writeRejection(w, reason),
+        .rejected => |reason| try writeRejection(w, reason, first),
     }
     try w.writeByte('\n');
 }
 
-/// The canonical rejection diagnostic, plus the executions a retry exhaustion
-/// counted.
-pub fn writeRejection(w: *std.Io.Writer, reason: execution.Rejection) std.Io.Writer.Error!void {
+/// The canonical rejection diagnostic, which names an authority rejection's reason, plus the facts of a
+/// retry exhaustion and, only when a later failure replaced one, the first cause, with its own facts
+/// when it was an exhaustion. A line without a suffix reads as it always did.
+pub fn writeRejection(w: *std.Io.Writer, reason: execution.Rejection, first: ?execution.FirstCause) std.Io.Writer.Error!void {
     try w.print("rejected:{s}:{s}", .{ @tagName(reason), reason.diagnostic() });
-    if (reason == .retry_limit) try w.print(":executions={d}", .{reason.retry_limit.completed_executions});
+    if (reason == .retry_limit) try writeRetryFacts(w, reason.retry_limit);
+    if (first) |cause| {
+        try w.print(":first={s}:{s}", .{ @tagName(cause), cause.rejection().diagnostic() });
+        if (cause == .retry_limit) try writeRetryFacts(w, cause.retry_limit);
+    }
+}
+
+/// The executions a retry exhaustion counted and, for a `request-model` step, the stage that reached the
+/// limit (ADR 0030).
+fn writeRetryFacts(w: *std.Io.Writer, exhaustion: workflow_retry.Exhaustion) std.Io.Writer.Error!void {
+    try w.print(":executions={d}", .{exhaustion.completed_executions});
+    if (exhaustion.stage) |stage| try w.print(":stage={s}", .{stage.name()});
 }
 
 /// One accounted inference, in accounting order.
@@ -204,10 +221,34 @@ pub fn hashed(a: std.mem.Allocator, observed: []const File) std.mem.Allocator.Er
     return result;
 }
 
+pub const repairs_schema = "workflow-repair-evidence/v1";
+
+/// The scenario's native repair evidence beside its step lines (ADR 0033 "Freeze first"): each
+/// instance's retry limit, scope, executions, the defect keys counted per instance (hex of the
+/// scope, target and family digests) and the per-request assignment counts, and every retained
+/// native merge (its authorization, owner, operation, revisions, change fact, origin and permit).
+/// It is a separate file so the trace and summary bytes of earlier freezes stay comparable.
+pub const RepairEvidence = struct {
+    schema: []const u8 = repairs_schema,
+    retry_settings: []const workflow_retry.Observation,
+    merges: []const atomic_repair.Merge,
+};
+
+fn basePath(a: std.mem.Allocator, summary: Summary) std.mem.Allocator.Error![]const u8 {
+    return std.fmt.allocPrint(a, "{s}/{s}-{s}-{d:0>3}", .{ directory, summary.workflow, summary.case, summary.scenario });
+}
+
+/// Writes `<workflow>-<case>-<scenario>.repairs`, the JSON of `evidence`.
+pub fn writeRepairs(io: std.Io, a: std.mem.Allocator, summary: Summary, evidence: RepairEvidence) !void {
+    const cwd = std.Io.Dir.cwd();
+    try cwd.createDirPath(io, directory);
+    try cwd.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "{s}.repairs", .{try basePath(a, summary)}), .data = try std.json.Stringify.valueAlloc(a, evidence, .{ .whitespace = .indent_2 }) });
+}
+
 /// Writes `<workflow>-<case>-<scenario>.trace`, `.json` and the masked files
 /// beneath `<...>.files/`.
 pub fn write(io: std.Io, a: std.mem.Allocator, trace: *Trace, summary: Summary, observed: []const File) !void {
-    const base = try std.fmt.allocPrint(a, "{s}/{s}-{s}-{d:0>3}", .{ directory, summary.workflow, summary.case, summary.scenario });
+    const base = try basePath(a, summary);
     const cwd = std.Io.Dir.cwd();
     try cwd.createDirPath(io, directory);
     try cwd.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "{s}.trace", .{base}), .data = trace.written() });
@@ -227,59 +268,107 @@ fn testStep(chain: []const source.Entry, operation: []const u8) compilation.Comp
     return .{ .source_chain = chain, .id = .{ .bytes = "g1-step" }, .operation_id = .{ .bytes = operation }, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{}, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
 }
 
-test "a lifecycle step collapses to its wrapper call site and stage operation" {
+test "a step in a nested subgraph is keyed by its whole call path and its operation" {
     var trace: Trace = .init(std.testing.allocator);
     defer trace.deinit();
     const chain = [_]source.Entry{
-        chainEntry(null, "reconcile", .subgraph, "reconciliation"),
-        chainEntry("reconciliation", "dispositions", .subgraph, "model-request"),
-        chainEntry("model-request", "request", .subgraph, "model-request-body"),
-        chainEntry("model-request-body", "account", .operation, "advance-model-attempt-accounting"),
-    };
-    const step = testStep(&chain, "advance-model-attempt-accounting");
-    try trace.record(&step, .{ .outcome = .ok });
-    try trace.record(&step, .{ .rejected = .authority });
-    try std.testing.expectEqualStrings("reconcile/dispositions#advance-model-attempt-accounting\tok\nreconcile/dispositions#advance-model-attempt-accounting\trejected:authority:failed\n", trace.written());
-    try std.testing.expectEqual(@as(usize, 2), trace.steps);
-}
-
-test "nested and direct composition bodies collapse at the outermost wrapper" {
-    var trace: Trace = .init(std.testing.allocator);
-    defer trace.deinit();
-    const nested = [_]source.Entry{
-        chainEntry(null, "summary", .subgraph, "composition-request"),
-        chainEntry("composition-request", "request", .subgraph, "composition-request-body"),
-        chainEntry("composition-request-body", "request", .subgraph, "model-request-body"),
-        chainEntry("model-request-body", "invoke", .operation, "invoke-model"),
-    };
-    const direct = [_]source.Entry{
         chainEntry(null, "extract", .subgraph, "extraction"),
-        chainEntry("extraction", "content-request", .subgraph, "composition-request-body"),
-        chainEntry("composition-request-body", "retain", .operation, "retain-json-part"),
+        chainEntry("extraction", "content-request", .subgraph, "retention"),
+        chainEntry("retention", "retain", .operation, "retain-json-part"),
     };
-    try trace.record(&testStep(&nested, "invoke-model"), .{ .outcome = .ok });
-    try trace.record(&testStep(&direct, "retain-json-part"), .{ .outcome = .ok });
-    try std.testing.expectEqualStrings("summary#invoke-model\tok\nextract/content-request#retain-json-part\tok\n", trace.written());
+    try trace.record(&testStep(&chain, "retain-json-part"), .{ .outcome = .ok }, null);
+    try std.testing.expectEqualStrings("extract/content-request/retain#retain-json-part\tok\n", trace.written());
 }
 
-test "a request body without a wrapper is an error, not a silent key" {
+test "a request-model step is one line at its own call site" {
     var trace: Trace = .init(std.testing.allocator);
     defer trace.deinit();
     const chain = [_]source.Entry{
-        chainEntry(null, "review", .subgraph, "renamed-request"),
-        chainEntry("renamed-request", "request", .subgraph, "model-request-body"),
-        chainEntry("model-request-body", "close", .operation, "complete-model-request"),
+        chainEntry(null, "review", .subgraph, "assess-support"),
+        chainEntry("assess-support", "model", .operation, "request-model"),
     };
-    try std.testing.expectError(error.UnwrappedRequestLifecycle, trace.record(&testStep(&chain, "complete-model-request"), .{ .outcome = .ok }));
-    try std.testing.expectEqual(@as(usize, 0), trace.steps);
+    try trace.record(&testStep(&chain, "request-model"), .{ .outcome = .ok }, null);
+    try trace.record(&testStep(&chain, "request-model"), .{ .rejected = .cancelled }, null);
+    try std.testing.expectEqualStrings("review/model#request-model\tok\nreview/model#request-model\trejected:cancelled:cancelled\n", trace.written());
+    try std.testing.expectEqual(@as(usize, 2), trace.steps);
 }
 
 test "a step without a source chain keys by its compiled ID and rejections use the canonical diagnostic" {
     var trace: Trace = .init(std.testing.allocator);
     defer trace.deinit();
-    const step = testStep(&.{}, "retire-model-transport");
-    try trace.record(&step, .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } });
-    try std.testing.expectEqualStrings("g1-step#retire-model-transport\trejected:operation_failed:OperationExecutionFailed\n", trace.written());
+    const step = testStep(&.{}, "release-model-transport");
+    try trace.record(&step, .{ .rejected = .{ .operation_failed = error.RepairOwnerMismatch } }, null);
+    try std.testing.expectEqualStrings("g1-step#release-model-transport\trejected:operation_failed:RepairOwnerMismatch\n", trace.written());
+}
+
+test "an authority rejection names its reason, and a first cause is named only when one was kept" {
+    var trace: Trace = .init(std.testing.allocator);
+    defer trace.deinit();
+    const step = testStep(&.{}, "request-model");
+    // Every reason is its own line, which carries no suffix: the trace of a lone failure is as it was.
+    for (std.enums.values(execution.AuthorityReason)) |reason| {
+        try trace.record(&step, .{ .rejected = .{ .authority = reason } }, null);
+        var expected: [96]u8 = undefined;
+        const line = try std.fmt.bufPrint(&expected, "g1-step#request-model\trejected:authority:{s}\n", .{@tagName(reason)});
+        try std.testing.expect(std.mem.endsWith(u8, trace.written(), line));
+    }
+    try std.testing.expectEqual(std.enums.values(execution.AuthorityReason).len, trace.steps);
+    // A rejection that replaced another names it last, by its tag and its own diagnostic, whatever the
+    // terminal rejection is; a retry exhaustion keeps its own counts before it.
+    var replaced: Trace = .init(std.testing.allocator);
+    defer replaced.deinit();
+    try replaced.record(&step, .{ .rejected = .{ .logging = .LOG_FLUSH_FAILURE } }, .{ .authority = .invocation_result });
+    try replaced.record(&step, .{ .rejected = .{ .retry_limit = workflow_retry.Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).? } }, .{ .operation_failed = error.InvalidCandidatePayload });
+    try std.testing.expectEqualStrings(
+        "g1-step#request-model\trejected:logging:blocked:first=authority:invocation_result\n" ++
+            "g1-step#request-model\trejected:retry_limit:RetryLimitExhausted:executions=2:first=operation_failed:InvalidCandidatePayload\n",
+        replaced.written(),
+    );
+    // A retry exhaustion that a later failure replaced gives its own counts and stage after its name,
+    // where the terminal one gives them before the first cause.
+    var exhausted: Trace = .init(std.testing.allocator);
+    defer exhausted.deinit();
+    const exhaustion = workflow_retry.Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).?.atStage(.advance_attempt);
+    try exhausted.record(&step, .{ .rejected = .{ .logging = .LOG_FLUSH_FAILURE } }, .{ .retry_limit = exhaustion });
+    try exhausted.record(&step, .{ .rejected = .{ .retry_limit = workflow_retry.Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 3).? } }, .{ .retry_limit = exhaustion });
+    try std.testing.expectEqualStrings(
+        "g1-step#request-model\trejected:logging:blocked:first=retry_limit:RetryLimitExhausted:executions=2:stage=advance-attempt\n" ++
+            "g1-step#request-model\trejected:retry_limit:RetryLimitExhausted:executions=3:first=retry_limit:RetryLimitExhausted:executions=2:stage=advance-attempt\n",
+        exhausted.written(),
+    );
+    // A first cause rides only a rejected line: an outcome has none to name.
+    var outcome: Trace = .init(std.testing.allocator);
+    defer outcome.deinit();
+    try outcome.record(&step, .{ .outcome = .failed }, .{ .authority = .invocation_result });
+    try std.testing.expectEqualStrings("g1-step#request-model\tfailed\n", outcome.written());
+}
+
+test "a step that selects a contract variant names it and every other step's line is unchanged" {
+    var trace: Trace = .init(std.testing.allocator);
+    defer trace.deinit();
+    var selecting = testStep(&.{}, "merge-repair");
+    selecting.parameters = &.{
+        .{ .id = .{ .bytes = "retry-limit" }, .value = .{ .integer = 64 } },
+        .{ .id = .{ .bytes = selector_parameter }, .value = .{ .enumeration = "specification-unit" } },
+    };
+    var other = testStep(&.{}, "merge-repair");
+    // A string parameter of the same name is not a selector: only a closed enumeration selects.
+    other.parameters = &.{.{ .id = .{ .bytes = selector_parameter }, .value = .{ .string = "specification-unit" } }};
+    try trace.record(&selecting, .{ .outcome = .ok }, null);
+    try trace.record(&other, .{ .outcome = .ok }, null);
+    try trace.record(&testStep(&.{}, "merge-repair"), .{ .outcome = .ok }, null);
+    try std.testing.expectEqualStrings("g1-step#merge-repair@specification-unit\tok\ng1-step#merge-repair\tok\ng1-step#merge-repair\tok\n", trace.written());
+}
+
+test "the repair evidence record is deterministic JSON with its schema first" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const evidence: RepairEvidence = .{ .retry_settings = &.{}, .merges = &.{} };
+    const first = try std.json.Stringify.valueAlloc(a, evidence, .{ .whitespace = .indent_2 });
+    const second = try std.json.Stringify.valueAlloc(a, evidence, .{ .whitespace = .indent_2 });
+    try std.testing.expectEqualStrings(first, second);
+    try std.testing.expect(std.mem.startsWith(u8, first, "{\n  \"schema\": \"workflow-repair-evidence/v1\""));
 }
 
 test "observed files exclude log components, mask the run identity and sort by path" {

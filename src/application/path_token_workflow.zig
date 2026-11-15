@@ -51,7 +51,7 @@ pub const Scan = struct {
                 text = resource.content.data;
             };
         }
-        const result = self.action.execute(self.allocator, compiled.*, current, source.*, text orelse return error.OperationExecutionFailed) catch |operation_error| return operation_error;
+        const result = self.action.execute(self.allocator, compiled.*, current, source.*, text orelse return error.PathTokenTextMissing) catch |operation_error| return operation_error;
         errdefer scan.destroy(result);
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
         delta.data_writes[@intFromEnum(scan_schema.key)] = values.adopt(self.allocator, scan_schema, scan.Result, scan.Owner, result, scan.view, scan.destroy, null) catch |operation_error| return operation_error;

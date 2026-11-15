@@ -152,8 +152,13 @@ pub const Account = struct {
 
 pub fn read(view: *const data.View, schema: data.Schema, stage: std.meta.Tag(owned.Payload)) operations.Error!*const owned.Value {
     const value = values.read(view, schema, owned.Value) catch |operation_error| return operation_error;
-    if (value.payload().* != stage) return error.OperationExecutionFailed;
+    if (value.payload().* != stage) return error.ReferenceStageMismatch;
     return value;
+}
+/// A repair owner's read of the data it repairs: another stage at its key means the compiled owner
+/// disagrees with the data, whichever owner's value is there; an absent key stays `MissingRequiredData`.
+pub fn readNative(view: *const data.View, schema: data.Schema, stage: std.meta.Tag(owned.Payload)) operations.Error!*const owned.Value {
+    return read(view, schema, stage) catch |err| if (err == error.ReferenceStageMismatch) error.RepairOwnerMismatch else err;
 }
 /// Transfers ownership only on success, matching pipeline_values.adopt.
 pub fn publish(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner, outcome: @import("../domain/workflow.zig").OutcomeTag) operations.Error!execution.Candidate {

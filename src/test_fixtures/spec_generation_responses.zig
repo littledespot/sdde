@@ -2,13 +2,14 @@
 const std = @import("std");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("../application/pipeline_values.zig");
+const definitions = @import("../domain/specification_result_definitions.zig");
 const r = @import("../domain/reference_reconciliation.zig");
 const g = @import("../domain/specification_generation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
 pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition, misbound_summary, misbound_signals };
-pub const SupportFault = enum { inconclusive, missing_detail, foreign_source_single, foreign_sources, question_recover, question_exhaust, question_native_exhaust, question_mixed_exhaust, question_evidence_recover, question_evidence_exhaust, question_evidence_alternating };
+pub const SupportFault = enum { foreign_source_single };
 // Semantic outcomes remain scripted candidates, not native semantic proof.
 pub const Applicability = enum {
     unjustified,
@@ -30,9 +31,11 @@ pub const applicability_detail = "The source requires a displayed value. Its ori
 pub const applicability_question = "Should the displayed value be calculated on request or read from managed records? Answer calculate, or records with their required fields.";
 
 pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
-/// Scripted edge cases (ADR 0038 Decision 7). Each model claim gets one: `native` beside its one
-/// acceptance criterion, `chosen` beside two so the model decides, and `unlinked` in every batch
-/// after the first, where the batch has no criterion at all.
+/// Scripted edge cases (ADR 0038 Decision 7). `native` writes one for each model claim, beside the
+/// one criterion the engine writes for the claim's requirement. `chosen` groups two claims in each
+/// signal and writes one edge case per group naming both, beside the two criteria the engine
+/// writes for them, so the model decides. `unlinked` names the claim of every group after the first
+/// only in an edge case: no requirement names it, so no criterion can serve the edge case.
 pub const EdgeCases = enum { native, chosen, unlinked };
 fn falseConflict(mode: ?SourceLoss) bool {
     return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
@@ -45,11 +48,14 @@ pub const Options = struct {
     attempt: u32 = 1,
     source_loss: ?SourceLoss = null,
     support_fault: ?SupportFault = null,
-    support_merges: usize = 0,
     applicability: ?Applicability = null,
     source_gaps: bool = false,
     evidence_fault: ?enum { recover, empty_correction } = null,
-    candidate_omissions: ?enum { functional, acceptance_and_functional } = null,
+    /// The records response omits every functional requirement.
+    candidate_omissions: bool = false,
+    /// The records response states each claim as an outcome and writes no functional requirement,
+    /// so its groups have scenario slots while the mandatory requirement family is missing.
+    behaviour_without_requirement: bool = false,
     extraction_omission: bool = false,
     reconciliation_repair_fault: ?enum { unchanged, alternating, unchanged_text } = null,
     reconciliation_fault: ?ReconciliationFault = null,
@@ -61,52 +67,20 @@ pub const Options = struct {
     repair_across_units: bool = false,
     failed_repair: bool = false,
     omit_exact: bool = false,
-    normalize_exact: bool = false,
     missing_classifications: bool = false,
     failed_classification_repair: bool = false,
     entities_required: bool = false,
     contradict_entities: bool = false,
     generation_gap: bool = false,
     edge_cases: ?EdgeCases = null,
+    /// The first scenario of each group's first scenarios answer has a text defect, which the
+    /// field-level repair fixes (ADR 0038 Decision 3).
+    scenario_defect: bool = false,
 };
 
 pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
     const request = try requests.readCurrent(&view, requests.prepared_schema);
-    const body = try partResponse(allocator, request, try completeResponse(allocator, view, options));
-    return modelWire(allocator, body, request.packet() orelse return body);
-}
-
-/// Project canonical fixture data to the currently bound response wire shape.
-/// This test helper does not admit or normalize actual provider responses.
-pub fn modelWire(allocator: std.mem.Allocator, body: []const u8, packet: *const @import("../domain/model_input_packet.zig").Packet) ![]const u8 {
-    for (packet.integerChoices()) |choice| {
-        if (choice.constructedValue() != null) break;
-    } else return body;
-    var parsed = try @import("../domain/strict_json.zig").parse(allocator, body, .{ .maximum_depth = 64 }, false, null);
-    try omitScriptedNativeFields(&parsed.value, packet.integerChoices());
-    return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
-}
-
-// Scripted canonical values are fixture data; model-wire responses omit only
-// their matching determined handles. Independent boundary tests cover admission.
-fn omitScriptedNativeFields(value: *std.json.Value, choices: []const @import("../domain/model_result_schema.zig").IntegerChoice) !void {
-    switch (value.*) {
-        .object => |*object| {
-            for (object.values()) |*child| try omitScriptedNativeFields(child, choices);
-            const kind = object.get("kind") orelse return;
-            if (kind != .string) return;
-            for (choices) |choice| if (choice.constructedValue()) |fixed| {
-                const target = choice.target.tagged;
-                if (!std.mem.eql(u8, target.kind, kind.string)) continue;
-                const selected = object.get(target.field) orelse continue;
-                if (selected != .number_string) return error.InvalidFixture;
-                const id = try @import("../domain/model_payload_schema.zig").exactInteger(selected.number_string);
-                if (id == fixed) _ = object.swapRemove(target.field);
-            };
-        },
-        .array => |*array| for (array.items) |*child| try omitScriptedNativeFields(child, choices),
-        else => {},
-    }
+    return partResponse(allocator, request, try completeResponse(allocator, view, options));
 }
 
 fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
@@ -238,6 +212,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 return @import("reference_reconciliation.zig").modelWire(allocator, .{ .summary = proposal });
             }
             var proposal = try @import("reference_reconciliation.zig").global(allocator, input);
+            if (options.edge_cases == .chosen) proposal.signals = try pairedSignals(allocator, proposal.signals);
             const disposition_claims = try dispositionClaims(allocator, request, input);
             var semantic_dispositions: std.ArrayList(r.ClaimDispositionProposal) = .empty;
             for (proposal.claim_dispositions) |entry| if (r.contains(r.ClaimId, disposition_claims, entry.claim_id)) try semantic_dispositions.append(allocator, entry);
@@ -369,7 +344,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             // An edge case's outcome link: the model names the last criterion it is offered for the
             // first pending edge case, the first for the next, and so on, so a run proves the engine
             // used each answer for its own edge case, not a default candidate.
-            if (request.packet()) |packet| if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, @import("../domain/scenario_link_request.zig").definition)) {
+            if (request.packet()) |packet| if (packet.resultDefinition()) |definition| if (definitions.Links.parse(definition) == .scenario_link) {
                 const offered = packet.integerChoices()[0].allowed;
                 const earlier = (try @import("../application/scenario_link_workflow.zig").chosen(&view)).len;
                 return std.fmt.allocPrint(allocator, "{{\"criterion\":{d}}}", .{if (earlier % 2 == 0) offered[offered.len - 1] else offered[0]});
@@ -399,18 +374,10 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = content_value } }, .provenance = membership.fixed_provenance };
                         return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, record.content) });
                     }
-                    // ADR 0038 Decision 3: the engine fixed the criterion's claim; the
-                    // response is its content only.
-                    if (auth.rule.group != null and auth.rule.group.? == .scenario) {
-                        // Written from the fixed claim, so criteria inserted in different
-                        // batches don't repeat each other's content.
-                        const tested = try withoutExact(allocator, options, try attributed(allocator, all, auth.rule.group.?.scenario.fixed_provenance.claim_ids));
-                        const content: @FieldType(g.spec.Model.RecordProposal, "content") = .{ .acceptance_criterion = .{ .given = tested.value, .when = tested.value, .then = tested.value } };
-                        return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, content) });
-                    }
                 }
                 return if (options.failed_repair) "{\"provenance\":{\"claim_ids\":[999999]}}" else error.UnexpectedScriptedRepair;
             }
+            if (request.packet()) |packet| if (packet.resultDefinition()) |definition| if (definitions.Generation.parse(definition) == .scenarios) return scenarios(allocator, current, context, options);
             const unit = try @import("../domain/specification_session.zig").unit(current.completed);
             const assigned = try @import("../domain/specification_session.zig").currentBinding(allocator, current, context);
             if (options.generation_gap and unit == .entities) {
@@ -432,40 +399,34 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         var records: std.ArrayList(g.spec.Model.RecordProposal) = .empty;
                         // One statement record per claim (ADR 0038): each claim's functional
                         // requirement carries its chunk's exact value, which no second record
-                        // restates.
+                        // restates. No acceptance criterion: the scenarios request writes them.
+                        // `unlinked` states the claim of every group after the first only as an
+                        // edge case, which no requirement's criterion serves.
+                        const unlinked = options.edge_cases == .unlinked and current.record_cursor != 0;
+                        const statement: g.spec.Kind = if (options.behaviour_without_requirement) .user_visible_outcome else .functional_requirement;
                         for (std.enums.values(g.spec.Kind)) |kind| {
-                            if (omittedKind(options, kind)) continue;
-                            if (kind != .functional_requirement and kind != .acceptance_criterion and !(kind == .edge_case and options.edge_cases != null)) continue;
+                            if (omittedKind(options, kind) or (unlinked and kind == .functional_requirement)) continue;
+                            if (kind != statement and !(kind == .edge_case and options.edge_cases != null)) continue;
                             for (all.entries) |item| {
                                 const retained = eligibleRecordClaim(dispositions, item.claim.id);
                                 if (!retained or (try businessValue(allocator, item.claim)) == null or !r.contains(r.ClaimId, assigned.records.selection.claim_ids, item.claim.id)) continue;
                                 const selected = try withoutExact(allocator, options, try attributed(allocator, all, &.{item.claim.id}));
                                 if (kind == .edge_case) {
-                                    if (item.claim.content == .model) try records.append(allocator, .{ .content = .{ .edge_case = .{ .condition = selected.value } }, .provenance = selected.provenance });
+                                    // `chosen` writes one edge case for the group, which names every claim it holds.
+                                    const written = options.edge_cases != .chosen or item.claim.id.ordinal == assigned.records.selection.claim_ids[0].ordinal;
+                                    if (written and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .edge_case = .{ .condition = selected.value } }, .provenance = selected.provenance });
                                     continue;
                                 }
-                                // `unlinked` leaves every batch after the first without a criterion.
-                                const unlinked = options.edge_cases == .unlinked and current.record_cursor != 0;
-                                if (kind == .acceptance_criterion and item.claim.content == .model and !unlinked) {
-                                    const criterion: @FieldType(g.spec.Content(g.spec.BusinessValue), "acceptance_criterion") = .{ .given = selected.value, .when = selected.value, .then = selected.value };
-                                    try records.append(allocator, .{ .content = .{ .acceptance_criterion = criterion }, .provenance = selected.provenance });
-                                    if (options.edge_cases == .chosen) {
-                                        const refusal: g.spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "The request is refused." } }} };
-                                        try records.append(allocator, .{ .content = .{ .acceptance_criterion = .{ .given = selected.value, .when = selected.value, .then = refusal } }, .provenance = selected.provenance });
-                                    }
-                                }
-                                if (kind != .functional_requirement or item.claim.content != .model) continue;
+                                if (item.claim.content != .model) continue;
                                 var text: std.ArrayList(r.text.BusinessSegment) = .empty;
                                 try text.appendSlice(allocator, selected.value.segments);
                                 if (!options.omit_exact and std.meta.eql(item.claim.id, try outcomeClaim(allocator, all, dispositions, item.claim.chunk_id))) for (all.entries) |exact_item| {
                                     if (exact_item.claim.content != .preserved_token or !std.mem.eql(u8, exact_item.claim.chunk_id.bytes, item.claim.chunk_id.bytes)) continue;
                                     try text.append(allocator, .{ .literal = .{ .value = " " } });
-                                    try text.append(allocator, if (options.normalize_exact)
-                                        .{ .literal = .{ .value = exact_item.claim.content.preserved_token.value.raw_value.bytes } }
-                                    else
-                                        .{ .exact_copy = .{ .claim_id = exact_item.claim.id } });
+                                    try text.append(allocator, .{ .exact_copy = .{ .claim_id = exact_item.claim.id } });
                                 };
-                                try records.append(allocator, .{ .content = .{ .functional_requirement = .{ .text = .{ .segments = try text.toOwnedSlice(allocator) } } }, .provenance = selected.provenance });
+                                const wording: g.spec.BusinessValue = .{ .segments = try text.toOwnedSlice(allocator) };
+                                try records.append(allocator, .{ .content = if (kind == .user_visible_outcome) .{ .user_visible_outcome = .{ .text = wording } } else .{ .functional_requirement = .{ .text = wording } }, .provenance = selected.provenance });
                             }
                         }
                         break :result .{ .records = records.items };
@@ -492,7 +453,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .records => if (options.repair_across_units and proposed.content.records.len != 0) {
                         const records = try allocator.dupe(g.spec.Model.RecordProposal, proposed.content.records);
                         switch (records[0].content) {
-                            .acceptance_criterion => |*criterion| criterion.given = invalid,
                             .functional_requirement => |*requirement| requirement.text = invalid,
                             else => return error.InvalidFixture,
                         }
@@ -512,7 +472,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const ledger = try a.build(allocator, inputs);
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
             if (options.evidence_fault == .empty_correction and options.attempt > 1) return "{}";
-            if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, "preservation_comparisons")) {
+            if (packet.resultDefinition()) |definition| if (definitions.Support.parse(definition) == .preservation_comparisons) {
                 const prior = workflow.prior(progress);
                 const candidate = switch (prior.?) {
                     .pending => |value| value,
@@ -610,35 +570,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const authorized = state.authorization;
                 if (options.applicability == .missing_text) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, .{ .detail = .{ .detail = applicability_detail, .question = applicability_question } });
                 if (options.source_loss == .false_conflict_questions) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, .{ .detail = .{ .detail = findings[authorized.target.ordinal - 1].value.detail, .question = "Which behavior is intended? State the action and date to display." } });
-                if (options.support_fault) |fault| switch (fault) {
-                    .question_evidence_recover, .question_evidence_exhaust, .question_evidence_alternating => {
-                        var replacement = authorized.operation.replace;
-                        if (replacement != .detail) return error.InvalidFixture;
-                        replacement.detail.question = "What duration applies? State the duration and starting event.";
-                        return sourceRepairWire(allocator, inputs, context, authorized, replacement);
-                    },
-                    .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
-                        var replacement: repair.Replacement = .{ .detail = .{
-                            .detail = "The source establishes the action; its duration is unspecified.",
-                            .question = "What duration applies? State the duration and starting event.",
-                        } };
-                        switch (fault) {
-                            .question_recover => if (options.attempt == 1) {
-                                replacement.detail.question = null;
-                            },
-                            .question_exhaust => replacement.detail.question = null,
-                            .question_native_exhaust => if (options.support_merges == 0) {
-                                replacement.detail.detail = " ";
-                            } else {
-                                replacement.detail.question = "Invalid scalar\x01";
-                            },
-                            .question_mixed_exhaust => replacement.detail.question = if (options.attempt == 1) null else "Invalid scalar\x01",
-                            else => unreachable,
-                        }
-                        return sourceRepairWire(allocator, inputs, context, authorized, replacement);
-                    },
-                    else => {},
-                };
                 const value = findings[authorized.target.ordinal - 1].value;
                 const kind = switch (authorized.operation) {
                     .replace => |replacement| std.meta.activeTag(replacement),
@@ -666,48 +597,11 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 }
                 if (requirement.seed.id.kind != .entity_applicability and requirement.seed.id.unit != .token) finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
             };
-            if (options.support_fault) |fault| {
-                switch (fault) {
-                    .inconclusive => {
-                        findings[0].value.kind = .inconclusive;
-                        findings[0].value.detail = "No missing user decision was established; interpretation remains inconclusive.";
-                        findings[0].value.question = null;
-                    },
-                    .question_evidence_recover, .question_evidence_exhaust, .question_evidence_alternating => {
-                        for (findings[0..4]) |*finding| {
-                            finding.value.kind = .unsupported;
-                            finding.value.detail = "The source establishes the action; its duration is unspecified.";
-                            finding.value.question = "Invalid scalar\x01";
-                        }
-                        for (ledger.requirements, findings) |requirement, *finding| if (requirement.seed.id.kind == .entity_applicability) {
-                            finding.value.kind = .not_applicable;
-                            finding.value.source_ids = if (options.attempt == 1 or fault == .question_evidence_exhaust or fault == .question_evidence_alternating) &.{.{ .ordinal = if (fault == .question_evidence_alternating) 999999 + options.attempt else 999999 }} else &.{context.inputs.corpus.sources[0].id};
-                        };
-                    },
-                    .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
-                        for (findings[0..2]) |*finding| {
-                            finding.value.kind = .unsupported;
-                            finding.value.detail = "The source establishes the action; its duration is unspecified.";
-                            finding.value.question = "Invalid scalar\x01";
-                        }
-                    },
-                    .missing_detail => {
-                        findings[0].value.kind = .ambiguous;
-                        findings[0].value.question = "Which renewal deadline applies? Supply a duration and starting event.";
-                        findings[0].value.detail = if (options.attempt == 1) "" else "The source leaves the renewal deadline unspecified.";
-                    },
-                    .foreign_source_single => if (options.attempt == 1) {
-                        findings[0].value.source_ids = &.{.{ .ordinal = 999999 }};
-                    },
-                    .foreign_sources => {
-                        // Foreign source IDs now fail protocol admission. The
-                        // immutable correction supplies eligible source evidence.
-                        if (options.attempt == 1) for ([_]usize{ 1, 4, 5, 6, 7, 8, 10 }) |index| {
-                            findings[index].value.source_ids = &.{.{ .ordinal = 2 }};
-                        };
-                    },
-                }
-            }
+            if (options.support_fault) |fault| switch (fault) {
+                .foreign_source_single => if (options.attempt == 1) {
+                    findings[0].value.source_ids = &.{.{ .ordinal = 999999 }};
+                },
+            };
             if (options.applicability) |mode| for (ledger.requirements, findings) |requirement, *finding| {
                 if (requirement.seed.id.kind != .entity_applicability) continue;
                 finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
@@ -807,6 +701,48 @@ fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId
     return .{ .value = value, .provenance = .{ .claim_ids = try allocator.dupe(r.ClaimId, ids), .clarification_response_ids = &.{} } };
 }
 
+/// The Then of the last scenario of each group under `chosen` edge cases, which tells the group's
+/// two criteria apart in the published specification.
+pub const refusal = "The request is refused.";
+
+/// The answer to a group's scenarios request (ADR 0038 Decision 3): one scenario for each slot,
+/// written from the slot's claim. It names no claim, kind or group; the engine binds them.
+fn scenarios(allocator: std.mem.Allocator, current: @import("../domain/specification_session.zig").Session, context: @import("../domain/specification_provenance.zig").Context, options: Options) ![]const u8 {
+    const request = @import("../domain/scenario_request.zig");
+    const provenance = @import("../domain/specification_provenance.zig");
+    const group_plan = try @import("../domain/specification_session.zig").scenarioPlan(allocator, current);
+    const all = try provenance.items(context);
+    const references = @import("../domain/reference_support.zig").records(context.references);
+    const written = try allocator.alloc(request.Scenario, group_plan.count());
+    for (written, 0..) |*scenario, index| {
+        const slot = group_plan.slot(index);
+        const claim = try withoutExact(allocator, options, try attributed(allocator, all, &.{slot.claim}));
+        const value = try provenance.modelValue(allocator, references, claim.value);
+        const refuses = options.edge_cases == .chosen and index + 1 == written.len;
+        scenario.* = .{ .number = slot.number, .given = value, .when = value, .then = if (refuses) .{ .segments = &.{.{ .literal = .{ .value = refusal } }} } else value };
+    }
+    if (options.scenario_defect and options.attempt == 1) written[0].given = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
+    return @import("../domain/model_candidate_json.zig").encode(request.Response, allocator, .{ .scenarios = written });
+}
+
+/// Two claims to a signal, in the order the model's reconciliation lists them: a group holding two
+/// claims, so an edge case naming both meets two criteria. A signal of a preserved token, and a
+/// last signal with no partner, stay as they are.
+fn pairedSignals(allocator: std.mem.Allocator, signals: []const r.SignalProposal) ![]const r.SignalProposal {
+    var paired: std.ArrayList(r.SignalProposal) = .empty;
+    var held: ?r.SignalProposal = null;
+    for (signals) |signal| {
+        if (signal.content != .model) {
+            try paired.append(allocator, signal);
+        } else if (held) |first| {
+            try paired.append(allocator, .{ .claim_ids = try std.mem.concat(allocator, r.ClaimId, &.{ first.claim_ids, signal.claim_ids }), .content = first.content });
+            held = null;
+        } else held = signal;
+    }
+    if (held) |single| try paired.append(allocator, single);
+    return paired.items;
+}
+
 // Explicit scripted source choices, resolved by the production occurrence owner.
 // This fake knows its authored claim set; it does not infer support for an LLM.
 fn fixtureGroups(allocator: std.mem.Allocator, context: @import("../domain/specification_provenance.zig").Context, claims: []const r.ClaimId, mode: @import("../domain/specification_source_binding.zig").Mode) !@import("../domain/specification_source_binding.zig").Association {
@@ -868,7 +804,7 @@ fn selection(value: g.spec.Provenance) g.spec.Selection {
 fn dispositionClaims(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, input: r.Input) ![]const r.ClaimId {
     const packet = request.packet() orelse return error.InvalidReconciliationFixture;
     const definition = packet.resultDefinition() orelse return error.InvalidReconciliationFixture;
-    if (!std.mem.eql(u8, definition.bytes, "dispositions_assignment")) return @import("../domain/reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
+    if (definitions.Reconciliation.parse(definition) != .dispositions_assignment) return @import("../domain/reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
     const body = try std.json.parseFromSlice(std.json.Value, allocator, packet.body(), .{});
     const supplied = body.value.object.get("assignment").?.object.get("claim_ids").?.array.items;
     const result = try allocator.alloc(r.ClaimId, supplied.len);
@@ -883,7 +819,12 @@ fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain
     const part = request.part() orelse {
         const bound = request.packet() orelse return body;
         const definition = bound.resultDefinition() orelse return body;
-        const field: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "dispositions_assignment")) "claim_dispositions" else if (std.mem.eql(u8, definition.bytes, "signals_assignment")) "signals" else if (std.mem.eql(u8, definition.bytes, "conflicts_assignment")) "conflicts" else null;
+        const field: ?[]const u8 = if (definitions.Reconciliation.parse(definition)) |selected| switch (selected) {
+            .dispositions_assignment => "claim_dispositions",
+            .signals_assignment => "signals",
+            .conflicts_assignment => "conflicts",
+            else => null,
+        } else null;
         if (field) |name| {
             const parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
             defer parsed.deinit();
@@ -968,8 +909,7 @@ fn misboundProjection(comptime T: type, projections: []const T) !r.SignalProposa
 // Scripted semantic judgments stay in fake-provider fixtures. The native engine
 // still validates ordinary candidate data; review has no content-repair authority.
 fn omittedKind(options: Options, kind: g.spec.Kind) bool {
-    const selected = options.candidate_omissions orelse return false;
-    return kind == .functional_requirement or (selected == .acceptance_and_functional and kind == .acceptance_criterion);
+    return options.candidate_omissions and kind == .functional_requirement;
 }
 
 pub fn withForbiddenProvenance(allocator: std.mem.Allocator, wire: []const u8) ![]const u8 {

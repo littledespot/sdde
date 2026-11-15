@@ -5,8 +5,9 @@
 **Decision authority:** Explicit user direction on 2026-09-02
 
 **Implementation:** Complete. F0006's conditional provider-bootstrap routine, invoked after
-exact workflow selection, invokes this component exactly once when required and
-decodes its untrusted bytes.
+exact workflow selection, runs this feature's locate and read steps exactly once when required
+and decodes the untrusted bytes. The earlier `LLMProviderConfigService` type was removed when the
+sequence became that routine (ADR 0032); the file keeps its name for the links that cite it.
 
 **Compatibility:** None. `paths.providers` is required in the single current
 configuration contract. There is no legacy fixed-location reader, alias,
@@ -29,13 +30,13 @@ paths](../contracts/09-configuration.md#91-required-configuration-shape).
 
 ## 1. Responsibility
 
-`LLMProviderConfigService` owns one complete bounded byte capture of the
-configured `.sddproviders.json` catalogue document and exposes those bytes
-immutably. Catalogue membership describes an available configured model
+The provider-bootstrap routine's locate and read steps own one complete bounded byte capture of the
+configured `.sddproviders.json` catalogue document and hand those bytes, still untrusted,
+to the decode step; no service type holds them. Catalogue membership describes an available configured model
 instance; it does not add that model to the repository's allowed
 `.sddtoolkit.json` `models.slots` set.
 
-The service does not decode JSON, validate provider definitions, construct a
+The capture does not decode JSON, validate provider definitions, construct a
 provider registry, validate the slot-to-catalogue subset relationship, select a
 workflow operation or model slot, obtain credentials, or invoke a provider. Those remain
 responsibilities of F0006 and each peer provider's adapter, such as F0007 for Bedrock
@@ -73,10 +74,10 @@ reads `config.paths.providers` directly and never resolves the path again.
 | `read_config` step | Capture that already opened file completely under the fixed byte limit and return owned untrusted bytes. |
 | Filesystem adapter | Consume the opaque F0004 capability, walk beneath the bound project root without following links, open read-only, and verify file identity/type/size before and after capture. |
 | Provider-bootstrap routine | Under ADR 0032, run the locate and read steps as part of the provider-bootstrap engine routine, preserve failed/cancelled outcomes, own intermediates, and keep the capture only after a successful complete read. Locate and read stay separate typed steps (AC 4), with fake-port tests. |
-| `LLMProviderConfigService` | Own the captured bytes and expose one borrowed immutable `bytes()` view. |
 | Composition root | Construct the filesystem adapter and the routine's port without invoking the routine during ordinary bootstrap. |
 
-No step invokes another step. The service performs no I/O and has no reload or mutation method.
+No step invokes another step. The capture has no reload or mutation method: the routine holds the
+bytes in the read step's return value, decodes them once and releases them when the routine ends.
 
 ## 4. Read and ownership contract
 
@@ -87,22 +88,14 @@ project-root escape, identity replacement, short read, growth, shrink, or byte
 limit violation. It reads no parent, sibling, repository example, packaged
 asset, environment-selected path, or default location.
 
-The service API is:
-
-```zig
-pub fn bytes(self: *const LLMProviderConfigService) []const u8
-pub fn deinit(self: *LLMProviderConfigService) void
-```
-
-Repeated `bytes()` calls return the same borrowed slice without allocation,
-I/O, parsing, or mutation. The service owns and releases the capture exactly
-once.
+The read step returns the owned raw bytes (`llm_provider_config.Raw`), and the routine releases
+them exactly once on every path, after the decode step has copied what it needs.
 
 The bytes remain untrusted. Only F0006's decoder may interpret them.
 
 ## 5. Failure and orchestration boundary
 
-F0008 returns the closed outcomes `ready`, `failed`, or `cancelled`. Every
+The routine returns the closed outcomes `ready`, `failed`, or `cancelled`. Every
 locate or capture rejection returns `failed`; F0006's conditional
 provider-bootstrap routine maps it to the already accepted
 `LLM_PROVIDER_CONFIG_READ_ERROR`. No partial service is published.
@@ -126,8 +119,8 @@ provider-bootstrap routine maps it to the already accepted
 5. The adapter opens read-only beneath the project root without following
    links and verifies a stable regular-file identity and length.
 6. Exactly 1,048,576 bytes are accepted; one byte more is rejected.
-7. `LLMProviderConfigService` exposes immutable bytes only and performs no I/O,
-   parsing, registry work, or provider work.
+7. The locate and read steps return untrusted bytes only and perform no parsing, registry work,
+   or provider work; no service type holds the capture.
 8. Missing, malformed, or unsafe provider content is never replaced by a
    source example, packaged asset, fixed root filename, or cached value.
 9. All handles and owned bytes are released once on every terminal branch.
@@ -147,8 +140,7 @@ Tests cover:
   over-size files
 - routine step order and terminal propagation
 - cleanup on every path
-- immutable repeated queries
-- absence of parsing in the service
-- conditional single capture
+- absence of parsing in the locate and read steps
+- conditional single capture (zero port calls on `not_required`)
 - ordinary-bootstrap non-probing
 - no fixed-location or source-example fallback.

@@ -62,10 +62,10 @@ pub const CollectExtraction = struct {
         const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const producers: @import("../domain/reference_extraction.zig").ProducerOrigins = .{
-            .content = candidate.producer(&.{"claims"}) orelse candidate.producer(&.{"reason"}) orelse return error.OperationExecutionFailed,
+            .content = candidate.producer(&.{"claims"}) orelse candidate.producer(&.{"reason"}) orelse return error.ReferenceCandidateUnavailable,
             .classifications = candidate.producer(&.{"token_classifications"}),
         };
-        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress, candidate.base, candidate.body, candidate.origin orelse return error.OperationExecutionFailed, producers) catch |operation_error| return operation_error };
+        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress, candidate.base, candidate.body, candidate.origin orelse return error.ReferenceCandidateUnavailable, producers) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(progress_schema.key)] = values.adopt(self.allocator, progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
@@ -154,7 +154,7 @@ pub const ForceClassifications = struct {
         const candidates = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
         const owner = try composition.Owner.create(self.allocator, &input.step.data, &.{.json_composition});
         errdefer owner.destroy();
-        const outcome: @import("../domain/workflow.zig").OutcomeTag = switch (self.action.execute(owner.arena.allocator(), state.*, source_part orelse return error.OperationExecutionFailed, target_part orelse return error.OperationExecutionFailed, (try readInputs(&input.step.data)).*, candidates.*) catch |operation_error| return operation_error) {
+        const outcome: @import("../domain/workflow.zig").OutcomeTag = switch (self.action.execute(owner.arena.allocator(), state.*, source_part orelse return error.ReferencePartUnavailable, target_part orelse return error.ReferencePartUnavailable, (try readInputs(&input.step.data)).*, candidates.*) catch |operation_error| return operation_error) {
             .semantic => semantic: {
                 owner.payload = .{ .state = state.* };
                 break :semantic .more;

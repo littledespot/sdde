@@ -8,7 +8,7 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "admit-model-response",
         .kind = .action,
-        .requires = &@import("../../domain/workflow_model_invocation.zig").decode_requires,
+        .requires = &@import("../../domain/workflow_model_invocation.zig").admission_requires,
         .produces = &@import("../../domain/workflow_model_invocation.zig").admission_produces,
         .side_effect = .none,
     };

@@ -149,7 +149,8 @@ pub const Source = struct {
         }
         const body = try std.json.Stringify.valueAlloc(scratch, projected_input, .{});
         const slot = try reviewSlot(scratch, target);
-        const definition: ?@import("model_result_schema.zig").DefinitionId = .{ .bytes = if (inputs.projection == .source_preservation) "preservation_finding" else if (permitsNotApplicable(required)) "applicability_finding" else "finding" };
+        const support_definitions = @import("specification_result_definitions.zig").Support;
+        const definition: ?@import("model_result_schema.zig").DefinitionId = (if (inputs.projection == .source_preservation) support_definitions.preservation_finding else if (permitsNotApplicable(required)) support_definitions.applicability_finding else support_definitions.finding).id();
         const packet = try reviewPacket(allocator, inputs, all.state_id, body, slot, definition);
         defer packets.release(packet);
         const ids = try scratch.alloc(i64, evidence_rule.eligible_source_ids.len);
@@ -244,7 +245,7 @@ pub const Source = struct {
         };
         const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
         const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{try reviewSlot(scratch, assigned.finding.subject)});
-        const packet = try reviewPacket(allocator, inputs, context.inputs.corpus.state_id, body, slot, .{ .bytes = "preservation_comparisons" });
+        const packet = try reviewPacket(allocator, inputs, context.inputs.corpus.state_id, body, slot, @import("specification_result_definitions.zig").Support.preservation_comparisons.id());
         defer packets.release(packet);
         // The binding always assigns the extracted-claims comparison; none is not a state.
         if (assigned.comparisons.len == 0) return error.InvalidRequiredAuthority;
@@ -252,7 +253,7 @@ pub const Source = struct {
         for (assigned.comparisons, ids) |view, *id| id.* = view.id.ordinal;
         // Native admission requires exactly one assessment per comparison, so
         // response admission binds the same member set.
-        return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{ .{ .property = "assessments" }, .items, .{ .property = "comparison_id" } } }, .definition = .{ .bytes = "preservation_comparisons" }, .allowed = ids, .collection = .exact_members }});
+        return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{ .{ .property = "assessments" }, .items, .{ .property = "comparison_id" } } }, .definition = @import("specification_result_definitions.zig").Support.preservation_comparisons.id(), .allowed = ids, .collection = .exact_members }});
     }
 
     pub fn admitComparisons(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate, retained: @import("source_omission.zig").comparisons.Assignment, bytes: []const u8) ComparisonError!@import("source_omission.zig").comparisons.Attribution {

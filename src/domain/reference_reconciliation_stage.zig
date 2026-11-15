@@ -64,7 +64,7 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     defer packets.release(with_facts);
     // The definition and revision belong to this exact immutable assignment.
     const slot = try slotId(scratch, prior);
-    const result = try packets.create(a, with_facts.body(), .{ .reference_global = .{ .reference_state_id = .{ .bytes = current.progress.plan.layout.items.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = definition(stage) });
+    const result = try packets.create(a, with_facts.body(), .{ .reference_global = .{ .reference_state_id = .{ .bytes = current.progress.plan.layout.items.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, definition(stage));
     defer packets.release(result);
     const witnessed = try packets.withOriginalSourceTexts(a, result, with_facts.originalSources());
     defer packets.release(witnessed);
@@ -84,7 +84,7 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
     const current = input(prior);
     const stage = std.meta.activeTag(prior);
     if (!accepts(prior)) return error.InvalidReferenceReconciliation;
-    if (bound.unit() != .reference_global or bound.purpose() != .initial_generation or !std.mem.eql(u8, bound.unit().reference_global.reference_state_id.bytes, current.progress.plan.layout.items.state_id.bytes) or !std.mem.eql(u8, (bound.resultDefinition() orelse return error.InvalidReferenceReconciliation).bytes, definition(stage))) return error.InvalidReferenceReconciliation;
+    if (bound.unit() != .reference_global or bound.purpose() != .initial_generation or !std.mem.eql(u8, bound.unit().reference_global.reference_state_id.bytes, current.progress.plan.layout.items.state_id.bytes) or !std.mem.eql(u8, (bound.resultDefinition() orelse return error.InvalidReferenceReconciliation).bytes, definition(stage).bytes)) return error.InvalidReferenceReconciliation;
     const expected = try slotId(a, prior);
     defer a.free(expected);
     if (!std.mem.eql(u8, bound.unit().reference_global.unit_slot_id.bytes, expected)) return error.InvalidReferenceReconciliation;
@@ -136,10 +136,13 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
 }
 pub const Response = union(Stage) { dispositions: @import("reference_conflict_groups.zig").Selection, signals: struct { signals: []const @import("reference_reconciliation_projection.zig").SemanticSignal }, conflicts: struct { conflicts: []const @import("reference_conflict_groups.zig").Explanation } };
 
-fn definition(stage: Stage) []const u8 {
+fn definition(stage: Stage) @import("model_result_schema.zig").DefinitionId {
+    const definitions = @import("specification_result_definitions.zig").Reconciliation;
     return switch (stage) {
-        inline else => |v| @tagName(v) ++ "_assignment",
-    };
+        .dispositions => definitions.dispositions_assignment,
+        .signals => definitions.signals_assignment,
+        .conflicts => definitions.conflicts_assignment,
+    }.id();
 }
 
 fn slotId(a: std.mem.Allocator, prior: Prior) std.mem.Allocator.Error![]const u8 {

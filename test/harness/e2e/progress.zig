@@ -28,6 +28,9 @@ pub const Progress = struct {
                 .{ .provider = .{ .call = if (report.provider_origin != null) report.last_model_call else null, .origin = report.provider_origin, .reason = reason, .content = report.provider_content_diagnostic } }
             else if (report.last_operation_rejection) |value|
                 .{ .operation = value }
+            else if (report.first_cause) |first|
+                // A later failure replaced it within the step, so it, not the terminal rejection, came first.
+                .{ .runner = first.asTerminal() }
             else if (report.terminal_rejection) |value|
                 .{ .runner = value }
             else

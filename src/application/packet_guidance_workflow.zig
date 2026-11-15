@@ -15,8 +15,8 @@ pub const Capture = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const selected = @import("model_request_workflow.zig").resource(input.step, "guidance") orelse return error.OperationExecutionFailed;
-        if (selected.content != .packet_guidance) return error.OperationExecutionFailed;
+        const selected = @import("model_request_workflow.zig").resource(input.step, "guidance") orelse return error.GuidanceResourceInvalid;
+        if (selected.content != .packet_guidance) return error.GuidanceResourceInvalid;
         return @import("workflow_candidate.zig").publish(self.allocator, schema, guidance.Guidance, self.action.execute(selected.content.packet_guidance));
     }
 };

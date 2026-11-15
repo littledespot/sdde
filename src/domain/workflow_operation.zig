@@ -23,6 +23,29 @@ pub const RetryLimitDescriptor = struct {
     scope: @import("workflow_retry.zig").Scope = .operation,
 };
 
+/// One closed variant of a contract that has variants (ADR 0030 "Contract variants"). A variant is
+/// a complete contract: its type has no defaulted field, so each one states every field, and
+/// nothing is partial or merged from another variant. Its `parameters` are the whole parameter list
+/// of a step that selects it, the selector's descriptor included.
+pub const Variant = struct {
+    /// The selector parameter's value that picks this variant.
+    value: []const u8,
+    parameters: []const ParameterDescriptor,
+    requires: []const pipeline.DataKey,
+    optional: []const pipeline.DataKey,
+    produces: []const pipeline.DataKey,
+    replaces: []const pipeline.DataKey,
+    invalidates: []const pipeline.DataKey,
+    outcomes: []const workflow.OutcomeTag,
+    side_effect: pipeline.SideEffect,
+    runner_accounting: pipeline.RunnerAccountingCapability,
+    repair_role: @import("workflow_retry.zig").Role,
+    outcome_association: @import("workflow_outcome_association.zig").Descriptor,
+    gates: []const []const u8,
+    retry_limit: ?RetryLimitDescriptor,
+    iteration: ?@import("workflow_iteration.zig").Descriptor,
+};
+
 pub const Contract = struct {
     id: []const u8,
     kind: Kind,
@@ -40,6 +63,11 @@ pub const Contract = struct {
     gates: []const []const u8 = &.{},
     retry_limit: ?RetryLimitDescriptor = null,
     iteration: ?@import("workflow_iteration.zig").Descriptor = null,
+    /// The one closed enumeration step parameter that selects a variant at compile time. A contract
+    /// with variants states every other field only in its variants (its own are then empty), and a
+    /// step that leaves the selector out is rejected: no variant is selected by its absence.
+    selector: ?[]const u8 = null,
+    variants: []const Variant = &.{},
 
     // The typed slot is the sole binding declaration, not permission to call
     // a provider. Operational capabilities derive independently from ports.
@@ -50,6 +78,47 @@ pub const Contract = struct {
     pub fn requiresModelBinding(self: Contract) bool {
         for (self.parameters) |parameter| if (parameter.kind == .model_slot) return true;
         return false;
+    }
+
+    pub fn hasVariants(self: Contract) bool {
+        return self.variants.len != 0;
+    }
+
+    /// The contract a step is checked against, flat as any single-shape contract is. A contract with
+    /// variants needs the selector's value and yields exactly that variant, never a union; a
+    /// contract without variants takes no selector.
+    pub fn resolve(self: Contract, selected: ?[]const u8) ?Contract {
+        if (!self.hasVariants()) return if (selected == null and self.selector == null) self else null;
+        const value = selected orelse return null;
+        for (self.variants) |variant| if (std.mem.eql(u8, variant.value, value)) return .{
+            .id = self.id,
+            .kind = self.kind,
+            .parameters = variant.parameters,
+            .requires = variant.requires,
+            .optional = variant.optional,
+            .produces = variant.produces,
+            .replaces = variant.replaces,
+            .invalidates = variant.invalidates,
+            .outcomes = variant.outcomes,
+            .side_effect = variant.side_effect,
+            .runner_accounting = variant.runner_accounting,
+            .repair_role = variant.repair_role,
+            .outcome_association = variant.outcome_association,
+            .gates = variant.gates,
+            .retry_limit = variant.retry_limit,
+            .iteration = variant.iteration,
+        };
+        return null;
+    }
+
+    /// A contract with variants carries no shape of its own: only its id, kind, selector and
+    /// variants. Anything else would be a second contract beside them.
+    pub fn isShell(self: Contract) bool {
+        return self.hasVariants() and self.selector != null and self.parameters.len == 0 and self.requires.len == 0 and
+            self.optional.len == 0 and self.produces.len == 0 and self.replaces.len == 0 and self.invalidates.len == 0 and
+            self.outcomes.len == 0 and self.side_effect == .none and self.runner_accounting == .none and
+            self.repair_role == .none and self.outcome_association == .independent and self.gates.len == 0 and
+            self.retry_limit == null and self.iteration == null;
     }
 };
 

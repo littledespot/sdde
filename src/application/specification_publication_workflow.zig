@@ -41,7 +41,7 @@ pub const Build = struct {
         const content = authority.read(view, @import("required_authority_workflow.zig").content_schema, .content) catch |operation_error| return operation_error;
         const ledger = values.read(view, @import("specification_workflow.zig").ids_schema, @import("../domain/specification_identity.zig").Ledger) catch |operation_error| return operation_error;
         const coverage = owned.read(view, @import("specification_workflow.zig").coverage_schema, .coverage) catch |operation_error| return operation_error;
-        const brief = (try @import("specification_generation_facts.zig").read(view)).brief() orelse return error.OperationExecutionFailed;
+        const brief = (try @import("specification_generation_facts.zig").read(view)).brief() orelse return error.SpecificationBriefMissing;
         const principles = values.read(view, @import("principle_workflow.zig").registry_schema, @import("../domain/principle_registry.zig").Registry) catch |operation_error| return operation_error;
         const clarifications = values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch |operation_error| return operation_error;
         const valid = values.read(view, rendering.validated_schema, bool) catch |operation_error| return operation_error;
@@ -65,7 +65,7 @@ pub const BuildSnapshot = struct {
         const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reference_snapshot = self.action.execute(owner.arena.allocator(), (input.step.authority orelse return error.OperationExecutionFailed).*, .{ .bytes = directory.project_relative_path }, inputs.*, extracted.payload().accounted, reconciled.payload().reconciliation_accounted, registry.*) catch |cause| return cause };
+        owner.payload = .{ .reference_snapshot = self.action.execute(owner.arena.allocator(), (input.step.authority orelse return error.ProjectAuthorityMissing).*, .{ .bytes = directory.project_relative_path }, inputs.*, extracted.payload().accounted, reconciled.payload().reconciliation_accounted, registry.*) catch |cause| return cause };
         return owned.publish(self.allocator, snapshot_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };

@@ -24,8 +24,8 @@ pub const Complete = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const facts = try readCurrent(&input.step.data);
-        const authority = input.step.provider_operation orelse return error.OperationExecutionFailed;
-        const record = authority.ledger.record(facts.source.id()) orelse return error.OperationExecutionFailed;
+        const authority = input.step.provider_operation orelse return error.ProviderOperationFactsMissing;
+        const record = authority.ledger.record(facts.source.id()) orelse return error.LifecycleRecordMissing;
         var delta = self.action.execute(authority.ledger, authority.authority, authority.ledger.revision(), record.id, record.revision, .{ .terminate = facts.terminal }) catch |operation_error| return operation_error;
         delta.data_invalidations.insert(.invoked_provider_operation);
         return .{ .outcome = facts.outcome, .delta = delta };
@@ -36,7 +36,7 @@ pub const Complete = struct {
 pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completion {
     const source = try observation.readCurrent(view);
     const invoked = (values.read(view, accounting.invoked_schema, lifecycle.InvokedOperation) catch |operation_error| return operation_error).operation();
-    if (!source.operationId().eql(invoked.id)) return error.OperationExecutionFailed;
+    if (!source.operationId().eql(invoked.id)) return error.LifecycleEvidenceForeign;
     const terminal: lifecycle.Terminal = switch (source.outcome()) {
         .validated => |evidence| switch (evidence.result()) {
             .complete => .completed,
@@ -45,7 +45,7 @@ pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completio
         },
         // Cancellation carries no proof of non-delivery or a received response.
         .cancelled => .{ .cancelled = .accepted_or_unknown },
-        .rejected => return error.OperationExecutionFailed,
+        .rejected => return error.OperationOutcomeNotAdmitted,
     };
     return .{ .source = .{ .invoked = invoked }, .terminal = terminal, .outcome = observation.status(source) };
 }

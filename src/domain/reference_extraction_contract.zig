@@ -44,8 +44,12 @@ pub fn capture(allocator: std.mem.Allocator, authority: compilation.SemanticAuth
             var parts: std.ArrayList(Part) = .empty;
             errdefer parts.deinit(allocator);
             for (authority.steps, 0..) |producer, producer_index| {
+                // The same owner of "this step begins one request" as the composition data flow: a
+                // part is produced by the step that assigns the request or by a `request-model` step,
+                // which carries the whole request. Its operation and parameters are the compiled
+                // step's own, so a part's evidence changes when its operation or declaration does.
                 if ((flow[producer_index] orelse return unavailable()).composition.plan != plan or
-                    !@import("workflow_model.zig").assignsRequest(producer.produces, producer.replaces)) continue;
+                    !@import("workflow_model.zig").startsRequest(producer)) continue;
                 try parts.append(allocator, .{ .node = producer.id, .operation = producer.operation_id, .parameters = producer.parameters });
             }
             if (parts.items.len == 0) return unavailable();

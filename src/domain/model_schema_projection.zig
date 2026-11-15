@@ -81,6 +81,17 @@ pub fn outline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.A
     }
 }
 
+/// The set an integer enumeration admits, borrowed from the compiled node in schema order. No
+/// other node has one: a string enumeration's strings are already in its outline, and the
+/// outline of an integer enumeration states only its type. A correction names this set beside
+/// the value the candidate gave (22-repair.md §22.6).
+pub fn allowedIntegers(node: *const schema.Node) ?[]const i64 {
+    return switch (node.*) {
+        .integer_enumeration => |choices| choices,
+        else => null,
+    };
+}
+
 fn fieldOutline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.Allocator.Error!std.json.Value {
     var object: std.json.ObjectMap = .{};
     switch (node.*) {

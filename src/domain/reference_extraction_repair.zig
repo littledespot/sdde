@@ -53,7 +53,7 @@ pub fn packet(a: std.mem.Allocator, inputs: evidence.Inputs, literals: @import("
     const entry = try entryAt(current, scope);
     const rejected_origin = try validation.rejectionOrigin(entry, authorization.rule.token_classifications.issues);
     const producing_origin = if (entry.producers) |producers| producers.classifications else entry.origin;
-    return atomic.packet(a, authorization, base, .{ .bytes = "classification_replacement" }, rejected_origin orelse producing_origin, .{ .fields = .{ .replacement = .{ .reference_phase = .extraction } } });
+    return atomic.packet(a, authorization, base, @import("specification_result_definitions.zig").Extraction.classification_replacement.id(), rejected_origin orelse producing_origin, .{ .fields = .{ .replacement = .{ .reference_phase = .extraction } } });
 }
 
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
@@ -178,7 +178,7 @@ pub const Omission = struct {
         const scope = try Omission.scopeOf(auth);
         const base = try input.extractionBase(a, facts.extraction.inputs, literals, facts.extraction.candidates, scope);
         defer packets.release(base);
-        const result = try Atomic.packetPresenting(a, auth, guidance, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" }, try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
+        const result = try Atomic.packetPresenting(a, auth, guidance, base, @as(@import("specification_result_definitions.zig").Extraction, if (auth.target == .classification) .classification else .claim).id(), try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
         if (auth.target == .classification) return result;
         defer packets.release(result);
         return input.withCitationChoices(a, result, facts.extraction.inputs, scope, &.{.{ .property = "citations" }});

@@ -88,6 +88,14 @@
       "destination": ".sddtoolkit/workflows/spec/records.prompt.md"
     },
     {
+      "source": "design/workflows/spec/scenarios.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/scenarios.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/scenarios.context.json",
+      "destination": ".sddtoolkit/workflows/spec/scenarios.context.json"
+    },
+    {
       "source": "design/workflows/spec/generation.schema.json",
       "destination": ".sddtoolkit/workflows/spec/generation.schema.json"
     },

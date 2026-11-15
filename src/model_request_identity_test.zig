@@ -16,10 +16,9 @@ test "workflow-owned requests retain their origin without accepting SDD authorit
     try std.testing.expectError(error.InvalidImmutableUnitOwnerId, runner.assign(current.revision(), .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "reference" }, .chunk_id = .{ .bytes = "" } } }, origin, .initial_generation));
 }
 const advance_lifecycle = @import("actions/model/advance_model_request_lifecycle.zig");
-const assign_request = @import("actions/model/assign_model_request_id.zig");
+const prepare_request = @import("actions/model/prepare_model_request.zig");
 const build_ledger = @import("actions/model/build_initial_model_request_identity_ledger.zig");
 const build_owner = @import("actions/model/build_immutable_unit_owner_id.zig");
-const validate_binding = @import("actions/model/validate_model_request_binding.zig");
 const runner_module = @import("model_request_identity_runner_test_fixture.zig");
 const binding = @import("domain/llm_provider_binding.zig");
 const identity = @import("domain/model_request_identity.zig");
@@ -559,12 +558,12 @@ test "request identity actions declare the sole ledger production and replacemen
     try std.testing.expectEqualSlices(
         pipeline.DataKey,
         &.{.model_request_identity_ledger},
-        assign_request.Action.contract.requires,
+        prepare_request.Action.contract.requires,
     );
     try std.testing.expectEqualSlices(
         pipeline.DataKey,
         &.{.model_request_identity_ledger},
-        assign_request.Action.contract.replaces,
+        prepare_request.Action.contract.replaces,
     );
     try std.testing.expectEqualSlices(
         pipeline.DataKey,
@@ -575,11 +574,6 @@ test "request identity actions declare the sole ledger production and replacemen
         pipeline.DataKey,
         &.{.model_request_identity_ledger},
         advance_lifecycle.Action.contract.replaces,
-    );
-    try std.testing.expectEqualSlices(
-        pipeline.DataKey,
-        &.{.model_request_identity_ledger},
-        validate_binding.Action.contract.requires,
     );
 }
 

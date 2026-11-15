@@ -3,9 +3,10 @@
 The fix record for open work and user decisions not yet recorded in an ADR
 ([convention](README.md)). Each phase needs the user's approval before its changes, and
 every live run needs its own approval. **Decision** marks a question only the user settles;
-a recommendation is not a decision. Implemented items are in [Z_SPEC01](Z_SPEC01.md); closed
-and reverted work, superseded measurements and earlier references are in git history
-(`fixes/FIX06.md` before 9 November 2026; earlier items at `39fd9ff` and `0f3e4d2`).
+a recommendation is not a decision. Decisions marked 15 November 2026 took their recommended best
+option (user: "update the best options recommendations", then "yes"). Implemented items are in
+[Z_SPEC01](Z_SPEC01.md); closed and reverted work, superseded measurements and earlier references
+are in git history (`fixes/FIX06.md` before 9 November 2026; earlier items at `39fd9ff` and `0f3e4d2`).
 
 ## 1. Gate status and output quality
 
@@ -15,17 +16,21 @@ committed, unmodified build (`a3d083e`, source `5fb59f67…`, 3 runs per case, n
 `185b9bc6…`, no critical failure) with no lost or weakened requirement ([Z_SPEC01](Z_SPEC01.md)
 Next 6). **Judged 9 November 2026** (user: "three per case is enough for now"): the HEAD set is
 enough stability evidence for now. ADR 0034 leaves actioning Plan to the user, so none is
-started.
+started. **Re-run decided 14 November 2026** (user: "the above recommendations are approved"): the
+gate is re-run on the build after E1–E4 land, as one closing set after the output-track changes
+(§3) are each kept or reverted, so the evidence comes from the build Plan work would start from
+(ADR 0034, derived item 7). E1's live set (3 per case, 6 of 6 published and passed) is a
+no-regression check, not the closing set.
 
-**Reference** for quality phases (§2 rule 7): the HEAD set, the last kept state (§3 Next items
-6, 7 and 8). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
+**Reference** for quality phases (§2 rule 7): b4's second set (`2026-11-15T04-01-*`, build
+`a349a72a…`, modified), the last kept state ([Z_SPEC01](Z_SPEC01.md) Q14 b4). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
 as one evaluator ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
 | --- | --- | --- | --- | --- |
-| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 0 / 0 | 94.0 (92.9–96.4) |
-| Loan-renewal | 3 of 3 | 3 of 3 | 0 / 0 / 4 / 0 (three are AC-001's minor "records the loan as renewed") | 90.5 (85.7–92.9) |
+| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 1 / 0 (the greeting-then-timestamp order) | 92.9 (89.3–96.4) |
+| Loan-renewal | 3 of 3 | 3 of 3 | 0 / 0 / 0 / 0 | 89.3 (85.7–92.9) |
 
 Advisory scores are scored against the case rubrics (`evaluations/e2e/<run>/evaluation.json`);
 scorer judgment moves one by about ±3.6, and keep decisions use the accuracy counts (§2 rule 6).
@@ -35,7 +40,7 @@ scorer judgment moves one by about ±3.6, and keep decisions use the accuracy co
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
 `00-37-49Z`), the entity and escaping set (`05-5*`) and six edge-case-lever runs on `071ce2b`
 (`09-2*`). Earlier runs are removed; their evaluations and measures stay under `evaluations/`.
-The current build decodes only `spec-e2e-report/v17` (`test/harness/e2e/contracts.zig:140`); earlier runs need their own build.
+The current build decodes only `spec-e2e-report/v20` (`test/harness/e2e/contracts.zig:223`); earlier runs need their own build.
 
 ## 2. Rules for measured phases
 
@@ -129,8 +134,8 @@ governs; these add what the phases need.
     `business_meaning` entity field from the report's `admission_audit` subjects (ADR 0038
     Decision 6) without a new version, so the six `2026-11-08T00-3*` to `00-4*` reports no
     longer decode and `adjudicate-spec` rejects any record for them (`InvalidAdjudication`,
-    naming no member). Their `1d66d882…` adjudications stand; their `3c74781e…` re-scores (§3
-    Next item 3) stay unapplied. The twelve `05-5*` and `09-2*` runs are adjudicated under
+    naming no member). Their `1d66d882…` adjudications stand; their `3c74781e…` re-scores
+    ([Z_SPEC01](Z_SPEC01.md) T7) stay unapplied. The twelve `05-5*` and `09-2*` runs are adjudicated under
     `3c74781e…`.
 
 **Boundary gates** for contract changes (from FIX01 §5, git `b2f10a3`). Offline tests prove
@@ -151,40 +156,25 @@ human-reviewed labels, never by native code or a new judge.
 
 Ranked by expected reduction of published-output defects (AGENTS.md). Tracks: **Q** quality
 phases (model input or published output change, each measured), **E** engine (no model-input
-change except E5's correction location and E7), **T** tests, **H** human decisions, **R**
+change except the §22.6 correction location, outside E5 since DE5 7, and E7), **T** tests, **H** human decisions, **R**
 research, **C** code-review findings (§10; none scheduled). "Gap" means between measurement sets.
 
-**Next:**
+**Next:** items 1 to 8 are implemented, kept or closed (records in [Z_SPEC01](Z_SPEC01.md)): Q14 b4
+(item 4) was kept 15 November 2026, and item 8 (ADR 0038's edge-case outcome limit) needed no change,
+since b4 gives each criterion one claim and neither set printed a success Then for a refusal edge case.
 
-1. **Kept 12 November 2026** (user: "yes"): the bare-value `reference_only` correction
-   ([Z_SPEC01](Z_SPEC01.md)). It has fired once live (8 November,
-   `2026-11-07T20-44-15Z-9273…`, uncommitted tree) and changed nothing: all three records
-   attempts returned the same bare outcomes and the run exhausted its retries, so the keep
-   rests on the mechanism. The repeated-statement change has no recorded keep decision; its
-   native deletes ran in the Q22 set (nine) and the Q14 b3 set (ten), all helpful.
-2. **Closed 8 November 2026:** skill `1d66d882…` is the same evaluator as `af394020…` and
-   `0b552067…` ([Z_SPEC01](Z_SPEC01.md) T7).
-3. **Decided 8 November 2026** (user: "recommendations accepted for 1 to 6"): a title that
-   repeats a requirement's value states it (§7 H1 "Titles"). The re-score of the reference it
-   required is done (9 November 2026, skill `3c74781e…`, `evaluations/e2e/<run>/`); its records
-   are unapplied (`adjudication-record.3c74781e-unapplied.json`, §2 rule 12).
-4. **Kept 12 November 2026:** a scenario gap takes an engine-bound criterion insert (ADR 0038
-   Decision 3; [Z_SPEC01](Z_SPEC01.md) Q14 b3). b4 is not started (decided 8 November 2026).
-5. **Kept 11 November 2026:** the engine takes the title (ADR 0048; [Z_SPEC01](Z_SPEC01.md) Q22).
-6. **Kept 9 November 2026:** an entity is a name and its groups ([Z_SPEC01](Z_SPEC01.md) Next 6).
-7. **Kept 9 November 2026:** the renderer escapes only the bytes Markdown reads as markup
-   ([Z_SPEC01](Z_SPEC01.md) Next 7).
-8. **Kept 9 November 2026:** an edge case's outcome is the Then of a linked criterion
-   ([Z_SPEC01](Z_SPEC01.md) Next 8). Evidence for it: EC-001's free-text outcome dropped
-   "calendar", "existing" or the new due date, failing `successful-renewal` in 4 of the 6
-   loan-renewal runs before 8 November and 2 of the 3 that day. ADR 0038:227-228's limit still applies: a success criterion
-   citing the refusal claims can be a refusal edge case's only candidate and print the success
-   Then. No HEAD-set run was scored with that defect; changing the link rule amends ADR 0038
-   Decision 7 (a **Decision**).
+**Set order, decided 14 November 2026** (user: "the above recommendations are approved"). Each
+change set is measured on its own committed build (§2.1, §2.3), against the previous item's
+kept state (§2 rule 7); b4's second set is the reference for the next one ([Z_SPEC01](Z_SPEC01.md)
+Q14 b4):
+1. **Q17,** then **Q7 D7.5,** then **Q4** (the table below): screens, then a set each.
+2. **The closing set** (§1).
 
-**Output track** (recommended order, not decided, inside the decided constraints: D17.1 puts
-Q17 after D12.2; each change set is measured on its own committed
-build, §2.1 and §2.3):
+The order is approved, not a blanket go-ahead: each screen batch and live set still needs its
+own approval when it is ready (AGENTS.md; the project settings prompt for every live step).
+
+**Output track** (rank order of the table; each item's screens and set follow the set order
+above, inside the decided constraints: D17.1 puts Q17 after D12.2):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
@@ -193,8 +183,8 @@ build, §2.1 and §2.3):
 | 3 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
 | 4 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
-**Robustness track** (run completion and budget; no scored defect): E5's §22.6 correction
-location. Since D13.1 the measured runs show 0 runaways and 0 re-sends; the highest used 67,448
+**Robustness track** (run completion and budget; no scored defect): the §22.6 correction
+location, outside E5 since DE5 7. Since D13.1 the measured runs show 0 runaways and 0 re-sends; the highest used 67,448
 of the 125,000-token workflow budget (`2026-11-02T02-28-14Z`, which reached source review), and
 the HEAD set used 12,971 to 17,037 tokens a run. Runs since ADR 0047 have failed only by retry
 exhaustion, never budget, in two modes, each reported with no lever:
@@ -206,19 +196,17 @@ exhaustion, never budget, in two modes, each reported with no lever:
   prose and no JSON on all three attempts, from a request byte-identical to one that succeeded:
   the model's variance under a coherent contract.
 
-**Engine track, in gaps:** E2's first conversion is done and measured (the next stage is the
-user's call); E3 may follow (nothing technical ties startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6 and E8 in
-any gap; E4 after E1, E2's measure and its capture replays (§5 E4); E5's closed reasons
-with the E1–E4 conversion that rewrites them, its evaluator gap in any gap; E9 with E1, E4 or
-E5; R-A1 after E1; E7 last. E0 is on hold. E1, E4, E5, E9 and T8 land only under §2.12. E1–E4
-before the closing set is the user's call (ADR 0034:93-95). **Tests:** T2, T3 and T8 in any
-gap; T4 with E1–E4. **Adjudication:** H1 (the evaluate-e2e skill) for every set.
+**Engine track, in gaps:** E1's `DataKey` removal (§5 E1); E2 stops
+at its three preparation stages (decided 14 November 2026); E3's feature logging waits on E6; E6
+in any gap; the evaluator partial-body gap (§5 E5) in any gap; E7 last. E0 is on hold. E1's
+`DataKey` removal and T8 land only under §2.12. **Tests:** T2, T3 and T8 in any gap; T4 with
+E1–E4. **Adjudication:** H1 (the evaluate-e2e skill) for every set.
 **Human:** H2 when required source review is labelled or review returns; H3 when the user
 reviews the panels; H4 before any formal baseline freeze; H5 at the user's choice. **Closing
 set:** repeated runs of both cases on one committed, unmodified build (ADR 0034:55-56) unless
 the user amends ADR 0034; every counted published run adjudicated (H1). The HEAD set (3 per
-case) is enough for now (user); a later structural change (E1–E4) re-opens whether the gate is
-re-run on the new build (ADR 0034:93-95).
+case) is enough for now (user); the gate is re-run on the post-E1–E4 build (§1, decided 14
+November 2026; ADR 0034:93-95).
 
 **Open problems without an item.** Each stays until a structural lever with an owner is found
 or the user records it as a model limitation.
@@ -237,8 +225,6 @@ or the user records it as a model limitation.
     accepted** (user, 7 November 2026: "that is a poor idea and I will not accept it"): the
     engine filling `then` and `expected_outcome` from the record's cited source lines. ADR 0038
     Decision 7 records that this doesn't cover copying a criterion's Then.
-  - **Titles:** kept 11 November 2026: the engine takes the title (ADR 0048, [Z_SPEC01](Z_SPEC01.md)
-    Q22). Runs on a build before Q22 hold titles to their values by §3 Next item 3.
 - **Unsupported additions in AC wording.** AC-001's recording of the renewal ("records the loan
   as renewed", three of the HEAD set's four additions) is ruled a minor addition (§7 H1) and
   has no structural lever: the `given` purpose forbids invented prerequisites
@@ -272,7 +258,8 @@ or the user records it as a model limitation.
 
 ### Q2b. Generic content-loss guard for repairs
 
-**D2.3** is implemented and kept ([Z_SPEC01](Z_SPEC01.md)). Open follow-ups:
+**D2.3** implemented and kept 1 November 2026; record in [Z_SPEC01](Z_SPEC01.md) Q2b D2.3. Open
+follow-ups:
 
 - remove `Relations.competing` under §2.12 (`reference_reconciliation_diagnostic.zig:162`);
 - fold `member_count` into `collection`'s `exact_members` variant
@@ -307,10 +294,10 @@ which reach requests through `descriptionFor` (`reference_model_input.zig:297`);
 `specification_repair.zig:81` can send it). Reword engine vocabulary in place; remove a
 restated rule only when the schema or its correction states all of it; keep task semantics the
 engine doesn't check (both `citations` sentences and the `claim_ids` definition).
-`records.prompt.md:9-13` states the coverage rule and an "at most one record" rule (ADR 0038
-Decisions 2 and 5); the engine checks the second only for non-requirement statements (ADR
-0038:155-158), and the sentence is kept as written on purpose (:163-164). It stays as their only
-carrier on a first attempt, since the provider schema can't express them.
+`records.prompt.md:9-11` states an "at most one record" rule (ADR 0038 Decision 5); the engine
+checks it only for non-requirement statements (ADR 0038:155-158), and the sentence is kept as
+written on purpose (:163-164). It stays as the rule's only carrier on a first attempt, since the
+provider schema can't express it.
 
 **Validation:** projection shows only the listed texts change; scripted missing and repeated
 members get the `array_length` and `duplicate_member` corrections; then a set, with the
@@ -335,8 +322,6 @@ D16.1 and D16.2 sets:
   reference is offered, and fragments join with no separator
   (`model_candidate_json.zig:251-253`). D7.5 owns it.
 
-- **D7.4** (implemented, [Z_SPEC01](Z_SPEC01.md)): decided 1 November 2026, D7.4 is not a
-  punctuation rule (AGENTS.md "Prose heuristic").
 - **D7.5** (decided 3 November 2026: yes, a conformance fix with no contract amendment, since
   07-domain-representations.md:74-79, ADR 0006:302-316, 12-model-boundary.md:199-203 and
   text-field-composition.md:21-22 already reserve fragments for composition around typed
@@ -377,8 +362,6 @@ Decision 3 and ADR 0038 Decision 4 (the list-item split,
   interior line is blank (`markdown_code_spans.zig:53`, `:59`;
   `exact_token_obligation.zig:40-45`; `source_selections.zig:57-60`). No fixture covers it.
   Decided offline with fixtures at its owners and §2.10 projections, in any gap, or recorded.
-- **D8.3** is implemented ([Z_SPEC01](Z_SPEC01.md)); semantic benefit is not demonstrated, since
-  no live run since has duplicated an extraction claim.
 
 ### Q13. Inline source lines
 
@@ -387,78 +370,39 @@ D13.1 (post-generation reviews removed) and the inline source lines are in
 constraints only, never origins, and never modified (Q17). Nothing checks what a shown source
 line means beyond the advisory evaluate-e2e link check.
 
-- **Reopening link checks** (a **Decision**), in shadow mode, only if adjudication shows
-  semantic defects that the generation-side items (Q14, ADR 0047) leave. It amends ADR 0023's
-  Decision (:46, :60-62) and its removal amendment (:25-42), and the harness makes no judge
-  call (AGENTS.md). **Proposed shape** (8 November 2026): each check asks one question of one
-  generated value against its fixed claims, returns a structured finding with evidence, edits
-  and decides nothing, and is labelled under H2's scheme (SKILL.md §7). Against it: the 26
-  October source review, on the same model, caught 1 of 28 defects by the assistant's
-  unconfirmed labels (`evaluations/b2-review-accuracy/2026-10-26/summary.md`), and a reliable
-  finding drives no repair unless ADR 0023:51-53 is also amended.
 - **Clarification question lines disagree.** `clarification_preparation.zig:32` prints
   `lines {start}–{end.line}`, so a citation of line 5 reads "lines 5–6" there and "line 5" in
   `spec.md`. Fix: use `source_coordinates.lines`. It changes clarification form bytes; no
   development case reaches a clarification today.
-- **D13.7 (decision, needed only when Plan's editable reparse is built; ADR 0034 gates it):**
-  what a hand-edited or stale source line does at the plan boundary. 23-rendering.md §23.1
-  (:148-153) says readback compares it with the derived line, but not what a mismatch does.
-  **Recommended:** regenerate it from the re-attributed provenance, never block on it, since
-  the line is a display and a user can't change what a record cites by editing it.
+- **D13.7 (decided 15 November 2026, user: "yes"; applies when Plan's editable reparse is
+  built, which ADR 0034 gates):** what a hand-edited or stale source line does at the plan
+  boundary. 23-rendering.md §23.1 (:148-153) says readback compares it with the derived line,
+  but not what a mismatch does. **Decision:** regenerate it from the re-attributed provenance,
+  never block on it, since the line is a display and a user can't change what a record cites
+  by editing it. The sentence joins §23.1 with the reparse code and its tests.
   **Limits:** a citation is only as true as its link (loan-renewal AC-001 cited refusal lines
   it doesn't test, `2026-11-07T01-19-36Z-728d…`), so it pairs with Q14 b3; entities cite whole
   groups (R1); semantic checking rests on adjudication (H1).
 
-**D13.6 — decided 1 November 2026** (user: "the review repair should check that the claim
-exists, if the claim supplied by the LLM does not exist then is should attempt to get the LLM
-to repair with guidance on the error"). Every claim a model supplies must exist; a
-non-existent claim is rejected and the model is asked to repair it, with guidance on the
-error.
-
-- **Already in place:** every claim, signal and line ID a model supplies is a closed integer
-  choice (for example records' `claim_ids`, `specification_session.zig:405`). A non-existent
-  ID fails response admission as `enum_mismatch` (`model_payload_schema.zig:197`) and gets a
-  protocol correction within the step's retry limit. No such correction has fired in any
-  measured run.
-- **Gap, the guidance:** the correction says only "this value is not among the allowed
-  values" (`model_schema_diagnostic.zig:34`), and its expected shape for an ID choice is
-  `{"type":"integer"}` (`model_schema_projection.zig:75-79`). It names neither the rejected
-  ID nor the IDs that exist; the rejected response travels with the correction
-  (`model_protocol_retry.zig:96`).
-- **Change (approval needed to implement):** the `enum_mismatch` correction for an ID choice
-  names the rejected value and lists the allowed IDs, both taken from the compiled choice,
-  never hard-coded (as the `shared_member` correction names its compiled kinds). It amends 22-repair.md:573-574,
-  which keeps the allowed-ID list out of an integer-enum outline, and :568-569 ("no other
-  correction changes"). It changes model-visible correction text only; first requests stay
-  byte-identical (§2.10). Proven offline: a scripted non-existent claim gets the named
-  correction and an accepted retry. A set can't measure it, since it hasn't fired live.
-
 ### Q14. Scenarios bound to their claims
 
-**Defect:** lost source requirement: no scenario tests refusal, in 2 loan-renewal publications
-since ADR 0047 (`2026-11-03T04-13-31Z-fa03…`, `2026-11-07T01-19-36Z-728d…`; none in the HEAD
-set). In both, one FR named every claim and the success-only AC-001 cited the refusal lines.
-Coverage (ADR 0038 Decision 2; `specification_session.zig:351-357`) covers FR, BR, UO and PB
-claims and checks links, not meaning (ADR 0038:219-221), so an AC naming every claim passes
-it: `fa03…` passed on its first attempt with no `uncovered_member` firing, a route b3 doesn't
-close. No retained `uncovered_member` firing ended well: two runs exhausted the records retry
-limit (2, step `gen` in `generate-unit`), and three passed by adding the claim IDs to the
-success-only AC-001. The advisory evaluate-e2e link check can't record over-citation.
+**Kept 15 November 2026** (record: [Z_SPEC01](Z_SPEC01.md) Q14 b4). Open parts only:
 
-- **b3 (D14.1):** a claim-bound scenario insert. **Kept 12 November 2026** (user: "keep B3";
-  [Z_SPEC01](Z_SPEC01.md) Q14 b3, ADR 0038 Decision 3). No insert has fired live.
-- **b4** (proposed 8 November 2026; not started, §3 Next item 4): claim-bound scenarios at
-  first generation too: the engine fixes each scenario's `claim_ids` before the model writes
-  it, closing `fa03…`'s first-attempt route that b3 leaves. Slots can come only from IDs, so a
-  slot per claim needs the statements first (a second records call per group) or D21.1's unit
-  (§4 Q21). Risk: each added scenario is another restatement that can lose part of its claim.
-  Amends ADR 0038 Decisions 1–3 beyond b3's.
-- **b2** (not chosen): the scenarios naming a claim must together contain every exact value
-  its quoted text requires; it misses claim 4 and business-rule-only cases.
-
-**D14.1:** b3, not b2 (decided 1 November 2026); held until lost source requirement recurs
-(re-decided 3 November 2026), a condition since met; held again with b4 not started (8
-November 2026, §3 Next item 4); released, implemented and kept 12 November 2026.
+- **Watch, from the second set:** the one-renewal criterion (claim 4) is a bare rule or changes modality in
+  3 of 3 loan-renewal runs; AC-001 repeats other requirements' results in 2 of 3 (its Source then cites
+  two of three claims), a **Decision** on ADR 0038 (an exact copy in a criterion must belong to the slot's
+  own claims) only if it repeats in the next set; a Given that already holds the event its When names in
+  2 of 3 hello-world runs.
+- **Restated edge cases** from the records call recur (loan-renewal EC-001 and EC-002 repeat AC-005) and
+  cost `organization` only; they wait for the 13 November edge-case amendment (ADR 0038 Decision 7,
+  unbuilt), then re-measure.
+- **Not shown by the sets** (one group each): a heading or lead-in claim that a behaviour statement names
+  gets a full scenario; an edge case naming only a scope-only claim blocks late at the link step
+  (`edge_case_without_criterion`); equal criteria across groups with generic wording block as
+  `competing_records`; one group with many claims makes one long answer.
+- **Entities call** invents a business entity for a feature with no business data (hello-world 3 of 3 in
+  the second set, 1 of 3 in the first, 0 of 3 in E5; loan-renewal names the feature, "Loan Renewal", in 2 of
+  3): not a b4 call, and its request is unchanged; it needs its own item.
 
 ### Q17. Principles as Spec context
 
@@ -496,28 +440,28 @@ principles "should be used for context when executing the spec workflow".
 passes coverage, because the brief fields, entity basis and composed story select whole
 groups and a claim maps through any field holding it (`specification_coverage.zig:52-61`,
 `:75`). In a one-group feature, as both development cases are, ADR 0038 Decision 2's scenario
-rule never reaches an unnamed claim (ADR 0038:239-241; pinned at
+rule never reaches an unnamed claim (ADR 0038 Consequences, Limits; pinned at
 `specification_generation_test.zig:9231-9234`). No failure since ADR 0047 is of this kind, so a
 set may show only "benefit not demonstrated".
 
 **Proposed 8 November 2026** (not decided): a narrative selection gives traceability only;
 every obligation-bearing claim must be named by a behaviour statement (FR, BR, UO or PB),
 whose claims then need a scenario. A coverage gap blocks with no repair today
-(`specification_coverage_repair.zig:26-30`), so it needs a correction at records admission
-(ADR 0038 Decision 3) or a claim-bound insert (b3, [Z_SPEC01](Z_SPEC01.md) Q14 b3), or silent passes become blocked
-runs. Owner: `Coverage` (`model_result_schema.zig:56`) and `specification_coverage.zig`;
-amends ADR 0038 Decision 2 and :234-241, 17-specify.md §17.5 and F0100.
+(`specification_coverage_repair.zig:26-30`), so it needs a correction at records admission,
+or silent passes become blocked runs. Owner: `Coverage` (`model_result_schema.zig:56`) and
+`specification_coverage.zig`; amends ADR 0038 Decision 2 and its Limits, 17-specify.md
+§17.5 and F0100.
 
 **D21.1 (Decision):** which claims bear obligations: (a) every `business` claim, which
 includes feature identity and purpose (`extraction.context.json:6`); (b) a new obligation
 category in extraction (`:5-13`), changing extraction requests; (c) a bounded model
 decomposition into source-span elements, the only option that separates a compound claim such
 as loan-renewal's four-part refusal item (`test/e2e/wf-002-loan-renewal/stories.md:9`, ADR
-0038:217-218), at the cost of a model step whose losses nothing native detects. Treating
+0038 Consequences, Limits), at the cost of a model step whose losses nothing native detects. Treating
 shared source evidence as no redundancy is not adopted: it would reverse ADR 0038 Decision 5
 (user, 2 November 2026).
 
-**D21.1 deferred** (8 November 2026; user: "recommendations accepted for 1 to 6"): no failure of
+**D21.1 deferred** (8 November 2026; user: "recommendations accepted for 1 to 6"; confirmed 15 November 2026): no failure of
 this kind has occurred since ADR 0047, so a set could show only "benefit not demonstrated", and
 each option risks accuracy: (a) false blocks on identity claims, (b) a change to every
 extraction request, (c) losses nothing native detects. If it resumes, take (b).
@@ -529,14 +473,14 @@ records the blocking route's constant-result machinery.
 ## 5. Engine track (E)
 
 Each item: `/preflight`, offline tests, the §2.10 proof, `zig build verify`, one live run
-per case (DE2–DE4 ask whether offline evidence replaces it), landing between sets and under
-§2.12.
+per case (DE2–DE4, in [Z_SPEC01](Z_SPEC01.md), asked whether offline evidence replaces it),
+landing between sets and under §2.12.
 
 ### E0. Failed and blocked runs publish validated content (B10, ADR 0041)
 
 On hold since 30 October 2026 (ADR 0041:3-4). Nothing under `src/` names `failure-output`,
 `spec_incomplete` or `run.incomplete_published`. To resume: implement ADR 0041 Decisions 1–8,
-taking `specification-state/v26` (ADR 0041:9-12, :45, :228); align the measures
+taking `specification-state/v27` (ADR 0041 names v27 since 14 November 2026); align the measures
 (`test/harness/e2e/measures.zig:207`, test `:739-742`; e2e.md:682-683), design.md:208,
 24-workflow-state.md:78-83, F0100:1145 and `test/harness/e2e/contracts.zig:209-212` with
 Decision 7.1 (an `invalid` run stays `invalid` and may publish), and F0100:1139 with Decision
@@ -552,72 +496,52 @@ Budget-stopped runs publish nothing while it is on hold (none since D13.1).
 
 ### E1. Engine-owned model request (A1, ADR 0030 slice 4)
 
-Not started: the `request-model` step replacing `model-request-body`
-(`spec.workflow.yaml` subgraph `model-request-body`) and its five wrappers
-(`model-request-with-context`, `model-request`, `support-request`, `composition-request` and
-`composition-request-body`), with the contract-variant
-mechanism ADR 0033 reuses. It folds in ADR 0039's re-send and retires `validateRunawayRoutes`
-(`src/domain/workflow_model_request_lifecycle.zig:86`). Retake the slice 1 freeze on the commit
-before it lands (slices 1 and 4: git `194e29a:fixes/Z_FIX05.md:2794`, `:4430`). Slice 1 review
-points: make `extract/content` and `extract/content-request` (steps `content` and `content-request` of `extract-references`) one
-step; port each runner-level lifecycle test in `src/model_request_workflow_test.zig` one for one
-with a mapping table and a reason for any dropped assertion (user decision, 23 October 2026,
-option b). If E1 removes a request-lifecycle `DataKey`, it lands under §2.12.
+Implemented and kept 13 November 2026; record in [Z_SPEC01](Z_SPEC01.md) E1. Open:
+
+- **`DataKey` enum:** removing the engine-internal request keys from it is a follow-up change (DE1b,
+  [Z_SPEC01](Z_SPEC01.md) E1); it lands under §2.12.
+- **Retention:** recorded retention keeps every call's raw exchange for the run, and its growth is
+  unmeasured.
 
 ### E2. Stage actions (A2, ADR 0031)
 
-**`prepare-toolchain` converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E2; DE2 confirmed,
-user: "yes": ADR 0031's derived choices 1–3 and 6–8 (:268-290), including that choice 7's
-offline evidence replaces the live run). Its measures are recorded there; they decide whether
-the next stage converts (ADR 0031:236-238, the user's call). §10 C32 records what the stage feeds
-today.
-
-**`prepare-inputs` converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E2b; the user's "yes").
-**`prepare-references` converted 12 November 2026** as two stages,
-`prepare-reference-evidence` and `prepare-reference-tokens`, with `compile-naming-policy` a
-separate step between them ([Z_SPEC01](Z_SPEC01.md) E2c; the user's "apply best recommendations").
-The three preparation subgraphs the E2 preflight named (`prepare-toolchain`, `prepare-inputs`,
-`prepare-references`) are now stage actions; converting any other subgraph is a separate decision.
+Implemented 12 November 2026 (the three preparation stages; E2b and E2c kept the same day); record in
+[Z_SPEC01](Z_SPEC01.md) E2, E2b and E2c. Open: converting any other subgraph is a separate decision, and
+**decided 14 November 2026** (user: "recommendation accepted") none converts before the closing set
+(§1). The remaining chains are short or excluded by ADR 0031: publication, clarification output and
+the authority gate write, branch or issue a gate, and the assemble subgraph has a repair step. The
+only eligible candidates, read from the YAML with no freeze taken, are two pure five-step tails
+(before publish, and in clarification output). A conversion changes the build before the closing set.
+Revisit when Plan work begins (ADR 0034).
 
 ### E3. Engine routines (A3, ADR 0032)
 
-**Startup and provider bootstrap converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E3; the
-user's "apply recommendations and implement"). Still open: feature logging, which waits on its
-preconditions (ADR 0032:152-172): no test covers cancellation under a log lock, and the
-policy-transition coordinator waits on E6's §14.10 decision. **DE3 confirmed 12 November
-2026** (user: "yes"): ADR 0032's derived choices 1–8 (:224-241), including offline evidence.
-
-### E4. Generic repair operations (W3, ADR 0033)
-
-After E1, E2's measure and its capture replays (ADR 0033:261), which must be
-`model-request-debug/v18` captures (`model_request_description.zig:5-10`; earlier captures no
-longer decode): all Specify owners in one change on offline equivalence evidence; the 29
-operations and 13 owners of ADR 0033:87-103 still match (10 authorize, 6 build, 6 parse, 7
-merge). Seven operations read `.packet_guidance`; their variants keep those reads. Retained
-reports carry repair keys, so it lands under §2.12. **DE4:** confirm ADR 0033's derived choices
-2–8 (:273-285; choice 6 is moot since D13.1, :280-281). Q14 b3 extends the specification-unit
-repair route these operations replace; E4 isn't its prerequisite (§4 Q14).
+Startup and provider bootstrap implemented 12 November 2026 and kept 14 November 2026; record in
+[Z_SPEC01](Z_SPEC01.md) E3. Open: feature logging, which waits on its preconditions (ADR
+0032:152-179): no test covers cancellation under a log lock, and no test counts the emergency lines.
+The policy-transition coordinator's authority is decided on both sides (prior-run finalization's, ADR
+0026; the same-run transition's, ADR 0032, decided 14 November 2026, §8).
 
 ### E5. Rejections say why (A4)
 
-Give the payload-free `.authority` rejection a closed reason
-(`src/domain/workflow_execution.zig:56`, `:74`) and split `error.OperationExecutionFailed`
-(131 sites in 38 production files, 2 November 2026) into causes at their owners; sites E1–E4
-rewrite land with that conversion. Failure-evidence gaps:
+Implemented and kept 14 November 2026; record in [Z_SPEC01](Z_SPEC01.md) E5, with DE5 (decided 14
+November 2026, user: "yes", to the E5 preflight's ten recommendations). Open:
 
-- Evaluator partial bodies disappear (harness only; matters for H3): carry the transport's
-  `ResponseBody` bytes and completeness through `test/harness/provider.zig:27-34`,
-  `bedrock.zig` (`:67-70`), `http.zig` (`:99-101`) and `evaluation_trace.zig`, with redaction
-  and fault tests.
-- A later failure replaces the earlier cause
-  (`src/application/workflow_model_invocation.zig:15-22`,
-  `workflow_pipeline_runner.zig:448-470`): keep the first cause beside the terminal one.
-- **Correction location:** a SyntaxError correction tells the model the malformed opening
-  (all four in the 18 runs of 31 October said `byte_offset 4`, key `"{"`), not the unterminated
-  string: `model_envelope.zig:68` drops the re-parse diagnostic and `:75` reports the original,
-  as §22.6 requires (22-repair.md:519). Fixing it amends §22.6 and changes correction requests.
-  None has occurred since D13.1.
-- Further payload-free failures, by area: §10 C4.
+- **Evaluator partial bodies disappear** (a separate item; harness only; matters for H3): carry the
+  transport's `ResponseBody` bytes and completeness through `test/harness/provider.zig:27-34`,
+  `bedrock.zig` (`:67-70`), `http.zig` (`:99-101`) and `evaluation_trace.zig`, with redaction and
+  fault tests.
+- **Correction location** (dropped from E5, DE5 7: it changes model-facing correction bytes, has no
+  scored defect and has not occurred since D13.1; it needs its own phase if it ever does): a
+  SyntaxError correction tells the model the malformed opening (all four in the 18 runs of 31 October
+  said `byte_offset 4`, key `"{"`), not the unterminated string: `model_envelope.zig:68` drops the
+  re-parse diagnostic and `:75` reports the original, as §22.6 requires (22-repair.md:526-527). Fixing
+  it amends §22.6 and changes correction requests.
+- **Workflow-definition rejection detail** (a separate item, DE5 8): F0005 §9.
+- **Further payload-free failures,** by area: §10 C4.
+- **First cause in the log and CLI:** the feature log's terminal event keeps the terminal code only,
+  so a production run's first cause is visible in the harness report, step event and trace and not in
+  the log or the CLI; showing it there needs an event field and an F0002 change.
 
 ### E6. Logging and visibility gaps
 
@@ -627,26 +551,33 @@ rewrite land with that conversion. Failure-evidence gaps:
   "recommendations accepted for 1 to 6"): it ends `cancelled`, as its own phase after the
   entity and escaping set (user, 8 November 2026: "after"). Not implemented: it adds
   `Cancelled` to the `FeatureLogSink` error set and a `cancelled` log outcome, amending ADR
-  0032:312-313's "Not decided" bullet, with no new `LOG_*` code. Measured scope: about 35
+  0032:319-320's "Not decided" bullet, with no new `LOG_*` code. Measured scope: about 35
   `SinkFailure` mapping sites in the log adapters (`feature_log_segment_store.zig` 21,
   `feature_log_retention_store.zig` 6, `feature_log_lock.zig` 5, `feature_log_recovery.zig` 2,
   `feature_log_historical_stream.zig` 1) and about 9 consumers of the log outcome, not a small
   change; it affects no model request. No production code supplies a cancellation status today
   (§10 C28).
-- **Prior-run crash finalization** (§14.10) is blocked on a persisted bootstrap authority that
-  doesn't exist (14-orchestration.md:317-321), so a crashed run's logs are kept whole and
-  damaged prior logs block later runs until someone repairs or removes them. **Decision:**
-  which persisted authority supplies the historical policy lineage (§14.10; ADR 0032:310-311,
-  "Not decided here"). E3's feature-logging conversion waits on it.
-- **Redaction policy ID:** 26-security.md:195 and F0002:542 name `redaction/default-v1`, which
-  no code carries. **Decision:** a record carries the ID (a new field, so `feature-log/v3`;
-  v2 is current, `feature_log_limits.zig:1`), or both documents drop it. **Recommended:** drop it.
-- **Producerless rejection** (fixed, [Z_SPEC01](Z_SPEC01.md)), still open: contract 27
-  (27-observability.md:44-47) names only coverage as an assembled-candidate example (design
-  edit awaiting approval: add `producerless` as a second example); `observation.capture`'s
-  candidate arm (`test/harness/e2e/observation.zig:131-132`) has no direct test. **Decision**
-  (optional): a first-generation omission names its chunk's classification producer.
-  **Recommended:** no.
+- **Prior-run crash finalization** (§14.10). **Authority decided 14 November 2026** (user:
+  "recommendation accepted"): segment-header identity alone, with no persisted bootstrap
+  lineage (ADR 0026 amended; §14.10 and ADR 0032 updated). Building it is deferred: a crashed
+  run's logs stay whole and unpruned, and only damaged prior logs block later runs. Before
+  building it, check that header identity suffices where the runner selects the prompt stream
+  from the policy (`feature_log_runner.zig:87`), and decide its order against the current
+  activation. The same-run policy transition's authority is decided separately (§8 "Mid-run logging
+  transition", ADR 0032); E3's feature-logging conversion waits on the cancellation change above and
+  on ADR 0032's other preconditions (§5 E3).
+- **Redaction policy ID: dropped 14 November 2026** (user: "recommendation accepted").
+  `redaction/default-v1` is gone from 26-security.md and F0002 §6.4 (the row is :548). No code
+  carried it, and a record field would invalidate every `feature-log/v2` segment. F0002's
+  "classified fragments retain their existing detector contract" clause still has no code
+  counterpart.
+- **Producerless rejection** (fixed, [Z_SPEC01](Z_SPEC01.md)). **Decided no** (user, 14 November
+  2026): a classification entry missing at first generation does not name its chunk's
+  classification producer; the validator's `producerless` rule and `candidate` attribution stand,
+  and contract 27 (27-observability.md:45-50) now names `producerless` beside coverage as an
+  assembled-candidate example (user, 14 November 2026: "approved"). Still open:
+  `observation.capture`'s candidate arm (`test/harness/e2e/observation.zig:132-133`) has no direct
+  test.
 
 ### E7. Clarification answer recovery (R2, ADR 0025)
 
@@ -654,7 +585,7 @@ Not started; no §13 authentication chain exists in `src/`. Fresh answers can't 
 recovery: refresh rejects new submissions (`clarification_refresh.zig:65`); provenance
 rejects nonempty response-ID sets (`specification_provenance.zig:88`,
 `specification_support_evidence.zig:171`); form validation returns one
-`InvalidClarificationInput` (`src/actions/specify/prepare_inputs.zig:179-184`);
+`InvalidClarificationInput` (`validateClarificationForms` in `src/actions/specify/prepare_inputs.zig`);
 resolved needs are empty (`src/actions/clarification/build_resolved_clarification_needs.zig`);
 passive literal origins are source-only (`passive_literals.zig:16`), so answer text can't get
 ADR 0025's response-owned origin (0025:70-71); generation doesn't consume answers (it binds
@@ -663,31 +594,6 @@ empty response-ID sets, `specification_source_binding.zig:136`, `:188`). Complet
 under ADR 0025. Live validation needs a user-chosen clarification-expected case run twice with
 forms answered between runs; neither the case nor a two-run harness flow exists. Last, after
 E1–E4. §10 C8 adds record-lifecycle gaps.
-
-### E8. Typed schema-definition identities
-
-Domain code names result-schema definitions by raw strings (T5.2: 20 production sites on the
-`b38628c` tree, `zig-out/code-heuristics/report.json`, 2 November 2026; ADR 0047 removed the
-story's, and `e681cfd` added `scenario_link`, `scenario_link_request.zig:19`). They fail only
-at request preparation (`model_request_handoff.zig:343`; sites in `specification_support.zig`,
-`specification_support_repair.zig`, `specification_session.zig`, `specification_repair.zig`,
-`reference_model_input.zig`, `scenario_link_request.zig` and the reference reconciliation and
-extraction-repair files). Bind them as closed IDs checked at schema load, each owner declaring
-the definitions it reads; the generic `DefinitionId` (`model_result_schema.zig:19`) names no
-Spec definition (ADR 0003:100-101). Test fixtures branch on names too
-(`spec_generation_driver.zig`, `spec_generation_responses.zig`). §10 C34 and C41 add sites.
-
-### E9. Superseded exact-handle correction
-
-`ValueChoices.correction`'s `unknown_exact` arm (`specification_provenance.zig:172-175`)
-corrects a model-authored exact handle that models can't author since `dfae959` (ADR 0020:234).
-`ValueChoices.permits` (`:162-164`) has no caller. Delete the arm, `permits`, the
-`rejected_exact` member (`typed_text.zig:144`), its assignments (`typed_text.zig:245`,
-`specification_provenance.zig:426-433`) and the assertions that read it
-(`typed_text_test.zig:32`, `specification_generation_test.zig:6907`,
-`packet_guidance_test.zig:205`); the `unknown_exact` rejection stays. No freeze under
-`evaluations/request-projection/` carries `rejected_exact`, and no retained report does. Lands
-with E1, E4 or E5. §10 C27 adds the `.construct` singleton choice.
 
 ### E15. Streamed provider replies (proposal; no ADR)
 
@@ -750,13 +656,13 @@ and fix002 (`workflow_tests.zig:1633-1698`); tests R36 (`model_envelope_test.zig
   records batch has one claim, so D16.2's partly taken record is proven only at admission.
   A scripted multi-claim batch needs a per-group generator, since the baseline one names one
   claim per record (`spec_generation_responses.zig:769`).
-- Scripted branches no scenario selects, and stages the development cases never exercise: §10
+- Scripted branches no scenario selects, and stages the development cases rarely exercise: §10
   C44 and C48.
 
 ### T4. Architecture rules and replay (A5)
 
 When E1–E4 remove files pinned by architecture tests, write the replacements as import-graph
-and contract-shape rules (ADR 0030:464-468, 0031:337-353, 0032:291-303, 0033:338-341), not
+and contract-shape rules (ADR 0030:464-468, 0031:337-353, 0032:298-310, 0033:338-341), not
 per-file pins (about 70 of the 79 tests pin files). Prefer replaying retained captures over
 extending `spec_generation_responses.zig`. §10 C46 adds the raw-text matching.
 
@@ -768,14 +674,13 @@ T5.3 `repeated_instructions`, T5.5 `model_or_case_branches`, T5.6 `model_text_ou
 T5.4 isn't in it. Each change set that a phase reports on
 retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>` with the
 freeze §2.10 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a `slot: repair`
-step whose prompt no non-repair step binds). Last taken 2 November 2026 on the `b38628c` tree
-with freeze `evaluations/request-projection/b38628c` (130 scenarios, 1,714 calls): T5.1 19,
-T5.2 20 (tests 88), T5.3 5 instructions at 11 sites, T5.4 6, T5.5 0, T5.6 13 in 4 files.
-**Due:** not retaken since the kept ADR 0047 and D12.3 change set (`f6ef0f6`, `39fd9ff`; freeze
-`evaluations/request-projection/entity-meaning-before`, 130 scenarios, 1,592 calls) or the HEAD
-set's build; ADR 0047 deleted the story prompt and purpose, so T5.2 and T5.3 may change. T5.4
-is still 6 (the six sites that bind `repair-prompt`, listed under "Repair requests without step
-guidance").
+step whose prompt no non-repair step binds). Last taken 14 November 2026 on the working tree after
+E5 (a modified build) with freeze `evaluations/request-projection/e5-final`; its counts, beside the
+ones taken 2 November 2026 on the `b38628c` tree with freeze `evaluations/request-projection/b38628c`
+(130 scenarios, 1,714 calls), are in [Z_SPEC01](Z_SPEC01.md) E5. No retake lies between the two, so the
+difference is the net of the kept ADR 0047 and D12.3 change set (`f6ef0f6`, `39fd9ff`), E1 to E5 and E8,
+not each change's share. **Due:** with the next change set that a phase reports on. T5.4 is still 6
+(the six sites that bind `repair-prompt`, listed under "Repair requests without step guidance").
 
 ### T8. Report repairs cover every unit
 
@@ -797,14 +702,8 @@ several merges in one unit and merges in two units reports each merge once, in o
 
 ### H1. Adjudication (R8)
 
-**Decided 3 November 2026** (user: "yes", to "should the evaluator's rubric scores decide
-acceptance instead of your record?"): the `/evaluate-e2e` skill writes each published run's
-`spec-adjudication-record/v1` from its rubric scores and applies it with `zig build
-adjudicate-spec` (AGENTS.md "Testing expectations"; ADR 0034 and design/harness/acceptance.md
-amended). Only the user triggers or approves the skill (AGENTS.md states the rule).
-
-**Decided 3 November 2026** (user: "YES", "YES approved"): a run's first adjudication under a
-skill version counts (R8, design/harness/acceptance.md).
+The 3 November 2026 decisions that the evaluator's rubric scores decide acceptance and that a
+run's first adjudication under a skill version counts are in [Z_SPEC01](Z_SPEC01.md) H1.
 
 **Open:** `2026-11-02T09-15-27Z-d2ee…`'s applied decision reads `admission_evidence_invalid`,
 from a harness bug since fixed; its record scores `critical_failed`. Its v14 report survives
@@ -868,19 +767,17 @@ nor SPEC01's sets need them.
 ### H4. Experiment stops, qualified scope and the formal baseline (B4, B5)
 
 **Decision** needed only before freezing the evaluation protocol's Phase 2 baseline. The
-protocol stops at 1,000 sends or 2,000,000 tokens
-([README](../test/calibration/semantic-simplicity/README.md):189-190), about 13.9 sends and
-27.8k tokens for each of the Phase 2 baseline's 72 workloads. Since ADR 0047 the development
-cases use about 9 sends and 13k to 17k tokens a run (the HEAD set: 9 calls, 12,971 to 17,037
-tokens; one earlier post-ADR 0047 loan-renewal run used 13 sends and 27.7k, near the
-ceiling); before D13.1, hello-world runs that reached source review used 34 sends and up to
-67,448 tokens (`2026-11-02T02-28-14Z`). The 72 workloads are the panel's development features
-in three variants and three repetitions (README:222-224; §2 rule 11), whose cost on the
-current build is unmeasured, and the latest feasibility report
-(`zig-out/baseline/2026-10-15T22-38-08Z-4ae4…/budget-feasibility.json`, `insufficient`)
-predates D13.1; retaking it is a `baseline` run (live, approval needed). Options if it still
-doesn't fit: narrow the qualified scope, or the user changes the stops. Measure each call's
-prompt, schema and evidence share before trimming; no local size ceilings (ADR 0011).
+experiment-wide stops are 1,000 sends or 2,000,000 tokens
+([README](../test/calibration/semantic-simplicity/README.md):189-199), about 13.9 sends and
+27.8k tokens for each of the 72 Phase 2 workloads if the baseline is the only consumer. A published
+run uses about 9 sends and 13k to 17k tokens (the HEAD set), but a run that reaches source review
+uses more: `2026-11-14T06-58-13Z-7dea…` (loan-renewal, `invalid`) used 22 sends and 59,703 tokens.
+A freeze needs a feasible projection from the worst listed run
+(`test/harness/baseline/feasibility.zig`), and 22 × 72 is 1,584 sends, so today's numbers would not
+be admitted; the 15 October feasibility report predates D13.1 and its reader. **Decided 15 November
+2026:** not yet; leave H4 open until the formal baseline is asked for, since the closing set supplies
+current cost evidence. The choice then is narrowing the qualified scope or dropping the baseline; changing the stops
+or trimming calls for cost alone is excluded (AGENTS.md; ADR 0011 for any size ceiling).
 
 ### H5. Model choice (R7)
 
@@ -929,13 +826,11 @@ since left source review, [Z_SPEC01](Z_SPEC01.md) Q12 D12.3).
 design-routed changes. **Owner:** the cited documents (ADR and AGENTS.md changes are policy
 edits). **Next:** **Decision** marks what only the user settles; F0002 is a code change.
 
-- **Semantic-review and no-invention branches (Decision: keep or remove):** since D13.1 no
-  Spec route produces a finding on generated content or a no-invention replacement (`src/` has
-  no `invention`; source review admits F0100 §3.10's support findings), yet 13-04's repair and
-  no-invention proposal entries, 12-model-boundary.md:506-508,
-  14-orchestration.md:155-160 and :164-168, 22-repair.md:209-211 and :417-419 (principle citation
-  diagnostics), invariant 18 (design.md:952-955), ADR 0033:138-139 and code.md samples 3, 4,
-  13 and 28 keep them.
+- **No-invention routing** was removed from the design text (record in [Z_SPEC01](Z_SPEC01.md)
+  "Design–code conflicts resolved"). F0006:855 and :1017 still name it, and the Plan and Tasks wording
+  that names semantic or model-assisted review (18-plan.md:289 and :307, 19-tasks.md:188,
+  14-orchestration.md §14.14) stays: ADR 0034:32-36 bars Plan- and Tasks-specific design edits until
+  the gate passes.
 - **F0002 event registry** against `src/domain/log_event_registry.zig`. **Decided** (9 November
   2026): F0002 stays the target (F0002 §4 says so); the code change is open. F0002 requires
   `repair_unit_kind` on `repair.applied` and `task_id` on `task.completed` and `task.failed`
@@ -946,27 +841,20 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
   `TelemetryFact` is one variant per event (F0002:193-217), but one struct with `event_type`
   and `fields` in code (`telemetry.zig:205-212`). **Next:** the code change, recording any
   event-row or report version it moves (§2 rule 12).
-- **Upstream rework as a form (Decision):** `required_authority_clarifications.build` turns an
-  `upstream_rework_required` entry into a form for its owner stage (`:15`), where §14.14 sends
-  an earlier-owner gap to §24.5's invalidation route. In the graph the gate blocks any set
-  holding such an entry before `build` runs (`required_authority.zig:276`), so only
-  `required_authority_test.zig:515-559`, which calls `build` directly, exercises it; Spec also
-  detects only at `spec` (`workflow_outcome_binding.zig:717`, `specification_authority.zig:58`,
-  `source_preservation.zig:23`). Settle it before a downstream stage detects gaps (ADR 0034).
-  No test covers the path the graph does reach, two same-stage `clarification_required` gaps
-  becoming two forms (§14.14).
-- **Renderer version (Decision):** 23-rendering.md §23.1, 24-workflow-state.md:156,
-  and 13-01's `ValidateRendererContractVersionAction` require a renderer
-  version recorded in state and views, and renewed plan/task review when review-visible bytes
-  change; Spec state records none (`specification_state.zig:8-24`) and a rerun regenerates the
-  views (ADR 0036:177-178). Keep it as the target for stages that persist review-visible views,
-  or remove it across those sites?
-- **Mid-run logging transition (Decision):** 14-orchestration.md:267-268,
-  :280-281 and :292 require a committed, durable successor bootstrap authority; §9.4 keeps
-  changed candidates execution-local with no independent successor (09-configuration.md:376-378,
-  as ADR 0009 keeps candidate outputs private) and switches "after an adopting route"
-  (:400-401); the validator checks neither (`validate_feature_log_policy_transition.zig:17-31`).
-  **Recommended:** §9.4's reading, an execution-local successor with no durability proof.
+- **Upstream rework as a form (decided 15 November 2026):** `required_authority_clarifications.build`
+  turns an `upstream_rework_required` entry into a form (`:15`), where §14.14 and invariant 22 send an
+  earlier-owner gap to §24.5's rework route. The gate blocks such a set before `build` runs
+  (`required_authority.zig:276`), so only `required_authority_test.zig:517-561` exercises the branch,
+  and Spec detects only at `spec` (`specification_authority.zig:58`). The design wins: delete that
+  branch and move its test to `.spec` detection, in a gap before the closing set; no design edit, so
+  ADR 0034 is untouched. No test covers two same-stage `clarification_required` gaps becoming two
+  forms (§14.14).
+- **Renderer version (decided 15 November 2026):** §23.1's version rules stay the target for stages
+  that get approvals (23-rendering.md:49 cites this entry); build or delete nothing now.
+- **Mid-run logging transition:** decided (ADR 0032, §14.10). Open only when a route needs the
+  switch: no production code switches policy mid-run (`Lifecycle.transition` has test callers only,
+  §10 C28), no text says which event would produce a changed logging candidate, and "adopting
+  route" (09-configuration.md:400) is undefined.
 - More, from the 11 November 2026 code review: §10 C39.
 
 ### Retired SPEC01 IDs cited elsewhere
@@ -991,11 +879,6 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
   lists only the two Bedrock tuples and the Bedrock credential, and
   `test/harness/model_cost_policy.zig:23` cites ADR 0028 for the tuple. Correct both with the
   next harness code change. No live Claude call has been made.
-
-### R-A1. Engine-owned release
-
-Whether the engine also takes over release, changing ADR 0012's retained-request handoff (ADR
-0030:475-477). Decide after E1.
 
 ## 9. Guardrails
 
@@ -1031,22 +914,26 @@ The user's standing constraints beyond AGENTS.md:
 Read-only review completed on 11 November 2026 (user: "review the current spec workflow source
 code, do complete end 2 end analysis, do not guess").
 
-- **Scope:** all 701 production files under `src/` (68,383 lines), read in seven areas, and
-  `spec.workflow.yaml` with its 24 resources. Tests and the harness were measured, not read in
-  full. `src/debugger/` (web assets) wasn't reviewed.
+- **Scope:** all production files under `src/` as they stood on 11 November 2026, read in seven
+  areas, and `spec.workflow.yaml` with its 24 resources. Tests and the harness were measured, not
+  read in full. `src/debugger/` (web assets) wasn't reviewed. Re-checked against the tree on 14
+  November 2026, except run-derived counts and the `zig build verify` output (C38).
 - **Evidence:** every cited line was printed and checked against its claim. "Not executed" marks
   a path established by reading only. "Traced" marks a count or a reach taken from reading call
   sites and not recounted. "Grep" marks a search of the production tree.
-- **Runs:** the six runs of 10 November 2026 UTC (`zig-out/e2e-spec/2026-11-10T19-41-*`, 3 per
-  case, build `a6ae058`, `modified` true, source `527484a8…`, Debug), which the user started
-  before asking for this review. They are not a measurement set (§2 rule 3) and decide nothing.
-  Their sends, tokens and logged span are `e2e-measures` values
-  (`evaluations/e2e/<run>/measures.json`). Every other run figure in this section is
-  indicative: it was counted by one-off reads of retained requests, responses and logs, which
-  §9 reserves for the owning steps and the user hasn't approved, so none may serve §2 rules 5–7
-  (C18). "The 38 runs" are the retained runs on `aws-bedrock` / `openai.gpt-oss-20b-1:0`. The
-  four retained `anthropic` / `claude-haiku-5-5` runs of 9 November 2026 are left out and no
-  model is compared (§9). T5's counts were not retaken.
+- **Runs:** the six runs of 10 November 2026 UTC (`2026-11-10T19-41-*`, 3 per case, build
+  `a6ae058`, `modified` true, source `527484a8…`, Debug; their `zig-out/e2e-spec` directories are
+  gone, their `evaluations/e2e/` records remain), which the user started before asking for this
+  review. They are not a measurement set (§2 rule 3) and decide nothing. Their sends, tokens and
+  logged span are `e2e-measures` values (`evaluations/e2e/<run>/measures.json`). Every other run
+  figure in this section is indicative: it was counted by one-off reads of retained requests,
+  responses and logs, which §9 reserves for the owning steps and the user hasn't approved, so none
+  may serve §2 rules 5–7 (decided 15 November 2026: `e2e-measures` owns none of them). "The 38
+  runs" were the runs on `aws-bedrock` /
+  `openai.gpt-oss-20b-1:0` retained on 11 November; many are no longer under `zig-out/e2e-spec`,
+  so those counts can't be retaken, and the six retained runs of 14 November serve where a
+  finding says so. The four `anthropic` / `claude-haiku-5-5` runs of 9 November 2026 were left
+  out and no model is compared (§9). T5's counts were not retaken.
 - **Status:** nothing here is approved or scheduled, and each item needs its phase approval
   (§2). An item that names no defect class targets no published-output defect: it reports a fact
   or asks a Decision, and proposes no change (AGENTS.md: cost is reported, never the reason for
@@ -1055,21 +942,19 @@ code, do complete end 2 end analysis, do not guess").
 
 ### 10.1 Failures first
 
-**C2. A publication interrupted between a form and its state blocks every rerun.** Forms are
-written before the clarification state (`clarification_output.zig:17-29`), one file at a time
-with no rollback (`adapters/filesystem/workflow_output.zig:1-2`, `:56-87`), and each file is
-truncated in place before it is written (`file_access.zig:8-9`, `:40-42`). The next run fails
-`prepare-inputs` when forms exist without a state or their count differs from its records
-(`src/actions/specify/prepare_inputs.zig:179-184`). ADR 0009's acceptance
-(`:144-146`) requires that "a fresh rerun replaces the complete output set without recovery".
-The failpoint test drives the input capturer and the writer with placeholder bytes and fails
-before the file is touched (`test/integration/workflow_tests.zig:3019-3103`, `:3028`), so it
-exercises neither the truncation nor the next run's form validation. **Reach:** only when a form
-is written, which no development case does; the truncation window covers both state files on
-every publication. Not executed. **Class:** successful completion. **Owner:**
-`clarification_output.zig` and the publication writer. **Next:** an integration scenario that
-fails the clarification-state write and reruns the workflow, then a **Decision** on the remedy,
-since ADR 0009:122-123 rules out rollback and recovery stores.
+**C2. A publication interrupted between a form and its state blocks every rerun** (class: successful
+completion). Forms are written before the state (`clarification_output.zig:17-29`) and truncated in place
+(`file_access.zig:40-42`), and every rerun re-stamps each open form with a new state revision
+(`clarification_refresh.zig:79-82`), so a failure between a form write and the state write fails the next
+`prepare-inputs` (`src/actions/specify/prepare_inputs.zig:180-204`), against ADR 0009:144-146 ("a fresh
+rerun replaces the complete output set without recovery"). Forms are also user input, and the writer never
+overwrites a closed one (`workflow_output.zig:79`). Reach: only when a form is written, which no
+development case does; not executed, and no test reruns after a failure (the failpoint test fails before
+the file is touched). **Decision** on the remedy, since ADR 0009:122-123 rules out rollback and recovery
+stores. **Decided 15 November 2026:** not yet: first an offline scenario that fails the state write and
+reruns (the regression test any remedy needs; no engine change). The likely remedy then is a typed
+exception that stops failing on leftover forms holding no user submission, with closed forms still
+stopping; it comes back to the user with the scenario's result.
 
 **C3. A console or flush failure after a successful append leaves the log unclosable.**
 `feature_log_runner.zig:222-234` appends the row, writes it to the console
@@ -1077,8 +962,8 @@ since ADR 0009:122-123 rules out rollback and recovery stores.
 the append writes before it syncs (`feature_log_segment_store.zig:99-100`). After either failure
 the row is on disk and the state isn't advanced, and every later append and the close require
 the file size to equal that stale state (`:96`, `:125-126`). The prompt stream has the same shape
-(`feature_log_runner.zig:328-341`). The segment keeps no trailer, which ADR 0026:95-100 treats
-as a crashed run. Not executed; the test checks the failing call only
+(`feature_log_runner.zig:328-341`). The segment keeps no trailer, which ADR 0026 ("Crashed runs
+are kept whole") treats as a crashed run. Not executed; the test checks the failing call only
 (`src/feature_log_runtime_test.zig:409-438`). **Class:** successful completion. **Owner:**
 `feature_log_runner.zig` (`persistEvent`, `persistPrompt`). **Next:** a runner test that appends
 again after each failure.
@@ -1089,12 +974,13 @@ again after each failure.
   diagnostic (`llm_provider_operation.zig:170-180`, `:193-205`), but nothing logs or reports
   them: outside `domain/` and `adapters/` the cause is only built or compared
   (`workflow_provider_authorization.zig:80-81`; grep). `model.completed` has no cause field and
-  is emitted with a null reason (`log_event_registry.zig:68`;
-  `workflow_pipeline_runner.zig:500`). The CLI prints the outcome tag, then an operation error
-  name or a candidate diagnostic if the run recorded one (`src/main.zig:43-45`). A missing key
-  and a malformed one are the same case (`provider_api_key.zig:35-37`), and the response decode
-  diagnostic is dropped (`provider_response_assembly.zig:127`). So a missing key, HTTP 401, 403
-  or 429 and a DNS or TLS failure should all read `failed`. Not executed.
+  is emitted with a null reason (`model_completed` in `log_event_registry.zig`;
+  `logModelCompletion` in `workflow_pipeline_runner.zig`). The CLI prints the outcome tag, then
+  an operation error name or a candidate diagnostic if the run recorded one
+  (`src/main.zig:43-45`). A missing key and a malformed one are the same case
+  (`provider_api_key.zig:35-37`), and the response decode diagnostic is dropped
+  (`provider_response_assembly.zig:127`). So a missing key, HTTP 401, 403 or 429 and a DNS or TLS
+  failure should all read `failed`. Not executed.
 - **Workflow definition:** every schema, compile and graph rejection is one of two codes with
   no step, key or rule (`workflow_graph_compilation.zig`, `workflow_graph_validation.zig` and
   `workflow_definition_schema.zig` return one `invalid()` error each; the startup routine maps
@@ -1102,54 +988,31 @@ again after each failure.
   hand-written invalidation list (`source_omission.zig:343`, `:345`; `required_authority.zig:124`)
   fails the same way, because the data-flow check rejects producing a key that is still
   available (`workflow_data_flow.zig:87-95`).
-- **Result schemas and compositions:** 90 and 48 `invalid()` lines, one error each
+- **Result schemas and compositions:** 86 and 48 `invalid()` lines, one error each
   (`model_result_schema.zig`, `json_composition.zig`).
 - **Reference ingestion:** ten typed reasons (`reference_ingestion.zig:42-53`) are discarded;
-  each becomes `InvalidReferenceAccounting` (`prepare_reference_evidence.zig:156`, `:169`),
-  against ADR 0036:198-200 ("fails at ingestion with a typed reason", said of malformed text).
-  Any file that isn't `.md` or `.markdown` is one of them (`markdown_reference.zig:17`).
-- **Toolchain:** `error.InvalidToolchain` on 68 lines in ten files.
-- **Runner:** `.rejected = .authority` on 121 lines of `workflow_pipeline_runner.zig`.
-
-**C5. Model answers the schema admits that end the run with no correction.**
-
-- `claims: []` with nothing preserved: `validate_reference_claims.zig:28` returns an error and
-  the step has no `invalid` route (`validate-claims` in `validate-extraction`), so the run ends
-  `failed`.
-  F0100:325-326 states the rule, not its outcome.
-- A repeated ID in `claim_ids` or `signal_ids` is rejected at parse
-  (`specification_generation.zig:156-157`; `specification_source_binding.zig:170`) and routed
-  `invalid: end.invalid` (`parse-specification` in `generate-unit`). **D:** ADR 0038:88-89.
-- An edge case with no candidate criterion ends `blocked` after every generation call
-  (`scenario_link.zig:46-48`; `scenario_link_request.zig:57-60`).
-
-**Class:** successful completion. **Owners:** `validate_reference_claims.zig` and its route;
-`specification_generation.zig` (the ADR 0038 parse); `scenario_link.zig`. **Next:** a
-**Decision** for each on correction against stop.
+  each becomes `InvalidReferenceAccounting` (`validateAccounting` in
+  `prepare_reference_evidence.zig`), against ADR 0036:198-200 ("fails at ingestion with a typed
+  reason", said of malformed text). Any file that isn't `.md` or `.markdown` is one of them
+  (`markdown_reference.zig:17`). The stage names the failing step in the event
+  (`validate_accounting`), not the reason.
+- **Toolchain:** every toolchain failure is `error.InvalidToolchain`; the stage names the
+  failing step in the event (`Step` in `prepare_toolchain.zig`), not the rule that failed.
 
 **C6. A descriptor that passes registry and graph validation can fail at run time.**
 `validDescriptor` checks that the keys are declared and that the kind and repair role fit
-(`workflow_outcome_association.zig:586-602`). At run time the binding looks the result key up in
+(`workflow_outcome_association.zig:585-602`). At run time the binding looks the result key up in
 hard-coded tables that end `else => return error.InvalidOutcomeAssociation`
-(`workflow_outcome_binding.zig:432-438`; also `:200-206`, `:421`). Giving another authorizer a
-`blocked` outcome compiles, validates and then rejects the first run that takes it. Not
-executed. **Owner:** `workflow_outcome_binding.zig`.
+(`authorizationBlocked` in `workflow_outcome_binding.zig`; also the `clarification_route` branch
+and `diagnosticAdmission`). Giving another authorizer a `blocked` outcome compiles, validates and
+then rejects the first run that takes it. Not executed. **Owner:** `workflow_outcome_binding.zig`.
 
-**C7. Stray files and directory modes (Decisions).** **Class:** successful completion for the
-first two; none for the third. **Owners:** the filesystem adapters cited.
-
-- Any entry in `clarify/` that isn't a six-character `.md` name fails the run
-  (`adapters/filesystem/feature_input_source.zig:83-85`; asserted at
-  `test/integration/workflow_tests.zig:2860`, `:2869`). F0100:197-203 intends it; the user
-  exempted the same case for log folders (ADR 0026:73-75, log-folder entries amendment).
-  **Decision:** the same exemption for `clarify/`?
-- Any non-Markdown file in the reference directory fails ingestion (C4). **Decision:** skip it, or
-  keep failing with its typed reason?
-- Activation creates every missing directory owner-only, the specs root and the feature
-  directory included (`adapters/filesystem/feature_log_layout.zig:12`, `:71`, `:74`);
-  `project/specs` and `project/specs/hello-world` are mode 700 in `2026-11-10T19-41-09Z-22a6…`.
-  The design names only log directories (ADR 0018:65; 26-security.md:208). **Decision:**
-  intended?
+**C7. A stray entry in `clarify/` fails the run, even after every model call**
+(`adapters/filesystem/feature_input_source.zig:83-85`; the publish step repeats the capture; class:
+successful completion). **Decided 15 November 2026:** the same exemption the user gave log folders (ADR
+0026): a regular file not named like a form is never opened or changed; directories, symlinks,
+form-shaped names and orphan or missing registered forms still fail. Its own phase: the adapter, the
+`.unknown` test case, and 23-rendering.md:263-264, 24-workflow-state.md:123 and F0100:200-201.
 
 **C8. Clarification records (adds to E7).**
 
@@ -1165,35 +1028,26 @@ first two; none for the third. **Owners:** the filesystem adapters cited.
 
 ### 10.2 Optimisation
 
-**C9. Where a run's time and tokens go (facts; no item).**
+**C9. Input tokens are most of a run (a fact; no item).** Input tokens are 92.5% of a
+hello-world run (11,987) and 89.7% of a loan-renewal run (14,816).
 
-- 263–275 runner steps for nine model calls. 99 are the request lifecycle (11 a call); with the
-  prepare, retain and retire steps around it, 119, or 43–45% of a run (E1).
-- Mean logged span 8.65 s: 92.2% inside the nine `invoke-model` steps, 3.4% inside all other
-  steps, 4.3% between steps. The 40 steps before logging starts aren't timed.
-- Each call step runs about 110 ms longer than the provider's reported latency (11.5% of the
-  span). That covers connection setup and the prompt-log writes, unsplit (C13, C14).
-- Input tokens are 92.5% of a hello-world run (11,987) and 89.7% of a loan-renewal run (14,816).
-
-**C10. The conflicts request is sent when only one answer is admissible.** No branch tests whether
-a conflict group was accepted: after signals the phase is `.signals`
-(`reference_reconciliation_stage.zig:106`) and `check-conflicts` routes to the request
-(`check-conflicts` in `validate-reconciliation`). With no group the choice set is empty
-(`reference_reconciliation_stage.zig:79-81`) and the schema owner narrows the array to
-`maxItems: 0` (`model_result_schema.zig:423-430`). In the 38 runs every conflicts request
-carries `"maxItems":0` and every answer is `{"conflicts":[]}`. The call is 9.4% of their model
-tokens (1,128 and 1,651 input tokens a run in the two cases) and can only return the forced
-value or fail. **D:** ADR 0022:108-109 ("Empty eligible catalogues admit only an empty authored
-collection"); `:136-138` already constructs forced token classifications natively with no call
-(`construct_forced_token_classifications.zig`). **Class:** successful completion in principle,
-since the call can only fail; no such failure is observed, so no benefit is demonstrated.
-**Owner:** `reference_reconciliation_stage.zig` and the `check-conflicts` route. **Decision:**
-whether ADR 0022's native rule extends to the conflicts stage. No other request would change.
+**C10. The conflicts request is sent when only one answer is admissible** (class: successful completion
+in principle: with no conflict group the call can only return `{"conflicts":[]}` or fail; no failure is
+observed, so no benefit is demonstrated). `check-conflicts` tests only the phase
+(`reference_reconciliation_stage.zig:106`), so with no group the choice set is empty (`:79-81`) and the
+schema owner narrows the array to `maxItems: 0`; five of the six runs of 14 November sent such a request,
+and the sixth (loan-renewal) had a conflict group, so its call was a real choice. **D:** ADR
+0022:108-109 ("Empty eligible catalogues admit only an empty authored collection"); `:136-138` already
+constructs forced token classifications natively with no call. **Decision:** whether ADR 0022's native
+rule extends to the conflicts stage. **Decided 15 November 2026:** yes, conflicts only: a forced answer
+is computable structure and the call adds failure exposure and no information; tokens are reported,
+never the reason. It amends ADR 0022:64-66 and :108-109 and changes the step trace, the freeze and one
+scripted fault test; implementation is its own phase.
 
 **C11. The leaf summary adds a paraphrase that only the next reconciliation requests read (adds to
 R1).** For one source of up to eight claims the leaf summary is always requested: native reuse
 needs exactly one child (`reference_reconciliation_validation.zig:491`). Its prose is sent to the
-dispositions and signals requests (`reference_model_input.zig:155-161`); that it is neither
+dispositions and signals requests (`reference_model_input.zig:159-165`); that it is neither
 persisted nor rendered is traced. Those requests carry it without the "earlier summaries are
 supporting context" purpose, which is attached to summary requests only
 (`reference_model_input.zig:89`; `packet-guidance.json:56`).
@@ -1247,44 +1101,49 @@ proposed.
 
 **C13. A new HTTP client and connection for every model call.** `model_http_exchange.zig:101-108`
 (`.keep_alive = false`; the comment lists "connection reuse" among what isn't installed). No
-design text requires or forbids reuse (grep of `design/`). How much of C9's 110 ms it accounts
-for isn't measured (C17).
+design text requires or forbids reuse (grep of `design/`). How much of a call's latency it
+accounts for isn't measured (C17).
 
 **C14. Log volume and per-record work.**
 
-- At `debug` the prompt log is 851–889 KB a run, and 76.7% of it is the request-source snapshot:
-  the workflow YAML and bound resources, rewritten for each of the nine requests
-  (`request_source_capture.zig:50`). **D:** ADR 0019:96-102.
+- At `debug` the prompt log is about 750 KB a run (754 KB in a 14 November hello-world run), most
+  of it the request-source snapshot: the workflow YAML and bound resources, rewritten for each of
+  the nine requests (`captureDocument` in `request_source_capture.zig`). **D:** ADR 0019:96-102.
 - Each record reopens the lock file and the segment (`feature_log_orchestrator.zig:17-29`;
-  `feature_log_segment_store.zig:88-100`): about nine system calls (traced) for each of the 656
-  records of a hello-world run (492 event, 164 prompt). The lock per record is **D**
-  (F0002:250-251; 26-security.md:216-219); reopening the files is not.
+  `feature_log_segment_store.zig:88-100`): about nine system calls (traced) for each of the
+  roughly 660 records of a hello-world run. The lock per record is **D** (F0002:250-251;
+  26-security.md:216-219); reopening the files is not.
 - Activation re-reads every prior segment of the feature and walks every earlier run directory
-  (`adapters/filesystem/feature_log_history.zig:46-92`). **D:** ADR 0026, whose `:138-139`
-  records that the number of prior runs is unbounded. The harness never meets it: each run has a
-  fresh project.
+  (`adapters/filesystem/feature_log_history.zig:46-92`). **D:** ADR 0026 (Consequences), which
+  records that the number of retained prior runs is unbounded. The harness never meets it: each
+  run has a fresh project.
 
 **C15. Repeated native work (no time to recover; one rule kept at many sites).**
 
-- Every executed step revalidates the whole operation registry, a pairwise ID loop over 201
-  operations included (`workflow_pipeline_runner.zig:168`, `:693`;
-  `ports/workflow_operation_registry.zig:117-140`, "Rebuild on every call").
+- Every executed step revalidates the whole operation registry, a pairwise ID loop over every
+  registered operation included (`authorityMatches` in `workflow_pipeline_runner.zig`, called by
+  `executeStep`; `Registry.validate` in `ports/workflow_operation_registry.zig`, "Rebuild on
+  every call").
 - The clean path re-runs validators in all six runs: `validate-dispositions` three times and
   `validate-signals` twice, because each release returns to the first validator
-  (the `ok` routes of the `merge` steps in `reconcile-references` and `validate-reconciliation`);
-`check-summary-reuse` and `validate-summary` twice, once
-  for the requested leaf summary and once for the parent partition that reuses it.
+  (the `ok` routes of `release-signals` and `release-conflicts` in `validate-reconciliation`);
+  `check-summary-reuse` and `validate-summary` twice, once for the requested leaf summary and
+  once for the parent partition that reuses it.
 - One request packet is built through 10 to 15 full copies (traced), each copying every source's
-  bytes (`model_input_packet.zig:164-205`, `:199`).
-- The codec parses a response, re-serialises it and parses it again
-  (`model_candidate_json.zig:128-135`).
+  bytes (`cloneWith` and `copyOriginalSources` in `model_input_packet.zig`).
+- The codec parses a response, re-serialises it and parses it again (`decode` in
+  `model_candidate_json.zig`).
 - Publication renders `spec.md` five times and parses it twice (`render_specification.zig:13`;
   `validate_specification_rendering.zig:14-17`; `prepare_specification_output.zig:24-25`).
-  **D:** 13-05:364-370, :381-388.
-- `token_classification_validation.zig:213` hashes every source byte into a value whose only
-  use is a copy (`build_preserved_token_claims.zig:38`; traced).
-- Graph validations run two or three times at startup (traced), with the retry-authority block
-  duplicated (`workflow_graph_validation.zig`; `workflow_registry.zig:172-186`).
+  **D:** 13-05 (`ValidateSpecificationRenderingAction`, `PrepareSpecificationOutputAction`).
+- `token_classification_validation.zig` builds its dependency snapshot with
+  `atomic_repair.snapshot`, which hashes every source byte, into a value whose only use is a
+  copy (`build_preserved_token_claims.zig:38`; traced).
+- Startup repeats two compiled-graph checks: outcome flow runs in the compiler and in graph
+  validation (`workflow_graph_compilation.zig:85`, `workflow_graph_validation.zig:53`), and
+  resource bindings run there and once more in registry publication, which keeps them as
+  `cloneGraph`'s precondition (`workflow_graph_compilation.zig:267`,
+  `workflow_graph_validation.zig:37`, `workflow_registry.zig:158`).
 
 **C16. Source review, when it runs, sends the whole evidence catalogue with every per-subject
 request** (`specification_support.zig:129`; traced: the ledger is rebuilt nine times a subject).
@@ -1293,63 +1152,61 @@ subject is the user's guardrail and §9 forbids truncating required evidence, so
 proposed.
 
 **C17. Several of these counts aren't in the owning step.** `e2e-measures` gives sends, tokens,
-stages and the logged span. It doesn't give the time split and per-call gap of C9, the
-forced-answer count of C10, the reconciliation counts of C11, the request-part shares and
-schema differences of C12, the log bytes of C14 or the passive-literal count of C48.
-
-**C18. Next for C9–C17:** a **Decision** on which of those counts `e2e-measures` should own,
-under a new measures version, so a set reports them from the owning step. Until then they stay
-indicative (§9). **Class:** measurement. **Owner:** `test/harness/e2e/measures.zig`.
+stages and the logged span. It doesn't give the input-token share of C9, the forced-answer
+count of C10, the reconciliation counts of C11, the request-part shares and schema differences
+of C12, the log bytes of C14 or the passive-literal count of C48.
 
 ### 10.3 Coupling
 
-**C19. The generic domain core imports the Spec stages.** 115 files, 113 in `domain/` and 2 in
-`ports/`, form one import cycle (701 files, 4,288 import edges; `pipeline.zig` is imported by
-337). The engine's error set is a union of 37 error sets (`operation_error.zig:55-91`,
-re-exported at `workflow_execution.zig:52`); that file imports 31 others, 14 of them Spec-stage
-modules, and each Spec file imports `pipeline.zig` for data keys. ADR 0003:100-101 says the four
+**C19. The generic domain core imports the Spec stages.** 119 files, 117 in `domain/` and 2 in
+`ports/`, form one import cycle (`pipeline.zig` is imported by 237 of 608 non-test files). The
+engine's error set is a union of 41 error sets (`operation_error.zig:55-95`, re-exported at
+`workflow_execution.zig:52`); that file imports 33 others, 14 of them Spec-stage modules, and
+each Spec file imports `pipeline.zig` for data keys. ADR 0003:100-101 says the four
 workflows are "not special cases in the generic engine". The layer test checks layers, not
 cycles inside `domain/`.
 
-**C20. `DataKey` is one closed enum of 194 keys** (`pipeline.zig:4-199`). Traced split: 42
-startup, 23 logging, 17 model request, 2 output, and 110 that only Spec operations touch. Every
-per-step structure is sized by the total. **D:** 06-pipeline-nodes.md:91; ADR 0003:84-85.
+**C20. `DataKey` is one closed enum of 142 keys** (`pipeline.zig:4-147`): 23 logging, 17 model
+request and 2 output keys, and 100 startup keys and keys that only Spec operations touch. Every
+per-step structure is sized by the total. **D:** 06-pipeline-nodes.md:38; ADR 0003:84-85.
 
 **C21. The generic outcome association hard-codes Spec keys and types.**
-`workflow_outcome_association.zig:112-113` holds `required_authority.zig` and
-`clarification_refresh.zig` result types, and six of its 15 descriptor variants
-(`workflow_outcome_association.zig:19-35`) are assigned at one or two sites (grep).
+`workflow_outcome_association.zig` holds `required_authority.zig` and `clarification_refresh.zig`
+result types (the `reclassify` arms `authority_result` and `clarification_result`), and several
+of its 14 descriptor variants (`Descriptor`) are assigned at one to three sites (grep).
 `workflow_outcome_binding.zig` branches on `.required_authority_result` and
-`.validated_specification_unit` (`:200-206`), `.specification_support_review` (`:421`) and four
-repair keys (`:432-438`). A second workflow with its own gate, clarification route or blockable
-repair needs edits to both files.
+`.validated_specification_unit` (the `clarification_route` branch), `.specification_support_review`
+(`diagnosticAdmission`) and four repair keys (`authorizationBlocked`). A second workflow with its
+own gate, clarification route or blockable repair needs edits to both files.
 
 **C22. Change amplification (traced).**
 
 - One operation with one new key: 8 production files and 15 sites.
-  `native_workflow_operations.zig` keeps three parallel lists of about 160 lines and a hand-kept
-  count (`:221`, `core.entries.len + 161 + model_request.count`).
+  `native_workflow_operations.zig` keeps three parallel lists of about 110 entries and a
+  hand-kept count (`:176`, `core.entries.len + 112 + model_request.count`).
 - One record family: three Zig files the compiler enforces, plus `generation.schema.json`,
-  `packet-guidance.json`, the prose of `records.prompt.md:9-13` and
-  `specification_markdown.zig:155`, which it doesn't.
+  `packet-guidance.json`, the prose of `records.prompt.md:9-13` and `isScope` in
+  `specification_markdown.zig`, which it doesn't.
 - One reconciliation phase: five parallel enums (`reference_reconciliation.zig:125`,
   `reference_reconciliation_stage.zig:6`, `reference_reconciliation_diagnostic.zig:57`,
-  `reference_reconciliation_repair.zig:499`, `reference_reconciliation_repair_workflow.zig:35`)
+  `reference_reconciliation_repair.zig:512`, `reference_reconciliation_repair_workflow.zig:36`)
   and the YAML strings (`reference_reconciliation_stage_workflow.zig:75`), bridged by tag name.
 
 **C23. The model boundary carries Spec names.** The 32-tag `text_field_policy.Field` is part of
 the generic field binding (`model_text_field.zig:5-7`); ADR 0038's statement rule is wired through
 generic admission (`model_payload_schema.zig:4`); the schema and admission files sit inside the
-115-file cycle (C19).
+119-file cycle (C19).
 
 **C24. One request fact is held in up to five ledgers and re-checked at five to seven sites**
 (attempt number, the binding, input and sampling triple, deadline, terminal outcome; traced).
-**D:** model-request-operations.md:62-65, :113-118; ADR 0030:194-197 keeps the rules after E1.
+**D:** model-request-operations.md ("Accounting integration" and the authorization sections: the
+runner validates the exact retained request, attempt, binding, input and deadline); ADR 0030
+("Stage rules carry over").
 
 **C25. Reference, repair and review modules import each other, and six files reach through the
 validators' nesting.** `reference_reconciliation.zig:123` imports its diagnostic,
 which imports the repair owner (`reference_reconciliation_diagnostic.zig:16`), which imports
-`source_omission.zig` (`reference_reconciliation_repair.zig:687`), which imports
+`source_omission.zig` (`reference_reconciliation_repair.zig:700`), which imports
 `specification_support.zig` (`source_omission.zig:52`). Ten production sites in six files reach
 `assignments.checked.prior.prior` directly (for example `specification_provenance.zig:27`, `:32`,
 `:41`, `:52`), although `reference_support.zig:26` wraps it.
@@ -1359,86 +1216,83 @@ which imports the repair owner (`reference_reconciliation_diagnostic.zig:16`), w
 **C26. Registered operations that no shipped workflow uses.** `design/workflows/` holds one
 definition.
 
-- No workflow anywhere: `prepare-clarification-output` (registered at
-  `native_workflow_operations.zig:566`).
+- No workflow anywhere: `prepare-clarification-output` (registered as
+  `output.PrepareClarifications` in `native_workflow_operations.zig`).
 - Test workflows only: `scan-path-tokens`, `validate-source-citations`,
   `parse-required-authority-observations`. Their keys (`path_token_scan`,
   `reference_citation_proposals`, `validated_source_citations`,
   `raw_required_authority_observations`) have no other producer or consumer.
 - Registered beside the consolidated operation Spec uses: the four principle steps
-  (`native_workflow_operations.zig:409-413`; 13-01:442-443 documents them).
+  (`principles.Inventory`, `ValidateInventory`, `Capture` and `Build` in
+  `native_workflow_operations.zig`; 13-01:424-426 documents them).
 
 **C27. Code with no production caller.** Each was checked by grep with tests excluded.
 
-- `model_request_handoff.zig:213` `acceptsRetained`; `model_request_workflow.zig:156`
-  `selectionForPacket`; `model_text_wire.zig:106-122` `checkProseFields` and its helper;
-  `model_result_schema.zig:13` `ChoiceBoundError`.
-- The engine-constructed singleton choice (`.singleton = .construct`), superseded by ADR
-  0020:26-28 and set only in tests (adds to E9).
+- `model_request_handoff.zig:213` `acceptsRetained`; `model_text_wire.zig:106-122`
+  `checkProseFields` and its helper; `model_result_schema.zig:13` `ChoiceBoundError`.
 - `PipelineEnvelope.place` (`pipeline_envelope.zig:75-84`); `DataKey.feature_log_recovery` and
-  `.log_drop_evidence` (`pipeline.zig:185`, `:197`).
+  `.log_drop_evidence` (`pipeline.zig:133`, `:145`).
 - `ValidToolchain.packages()` (`toolchain_safety.zig:10-12`); `ToolChainService`
-  (`toolchain_service.zig`), which F0003:214 says the runner constructs.
+  (`toolchain_service.zig`; two architecture pins and `workflow_tests.zig:508-509` use it), which
+  F0003:206 says the runner constructs. Recommended: delete it with those uses and that claim, as one change with C39.
 - `generation.schema.json:481-492` `repair_record_functional_requirement` has no reference in
-  the schema or the code, like the `repair_record_acceptance_criterion` Q14 records.
-  `attributed_value` (`:3-14`) has the same body as `value` (`:493-504`); code selects each by
-  name (`specification_repair.zig:269-271`).
+  the schema or the code. `attributed_value` (`:3-14`) has the same body as `value`
+  (`:493-504`); code selects each by name (`switch (kind)` in `specification_repair.zig`).
 
 **C28. Paths no production run can take.**
 
 - Nothing supplies a cancellation or deadline status: production passes the default runtime
-  (`composition/root.zig:53`; `pipeline.zig:242`, `alwaysActive`), no production code sets
-  `status_fn` and no signal is handled (grep). So the branches on a `cancelled` or
+  (`run` in `composition/root.zig` passes `.{}`; `pipeline.zig` `alwaysActive`), no production
+  code sets `status_fn` and no signal is handled (grep). So the branches on a `cancelled` or
   `deadline_exhausted` runtime status run only in tests, E6's cancellation change included, and
   an interrupt ends the process with no finalization.
-- Feature logging: `WorkflowLog.log` (`pipeline.zig:326-339`) has no production caller (grep);
+- Feature logging: `WorkflowLog.log` (`pipeline.zig:281-295`) has no production caller (grep);
   the mid-run policy transition, historical finalization and the non-empty recovery path have
   test callers only (traced). The designs specify them (14-orchestration.md §§14.9–14.10;
   27-observability.md:6-10); ADR 0009's fresh-run rule and ADR 0026:8-9 leave them unused.
 
-**C29. YAML duplicates, dead edges and one-valued options.** Bare line numbers in this item are
-`spec.workflow.yaml`.
+**C29. YAML duplicates, dead edges and one-valued options** (`spec.workflow.yaml`).
 
-- Identical bodies: the `model-request` and `support-request` subgraphs (`:922-953`; E1 removes
-  both); the `finish-native` and `finish-model` steps (`:348-353`); the `release-signals` and
-  `release-conflicts` steps (`:547-549`, `:567-569`). `repair-source-extraction` and
-  `repair-source-candidate` (`:856-886`) differ in one step. Only the step-trace fixture names
-  any of these: `model-request` and `support-request`
-  (`src/test_fixtures/workflow_step_trace.zig:19`). Whether the join rule
-  (`workflow_data_flow.zig:70`) requires the paired steps wasn't checked.
-- `check-reconciliation`'s `ok: end.ok` (`:505-507`) can't be taken. The step runs only after a
-  summary response or repair, on the input for which the same check returned `more` at
-  `select-composition` (`:460-462`; `check_reference_reconciliation_purpose.zig:5-8`), and that
-  input is rebuilt only after `build-summary`.
-- `clarification-output` (`:1057-1080`) repeats four of the last seven operations of
-  `publish-specification` in the same order, and `check-clarification-progress` runs twice in a
-  row on the pending path (`:832-834`, then `:1060-1062`).
-- Every call site passes `selection: input` (nine sites; `:916` hard-codes it).
+- Identical bodies: the `finish-native` and `finish-model` steps (`extract-references`); the
+  `release-signals` and `release-conflicts` steps (`validate-reconciliation`).
+  `repair-source-extraction` and `repair-source-candidate` differ in one step (`request`).
+  Whether the join rule (`workflow_data_flow.zig:70`) requires the paired steps wasn't
+  checked.
+- `check-reconciliation`'s `ok: end.ok` (`reconcile-references`) can't be taken. The step runs
+  only after a summary response or repair, on the input for which the same check returned `more`
+  at `select-composition` (`check_reference_reconciliation_purpose.zig:5-8`), and that input is
+  rebuilt only after `build-summary`.
+- `clarification-output` repeats four of the last seven operations of `publish-specification`
+  in the same order, and `check-clarification-progress` runs twice in a row on the pending path
+  (`check-output-clarifications`, then `check`).
+- Every `request-model` step that names a `result-schema` (14 of the 17) passes
+  `result-selection: input`; no shipped step selects `resource`.
 
 **C30. Typed machinery whose result is constant.**
 
 - Coverage repair can only block: a one-variant decision (`specification_coverage_repair.zig:10`,
   `:22-30`) with a repair role, a descriptor, a data key and a binding branch
-  (`workflow_outcome_binding.zig:433`). The step has no `ok` route (`authorize-coverage-repair` in `assemble-specification-candidate`).
+  (`authorizationBlocked` in `workflow_outcome_binding.zig`). The step has no `ok` route
+  (`authorize-coverage-repair` in `assemble-specification-candidate`).
   Q21 owns the gap that this route blocks on.
 - `validated_specification_rendering` is always `true`
   (`specification_rendering_workflow.zig:53`), so the `!rendering_valid` checks
   (`build_specification_state.zig:16`; `prepare_specification_output.zig:17`) can't fire.
 - The authority outcome is computed by `reconcile` and again by `validate`
   (`required_authority.zig:365-366`), and all four `reconcile` outcomes route to `gate`
-  (step `reconcile` in `authority-gate`). **D:** 13-10:81-83. The `required-authority@1` gate is registered
-  (`native_workflow_operations.zig:579`), but no production operation declares it (`:665`),
-  against F0100:723.
+  (step `reconcile` in `authority-gate`). **D:** 13-10:81-83. The `required-authority@1` gate is
+  registered (the registry's `gates` in `native_workflow_operations.zig`), but no production
+  operation declares it, against F0100:720.
 - `checkConsistency` is called at admission, story composition and assembly
   (`validate_specification_unit.zig:11`; `compose_specification_story.zig:21`;
-  `specification_session.zig:639`), but acts only on a records batch while records are being
-  admitted (`specification_session.zig:549-554`), so the other two calls return null (read).
+  `specification_session.zig:792`), but acts only on a records batch while records are being
+  admitted or their scenarios written (`specification_session.zig:674`), so the other two calls
+  return null (read).
 
 **C31. Per-kind and copied code (traced unless a line is cited).**
 
-- Reconciliation writes statement, signal and conflict logic once a kind
-  (`reference_reconciliation_repair.zig:589-594` beside `:597-602`); 13 action files differ only
-  in their contract literal. The one-contract-per-file rule is **D**; the domain repetition isn't.
+- Reconciliation writes statement, signal and conflict logic once a kind (`select` in
+  `reference_reconciliation_repair.zig`).
 - `persistEvent` and `persistPrompt` (`feature_log_runner.zig:153-236`, `:274-342`) differ in
   builder, serialiser and stream tag, so C3 has to be fixed twice.
 - The open-fstat-check sequence for a log segment is written seven times, and the bounded read
@@ -1447,45 +1301,42 @@ definition.
 - The engine-config and provider-config readers duplicate each other with different rigour
   (`adapters/filesystem/engine_config_source.zig:116-134` has no post-read check).
 
-**C32. The toolchain stage feeds only a policy list and an identity.** 47 action contracts require
+**C32. The toolchain stage feeds only a policy list and an identity.** 27 action contracts require
 `valid_toolchain`; production reads `policies()` and `identity()` only (grep). Both development
 cases run with `presets: []` and `policies: []` (`project/.sddtoolkit/principles/toolchain.yaml`;
-one run of each case checked), so the nine steps always give the compiled-in rules. Adds to E2.
+one run of each case checked), so the stage's nine steps always give the compiled-in rules.
+Adds to E2.
 
-**C33. JSON composition is 987 production lines for two uses** (traced), one of which, the summary,
-has a single part. **D:** ADR 0016:42, :248-249.
+**C33. JSON composition is about 980 production lines for two uses** (traced), one of which, the
+summary, has a single part. **D:** ADR 0016:42, :248-249.
 
 ### 10.5 Brittleness (latent)
 
 **C34. Names carried as strings.**
 
-- Result-schema definition names are also built from enum tags
-  (`reference_reconciliation_stage.zig:141`, `@tagName(v) ++ "_assignment"`;
-  `reference_reconciliation_repair.zig:330`, `"repair_{s}"`), so renaming a tag changes the
-  definition a request selects. Adds to E8.
 - Operation parameter names are spelled in a descriptor table and again at each lookup
-  (`model_request_workflow.zig:27-32` against `:166-192`). The lookup returns null on a miss
-  (`:236-242`), so a drifted optional `context` or `protocol-prompt` is dropped from the request
-  with no error.
+  (`preparation_parameters` against each `resource(step, "…")` lookup in
+  `model_request_workflow.zig`). The lookup returns null on a miss (`resource`), so a drifted
+  optional `context` or `protocol-prompt` is dropped from the request with no error.
 - The support packet is edited by raw JSON key after encoding (`specification_support.zig:134-148`:
   `getPtr("…").?`, and `orderedRemove` with its result discarded).
 - Log columns are read by literal position in the recovery, retention and debugger readers
   (traced: 25 sites in `feature_log_format.zig` and `feature_log_recovery.zig`, about 35 in
   `request_debugger_archive.zig`).
 
-**C35. `else` arms on closed sets.** Production has 300 `else =>` arms in 126 files; not all are on
-closed sets. Arms that give a default and no error: `model_result_schema.zig:931` (a shallow
-copy of any other node; the file has 14 arms), `reference_reconciliation_repair.zig:385`,
-`:472`, `:485`, `:586`, `:623` (the file has 23), `bootstrap_roots.zig:34`, `:41`,
-`log_event_registry.zig:135`, `workflow_registry.zig:304`. AGENTS.md asks for exhaustive
+**C35. `else` arms on closed sets.** Production has 313 `else =>` arms in 128 files; not all are on
+closed sets. Arms that give a default and no error: `model_result_schema.zig:883` (a shallow
+copy of any other node; the file has 13 arms), `reference_reconciliation_repair.zig:398`,
+`:485`, `:498`, `:599`, `:636` (the file has 22), `bootstrap_roots.zig:34`, `:41`,
+`log_event_registry.zig:142`, `workflow_registry.zig:324`. AGENTS.md asks for exhaustive
 switches on closed sets.
 
 **C36. Order and position.**
 
 - `required_authority.zig:359` compares the ordinals of two different enums (`DetectionStage`
-  and `Stage`, `:357`); `:402-415` orders by declaration order.
-- Unit kinds are compared by integer tag across two unions (`specification_generation.zig:240`;
-  `specification_repair.zig:212`).
+  and `Stage`, `:357`); `:403-419` orders by declaration order.
+- Unit kinds are compared by integer tag across two unions (`specification_generation.zig:243`;
+  `specification_repair.zig:265`).
 - The YAML pairs prompts with units by step position (subgraph `generate-specification`) and nothing
   ties a prompt to its unit (no Zig file names the three prompt resources, by grep), so a
   swapped prompt would be accepted.
@@ -1495,34 +1346,36 @@ switches on closed sets.
 - `retry-limit: 64` (`merge-repair` in `generate-unit`) and `128` (the `merge` steps of
   `reconcile-references`, `validate-reconciliation` and `repair-reconciliation-candidate`) count visits
   per defect key, which the repair routes can't reach (traced). The real bound is a target
-  population written as literals (`specification_repair.zig:186-196`;
-  `reference_reconciliation_repair.zig:126-131`). An overflow surfaces as the payload-free
-  `.authority` rejection (traced).
-- The retry limit is enforced by two formulas with two errors (`workflow_retry.zig:423`;
-  `model_attempt_accounting.zig:288`); the second can't fire through the runner (traced).
-- The 64 MiB value bound is written 11 times in six application files (grep; for example
-  `passive_literal_workflow.zig:16-18`).
+  population written as literals (`targetBound` in `specification_repair.zig`;
+  `reference_reconciliation_repair.zig:126-131`). An overflow surfaces as an `.authority`
+  rejection (traced).
+- The retry limit is enforced by two formulas with two errors (`countAttempt` in
+  `workflow_retry.zig`; `model_attempt_accounting.zig:288`); the second can't fire through the
+  runner (traced).
+- The 64 MiB value bound is written 8 times in six files (grep; for example
+  `passive_literal_workflow.zig:6`).
 
 **C38. A passing `zig build verify` reads as a failure.** A passing run prints 6.2 MB: 4,437
 feature-log rows and two `failed command:` lines, which Zig prints for any step that wrote to
 stderr (`test-integration`, and `test` through `emit_emergency_log_failure_record.zig:22`). The
-default summary mode prints no success line; only `--summary line` shows `169/169 steps
-succeeded; 2003/2003 tests passed`. **Owner:** the tests that write to the real stderr.
+default summary mode prints no success line; only `--summary line` shows `N/N steps
+succeeded; M/M tests passed`. **Owner:** the tests that write to the real stderr.
 
-**C39. Design text the code contradicts (adds to §8 "Design–code conflicts").** F0100:723
-("Protected operations declare that gate"; C30). F0003:214 (the runner constructs
-`ToolChainService`; C27). 26-security.md:224-225 says a log row is encoded before the lock is
-taken; `feature_log_orchestrator.zig:17-22` takes the lock first. 13-05:276-278 and ADR
-0021:24-25 predate the source-preservation projection (traced).
+**C39. Design text the code contradicts (adds to §8 "Design–code conflicts").** F0100:720
+("Protected operations declare that gate"; C30). F0003:206 (C27). 26-security.md:224-225 says
+a log row is encoded before the lock is taken; `feature_log_orchestrator.zig:17-22` takes the
+lock first. 13-05:209 and ADR 0021:24-25 predate the source-preservation projection
+(`Source.acceptsProjection` accepts it).
 
 ### 10.6 Tests and harness
 
 **C40. A scripted scenario is identified by its position, and the position names its
 request-projection freeze.** `runSpecificationWorkflows`
-(`test/integration/workflow_tests.zig:1367-2608`) derives 134 scenario indices from list lengths
-(`:1415`, `:1418`, `:1451`), and 18 of its lines branch on a literal index (grep). The index
-names the freeze directory (`:1620`; `src/test_fixtures/request_projection.zig:168-170`), so one
-added fault renumbers every later scenario: under `evaluations/request-projection/` the three
+(`test/integration/workflow_tests.zig`) derives its scenario indices from list lengths
+(`classification_repair_start` to `link_start`), and 17 of its lines branch on a literal index
+(grep). The index names the freeze directory (`Recorder` at `:1621`;
+`src/test_fixtures/request_projection.zig:168-170`), so one added fault renumbers every later
+scenario: under `evaluations/request-projection/` the three
 source-preservation scenarios are 177–179 in freeze `93476e7`, 125–127 in `2b3dc8b`, 126–128 in
 `b38628c` and 128–130 in `lever-after`. Two freezes taken either side of such a change don't
 line up by path for §2 rule 10's byte comparison, and each scenario T3 asks for causes one
@@ -1530,47 +1383,49 @@ shift. **Class:** measurement. **Owner:** `runSpecificationWorkflows` and
 `request_projection.zig`. **Next:** key a scenario and its freeze directory by a stable name.
 
 **C41. The scripted driver is also the oracle, and its checks are gated on name literals (adds to
-E8).** `src/test_fixtures/spec_generation_driver.zig` gates checks on operation IDs on nine lines
-(`:181`, `:531-533`, `:551`, `:582`, `:603`, `:607`, `:628`), on the `extraction-schema` resource
-(`:243`) and on slot names (`:191`). Renaming one, code and YAML together, turns the guard false
-and the check stops running with no failure. A failed driver assertion is a panic: the file has
-167 `catch unreachable` lines.
+E8).** `src/test_fixtures/spec_generation_driver.zig` gates checks on operation IDs on seven lines
+(`:558-560`, `:578`, `:609`, `:630`, `:634`), on the `extraction-schema` resource (`:275`) and on
+slot names (`:218`). Renaming one, code and YAML together, turns the guard false and the check
+stops running with no failure. A failed driver assertion is a panic: the file has 101
+`catch unreachable` lines.
 
 **C42. No offline run reaches publication through the production composition.** The scripted
-scenarios run a hand copy of `Runtime.init`'s wiring (`workflow_tests.zig:1098`, `:1581`, `:3192`,
-`:3262`, against `composition/root.zig:106`). Every offline run through `root.Runtime` or the
+scenarios run a hand copy of `Runtime.init`'s wiring (`workflow_tests.zig:1082`, `:1582`, `:3224`,
+`:3295`, against `composition/root.zig:57`). Every offline run through `root.Runtime` or the
 harness's `invoke.run` stops before publication (traced), so the harness's success path runs end
 to end only live.
 
 **C43. Scenarios patch shipped assets by exact text with no check that the patch applied.**
-`workflow_tests.zig:1557` (`"group-size: 8"`) and `:1566` (`"/reason"` in
+`workflow_tests.zig:1558` (`"group-size: 8"`) and `:1567` (`"/reason"` in
 `extraction.composition.json`). If either text changes, the scenario runs unpatched and passes.
 The guarded form is at `test/harness/integration/tests.zig:145-146`.
 
 **C44. Scripted branches that no test selects (adds to T3).** 8 of the driver's 24 fault shapes
-(`spec_generation_driver.zig:11`: seven of the nine `review_*` shapes and
+(`spec_generation_driver.zig:13`: seven of the nine `review_*` shapes and
 `runaway_partial_assignment`) and 10 of the 11 support faults
-(`spec_generation_responses.zig:11`; only `foreign_source_single` is set,
-`workflow_tests.zig:1648`, `:1702`). Checked by grep.
+(`spec_generation_responses.zig:12`; only `foreign_source_single` is set,
+`workflow_tests.zig:1649`, `:1703`). Checked by grep.
 
 **C45. Versions, layouts and lists repeated by hand.**
 
-- `spec-e2e-report/v17` is spelled on 66 lines in 15 test files, because the schema field has no
-  default (`test/harness/e2e/contracts.zig:140`). §2 rule 12 makes each closed-member change a
-  version bump.
+- `spec-e2e-report/v20` is spelled on 81 lines in 16 test files (with 11 more lines naming a
+  superseded version in the rejection tests), because the schema field has no default
+  (`test/harness/e2e/contracts.zig:223`). `baseline-acquisition/v14`, `e2e-step-event/v5`,
+  `baseline-score/v6` and `provider-compatibility-report/v3` add 14 more. §2 rule 12 makes each
+  closed-member change a version bump.
 - The measures reader repeats the evidence layout as literals and returns no responses when the
   directory is missing (`test/harness/e2e/measures_cli.zig:184-203`, `:190`); its tests write
   their own layout (traced), so a moved evidence path would read as zero responses with tests
   passing.
-- The 24 workflow assets are listed again in five places (`workflow_tests.zig:1560`,
-  `test/packaging/smoke.zig:596-604`, three case files).
+- The 24 workflow assets are listed again in five places (`workflow_tests.zig:1561`,
+  `test/packaging/smoke.zig:335-342`, three case files).
 - Sequence fixtures pin call positions and retry limits as number literals
   (`summary_protocol_sequence.zig:71-72`; `global_protocol_sequence.zig:72-73`).
 
 **C46. Architecture tests match raw text (adds to T4, which owns the per-file pin count).**
-`expectAbsent` is a substring search over the raw file (`src/architecture_test.zig:1997-1999`),
-so a comment containing "plan", "hard" or "reference" fails a test with no boundary change
-(`:1269-1272`, `:1073-1075`, `:1680-1681`).
+`expectAbsent` is a substring search over the raw file (`src/architecture_test.zig`), so a
+comment containing "plan", "hard" or "reference" fails a test with no boundary change (the
+`expectAbsent` calls with those three words).
 
 **C47. Registration and leftovers.**
 
@@ -1578,21 +1433,22 @@ so a comment containing "plan", "hard" or "reference" fails a test with no bound
   Nothing checks reachability: `test-build-registration` checks test executables on a synthetic
   graph (traced).
 - Each integration run writes about 1,000 files that nothing reads: 18 dump prefixes and an
-  unconditional step trace for every scenario (`workflow_tests.zig:1727-1728`; traced).
+  unconditional step trace for every scenario (`workflow_tests.zig:1728-1729`; traced).
   `build/test_run_inputs.zig:28-30` lists three `principle-citation-*` inputs that nothing names.
   Adds to T2.
 - `src/test_fixtures/authoring_association_calibration.zig:16` reads a retained run of 11 October
   2026 that is no longer under `zig-out/e2e-spec/`, so part of a unit test returns `.unavailable`
   (`:297`) and is skipped.
 
-**C48. Stages the development cases never exercise (adds to T3).** Neither is dead code and no
-removal is proposed: live runs give them no coverage, so only offline tests do.
+**C48. Stages the development cases rarely exercise (adds to T3).** Neither is dead code and no
+removal is proposed: live runs give them almost no coverage, so mostly offline tests do.
 
 - Source review and its repairs run only when the source isn't ready (reconciliation not
-  complete, or no eligible claim; `specification_provenance.zig:39-45`) or when
+  complete, or no eligible claim; `generationReady` in `specification_provenance.zig`) or when
   `validation.sourcePreservationCheck` is true (`check_source_preservation_policy.zig:8`; default
-  false, `config.zig:68`). That is 40 whole files and 3,078 lines (import closure, traced), 206
-  YAML lines and three resources. None of the six runs made a review send.
+  false, `config.zig:68`). That is dozens of production files (import closure, traced), over a
+  fifth of the YAML and three resources. None of the six runs of 10 November made a review send;
+  of the six of 14 November, one (a loan-renewal run that also formed a conflict group) made 12.
 - The passive-literal registry gave an empty list in all 344 requests that carry one in the 38
   runs.
 
@@ -1612,5 +1468,5 @@ change. **Next** for each: a test at its owner that shows the behaviour.
   exchange sleeps on `.awake` (`model_http_exchange.zig:84`), so a request deadline is measured
   on two clocks. **Owner:** the provider adapters. **Class:** none.
 - A retry population can differ after a source-omission merge
-  (`reference_reconciliation_repair.zig:145-147`; `workflow_retry.zig:460`). **Owner:**
+  (`reference_reconciliation_repair.zig:145-147`; `workflow_retry.zig:471`). **Owner:**
   `reference_reconciliation_repair.zig`. **Class:** successful completion.

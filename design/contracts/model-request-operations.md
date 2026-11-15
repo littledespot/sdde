@@ -3,14 +3,14 @@
 Detailed contracts for the explicit YAML model-request operations governed by
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md).
 
-> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) (the `request-model`
-> step is not yet implemented; its token-counting removal and catalogue deadline are,
-> and the sections below reflect them).** Under ADR 0030 these operations stop
-> being YAML-selectable. Each request-lifecycle operation becomes a fixed stage of one
-> `request-model` step. A capability-free kernel orchestrator runs the stages in the order
-> ADR 0030 lists, through runner-owned child bindings. That list also includes the
-> request-phase check, which decides whether the request lifecycle advances (initial
-> attempt only).
+> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented.** These
+> operations are not YAML-selectable: each request-lifecycle entry below is a fixed **stage**
+> of one `request-model` step, a native binding the registry holds under that step's entry, and a
+> definition that names a stage's ID fails to compile. A capability-free kernel orchestrator runs
+> the stages in the order ADR 0030 lists, through runner-owned child bindings. That list also
+> includes the request-phase check, which decides whether the request lifecycle advances
+> (initial attempt only). The decode and payload-schema operations are one stage,
+> `admit-model-response`.
 >
 > Every rule below still applies to its stage: inputs, transitions, ownership, rejection,
 > cleanup and accounting. Read "explicit step", "YAML selects" and "explicit YAML retry" as
@@ -18,6 +18,53 @@ Detailed contracts for the explicit YAML model-request operations governed by
 > which declares no deadline. Retry authority names that step instead of the accounting step; ordinary,
 > atomic-repair and dependent counting scopes are unchanged. Correction and closure stay
 > distinct stages. Retirement (release) stays an explicit YAML step.
+
+## The `request-model` step's data contract
+
+This is the one statement of what the step requires, leaves and drops; other documents point here.
+The owner in code is `src/domain/model_request_kernel.zig`.
+
+- **Requires** the request-identity ledger. **Optional**: `model_input_packet`, `json_composition`.
+- **Replaces** the request-identity ledger with the successor the stages publish.
+- **Produces and leaves current** the four records a step outside the kernel reads:
+  `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation` and
+  `model_payload_schema_result`. With the ledger, these are the five kept keys.
+- **Outcomes**: `ok`, `invalid`, `failed`, `cancelled`, each mapped by the workflow.
+- **Per-outcome rule.** The runner ends every step with the same engine-owned invalidation of the
+  internal keys that are present, whatever the outcome, and the kept keys the stages had
+  published by then stay current on every outcome (a request that stops before a stage
+  publishes a kept key has none). The internal keys are `assigned_model_request`, `validated_model_request`,
+  `assigned_provider_operation`, `invoked_provider_operation`, `provider_authorization_result`,
+  `provider_invocation_result`, `provider_invocation_validation_result` and
+  `model_envelope_result`. They exist only between stages; no YAML step can require one.
+- **Evidence retention.** `provider_authorization_result`, `model_envelope_result`,
+  `provider_invocation_result` and `model_payload_schema_result` are recorded-retention keys, like
+  `provider_invocation_validation_result`. Ending the step drops the first three from the current
+  envelope, and a correction replaces the payload result; the E2E harness reads every attempt's
+  evidence from the recorded history, so a corrected or re-sent request that ends `ok` still reports
+  each earlier provider stop, protocol rejection or schema rejection with its own call and origin.
+- **Retry limit.** At most 3 retries, so four attempts, each of which may also take its one runaway
+  re-send (up to eight provider calls, see Allowance): a request that does not pass in four attempts
+  will most likely fail. The operation's descriptor, the parameter's range and the attempt-accounting
+  stage's descriptor each declare this
+  one maximum (`maximum_retry_limit` in the owner above), the registry admits the kernel entry only
+  with it, and the compiler rejects a larger `retry-limit`.
+- **Allowance.** The step counts once toward the step ceiling. Its stages are bounded by
+  2 x (1 + `retry-limit`) provider calls: each attempt, correction or not, plus its one runaway
+  re-send ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), which
+  lies outside `retry-limit`. The attempt-accounting stage refuses the entry past that bound as a
+  retry exhaustion that names the stage. Every `request-model` step's retry authority counts in the
+  compiled retry-derived execution allowance, including each attempt's one runaway re-send, as the
+  attempt-accounting step it replaced did. An ordinary-scope request that a workflow revisits for
+  another stage run, unit owner, model operation or purpose starts a new request assignment, which
+  restarts the attempt count, so across such visits only this allowance, native iteration and the
+  workflow token budget bound it; a revisit under the same assignment continues its count and ends
+  at the retry limit. That allowance is the finite ceiling [§6.3](06-pipeline-nodes.md) item 7 asks
+  of a cycle through the step, which declares its own finite `retry-limit`. The stage bound above is
+  separate from that allowance.
+- **Events.** Every event of a stage names the stage (its dashed `Stage` name in `step_id`). The
+  step's own start and end events name none, except that a failed end names the stage that ended
+  the request. Retry exhaustion names the step and the stage.
 
 ## Accounting integration
 
@@ -36,13 +83,13 @@ Detailed contracts for the explicit YAML model-request operations governed by
   [§22.7](22-repair.md#227-repair-retry-limit-and-escalation). Other retry-capable
   operations retain invocation-wide counts. Request ordinals never become a second
   retry counter or reset history.
-- Retry authority names the accounting step, not the request origin.
+- Retry authority names the `request-model` step, not the request origin.
 - Consumers retain that original request and must invalidate consumed attempt evidence
-  before a YAML retry revisits the accounting step.
+  before a YAML retry revisits the `request-model` step.
 - Foreign or stale evidence and a second initial attempt cannot reset an existing
   request's accounting.
 
-- That accounting step is the sole attempt limit on the model-request correction path.
+- The step's attempt-accounting stage is the sole attempt limit on the model-request correction path.
 - The protocol-retry builder only prepares a corrected request from retained original
   inputs and the latest rejection; it has no separate execution limit.
 - Runner exhaustion retains the compiled owner, limit and consumed execution count as a
@@ -152,39 +199,27 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - No token reconciliation, decoding, schema validation, retry or terminalization is
   implicit.
 
-## JSON decoding integration
+## Response admission: decoding and payload-schema validation
 
-- Native `decode-model-envelope` is also integrated as a parameter-free pure step.
-- It consumes the same prepared request and sealed observation, parses only its complete
-  branch through the existing decoder, and retains the source value with the owned tree.
-- Syntax rejection, after the sole
-  [§22.6](22-repair.md#226-unparseable-output) prefix normalization, returns typed
-  `InvalidModelEnvelope` as `invalid`; the inference profile permits `end.invalid`,
-  preserving the compiler's matching-terminal rule.
-- Stops, failures, observation rejection and cancellation are forwarded unchanged
-  without parsing; response admission, not the decoder, applies ADR 0039's runaway
-  mapping (below).
-- No schema check, new identity, byte limit, token charge, retry or lifecycle transition
-  is introduced.
+Decoding and payload-schema validation are one stage, `admit-model-response`; there is no separate
+decode or schema stage. The decoder (`model_envelope.decode`) and the schema validator
+(`model_payload_schema.validate`) are domain functions that only this stage calls.
 
-## Payload-schema validation integration
-
-- `validate-model-payload-schema` is a parameter-free pure step consuming the retained
-  decoded result, prepared request and request ledger.
-- The existing validator alone checks decoded candidates against their original compiled
-  schema.
-- Its owned result retains the source, publishing schema-valid evidence or a closed
-  schema rejection; non-decoded protocol/provider/cancellation facts pass through
-  unchanged.
-- Consumers cannot substitute a schema or reuse foreign evidence.
-- No parsing, copying of content, token charge, lifecycle transition or retry occurs.
-- Schema validity remains distinct from semantic correctness and commit authority.
-
-## Consolidated response admission
-
-- `admit-model-response` is a parameter-free pure alternative to the detailed
-  decoder and payload validator. It consumes the current request ledger,
-  prepared request and sealed observation.
+- **Decoding.** The stage parses only the complete branch of the sealed observation through the
+  existing decoder, and retains the source value with the owned tree. Syntax rejection, after the
+  sole [§22.6](22-repair.md#226-unparseable-output) prefix normalization, returns typed
+  `InvalidModelEnvelope` as `invalid`. Stops, failures, observation rejection and cancellation are
+  forwarded unchanged without parsing; ADR 0039's runaway mapping (below) is applied here, not by
+  the decoder. No schema check, new identity, byte limit, token charge, retry or lifecycle
+  transition is introduced by decoding.
+- **Schema validation.** The existing validator alone checks the decoded candidate against its
+  original compiled schema. The owned result retains the source, publishing schema-valid evidence or
+  a closed schema rejection; non-decoded protocol, provider and cancellation facts pass through
+  unchanged. Consumers cannot substitute a schema or reuse foreign evidence. No parsing, copying of
+  content, token charge, lifecycle transition or retry occurs, and schema validity stays distinct
+  from semantic correctness and commit authority.
+- **Contract.** `admit-model-response` is a parameter-free pure stage. It consumes the current
+  request ledger, prepared request and sealed observation.
 - The existing decoder parses complete evidence once; the existing schema
   validator checks that exact candidate against its retained selected schema.
   Shared result owners publish the existing envelope and payload keys together;
@@ -199,9 +234,9 @@ Detailed contracts for the explicit YAML model-request operations governed by
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). Failure
   before publication releases both values. One delta-application/cancellation
   boundary replaces two; current-authority dependencies remain required.
-- Detailed operations remain available. No new identity, schema selection,
-  provider call, retry, accounting, semantic authority or runtime coordinator is
-  introduced. Correction, closure and retirement remain explicit operations.
+- No new identity, schema selection, provider call, retry, accounting, semantic authority
+  or runtime coordinator is introduced. Correction and closure are the next stages of the same
+  step; retirement is the workflow's release step.
 
 ## Provider-operation completion integration
 

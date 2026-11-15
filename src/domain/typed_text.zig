@@ -141,7 +141,6 @@ pub const Issue = struct {
     first_node: usize,
     last_node: usize,
     rejected_passive: ?literals.Id = null,
-    rejected_exact: ?ExactCopy = null,
     field: ?field_policy.Field = null,
     pub fn isComposition(self: Issue) bool {
         return switch (self.reason) {
@@ -242,7 +241,7 @@ pub const Validator = struct {
                     try result.append(allocator, .{ .literal = .{ .value = text } });
                 } else if (comptime std.mem.eql(u8, @tagName(tag), "exact_copy")) {
                     if (!permitsExact(context.exact_copies, node)) {
-                        issue.* = .{ .reason = .unknown_exact, .first_node = index, .last_node = index, .rejected_exact = node };
+                        issue.* = .{ .reason = .unknown_exact, .first_node = index, .last_node = index };
                         return error.InvalidTypedText;
                     }
                     try result.append(allocator, .{ .exact_copy = node });

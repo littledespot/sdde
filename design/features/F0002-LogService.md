@@ -348,9 +348,9 @@ Logging-internal nodes are not recursively observed.
 | `stage.blocked` | `error` | `diagnostic_code`, `outcome` | — |
 | `stage.failed` | `error` | `diagnostic_code`, `outcome` | `duration_ms` |
 | `stage.clarification_pending` | `info` | `outcome` | — |
-| `action.started` | `debug` | — | — |
-| `action.completed` | `debug` | `outcome` | `duration_ms` |
-| `action.invalid` | `warning` | `diagnostic_code`, `outcome` | — |
+| `action.started` | `debug` | — | `step_id` |
+| `action.completed` | `debug` | `outcome` | `duration_ms`, `step_id` |
+| `action.invalid` | `warning` | `diagnostic_code`, `outcome` | `step_id` |
 | `action.failed` | `error` | `diagnostic_code`, `outcome` | `duration_ms`, `step_id` |
 | `model.requested` | `debug` | `model_route_id`, `model_profile_id` | — |
 | `model.completed` | `debug` | `model_route_id`, `model_profile_id`, `outcome` | `input_tokens`, `output_tokens`, `duration_ms` |
@@ -413,7 +413,11 @@ record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_bin
 
 - The first is the event heading (38 columns) and the second the prompt heading (37 columns).
   `step_id` is the internal step of an [ADR 0031](../decisions/0031-stage-actions.md) stage action
-  at which a failed action stopped, and appears only on `action.failed`.
+  at which a failed action stopped, and appears on `action.failed` only; on any `action.*` event of
+  one stage of a `request-model` step ([ADR 0030](../decisions/0030-engine-owned-model-request.md)) it
+  is that stage's stable name. Adding the optional member to `action.started`, `action.completed`
+  and `action.invalid` changes no column and no template identifier: every template stays
+  `<event_type>/v1` (the rule above), as when ADR 0031 added it to `action.failed`.
 - Existing wire columns `model_route_id` (events) and `route_id` (prompts) carry
   the workflow model-operation identity; `model_profile_id` carries the repository
   model-slot identity. ADR 0018 does not rename columns or introduce a route registry.
@@ -541,7 +545,7 @@ compiler injects them only after validating the two user choices.
 | Flush level | `flushAtOrAbove` is exactly `error`; `error`, `fatal`, and terminal stage/task events force flush |
 | Lower-level flush | flush after 32 records or 1,000 monotonic ms since the last successful flush, whichever occurs first |
 | Failure mode | exactly `block_new_work` |
-| Redaction policy | compiler-owned `redaction/default-v1`; production complete-body capture removes exact authorized credentials and JSON-escaped forms before splitting; classified fragments retain their existing detector contract; no configured patterns |
+| Redaction policy | compiler-owned; production complete-body capture removes exact authorized credentials and JSON-escaped forms before splitting; classified fragments retain their existing detector contract; no configured patterns |
 | Prompt capture | `debug`/`trace` selects every direction/body class; higher thresholds emit metadata only; no independent selector setting |
 | Prompt content | `maxContentBytes = 5,000` per sanitized chunk; complete selected exchanges use lossless ordered chunks, never tail truncation |
 | Stream lock | compiler constant 2,000 ms from first acquisition attempt; one attempt, no retry or backoff |

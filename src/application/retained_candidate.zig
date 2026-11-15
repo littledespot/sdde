@@ -52,6 +52,12 @@ pub fn Storage(comptime Payload: type, comptime initial: Payload) type {
             if (current.* != tag) return error.InvalidCandidatePayload;
             return @field(current, @tagName(tag));
         }
+        /// A repair owner's read of its own retained state or of the data it repairs: another kind of
+        /// value at its key means the compiled owner disagrees with the data; an absent key stays
+        /// `MissingRequiredData`.
+        pub fn readNative(inputs: *const data.View, schema: data.Schema, comptime tag: std.meta.Tag(Payload)) (values.Error || error{RepairOwnerMismatch})!@FieldType(Payload, @tagName(tag)) {
+            return read(inputs, schema, tag) catch |err| if (err == error.InvalidCandidatePayload) error.RepairOwnerMismatch else err;
+        }
         pub fn publish(allocator: std.mem.Allocator, schema: data.Schema, owner: *Owner, outcome: @import("../domain/workflow.zig").OutcomeTag) !@import("../domain/workflow_execution.zig").Candidate {
             var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
             delta.data_writes[@intFromEnum(schema.key)] = try values.adopt(allocator, schema, Value, Owner, owner, view, destroy, null);

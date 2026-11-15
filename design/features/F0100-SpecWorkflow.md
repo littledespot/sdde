@@ -23,10 +23,10 @@ primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0038](../decisions/0038-record-claims-and-scenario-coverage.md),
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
 [0043](../decisions/0043-model-facing-exact-text-names.md),
-[0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md). Not yet implemented:
-[ADR 0025](../decisions/0025-clarification-answer-authentication.md),
-[ADR 0033](../decisions/0033-generic-repair-operations.md) and most of
-[ADR 0030](../decisions/0030-engine-owned-model-request.md);
+[0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md), and the engine-owned `request-model` step of
+[ADR 0030](../decisions/0030-engine-owned-model-request.md) and the four generic repair
+operations of [ADR 0033](../decisions/0033-generic-repair-operations.md) are implemented. Not yet implemented:
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md);
 [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) is accepted, on hold
 since 30 October 2026. The
 [§32 index](../design.md#32-accepted-and-deferred-implementation-choices) lists every
@@ -473,23 +473,20 @@ The closed model classifications are:
   their existing relevance/kind rules. Classification repair and stored
   validation enforce this same native predicate.
 
-Specify reuses model-request/release subgraphs and compact outcome maps for its
-repair routes within the compiler's 1,024-step ceiling
+Specify uses the release subgraph and compact outcome maps for its repair routes
+within the compiler's 1,024-step ceiling
 ([§14.1](../contracts/14-orchestration.md#141-model-operation-composition),
 [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation)).
-The request subgraph uses ADR 0012's pure `prepare-model-request` operation;
-detailed assignment, binding validation and request construction remain available.
-Both paths use the same native owners and produce identical model-visible content.
-The request body also uses pure `admit-model-response`, retaining detailed decoder
-and schema-validator operations. Pre-generation source review has its own
-request/repair call sites; shared bodies do not share their retry counters.
+Pre-generation source review has its own request/repair call sites, and no call site
+shares a retry counter with another.
 
-Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
-`model-request-body` subgraph and its wrappers (`model-request`,
-`model-request-with-context`, `support-request`, `composition-request` and
-`composition-request-body`) are removed. Each request call site becomes one
-`request-model` step, followed by its consumers, any `retain-json-part` and its release
-step, and each call site keeps its own retry counter.
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) each model request is
+one `request-model` step, followed by its consumers, any `retain-json-part` step and its
+`release-model-request` or `release-model-transport` step; each call site keeps its own
+retry counter. The engine runs the request's stages (preparation, attempt accounting,
+authorization, inference, observation, completion, admission, correction and closure) in
+a fixed order; the workflow sees only the step's outcome and the request keys the
+release step retires.
 
 No call site declares a deadline: the body's authorization step takes no parameter, and
 each model's catalogue entry carries `requestTimeoutMs`
@@ -820,8 +817,8 @@ validators:
   assignment cannot alias an earlier candidate's repair scope.
 - Existing domain validators still own interpretation/accounting.
 
-- `assign-model-request-id` accepts either a native `model_input_packet` or the declared
-  static input resource, never both.
+- `request-model` (its preparation stage) accepts either a native `model_input_packet` or the
+  declared static input resource, never both.
 - The packet supplies an engine-owned unit and purpose key, not a prompt, result schema
   or provider selection; purpose text comes from the workflow's packet guidance
   (`capture-packet-guidance`; ADR 0016 packet-guidance amendment).
@@ -833,9 +830,9 @@ validators:
 
 - The ordinary [Specify definition](../workflows/spec.workflow.yaml) connects
   these operations, workflow-owned resources and the shared required-authority review.
-- `retire-model-transport` releases completed request and input slots through the
-  existing retirement owner. Detailed `retire-model-input` and
-  `retire-model-request` operations remain available.
+- `release-model-transport` releases a completed `request-model` request's kept keys and
+  its input slot through the retirement owner; `release-model-request` releases the
+  request alone.
 - Native captured evidence keeps its current domain-source lineage, not the replaceable
   transport slot; source changes and mixed-generation joins still reject.
 - The request ledger is runner-validated execution control, not business authority.
@@ -849,8 +846,7 @@ validators:
   lifecycle and accounting.
 - [§22.6–§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation) own
   correction accounting and exhaustion, including the
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` form (not
-  yet implemented).
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` form.
 
 - Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR 0006's
   closed `kind` alternatives, including nested typed values.
@@ -927,10 +923,11 @@ validators:
   clarification binding/open IDs and prior ID ledger; it cannot supply completed content.
   The specified variant contains the feature key,
   revision, `specified` stage, captured reference sources/chunks/claims/citations,
-  exact compiled extraction-contract comparison evidence, reconciliation and
+  exact compiled extraction-contract comparison evidence (each part is the `request-model`
+  step that makes its request, with that step's own parameters), reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v25`). Neither variant holds review evidence.
+  registry identity (`specification-state/v26`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton
@@ -1190,9 +1187,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   obligations; the source-readiness projection always includes them (§3.10).
 
   - Generation that completes without a mandatory record family ends `invalid`
-    (`check-specification-generation-progress`); no model evidence supplies it.
-  - Natively, ADR 0038's one-statement-record rule applies to each records response and its
-    scenario rule to each batch the native deletes leave ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+    (`check-specification-generation-progress`, and `check-scenario-generation-progress` for
+    the criterion family); no model evidence supplies it.
+  - Natively, ADR 0038's one-statement-record rule applies to each records response, and a
+    second request per group writes one criterion for each claim a surviving behaviour
+    statement names on the batch the native deletes leave ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
     Decisions 2, 3 and 5). No model compares the generated candidate with its sources; the
     human who reviews `spec.md` judges scenario meaning (ADR 0023).
   - Missing behavior cannot be satisfied by citation presence or a title.
@@ -1261,11 +1260,13 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Engine code allocates monotonic per-family record IDs; no model identity, completion,
   approval or artifact-path field is accepted.
 
-- Three configured task types (brief, entities and one call per record group) reuse
-  the same generation subgraph and generic model path; narrative, applicability and
-  records use concise purpose-specific guidance. The registered action
-  `compose-specification-story` composes the story between the brief and entities,
-  with no model call (ADR 0047). After the records, the `link-scenarios` step links each
+- Four configured task types (brief, entities, one call per record group and one call per
+  record group with a scenario slot) reuse the same generation operations and generic model
+  path; narrative, applicability, records and scenarios use concise purpose-specific
+  guidance. The registered action `compose-specification-story` composes the story between
+  the brief and entities, with no model call (ADR 0047). After the records, the
+  `generate-scenarios` step writes one acceptance criterion per claim a surviving behaviour statement names,
+  each bound to its claim by the engine (ADR 0038 Decision 3, §17.3). After it, the `link-scenarios` step links each
   edge case to an acceptance criterion of its own batch that shares a claim: natively when
   one does, by one closed model request offering those criteria when several do, and by a
   typed block when none does (ADR 0038 Decision 7, §17.3).
@@ -1334,8 +1335,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   authorization IDs also bind the repair owner.
 - Native domain actions select and apply their typed units.
 - Generation, reference and source-omission repairs use the shared repair prompt through
-  `model-request` or `model-request-with-context`; source-review repairs reuse the
-  support prompt through `support-request`.
+  `request-model`; source-review repairs reuse the support prompt through the same step.
 - Request release occurs before shared model/automatic reconciliation and specification
   merge routes.
 - Deterministic repair loops have explicit runner-owned execution bounds.
@@ -1372,9 +1372,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
 - A records response with a non-requirement statement naming both taken and untaken
   claims is rejected at admission as `shared_member`, whose protocol correction names the
-  governing kinds. A behaviour-statement claim no acceptance criterion or edge case names,
-  on the batch the native deletes leave, is a `scenario_coverage` unit defect repaired by
-  one acceptance criterion whose claim and group the engine fixes; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). Coverage counts only the claims
+  governing kinds. A scenario slot's criterion is written by the scenarios request with its
+  claim and group fixed by the engine, a defect in its text takes the field-level value
+  repair, and exhaustion fails; a behaviour-statement claim left without a criterion on the
+  merged batch is a `scenario_coverage` engine defect that takes no repair ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). Coverage counts only the claims
   each record names, so a claim no record names maps only through another target.
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or
@@ -1387,15 +1388,15 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   claims. Cycle and permutation regressions exercise the complete publication path.
 - JSON/schema protocol retry remains separate from semantic repair.
 - Each repair route is bounded by an explicit YAML `retry-limit` on its repair request or
-  merge ([ADR 0033](../decisions/0033-generic-repair-operations.md)'s per-owner table);
-  exhaustion fails.
-- Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
-  the 29 per-owner repair operations of the Spec definition become four generic ones:
-  `authorize-repair`, `build-repair-input`, `parse-repair` and `merge-repair`.
+  merge ([ADR 0033](../decisions/0033-generic-repair-operations.md)'s table of variant
+  maxima); exhaustion fails.
+- Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (implemented), the Spec
+  definition's repair routes use four generic operations: `authorize-repair`,
+  `build-repair-input`, `parse-repair` and `merge-repair`, specified in
+  [13-04](../contracts/actions/13-04-model.md#generic-repair-operations).
   - Each takes the route's closed `owner`, and the owner rules stay in their domain
     modules.
   - Each route keeps its own steps, retry counter and ceiling.
-  - This converts after ADR 0030 and ADR 0031's first conversion.
 - Only the workflow's cumulative actual token budget limits model tokens.
 - No missing knowledge is replaced with a default or treated as deterministic proof.
 

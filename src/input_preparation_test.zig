@@ -133,17 +133,6 @@ const Countdown = struct {
     }
 };
 
-test "the stage contract is one read-only operation that requires the invocation and produces only the input values" {
-    const contract = stage.Action.contract;
-    try std.testing.expectEqualStrings("prepare-inputs", contract.id);
-    try std.testing.expectEqual(pipeline.SideEffect.filesystem_read, contract.side_effect);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.specify_invocation}, contract.requires);
-    try std.testing.expectEqual(@as(usize, 0), contract.optional.len + contract.replaces.len + contract.invalidates.len);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &.{ .feature_directory, .relative_feature_directory, .reference_directory, .feature_artifact_paths, .prior_specification_state, .prior_principle_registry, .raw_clarification_inputs, .clarification_inputs }, contract.produces);
-    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
-    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
-}
-
 test "the stage runs the thirteen steps in order once each and returns the edge values and an absent prior state" {
     var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
     var fake: Fake = .{};

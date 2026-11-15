@@ -123,7 +123,11 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
         break :shared try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
     } else try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(common), scratch, common);
     const slot = try std.fmt.allocPrint(scratch, "reconciliation-{d}", .{input.partition.id.ordinal});
-    const packet = try packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
+    const packet = try packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, switch (input.purpose) {
+        .summary => @import("specification_result_definitions.zig").Reconciliation.summary.id(),
+        // The global base packet is a stage's starting point: its request selects an assignment definition.
+        .global => null,
+    });
     defer packets.release(packet);
     const witnessed = try packets.withOriginalSources(allocator, packet, inputs);
     defer packets.release(witnessed);
@@ -192,7 +196,7 @@ pub fn withSemanticChoices(a: std.mem.Allocator, packet: *const packets.Packet, 
     const ids = try claimOrdinals(a, members);
     defer a.free(ids);
     const field = if (assignment == .summary) "statements" else "signals";
-    const definition_id: schema.DefinitionId = .{ .bytes = if (assignment == .summary) "summary" else "signals_assignment" };
+    const definition_id: schema.DefinitionId = @as(@import("specification_result_definitions.zig").Reconciliation, if (assignment == .summary) .summary else .signals_assignment).id();
     return packets.withIntegerChoices(a, narrowed, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids, .collection = .unique_subset }});
 }
 /// Availability projects existing evidence, not semantics or a second registry.

@@ -99,7 +99,12 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 
 - **Owner:** [`src/actions/specification/build_specification_model_input.zig`](../../../src/actions/specification/build_specification_model_input.zig)
 - **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Rejects:** `specification_session.Error`.
+- **Does:** Build the request of the unit in flight: the brief, entities or records packet or, while
+  scenarios are written ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md)
+  Decision 3), the next group's requirements, numbered from one, each with its claim's meaning and
+  source. The session's scenarios phase selects the branch.
+- **Rejects:** `scenario_request.Error`, which holds `specification_session.Error`, the slot
+  errors and the reference reconciliation errors.
 
 ## `CollectSpecificationModelResultAction` (`collect-specification-model-result`)
 
@@ -113,7 +118,10 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 
 - **Owner:** [`src/actions/specification/parse_specification_unit.zig`](../../../src/actions/specification/parse_specification_unit.zig)
 - **Reads:** `raw_specification_unit`, `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `parsed_specification_unit` · **Side effect:** `none`
-- **Rejects:** an unparsable body (`invalid`); `specification_session.Error`.
+- **Does:** Parse the unit's response. While scenarios are written, the answer's numbered scenarios
+  become the acceptance criteria of the group's batch, each bound to its slot's claim.
+- **Rejects:** an unparsable body (`invalid`); `scenario_request.Error` (`specification_session.Error`,
+  the slot errors and the reference reconciliation errors).
 
 ## `ValidateSpecificationUnitAction` (`validate-specification-unit`)
 
@@ -142,8 +150,42 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 
 - **Owner:** [`src/actions/specification/check_specification_generation_progress.zig`](../../../src/actions/specification/check_specification_generation_progress.zig)
 - **Reads:** `specification_generation_session` · **Writes:** none · **Side effect:** `none`
-- **Does:** Return `more` until every unit is complete, then `ok`.
-- **Rejects:** `invalid` when a required record family is missing.
+- **Does:** Return `more` while a source group still awaits its records, then `ok`.
+- **Rejects:** `invalid` when a mandatory record family the records step writes is missing; the
+  criterion family is the scenarios step's, checked by `check-scenario-generation-progress`.
+
+## `PlanScenarioGenerationAction` (`plan-scenario-generation`)
+
+- **Owner:** [`src/actions/specification/plan_scenario_generation.zig`](../../../src/actions/specification/plan_scenario_generation.zig)
+- **Reads:** `specification_generation_session`, `accounted_reference_reconciliation` · **Writes:** `scenario_generation_progress` · **Side effect:** `none`
+- **Does:** Plan the scenarios step's population, the groups with at least one scenario slot
+  ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3), once every
+  group's records are admitted. The session is unchanged.
+- **Rejects:** `InvalidSpecificationUnit` outside the scenario phase or after a group's scenarios
+  are written.
+
+## `CheckScenarioGenerationProgressAction` (`check-scenario-generation-progress`)
+
+- **Owner:** [`src/actions/specification/check_scenario_generation_progress.zig`](../../../src/actions/specification/check_scenario_generation_progress.zig)
+- **Reads:** `specification_generation_session`, `scenario_generation_progress` · **Writes:** none · **Side effect:** `none`
+- **Does:** Return `more` while a group with a slot awaits its scenarios, then `ok`.
+- **Rejects:** `invalid` when the held batches hold no criterion, the family this step writes.
+
+## `AdvanceScenarioGenerationAction` (`advance-scenario-generation`)
+
+- **Owner:** [`src/actions/specification/advance_scenario_generation.zig`](../../../src/actions/specification/advance_scenario_generation.zig)
+- **Reads:** `accounted_reference_reconciliation`, `specification_generation_session`, `scenario_generation_progress`, `validated_specification_unit` · **Writes:** replaces `specification_generation_session`, `scenario_generation_progress`; invalidates `raw_specification_unit`, `parsed_specification_unit`, `validated_specification_unit` · **Side effect:** `none`
+- **Does:** Join the validated criteria to their group's batch and count the group as written. It
+  completes no unit.
+- **Rejects:** `specification_session.Error`.
+
+## `CompleteScenarioGenerationAction` (`complete-scenario-generation`)
+
+- **Owner:** [`src/actions/specification/complete_scenario_generation.zig`](../../../src/actions/specification/complete_scenario_generation.zig)
+- **Reads:** `specification_generation_session` · **Writes:** replaces `specification_generation_session` · **Side effect:** `none`
+- **Does:** Merge the held batches once every group with a slot has its criteria. It is the only
+  operation that merges them.
+- **Rejects:** `specification_session.Error`.
 
 ## `PlanScenarioLinksAction` (`plan-scenario-links`)
 
@@ -195,39 +237,9 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 
 ## Specification repair ([§22](../22-repair.md))
 
-## `AuthorizeSpecificationRepairAction` (`authorize-specification-repair`)
-
-- **Owner:** [`src/actions/specification/authorize_specification_repair.zig`](../../../src/actions/specification/authorize_specification_repair.zig)
-- **Reads:** `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `parsed_specification_unit`, `validated_specification_unit`, `packet_guidance` · **Writes:** `specification_repair_authorization` · **Side effect:** `none`
-- **Rejects:** `InvalidSpecificationRepair`, `UnsafeSpecificationRepair`; outcomes `blocked`,
-  `invalid` and `more`.
-
-## `BuildSpecificationRepairInputAction` (`build-specification-repair-input`)
-
-- **Owner:** [`src/actions/specification/build_specification_repair_input.zig`](../../../src/actions/specification/build_specification_repair_input.zig)
-- **Reads:** `specification_generation_session`, `specification_repair_authorization`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Rejects:** `specification_repair.Error`.
-
-## `ParseSpecificationRepairAction` (`parse-specification-repair`)
-
-- **Owner:** [`src/actions/specification/parse_specification_repair.zig`](../../../src/actions/specification/parse_specification_repair.zig)
-- **Reads:** `specification_repair_authorization`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `specification_repair_authorization` · **Side effect:** `none`
-- **Rejects:** `specification_repair.Error`.
-
-## `MergeSpecificationRepairAction` (`merge-specification-repair`)
-
-- **Owner:** [`src/actions/specification/merge_specification_repair.zig`](../../../src/actions/specification/merge_specification_repair.zig)
-- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
-- **Reads:** `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `parsed_specification_unit`, `specification_repair_authorization` · **Writes:** replaces `parsed_specification_unit`; invalidates `validated_specification_unit`, `specification_repair_authorization` · **Side effect:** `none`
-- **Does:** Merge the replacement into only the authorized unit, checked against canonical
-  (NFC) source text.
-- **Rejects:** `specification_repair.Error`.
-
-## `AuthorizeSpecificationCoverageRepairAction` (`authorize-specification-coverage-repair`)
-
-- **Owner:** [`src/actions/specification/authorize_specification_coverage_repair.zig`](../../../src/actions/specification/authorize_specification_coverage_repair.zig)
-- **Reads:** `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `specification_coverage` · **Writes:** `specification_coverage_repair` · **Side effect:** `none`
-- **Rejects:** `specification_repair.Error`; outcome `blocked`.
+The specification unit, specification support and specification coverage repair operations are
+variants of the generic repair operations, specified once in
+[13-04](13-04-model.md#generic-repair-operations).
 
 ## Source review before generation
 
@@ -270,34 +282,6 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 - **Owner:** [`src/actions/specification/collect_specification_support_loss.zig`](../../../src/actions/specification/collect_specification_support_loss.zig)
 - **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
 - **Rejects:** `specification_support` errors; outcome `invalid`.
-
-## `AuthorizeSpecificationSupportRepairAction` (`authorize-specification-support-repair`)
-
-- **Owner:** [`src/actions/specification/authorize_specification_support_repair.zig`](../../../src/actions/specification/authorize_specification_support_repair.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `specification_support_repair` · **Side effect:** `none`
-- **Rejects:** `specification_support_repair` errors; outcome `blocked`.
-
-## `BuildSpecificationSupportRepairInputAction` (`build-specification-support-repair-input`)
-
-- **Owner:** [`src/actions/specification/build_specification_support_repair_input.zig`](../../../src/actions/specification/build_specification_support_repair_input.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_support_repair`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Rejects:** `specification_support_repair` errors.
-
-## `ParseSpecificationSupportRepairAction` (`parse-specification-support-repair`)
-
-- **Owner:** [`src/actions/specification/parse_specification_support_repair.zig`](../../../src/actions/specification/parse_specification_support_repair.zig)
-- **Reads:** `specification_support_repair`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `specification_support_repair` · **Side effect:** `none`
-- **Does:** Parse the repair response against its authorization.
-- **Rejects:** `specification_support_repair` errors.
-
-## `MergeSpecificationSupportRepairAction` (`merge-specification-support-repair`)
-
-- **Owner:** [`src/actions/specification/merge_specification_support_repair.zig`](../../../src/actions/specification/merge_specification_support_repair.zig)
-- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `model_request_identity_ledger`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_support_repair`, `packet_guidance` · **Writes:** replaces `specification_support_review`; invalidates `specification_support_repair` · **Side effect:** `none`
-- **Does:** Merge the repaired finding into the review, checked against canonical (NFC) source
-  text.
-- **Rejects:** `specification_support_repair` errors; outcome `invalid`.
 
 ## `ApplySpecificationSupportAction` (`apply-specification-support`)
 

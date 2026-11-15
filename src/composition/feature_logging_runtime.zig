@@ -8,6 +8,7 @@ const artifacts = @import("../domain/workflow_artifact_registry.zig");
 const binding = @import("../domain/feature_log_binding.zig");
 const runtime = @import("active_feature_log_runtime.zig");
 const run = @import("../domain/run_outcome.zig");
+const execution = @import("../domain/workflow_execution.zig");
 const telemetry = @import("../domain/telemetry.zig");
 const Failure = @import("../domain/feature_log_stream.zig").FailureCode;
 
@@ -25,13 +26,15 @@ pub const Assembly = struct {
     runtime_owner: ?*runtime.Owner = null,
     shortcode: ?telemetry.WorkflowShortcode = null,
     failure: ?Failure = null,
+    /// The rejection this log's own failure replaced at the end of the run, kept beside it (27-observability.md).
+    replaced: ?execution.FirstCause = null,
     finalized: bool = false,
 
     pub fn activator(self: *Assembly) port.Activator {
         return .{ .context = @ptrCast(self), .activate_fn = activate };
     }
     pub fn finalizer(self: *Assembly) port.Finalizer {
-        return .{ .context = @ptrCast(self), .finish_fn = finish };
+        return .{ .context = @ptrCast(self), .finish_fn = finish, .replaced_fn = replacedRejection };
     }
 
     fn activate(context: *port.Context, prior: feature.Directory, shortcode: telemetry.WorkflowShortcode) port.Outcome {
@@ -165,9 +168,19 @@ pub const Assembly = struct {
                 detail.subsequent_logging_failure = failure;
                 return .{ .execution_rejected = .{ .model_capture = detail } };
             }
-            return .{ .execution_rejected = .{ .logging = failure } };
+            const terminal: execution.Rejection = .{ .logging = failure };
+            // An outcome that is no rejection is replaced with no first cause. Finalizing again keeps what
+            // the first failure replaced, as it keeps the failure itself; the runner alone decides which
+            // cause of the whole run is the first.
+            if (outcome == .execution_rejected and self.replaced == null) self.replaced = execution.FirstCause.replacedBy(outcome.execution_rejected, terminal);
+            return .{ .execution_rejected = terminal };
         }
         return outcome;
+    }
+
+    fn replacedRejection(context: *port.Context) ?execution.FirstCause {
+        const self: *Assembly = @ptrCast(@alignCast(context));
+        return self.replaced;
     }
 
     pub fn deinit(self: *Assembly) void {

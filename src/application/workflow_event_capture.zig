@@ -21,7 +21,32 @@ pub const Capture = struct {
     /// `stage_step` is the internal step a stage action stopped at (ADR 0031); only a failed
     /// action's event records it.
     pub fn action(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError, stage_step: ?[]const u8) ?stream.FailureCode {
+        return self.actionEvent(node, result, rejection, .{ .stopped_at = stage_step });
+    }
+
+    /// One event of one stage of a `request-model` step (ADR 0030): whatever the stage's status,
+    /// the event names the stage, so a report can tell where the request was at any time.
+    pub fn requestStage(self: Capture, node: workflow.WorkflowStepId, stage: []const u8, result: ?execution.Applied, rejection: ?execution.OperationError) ?stream.FailureCode {
+        return self.actionEvent(node, result, rejection, .{ .stage = stage });
+    }
+
+    /// The internal step an action event names.
+    const Internal = union(enum) {
+        /// A stage action's internal step (ADR 0031): only a failed event records it.
+        stopped_at: ?[]const u8,
+        /// A stage of a `request-model` step (ADR 0030): every event of the stage records it.
+        stage: []const u8,
+    };
+
+    fn actionEvent(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError, internal: Internal) ?stream.FailureCode {
         var code: [96]u8 = undefined;
+        const named: ?t.Identifier = switch (internal) {
+            .stage => |name| t.Identifier.validate(name) orelse return .LOG_SERIALIZATION_FAILURE,
+            .stopped_at => |step| if (result) |value| switch (value.status()) {
+                .failed, .blocked, .cancelled => if (step) |name| t.Identifier.validate(name) orelse return .LOG_SERIALIZATION_FAILURE else null,
+                else => null,
+            } else null,
+        };
         return self.emit(.{
             .event_type = if (result) |value| switch (value.status()) {
                 .ok, .more, .needs_user => .action_completed,
@@ -35,11 +60,8 @@ pub const Capture = struct {
                     .ok, .more, .needs_user => null,
                     else => if (value == .rejected) rejectionCode(&code, value.rejected) orelse return .LOG_SERIALIZATION_FAILURE else diagnostic(&code, if (rejection) |cause| @errorName(cause) else @tagName(value.outcome)) orelse return .LOG_SERIALIZATION_FAILURE,
                 },
-                .step_id = switch (value.status()) {
-                    .failed, .blocked, .cancelled => if (stage_step) |step| t.Identifier.validate(step) orelse return .LOG_SERIALIZATION_FAILURE else null,
-                    else => null,
-                },
-            } else .{},
+                .step_id = named,
+            } else .{ .step_id = named },
         });
     }
     pub fn model(self: Capture, node: workflow.WorkflowStepId, info: Model, event: t.EventType, status: ?workflow.OutcomeTag, reason: ?[]const u8, usage: ?@import("../domain/llm_provider_operation.zig").ProviderUsage) ?stream.FailureCode {

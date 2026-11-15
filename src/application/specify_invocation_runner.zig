@@ -18,7 +18,7 @@ pub const ParseInvocation = struct {
         const self = context.?;
         const arguments = switch (input) {
             .invocation => |value| value.arguments,
-            .step => return error.OperationExecutionFailed,
+            .step => return error.OperationWrongKind,
         };
         const result = self.action.execute(arguments) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.parsed, invocation_types.ParsedInvocation, result);
@@ -52,7 +52,7 @@ pub const Invocation = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const arguments = switch (input) {
             .invocation => |value| value.arguments,
-            .step => return error.OperationExecutionFailed,
+            .step => return error.OperationWrongKind,
         };
         var runner: InvocationRunner = .{
             .parser = .{ .allocator = context.?.allocator },
@@ -61,7 +61,7 @@ pub const Invocation = struct {
             .envelope = .init(context.?.allocator, &schemas.schemas),
         };
         defer runner.envelope.deinit();
-        if (orchestrator.run(.{ .context = &runner, .parse_fn = InvocationRunner.parse, .validate_fn = InvocationRunner.validate }) != .ok) return runner.failure orelse error.OperationExecutionFailed;
+        if (orchestrator.run(.{ .context = &runner, .parse_fn = InvocationRunner.parse, .validate_fn = InvocationRunner.validate }) != .ok) return runner.failure orelse error.InvocationFailureUnrecorded;
         // Transfer only the validated output; parsed arguments remain private.
         const slot = &runner.envelope.slots[@intFromEnum(schemas.invocation.key)];
         var delta: pipeline.NodeDelta = .{};

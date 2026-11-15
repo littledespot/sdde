@@ -228,7 +228,9 @@ fn insertion(value: std.json.Value) bool {
     const kind = value.object.get("kind") orelse return false;
     if (kind != .string) return false;
     if (std.mem.eql(u8, kind.string, "exact_copy")) {
-        if (value.object.count() == 1) return true; // Engine-constructed singleton handle.
+        // A model-authored `{"kind":"exact_copy"}` with no claim is still wire syntax: recognised here so
+        // admission rejects it as an encoded insertion, as it does the form with a `claim_id`.
+        if (value.object.count() == 1) return true;
         return value.object.count() == 2 and positive(value.object.get("claim_id") orelse return false);
     }
     const field: []const u8 = if (std.mem.eql(u8, kind.string, "passive")) "passive_literal_id" else if (std.mem.eql(u8, kind.string, "source")) "source_id" else return false;

@@ -264,7 +264,7 @@ No request bytes sent means `not_sent`; a complete response means
 `response_received`; transport interruption after transmission begins means
 `accepted_or_unknown`. Only YAML can select an explicit retry with a new
 attempt and lease. The adapter does not back off, refresh, reroute or replay.
-Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), a
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (implemented), a
 protocol correction is a stage of the `request-model` step, bounded by its `retry-limit`,
 with a new attempt and lease. The adapter still never retries.
 

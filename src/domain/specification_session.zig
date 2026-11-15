@@ -7,6 +7,7 @@ const packets = @import("model_input_packet.zig");
 const identity = @import("model_request_identity.zig");
 const binding = @import("specification_source_binding.zig");
 const scenario_link = @import("scenario_link.zig");
+const slots = @import("scenario_slots.zig");
 pub const unit_count = std.meta.fields(g.Unit).len;
 pub const story_index = @intFromEnum(std.meta.Tag(g.Unit).primary_user_story);
 pub const entities_index = @intFromEnum(std.meta.Tag(g.Unit).entities);
@@ -21,19 +22,63 @@ pub const Session = struct {
     record_cursor: usize = 0,
     record_group_count: usize = 0,
     record_batches: []const g.Checked = &.{},
+    /// The groups with a scenario slot whose criteria are admitted (ADR 0038 Decision 3). It counts
+    /// up while every group's records are admitted and their scenarios are being written.
+    scenario_cursor: usize = 0,
     units: [unit_count]?g.Checked = @splat(null),
     starting_ledger: @import("specification_identity.zig").Ledger = .{},
 };
 pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error || binding.Error;
 
+/// Every group's records are admitted and the scenarios of the groups with a slot are being
+/// written (ADR 0038 Decision 3). The record batches are held, and the records unit is not yet
+/// complete, until the last scenarios are admitted and the batches merge.
+pub fn scenarioPhase(current: Session) bool {
+    return current.completed == records_index and current.record_group_count != 0 and current.record_cursor == current.record_group_count;
+}
+
+/// The groups with a scenario slot: the native population of the scenarios step.
+pub fn scenarioPopulation(current: Session) usize {
+    var count: usize = 0;
+    for (current.record_batches) |batch| {
+        if (slots.hasSlots(batch.response.content.records)) count += 1;
+    }
+    return count;
+}
+
+/// The batch of the group the next scenarios are written for: the `scenario_cursor`-th group with a slot.
+fn scenarioGroupIndex(current: Session) Error!usize {
+    var seen: usize = 0;
+    for (current.record_batches, 0..) |batch, index| {
+        if (!slots.hasSlots(batch.response.content.records)) continue;
+        if (seen == current.scenario_cursor) return index;
+        seen += 1;
+    }
+    return error.InvalidSpecificationUnit;
+}
+
+/// The record group the unit in flight is for: the group being authored, or while the scenarios are
+/// written, the group they are written for.
+pub fn currentGroup(current: Session) Error!usize {
+    return if (scenarioPhase(current)) scenarioGroupIndex(current) else current.record_cursor;
+}
+
+/// The slots of the group the scenarios are being written for. The caller owns an arena.
+pub fn scenarioPlan(allocator: std.mem.Allocator, current: Session) Error!slots.Plan {
+    if (!scenarioPhase(current)) return error.InvalidSpecificationUnit;
+    const batch = current.record_batches[try currentGroup(current)];
+    const fact = batch.record_assignment orelse return error.InvalidSpecificationUnit;
+    return (try slots.plan(allocator, fact.source_group_id, batch.response.content.records)) orelse error.InvalidSpecificationUnit;
+}
+
 /// One native population covers narrative units and record-authoring groups.
-/// Repairs of already completed units do not reopen this authoring pass.
+/// Repairs of already completed units do not reopen this authoring pass. The scenarios step has its
+/// own population, the groups with a slot (`scenarioPopulation`).
 pub fn iterationProgress(current: Session) Error!struct { limit: usize, position: usize } {
     if (current.record_group_count == 0 or current.completed > unit_count or current.record_cursor > current.record_group_count) return error.InvalidSpecificationUnit;
     if (current.completed < records_index) {
-        if (current.record_cursor != 0 or current.record_batches.len != 0) return error.InvalidSpecificationUnit;
-    } else if (current.record_batches.len != current.record_cursor or
-        (current.completed == records_index and current.record_cursor == current.record_group_count) or
+        if (current.record_cursor != 0 or current.record_batches.len != 0 or current.scenario_cursor != 0) return error.InvalidSpecificationUnit;
+    } else if (current.record_batches.len != current.record_cursor or current.scenario_cursor > scenarioPopulation(current) or
         (current.completed == unit_count and current.record_cursor != current.record_group_count)) return error.InvalidSpecificationUnit;
     return .{
         .limit = std.math.add(usize, records_index, current.record_group_count) catch return error.InvalidSpecificationUnit,
@@ -70,7 +115,7 @@ pub fn initialize(a: std.mem.Allocator, feature: @import("feature_identity.zig")
 pub fn currentBinding(a: std.mem.Allocator, current: Session, context: p.Context) Error!binding.Bound {
     if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
     if (current.record_group_count != try binding.recordCount(@import("reference_support.zig").records(context.references))) return error.InvalidSpecificationUnit;
-    return binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(current.completed), current.record_cursor);
+    return binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(current.completed), try currentGroup(current));
 }
 
 /// A checked batch retains the native dispatch occurrence even when it is empty.
@@ -87,7 +132,7 @@ pub fn admit(a: std.mem.Allocator, current: Session, context: p.Context, checked
     }
     if (checked.response != .content or checked.response.content != .records) return error.InvalidSpecificationUnit;
     try checkBatchGroup(checked, assigned.records.signal);
-    const fact: g.RecordAssignment = .{ .reference_state = current.reference_state, .group_index = current.record_cursor, .source_group_id = assigned.records.signal, .references = try referenceSnapshot(a, context) };
+    const fact: g.RecordAssignment = .{ .reference_state = current.reference_state, .group_index = try currentGroup(current), .source_group_id = assigned.records.signal, .references = try referenceSnapshot(a, context) };
     if (checked.record_assignment) |prior| if (!sameAssignment(prior, fact)) return error.InvalidSpecificationUnit;
     var result = checked;
     result.record_assignment = fact;
@@ -106,7 +151,7 @@ fn referenceSnapshot(a: std.mem.Allocator, context: p.Context) Error!@import("at
 
 fn checkBatchGroup(checked: g.Checked, group: @import("reference_reconciliation.zig").SignalId) Error!void {
     if (checked.unit != .records or checked.response != .content or checked.response.content != .records) return error.InvalidSpecificationUnit;
-    for (checked.response.content.records) |record| if (record.content == .entity or record.source_group_ids.len != 1 or record.source_group_ids[0].ordinal != group.ordinal) return error.InvalidSpecificationUnit;
+    for (checked.response.content.records) |record| if (!g.inBatch(record, group)) return error.InvalidSpecificationUnit;
 }
 
 pub fn validateRecordAssignments(a: std.mem.Allocator, current: Session, context: p.Context) Error!void {
@@ -138,7 +183,13 @@ pub fn ownerFor(allocator: std.mem.Allocator, current: Session, index: usize) Er
             .reference_state_id = .{ .bytes = current.reference_state.bytes },
             // Feature directory is the feature identity; no second ownership registry.
             .feature_id = current.feature,
-            .unit_slot_id = .{ .bytes = if (index == records_index and current.completed == records_index) try std.fmt.allocPrint(allocator, "specification-{d}-group-{d}", .{ index + 1, current.record_cursor + 1 }) else try std.fmt.allocPrint(allocator, "specification-{d}", .{index + 1}) },
+            // The scenarios of a group are a request of their own beside its records (ADR 0038 Decision 3).
+            .unit_slot_id = .{ .bytes = if (index != records_index or current.completed != records_index)
+                try std.fmt.allocPrint(allocator, "specification-{d}", .{index + 1})
+            else if (scenarioPhase(current))
+                try std.fmt.allocPrint(allocator, "specification-{d}-group-{d}-scenarios", .{ index + 1, (try currentGroup(current)) + 1 })
+            else
+                try std.fmt.allocPrint(allocator, "specification-{d}-group-{d}", .{ index + 1, current.record_cursor + 1 }) },
         },
     };
 }
@@ -165,19 +216,22 @@ const RecordRequirements = struct {
 };
 
 /// Family presence is a native structural fact, not evidence that the earlier
-/// candidate's content is correct or that its obligations have been fulfilled.
+/// candidate's content is correct or that its obligations have been fulfilled. The records
+/// request names the mandatory families its step authors, which are all but the scenarios'.
 fn recordRequirements(a: std.mem.Allocator, current: Session, context: p.Context) Error!RecordRequirements {
     if (current.completed != records_index or current.record_cursor >= current.record_group_count) return error.InvalidSpecificationUnit;
     try validateRecordPrefix(a, current, context);
     const present = presentFamilies(current);
-    const required = &g.spec.required_record_families;
+    var required: std.ArrayList(g.spec.Kind) = .empty;
+    errdefer required.deinit(a);
+    for (g.spec.required_record_families) |kind| if (g.spec.requiredByRecords(kind)) try required.append(a, kind);
     var families: std.ArrayList(g.spec.Kind) = .empty;
     errdefer families.deinit(a);
     for (std.meta.tags(g.spec.Kind)) |kind| if (present.contains(kind)) try families.append(a, kind);
     var unmet: std.ArrayList(g.spec.Kind) = .empty;
     errdefer unmet.deinit(a);
-    for (required) |kind| if (!present.contains(kind)) try unmet.append(a, kind);
-    return .{ .required_families = required, .present_families = try families.toOwnedSlice(a), .unmet_required_families = try unmet.toOwnedSlice(a) };
+    for (required.items) |kind| if (!present.contains(kind)) try unmet.append(a, kind);
+    return .{ .required_families = try required.toOwnedSlice(a), .present_families = try families.toOwnedSlice(a), .unmet_required_families = try unmet.toOwnedSlice(a) };
 }
 
 /// The record families the admitted record batches contain.
@@ -187,12 +241,50 @@ pub fn presentFamilies(current: Session) std.EnumSet(g.spec.Kind) {
     return present;
 }
 
-/// Whether completed generation lacks a mandatory record family. A model can
-/// omit one; that candidate is invalid, never a complete specification.
-pub fn missingRequiredFamily(current: Session) bool {
+/// Whether the records the groups authored lack a mandatory family their step writes: every required
+/// family but the scenarios'. A model can omit one; that candidate is invalid, never a complete
+/// specification.
+pub fn missingRecordsFamily(current: Session) bool {
     const present = presentFamilies(current);
-    for (g.spec.required_record_families) |kind| if (!present.contains(kind)) return true;
+    for (g.spec.required_record_families) |kind| if (g.spec.requiredByRecords(kind) and !present.contains(kind)) return true;
     return false;
+}
+
+/// Whether the scenarios step wrote none of its family into the held batches, so the assembled
+/// specification would lack a mandatory family.
+pub fn missingScenarioFamily(current: Session) bool {
+    return g.spec.requiresRecords(g.spec.scenario_family) and !presentFamilies(current).contains(g.spec.scenario_family);
+}
+
+/// What a specification request displays of the sources' claims: for each claim eligible for records,
+/// its requirement and its chunk's scope, and for a preserved token a claim may copy, its exact value.
+pub const DisplayCatalogue = struct {
+    requirements: []const @import("model_evidence.zig").Requirement,
+    scopes: []const @import("reference_evidence.zig").Scope,
+    exact_choices: []const @import("model_evidence.zig").ExactLiteral,
+};
+
+/// The one owner of that catalogue, for the records and entities requests and the scenarios request
+/// alike. `exact_claims` narrows the exact values to those claims, as a repair's bound claims do.
+pub fn displayCatalogue(a: std.mem.Allocator, context: p.Context, exact_claims: ?[]const @import("reference_reconciliation.zig").ClaimId) Error!DisplayCatalogue {
+    const all = try p.items(context);
+    const projection = @import("model_evidence.zig");
+    var requirements: std.ArrayList(projection.Requirement) = .empty;
+    var exact_choices: std.ArrayList(projection.ExactLiteral) = .empty;
+    var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
+    for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
+        if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
+        const item = try @import("reference_reconciliation.zig").item(all, disposition.claim_id);
+        try requirements.append(a, try projection.requirement(a, item, context.inputs, context.registry));
+        try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
+        if (item.claim.content == .preserved_token) {
+            const token = item.claim.content.preserved_token;
+            if (try @import("specification_exact_tokens.zig").permits(all, item.claim.id) and (exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, exact_claims.?, item.claim.id))) {
+                try exact_choices.append(a, .{ .claim_id = item.claim.id, .value = token.value.raw_value.bytes, .source_id = item.source_id });
+            }
+        }
+    }
+    return .{ .requirements = requirements.items, .scopes = scopes.items, .exact_choices = exact_choices.items };
 }
 
 /// Repair retains all source claims but offers exact-copy choices only from the
@@ -214,7 +306,12 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         if (checked.unit != .entities or checked.response != .content or checked.response.content != .entities) return error.InvalidSpecificationUnit;
     }
     var excluded_list: std.ArrayList(@import("model_result_schema.zig").ExcludedVariant) = .empty;
-    if (selected == .records) try excluded_list.append(a, .{ .kind = "entity" });
+    // A records response holds neither entities nor the scenarios' family: the engine writes each
+    // criterion from its claim's slot in the scenarios step (ADR 0038 Decision 3).
+    if (selected == .records) {
+        try excluded_list.append(a, .{ .kind = "entity" });
+        try excluded_list.append(a, .{ .kind = @tagName(g.spec.scenario_family) });
+    }
     if (selected == .entities) for (std.meta.tags(g.spec.Kind)) |kind| {
         if (kind != .entity) try excluded_list.append(a, .{ .kind = @tagName(kind) });
     };
@@ -227,29 +324,15 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         try record_kinds.append(a, kind);
     }
     const projection = @import("model_evidence.zig");
-    var requirements: std.ArrayList(projection.Requirement) = .empty;
-    var exact_choices: std.ArrayList(projection.ExactLiteral) = .empty;
-    var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
-    for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
-        if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
-        const item = try @import("reference_reconciliation.zig").item(all, disposition.claim_id);
-        try requirements.append(a, try projection.requirement(a, item, context.inputs, context.registry));
-        try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
-        if (item.claim.content == .preserved_token) {
-            const token = item.claim.content.preserved_token;
-            if (try @import("specification_exact_tokens.zig").permits(all, item.claim.id) and (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, item.claim.id))) {
-                try exact_choices.append(a, .{ .claim_id = item.claim.id, .value = token.value.raw_value.bytes, .source_id = item.source_id });
-            }
-        }
-    }
+    const display = try displayCatalogue(a, context, options.exact_claims);
     // Completed units are repaired under an atomic target and its evidence.
     // Their authoring cursor no longer selects a current source assignment.
-    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, selected, current.record_cursor), switch (options.presentation) {
+    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, selected, try currentGroup(current)), switch (options.presentation) {
         .authoring => |guidance| .{ .authoring = guidance },
         .task => .repair,
-    }, requirements.items, record_kinds.items);
+    }, display.requirements, record_kinds.items);
     var contextual_requirements: std.ArrayList(projection.Requirement) = .empty;
-    for (requirements.items) |requirement| {
+    for (display.requirements) |requirement| {
         if (assigned) |selection| {
             if (selected != .records or binding.assigns(selection, requirement.claim_id)) continue;
         }
@@ -264,23 +347,23 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
             else => |other| return other,
         }).scopes
     else
-        scopes.items;
-    const source_groups = if (assigned != null and selected != .records) try binding.groupGuidance(a, @import("reference_support.zig").records(context.references), requirements.items) else &.{};
+        display.scopes;
+    const source_groups = if (assigned != null and selected != .records) try binding.groupGuidance(a, @import("reference_support.zig").records(context.references), display.requirements) else &.{};
     const payload = .{
         .source_assignment = assigned,
         .source_groups = source_groups,
         .context_requirements = contextual_requirements.items,
-        .exact_texts = exact_choices.items,
+        .exact_texts = display.exact_choices,
         .sources = try @import("model_evidence.zig").sources(a, context.inputs),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
     const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), a, payload);
-    var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
-        .brief => "brief",
+    var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, @as(@import("specification_result_definitions.zig").Generation, switch (selected) {
+        .brief => .brief,
         .primary_user_story => return error.InvalidSpecificationUnit,
-        .entities => "entities",
-        .records => "records",
-    } });
+        .entities => .entities,
+        .records => .records,
+    }).id());
     defer packets.release(result);
     const scoped = try packets.withExactScope(allocator, result, .{ .reference_state = all.state_id, .occurrences = try p.exactOccurrences(a, @import("reference_support.zig").records(context.references), options.exact_claims) });
     packets.release(result);
@@ -336,7 +419,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const choices = try input.withTextChoices(allocator, fixed, passive_ids);
     defer packets.release(choices);
     if (options.presentation == .task or index < current.completed) return packets.withRestrictions(allocator, choices, choices.excludedVariants(), choices.integerChoices());
-    return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
+    return withGroupChoices(allocator, choices, context, selected, try currentGroup(current));
 }
 
 /// ADR 0038 Decision 5: functional requirements own their claims. A business rule,
@@ -504,10 +587,51 @@ pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) E
     var next = current;
     next.record_batches = batches;
     next.record_cursor += 1;
-    if (next.record_cursor < next.record_group_count) {
-        next.revision = std.math.add(u64, current.revision, 1) catch return error.InvalidSpecificationUnit;
-        return next;
-    }
+    next.revision = std.math.add(u64, current.revision, 1) catch return error.InvalidSpecificationUnit;
+    // The last group's records start the scenarios phase: the batches wait there for their criteria
+    // (ADR 0038 Decision 3), and the records unit completes when the last scenarios are admitted.
+    return next;
+}
+
+/// The criteria `checked` holds join the batch of the group they were written for, after its records
+/// (ADR 0038 Decision 3: the batch spans both responses), and the group counts as written. The batches
+/// merge in `completeScenarios`, once every group with a slot has its criteria.
+pub fn appendScenarios(a: std.mem.Allocator, current: Session, checked: g.Checked) Error!Session {
+    if (!scenarioPhase(current) or checked.unit != .records or checked.response != .content or checked.response.content != .records) return error.InvalidSpecificationUnit;
+    const group = try currentGroup(current);
+    const fact = checked.record_assignment orelse return error.InvalidSpecificationUnit;
+    if (!fact.reference_state.eql(current.reference_state) or fact.group_index != group or fact.source_group_id.ordinal == 0) return error.InvalidSpecificationUnit;
+    try checkBatchGroup(checked, fact.source_group_id);
+    const criteria = checked.response.content.records;
+    if (criteria.len == 0) return error.InvalidSpecificationUnit;
+    for (criteria) |record| if (std.meta.activeTag(record.content) != g.spec.scenario_family) return error.InvalidSpecificationUnit;
+    const batch = current.record_batches[group];
+    const held = batch.response.content.records;
+    const records = try a.alloc(g.spec.RecordProposal, held.len + criteria.len);
+    @memcpy(records[0..held.len], held);
+    @memcpy(records[held.len..], criteria);
+    var joined = batch;
+    joined.response.content.records = records;
+    // The batch's last repair is the later of the two responses' (a criterion's text repair, else the records').
+    joined.last_repair = checked.last_repair orelse batch.last_repair;
+    joined.origins = batch.origins.appendingRecords(a, held.len, checked.origins, criteria.len) catch |err| return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidRepairOccurrence, error.InvalidSpecificationRepair => error.InvalidSpecificationUnit,
+    };
+    const batches = try a.dupe(g.Checked, current.record_batches);
+    batches[group] = joined;
+    var next = current;
+    next.record_batches = batches;
+    next.scenario_cursor += 1;
+    next.revision = std.math.add(u64, current.revision, 1) catch return error.InvalidSpecificationUnit;
+    return next;
+}
+
+/// The one transition that completes the records unit: it merges the held batches once no group still
+/// awaits its scenarios (the step's `complete-scenario-generation` operation is its only caller).
+pub fn completeScenarios(a: std.mem.Allocator, current: Session) Error!Session {
+    if (!scenarioPhase(current) or current.scenario_cursor != scenarioPopulation(current) or current.record_batches.len != current.record_group_count) return error.InvalidSpecificationUnit;
+    const batches = current.record_batches;
     var total: usize = 0;
     for (batches) |batch| total = std.math.add(usize, total, batch.response.content.records.len) catch return error.InvalidSpecificationUnit;
     const records = try a.alloc(g.spec.RecordProposal, total);
@@ -530,11 +654,11 @@ pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) E
         origins = projected;
         offset += count;
     }
-    var combined = checked;
+    var combined = batches[batches.len - 1];
     combined.record_assignment = null;
     combined.response.content.records = records;
     combined.origins = origins;
-    return append(next, combined);
+    return append(current, combined);
 }
 
 /// Cross-batch and cross-unit consistency belongs to the session. The same
@@ -549,44 +673,49 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Conte
     if (proposed != .records and proposed != .entities) return null;
     if (proposed == .records and current.completed == records_index) {
         // Every same-kind duplicate, competing ones included, is decided before
-        // a restatement can remove a record (ADR 0035).
+        // a restatement can remove a record (ADR 0035). While scenarios are written, the
+        // criteria meet every record of every batch, so an equal criterion of another group blocks.
         for (proposed.records, 0..) |record, index| {
             for (current.record_batches) |batch| for (batch.response.content.records) |prior| {
                 if (try g.duplicateRecordIssue(a, prior, record, index, null)) |issue| return issue;
             };
         }
+        // A criterion restates no statement and is exempt from the repeated-statement rule.
+        if (scenarioPhase(current)) return scenarioCoverageIssue(a, current, proposed.records);
         if (try restatementIssue(a, current, proposed.records, model)) |issue| return issue;
         if (try repeatedStatementIssue(a, proposed.records, model)) |issue| return issue;
-        return scenarioCoverageIssue(proposed.records);
     }
     return null;
 }
 
 /// ADR 0038 Decisions 2 and 3: every claim a functional requirement, business rule,
-/// user-visible outcome or prohibited behavior names must also be named by an acceptance
-/// criterion or edge case of the same batch. It is decided on the batch the native deletes
-/// leave, so a record the engine deletes needs no scenario. The first uncovered claim, in
-/// record and claim order, is repaired by one engine-bound acceptance-criterion insert.
-fn scenarioCoverageIssue(records: []const g.spec.RecordProposal) ?@import("specification_candidate.zig").Issue {
-    const r = @import("reference_reconciliation.zig");
-    for (records) |record| {
-        switch (std.meta.activeTag(record.content).role()) {
-            .requirement, .behaviour => {},
-            .scope, .scenario, .entity => continue,
-        }
-        claims: for (record.provenance.claim_ids) |claim| {
-            for (records) |other| if (std.meta.activeTag(other.content).role() == .scenario and r.contains(r.ClaimId, other.provenance.claim_ids, claim)) continue :claims;
-            return .{
-                .unit = .records,
-                .field = .unit,
-                .rule = .scenario_coverage,
-                .observed = null,
-                .uncovered_claim = claim,
-                .detail = "A behaviour statement names a claim that no acceptance criterion or edge case of its batch names.",
-            };
-        }
+/// user-visible outcome or prohibited behavior of the group's batch names has an acceptance
+/// criterion among the `criteria` its scenarios wrote (the batch holds none until they join it). The
+/// engine binds each criterion to its slot's claim, so a gap here is an engine defect that takes no
+/// repair; an edge case is no cover. The slots are those of the batch the native deletes left
+/// (`scenario_slots.zig`).
+fn scenarioCoverageIssue(a: std.mem.Allocator, current: Session, criteria: []const g.spec.RecordProposal) Error!?@import("specification_candidate.zig").Issue {
+    const group_plan = try scenarioPlan(a, current);
+    for (0..group_plan.count()) |index| {
+        const claim = group_plan.slot(index).claim;
+        if (criterionNames(criteria, claim)) continue;
+        return .{
+            .unit = .records,
+            .field = .unit,
+            .rule = .scenario_coverage,
+            .observed = null,
+            .uncovered_claim = claim,
+            .detail = "A behaviour statement names a claim that no acceptance criterion of its batch names.",
+        };
     }
     return null;
+}
+
+/// Whether an acceptance criterion of `records` names `claim`: the one kind that covers a claim.
+fn criterionNames(records: []const g.spec.RecordProposal, claim: @import("reference_identity.zig").ClaimId) bool {
+    const r = @import("reference_reconciliation.zig");
+    for (records) |record| if (std.meta.activeTag(record.content) == g.spec.scenario_family and r.contains(r.ClaimId, record.provenance.claim_ids, claim)) return true;
+    return false;
 }
 
 /// ADR 0038 Decision 5: the first non-requirement statement record whose every claim a

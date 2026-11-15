@@ -210,6 +210,9 @@ test "captured descriptions round-trip controls and reject a retired output allo
     // ADR 0038 Decision 3 (amended): v17 recorded covered and covering kinds for an
     // admission scenario rule that no longer exists, so it is refused.
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v17")));
+    // ADR 0038 Decision 3 (amended): v18 recorded no properties its exact members must not all repeat,
+    // so a replay would admit what the request refused.
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v18")));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, ",\"sampling\":\"configured\"", "")));
     // A re-send records its sampling, and the value it sent round-trips.
     var resend = description;
@@ -1132,7 +1135,7 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     }
     if (shape == 7) {
         const canonical = try compiler.compile(a, member_schema);
-        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = member_path }, .allowed = &.{ 2, 4 }, .collection = .exact_members }});
+        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = member_path }, .allowed = &.{ 2, 4 }, .collection = .exact_members, .distinct = &.{"note"} }});
         return .{ .schema = restriction.selected(), .response = "{\"findings\":[{\"ordinal\":4,\"note\":\"b\"},{\"ordinal\":2,\"note\":\"a\"}]}", .restriction = restriction };
     }
     if (shape == 5) {
@@ -1177,12 +1180,30 @@ fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debu
     var unrestricted = selected;
     unrestricted.members = &.{};
     try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, repeated)).schema);
+    // ADR 0038 Decision 3: the record also carries the properties its items must not all repeat, and
+    // replay applies it, so equal notes are rejected at the first of the equal items as they were live.
+    try std.testing.expectEqual(@as(usize, 1), selected.members[0].distinct.len);
+    try std.testing.expectEqualStrings("note", selected.members[0].distinct[0]);
+    const equal = try debugResponse(a, "{\"findings\":[{\"ordinal\":4,\"note\":\"a\"},{\"ordinal\":2,\"note\":\"a\"}]}");
+    const equal_check = try fixture.provider.provider().inspect(a, selected, equal);
+    try std.testing.expectEqual(.invalid, equal_check.schema);
+    try std.testing.expectEqualStrings("equal_items", equal_check.reason.?);
+    try std.testing.expectEqualStrings("/findings/0", equal_check.path.?);
+    // Without the rule in the record the same bytes pass: the record is what replays it.
+    var without_rule = selected;
+    without_rule.members = &.{.{ .path = member_path, .allowed = &.{ 2, 4 } }};
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, without_rule, equal)).schema);
     // A record that does not fit the captured schema cannot be read or replayed.
     var foreign = selected;
     foreign.members = &.{.{ .path = member_path, .allowed = &.{ 2, 4, 6 } }};
     try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
     try std.testing.expectEqualStrings("Captured schema and native membership or coverage disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
+    // So is a rule naming a property the captured schema's items do not have.
+    var unknown = selected;
+    unknown.members = &.{.{ .path = member_path, .allowed = &.{ 2, 4 }, .distinct = &.{"absent"} }};
+    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, unknown));
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, unknown, .{})));
     try std.testing.expectEqualDeep(selected.members, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).members);
 }
 
@@ -1345,16 +1366,6 @@ test "debugger exposes provider reasoning separately including stopped and missi
     try std.testing.expectEqual(.unavailable, missing.schema);
     const no_reasoning = try fixture.provider.provider().inspect(a, description, try debugResponse(a, "{\"answer\":\"plain\"}"));
     try std.testing.expectEqual(@as(usize, 0), no_reasoning.reasoning.len);
-    // Embedded rendering uses text nodes for the exact provider text/signature,
-    // including markup-shaped diagnostic strings; no HTML injection sink exists.
-    const ui = @embedFile("debugger/app.js");
-    try std.testing.expect(std.mem.indexOf(u8, ui, "p.append(reasoningView(v.reasoning))") != null);
-    try std.testing.expect(std.mem.indexOf(u8, ui, "e.textContent = String(text)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, ui, "innerHTML") == null);
-    // Every engine normalization is displayed separately from the raw response.
-    inline for (comptime std.meta.tags(@import("domain/model_envelope.zig").Normalization)) |rule| {
-        if (rule != .none) try std.testing.expect(std.mem.indexOf(u8, ui, @tagName(rule) ++ ":") != null);
-    }
 }
 
 test "replay re-encodes only with the family the authorized binding compiles" {

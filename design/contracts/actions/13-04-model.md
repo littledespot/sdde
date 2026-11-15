@@ -19,8 +19,19 @@ production caller.
 [§12](../12-model-boundary.md) owns the model boundary and
 [model-request-operations.md](../model-request-operations.md) the request lifecycle these
 operations implement. Under [ADR 0030](../../decisions/0030-engine-owned-model-request.md)
-(not yet implemented) the request-lifecycle operations become stages of one `request-model`
-step. Entries marked "Proposed, no code" are named elsewhere but have no registered operation.
+the request-lifecycle entries below (attempt accounting, provider operation, authorization,
+phase check, invocation, observation, completion, admission, correction, re-send, closure and
+termination) are the **stages** of one `request-model` step, which the Spec workflow and the
+packaging fixture use. A stage is a native binding held by the `request-model` registry entry,
+not an operation a workflow can select: a definition that names a stage's ID fails to compile.
+Entries marked "Proposed, no code" are named elsewhere but have no registered operation.
+
+The runner has one seam beside the stages: an optional stage gate, consulted before each stage
+of a `request-model` step, that a caller such as the provider compatibility probe uses to end a
+request once its one exchange is retained. It names one of two typed stops (`cancelled` or
+`failed`), which the runner maps to its own rejection; the stage it precedes does not run and
+emits no event. It holds no capability and runs nothing. Only the E2E harness `Trace` sets it,
+and an architecture test pins that.
 
 ## Request identity and preparation
 
@@ -37,30 +48,6 @@ step. Entries marked "Proposed, no code" are named elsewhere but have no registe
 - **Reads:** none · **Writes:** none (returns the owner) · **Side effect:** `none`
 - **Does:** Validates one immutable unit-owner descriptor and returns it unchanged.
 - **Rejects:** `InvalidImmutableUnitOwnerId`.
-
-## `AssignModelRequestIdAction` (`assign-model-request-id`)
-
-- **Owner:** [`src/actions/model/assign_model_request_id.zig`](../../../src/actions/model/assign_model_request_id.zig)
-- **Reads:** `model_request_identity_ledger` · **Writes:** replaces `model_request_identity_ledger` · **Side effect:** `none`
-- **Does:** Allocates one logical request ordinal for a unit owner, model operation and purpose binding at the expected ledger revision; protocol retries reuse the identity.
-- **Registered step:** reads `model_request_identity_ledger` (optional: `model_input_packet`, `json_composition`), writes `assigned_model_request` and replaces the ledger, with the request-preparation parameters.
-- **Rejects:** `ModelRequestRevisionConflict`, `InvalidRequestPurposeBinding`, `RequestPurposeNotRegistered`, ordinal or revision exhaustion.
-
-## `ValidateModelRequestBindingAction` (`validate-model-request-binding`)
-
-- **Owner:** [`src/actions/model/validate_model_request_binding.zig`](../../../src/actions/model/validate_model_request_binding.zig)
-- **Reads:** `model_request_identity_ledger` · **Writes:** none (returns binding evidence) · **Side effect:** `none`
-- **Does:** Proves a request ID's ledger membership, unit owner, model operation and purpose at the expected revision.
-- **Registered step:** reads `model_request_identity_ledger`, `assigned_model_request` and writes `validated_model_request`.
-- **Rejects:** `ModelRequestBindingInvalid`, `ModelRequestNotFound`, `ModelRequestRevisionConflict`.
-
-## `BuildModelRequestAction` (`build-model-request`)
-
-- **Owner:** [`src/actions/model/build_model_request.zig`](../../../src/actions/model/build_model_request.zig)
-- **Reads:** `model_request_identity_ledger`, `validated_provider_model_binding` · **Writes:** none (returns the prepared request) · **Side effect:** `none`
-- **Does:** Builds one identified provider-neutral request from a validated source and its model-visible content.
-- **Registered step:** reads `model_request_identity_ledger`, `validated_model_request` and writes `prepared_model_request`.
-- **Rejects:** `InvalidModelRequestSource`, `ModelRequestAssociationInvalid`, `ModelRequestBindingInvalid`.
 
 ## `PrepareModelRequestAction` (`prepare-model-request`)
 
@@ -100,7 +87,7 @@ step. Entries marked "Proposed, no code" are named elsewhere but have no registe
 - **Owner:** [`src/actions/model/advance_model_attempt_accounting.zig`](../../../src/actions/model/advance_model_attempt_accounting.zig)
 - **Reads:** `model_request_identity_ledger` · **Writes:** runner accounting transition `increment_model_attempt` · **Side effect:** `none`
 - **Does:** Proposes the next model attempt for a live request: the initial attempt once, a correction only within the step's `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)), and a runaway re-send without counting against it ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
-- **Registered step:** [`model_attempt_workflow.zig`](../../../src/application/model_attempt_workflow.zig) reads `model_request_identity_ledger`, `prepared_model_request`, writes `accounted_model_attempt` and takes the required `retry-limit` parameter.
+- **Registered step:** [`model_attempt_workflow.zig`](../../../src/application/model_attempt_workflow.zig) reads `model_request_identity_ledger`, `prepared_model_request`, writes `accounted_model_attempt` and takes the required `retry-limit` parameter, within the step's maximum ([model-request-operations.md](../model-request-operations.md) "Retry limit").
 - **Rejects:** `ModelRetryLimitExhausted`, `InvalidAttemptClassification`, `ModelAttemptAccountingRevisionConflict`, `ModelRequestUnavailableForAttempt`, `ModelRequestLedgerRevisionConflict`.
 
 ## `CheckWorkflowTokenBudgetAction` (`check-workflow-token-budget`)
@@ -190,20 +177,6 @@ These steps bind the two lifecycle actions above to fixed transitions; their rul
 - **Does:** Proves call association, delivery, stop and usage before any decode.
 - **Rejects:** `InvalidProviderInvocationContext`, `ProviderInvocationAssociationInvalid`, `InvalidProviderTokenUsage`.
 
-## `DecodeModelEnvelopeAction` (`decode-model-envelope`)
-
-- **Owner:** [`src/actions/model/decode_model_envelope.zig`](../../../src/actions/model/decode_model_envelope.zig)
-- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `provider_invocation_validation_result` · **Writes:** `model_envelope_result` · **Side effect:** `none`
-- **Does:** Parses the complete candidate as one JSON object with its syntax diagnostic.
-- **Rejects:** `InvalidModelEnvelope`.
-
-## `ValidateModelPayloadSchemaAction` (`validate-model-payload-schema`)
-
-- **Owner:** [`src/actions/model/validate_model_payload_schema.zig`](../../../src/actions/model/validate_model_payload_schema.zig)
-- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `model_envelope_result` · **Writes:** `model_payload_schema_result` · **Side effect:** `none`
-- **Does:** Applies only the bound closed result schema; parsing and call association are earlier steps.
-- **Rejects:** a schema diagnostic in the result.
-
 ## `AdmitModelResponseAction` (`admit-model-response`)
 
 - **Owner:** [`src/actions/model/admit_model_response.zig`](../../../src/actions/model/admit_model_response.zig)
@@ -232,38 +205,14 @@ These steps bind the two lifecycle actions above to fixed transitions; their rul
 - **Does:** Builds the correction request for a rejected response under the same request identity, with the diagnostic and repetition fact ([§22.6](../22-repair.md#226-unparseable-output)).
 - **Rejects:** the request-preparation errors (`ModelRequestAssociationInvalid`, `InvalidModelRequestSource`).
 
-## Retirement
+## Release
 
-The three retirement operations read `model_request_identity_ledger`, `prepared_model_request`,
-`accounted_model_attempt`, `terminal_provider_operation` and `model_payload_schema_result`, have
-side effect `none`, write nothing but invalidations, and reject `InvalidTransportRetirement`
-unless the request is terminal. The **attempt keys** are `accounted_model_attempt`,
-`terminal_provider_operation`, `provider_authorization_result`, `provider_invocation_result`,
-`provider_invocation_validation_result`, `model_envelope_result` and
-`model_payload_schema_result`; the **request keys** are those plus `assigned_model_request`,
-`validated_model_request` and `prepared_model_request`
-([`model_transport.zig`](../../../src/domain/model_transport.zig)).
+## `ReleaseModelRequestAction` (`release-model-request`) and `ReleaseModelTransportAction` (`release-model-transport`)
 
-## `RetireModelInputAction` (`retire-model-input`)
-
-- **Owner:** [`src/actions/model/retire_model_input.zig`](../../../src/actions/model/retire_model_input.zig)
-- **Reads:** as above · **Writes:** invalidates `model_input_packet` · **Side effect:** `none`
-- **Does:** Releases the model input packet of a terminal request.
-- **Rejects:** `InvalidTransportRetirement`.
-
-## `RetireModelRequestAction` (`retire-model-request`)
-
-- **Owner:** [`src/actions/model/retire_model_request.zig`](../../../src/actions/model/retire_model_request.zig)
-- **Reads:** as above · **Writes:** invalidates the attempt keys and the assigned, validated and prepared request · **Side effect:** `none`
-- **Does:** Releases a terminal request's transport data.
-- **Rejects:** `InvalidTransportRetirement`.
-
-## `RetireModelTransportAction` (`retire-model-transport`)
-
-- **Owner:** [`src/actions/model/retire_model_transport.zig`](../../../src/actions/model/retire_model_transport.zig)
-- **Reads:** as above · **Writes:** invalidates the request keys and `model_input_packet` · **Side effect:** `none`
-- **Does:** Releases a terminal request's transport data and its input packet together.
-- **Rejects:** `InvalidTransportRetirement`.
+- **Owners:** [`src/actions/model/release_model_request.zig`](../../../src/actions/model/release_model_request.zig), [`src/actions/model/release_model_transport.zig`](../../../src/actions/model/release_model_transport.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** invalidate the **released keys** (`accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result`, `prepared_model_request`), and `release-model-transport` also `model_input_packet` ([`model_transport.zig`](../../../src/domain/model_transport.zig)) · **Side effect:** `none`
+- **Does:** Release a closed [ADR 0030](../../decisions/0030-engine-owned-model-request.md) `request-model` request's kept keys; the ledger is replaced, never retired, and the other request keys ended with the step.
+- **Rejects:** `InvalidTransportRetirement` unless the request is terminal.
 
 ## JSON composition
 
@@ -310,23 +259,132 @@ Proposed, no code: select the bounded known context for a unit ([§12](../12-mod
 
 Proposed, no code: build a unit's deterministic initial guidance packet ([§12](../12-model-boundary.md)).
 
-> **ADR 0033 (not yet implemented).** The repair entries below become domain functions of
-> [ADR 0033](../../decisions/0033-generic-repair-operations.md)'s four generic repair operations;
-> today each owner registers its own `authorize`/`parse`/`merge` operations. Whether the
-> no-invention and semantic-review branches stay is an open decision (SPEC01 "Design–code
-> conflicts").
+> **ADR 0033 (implemented).** The repair entries below are domain functions inside
+> [ADR 0033](../../decisions/0033-generic-repair-operations.md)'s four generic repair operations
+> (`authorize-repair`, `build-repair-input`, `parse-repair`, `merge-repair`), whose per-owner
+> variants are specified once, in [Generic repair operations](#generic-repair-operations) below.
 
-## `ClassifyRepairAuthorizationPurposeAction`
+## Generic repair operations
 
-Proposed, no code: choose ordinary atomic repair or the no-invention replacement for a selected diagnostic ([§14](../14-orchestration.md), [§22](../22-repair.md)).
+Four registered operations replace the 29 per-owner repair operations of the Specify
+definition ([ADR 0033](../../decisions/0033-generic-repair-operations.md)). Each is **one
+registered contract made of closed variants**, one per owner it serves, selected at compile
+time by the required enumeration parameter `owner`
+([ADR 0030](../../decisions/0030-engine-owned-model-request.md), "Contract variants"). The
+owners are the 13 members of `RepairOwner`
+([`src/domain/repair_owner.zig`](../../../src/domain/repair_owner.zig)); each operation's
+allowed `owner` values are exactly the owners that have a variant of it, so a step that names
+an owner with no variant rejects at compilation.
+
+- **Common facts.** Every variant has side effect `none`, declares no gates and holds no
+  capability. No variant makes a model call: the call is the separate `request-model` step
+  between `build-repair-input` and `parse-repair`. A repair route is `authorize-repair`,
+  `build-repair-input`, `request-model`, `parse-repair`, `merge-repair`; an authorizer's `more`
+  skips input, request and parse and goes to merge.
+- **Where the rules live.** The generic operation selects the owner's rules through one
+  exhaustive `switch` over `RepairOwner`
+  ([`src/application/repair_workflow.zig`](../../../src/application/repair_workflow.zig)), with no
+  default branch, table or dispatcher. Each owner's binding declares its data effects once
+  (`repair_owner.Effects`) and holds its rules in the owner's domain module, reusing the shared
+  `atomic_repair.Contract`.
+- **`owner` selects no policy, scope or defect identity.** Where a variant's required keys prove
+  the owner, the compiler checks it. Otherwise the owner's binding reads only its own native
+  facts, and a mismatch is a terminal runner rejection, never a routable outcome. Retry identity
+  is the compiled step instance, so two steps using one operation keep separate counters.
+- **Retry.** Only merges retry. The `reference-text` and `reference-extraction` merges forbid
+  `retry-limit`. The others require it, within their variant's maximum: `reference-reconciliation`
+  128, `source-omission-extraction` 1, `source-omission-reconciliation` 1, `specification-unit`
+  64, `specification-support` 2 ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
+- **Source omission.** The current native pre-generation phase witness is checked inside
+  authorize, input and both merges whatever `owner` says. Its authorize `ok` selects the
+  extraction branch and `more` the reconciliation branch; each branch merges through its own
+  owner.
+- **`.packet_guidance`** is read by exactly seven (operation, owner) variants:
+  `authorize-repair` and `build-repair-input` for `specification-unit` and `specification-support`,
+  `merge-repair` for `specification-support`, and `build-repair-input` for
+  `reference-reconciliation` and `source-omission`.
+
+### `authorize-repair`
+
+Decides whether one engine-selected unit may be repaired and binds its target, old value,
+revision, dependencies and retry identity. Role `authorize`; association `repair_authorize`.
+Rejects with the owner's own errors.
+
+| Owner | Reads | Writes | Outcomes | Association (kind; subject; evidence) |
+| --- | --- | --- | --- | --- |
+| `reference-text` | `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `text_validated_reference_extraction` | `reference_text_repair_authorization` | `ok`, `invalid`, `failed` | candidate; `parsed_reference_extraction`; `text_validated_reference_extraction` |
+| `reference-extraction` | `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `validated_reference_selections` | `reference_extraction_repair_authorization` | `ok`, `invalid`, `failed` | candidate; `text_validated_reference_extraction`; `validated_reference_selections` |
+| `reference-summary` | `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_summary` | `reference_reconciliation_repair`; invalidates `validated_reference_summary` | `ok`, `more`, `blocked`, `failed` | candidate; `parsed_reference_reconciliation`; `validated_reference_summary` |
+| `reference-dispositions` | as `reference-summary`, with `validated_reference_dispositions` | `reference_reconciliation_repair`; invalidates `validated_reference_dispositions` | `ok`, `blocked`, `failed` (no `more`: ADR 0046) | candidate; `parsed_reference_reconciliation`; `validated_reference_dispositions` |
+| `reference-signals` | as `reference-summary`, with `validated_reference_signals` | `reference_reconciliation_repair`; invalidates `validated_reference_dispositions`, `validated_reference_signals` | `ok`, `more`, `blocked`, `failed` | candidate; `parsed_reference_reconciliation`; `validated_reference_signals` |
+| `reference-conflicts` | as `reference-summary`, with `validated_reference_conflicts` | `reference_reconciliation_repair`; invalidates `validated_reference_dispositions`, `validated_reference_signals`, `validated_reference_conflicts` | `ok`, `more`, `blocked`, `failed` | candidate; `parsed_reference_reconciliation`; `validated_reference_conflicts` |
+| `source-omission` | `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `parsed_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `specification_support_review` (optional: `specification_generation_session`, `identified_specification_content`) | `source_omission_repair` | `ok` (extraction branch), `more` (reconciliation branch), `invalid`, `failed` | authority; `required_authority_inputs`; `required_authority_result` |
+| `specification-unit` | `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `parsed_specification_unit`, `validated_specification_unit`, `packet_guidance` | `specification_repair_authorization` | `ok`, `more` (a delete), `invalid`, `blocked`, `failed` | candidate; `parsed_specification_unit`; `validated_specification_unit` |
+| `specification-support` | `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` | `specification_support_repair` | `ok`, `more`, `blocked`, `failed` | candidate; `specification_support_review`; `specification_support_review` |
+| `specification-coverage` | `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `specification_coverage` | `specification_coverage_repair` | `blocked`, `failed` only | candidate; `specification_generation_session`; `specification_coverage` |
+
+### `build-repair-input`
+
+Builds the repair packet for the authorization. Writes `model_input_packet`; outcomes `ok` and
+`failed`; role `none`; association independent. Reads the owner's inputs and its authorization key:
+
+| Owner | Reads |
+| --- | --- |
+| `reference-text` | `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `structured_token_candidates`, `reference_text_repair_authorization` |
+| `reference-extraction` | `citable_reference_inputs`, `reference_passive_literals`, `structured_token_candidates`, `text_validated_reference_extraction`, `reference_extraction_repair_authorization` |
+| `reference-reconciliation` | `parsed_reference_reconciliation`, `reference_reconciliation_repair`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` (only a summary input carries the workflow's summary purpose) |
+| `source-omission` | the `source-omission` authorize reads, plus `source_omission_repair` and `packet_guidance`; builds the extraction or reconciliation packet the authorization selected |
+| `specification-unit` | `specification_generation_session`, `specification_repair_authorization`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` |
+| `specification-support` | `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_support_repair`, `packet_guidance` |
+
+### `parse-repair`
+
+Decodes and validates the admitted replacement. Role `none`; association `preserve` (candidate;
+authority for `source-omission`). Reads the owner's authorization key and the request evidence
+(`model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`,
+`accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result`);
+`specification-support` reads only five keys: `specification_support_repair`,
+`model_request_identity_ledger`, `prepared_model_request`, `model_input_packet` and
+`model_payload_schema_result`.
+
+| Owner | Authorization read | Writes | Outcomes |
+| --- | --- | --- | --- |
+| `reference-text` | `reference_text_repair_authorization` | `reference_text_repair_result` | `ok`, `invalid`, `failed` |
+| `reference-extraction` | `reference_extraction_repair_authorization` | `reference_extraction_repair_result` | `ok`, `invalid`, `failed` |
+| `reference-reconciliation` | `reference_reconciliation_repair` | replaces `reference_reconciliation_repair` | `ok`, `failed` |
+| `source-omission` | `source_omission_repair` | replaces `source_omission_repair`; parses the extraction or reconciliation replacement its authorization names, keeping the response origin | `ok`, `failed` |
+| `specification-unit` | `specification_repair_authorization` | replaces `specification_repair_authorization` | `ok`, `failed` |
+| `specification-support` | `specification_support_repair` | replaces `specification_support_repair` | `ok`, `failed` |
+
+### `merge-repair`
+
+Compare-and-swaps the authorized replacement into the candidate, over the canonical (NFC)
+captured text. Another authorization, or a missing response, is `InvalidAtomicRepair`.
+
+| Owner | Replaces | Invalidates | Outcomes | Role; association | `retry-limit` |
+| --- | --- | --- | --- | --- | --- |
+| `reference-text` | `parsed_reference_extraction` | `text_validated_reference_extraction`, `reference_text_repair_authorization`, `reference_text_repair_result` | `ok`, `invalid`, `failed` | `merge`; `repair_merge` | forbidden |
+| `reference-extraction` | `text_validated_reference_extraction` | `validated_reference_selections`, `reference_extraction_repair_authorization`, `reference_extraction_repair_result` | `ok`, `invalid`, `failed` | `merge`; `repair_merge` | forbidden |
+| `reference-reconciliation` | `parsed_reference_reconciliation` | `reference_reconciliation_repair` | `ok`, `failed` | `merge`; `repair_merge` | required, at most 128 |
+| `source-omission-extraction` | `text_validated_reference_extraction` | every key derived from it, through `source_omission_repair` (`source_omission.extraction_dependents`) | `ok`, `failed` | `merge`; `repair_merge` | required, at most 1 |
+| `source-omission-reconciliation` | `parsed_reference_reconciliation` | every key derived from it, through `source_omission_repair` (`source_omission.reconciliation_dependents`) | `ok`, `failed` | `merge`; `repair_merge` | required, at most 1 |
+| `specification-unit` | `parsed_specification_unit` | `validated_specification_unit`, `specification_repair_authorization` | `ok`, `failed` | `merge`; `repair_merge` | required, at most 64 |
+| `specification-support` | `specification_support_review` | `specification_support_repair` | `ok`, `more`, `invalid`, `failed` | `merge_validate`; `repair_validate` | required, at most 2 |
+
+The two source-omission merges merge only in the repair phase; their reads are the merge
+context (`citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`,
+`required_authority_inputs`, `required_authority_observations`, `required_authority_result`,
+`specification_support_review`, `source_omission_repair`), plus
+`structured_token_candidates` and `text_validated_reference_extraction` for the extraction merge
+or `parsed_reference_reconciliation` for the reconciliation merge (optional:
+`specification_generation_session`, `identified_specification_content`). The other owners read
+the keys they replace, their authorization or repair key and the shared inputs
+(`citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, and for the
+specification owners `accounted_reference_reconciliation`).
 
 ## `CreateRepairAuthorizationAction`
 
 Proposed, no code: bind one closed repair operation to current values, preconditions and cited rules ([§22](../22-repair.md)).
-
-## `CreateNoInventionClarificationReplacementAuthorizationAction`
-
-Proposed, no code: authorize the one-shot whole-result replacement of unsupported content by a clarification ([§14](../14-orchestration.md)).
 
 ## `BuildAtomicRepairGuidanceAction`
 

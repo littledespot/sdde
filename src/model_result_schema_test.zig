@@ -369,6 +369,28 @@ fn uniqueCollectionPacket(allocator: std.mem.Allocator) !void {
     try expectSelection(a, narrowed.selected(), "{\"value\":{\"kind\":\"selection\",\"handles\":[3,8,3]}}", false);
 }
 
+test "the properties an exact member set compares survive packet projections and reach the restriction" {
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(comparedPacket, .{});
+}
+
+fn comparedPacket(allocator: std.mem.Allocator) !void {
+    const packets = @import("domain/model_input_packet.zig");
+    const base = try packets.create(allocator, "{}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const selected = try packets.withIntegerChoices(allocator, base, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{ "given", "then" } }});
+    defer packets.release(selected);
+    const contextual = try packets.withContext(struct { description: []const u8 }, allocator, selected, "assignment", .{ .description = "MOCK native selection" });
+    defer packets.release(contextual);
+    try std.testing.expectEqual(@as(usize, 1), contextual.integerChoices().len);
+    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "given", "then" }), contextual.integerChoices()[0].distinct);
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const resource = try compile(arena.allocator(), equal_items_schema);
+    const restricted = try schema.restrict(allocator, resource, contextual.excludedVariants(), contextual.integerChoices());
+    defer restricted.release();
+    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "given", "then" }), restricted.selected().memberChoices()[0].distinct);
+}
+
 test "ID restrictions validate definition and selected part association before omitting sibling locations" {
     try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(selectedIdChoices, .{});
 }
@@ -909,54 +931,6 @@ fn restrictChoices(allocator: std.mem.Allocator) !void {
     try std.testing.expectEqualStrings(narrowed.selected().modelBytes(), copy.modelBytes());
 }
 
-test "explicit native singleton construction omits only determined tagged fields" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const canonical = try compile(a,
-        \\{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":4,"items":{"oneOf":[{"type":"string","maxLength":80},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]}},"count":{"type":"integer","minimum":1,"maximum":100}},"required":["value","count"],"additionalProperties":false}
-    );
-    const single: schema.IntegerChoice = .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{7}, .singleton = .construct };
-    const fixed = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{single});
-    defer fixed.release();
-    try expectSelection(a, fixed.selected(), "{\"value\":[\"MOCK narrative \",{\"kind\":\"exact_copy\"}],\"count\":8}", true);
-    for ([_][]const u8{
-        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":7}],\"count\":8}",
-        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":8}],\"count\":8}",
-        "{\"value\":[{\"kind\":\"exact_copy\",\"unexpected\":7}],\"count\":8}",
-    }) |bad| try expectSelection(a, fixed.selected(), bad, false);
-    // Canonical and ordinary restricted contracts continue to require IDs.
-    try expectSelection(a, canonical, "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
-    var selected = single;
-    selected.singleton = .select;
-    const unchanged = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected});
-    defer unchanged.release();
-    try expectSelection(a, unchanged.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":7}],\"count\":8}", true);
-    selected = single;
-    selected.allowed = &.{ 7, 9 };
-    const multiple = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected});
-    defer multiple.release();
-    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":9}],\"count\":8}", true);
-    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
-    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":8}],\"count\":8}", false);
-    const absent = try schema.restrict(std.testing.allocator, canonical, &.{.{ .kind = "exact_copy" }}, &.{});
-    defer absent.release();
-    try expectSelection(a, absent.selected(), "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
-    // Native construction is explicit tagged scalar policy, never a blanket
-    // omission of all singleton values or optional field/array inference.
-    selected = single;
-    selected.target = .{ .path = &.{.{ .property = "count" }} };
-    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
-    selected = single;
-    selected.allowed = &.{101};
-    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
-    selected.allowed = &.{ 7, 7 };
-    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
-    var adapter: parser.Adapter = .{};
-    const captured = try adapter.compiler().compileSelected(a, fixed.selected().modelBytes());
-    try expectSelection(a, captured, "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", true);
-}
-
 test "admission requires no scenario coverage, and the cross-item rule's kinds are validated" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -1101,4 +1075,103 @@ test "no exclusive item names both taken and untaken values, owning items are un
         defer restored.release();
         try std.testing.expectEqual(check.Rejection.shared_member, check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), restored.selected().root()).?.reason);
     }
+}
+
+/// An exact-members array whose items hold the key, two compared properties, one a string or a fragment
+/// object, and an optional one.
+const equal_items_schema =
+    \\{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":10,"items":{"type":"object","properties":{"ordinal":{"type":"integer","minimum":1,"maximum":10},"given":{"oneOf":[{"type":"string","maxLength":8},{"type":"object","properties":{"part":{"type":"integer","minimum":0,"maximum":9},"text":{"type":"string","maxLength":8}},"required":["part","text"],"additionalProperties":false}]},"then":{"type":"string","maxLength":8},"note":{"type":"string","maxLength":8}},"required":["ordinal","given","then"],"additionalProperties":false}}},"required":["value"],"additionalProperties":false}
+;
+const equal_items_path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ordinal" } };
+
+test "an exact member set states the properties its items must not all repeat, and the choice is validated" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const resource = try compile(a, equal_items_schema);
+    const compared: []const []const u8 = &.{ "given", "then" };
+    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = compared }});
+    defer restricted.release();
+    const array = schema.findProperty(restricted.selected().root().object, "value").?.schema.array;
+    try std.testing.expectEqual(@as(usize, 2), array.members.?.distinct.len);
+    try std.testing.expectEqualStrings("given", array.members.?.distinct[0]);
+    try std.testing.expectEqualStrings("then", array.members.?.distinct[1]);
+    // The rule is recorded beside the members it governs, owned by the restriction and by its clones.
+    try std.testing.expectEqualDeep(compared, restricted.selected().memberChoices()[0].distinct);
+    const cloned = try restricted.selected().clone(a);
+    try std.testing.expectEqualDeep(restricted.selected().memberChoices(), cloned.memberChoices());
+    try std.testing.expectEqualDeep(array.members.?.distinct, schema.findProperty(cloned.root().object, "value").?.schema.array.members.?.distinct);
+    // A selection that states no rule records an empty one, so the rule is opt-in.
+    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }});
+    defer plain.release();
+    try std.testing.expectEqual(@as(usize, 0), plain.selected().memberChoices()[0].distinct.len);
+    try std.testing.expectEqual(@as(usize, 0), schema.findProperty(plain.selected().root().object, "value").?.schema.array.members.?.distinct.len);
+    // The rule needs an exact member set, a property every item has that is not the key, each named once.
+    const other_path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "given" } };
+    for ([_]schema.IntegerChoice{
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .distinct = compared },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .distinct = compared },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"ordinal"} },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"absent"} },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"note"} },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{""} },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{ "then", "then" } },
+        .{ .target = .{ .path = other_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"then"} },
+    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
+}
+
+test "equal items of one exact member set are rejected as returned, and replay restores the rule" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const check = @import("domain/model_payload_schema.zig");
+    const resource = try compile(a, equal_items_schema);
+    const compared: []const []const u8 = &.{ "given", "then" };
+    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = compared }});
+    defer restricted.release();
+    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }});
+    defer plain.release();
+    // Provider bytes carry neither rule, so replay reapplies the recorded one.
+    const wire = try compile(a, restricted.selected().modelBytes());
+    const restored = try schema.restrictRecorded(std.testing.allocator, wire, restricted.selected().memberChoices(), &.{});
+    defer restored.release();
+    try std.testing.expectEqualDeep(restricted.selected().memberChoices(), restored.selected().memberChoices());
+    const Case = struct { bytes: []const u8, equal: bool };
+    for ([_]Case{
+        // Equal in every compared property: a string and a string, in the order the items arrive.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\"},{\"ordinal\":3,\"given\":\"g\",\"then\":\"t\"}]}", .equal = true },
+        // Equal whatever the property an item adds that is not compared, and whatever the key order.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\",\"note\":\"x\"},{\"then\":\"t\",\"ordinal\":3,\"given\":\"g\"}]}", .equal = true },
+        // Fragment objects are equal as decoded values, in any member order.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":{\"part\":1,\"text\":\"g\"},\"then\":\"t\"},{\"ordinal\":3,\"given\":{\"text\":\"g\",\"part\":1},\"then\":\"t\"}]}", .equal = true },
+        // Different in one compared property, however alike the rest.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\"},{\"ordinal\":3,\"given\":\"g\",\"then\":\"u\"}]}", .equal = false },
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\"},{\"ordinal\":3,\"given\":\"h\",\"then\":\"t\"}]}", .equal = false },
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":{\"part\":1,\"text\":\"g\"},\"then\":\"t\"},{\"ordinal\":3,\"given\":{\"part\":2,\"text\":\"g\"},\"then\":\"t\"}]}", .equal = false },
+        // A string is not the same value as the object that holds its text: no normalization applies.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\"},{\"ordinal\":3,\"given\":{\"part\":0,\"text\":\"g\"},\"then\":\"t\"}]}", .equal = false },
+        // Differing only in an uncompared property is still equal.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\",\"note\":\"x\"},{\"ordinal\":3,\"given\":\"g\",\"then\":\"t\",\"note\":\"y\"}]}", .equal = true },
+    }) |case| {
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, case.bytes, .{ .parse_numbers = false });
+        const value = @import("domain/model_envelope.zig").value(&parsed.value);
+        for ([_]*const schema.Schema{ restricted.selected(), restored.selected() }) |selected| {
+            const rejected = check.validateValue(value, selected.root());
+            if (case.equal) {
+                try std.testing.expectEqual(check.Rejection.equal_items, rejected.?.reason);
+                try std.testing.expectEqualStrings("/value/0", (try rejected.?.describe(a)).path);
+                try std.testing.expectEqualStrings("/value", (try rejected.?.describeExpected(a)).path);
+                try std.testing.expectEqualDeep(compared, rejected.?.members.?.distinct);
+            } else try std.testing.expect(rejected == null);
+        }
+        // The provider schema cannot say it, and a selection without the rule admits the response.
+        try std.testing.expect(check.validateValue(value, wire.root()) == null);
+        try std.testing.expect(check.validateValue(value, plain.selected().root()) == null);
+    }
+    // A record naming a property the captured schema does not have is refused, not ignored.
+    for ([_]schema.MemberChoice{
+        .{ .path = equal_items_path, .allowed = &.{ 3, 5 }, .distinct = &.{"absent"} },
+        .{ .path = equal_items_path, .allowed = &.{ 3, 5 }, .distinct = &.{"ordinal"} },
+        .{ .path = equal_items_path, .allowed = &.{ 3, 5 }, .distinct = &.{ "then", "then" } },
+    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{invalid}, &.{}));
 }

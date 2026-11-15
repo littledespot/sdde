@@ -50,9 +50,6 @@
       "primary_goal": "MOCK Present the greeting and UTC time on successful startup.",
       "entity_disposition": "not_applicable",
       "entity_basis": "MOCK Startup, greeting display and UTC time output need no business entity records.",
-      "given": "MOCK The application is ready to start.",
-      "when": "MOCK The user starts the application.",
-      "then": "MOCK Startup succeeds and the supplied greeting and UTC date and time are displayed.",
       "functional_requirement": "MOCK On startup the application must start successfully, display the supplied greeting and output UTC date and time.",
       "entity_name": null
     },
@@ -77,17 +74,11 @@
     "record_seeds": [
       {
         "group_id": 1,
-        "given": "MOCK The application is ready to start.",
-        "when": "MOCK The user starts the application.",
-        "then": "MOCK Startup succeeds and the supplied greeting and UTC date and time are displayed.",
         "functional_requirement": "MOCK On startup the application must start successfully, display the supplied greeting and output UTC date and time.",
         "entity_name": null
       },
       {
         "group_id": 2,
-        "given": null,
-        "when": null,
-        "then": null,
         "functional_requirement": null,
         "entity_name": null
       }
@@ -141,9 +132,6 @@
       "primary_goal": "MOCK Record inspections and prevent availability after a failed inspection until a successful inspection.",
       "entity_disposition": "required",
       "entity_basis": "MOCK Equipment and inspection results are business data whose association and availability are required.",
-      "given": "MOCK An equipment item is recorded in the register.",
-      "when": "MOCK An inspection result is recorded.",
-      "then": "MOCK The equipment identifier and inspection result are retained.",
       "functional_requirement": "MOCK The register must retain equipment identifiers and inspection results.",
       "entity_name": "MOCK Equipment"
     },
@@ -169,17 +157,11 @@
     "record_seeds": [
       {
         "group_id": 1,
-        "given": "MOCK An equipment item is recorded in the register.",
-        "when": "MOCK An inspection result is recorded.",
-        "then": "MOCK The equipment identifier and inspection result are retained.",
         "functional_requirement": "MOCK The register must retain equipment identifiers and inspection results.",
         "entity_name": "MOCK Equipment"
       },
       {
         "group_id": 2,
-        "given": "MOCK Equipment has failed an inspection.",
-        "when": "MOCK Its availability is checked before a later successful inspection.",
-        "then": "MOCK The equipment remains unavailable.",
         "functional_requirement": "MOCK When an inspection fails, that equipment must remain unavailable until a later successful inspection.",
         "entity_name": null
       }
@@ -230,9 +212,6 @@
       "primary_goal": "MOCK Track loans and renew eligible deadlines once the extension duration is specified.",
       "entity_disposition": "required",
       "entity_basis": "MOCK Loans and their return deadlines are business data used by eligible renewals.",
-      "given": "MOCK The loan is eligible for renewal.",
-      "when": "MOCK The borrower requests renewal.",
-      "then": "MOCK The return deadline is extended by the duration that remains to be specified.",
       "functional_requirement": "MOCK The library must track loans and return deadlines and extend eligible renewal deadlines by the still-undecided duration.",
       "entity_name": "MOCK Loan"
     },
@@ -257,9 +236,6 @@
     "record_seeds": [
       {
         "group_id": 1,
-        "given": "MOCK The loan is eligible for renewal.",
-        "when": "MOCK The borrower requests renewal.",
-        "then": "MOCK The return deadline is extended by the duration that remains to be specified.",
         "functional_requirement": "MOCK The library must track loans and return deadlines and extend eligible renewal deadlines by the still-undecided duration.",
         "entity_name": "MOCK Loan"
       }

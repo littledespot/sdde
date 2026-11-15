@@ -19,7 +19,7 @@ Part of the [proposed design](../design.md#27-observability), as amended by the
 
 Event fields include the validated four-character workflow shortcode, run/feature/stage/node IDs, parent/correlation IDs, attempt, duration, workflow model-operation/model-slot identity, token usage, diagnostic codes, stage-action step ID, repair unit kind, command ID, exit code, and evidence status. Field definitions are registry-owned and sensitive content is excluded or redacted before serialization.
 
-Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented),
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md),
 the stages of one `request-model` step are not YAML nodes. The runner still emits one
 event for each stage it runs, attributed to the originating step with a stable stage name,
 so a report can name the exact stage where a request stopped.
@@ -43,11 +43,13 @@ binds newly created roots to subsequent reads and publication.
 
 - Candidate diagnostics retain typed rule, target, rejected value and admissible scope.
 - The shared diagnostic projection distinguishes a response origin, an assembled-candidate
-  diagnostic, and missing required response provenance. Coverage validation initially
-  describes the assembled candidate; repair authorization supplies a producer only after
-  selecting a supported replacement. Observers retain the native revision, dependencies
-  and targets without inventing a call association. Missing required or ambiguous response
-  associations still reject; diagnostic attribution grants no repair authority.
+  diagnostic, and missing required response provenance. Coverage validation and a
+  producerless rejection (a classification rejection naming only missing entries, which
+  have no producer) initially describe the assembled candidate; repair authorization
+  supplies a producer only after selecting a supported replacement. Observers retain the
+  native revision, dependencies and targets without inventing a call association. Missing
+  required or ambiguous response associations still reject; diagnostic attribution grants
+  no repair authority.
 - The producing request's assignment position in the existing identity ledger, attempt ordinal
   and operation kind survive request-body release and join only to the current execution's
   operation ledger.
@@ -62,7 +64,12 @@ binds newly created roots to subsequent reads and publication.
   source-snapshot projection, serialization, redaction, chunking and persistence
   failures remain distinguishable without recording credentials or raw bodies in
   diagnostics. A subsequent logging/finalization failure cannot replace the first
-  capture cause; both remain failed evidence.
+  capture cause; both remain failed evidence. A capture failure is the call's one cause: a
+  rejection formed from that call's result (its own error, an accounting failure raised before
+  usage is applied, an unreadable result) is not kept beside it, and the report shows the
+  capture failure alone. A blocked request capture leaves the call `not_sent` in the token
+  ledger and a blocked response capture still accounts the call's usage, including a budget
+  overshoot, so only a second fault in the same call can leave its usage unaccounted.
   CLI failure output and terminal reports expose the typed diagnostic. Action and
   terminal event codes retain the boundary and closed cause; the terminal event
   retains the call correlation and attempt when known.
@@ -81,6 +88,18 @@ An earlier error remains inspectable after recovery. Capture every available mod
 body under ADR 0018; retain partial/no-response provenance and credential redaction.
 Diagnostic runs must enable full capture. Console output is a mirror, not a substitute
 for persisted records. A harness-only trace does not satisfy production logging.
+
+A later failure does not erase an earlier one. The terminal rejection stays the later
+failure, with its own status and diagnostic, which is all
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) reads. The runner
+keeps the first rejection it replaced as the run's first cause, whole, with an `authority`
+reason ([§6](06-pipeline-nodes.md#runner-rejection-reasons)) when it has one, set once so
+the earliest replacement wins. A capture failure is recorded while its call runs, so it is never kept
+as a first cause (its terminal carries a later logging failure), and one failure seen twice, such as a
+sink that stays broken, replaced nothing. The
+E2E report (`first_cause`), the step event of the rejected step and the offline step trace
+(`:first=`) carry both; the feature log's terminal event keeps the terminal code only and
+gains no event, column or code.
 
 Reuse the closed event registry and shared logging lifecycle. The runner owns
 execution/transition facts, validators supply typed diagnostics, and the existing
@@ -137,7 +156,7 @@ re-send is logged:
   carrying the diagnostic `RunawayRepeated`.
 
 Logging rejection prevents the re-send. The temperature each attempt sent is recorded in
-its request description (`model-request-debug/v18`), not in a log field. A re-send that
+its request description (`model-request-debug/v19`), not in a log field. A re-send that
 succeeds removes neither event.
 
 At `debug` or `trace`, ADR 0018's capture logs every runaway in full in the prompt

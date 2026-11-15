@@ -2,23 +2,24 @@ const pipeline = @import("pipeline.zig");
 
 pub const Error = error{InvalidTransportRetirement};
 
-pub const Retirement = enum { request, rejected_attempt, input, request_and_input };
+pub const Retirement = enum { rejected_attempt, released_request, released_request_and_input };
 pub const requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result };
 pub const attempt_keys = [_]pipeline.DataKey{
     .accounted_model_attempt,     .terminal_provider_operation,           .provider_authorization_result,
     .provider_invocation_result,  .provider_invocation_validation_result, .model_envelope_result,
     .model_payload_schema_result,
 };
-pub const request_keys = attempt_keys ++ [_]pipeline.DataKey{
-    .assigned_model_request, .validated_model_request, .prepared_model_request,
-};
+
+/// What a `request-model` step leaves current once its request closed (ADR 0030, DE1 decision 2),
+/// less the ledger, which is replaced and never retired. Its release retires exactly these, so the
+/// set is stated once, by the kernel contract that produces it.
+pub const released_keys = @import("model_request_kernel.zig").produces;
 
 pub fn keys(comptime retirement: Retirement) []const pipeline.DataKey {
     return switch (retirement) {
-        .request => &request_keys,
-        .request_and_input => &(request_keys ++ [_]pipeline.DataKey{.model_input_packet}),
+        .released_request => &released_keys,
+        .released_request_and_input => &(released_keys ++ [_]pipeline.DataKey{.model_input_packet}),
         .rejected_attempt => &attempt_keys,
-        .input => &.{.model_input_packet},
     };
 }
 

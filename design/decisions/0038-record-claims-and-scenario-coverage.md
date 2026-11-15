@@ -31,7 +31,20 @@
   (Decision 7). Amended on 12 November 2026 (SPEC01 Q14 b3; user: "B3 is approved,
   implement"): a scenario gap is the session's, repaired by one acceptance criterion whose
   claim the engine fixes (Decision 3); admission keeps only the partly taken statement
-  (Decision 5).
+  (Decision 5). Amended again on 12 November 2026 (SPEC01 Q14 b4; user: "approved decisions
+  1, 3, 4 and 5", then "Approved five sub-option picks"): a second request per group writes
+  one criterion for each claim a behaviour statement names, the engine fixing the claim, and
+  an edge case no longer counts as cover (Decisions 2 and 3). Implemented on 15 November
+  2026. Amended on 13 November 2026 (user: "it must use GIVEN,
+  WHEN, THEN, never anything else", one `GIVEN` holding both conditions, then "yes, amendment
+  to ADR 0038, do not make any code changes"): an edge case is printed as a Given/When/Then
+  scenario of the criterion it links to, and the model writes only its own given
+  (Decision 7). Not yet implemented: the code, the workflow assets and the sections this
+  amendment names still state the 8 November rule. Amended on 14 November 2026 (SPEC01 Q14
+  b4, D14.2; user: "update the documentation with the recommendation"): items of one
+  scenarios response with equal content take the request's protocol correction, naming every
+  item's number, in place of the `competing_records` block (Decision 3). Implemented on 15
+  November 2026.
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -62,7 +75,7 @@
     v24). The entities schema and prompt change, and every generation request's shared
     guidance loses one sentence.
   - Since 8 November 2026, Decision 7 (an edge case's outcome is a linked criterion's Then):
-    §17.3 (a fourth model task type, the outcome-link request), §23.1 (the outcome line),
+    §17.3 (the outcome-link request), §23.1 (the outcome line),
     §24 (`specification-state/v24`, `specification/v5`), the §32 index and F0100 §5;
     [ADR 0016](0016-configured-json-response-composition.md) (`packet-guidance/v5`);
     [ADR 0047](0047-engine-composed-primary-story.md) (its typed rejection gains a reason);
@@ -70,15 +83,38 @@
     v25). The records schema loses the edge case's outcome, the required-authority contract
     is 4, and a link-scenarios step with its own prompt and result schema follows
     generation.
-  - Since 12 November 2026, Decision 3 (a claim-bound scenario insert): §12 (admission no
-    longer applies the scenario rule), §17.3 and §17.5, §22 (a scenario gap takes an
-    engine-bound insert, not a protocol correction, and the `uncovered_member` correction
-    and its covering kinds are gone), F0100 §5.7;
-    [ADR 0019](0019-single-request-debugger.md) (`model-request-debug/v18`: a recorded rule
-    names only its exclusive and owning kinds);
-    [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (admission's native
-    constraints); and reports advance to `spec-e2e-report/v17`. No record shape, content,
-    state or packet-guidance version changes.
+  - Since 12 November 2026, Decision 3's first amendment: admission no longer applies the
+    scenario rule or the `uncovered_member` correction; request descriptions advance to
+    `model-request-debug/v18` ([ADR 0019](0019-single-request-debugger.md): a recorded rule
+    names only its exclusive and owning kinds) and reports to `spec-e2e-report/v17`.
+  - The scenario-slot amendment of 12 November 2026, Decisions 2 and 3: §12 (the scenario
+    rule is met by construction), §17.3 and §17.5 (a scenarios step and its request), §22
+    (the claim-bound insertion is gone), F0100 §5;
+    [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (a re-sent scenarios
+    response passes the same checks); and
+    [ADR 0047](0047-engine-composed-primary-story.md) (its three model task types become
+    four generation task types). No record shape or content version changes; request
+    descriptions, reports, state and packet guidance advance only if implementation changes
+    a closed member, in the same change (SPEC01 §2 rule 12).
+  - The edge-case scenario amendment of 13 November 2026, Decision 7: §17.3 (the edge case's
+    one model-written field), §23.1 (the edge-case lines, the separator's use between two
+    texts, and their readback), §24 (the edge-case shape),
+    [text-field-composition.md](../contracts/text-field-composition.md) (the edge-case field
+    row) and F0100 §5; [ADR 0016](0016-configured-json-response-composition.md) (packet
+    guidance loses its `condition` entry);
+    [ADR 0041](0041-failed-run-incomplete-publication.md) (its reserved state version moves
+    on); and every document that states the versions below. The records schema's edge case
+    holds `given` in place of `condition`. In the implementing change the canonical content,
+    the state and the packet guidance advance from the versions then current, and so do the
+    required-authority contract, reports and request descriptions wherever the rename removes
+    or renames one of their closed members; earlier versions reject.
+  - The equal-criteria amendment of 14 November 2026, Decision 3: §12.2 (the admission
+    constraints that stay native), §17.3 (the scenarios response's admission), §22.6 (the
+    corrections that name extra fields), [ADR 0019](0019-single-request-debugger.md) (the
+    request description records the rule) and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
+    (a re-sent scenarios response passes the same checks). Implemented 15 November 2026:
+    request descriptions advanced to `model-request-debug/v19` and reports to
+    `spec-e2e-report/v20`, for the new `equal_items` rejection reason.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -105,33 +141,67 @@ only block.
      subset of its group. A whole-group selection is still valid, so earlier stored
      states keep reading back.
    - Entities keep selecting whole groups. Repairs stay content-only and keep the
-     record's claims; the one record whose claims the engine sets is Decision 3's
-     inserted criterion, and the model writes only its content.
-2. **A behaviour statement's claims need a scenario.** In one records response, every
+     record's claims; the records whose claims the engine sets are Decision 3's slot
+     criteria, and the model writes only their content. The records response carries no
+     acceptance criterion.
+2. **A behaviour statement's claims need a scenario.** In one records batch, every
    claim a `functional_requirement`, `business_rule`, `user_visible_outcome` or
-   `prohibited_behavior` names must also be named by an `acceptance_criterion` or
-   `edge_case`. Assumptions and non-goals are scope statements that no scenario tests,
-   so they need none. The rule needs no claim categories or keywords: title and
-   purpose claims aren't named by behaviour statements. (Functional requirements only,
-   until 2 November 2026.)
-3. **A gap takes an engine-bound criterion insert** (amended 12 November 2026; until then
-   response admission rejected an uncovered claim as `uncovered_member` and the records
-   request's protocol correction asked for the whole response again). The specification
-   session checks the rule (`scenarioCoverageIssue`) after its duplicate, story-restatement
-   and repeated-statement checks, on the batch their native deletes leave, so a record the
-   engine deletes needs no scenario. The first uncovered claim, in record and claim order,
-   is a unit defect (`scenario_coverage`) repaired by one insert:
-   - the engine fixes the new record's kind (`acceptance_criterion`), its claims (the one
-     uncovered claim) and its group (the batch's), and the model writes only its content,
-     through the content-only `repair_record_acceptance_criterion` definition; the request
-     names the claim in its `provenance` context and offers only that claim's exact values;
-   - an edge case is never inserted: an uncovered claim has no criterion an edge case could
-     link to, so it would block under Decision 7;
-   - the insert follows the existing records repair route under §22's preconditions, retry
-     limits and impacted and full validation; each further uncovered claim takes its own
-     insert, and exhaustion fails the run. It adds content and never removes any;
-   - the insert repairs a named source obligation: the claim is one a behaviour statement
-     of the same batch already names, so it invents no requirement.
+   `prohibited_behavior` names is named by an `acceptance_criterion`; the engine writes
+   exactly one per claim and binds it (Decision 3). An `edge_case` is not cover: its outcome
+   is a criterion's Then (Decision 7), so it adds no scenario of its own. Assumptions and
+   non-goals are scope statements that no scenario tests, so they need none. The rule
+   needs no claim categories or keywords: title and purpose claims aren't named by
+   behaviour statements. (Functional requirements only, until 2 November 2026; before the
+   scenario-slot amendment an edge case counted as cover.)
+3. **Each such claim takes one engine-bound criterion, written by a second request per
+   group** (amended 12 November 2026; before the amendment a gap in the first response was
+   repaired by one insert per claim, and before that admission rejected it as
+   `uncovered_member`). A records response carries no acceptance criterion: its request
+   excludes the kind and offers no criterion requirement. After every group's records are
+   admitted and the native deletes (Decision 5, ADR 0035) have run, the engine plans each
+   group's slots, and a scenarios step follows, before Decision 7's link step:
+   - **Slots** are one per distinct claim that a surviving `functional_requirement`,
+     `business_rule`, `user_visible_outcome` or `prohibited_behavior` of the batch names,
+     in record and claim order. A compound claim is one slot (only a model decomposition
+     could split it, which is not adopted). A claim no behaviour statement names has none,
+     a scope-only claim and an edge-case-only claim included. A group with no slot makes
+     no call.
+   - **One request per group**, on the generation slot and the shared generation operations,
+     as an initial generation: no invalid candidate exists, so it is not a repair and uses
+     no repair slot. The step takes its own native iteration population, the groups with a
+     slot. The request offers each slot, numbered from one, with its claim's source text
+     and exact values, and no statement, entity, story or other batch's record, so a
+     criterion can't copy a statement's wording (SPEC01 D12.1).
+   - **The response is content only:** one item per slot, holding the slot's number and the
+     criterion's given, when and then. The result schema selects the numbers as an
+     `exact_members` set, so each appears exactly once, and carries no claim, kind or
+     group. A missing, repeated or foreign number, or any other property, takes the
+     request's protocol correction. So do items of the response that return equal values
+     for given, when and then, compared as returned: the correction names the number
+     of every item in each equal set, so one retry can fix them all, as Decision 5's
+     `shared_member` does, in place of the `competing_records` block they would meet after
+     the merge (14 November 2026; compared as returned, 15 November 2026). It covers one
+     response's own items as returned: equal criteria across groups, equal records of other
+     kinds, equality a field-level value repair produces, and items equal only after the
+     typed duplicate rule (`equalContent`) normalizes them, such as a string and the same
+     text as a one-fragment object, still block.
+   - **The engine binds** each criterion's kind (`acceptance_criterion`), claims (the
+     slot's one claim) and group (the batch's), and appends the criteria to the group's
+     batch in slot order, so the batch spans both responses. The merged batch takes full
+     unit validation: the duplicate, restatement, exact-copy and text checks, with
+     scenarios exempt from Decision 5's repeated-statement rule. A defect in a written
+     criterion's text takes the existing field-level value repair under §22's preconditions,
+     retry limits and impacted and full validation, which never changes its claim, kind or
+     group. The step's own `retry-limit` bounds its protocol corrections, ADR 0039's re-send
+     applies, and exhaustion fails the run. No repair inserts or replaces a whole criterion,
+     and no edge case is written here.
+   - **Coverage is met by construction.** The session's scenario-coverage check stays on the
+     merged batch; stored readback has no coverage rule. It requires at least one criterion for each such claim,
+     so a stored specification whose one criterion names several claims still reads back,
+     and a claim it finds without a criterion is an engine defect (`scenario_coverage`)
+     that takes no repair.
+   - **The acceptance-criterion family** is required of the assembled specification when
+     the scenarios step completes, not of a records response.
 
    Decision 5's partly taken statement, `shared_member`, stays a response-admission
    defect, and request descriptions record that rule so replay enforces the same admission
@@ -205,20 +275,36 @@ only block.
      earlier versions reject. `packet-guidance/v4` drops the meaning and relationship
      entries and the entity repair tail; the required-authority contract is 3 and loses
      those slots and the slot member index.
-7. **An edge case's outcome is the Then of a criterion it links to** (8 November 2026; user:
-   "apply recommendations", "recommendations accepted for 1 to 6", then "go"). The model
-   writes an edge case's condition and the claims it supports, and no outcome: the free
+7. **An edge case is a Given/When/Then scenario of the criterion it links to** (8 November
+   2026; user: "apply recommendations", "recommendations accepted for 1 to 6", then "go": its
+   outcome is the criterion's Then. Amended 13 November 2026; user: "it must use GIVEN, WHEN,
+   THEN, never anything else": its Given and When are the criterion's too). The model writes
+   an edge case's own given, the boundary or exceptional situation, and the claims it
+   supports, and no when or then. Before 8 November it also wrote the outcome: the free
    text restated a criterion's result and dropped part of it wherever it stayed open (the
    loan-renewal edge case that extended the due date "by fourteen days", without
    "calendar", "existing" or the new due date, in four of the last six runs; SPEC01 §3).
-   The engine prints the Then of an acceptance criterion the edge case links to as its
-   `EXPECTED OUTCOME` line ([§23.1](../contracts/23-rendering.md)). Like the source line, it
-   is a display, never provenance. The 7 November rejection of an engine-written outcome
-   concerned filling it from source lines; copying a criterion's Then, the only target, is
-   allowed.
+   Before 13 November its one field was `condition`, printed alone above the criterion's
+   Then, so an edge case could pair a situation the criterion doesn't cover with the
+   criterion's result: a loan past its due date printed the refusal the source gives only an
+   inactive or previously renewed loan, a material `unsupported_addition` (evaluation
+   `2026-11-12T20-18-32Z-0e01cf8809886860bdd3257af99631e9`, D2). The engine prints every
+   edge case as three lines labelled `GIVEN`, `WHEN` and `THEN`, and no other label
+   ([§23.1](../contracts/23-rendering.md) follows at implementation). Like the source line,
+   the parts it copies are a
+   display, never provenance, and the edge case's own given is its only content. An edge
+   case so keeps its criterion's whole scenario and adds one circumstance: it shows the
+   criterion's result for a narrower situation. The 7 November rejection of an
+   engine-written outcome concerned filling it from source lines; copying the linked
+   criterion's Given, When and Then, the only targets, is allowed.
+   - **Lines:** `GIVEN` is the linked criterion's Given, then the edge case's own given, in
+     one line. They are joined by the separator §23.1 derives from a clause's ending (`, `,
+     or one space after terminal punctuation), applied here between the two texts, so
+     neither text's bytes change. `WHEN` is the criterion's When and `THEN` its Then. The
+     copied parts are the criterion's own display, exact-value spans included.
    - **Candidates:** the acceptance criteria of the edge case's own records batch that name
-     at least one of its claims. They are found natively when the records unit completes;
-     no link crosses a batch.
+     at least one of its claims, across both of its group's responses (Decision 3). They are
+     found natively when the scenarios step completes; no link crosses a batch.
    - **One candidate** is the link; no model call. **Two or more** make one closed model
      request per edge case, in a `link-scenarios` step after generation: the request offers
      those criteria, numbered, with their given, when and then, and the answer is one offered
@@ -226,17 +312,23 @@ only block.
      bad answer takes the request's protocol correction and exhaustion fails the run.
    - **None** blocks the run with the typed rejection `edge_case_without_criterion`
      (ADR 0047's rejection), naming the edge case's group and claims. Deleting the edge case
-     would delete a scenario, which Decision 5 never does, and a second coverage rule would
-     send the batch back for a criterion no other record needs. Decision 2 still counts an
-     edge case as cover, so a claim that only an edge case names passes the scenario rule and
-     blocks here, after every generation call; of the 31 edge cases in the 26 retained loan-renewal
-     runs, 3 had no such criterion (two runs, both on 7 November builds), 20 had one and 8
-     had several, and hello-world wrote none.
+     would lose a stated condition, which Decision 5 never does to a scenario, and a second
+     coverage rule would ask for a criterion for a claim no behaviour statement names. The engine writes a criterion
+     for every claim a behaviour statement names (Decision 3), so only an edge case naming
+     claims no behaviour statement names, a scope-only claim for one, reaches this block,
+     after every generation call. Before the scenario-slot amendment an edge case counted as
+     cover, so a claim that only an edge case named passed the scenario rule and blocked
+     here too; of
+     the 31 edge cases in the 26 retained loan-renewal runs, 3 had no such criterion (two
+     runs, both on 7 November builds), 20 had one and 8 had several, and hello-world wrote
+     none.
    - The canonical content is `specification/v5` and the state `specification-state/v24`: an
      edge case keeps its `condition` and holds the ID of the criterion it links to, which
      state readback checks against the same candidate rule. Earlier versions reject.
      `packet-guidance/v5` drops the edge outcome entry; the required-authority contract is 4
-     and loses that slot. ADR 0041's state version moves to v25.
+     and loses that slot. ADR 0041's state version moves to v25. Under the 13 November 2026
+     amendment the edge case holds `given` in place of `condition`; the amendment list above
+     says which versions advance.
 
 ## Consequences
 
@@ -251,8 +343,37 @@ only block.
     candidates the model's closed choice decides, and a wrong choice prints a wrong
     outcome with no later check. The printed outcome is the criterion's Then exactly, so
     an edge case that is a boundary of a flow, not a flow of its own, shows that flow's
-    result. A single candidate links without a choice, so an acceptance criterion that
-    names every claim of its batch is the link of every edge case, a refusal included.
+    result. A single candidate links without a choice. With one criterion per claim
+    (Decision 3), an edge case naming one claim has that claim's criterion as its only
+    candidate, and one naming several slot claims has one candidate for each and takes the
+    model's closed choice.
+  - **An edge case as a scenario (Decision 7, 13 November 2026).**
+    - The link still decides which scenario an edge case narrows. The model writes the edge
+      case's own given before any criterion exists (Decision 3) and never sees the Given it
+      will follow, and nothing checks that the two are compatible: a wrong link or a
+      contradicting given prints as a `GIVEN` whose two parts disagree, which the human who
+      reviews `spec.md` judges. Where the criterion's Given doesn't carry the condition that
+      governs its Then, an outcome the source doesn't support still prints.
+    - The guidance text for the edge case's `given` is not decided here. Packet guidance
+      holds exactly one text for each registered key (ADR 0016), and the `given` text
+      describes a criterion's whole starting situation, where the edge case's own given is
+      one added circumstance. The implementing change decides the key and its text on
+      repeated runs; how the model phrases a given is unmeasured.
+    - An edge case repeats its criterion's Given and When, so it can't carry a second flow of
+      a claim (a cost of Decision 3's slot criteria, below), and a defect in a criterion's
+      Given or When repeats in each edge case linked to it. The 9 November ruling that files
+      a linked Then's defect once, on the criterion, covers only the Then.
+    - Two edge cases with the same own given and different claims still block as
+      `competing_records` (below), though under different criteria they would print different
+      scenarios.
+    - One line holds a copied part and the edge case's own text, so readback takes the own
+      given as the text after the copied Given and the separator, and a `GIVEN` line that
+      doesn't begin with them rejects. An edit to a criterion's Given or When makes each
+      linked edge case's lines differ from the projection, so readback rejects them.
+    - The amendment rests on one scored run, and hello-world wrote no edge case in the
+      retained runs. Its benefit is not demonstrated, and it is kept or reverted on scored
+      repeated runs of both development cases (AGENTS.md "Model output, prompts and
+      evidence").
   - **Two edge cases with one condition** and different claims are no longer told apart by
     their outcomes: like any single-field record they block as `competing_records`.
   - A lead-in condition is split from the items it governs. "Unless the borrower is
@@ -270,10 +391,9 @@ only block.
     wording:
     - a business rule or prohibition stating a second obligation of an FR's prose claim
       is deleted like a repeat; requirements alone are exempt;
-    - scenario coverage is decided on the batch the native deletes leave (since 12
-      November 2026; until then admission required it of a record the session then
-      deleted), and a statement taken only through a record that ADR 0035 then deletes as
-      a story restatement is kept;
+    - scenario slots are planned on the batch the native deletes leave, and a statement
+      taken only through a record that ADR 0035 then deletes as a story restatement is
+      kept;
     - a repeated statement's own text defect takes no correction and no unit repair:
       admission and the validator exempt the record the rule deletes. The text of a
       record the rule keeps, and any defect elsewhere in the response, still take theirs;
@@ -296,20 +416,35 @@ only block.
     (ADR 0035 Decision 3).
   - **A repeated claim ID** passes the schema (subset selectors don't enforce
     uniqueness) and ends the unit at parsing, as a repeated `signal_ids` entry does.
-  - **The criterion insert (Decision 3)** links its claim without checking meaning, like
-    any record. An inserted criterion whose content equals another record's with other
-    claims blocks as `competing_records` under the existing duplicate rule. It closes only
-    the route where the batch names the claim in a statement and no scenario: a criterion
-    that names every claim of its batch still passes the rule without testing each one
-    (SPEC01 Q14 b4).
+  - **The slot criteria (Decision 3)** link their claim without checking meaning, like any
+    record. A criterion whose content equals another record's with other claims blocks as
+    `competing_records` under the existing duplicate rule, except criteria of one
+    scenarios response as returned, which take the protocol correction (Decision 3). Binding the claim
+    before the model writes closes the routes where the batch names a claim in a statement
+    and no scenario, and where one criterion names every claim of its batch without testing
+    each one (SPEC01 Q14 b4). It costs four things:
+    - each criterion is another restatement, written without the statement, that can lose
+      part of its claim or add what the source doesn't state;
+    - the engine writes one criterion per claim, so a prose claim holding several flows,
+      such as a success and a refusal, has one criterion to carry them, and a second flow of
+      the same claim can only be an edge case, whose outcome is a criterion's Then. Whether
+      a criterion carries every flow of its claim is judged by the human who reviews
+      `spec.md`;
+    - a compound claim is one slot, so one criterion carries all its parts;
+    - the correction for equal criteria can push the model to invent a difference between
+      two claims that state no result of their own, an addition no check sees.
 - **Persistence.** Decisions 1 to 5 left the canonical record shape unchanged, so they
   changed no specification or state version; the generation schema's records gained a
   required `claim_ids`. Decision 6 changed the entity shape, so it took
   `specification/v4` and `specification-state/v23`. Decision 7 changed the edge-case
   shape, so it took `specification/v5` and `specification-state/v24`. Decision 3's
-  amendment changes no record shape and no specification or state version; the recorded
-  admission rule took `model-request-debug/v18`, and the report's closed rejection members
-  `spec-e2e-report/v17`.
+  12 November amendment changed no record shape and no specification or state version; the
+  recorded admission rule took `model-request-debug/v18`, and the report's closed rejection
+  members `spec-e2e-report/v17`. The scenario-slot amendment changes no record shape or
+  content version. The equal-criteria amendment took `model-request-debug/v19`, which records
+  its `distinct` rule, and `spec-e2e-report/v20`. The
+  edge-case scenario amendment renames the edge case's one field, and the amendment list
+  says which versions advance.
 - **Tests.**
   - The result-schema rule: admitted (a value only an exclusive item names, ungoverned
     kinds, empty), kept by clones, and invalid configurations rejected; admission
@@ -321,18 +456,37 @@ only block.
     whose claim no scenario names; identical records naming different claims block.
   - Coverage: a named claim maps, an unnamed claim in an unselected group blocks, and a
     narrative selection maps it.
-  - The criterion insert (Decision 3, 12 November 2026): in the session, a batch whose
-    outcome the engine deletes first and whose requirement then leaves a claim no
-    scenario names reports `scenario_coverage` for that claim; a scope-only claim needs
-    none; the insert is authorized at the end of the batch with the claim and group
-    fixed, its request selects the criterion definition and names the claim, a
-    replacement of another kind or naming other claims is refused, the merged batch
-    validates, and the rejection is stale after the insert; in an unrelated domain, one
-    requirement naming six claims takes six inserts within the repair bound frozen at the
-    first, which counts a criterion per claim a statement names, and a criterion in another
-    group is refused. Scripted records responses
-    missing their scenarios, in one batch, in every batch and as a re-sent runaway,
-    publish with one engine-bound criterion per lost scenario and no correction.
+  - Scenario slots (Decision 3, 12 November 2026):
+    - the planner returns one slot per distinct claim a surviving behaviour statement names,
+      in record and claim order: two claims of one statement are two slots, a claim two
+      statements name is one, and a scope-only claim, an edge-case-only claim and a claim no
+      statement names have none; a group with no slot makes no request; in an unrelated
+      domain, one requirement naming six claims gives six slots;
+    - the records request excludes the criterion kind and offers no criterion requirement,
+      and a records response carrying a criterion rejects;
+    - the scenarios request offers the slots numbered from one with only each claim's
+      source text and exact values, and no statement or other batch; its result schema
+      selects the numbers as an exact-member set and carries no claim, kind or group; a
+      missing, repeated or foreign number, or a claim, kind or group, rejects, and replay
+      restores the selection;
+    - items of one scenarios response with equal content, a pair and a set of three, take
+      one protocol correction naming every number of each set, and an accepted retry
+      publishes; items that differ in any of given, when or then don't; equal criteria
+      across groups, and a pair a field-level value repair makes equal, still block as
+      `competing_records`;
+    - the engine fixes each criterion's kind, claim and group and appends the criteria to
+      the batch in slot order; the merged batch validates, equal content naming other
+      claims in an earlier batch blocks as `competing_records`, and a text defect in a
+      written criterion takes the field-level value repair and keeps its claim;
+    - an edge case is not cover: a claim only an edge case names has no slot, and the edge
+      case still blocks with `edge_case_without_criterion`, while an edge case naming one
+      behaviour claim links natively to that claim's criterion with no model request;
+    - a merged batch lacking a claim's criterion reports `scenario_coverage` and takes no
+      repair, and a stored specification whose one criterion names several claims reads
+      back;
+    - scripted records responses publish with one engine-bound criterion per behaviour
+      claim, for one group and for several, and with a re-sent scenarios runaway, and no
+      records response is asked for a scenario.
   - Replay: a recorded rule round-trips, admits an uncovered response, and a record
     that doesn't fit the captured schema is refused.
   - Requirements own their claims (Decision 5):
@@ -408,4 +562,22 @@ only block.
       the persisted links read back; and block with the typed rejection when a batch has an
       edge case and no criterion. Each request is projected as a closed choice with its own
       prompt, and offered ids differ from unit positions in the domain cases.
+    - an edge case as a scenario (13 November 2026, not yet implemented):
+      - the rendering shows exactly the `GIVEN`, `WHEN` and `THEN` lines: the `GIVEN` is the
+        linked criterion's Given, the separator and the edge case's own given, and the `WHEN`
+        and `THEN` are the criterion's own, for a native link, for a chosen one and in an
+        unrelated domain; a criterion's Given with and without terminal punctuation each
+        takes the renderer's separator, and no text's bytes change;
+      - the records request projects the edge case's `given` and no `condition`, and the
+        records response rejects a `condition`, a `when` and a `then` on an edge case; a
+        guidance resource that still carries `condition` rejects, and the field inventory
+        covers the edge case's `given`;
+      - readback recovers the own given from the text after the copied Given, also when the
+        own given equals or begins with the copied Given, and in an unrelated domain; it
+        rejects an edited copy of the Given, When or Then, a `GIVEN` line that doesn't begin
+        with the copied Given, and a `CONDITION` or `EXPECTED OUTCOME` line;
+      - the content, state and packet guidance round-trip at their new versions and reject
+        the previous ones;
+      - a scripted run publishes an edge case as its criterion's scenario, for a native link
+        and for a chosen one.
   - The list-item split: its quoting, structure and omission-repair cases (ADR 0036).

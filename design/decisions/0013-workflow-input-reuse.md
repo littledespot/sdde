@@ -73,7 +73,11 @@
 - An explicit originating request parameter opts into selection from the input packet's
   typed result-definition identity.
 - The packet's producer supplies that identity from its current typed unit or authorized
-  repair target; the model never selects it.
+  repair target; the model never selects it. A Spec-owned producer names the definition by a
+  member of a closed enum declared for its schema resource
+  (`src/domain/specification_result_definitions.zig`), never by a string literal or a computed
+  name, and a test requires every member to be selectable in the shipped schema. The generic
+  `DefinitionId` stays a parsed name (YAML-authored `json-composition/v1` selects by string).
 - Missing or non-result definitions reject before invocation.
 - Consumers retain that selected schema for the request's lifetime.
 - A single known result variant omits the redundant root discriminator and is decoded

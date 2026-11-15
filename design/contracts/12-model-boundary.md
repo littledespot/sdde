@@ -19,21 +19,20 @@ LLM interaction is deliberately split across actions:
 
 No one action both invokes and interprets the model. No model action reads or writes the workspace directly.
 
-Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
-request-lifecycle actions run as fixed stages of one `request-model` step. A capability-free
-kernel orchestrator coordinates them through runner-owned child bindings. The split above is
-unchanged: each stage is still a separate action with its own narrow ports.
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md), the request-lifecycle
+actions run as fixed stages of one `request-model` step. A capability-free kernel orchestrator
+coordinates them through runner-owned child bindings. The split above is unchanged: each stage
+is still a separate action with its own narrow ports.
 
 Independently valid usage survives invalid answer content through the shared
 provider observation contract, including missing final text. Only complete content
 reaches decoding. The envelope retains declared observation history for reporting;
 storage does not change retry eligibility or the execution-wide token ledger.
 
-Step 5 is the YAML operation `validate-provider-invocation-observation`; step 6 is
-`decode-model-envelope` and `validate-model-payload-schema`, or the consolidated
-`admit-model-response` that combines them. The
-[operation catalogue](model-request-operations.md) owns their inputs, outcomes and
-ownership rules.
+Step 5 is the observation-validation stage (`validate-provider-invocation-observation`); step 6
+is the response-admission stage (`admit-model-response`), which decodes and schema-validates in
+one binding. The [operation catalogue](model-request-operations.md) owns their inputs, outcomes
+and ownership rules.
 
 - The sole approved prefix-normalization exception to strict decoding and its logging
   are defined in [§22.6](22-repair.md#226-unparseable-output).
@@ -103,9 +102,10 @@ Each generation request contains only what the current unit needs:
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
   and local validation. Two admission constraints are exceptions, because
-  provider schema syntax cannot express them: `exact_members` uniqueness, and with a
-  native count its completeness (`missing_member`; below, ADR 0046), and
-  ADR 0038's records exclusivity (`shared_member`; scenario coverage is the session's, Decision 3). Local admission, request descriptions and replay
+  provider schema syntax cannot express them: `exact_members` uniqueness, with a
+  native count its completeness (`missing_member`; below, ADR 0046) and with a `distinct`
+  rule its distinctness (`equal_items`; below), and
+  ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -126,6 +126,12 @@ Each generation request contains only what the current unit needs:
     owner declares the count native only where a decision requires the request
     itself to stay unchanged; otherwise the count is stated;
   - a repeated member rejects natively as `duplicate_member`;
+  - an owner may declare a `distinct` rule, a list of other item properties, each required in
+    every item variant and none the key: items that return equal values for every listed
+    property, compared as the response returned them, reject natively as `equal_items`,
+    located at the first item of the first equal set, after `duplicate_member` and
+    `missing_member`. The rule governs one array; equality across arrays is not admission's
+    (ADR 0038 Decision 3);
   - it applies only to a path ending in array items and one property, with a
     nonempty member set that fits the canonical item bounds;
   - the key must be a required, non-nullable scalar integer in every item variant;
@@ -216,7 +222,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v18` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v19` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 
@@ -336,8 +342,8 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 ### 12.7 Workflow-defined model operations
 
-> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) (the `request-model`
-> step is not yet implemented).** One `request-model` step replaces the preparation step
+> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented.** One
+> `request-model` step replaces the preparation step
 > and every explicit request-lifecycle step of this section and the
 > [operation catalogue](model-request-operations.md). A fixed kernel orchestrator runs
 > them as the stages ADR 0030 lists, through runner-owned child bindings. Where a rule
@@ -376,9 +382,9 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   packaged route descriptor, prompt, schema, slot assignment, or fallback.
 - Under ADR 0012, later YAML operations consume the same immutable request through their typed
   data dependencies.
-- Preparation may use detailed operations or the pure `prepare-model-request`
-  operation. Both reuse the same identity, binding and construction owners; the
-  consolidated form publishes their typed values together through runner validation.
+- Preparation is the `request-model` step's first stage, which reuses the identity,
+  binding and construction owners and publishes their typed values together through
+  runner validation.
 - They retain its slot, resources, controls and identity; they do not declare replacement
   selections for their own step.
 - The internal `model-request/v1` content contract is not a YAML resource; the workflow supplies
@@ -503,9 +509,8 @@ findings. Only complete native collection validation permits authority advanceme
 - An admitted need is a normal semantic pause, consumes no operation-local retry,
   and is never sent through repair to manufacture content. Returning the model's
   clarification variant alone does not admit the need.
-- A malformed need is an invalid model candidate. The existing one-use no-invention
-  replacement may yield a clarification only for an identifiable authority gap;
-  it cannot turn an interpretation failure into a request for user information.
+- A malformed need is an invalid model candidate. An interpretation failure never becomes a
+  request for user information.
 - The engine validates/deduplicates the need, assigns an `SNN`, `PNN`, or `TNN` ID when
   necessary, persists its form under `clarify/`, and enters the matching clarification-pending
   state.
@@ -844,7 +849,7 @@ and source-preservation/reference exact claim sets retain their existing rules.
 Reconciliation supplies validated source-obligation groups. The engine binds each record authoring task to one active group before
 dispatch and resolves its claims through the existing ledger. A task may author
 several records, each naming the claims it supports from that group; admission applies
-ADR 0038's one-statement-record rule and the session its scenario rule, inserting an engine-bound criterion for a gap
+ADR 0038's one-statement-record rule, and a second request per group writes one engine-bound criterion for each claim a surviving behaviour statement names
 ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2, 3 and 5); overlapping or multi-claim groups preserve
 many-to-many links.
 Unbound or stale units block as engine defects. Semantic verdicts and ADR 0020's

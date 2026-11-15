@@ -1015,7 +1015,7 @@ test "production event projection uses closed facts and propagates every barrier
             try std.testing.expectEqual(expected, events.action(node, .{ .outcome = status }, null, null));
             if (status != .more) try std.testing.expectEqual(expected, events.terminal(.{ .execution = status }));
         }
-        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = .authority }, null, null));
+        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = .{ .authority = .kernel_stage } }, null, null));
         try std.testing.expectEqual(log_stream.FailureCode.LOG_SERIALIZATION_FAILURE, events.terminal(.{ .execution = .more }).?);
         try std.testing.expectEqual(expected, events.validation(node, .ok, null, null));
         try std.testing.expectEqual(expected, events.validation(node, .invalid, "WRONG_SHAPE", null));

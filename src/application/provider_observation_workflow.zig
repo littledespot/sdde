@@ -48,11 +48,11 @@ pub const Validate = struct {
 
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const call = input.step.provider_invocation orelse return error.OperationExecutionFailed;
+        const call = input.step.provider_invocation orelse return error.ProviderInvocationFactsMissing;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-        if (request.prepared() != call.request or request.binding() != call.provider_binding) return error.OperationExecutionFailed;
+        if (request.prepared() != call.request or request.binding() != call.provider_binding) return error.LifecycleEvidenceForeign;
         const response = values.read(&input.step.data, model_invocation.schema, invocation.Result) catch |operation_error| return operation_error;
-        const raw = response.outcome() orelse return error.OperationExecutionFailed;
+        const raw = response.outcome() orelse return error.ObservationOutcomeMissing;
         const owner = self.allocator.create(Owner) catch |operation_error| return operation_error;
         errdefer self.allocator.destroy(owner);
         const retained_request = values.retain(input.step.data.slots[@intFromEnum(requests.prepared_schema.key)].?) catch |operation_error| return operation_error;
@@ -76,7 +76,7 @@ pub const Validate = struct {
                 },
                 .cancelled => .cancelled,
                 .allocation_failed => return error.OutOfMemory,
-                .logging_blocked_before_send => return error.OperationExecutionFailed,
+                .logging_blocked_before_send => return error.ObservationLoggingBlocked,
             },
         };
         errdefer owner.releaseEvidence();
@@ -97,9 +97,9 @@ pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
 /// Also checks a result retained by a downstream owner after its source slot is removed.
 pub fn requireCurrent(view: *const data.View, result: *const Result) operations.Error!void {
     const request = try requests.readCurrent(view, requests.prepared_schema);
-    if (result.operationId().model_request_id != request.id()) return error.OperationExecutionFailed;
+    if (result.operationId().model_request_id != request.id()) return error.LifecycleEvidenceForeign;
     switch (result.outcome()) {
-        .validated => |evidence| if (evidence.request() != request.prepared() or !evidence.operationId().eql(result.operationId())) return error.OperationExecutionFailed,
+        .validated => |evidence| if (evidence.request() != request.prepared() or !evidence.operationId().eql(result.operationId())) return error.LifecycleEvidenceForeign,
         .rejected, .cancelled => {},
     }
 }

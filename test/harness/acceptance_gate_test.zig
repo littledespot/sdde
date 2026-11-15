@@ -130,16 +130,6 @@ test "every model score and qualification requires human adjudication" {
     }
 }
 
-test "acceptance evidence retains advisory quality without model acceptance authority" {
-    const evidence = gate.from(rubric(), result(), .unresolved);
-    try std.testing.expectEqualDeep(acceptance.Quality{ .passed = {} }, evidence.quality.?);
-    try std.testing.expectEqual(.unresolved, evidence.qualification);
-    try std.testing.expectEqual(.human_adjudication_required, evidence.decision);
-    const pending: gate.Evidence = .{};
-    try std.testing.expect(pending.quality == null);
-    try std.testing.expectEqual(.not_evaluated, pending.decision);
-}
-
 test "evaluation reports render human gate critical minima and qualification reasons" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

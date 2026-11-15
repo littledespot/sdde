@@ -62,7 +62,7 @@ pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_lit
     defer packets.release(base);
     const entry = try entryAt(facts.candidate, authorization.target);
     const options: shared.PacketOptions = .{ .fields = .{ .replacement = .{ .inherited = .extraction_reason, .reference_phase = .extraction } } };
-    return atomic.packet(a, authorization, base, .{ .bytes = "reference_text_replacement" }, e.textOrigin(entry, authorization.target.field), options);
+    return atomic.packet(a, authorization, base, @import("specification_result_definitions.zig").Extraction.reference_text_replacement.id(), e.textOrigin(entry, authorization.target.field), options);
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     return atomic.parse(a, authorization, input, bytes);

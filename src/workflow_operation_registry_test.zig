@@ -125,7 +125,7 @@ test "operation lookup is exact with one current contract and no version aliases
 }
 
 test "model response contracts require exact inputs without effects or overrides" {
-    inline for (.{ @import("application/provider_observation_workflow.zig").Validate, @import("application/model_envelope_workflow.zig").Decode, @import("application/model_payload_schema_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").Complete, @import("application/model_request_completion_workflow.zig").Complete, @import("application/provider_operation_termination_workflow.zig").Terminate, @import("application/model_request_termination_workflow.zig").Terminate }) |Native| {
+    inline for (.{ @import("application/provider_observation_workflow.zig").Validate, @import("application/model_payload_schema_workflow.zig").Admit, @import("application/provider_operation_completion_workflow.zig").Complete, @import("application/model_request_completion_workflow.zig").Complete, @import("application/provider_operation_termination_workflow.zig").Terminate, @import("application/model_request_termination_workflow.zig").Terminate }) |Native| {
         const required = Native.contract.requires;
         var context: Native = if (@hasField(Native, "allocator")) .{ .allocator = std.testing.allocator } else .{};
         const entry: Entry = .{ .contract = Native.contract, .binding = bindings.bind(Native, &context, Native.invoke) };

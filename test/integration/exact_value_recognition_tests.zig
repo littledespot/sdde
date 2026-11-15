@@ -124,10 +124,12 @@ test "test.integration.exact_value.production_admission retained failure classes
     try std.testing.expectEqual(.authentic_capture, report.rows[1].origin);
     try std.testing.expectEqualStrings("2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4", report.rows[1].execution_id.?);
     // The old raw prose predates records naming their claims (ADR 0038), and its
-    // third record is an entity that B9 assigns to the feature entities unit. This
-    // immutable batch ends in a typed schema rejection rather than an old-shape bypass.
-    try std.testing.expectEqual(.missing_required_property, report.rows[1].outcome.rejected.schema.reason);
-    try std.testing.expectEqualStrings("/records/0/claim_ids", report.rows[1].outcome.rejected.schema.path);
+    // first record is an acceptance criterion, which a records response no longer
+    // holds (ADR 0038 Decision 3), as its third is an entity that B9 assigns to the
+    // feature entities unit. This immutable batch ends in a typed schema rejection
+    // rather than an old-shape bypass.
+    try std.testing.expectEqual(.unknown_variant, report.rows[1].outcome.rejected.schema.reason);
+    try std.testing.expectEqualStrings("/records/0/content/kind", report.rows[1].outcome.rejected.schema.path);
     try std.testing.expectEqual(.unavailable_capture, report.rows[2].origin);
     try std.testing.expectEqual(.retained_raw_capture_not_found, report.rows[2].outcome.unavailable);
     try std.testing.expect(report.rows[2].output_sha256 == null);

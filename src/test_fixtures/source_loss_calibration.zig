@@ -625,7 +625,7 @@ fn isolatedPacket(a: std.mem.Allocator, packet: *const packets.Packet, id: compa
     const choices = try a.dupe(Choice, packet.integerChoices());
     var found = false;
     for (choices) |*choice| {
-        if (choice.definition == null or !std.mem.eql(u8, choice.definition.?.bytes, "preservation_comparisons") or choice.target != .path) continue;
+        if (choice.definition == null or @import("../domain/specification_result_definitions.zig").Support.parse(choice.definition.?) != .preservation_comparisons or choice.target != .path) continue;
         const path = choice.target.path;
         if (path.len != 3 or path[0] != .property or !std.mem.eql(u8, path[0].property, "assessments") or path[1] != .items or path[2] != .property or !std.mem.eql(u8, path[2].property, "comparison_id")) continue;
         if (found) return error.InvalidCalibrationAssignment;

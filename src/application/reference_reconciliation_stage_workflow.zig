@@ -77,9 +77,9 @@ pub const Check = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const prior = try extraction.read(&input.step.data, reconciliation.parsed_schema, .reconciliation_parsed);
         for (input.step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, "phase") and parameter.value == .enumeration) {
-            const expected = std.meta.stringToEnum(r.Phase, parameter.value.enumeration) orelse return error.OperationExecutionFailed;
+            const expected = std.meta.stringToEnum(r.Phase, parameter.value.enumeration) orelse return error.ReconciliationPhaseInvalid;
             return .{ .outcome = context.?.action.execute(prior.payload().reconciliation_parsed, expected), .delta = .{} };
         };
-        return error.OperationExecutionFailed;
+        return error.ReconciliationPhaseInvalid;
     }
 };

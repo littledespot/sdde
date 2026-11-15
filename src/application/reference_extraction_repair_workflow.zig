@@ -3,6 +3,7 @@ const std = @import("std");
 const data = @import("../domain/pipeline_data.zig");
 const pipeline = @import("../domain/pipeline.zig");
 const repair = @import("../domain/reference_extraction_repair.zig");
+const repair_owner = @import("../domain/repair_owner.zig");
 const extraction = @import("reference_extraction_workflow.zig");
 const reference = @import("../domain/reference_candidate_value.zig");
 const values = @import("pipeline_values.zig");
@@ -19,80 +20,94 @@ pub const schemas = [_]data.Schema{ authorization_schema, result_schema };
 const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
 
 pub const Authorize = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .validated_reference_selections },
+        .produces = &.{.reference_extraction_repair_authorization},
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_reference_selections, .result = .reference_extraction_repair_authorization } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
-    pub const Action = @import("../actions/reference/authorize_reference_extraction_repair.zig").Action;
     pub const outcomes = @import("reference_extraction_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const prior = try extraction.read(&input.step.data, extraction.text_schema, .text_validated);
+        const prior = try extraction.readNative(&input.step.data, extraction.text_schema, .text_validated);
         const rejected = values.read(&input.step.data, extraction.selections_schema, reference.Value) catch |operation_error| return operation_error;
         const rejection: repair.Rejection = switch (rejected.payload().*) {
             .token_classification_rejected => |diagnostic| .{ .token_classifications = diagnostic },
-            else => return error.OperationExecutionFailed,
+            else => return error.RepairOwnerMismatch,
         };
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .authorization = self.action.execute(owner.arena.allocator(), try facts(&input.step.data, prior.payload().text_validated), rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err) };
-        const permit = owner.payload.authorization.retry orelse return error.OperationExecutionFailed;
+        owner.payload = .{ .authorization = repair.authorize(owner.arena.allocator(), try facts(&input.step.data, prior.payload().text_validated), rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err) };
+        const permit = owner.payload.authorization.retry orelse return error.RepairPermitMissing;
         var result = owned.publish(self.allocator, authorization_schema, owner, .ok) catch |operation_error| return operation_error;
         result.delta.repair_transition = .{ .authorized = permit };
         return result;
     }
 };
 pub const BuildInput = struct {
-    pub const Action = @import("../actions/reference/build_reference_extraction_repair_input.zig").Action;
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .structured_token_candidates, .text_validated_reference_extraction, .reference_extraction_repair_authorization },
+        .produces = &.{.model_input_packet},
+    };
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const authorization = owned.read(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
-        const prior = try extraction.read(&input.step.data, extraction.text_schema, .text_validated);
+        const authorization = owned.readNative(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
+        const prior = try extraction.readNative(&input.step.data, extraction.text_schema, .text_validated);
         const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
         const candidates = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
         const literals = values.read(&input.step.data, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
-        const packet = self.action.execute(self.allocator, source.*, literals.*, candidates.*, prior.payload().text_validated, authorization) catch |operation_error| return operation_error;
+        const packet = repair.packet(self.allocator, source.*, literals.*, candidates.*, prior.payload().text_validated, authorization) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };
 pub const Parse = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .reference_extraction_repair_authorization, .model_input_packet, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result },
+        .produces = &.{.reference_extraction_repair_result},
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .reference_extraction_repair_authorization, .evidence = .reference_extraction_repair_authorization, .result = .reference_extraction_repair_result } };
-    pub const Action = @import("../actions/reference/parse_reference_extraction_repair.zig").Action;
     pub const outcomes = @import("reference_extraction_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
-    action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const authorization = owned.read(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
+        const authorization = owned.readNative(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
         const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const candidate = try @import("model_candidate_handoff.zig").read(&input.step.data);
-        owner.payload = .{ .replacement = .{ .value = self.action.execute(owner.arena.allocator(), authorization, packet, candidate.body) catch |err| return reject(self.allocator, result_schema, owner, err), .origin = candidate.origin } };
+        owner.payload = .{ .replacement = .{ .value = repair.parse(owner.arena.allocator(), authorization, packet, candidate.body) catch |err| return reject(self.allocator, result_schema, owner, err), .origin = candidate.origin } };
         return owned.publish(self.allocator, result_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
 pub const Merge = struct {
+    pub const effects: repair_owner.Effects = .{
+        .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .reference_extraction_repair_authorization, .reference_extraction_repair_result },
+        .replaces = &.{.text_validated_reference_extraction},
+        .invalidates = &.{ .validated_reference_selections, .reference_extraction_repair_authorization, .reference_extraction_repair_result },
+    };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .reference_extraction_repair_authorization, .result = .text_validated_reference_extraction } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
-    pub const Action = @import("../actions/reference/merge_reference_extraction_repair.zig").Action;
     pub const outcomes = @import("reference_extraction_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
-    action: Action,
+    normalizer: @import("../ports/unicode_normalizer.zig").Normalizer,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const authorization = owned.read(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
-        const replacement = owned.read(&input.step.data, result_schema, .replacement) catch |operation_error| return operation_error;
-        const prior = try extraction.read(&input.step.data, extraction.text_schema, .text_validated);
+        const authorization = owned.readNative(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
+        const replacement = owned.readNative(&input.step.data, result_schema, .replacement) catch |operation_error| return operation_error;
+        const prior = try extraction.readNative(&input.step.data, extraction.text_schema, .text_validated);
         const owner = reference.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer reference.destroy(owner);
-        owner.payload = .{ .text_validated = self.action.execute(owner.arena.allocator(), try facts(&input.step.data, prior.payload().text_validated), authorization, replacement.value, replacement.origin) catch |operation_error| return operation_error };
+        const current = try facts(&input.step.data, prior.payload().text_validated);
+        const arena = owner.arena.allocator();
+        var canonical = @import("../domain/typed_text.zig").CanonicalText.fromInputs(arena, self.normalizer, current.inputs) catch |operation_error| return operation_error;
+        defer canonical.deinit(arena);
+        owner.payload = .{ .text_validated = repair.merge(arena, canonical, current, authorization, replacement.value, replacement.origin) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
-        delta.repair_transition = (owner.payload.text_validated.last_repair orelse return error.OperationExecutionFailed).transition(.native) catch return error.OperationExecutionFailed;
+        delta.repair_transition = try repair_owner.mergeTransition(owner.payload.text_validated.last_repair, .native);
         delta.data_replacements[@intFromEnum(extraction.text_schema.key)] = values.adopt(self.allocator, extraction.text_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
-        for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
+        for (effects.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };
     }
 };

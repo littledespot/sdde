@@ -7,7 +7,7 @@ const observation = @import("provider_observation_workflow.zig");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 
-pub const schema = values.schema(.model_envelope_result, Result, 1, null).captured();
+pub const schema = values.schema(.model_envelope_result, Result, 1, null).captured().recorded();
 pub const Rejection = struct {
     reason: envelope.Rejection,
     diagnostic: envelope.Diagnostic,
@@ -34,34 +34,6 @@ pub const Result = opaque {
     }
 };
 
-pub const Decode = struct {
-    pub const Action = @import("../actions/model/decode_model_envelope.zig").Action;
-    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{
-        .id = Action.contract.id,
-        .kind = .step,
-        .requires = Action.contract.requires,
-        .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
-        .side_effect = Action.contract.side_effect,
-        .outcome_association = .{ .request_decode = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .model_envelope_result } },
-    };
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const source = try observation.readCurrent(&input.step.data);
-        var diagnostic: ?envelope.Diagnostic = null;
-        const decoded: ?envelope.Error!envelope.Owned = if (complete(source)) |candidate| self.action.execute(self.allocator, candidate, &diagnostic) else null;
-        const value = try capture(self.allocator, &input.step.data, decoded, diagnostic);
-        errdefer values.destroy(value);
-        var delta: pipeline.NodeDelta = .{};
-        delta.data_writes[@intFromEnum(schema.key)] = value;
-        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch |operation_error| return operation_error;
-        return .{ .outcome = status(result), .delta = delta };
-    }
-};
-
 pub fn complete(source: *const observation.Result) ?*const @import("../domain/provider_invocation_validation.zig").CompleteCandidate {
     return switch (source.outcome()) {
         .validated => |evidence| switch (evidence.result()) {
@@ -73,19 +45,19 @@ pub fn complete(source: *const observation.Result) ?*const @import("../domain/pr
 }
 
 /// Consumes the decoder tree/diagnostic on every path and retains its observation.
-/// Detailed and consolidated admission publish the same sealed result type.
+/// Response admission publishes this sealed result.
 pub fn capture(allocator: std.mem.Allocator, view: *const data.View, decoded: ?envelope.Error!envelope.Owned, diagnostic: ?envelope.Diagnostic) operations.Error!*data.Value {
     var outcome: Decoded = if (decoded) |result| decoded_result: {
         const owned = result catch |err| break :decoded_result switch (err) {
             error.OutOfMemory => return error.OutOfMemory,
-            error.InvalidModelEnvelope => .{ .protocol_rejected = .{ .reason = error.InvalidModelEnvelope, .diagnostic = diagnostic orelse return error.OperationExecutionFailed } },
+            error.InvalidModelEnvelope => .{ .protocol_rejected = .{ .reason = error.InvalidModelEnvelope, .diagnostic = diagnostic orelse return error.ProtocolDiagnosticMissing } },
         };
         break :decoded_result .{ .decoded = owned };
     } else .not_decoded;
     errdefer release(allocator, &outcome);
     const source = try observation.readCurrent(view);
-    if ((complete(source) != null) != (decoded != null)) return error.OperationExecutionFailed;
-    if (outcome == .decoded and outcome.decoded.candidate.association() != complete(source).?.association()) return error.OperationExecutionFailed;
+    if ((complete(source) != null) != (decoded != null)) return error.DecodeEvidenceInconsistent;
+    if (outcome == .decoded and outcome.decoded.candidate.association() != complete(source).?.association()) return error.DecodeEvidenceInconsistent;
     const owner = allocator.create(Owner) catch |operation_error| return operation_error;
     errdefer allocator.destroy(owner);
     const retained = values.retain(view.slots[@intFromEnum(observation.schema.key)].?) catch |operation_error| return operation_error;

@@ -418,6 +418,10 @@ test "the validated inventory is a distinct type that the later steps require" {
     try std.testing.expect(graphs_return == compilation.ValidatedGraphs);
     try std.testing.expect(graphs_return != []const compilation.CompiledWorkflow);
     try std.testing.expect(@typeInfo(@TypeOf(startup.steps.buildWorkflowRegistry)).@"fn".params[6].type.? == compilation.ValidatedGraphs);
+    // Both the graph validation and the registry candidate take the validated operations, because
+    // each rechecks a step of a contract with variants against the variant it selected.
+    try std.testing.expect(@typeInfo(@TypeOf(startup.steps.validateWorkflowGraphs)).@"fn".params[2].type.? == startup.ValidatedOperations);
+    try std.testing.expect(@typeInfo(@TypeOf(startup.steps.buildWorkflowRegistry)).@"fn".params[7].type.? == startup.ValidatedOperations);
 }
 
 test "locating maps a locator rejection without taking on read work" {

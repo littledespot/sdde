@@ -7,8 +7,7 @@ const capabilities = @import("workflow_capability.zig");
 pub const requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_authorization_result };
 pub const produces = [_]pipeline.DataKey{.provider_invocation_result};
 pub const validation_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_invocation_result };
-pub const decode_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .provider_invocation_validation_result };
-pub const payload_schema_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .model_envelope_result };
+pub const admission_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .provider_invocation_validation_result };
 pub const admission_produces = [_]pipeline.DataKey{ .model_envelope_result, .model_payload_schema_result };
 
 pub fn validContract(contract: operation.Contract, ports: []const []const u8) bool {
@@ -23,11 +22,16 @@ fn valid(inputs: []const pipeline.DataKey, outputs: []const pipeline.DataKey, op
     for ([_]pipeline.DataKey{ .provider_invocation_validation_result, .model_envelope_result, .model_payload_schema_result }) |key| {
         if (std.mem.indexOfScalar(pipeline.DataKey, replaces, key) != null) return false;
     }
-    const response_inputs: ?[]const pipeline.DataKey = if (validates(outputs)) &validation_requires else if (std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_envelope_result) != null) &decode_requires else if (std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_payload_schema_result) != null) &payload_schema_requires else null;
-    if (response_inputs) |required| {
-        if ((outputs.len != 1 and !std.mem.eql(pipeline.DataKey, outputs, &admission_produces)) or effect != .none or accounting != .none or ports.len != 0 or
+    // Observation validation publishes one result; response admission publishes the decoded envelope and
+    // its payload-schema result together (ADR 0030: there is no separate decode or schema step).
+    const validating = validates(outputs);
+    const admitting = std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_envelope_result) != null or
+        std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_payload_schema_result) != null;
+    if (validating or admitting) {
+        const shape = if (validating) outputs.len == 1 else std.mem.eql(pipeline.DataKey, outputs, &admission_produces);
+        if (!shape or effect != .none or accounting != .none or ports.len != 0 or
             optional.len != 0 or replaces.len != 0 or invalidates.len != 0 or parameters != 0 or retry) return false;
-        for (required) |key| {
+        for (if (validating) &validation_requires else &admission_requires) |key| {
             if (std.mem.indexOfScalar(pipeline.DataKey, inputs, key) == null) return false;
         }
     }

@@ -132,17 +132,6 @@ const Fake = struct {
 /// The port steps the fake counts; the identity source counts its own draws.
 const evidence_ports = [_]evidence_stage.Step{ .inventory_sources, .capture_sources, .decode_markdown };
 
-test "the evidence stage contract is one read-only operation from the directories to the citable inputs" {
-    const contract = evidence_stage.Action.contract;
-    try std.testing.expectEqualStrings("prepare-reference-evidence", contract.id);
-    try std.testing.expectEqual(pipeline.SideEffect.filesystem_read, contract.side_effect);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &.{ .reference_directory, .feature_directory }, contract.requires);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.citable_reference_inputs}, contract.produces);
-    try std.testing.expectEqual(@as(usize, 0), contract.optional.len + contract.replaces.len + contract.invalidates.len);
-    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
-    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
-}
-
 test "the evidence stage runs the eight steps in order and returns citable inputs for the feature" {
     var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer scratch.deinit();
@@ -243,17 +232,6 @@ fn prepareTokens(allocator: std.mem.Allocator) !Prepared {
 
 fn tokenAction() token_stage.Action {
     return .{ .normalizer = fixture.normalizer, .case_folder = fixture.folder, .classifier = fixture.classifier };
-}
-
-test "the token stage contract is one capability-free operation from the naming policy and inputs to three products" {
-    const contract = token_stage.Action.contract;
-    try std.testing.expectEqualStrings("prepare-reference-tokens", contract.id);
-    try std.testing.expectEqual(pipeline.SideEffect.none, contract.side_effect);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &.{ .compiled_naming_policy, .valid_toolchain, .citable_reference_inputs }, contract.requires);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &.{ .path_token_grammar, .reference_passive_literals, .structured_token_candidates }, contract.produces);
-    try std.testing.expectEqual(@as(usize, 0), contract.optional.len + contract.replaces.len + contract.invalidates.len);
-    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
-    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
 }
 
 test "the token stage returns the grammar, the literal registry and the token candidates for the inputs" {

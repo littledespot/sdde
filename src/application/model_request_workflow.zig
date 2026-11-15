@@ -48,33 +48,6 @@ pub const Initialize = struct {
     }
 };
 
-pub const Assign = struct {
-    pub const Action = @import("../actions/model/assign_model_request_id.zig").Action;
-    pub const contract: operation.Contract = contract: {
-        var result = descriptor(Action.contract, &.{.model_request_identity_ledger}, &.{.assigned_model_request}, &.{.model_request_identity_ledger});
-        result.optional = &.{ .model_input_packet, .json_composition };
-        result.parameters = &preparation_parameters;
-        break :contract result;
-    };
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const step = input.step;
-        const current = values.read(&step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena.deinit();
-        const selection = try selections(self.allocator, arena.allocator(), step);
-        defer selection.deinit();
-        const selected = selection.value;
-        const assignment = self.action.execute(current, current.revision(), selected.unit(), selected.binding.operation_id, selected.purpose()) catch |operation_error| return operation_error;
-        defer identity.deinitOwner(assignment.owner);
-        const request = selected.bind(self.allocator, assignment) catch |operation_error| return operation_error;
-        return publishAssignment(self.allocator, assignment.owner, &.{request});
-    }
-};
-
 pub const Prepare = struct {
     pub const Action = @import("../actions/model/prepare_model_request.zig").Action;
     pub const contract: operation.Contract = contract: {
@@ -99,45 +72,6 @@ pub const Prepare = struct {
     }
 };
 
-pub const Validate = struct {
-    pub const Action = @import("../actions/model/validate_model_request_binding.zig").Action;
-    pub const contract = descriptor(Action.contract, &.{ .model_request_identity_ledger, .assigned_model_request }, &.{.validated_model_request}, &.{});
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const request = try readCurrent(&input.step.data, assigned_schema);
-        const current = values.read(&input.step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
-        const id = request.id();
-        const evidence = self.action.execute(current, current.revision(), id, id.immutable_unit_owner_id, request.binding().operation_id, id.purpose) catch |operation_error| return operation_error;
-        const next = handoff.validated(request, evidence) catch |operation_error| return operation_error;
-        return publish(self.allocator, validated_schema, next);
-    }
-};
-
-pub const Build = struct {
-    pub const Action = @import("../actions/model/build_model_request.zig").Action;
-    pub const contract = descriptor(Action.contract, &.{ .model_request_identity_ledger, .validated_model_request }, &.{.prepared_model_request}, &.{});
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const request = try readCurrent(&input.step.data, validated_schema);
-        // These resources were selected once by the originating compiled step.
-        var parts: handoff.ContentBuffer = undefined;
-        var input_id: [32]u8 = undefined;
-        const source = request.buildSource(&input_id) catch |operation_error| return operation_error;
-        var owned = self.action.execute(self.allocator, source, request.content(&parts)) catch |operation_error| return operation_error;
-        const next = handoff.prepared(request, owned, null) catch |native_failure| {
-            owned.deinit();
-            return native_failure;
-        };
-        return publish(self.allocator, prepared_schema, next);
-    }
-};
-
 pub const Selection = struct {
     value: handoff.Selection,
     owned_packet: ?*const packets.Packet = null,
@@ -151,25 +85,19 @@ fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: op
     return selectInput(allocator, scratch, step, packet);
 }
 
-/// A pure selection for a reconstructed native assignment. This neither assigns
-/// a logical request nor supplies a provider invocation capability.
-pub fn selectionForPacket(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: operations.StepInput, packet: *const packets.Packet) operations.Error!Selection {
-    return selectInput(allocator, scratch, step, packet);
-}
-
 fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: operations.StepInput, packet: ?*const packets.Packet) operations.Error!Selection {
-    if (!@import("../domain/workflow_model.zig").validResultSelection(step.step.parameters)) return error.OperationExecutionFailed;
-    const selected = step.model_binding orelse return error.OperationExecutionFailed;
+    if (!@import("../domain/workflow_model.zig").validResultSelection(step.step.parameters)) return error.RequestDeclarationInvalid;
+    const selected = step.model_binding orelse return error.RequestModelBindingMissing;
     const static_input = resource(step, "input");
-    if (packet != null and static_input != null) return error.OperationExecutionFailed;
+    if (packet != null and static_input != null) return error.RequestDeclarationInvalid;
     var selection: handoff.ResultSelection = .resource;
     for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, "result-selection")) {
-        if (parameter.value != .enumeration) return error.OperationExecutionFailed;
-        selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.OperationExecutionFailed;
+        if (parameter.value != .enumeration) return error.RequestDeclarationInvalid;
+        selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.RequestDeclarationInvalid;
     };
     var result: handoff.Selection = .{
         .binding = selected.*,
-        .prompt = resource(step, "prompt") orelse return error.OperationExecutionFailed,
+        .prompt = resource(step, "prompt") orelse return error.RequestResourceMissing,
         .context = resource(step, "context"),
         .result = undefined,
         .input = if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null,
@@ -179,8 +107,8 @@ fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: o
     const part_id = parameterString(step, "composition-part");
     if (part_id) |id| {
         const state = try compositions.readState(&step.data);
-        if (state.base != packet) return error.OperationExecutionFailed;
-        const part = state.plan.part(@import("../domain/workflow.zig").WorkflowResourceId.parse(id) orelse return error.OperationExecutionFailed) orelse return error.OperationExecutionFailed;
+        if (state.base != packet) return error.RequestCompositionConflict;
+        const part = state.plan.part(@import("../domain/workflow.zig").WorkflowResourceId.parse(id) orelse return error.RequestDeclarationInvalid) orelse return error.RequestCompositionConflict;
         const binding = state.select(scratch, part) catch |operation_error| return operation_error;
         result.composition = binding;
         result.result = .{ .id = state.plan.resultAlias(), .content = .{ .result_schema = state.plan.resultSchema() } };
@@ -188,8 +116,8 @@ fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: o
         result.input = .{ .packet = derived };
         return .{ .value = result, .owned_packet = derived };
     } else {
-        if (step.data.contains(.json_composition)) return error.OperationExecutionFailed;
-        result.result = resource(step, "result-schema") orelse return error.OperationExecutionFailed;
+        if (step.data.contains(.json_composition)) return error.RequestCompositionConflict;
+        result.result = resource(step, "result-schema") orelse return error.RequestResourceMissing;
     }
     return .{ .value = result };
 }
@@ -225,7 +153,7 @@ fn publishAssignment(allocator: std.mem.Allocator, owner: *identity.Owner, reque
 pub fn readCurrent(view: *const data.View, schema: data.Schema) operations.Error!*const handoff.Request {
     const current = values.read(view, ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
     const request = values.read(view, schema, handoff.Request) catch |operation_error| return operation_error;
-    if (!current.containsRequest(request.id()) or !current.stageRunEpochId().eql(request.ledger().stageRunEpochId())) return error.OperationExecutionFailed;
+    if (!current.containsRequest(request.id()) or !current.stageRunEpochId().eql(request.ledger().stageRunEpochId())) return error.RequestLedgerForeign;
     return request;
 }
 
@@ -258,11 +186,4 @@ pub fn publishPacket(allocator: std.mem.Allocator, packet: *packets.Packet) oper
 
 pub fn adoptRequest(allocator: std.mem.Allocator, schema: data.Schema, request: *handoff.Request) values.Error!*data.Value {
     return values.adopt(allocator, schema, handoff.Request, handoff.Request, request, handoff.view, handoff.destroy, null);
-}
-
-fn publish(allocator: std.mem.Allocator, schema: data.Schema, request: *handoff.Request) operations.Error!execution.Candidate {
-    errdefer handoff.destroy(request);
-    var delta: pipeline.NodeDelta = .{};
-    delta.data_writes[@intFromEnum(schema.key)] = adoptRequest(allocator, schema, request) catch |operation_error| return operation_error;
-    return .{ .outcome = .ok, .delta = delta };
 }

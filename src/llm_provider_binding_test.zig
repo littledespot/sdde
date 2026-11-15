@@ -187,7 +187,7 @@ test "runner rejects altered or missing compiled model controls before operation
             .graph = &graph,
         }, &registry, barrier.port(), .{}, &fixture.services, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
-        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(step.id).rejected);
+        try std.testing.expectEqual(execution.Rejection{ .authority = .model_binding_mismatch }, runner.bindings().invokeStep(step.id).rejected);
         try std.testing.expectEqual(@as(usize, 0), control.state.calls);
     }
 }
@@ -229,7 +229,7 @@ test "generic runner supplies immutable binding to a pure operation without a pr
     );
     defer runner_without_authority.deinit();
     try std.testing.expectEqual(
-        .authority,
+        execution.Rejection{ .authority = .model_binding_mismatch },
         runner_without_authority.bindings().invokeStep(model_step.id).rejected,
     );
     try std.testing.expectEqual(@as(usize, 1), control.state.calls);
@@ -403,9 +403,9 @@ const OperationControl = struct {
         const self = context.?;
         const step = switch (input) {
             .step => |value| value,
-            .invocation => return error.OperationExecutionFailed,
+            .invocation => return error.OperationWrongKind,
         };
-        const bound = step.model_binding orelse return error.OperationExecutionFailed;
+        const bound = step.model_binding orelse return error.RequestModelBindingMissing;
         self.calls += 1;
         self.observed_slot = bound.slot_id.bytes;
         return .{ .outcome = .ok, .delta = .{} };

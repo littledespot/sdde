@@ -148,13 +148,16 @@ and qualification. No real grader is currently qualified by these pending record
   Bedrock family, and explicit grader/acceptance evidence with an always-unresolved
   decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v17`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v20` (v18 plus the closed `reason` of an `authority` terminal rejection,
+  which includes the repair-key and request-assignment population bounds, and
+  the `first_cause` the run kept beside its terminal rejection): the
+  single total token budget and aggregate actual usage,
   each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance, with ADR 0048's `no_title_heading` and
   `conflicting_title_headings` among the native rejections, and ADR 0038's
-  `scenario_coverage` unit defect in place of the `uncovered_member` schema rejection.
-  It embeds no model evaluation.
+  `scenario_coverage` unit defect in place of the `uncovered_member` schema rejection, and
+  its `equal_items` schema rejection. It embeds no model evaluation.
 - `spec-adjudication-record/v1`, `spec-adjudication/v3`: the `/evaluate-e2e` skill's
   rubric judgment and derived development acceptance.
 - `grader-calibration-panel/v1`, `grader-calibration-review/v1`,
