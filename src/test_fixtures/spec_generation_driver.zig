@@ -563,6 +563,7 @@ pub const Driver = struct {
                     std.testing.expect(!std.mem.eql(u8, part.bytes(), scenarios_guidance)) catch |err| return self.hookFailed(err);
                 };
                 std.testing.expect(found_prompt) catch |err| return self.hookFailed(err);
+                expectPrinciples(arena.allocator(), &view, current_request.packet().?, false) catch |err| return self.hookFailed(err);
                 self.link_calls += 1;
             } else if (current_request.id().immutable_unit_owner_id == .specification_unit and current_request.id().purpose == .initial_generation) {
                 std.testing.expect(!view.contains(.required_authority_gate)) catch |err| return self.hookFailed(err);
@@ -578,6 +579,8 @@ pub const Driver = struct {
                 };
                 std.testing.expect(found_prompt) catch |err| return self.hookFailed(err);
                 assertGuidanceContext(arena.allocator(), current_request.prepared().?, if (scenarios_request) scenarios_context else generation_context_path, if (scenarios_request) generation_context_path else scenarios_context) catch |err| return self.hookFailed(err);
+                // D17.1: the records request alone carries the captured principle files.
+                expectPrinciples(arena.allocator(), &view, current_request.packet().?, unit == .records and !scenarios_request) catch |err| return self.hookFailed(err);
                 if (scenarios_request) {
                     std.testing.expect(@import("../domain/specification_session.zig").scenarioPhase(session)) catch |err| return self.hookFailed(err);
                     self.scenario_calls += 1;
@@ -854,6 +857,20 @@ fn assertChoiceCorrection(a: std.mem.Allocator, guidance_bytes: []const u8, sche
 fn excludesCriterion(excluded: []const @import("../domain/model_result_schema.zig").ExcludedVariant) bool {
     for (excluded) |variant| if (std.mem.eql(u8, variant.kind, "acceptance_criterion")) return true;
     return false;
+}
+
+/// The request's `principles` part is the captured principle files, each file's text in registry order,
+/// when it is the records request of a project with principle files, and is absent otherwise.
+fn expectPrinciples(a: std.mem.Allocator, view: *const data.View, packet: *const @import("../domain/model_input_packet.zig").Packet, records: bool) !void {
+    const registry = try @import("../application/pipeline_values.zig").read(view, @import("../application/principle_workflow.zig").registry_schema, @import("../domain/principle_registry.zig").Registry);
+    const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+    if (!records or registry.sources.len == 0) return std.testing.expect(!body.contains("principles"));
+    const files = body.get("principles").?.array.items;
+    try std.testing.expectEqual(registry.sources.len, files.len);
+    for (files, registry.sources) |file, source| {
+        try std.testing.expectEqual(@as(usize, 1), file.object.count());
+        try std.testing.expectEqualStrings(source.bytes, file.object.get("text").?.string);
+    }
 }
 
 fn generationPrompt(unit: @import("../domain/specification_generation.zig").Unit) error{UnexpectedStoryRequest}![]const u8 {

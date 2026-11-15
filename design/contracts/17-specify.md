@@ -316,6 +316,14 @@ For each feature-brief or specification unit other than the engine-composed stor
   Authoring packets resolve offered complete group requirements beside field
   purposes; initial values select their support while drafting. Record packets
   retain their fixed group and separate remaining context without repeating assigned claims.
+  The records request alone also carries the captured principle files as `principles`
+  (SPEC01 D17.1, [ADR 0015](../decisions/0015-specification-principle-review.md)): one entry
+  per file holding its text as captured, in registry order, with no ID, path or citation, and
+  no key at all when the project has none. A protocol correction and the ADR 0039 re-send keep
+  it with the rest of the request; no other request does, and an atomic repair does not. The
+  files are context and constraints, never a record's origin: records cite only source
+  claims, and a principle supplies no passive literal or exact value. The records prompt
+  says how to read them.
   Shared guidance names `source_assignment.requirements` as the batch's duties;
   `context_requirements` help interpret them without substituting
   another group's independent obligation or changing fixed repair evidence.

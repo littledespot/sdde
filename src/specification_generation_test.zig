@@ -10574,3 +10574,86 @@ test "claim-bound scenarios: only the awaited group's own criteria join its batc
     try std.testing.expectEqual(@as(usize, 0), current.scenario_cursor);
     try std.testing.expectEqual(@as(usize, 1), current.record_batches[0].response.content.records.len);
 }
+
+test "Q17 only the records request carries the principle files, as captured and unnumbered" {
+    const sessions = @import("domain/specification_session.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const building: @import("actions/specification/build_specification_model_input.zig").Action = .{};
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Three files, the middle one longer than a transport chunk: the request carries each file whole.
+    const long = try a.alloc(u8, @import("domain/principle_registry.zig").chunk_bytes + 4000);
+    @memset(long, 'x');
+    const texts = [_][]const u8{ "MOCK Principle one.", long, "\"MOCK\" principle three.\n" };
+    const principles = try @import("test_fixtures/principles.zig").registryOf(a, &texts);
+    try std.testing.expect(principles.chunks.len > texts.len);
+    const none = try @import("test_fixtures/principles.zig").registry(a, null);
+    var fixture = try Fixture.initContent(a, "Renew eligible loans.", null, true, 2);
+    defer fixture.deinit();
+    const renewed = try fixture.proposalGroup("The loan is renewed.", 0);
+    const refused = try fixture.proposalGroup("The renewal is refused.", 1);
+    // The brief and entities requests carry none.
+    var current = (try sessions.initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
+    const story = try fixture.proposal("A loan can be renewed.");
+    while (current.completed < sessions.records_index) {
+        if (current.completed != sessions.story_index) {
+            const packet = try building.execute(std.testing.allocator, current, fixture.context, &packet_guidance.marked, principles);
+            defer packets.release(packet);
+            try std.testing.expect(!(try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object.contains("principles"));
+        }
+        const response: g.Response = .{ .content = switch (try sessions.unit(current.completed)) {
+            .brief => .{ .brief = .{ .description = story, .primary_goal = story } },
+            .primary_user_story => .{ .primary_user_story = story },
+            .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = story } },
+            .records => unreachable,
+        } };
+        current = try appendMockResponse(a, current, fixture.context, response);
+    }
+    // The records request carries each principle file once, as captured, with no number to cite, and
+    // is otherwise the request the session builds.
+    const plain = try sessions.packet(std.testing.allocator, current, fixture.context, &packet_guidance.marked);
+    defer packets.release(plain);
+    const carried = try building.execute(std.testing.allocator, current, fixture.context, &packet_guidance.marked, principles);
+    defer packets.release(carried);
+    const before = (try std.json.parseFromSlice(std.json.Value, a, plain.body(), .{})).value.object;
+    const after = (try std.json.parseFromSlice(std.json.Value, a, carried.body(), .{})).value.object;
+    try std.testing.expect(!before.contains("principles"));
+    const files = after.get("principles").?.array.items;
+    try std.testing.expectEqual(texts.len, files.len);
+    for (files, texts) |file, text_of_file| {
+        try std.testing.expectEqual(@as(usize, 1), file.object.count());
+        try std.testing.expectEqualStrings(text_of_file, file.object.get("text").?.string);
+    }
+    try std.testing.expectEqual(before.count() + 1, after.count());
+    for (before.keys()) |key| try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, before.get(key).?, .{}), try std.json.Stringify.valueAlloc(a, after.get(key).?, .{}));
+    // Everything native the request holds besides its body is the session's own: principle text is no
+    // original source, exact-value scope or field policy.
+    try std.testing.expectEqualDeep(plain.unit(), carried.unit());
+    try std.testing.expectEqualDeep(plain.purpose(), carried.purpose());
+    try std.testing.expectEqualDeep(plain.resultDefinition(), carried.resultDefinition());
+    try std.testing.expectEqualDeep(plain.originalSources(), carried.originalSources());
+    try std.testing.expectEqualDeep(plain.exactScope(), carried.exactScope());
+    try std.testing.expectEqualDeep(plain.fieldPolicies(), carried.fieldPolicies());
+    try std.testing.expectEqualDeep(plain.excludedVariants(), carried.excludedVariants());
+    // A project without principle files gets the request as the session builds it.
+    const unchanged = try building.execute(std.testing.allocator, current, fixture.context, &packet_guidance.marked, none);
+    defer packets.release(unchanged);
+    try std.testing.expectEqualStrings(plain.body(), unchanged.body());
+    // The second group's records request carries them too, whichever group is in flight.
+    const first_batch = [_]spec.Model.RecordProposal{authoredRecord(.{ .functional_requirement = .{ .text = renewed.value } }, renewed)};
+    const second_batch = [_]spec.Model.RecordProposal{authoredRecord(.{ .functional_requirement = .{ .text = refused.value } }, refused)};
+    const second_group = try sessions.appendBound(a, current, (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &first_batch } } })).valid);
+    try std.testing.expectEqual(@as(usize, 1), second_group.record_cursor);
+    try std.testing.expect(!sessions.scenarioPhase(second_group));
+    const later = try building.execute(std.testing.allocator, second_group, fixture.context, &packet_guidance.marked, principles);
+    defer packets.release(later);
+    const later_files = (try std.json.parseFromSlice(std.json.Value, a, later.body(), .{})).value.object.get("principles").?.array.items;
+    try std.testing.expectEqual(texts.len, later_files.len);
+    // The scenarios request carries none.
+    const scenarios = try sessionInScenarios(a, &fixture, story, &.{ &first_batch, &second_batch });
+    try std.testing.expect(!@import("domain/specification_principles.zig").carried(scenarios, principles));
+    const request = try building.execute(std.testing.allocator, scenarios, fixture.context, &packet_guidance.marked, principles);
+    defer packets.release(request);
+    try std.testing.expect(!(try std.json.parseFromSlice(std.json.Value, a, request.body(), .{})).value.object.contains("principles"));
+}

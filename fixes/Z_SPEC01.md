@@ -1888,6 +1888,46 @@ entities request. **Why no prompt change:** the contract is coherent, the cost i
 prompt changes on entity fields (their meaning, since removed) did not help (SPEC01 §3). Reopen if a set shows the
 cost above one point.
 
+## Q17. Principles as records-call context (kept 15 November 2026)
+
+**Decided** 1 November 2026 (D17.1, user: principles "should be used for context when executing the spec
+workflow"; never modified, ADR 0015:36); watch items 3 November ("Yes, watch items"); screen and set approved
+15 November; **kept** 15 November (user: "yes", on the nine-run set). **Defect class:** none scored (no
+rubric criterion measures principle consistency), so only the guards could show.
+
+**Built** (`specification_principles.zig`; `build-specification-model-input` requires `principle_registry`):
+the records request, and no other (not brief, entities, scenarios, links, support or an atomic repair), carries
+each principle file's text as `principles`, in registry order, with no ID, path or citation; no key when the
+project has no principle files. The records prompt's closing paragraph calls them "principles, given as
+context" and says they add no requirement or condition. Amended: ADR 0015, ADR 0023, 17-specify.md,
+09-configuration.md (:337, :354), 13-05, F0100 and PLAN01's capture row. **Offline:** `zig build verify` 147
+steps, 2,224 tests; of 1,900 scripted requests, 1,888 are identical and 12 records requests (5 scenarios) gain
+the key; three mutants of the carry rule each fail its test; an architecture pin allows only the records
+builder to import it; the scripted driver checks every initial request. An independent review found no
+blocker; its test, driver, stale-doc and prompt-wording findings were fixed.
+
+**Screen** (`zig-out/e2e-call/2026-11-15T07-46-*`, 10 replays per case, the second set's records call): 18 of 20
+completed; both protocol failures were an exact value alone in a record's text (loan-renewal), the
+text-composition check; every trial named all assigned claims; no response mentions principles.
+
+**Set** (`2026-11-15T07-50-*` and `08-11-*`, build `08ef5d5d…`, modified; skill `3fe52a92…`): 7 of 9 published
+and passed, no critical failure. Hello-world 92.9, 92.9, 89.3 (two minor unsupported additions, the same
+greeting-then-timestamp order as the reference); loan-renewal 92.9, 89.3, 100, 92.9 (0 / 0 / 0 / 0). No class is
+new; **no content traces to a principle file** in any of the 9 runs (n-gram and vocabulary scans, every
+records response read). Cost: +5.5k to +6k tokens a run (+33 to 41%), all in the records call's input.
+**Unpublished:** `dc98…` failed at reconciliation after the model declared claims 4 and 5 in conflict (call 4,
+before any call carries principles) and the outcome binding returned `InvalidOutcomeAssociation` (SPEC01 C6);
+`f971…` blocked at the link plan with `edge_case_without_criterion`: the records call (carrying principles) put
+claim 4 only in an edge case, so it had no slot (ADR 0038 Decisions 3 and 7). That block appears in 1 of 5
+principle-carrying loan-renewal records calls and 0 of 16 earlier. **Judgement calls:** loan-renewal
+`f080…` scored AC-004 "The loan is renewed only once." as a minor ambiguity (renewal-eligibility 3), as run
+`91f4` was; read as a weakened limit it is a critical failure; `aa46…` had a protocol correction before the
+records call (two objects in one conflicts answer).
+
+**Reported separately:** implementation complete; mechanical checks passed; semantic benefit **not
+demonstrated** (the model ignores the principle text, and no criterion scores it); brittleness unchanged;
+scope qualified (records call only, guards only). Open parts: SPEC01 Q17, Q14 and C6.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a

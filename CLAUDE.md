@@ -40,10 +40,12 @@ toward smaller semantic decisions hasn't been accepted.
 
 AGENTS.md lists them. The project settings make every one prompt, and the build
 rejects any `test`, `test-*`, `smoke*` or `verify` step that depends on a live step.
-The user starts a live Spec case with `/live-e2e <case>`. `/evaluate-e2e <run>`
-assesses and adjudicates a retained run; AGENTS.md "Testing expectations" says who
-triggers it ([R8](design/harness/acceptance.md)). A published run exits nonzero until
-it is adjudicated.
+The user starts a live Spec case with `/live-e2e <case>`, which then runs
+`/evaluate-e2e` on the run it produced unless `--no-evaluate` is given; that invocation
+is the approval for both.
+`/evaluate-e2e <run>` assesses and adjudicates a retained run; AGENTS.md "Testing
+expectations" says who triggers it ([R8](design/harness/acceptance.md)). A published run
+exits nonzero until it is adjudicated.
 
 ## Commands without prompts
 

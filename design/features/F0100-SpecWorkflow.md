@@ -915,7 +915,8 @@ validators:
 - `workflow.json` is written last.
 
 - Specify captures the current principle registry and runs no principle assessment
-  ([ADR 0015](../decisions/0015-specification-principle-review.md));
+  ([ADR 0015](../decisions/0015-specification-principle-review.md)); only the records
+  generation request carries the files, as context ([17-specify.md](../contracts/17-specify.md)).
   [§24](../contracts/24-workflow-state.md) owns the `principle_registry` state field.
   Specify creates no Plan form or obligation.
 - The native closed, versioned `specification-state` contract distinguishes `specified` and
