@@ -103,7 +103,7 @@ pub fn firstPass(current: session.Session) bool {
     const records = current.units[session.records_index] orelse return false;
     if (records.unit != .records or records.response != .content or records.response.content != .records or records.last_repair != null) return false;
     for (current.record_batches, 0..) |checked_unit, index| {
-        if (checked_unit.unit != .records or !originalUnit(checked_unit)) return false;
+        if (checked_unit.unit != .records or !originalBatch(checked_unit)) return false;
         const assignment = checked_unit.record_assignment orelse return false;
         if (!assignment.reference_state.eql(current.reference_state) or assignment.group_index != index or assignment.source_group_id.ordinal == 0) return false;
     }
@@ -115,6 +115,24 @@ fn originalUnit(checked: generation.Checked) bool {
         checked.origins.record_occurrences.next_ordinal != 0 or checked.origins.record_occurrences.values.len != 0) return false;
     const origin = checked.origins.initial orelse return false;
     return origin.kind == .inference and origin.request.value != 0 and origin.attempt.value == 1;
+}
+
+/// One group's record batch: its records response and, when the group has a scenario slot, the
+/// scenarios response whose criteria joined it (ADR 0038 Decision 3). A batch holding its records
+/// alone keeps that request's origin whole. A joined batch carries one origin for each record, the
+/// request that wrote it, and is original when each is a first attempt, no field has a more
+/// specific origin, and no repair touched either response.
+fn originalBatch(checked: generation.Checked) bool {
+    if (checked.origins.initial != null) return originalUnit(checked);
+    if (checked.response != .content or checked.response.content != .records or checked.last_repair != null) return false;
+    const records = checked.response.content.records;
+    if (records.len == 0 or checked.origins.fields.len != records.len) return false;
+    for (checked.origins.fields, 0..) |entry, index| {
+        if (entry.target != .record or entry.target.record != index) return false;
+        const origin = entry.origin orelse return false;
+        if (origin.kind != .inference or origin.request.value == 0 or origin.attempt.value != 1) return false;
+    }
+    return true;
 }
 
 /// The native story: content with no model origin, field origin or repair.
@@ -213,6 +231,37 @@ test "native first pass rejects missing corrected and repaired generation origin
     batch.origins.initial = null;
     current.record_batches = &.{batch};
     try std.testing.expect(!firstPass(current));
+    // A batch joined with its scenarios response has no whole origin, but one for each record: the
+    // first attempt of the request that wrote it.
+    const record: specification.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = .{ .segments = &.{.{ .literal = .{ .value = "Original business behavior." } }} } } }, .source_group_ids = &.{}, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{}, .citation_ids = &.{} } };
+    var joined = makeChecked(.records, 4);
+    joined.record_assignment = batch.record_assignment;
+    joined.response.content.records = &.{ record, record };
+    joined.origins = .{ .fields = &.{
+        .{ .target = .{ .record = 0 }, .origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } } },
+        .{ .target = .{ .record = 1 }, .origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 1 } } },
+    } };
+    current.record_batches = &.{joined};
+    try std.testing.expect(firstPass(current));
+    // A corrected record, a record without an origin, a record out of place, a record the origins do
+    // not account for, and a repair of either response each end the first pass.
+    var corrected = joined;
+    corrected.origins.fields = &.{
+        .{ .target = .{ .record = 0 }, .origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } } },
+        .{ .target = .{ .record = 1 }, .origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 2 } } },
+    };
+    var unaccounted = joined;
+    unaccounted.origins.fields = joined.origins.fields[0..1];
+    var missing = joined;
+    missing.origins.fields = &.{ joined.origins.fields[0], .{ .target = .{ .record = 1 }, .origin = null } };
+    var misplaced = joined;
+    misplaced.origins.fields = &.{ joined.origins.fields[1], joined.origins.fields[0] };
+    var repaired = joined;
+    repaired.last_repair = .{ .authorization = .{ .bytes = "repair-test" }, .owner = .workflow_step, .operation = .replace, .revision_before = 1, .revision_after = 2, .changed = true, .origin = null };
+    for ([_]generation.Checked{ corrected, unaccounted, missing, misplaced, repaired }) |rejected| {
+        current.record_batches = &.{rejected};
+        try std.testing.expect(!firstPass(current));
+    }
 }
 
 fn allocationScenario(a: std.mem.Allocator) !void {
@@ -282,25 +331,38 @@ test "native assembled observations resolve unrelated exact values and preserve 
                 current = (try (@import("../../../src/actions/specification/compose_specification_story.zig").Action{ .validator = text.validator }).execute(a, current, context)).composed;
                 continue;
             }
-            const response: generation.Response = .{ .content = switch (unit) {
-                .brief => .{ .brief = .{ .description = behavior, .primary_goal = narrative } },
-                .primary_user_story => unreachable,
-                .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = narrative } },
-                .records => batch: {
-                    const bound = (try session.currentBinding(a, current, context)).records;
-                    const literal: specification.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = example[1] } }} };
-                    const records = try a.alloc(specification.Model.RecordProposal, if (current.record_cursor == 0) 2 else 0);
-                    for (records, 0..) |*record, index| record.* = .{
-                        .content = if (index == 0) .{ .functional_requirement = .{ .text = literal } } else .{ .acceptance_criterion = .{ .given = literal, .when = literal, .then = literal } },
-                        .source_group_ids = &.{bound.signal},
-                        .provenance = bound.selection,
-                    };
-                    break :batch .{ .records = records };
+            const response: generation.Response = .{
+                .content = switch (unit) {
+                    .brief => .{ .brief = .{ .description = behavior, .primary_goal = narrative } },
+                    .primary_user_story => unreachable,
+                    .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = narrative } },
+                    .records => batch: {
+                        const bound = (try session.currentBinding(a, current, context)).records;
+                        const literal: specification.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = example[1] } }} };
+                        // The engine writes the acceptance criteria in the scenarios step (ADR 0038 Decision 3).
+                        const records = try a.alloc(specification.Model.RecordProposal, if (current.record_cursor == 0) 1 else 0);
+                        for (records) |*record| record.* = .{
+                            .content = .{ .functional_requirement = .{ .text = literal } },
+                            .source_group_ids = &.{bound.signal},
+                            .provenance = bound.selection,
+                        };
+                        break :batch .{ .records = records };
+                    },
                 },
-            } };
+            };
             const result = try (@import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = text.validator }).execute(a, current, context, .{ .response = response, .origins = .{ .initial = .{ .request = .{ .value = request }, .attempt = .{ .value = 1 } } } });
             if (result != .valid) return error.InvalidNativeCandidateFixture;
             current = try session.appendBound(a, current, result.valid);
+            // Each scenarios request is a first attempt of its own, as the records requests are.
+            if (session.scenarioPhase(current)) {
+                const group_plan = try session.scenarioPlan(a, current);
+                const criteria = try @import("../../../src/domain/scenario_request.zig").parse(a, try @import("../../../src/test_fixtures/scenario_completion.zig").answer(a, &.{1}), group_plan, (try session.currentBinding(a, current, context)).records);
+                request += 1;
+                const written = try (@import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = text.validator }).execute(a, current, context, .{ .response = .{ .content = .{ .records = criteria } }, .origins = .{ .initial = .{ .request = .{ .value = request }, .attempt = .{ .value = 1 } } } });
+                if (written != .valid) return error.InvalidNativeCandidateFixture;
+                current = try session.appendScenarios(a, current, written.valid);
+                current = try session.completeScenarios(a, current);
+            }
         }
         const content = (try session.assemble(a, text.validator, context, current, &.{})).content;
         var view: data.View = .{};

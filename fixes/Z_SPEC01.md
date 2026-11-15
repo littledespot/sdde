@@ -825,6 +825,138 @@ semantic benefit; the request projection is byte-identical to the one taken befo
 request sends is unchanged. **Kept 13 November 2026** (user: "for outcomes have improve out brittleness
 has been reduce E1 should be kept"): kept for the reduced brittleness; no outcome improvement is claimed
 (see the live set below: no regression, no demonstrated benefit).
+- **Execution ceiling counts the step's allowance** (decided 14 November 2026, user: "recommendation
+  accepted"; implemented 14 November 2026, user: "yes - implement E1's execution-ceiling change with offline
+  evidence only, with no live run"). `calculateExecutionLimit` (`workflow_compilation.zig`) no longer skips a
+  step that carries request stages: its retry authority counts like any other, and its re-send term is keyed
+  on that structural marker instead of the attempt-accounting capability the kernel step does not carry, so a
+  `request-model` step contributes `kernel.attemptAllowance` (2 × (1 + limit)) for every request key, as the
+  accounting step it replaced did. `guardsCycle` stays `retry_authority != null`, the arithmetic stays checked
+  (null is `WorkflowGraphCompileInvalid` at both callers) and §6.3 item 7 is not amended
+  (`model-request-operations.md` "Allowance" states it and no longer calls the change pending). The ceiling's
+  size follows the native key populations (the population bullet below states their bound and the resulting
+  values), and the workflow token budget remains the stop that ends a runaway cycle. Revisits under one assignment (the same stage run,
+  unit owner, model operation and purpose) continue its count and end at the retry limit; only a revisit for
+  another of those restarts it. The accepted premise (a revisit always starts a new assignment) held for the
+  Spec's per-unit loops (scenario 060's source-review loop visits one `request-model` step 8 times under
+  retry-limit 2) but not for a same-assignment re-ask, which the new cycle test showed. Tests (+10 unit
+  tests): the formula for a kernel step at limits 0 and 2, beside a repair-scope step, a step without stages
+  getting no re-send, and the checked arithmetic's bound on the pure function (its current form is in the
+  population bullet below); the compiled ceiling of the kernel graph; a real-kernel cycle that completes beyond the old ceiling and fails on
+  the old formula; the step's own retry limit ending the next visit; the token budget ending the same cycle; a
+  ceiling capped at 1, 2 and 3 (one execution spent per step, and a step it cannot cover refused before it
+  runs, with no provider call when that step is the request); a recorded old ceiling rejected by `validate`;
+  and a ceiling that cannot be computed refused by the compiler alone (validation off) and by validation alone,
+  so neither caller masks the other (retired when the populations were bounded: a ceiling that cannot be
+  computed is no longer reachable, see the population bullet below). Evidence:
+  `evaluations/request-projection/ceiling-before` and `ceiling-final` are byte-identical, and so is the step
+  trace with `evaluations/step-trace/e5-final`; no persisted contract carries the ceiling, so no version
+  moved; `zig build verify --summary all` passes (the latest total is in the retry-limit bullet below). Offline
+  evidence only; no scored defect; semantic benefit not applicable.
+- **Retry-limit maximum of the `request-model` step is 3** (decided 14 November 2026, user: "retry number
+  must be low, if it's not able to pass with less than 4 times then it will more than likely fail", and, asked
+  whether the maximum should be 3, "should be a max of 3"; implemented 14 November 2026, offline evidence
+  only). The operation's declared maximum was `maxInt(u32)`, so a workflow could declare four billion
+  retries, up to 2 × (1 + 4,294,967,295) provider calls for one request, and the compiled ceiling then
+  counted that allowance. **Owner and value:** `maximum_retry_limit` in `src/domain/model_request_kernel.zig`,
+  3, one named constant that carries the reason (at most 3 retries, so four attempts, each of which may also
+  take its one runaway re-send, up to eight provider calls: a request that does not pass in four attempts will
+  most likely fail). The operation's `retry_limit` descriptor, the `retry-limit`
+  parameter's range and the attempt-accounting stage's descriptor (`Advance.contract`, which the operation's
+  parameter list copies) take that constant, never a second literal. `kernel.validContract` pins the
+  operation's descriptor to it, and `validRequestKernel` (the registry port) pins the parameter's range and,
+  newly, the accounting stage's `retry_limit.maximum`, so the registry refuses a kernel entry that declares
+  more. A `retry-limit` above 3 is `WorkflowGraphCompileInvalid` at compile (the parameter's range, then the
+  retry authority against the descriptor); the runner rechecks a compiled kernel step against the registered
+  contract and refuses one past the maximum as `step_contract_mismatch`. No compiled value of the Spec
+  changes: its `request-model` limits are 1 or 2, and the 64 and 128 are repair-scope merge counts that keep
+  their owners' maxima. **Defect class named:** none; the change bounds what a workflow may
+  declare and claims no output benefit (no request byte moves). Tests (+2 unit tests): limits 0 to 3 compile,
+  each with its closed forms (the authority, the accounting stage's equal authority, the allowance
+  2 × (1 + limit) and the ceiling `steps × (1 + allowance × keys)`), and 4, 5, 128 and the old maximum are
+  `WorkflowGraphCompileInvalid`; the runner refuses a hand-retimed kernel step (and its accounting stage) at 4,
+  with no provider call, and runs one at 3. The registry admission test gains four widened-declaration cases
+  (operation maximum, parameter range on the operation, stage maximum, stage range). The ceiling's overflow
+  pins moved off the `request-model` step, which can no longer declare a wide limit (their final form is in
+  the population bullet below). **Mutations**, each run on `zig build test-model-request-workflow`, killed and
+  reverted: validation drops its whole ceiling recheck (the recorded-ceiling tamper test and a domain
+  validation test); an extra decrement on the kernel path (the
+  one-execution-spend test); the operation's maximum back at `maxInt(u32)` (229 of 543 tests, since the
+  registry refuses the kernel entry); `kernel.validContract`'s pin loosened (registry admission test); the
+  stage-maximum pin loosened (registry admission test); the runner's within-maximum recheck dropped (the new
+  runner test). Evidence: `SDDE_REQUEST_PROJECTION=.zig-cache/retrymax-final zig build test-integration` is
+  byte-identical to `evaluations/request-projection/ceiling-final`, and the step trace to
+  `evaluations/step-trace/e5-final`; no new evidence directory; no live run. `zig build verify --summary all`
+  passes (147 of 147 steps, 2,203 tests; `zig build test` 2,073 unit tests, 2,071 before).
+- **Native key populations are 128** (decided 15 November 2026, user: the compiled ceiling is "too large, it's
+  not viable"; told the fix is a real bound on the two populations, and asked what a repair merge is, then:
+  "128 should be the max"; implemented 15 November 2026, offline evidence only). `maximum_repair_keys` and
+  `maximum_request_assignments` (`workflow_retry.zig`) were both `maxInt(u32)`, so the Spec's compiled ceiling
+  was 930,624,923,546,241 for 231 steps. **Owner and value:** `maximum_population` in `workflow_retry.zig`,
+  128, one named constant that carries the reason (a run that needs more than 128 repair keys or
+  request-assignment counters, one for each compiled step and request assignment, is treated as a runaway
+  whatever its token budget); the two names stay, one per population, and both take it. The retry state's
+  runtime checks are unchanged and now bite: a new key or counter past 128 is `InvalidRepairProgress`, and
+  one already counted continues. The first wording of the reason said the workflow token budget ends a
+  realistic run long before; an independent review showed that false for native repairs (no model call, so
+  no budget spend) and for a budget set higher (ADR 0037), and the unit unstated, so the constant's comment
+  and 22-repair.md now state the unit and drop the claim. A large source (many chunks or review subjects)
+  can count more than the 32 the largest scripted scenario (084) does, and a run past 128 fails as the
+  shared `retry_admission` or `repair_transition` reason, which did not name the population (named
+  since: the E5 entry below). The four repair bindings declared `maxInt(u32)` for their `retry-limit`, but
+  nothing read that value: each variant carries its owner's own maximum (128, 1, 1, 64, 2 in
+  `repair_owner.retryMaximum`), so nothing changed there; the next entry deletes them. **Effect:** the Spec's compiled ceiling is 27,735,015 (231 steps, `231 × (1 + 128 × 938)`,
+  where 938 is the sum of `limit + 1` over its repair-scope steps plus four times that over its request
+  steps), down from 930,624,923,546,241; `kernel_yaml` is 4,611 at limit 2 and 6,147 at limit 3. The
+  largest scripted scenario (084) counts 32 of the 128 request assignments and the largest repair key set
+  is 3 (read from the retained step trace). No request byte or trace line moves. **Defect class named:**
+  none; the change bounds runaway state and claims no output benefit. A ceiling that cannot be computed is
+  no longer reachable: the widest ceiling any graph can have (1,024 steps, each a request step at limit
+  `maxInt(u32)`) is about 2.3e18, below the 1.8e19 of a 64-bit `usize`, so the null branches at the
+  compiler and at `validate` guard only a change to a bound. Tests (+1 unit test, 2,073 to 2,074): two
+  tests at the owner pin both populations to 128, accept the 128th key and assignment and refuse the 129th
+  as `InvalidRepairProgress` while a counted key and assignment continue; the compiler-alone and
+  validation-alone overflow tests and their repair-scope merge entry's overflow bound are retired, and one
+  test compiles and validates that entry at its widest limit against the closed form; the maximum-graph
+  test and the definition test assert the widest limit's ceiling exactly instead of null; the pure-function
+  test finds, with checked arithmetic of its own, the largest step count whose ceiling fits (2,896, more
+  than the 1,024 a graph can have) and pins exactness at it and null one step past it. **Mutations**, each killed and
+  reverted except two: a population back at `maxInt(u32)` (each of the two, on `zig build
+  test-workflow-repair-retry`); one population at 127 and the other unchanged; each runtime check off by
+  one; the final checked product saturating instead of returning null (the pure-function test); validation
+  dropping its ceiling recheck (two tests) and an extra decrement on the kernel path (the
+  one-execution-spend test), both as before. Validation accepting a null ceiling and the compiler
+  saturating one now survive, which is the unreachable branch above: their two caller tests could only
+  fail on that branch and were retired rather than faked. Evidence:
+  `SDDE_REQUEST_PROJECTION=.zig-cache/pop128-final zig build test-integration` is byte-identical to
+  `evaluations/request-projection/ceiling-final`, and the step trace to `evaluations/step-trace/e5-final`
+  (no scripted scenario hit `InvalidRepairProgress`); no new evidence directory; no live run.
+  `zig build verify --summary all` passes (147 of 147 steps, 2,204 tests). Review: a finding that the
+  deferred-parent check (`deferred.items.len >= maximum_repair_keys`) is untested was not actioned,
+  because that check cannot fire: deferred parents, the active key and a new key are distinct entries,
+  and entries are capped at 128.
+- **Repair merge bindings state no retry rule** (decided 15 November 2026, user: "yes delete"; implemented
+  15 November 2026, offline evidence only). Each of the four repair merge bindings (specification unit,
+  specification support, reference reconciliation, source omission) declared a `retry-limit` parameter and
+  a retry descriptor with a maximum of `maxInt(u32)`, and `variantOf` (`repair_workflow.zig`) overwrote
+  both with the owner's maximum, so the literal was a second, wrong statement of what
+  `repair_owner.retryMaximum` owns. **Owner and rule:** `variantOf` builds a merge's `retry-limit`
+  parameter (an integer from 0 to the owner's maximum) and its repair-scope retry descriptor from
+  `retryMaximum` alone, for the merge operation only, and no binding declares either. Deleted with them,
+  because nothing else used them: the variant builder's own-parameter support, the `entry()` branch in
+  `native_workflow_operations.zig` that read a binding's `retry_limit`, and the `std` import of
+  `repair_workflow.zig`. No variant, maximum, scope or check changes (`validRepair` allows only `repair`
+  for both merge roles); no request byte moves; no persisted contract. **Defect class named:** none. Tests:
+  none added; the frozen-variant test pins each variant's retry presence, scope, maximum and parameters
+  against `retryMaximum`, and the architecture test now pins that no owner binding names a retry rule and
+  that the generic file has 13 imports (14 before). A test fixture lost its never-cleared `validate_graphs`
+  flag. Review (mutations on scratch copies): a non-merge operation taking a maximum fails 4 tests, the
+  support merge losing its limit 1, a wrong scope 8; the pin is a substring match, so a renamed declaration
+  would pass it. Evidence: `SDDE_REQUEST_PROJECTION=.zig-cache/b4s1-verify zig build test-integration` is
+  byte-identical to `evaluations/request-projection/ceiling-final`, and the step trace to
+  `evaluations/step-trace/e5-final` (the tree included Q14 b4's unwired S1 contracts); no new evidence
+  directory; no live run. `zig build verify --summary all` passes (147 of 147 steps, 2,215 tests, 11 of them
+  S1's).
 - **Live set, 13 November 2026** (DE1f: one set, three runs per development case; build `42fe246e`,
   modified, `spec-e2e-report/v18`): all six runs published and passed adjudication under their case
   rubrics. hello-world 96.43%, 92.86%, 96.43% (no accuracy defect; quote marks around a code span in all
@@ -1613,6 +1745,13 @@ publishes nothing.
   reports and `adjudicate-spec` accepted the five published ones; `reason` and `first_cause` are null in all
   six, as no authority rejection or replaced failure occurred. Evaluations: `evaluations/e2e/2026-11-14T06-58-*`;
   adjudications in `evaluations/adjudications/`.
+- **Population refusals named** (decided 15 November 2026, user: "yes", then "update documents"; built with Q14
+  b4, offline evidence only): a new repair key or request-assignment counter past 128 is a `PopulationError`
+  refusal (`workflow_retry.zig`) that the runner reports as `repair_key_population` or
+  `request_assignment_population` (06-pipeline-nodes.md), where both had been the shared `retry_admission` or
+  `repair_transition`. The two `AuthorityReason` members moved the report, step-event, baseline and
+  provider-compatibility versions with b4's `equal_items` reason (§2 rule 12). Owner tests refuse the 129th member
+  of each population; runner tests report each reason.
 - **Brittleness counts, E1 to E5 and E8.** "Before" and "Recorded after" are the values the change's own entry
   records; "Now" was measured on 14 November 2026 on the final E5 tree. A cell that says "not recorded" has no
   recorded value.
@@ -1664,6 +1803,107 @@ publishes nothing.
   a recorded limit of the tool
   (short absence literals match by substring). E5's gain is in payload-free failure names, which no T5 count
   measures.
+
+## Design–code conflicts resolved (14 November 2026)
+
+- **No-invention replacement removed from the design text** (user, applying the four recommendations): no
+  Spec route produces it (`src/` has no `invention`), no owner has it (DE4 5), and every site was "Proposed,
+  no code"; an unsupported assertion is a typed clarification admitted under §12.8.1 or a failure
+  (AGENTS.md "LLM boundary"). 22-repair.md's principle-citation diagnostics sentence belonged to Spec's
+  removed principle review, so it went with its "source-line bounds" and "invalid model-proposed citation"
+  clauses (user: "only spec for now", "yes trim the clauses"); 09-configuration.md:339 and 18-plan.md:174
+  keep the exact-citation rule.
+- **Mid-run logging transition** (user, applying the four recommendations): the successor is
+  execution-local, with no committed bootstrap authority, durable lineage or pointer commit before the
+  switch (ADR 0009); the validator (`validate_feature_log_policy_transition.zig`, 13-09) is its whole
+  authority. ADR 0032 records it and 14-orchestration.md §14.10 is rewritten to match.
+
+## Q14 b4. Claim-bound scenarios (kept 15 November 2026)
+
+**Approved** 12 November 2026 (user: "approved decisions 1, 3, 4 and 5", then "Approved five sub-option
+picks"); D14.2 decided 14 November ("update the documentation with the recommendation"); **kept** 15
+November (user: "yes", on the second set). **Defect class:** lost source requirement: no scenario tested
+refusal in 2 loan-renewal publications since ADR 0047 (`2026-11-03T04-13-31Z-fa03…`,
+`2026-11-07T01-19-36Z-728d…`). In both, one FR named every claim and the success-only AC-001 cited the
+refusal lines; coverage checks links, not meaning, so an AC naming every claim passed it, a first-attempt
+route b3's insert left open.
+
+**Built** (ADR 0038 Decisions 2 and 3): after the records, a `generate-scenarios` step makes one request per
+group with a slot (one per claim a surviving behaviour statement names); the model writes a criterion per
+slot, the engine binds kind, claim and group; the records response carries no criterion; b3's insert repair
+is deleted. Four operations: plan, progress check, advance, completion (the only merge). D14.2: items of one
+answer that return equal values take one protocol correction naming every item of each equal set (a generic
+`distinct` rule on exact-member selections, schema reason `equal_items`, recorded in the request
+description, compared as returned). Versions advanced: `model-request-debug` v19, `spec-e2e-report` v20,
+`e2e-step-event` v5, `baseline-acquisition` v14, `baseline-score` v6, `provider-compatibility-report` v3,
+`exact-value-production-admission` v3. **Offline:** `zig build verify` 147 steps, 2,221 tests; of 1,900
+scripted requests, 1,717 are byte-identical to the pre-scenarios-prompt build and the rest are the scenarios
+requests.
+
+**Screens** (`zig-out/e2e-call/…00-41-40Z` to `…00-43-04Z`, 10 replays per arm and case): no criterion in
+the 20 b4 replays, and the behaviour statements still named all 3 (hello-world) and 5 (loan-renewal)
+claims; records requests 18% smaller.
+
+**First set** (`2026-11-15T02-30-17Z-*`, build `9af74ce0…`, modified; skill `3fe52a92…`): 5 of 6 published
+(the loan-renewal failure was a pre-generation false conflict, not b4). Hello-world 92.9, 92.9, 89.3
+against E5's 96.4 ×3: 7 minor unsupported additions, all from the scenarios call (an invented "installed"
+Given in two runs, established); loan-renewal 85.7 (a Given contradicting its When) and 96.4. The guard
+(a class absent from the reference with an established trace) was breached: keep blocked. An independent
+review of the whole change found no blocker and put the cause in what the request gave the model: a general
+context naming fields it lacked, a prompt calling the other requirements "context" (invited borrowing), no
+do-not-invent clause. Fixes (the scenarios prompt: task, sources only, no invention; its own
+`scenarios.context.json`; the slot array renamed `requirements` without `kind`; contract and comment gaps;
+small tidy) changed only the 183 scenarios requests.
+
+**Second set** (`2026-11-15T04-01-*`, build `a349a72a…`, modified; same skill): 6 of 6 published and
+passed, no critical failure, 10 sends each. Hello-world 92.9, 89.3, 96.4 (one unsupported addition: the
+greeting-then-timestamp order); loan-renewal 92.9, 89.3, 85.7 (no accuracy defect). Lost source requirement
+0 in every set, E5 included, so the benefit is **not demonstrated**; kept on the mechanism, the offline
+tests and the guards, which held (the guard needs an established trace, and the set's only addition had a
+likely one; no scenarios criterion needed a repair). Against E5 the rubric scores run lower (hello-world
+mean 92.9 against 96.4, loan-renewal 89.3 against 98.2) from minor ambiguity, restatement and entity
+points, and cost is 10 sends against 9 and 3 to 9% more tokens. **Judgement call:** loan-renewal run `91f4`
+scored AC-004 "The loan is renewed only once." as a minor ambiguity; read as a weakened limit in a checkable
+outcome it is a critical failure for that run. Evaluations: `evaluations/e2e/<run>/`.
+
+Open parts: SPEC01 Q14.
+
+## Decisions that changed nothing (15 November 2026)
+
+User: "update the best options recommendations", then "yes". Each took the recommended option, from a
+read-only check of the code and the accepted ADRs.
+
+- **C5, the three stops stay:** `claims: []` with nothing preserved ends `failed`
+  (`validate_reference_claims.zig:28`, ADR 0036:123); a repeated ID in `claim_ids` or `signal_ids` ends
+  `invalid` at parse (ADR 0038:136-137); an edge case with no candidate criterion ends `blocked` (ADR
+  0038:311-322), judged again on b4's set. Each is a coherent contract no retained run has shown, and a
+  correction would be an extra retry for a model contradiction (AGENTS.md).
+- **C7:** a non-Markdown file in the reference directory keeps failing ingestion (design.md invariant
+  11: skipping can silently lose a requirement); the specs root and feature directory the engine
+  creates are owner-only on purpose (ADR 0018:65 names only log directories).
+- **C18:** `e2e-measures` stays v2 and owns none of the C9–C17 counts: no count is a target, guard or
+  watch item, so none can change a keep decision (SPEC01 §2 rules 5-7). Reopen if C10's call is kept.
+- **Link checks** (ADR 0023) stay removed; reopen only if b4's adjudicated set shows semantic link
+  defects. The 26 October source review caught 1 of 28 defects, and a reliable finding drives no
+  repair unless ADR 0023:51-53 is also amended.
+
+Later that day, user: "update with recommendation", after a read-only check:
+
+- **The request cap stays 128 with b4,** which adds one request assignment for each group with a slot.
+  All 24 retained real runs have one records group; a generated run holds 9 assignments (10 with b4), the
+  one review-heavy run (`2026-11-14T06-58-13Z-7dea…`) 20, the largest scripted scenario 32 (33 with b4).
+  Without source review about 60 groups fit (120 before b4); with it and ten exact values about 30 (45
+  before), since review subjects drive large counts: that run's 12 were about 6, one for each group and
+  conflict group and two for each exact value. The ceiling `steps × (1 + 128 × S)` was 27.7 million and is
+  about 30 to 32 million with b4; widening only `maximum_request_assignments` to 256 would add about 4
+  million, so the number is policy, not arithmetic. A run that reaches it is a reported finding (named
+  `request_assignment_population`), not a number to adjust; the b4 set reports each
+  run's count from `report.json` `retry_settings`.
+- **The no-value test deletions are intended** (user, in a unit-test review session: "yes delete the
+  high-confidence items"): three startup assertions in `workflow_tests.zig` and the unit test in
+  `toolchain_service.zig` compared a getter with itself or repeated a compile-time field check, and
+  `architecture_test.zig:2394` keeps the same `!@hasField(BootstrapServices, "toolchain")` pin. Nothing is
+  restored; the service's own fate is SPEC01 C27.
 
 ## R-A1. Engine-owned release is not adopted
 

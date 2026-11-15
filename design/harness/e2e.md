@@ -211,7 +211,7 @@ Before any invocation/step executes, typed compiled output/replacement keys and
 side-effect policy are checked for publication capability. A publication-capable
 child stops at `publication_prohibited`, even before the first exchange.
 
-Each invocation retains `report.json` (`provider-compatibility-report/v2`) and
+Each invocation retains `report.json` (`provider-compatibility-report/v3`) and
 `report.md` beneath `zig-out/provider-compatibility/<UTC-date-time>-<unique-id>/`.
 The report links available immutable request/response captures and records the
 revision, exact model/settings, request/response identity and bytes, protocol and
@@ -353,7 +353,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v19`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v20`; it stays null until ADR 0041 is
   implemented (SPEC01 E0).
 
 ### Rubric assessment
@@ -605,10 +605,10 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v19`,
-`e2e-step-event/v4`, `baseline-freeze/v3`, `baseline-acquisition/v13`,
-`baseline-score/v5`, `baseline-budget-feasibility/v2`, the evaluator packets'
-`baseline-assessment-inputs/v2` and `provider-compatibility-report/v2`; assessor
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v20`,
+`e2e-step-event/v5`, `baseline-freeze/v3`, `baseline-acquisition/v14`,
+`baseline-score/v6`, `baseline-budget-feasibility/v2`, the evaluator packets'
+`baseline-assessment-inputs/v2` and `provider-compatibility-report/v3`; assessor
 documents use numeric schema `3`. Current readers reject superseded versions and
 fields: retained runs and captures of an earlier version stay immutable evidence,
 readable only by the build that made them. Feasibility evidence retains the single

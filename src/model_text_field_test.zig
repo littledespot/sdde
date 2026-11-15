@@ -82,6 +82,27 @@ test "native model declarations distinguish shared text types and narrowed repla
     try std.testing.expect(fields.same(questions, wire_questions));
 }
 
+test "a scenarios answer binds each of its three parts to the acceptance criterion's own text policy" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const request = @import("domain/scenario_request.zig");
+    // The answer is a wire contract of its own, so it declares its own bindings, and its slot
+    // number is no text.
+    const bound = try codec.fieldBindings(request.Response, a, .{});
+    try std.testing.expect(fields.valid(bound));
+    try std.testing.expectEqual(@as(usize, 3), bound.len);
+    for (bound, [_]policy.Field{ .ac_given, .ac_when, .ac_then }, [_][]const u8{ "given", "when", "then" }) |binding, field, name| {
+        try std.testing.expectEqual(field, binding.field);
+        try std.testing.expect(fields.samePath(&.{ .{ .property = "scenarios" }, .items, .{ .property = name } }, binding.path));
+    }
+    const resource = try compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
+    const selected = try schema.restrictFieldPolicies(a, resource.select(request.definition.id()).?, &.{}, &.{}, bound);
+    defer selected.release();
+    try std.testing.expectEqual(bound.len, (try fields.activeBindings(a, selected.selected().root(), bound)).len);
+    try std.testing.expect(fields.validSchema(selected.selected().root(), bound));
+}
+
 test "descriptive insertions reject identically in native composition and stored readback" {
     const text = @import("domain/typed_text.zig");
     const reference = @import("reference_evidence_test.zig");

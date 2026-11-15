@@ -43,6 +43,7 @@ const authority = @import("../application/required_authority_workflow.zig");
 const reference_model = @import("../application/reference_model_workflow.zig");
 const specification = @import("../application/specification_workflow.zig");
 const scenario_link = @import("../application/scenario_link_workflow.zig");
+const scenario_generation = @import("../application/scenario_generation_workflow.zig");
 const source_omission = @import("../application/source_omission_repair_workflow.zig");
 const support_repair = @import("../application/specification_support_repair_workflow.zig");
 const specification_support = @import("../application/specification_support_workflow.zig");
@@ -134,6 +135,10 @@ pub const Assembly = struct {
     parse_specification: specification.Parse,
     validate_specification: specification.Validate,
     advance_specification: specification.Advance,
+    plan_scenario_generation: scenario_generation.Plan,
+    check_scenario_generation: scenario_generation.Check,
+    advance_scenario_generation: scenario_generation.Advance,
+    complete_scenario_generation: scenario_generation.Complete,
     plan_scenario_links: scenario_link.Plan,
     check_scenario_links: scenario_link.Check,
     build_scenario_link_packet: scenario_link.BuildInput,
@@ -173,7 +178,7 @@ pub const Assembly = struct {
     build_repair_input: generic_repair.BuildRepairInput,
     parse_repair: generic_repair.ParseRepair,
     merge_repair: generic_repair.MergeRepair,
-    entries: [core.entries.len + 112 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 116 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -282,6 +287,10 @@ pub const Assembly = struct {
             .parse_specification = .{ .allocator = allocator },
             .validate_specification = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
             .advance_specification = .{ .allocator = allocator },
+            .plan_scenario_generation = .{ .allocator = allocator },
+            .check_scenario_generation = .{},
+            .advance_scenario_generation = .{ .allocator = allocator },
+            .complete_scenario_generation = .{ .allocator = allocator },
             .plan_scenario_links = .{ .allocator = allocator },
             .check_scenario_links = .{ .allocator = allocator },
             .build_scenario_link_packet = .{ .allocator = allocator },
@@ -371,6 +380,10 @@ pub const Assembly = struct {
             entry(specification.Parse, &self.parse_specification),
             entry(specification.Validate, &self.validate_specification),
             entry(specification.Advance, &self.advance_specification),
+            entry(scenario_generation.Plan, &self.plan_scenario_generation),
+            entry(scenario_generation.Check, &self.check_scenario_generation),
+            entry(scenario_generation.Advance, &self.advance_scenario_generation),
+            entry(scenario_generation.Complete, &self.complete_scenario_generation),
             entry(scenario_link.Plan, &self.plan_scenario_links),
             entry(scenario_link.Check, &self.check_scenario_links),
             entry(scenario_link.BuildInput, &self.build_scenario_link_packet),
@@ -480,7 +493,7 @@ pub const Assembly = struct {
     }
 };
 
-pub const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_link.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
+pub const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_generation.schemas ++ scenario_link.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging },
@@ -538,7 +551,6 @@ pub fn entry(comptime T: type, context: *T) operations.Entry {
             .side_effect = contract.side_effect,
             .outcomes = if (@hasDecl(T, "outcomes")) &T.outcomes else &.{ .ok, .failed },
             .gates = if (@hasDecl(T, "gates")) &T.gates else &.{},
-            .retry_limit = if (@hasDecl(T, "retry_limit")) T.retry_limit else null,
             .iteration = if (@hasDecl(T, "iteration")) T.iteration else null,
             .repair_role = if (@hasDecl(T, "repair_role")) T.repair_role else T.Action.contract.repair_role,
             .outcome_association = if (@hasDecl(T, "outcome_association")) T.outcome_association else if (@hasField(@TypeOf(contract), "outcome_association")) contract.outcome_association else .independent,

@@ -49,6 +49,14 @@ pub fn fixedParameter(stage: Stage) ?struct { id: []const u8, value: []const u8 
 /// the request's attempts.
 pub const accounting_stage: Stage = .advance_attempt;
 
+/// The most retries a `request-model` step may declare (user decision, 14 November 2026): at most 3
+/// retries, so four attempts, each of which may also take its one runaway re-send (up to eight
+/// provider calls, `model-request-operations.md` "Allowance"). A request that does not pass in four
+/// attempts will most likely fail, so no workflow may ask for more. The operation's descriptor, the
+/// `retry-limit` parameter's range and the attempt-accounting stage's descriptor each take this one
+/// value, and the registry admits the kernel entry only with it.
+pub const maximum_retry_limit: u32 = 3;
+
 /// The operation contract's own shape. Its parameters derive from the stage contracts and are
 /// checked with them (`ports/workflow_operation_registry.zig`).
 pub fn validContract(contract: operation.Contract) bool {
@@ -63,7 +71,7 @@ pub fn validContract(contract: operation.Contract) bool {
         contract.side_effect == .model_call and contract.runner_accounting == .none and
         contract.repair_role == .none and contract.outcome_association == .independent and
         contract.gates.len == 0 and contract.iteration == null and
-        limit.scope == .model_request and limit.maximum == std.math.maxInt(u32);
+        limit.scope == .model_request and limit.maximum == maximum_retry_limit;
 }
 
 /// Where a request goes after one stage ended with one outcome.

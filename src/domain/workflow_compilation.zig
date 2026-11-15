@@ -208,19 +208,27 @@ pub fn publicationTerminates(authority: SemanticAuthority) bool {
     return true;
 }
 
+/// The execution ceiling: each step once, plus every revisit its retry authority allows, counted per
+/// native key (`workflow_retry.maximum_repair_keys`, and for a request-scope step also
+/// `maximum_request_assignments`). Every sum and product is checked and null means the ceiling is not
+/// representable. A graph within `definition.max_steps` never reaches null, since its widest ceiling
+/// (every step at the widest limit a descriptor can carry) fits a 64-bit `usize`; the checks guard a
+/// change to a bound, and both callers refuse null rather than saturate.
 pub fn calculateExecutionLimit(steps: []const CompiledStep) ?usize {
     if (steps.len == 0) return null;
     var total_retry_limit: usize = 0;
     for (steps) |step| {
-        // A `request-model` step runs its attempts inside one step execution (ADR 0030), so its
-        // retry limit adds no step executions to the workflow ceiling.
-        if (step.request_stages.len != 0) continue;
         if (step.retry_authority) |authority| {
             const keys: usize = if (authority.scope == .operation) 1 else std.math.add(usize, workflow_retry.maximum_repair_keys, if (authority.scope == .model_request) workflow_retry.maximum_request_assignments else 0) catch return null;
             const per_key = std.math.add(usize, authority.limit.value, 1) catch return null;
             const visits: usize = if (authority.scope == .operation) authority.limit.value else std.math.mul(usize, per_key, keys) catch return null;
-            // ADR 0039: each model attempt may take one runaway re-send.
-            const resends: usize = if (step.runner_accounting == .increment_model_attempt) std.math.mul(usize, per_key, keys) catch return null else 0;
+            // ADR 0039: each model attempt may take one runaway re-send. A `request-model` step makes
+            // its attempts and their re-sends inside one step execution (ADR 0030) and counts them per
+            // request assignment: a revisit for another stage run, unit owner, model operation or
+            // purpose starts a new assignment and restarts the count, while a revisit under the same
+            // assignment continues it and ends at the retry limit. Its allowance therefore counts toward
+            // the ceiling like the attempt-accounting step it replaced did.
+            const resends: usize = if (step.request_stages.len != 0) std.math.mul(usize, per_key, keys) catch return null else 0;
             total_retry_limit = std.math.add(usize, total_retry_limit, std.math.add(usize, visits, resends) catch return null) catch return null;
         }
     }

@@ -466,6 +466,8 @@ All offline. The change makes no model call.
   - accepted: a valid request step with each schema form, with and without `context`;
   - rejected: both or neither of `result-schema` and `composition-part`;
   - rejected: a missing `retry-limit`, or any `timeout-ms` parameter;
+  - rejected: a `retry-limit` above 3, the operation's one maximum (`model-request-operations.md`
+    "Retry limit");
   - rejected: an unmapped outcome, and any `more` or `blocked` mapping;
   - rejected: a removed stage ID, or any attempt to name a stage;
   - rejected: a policy that does not permit one of the stages' capabilities.

@@ -19,8 +19,8 @@
     first consequence state only what native composition establishes. No decision changes.
 - **Amends:**
   - design.md §1 and §4: the story is no longer LLM-owned content (the Spec structure row);
-  - [17-specify.md](../contracts/17-specify.md) §17.3: three model task types (brief,
-    entities, one call per record group) and a native story; the story prompt clause; the
+  - [17-specify.md](../contracts/17-specify.md) §17.3: four model task types (brief,
+    entities, one call per record group, one per group with a scenario slot) and a native story; the story prompt clause; the
     narrative-assignment population;
   - [F0100](../features/F0100-SpecWorkflow.md) §5.2 (the story's purpose, formerly "Main
     user journey"), §5.7 and the four-call text;

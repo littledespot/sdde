@@ -40,7 +40,7 @@ pub const request_model_contract: @import("../domain/workflow_operation.zig").Co
     .replaces = &kernel.replaces,
     .outcomes = &kernel.outcomes,
     .side_effect = .model_call,
-    .retry_limit = .{ .maximum = std.math.maxInt(u32), .scope = .model_request },
+    .retry_limit = .{ .maximum = kernel.maximum_retry_limit, .scope = .model_request },
 };
 
 /// Every stage context of the kernel, in stage order; the kernel binding's capabilities derive from

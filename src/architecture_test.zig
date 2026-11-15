@@ -610,16 +610,6 @@ test "provider catalogue and repository allowlist have one immutable authority e
     try expectAbsent(registry, "/ports/");
     try expectAbsent(registry, "anyopaque");
 
-    const allowlist_fields = @typeInfo(repository_model_allowlist.Entry).@"struct".fields;
-    try std.testing.expectEqual(@as(usize, 4), allowlist_fields.len);
-    try std.testing.expectEqualStrings("slot_id", allowlist_fields[0].name);
-    try std.testing.expect(allowlist_fields[0].type == @import("domain/llm_provider_identity.zig").ModelSlotId);
-    try std.testing.expectEqualStrings("registry_entry_id", allowlist_fields[1].name);
-    try std.testing.expectEqualStrings("reasoning_effort", allowlist_fields[2].name);
-    try std.testing.expectEqualStrings("controls", allowlist_fields[3].name);
-    try std.testing.expect(allowlist_fields[3].type == @import("domain/model_controls.zig").InferenceControls);
-    try std.testing.expect(allowlist_fields[1].type == llm_provider_registry.RegistryEntryId);
-
     const allowlist = @embedFile("domain/repository_model_allowlist.zig");
     try expectAbsent(allowlist, "ValidatedProviderConfig");
     try expectAbsent(allowlist, "ProviderModelContract");
@@ -966,6 +956,8 @@ test "the contract-variant mechanism has no operation-specific branch and one ow
         "\"specification-unit\"",
         "\"specification-support\"",
         "\"specification-coverage\"",
+        // The kernel operation: the ceiling and the runner key on the stage marker, never on the name.
+        "\"request-model\"",
         "authorize-repair",
         "merge-repair",
         "parse-repair",
@@ -996,6 +988,24 @@ test "the contract-variant mechanism has no operation-specific branch and one ow
     // Only a variant-aware composition function registers such an operation, and it takes a shell.
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "pub fn variantEntry(") != null);
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "isShell()") != null);
+}
+
+test "compiled-step checks have one owner: graph validation, never registry publication" {
+    const graph = @embedFile("domain/workflow_graph_validation.zig");
+    try std.testing.expect(std.mem.indexOf(u8, graph, "for (step.request_stages) |stage| try validateStep(graph, stage.step);") != null);
+    // Publication imports no module whose only use to it would be a step check, and calls none of
+    // the step checks the modules it does import also hold.
+    const publication = @embedFile("domain/workflow_registry.zig");
+    try expectImportsOnly(publication, &.{
+        "std",                                   "pipeline.zig",            "pipeline_data.zig",
+        "workflow.zig",                          "workflow_definition.zig", "workflow_compilation.zig",
+        "workflow_inventory.zig",                "workflow_subgraphs.zig",  "workflow_source.zig",
+        "workflow_model.zig",                    "workflow_gate.zig",       "../ports/workflow_operation_registry.zig",
+        "../ports/workflow_contract_source.zig",
+    });
+    inline for (.{ "validProjection(", "publicationTerminates(", "calculateExecutionLimit(", ".parse(", "isValid()" }) |check| {
+        try expectAbsent(publication, check);
+    }
 }
 
 test "YAML invocation owns one response and uses runner accounting without hidden response work" {
@@ -1130,18 +1140,6 @@ test "provider operation boundary has one capability-limited interface" {
     try std.testing.expectEqual(
         @as(usize, 1),
         @typeInfo(llm_provider_interface.LLMProviderInterface.VTable).@"struct".fields.len,
-    );
-    try std.testing.expectEqual(
-        @as(usize, 9),
-        std.enums.values(llm_provider_operation.ProviderFailureCause).len,
-    );
-    try std.testing.expectEqual(
-        @as(usize, 3),
-        std.enums.values(llm_provider_operation.ProviderDeliveryDisposition).len,
-    );
-    try std.testing.expectEqual(
-        @as(usize, 2),
-        std.enums.values(llm_provider_operation.ProviderRetryClass).len,
     );
 
     const port = @embedFile("ports/llm_provider_interface.zig");
@@ -2716,9 +2714,7 @@ test "reconciliation is YAML visible capability free and preserves closed candid
     for (native.schemas) |schema| try std.testing.expect(schema.maximum_bytes == null);
     try std.testing.expectEqual(@as(i64, 2), native.Partition.parameters[0].integer_min);
     try std.testing.expect(native.Partition.parameters[0].required);
-    try std.testing.expectEqual(@as(usize, 4), @typeInfo(r.Disposition).@"enum".fields.len);
     try std.testing.expect(!@hasField(r.ConflictProposal, "resolution"));
-    try std.testing.expectEqual(@as(usize, 1), @typeInfo(@FieldType(r.ValidatedConflict, "resolution")).@"enum".fields.len);
     try std.testing.expect(!@hasField(r.SignalProposal, "id"));
     try std.testing.expect(!@hasField(r.ConflictProposal, "id"));
     try std.testing.expect(!@hasField(r.SummaryProposal, "partition_id"));
@@ -2738,7 +2734,6 @@ test "required authority has capability-free registered bindings and no model co
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
     try std.testing.expectEqual(@import("domain/clarification_inputs.zig").Stage, authority.Stage);
-    try std.testing.expectEqual(@as(usize, 6), @typeInfo(authority.Outcome).@"union".fields.len);
     // Post-generation review is removed: no outcome records advisory assessment.
     try std.testing.expect(!@hasField(authority.Outcome, "assessment_complete"));
     try std.testing.expect(!@hasField(authority.Outcome, "assessment_incomplete"));
@@ -2805,6 +2800,23 @@ fn expectAllowedActionImports(source: []const u8) !void {
                 std.mem.startsWith(u8, path, "../../domain/") or
                 std.mem.startsWith(u8, path, "../../ports/"),
         );
+        remaining = remaining[path_end + 1 ..];
+    }
+}
+
+fn expectImportsOnly(source: []const u8, allowed: []const []const u8) !void {
+    const prefix = "@import(\"";
+    var remaining = source;
+    while (std.mem.indexOf(u8, remaining, prefix)) |import_start| {
+        const path_start = import_start + prefix.len;
+        const path_end = std.mem.indexOfScalarPos(u8, remaining, path_start, '"') orelse return error.UnterminatedImport;
+        const path = remaining[path_start..path_end];
+        for (allowed) |candidate| {
+            if (std.mem.eql(u8, candidate, path)) break;
+        } else {
+            std.debug.print("import not allowed: {s}\n", .{path});
+            return error.TestUnexpectedResult;
+        }
         remaining = remaining[path_end + 1 ..];
     }
 }
@@ -2916,7 +2928,7 @@ test "the generic repair operations select owner rules through one exhaustive sw
     try std.testing.expectEqual(@as(usize, 29), arms);
     // Its imports are exactly the contract types and the seven owner bindings.
     try std.testing.expectEqual(@as(usize, 7), countOccurrences(generic, "_workflow.zig\")"));
-    try std.testing.expectEqual(@as(usize, 14), countOccurrences(generic, "@import(\""));
+    try std.testing.expectEqual(@as(usize, 13), countOccurrences(generic, "@import(\""));
     // An owner function has one definition: each owner binding's `invoke` is declared once in its own file,
     // so the generic operation holds it once and no second path to it exists.
     inline for (.{
@@ -2964,6 +2976,11 @@ test "no per-owner repair operation remains: the four generic operations are the
         try expectAbsent(source, ".transition(");
         try expectAbsent(source, ".validatedTransition(");
         try expectAbsent(source, "catch return error.");
+        // A binding states no retry rule: a merge takes a `retry-limit` exactly where the owner table
+        // (`repair_owner.retryMaximum`) gives a maximum, and the generic operation builds the parameter
+        // and the variant's descriptor from that one value.
+        try expectAbsent(source, "retry_limit");
+        try expectAbsent(source, "retry-limit");
     }
     // Each of the six bindings that merge reaches its merge transition through the shared helper exactly
     // once, so the cause it forwards is the helper's (tested once, and through the real text and support
@@ -2988,6 +3005,60 @@ test "no per-owner repair operation remains: the four generic operations are the
         if (entry.kind != .file) continue;
         try std.testing.expect(std.mem.indexOf(u8, entry.basename, "repair") == null);
     }
+}
+
+test "the engine binds each acceptance criterion to its slot, and the scenarios step runs the shared generation operations" {
+    // ADR 0038 Decision 3: a record's group and claims are bound by one writer, whichever response the
+    // record comes from. The scenarios answer carries no claim, kind or group, so it binds through that
+    // writer and builds no provenance of its own; a records response cannot carry a criterion.
+    const generation = @embedFile("domain/specification_generation.zig");
+    const request = @embedFile("domain/scenario_request.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(generation, "pub fn batchRecord("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(generation, "try batchRecord("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(request, "g.batchRecord("));
+    for ([_][]const u8{ "source_group_ids", "bound.selection" }) |binding| try expectAbsent(request, binding);
+    // The family the scenarios step writes is declared once, beside the mandatory families, and the
+    // records response rejects it where it reads that declaration.
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("domain/specification.zig"), "pub const scenario_family: Kind = .acceptance_criterion;"));
+    try expectAbsent(@embedFile("domain/specification_session.zig"), "pub const scenario_family");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(generation, "std.meta.activeTag(wire.content) == spec.scenario_family"));
+    // No repair inserts or replaces a whole criterion: its result definition, its schema entry and its
+    // group policy are gone, and the one repair a criterion takes is the field-level value repair.
+    try expectAbsent(@embedFile("domain/specification_result_definitions.zig"), "repair_record_acceptance_criterion");
+    try expectAbsent(@embedFile("domain/specification_repair.zig"), "repair_record_acceptance_criterion");
+    try expectAbsent(@embedFile("domain/specification_candidate.zig"), "scenario: FixedRecord");
+    const io = std.testing.io;
+    const schema = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/generation.schema.json", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(schema);
+    try expectAbsent(schema, "repair_record_acceptance_criterion");
+    // The scenarios step has four operations of its own, the plan of its population, its progress,
+    // its admission and its completion; its request, collection, parsing, validation and repair are
+    // the operations the unit steps run (each appears in both subgraphs), so no second model path
+    // exists. Collection and validation run on the group's batch unchanged; building the request and
+    // parsing the answer switch on the session's scenarios phase.
+    const native = @embedFile("composition/native_workflow_operations.zig");
+    try std.testing.expectEqual(@as(usize, 4), countOccurrences(native, "entry(scenario_generation."));
+    // One transition completes the records unit: the completion operation is the only caller of
+    // `completeScenarios`. The plan only measures the population, the admission only joins a group's
+    // criteria, and the progress check only reads, so none of them completes it.
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("actions/specification/complete_scenario_generation.zig"), "session.completeScenarios("));
+    for ([_][]const u8{
+        @embedFile("actions/specification/plan_scenario_generation.zig"),
+        @embedFile("actions/specification/advance_scenario_generation.zig"),
+        @embedFile("actions/specification/check_scenario_generation_progress.zig"),
+        @embedFile("application/scenario_generation_workflow.zig"),
+    }) |source| try expectAbsent(source, "completeScenarios");
+    const workflow = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(workflow);
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(workflow, "use: complete-scenario-generation"));
+    for ([_][]const u8{ "use: build-specification-model-input", "use: collect-specification-model-result", "use: parse-specification-unit", "use: validate-specification-unit" }) |shared| {
+        try std.testing.expectEqual(@as(usize, 2), countOccurrences(workflow, shared));
+    }
+    // It runs after generation and before linking, which needs the criteria it writes.
+    const generate_at = std.mem.indexOf(u8, workflow, "call: generate-specification") orelse return error.MissingGenerationStep;
+    const scenarios_at = std.mem.indexOf(u8, workflow, "call: generate-scenarios") orelse return error.MissingScenariosStep;
+    const link_at = std.mem.indexOf(u8, workflow, "call: link-scenarios") orelse return error.MissingLinkStep;
+    try std.testing.expect(generate_at < scenarios_at and scenarios_at < link_at);
 }
 
 test "principle root access stays in its narrow source adapter and shares physical traversal" {

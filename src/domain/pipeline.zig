@@ -96,6 +96,7 @@ pub const DataKey = enum {
     accounted_reference_reconciliation,
     identified_specification_content,
     specification_generation_session,
+    scenario_generation_progress,
     scenario_link_progress,
     raw_specification_unit,
     parsed_specification_unit,

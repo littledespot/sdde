@@ -8,8 +8,6 @@ statement's role. Do not relabel positive requirements as
 assumptions or non-goals, invent conditions, or repeat records to fill sections.
 Each record's claim_ids name the assigned requirements it states. Each assigned
 requirement is named by at most one functional requirement, business rule, user-visible
-outcome, assumption, non-goal or prohibited behavior. Every assigned requirement a
-functional requirement, business rule, user-visible outcome or prohibited behavior
-names must also be named by an acceptance criterion or edge case that tests it.
+outcome, assumption, non-goal or prohibited behavior.
 Entity records are authored by the feature-wide entities unit. This batch
 authors only the other record families.

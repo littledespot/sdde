@@ -22,6 +22,8 @@ resources:
   generation-context: spec/generation.context.json
   entities-prompt: spec/entities.prompt.md
   records-prompt: spec/records.prompt.md
+  scenarios-prompt: spec/scenarios.prompt.md
+  scenarios-context: spec/scenarios.context.json
   generation-schema: spec/generation.schema.json
   links-prompt: spec/links.prompt.md
   links-schema: spec/links.schema.json
@@ -148,9 +150,18 @@ steps:
   generate:
     call: generate-specification
     on:
-      ok: link
+      ok: scenarios
       invalid: end.invalid
       needs-user: generation-gaps
+      blocked: end.blocked
+      failed: end.failed
+      cancelled: end.cancelled
+  scenarios:
+    call: generate-scenarios
+    on:
+      ok: link
+      invalid: end.invalid
+      needs-user: end.needs-user
       blocked: end.blocked
       failed: end.failed
       cancelled: end.cancelled
@@ -700,6 +711,79 @@ subgraphs:
           owner: specification-unit
           retry-limit: 64
         on: {ok: validate-specification, failed: end.failed}
+      repair-release:
+        call: release-request
+        on: {ok: merge-repair, failed: end.failed}
+  generate-scenarios:
+    start: plan
+    steps:
+      plan:
+        use: plan-scenario-generation
+        on: {ok: progress, failed: end.failed}
+      progress:
+        use: check-scenario-generation-progress
+        on: {ok: complete, more: input, invalid: end.invalid, failed: end.failed}
+      complete:
+        use: complete-scenario-generation
+        on: {ok: end.ok, failed: end.failed}
+      input:
+        use: build-specification-model-input
+        on: {ok: write, failed: end.failed}
+      write:
+        use: request-model
+        with:
+          slot: spec_generation
+          protocol-prompt: protocol-prompt
+          context: scenarios-context
+          prompt: scenarios-prompt
+          result-schema: generation-schema
+          result-selection: input
+          retry-limit: 2
+        on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      collect:
+        use: collect-specification-model-result
+        on: {ok: parse, failed: end.failed}
+      parse:
+        use: parse-specification-unit
+        on: {ok: release, invalid: end.invalid, failed: end.failed}
+      release:
+        call: release-request
+        on: {ok: validate, failed: end.failed}
+      validate:
+        use: validate-specification-unit
+        on: {ok: admit, invalid: authorize-repair, needs-user: end.needs-user, failed: end.failed}
+      admit:
+        use: advance-scenario-generation
+        on: {ok: progress, failed: end.failed}
+      authorize-repair:
+        use: authorize-repair
+        with: {owner: specification-unit}
+        on: {ok: repair-input, more: merge-repair, invalid: end.invalid, blocked: end.blocked, failed: end.failed}
+      repair-input:
+        use: build-repair-input
+        with: {owner: specification-unit}
+        on: {ok: repair, failed: end.failed}
+      repair:
+        use: request-model
+        with:
+          slot: repair
+          protocol-prompt: protocol-prompt
+          context: generation-context
+          prompt: repair-prompt
+          result-schema: generation-schema
+          result-selection: input
+          retry-limit: 1
+        on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      parse-repair:
+        use: parse-repair
+        with: {owner: specification-unit}
+        on: {ok: repair-release, failed: end.failed}
+      merge-repair:
+        use: merge-repair
+        with:
+          owner: specification-unit
+          retry-limit: 64
+        on: {ok: validate, failed: end.failed}
       repair-release:
         call: release-request
         on: {ok: merge-repair, failed: end.failed}

@@ -414,6 +414,47 @@
       ],
       "additionalProperties": false
     },
+    "scenario": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "$ref": "#/$defs/ordinal"
+        },
+        "given": {
+          "$ref": "#/$defs/business_value"
+        },
+        "when": {
+          "$ref": "#/$defs/business_value"
+        },
+        "then": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "number",
+        "given",
+        "when",
+        "then"
+      ],
+      "additionalProperties": false
+    },
+    "scenarios": {
+      "type": "object",
+      "properties": {
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scenario"
+          },
+          "minItems": 1,
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "scenarios"
+      ],
+      "additionalProperties": false
+    },
     "clarification_reason": {
       "enum": [
         "missing",
@@ -459,18 +500,6 @@
       "properties": {
         "content": {
           "$ref": "#/$defs/record_entity"
-        }
-      },
-      "required": [
-        "content"
-      ],
-      "additionalProperties": false
-    },
-    "repair_record_acceptance_criterion": {
-      "type": "object",
-      "properties": {
-        "content": {
-          "$ref": "#/$defs/record_acceptance_criterion"
         }
       },
       "required": [

@@ -130,8 +130,6 @@ pub fn Merge(comptime kind: enum { extraction, reconciliation }) type {
         pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = if (kind == .extraction) .text_validated_reference_extraction else .parsed_reference_reconciliation, .evidence = .source_omission_repair, .result = if (kind == .extraction) .text_validated_reference_extraction else .parsed_reference_reconciliation } };
         pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
         pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .failed };
-        pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
-        pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
         allocator: std.mem.Allocator,
         /// What canonicalizing the repaired text needs: the extraction merge validates the text with
         /// the full text validator, the reconciliation merge only normalizes it.

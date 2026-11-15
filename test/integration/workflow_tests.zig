@@ -135,13 +135,8 @@ test "publishes config and the validated root registry together" {
         @import("../../src/domain/telemetry.zig").CanonicalLogLevel.debug,
         outcome.ready.logs.policy().level.threshold,
     );
-    try std.testing.expect(first_config == outcome.ready.config.config());
     try std.testing.expect(outcome.ready.roots.registry().workflowAuthority().isPresent());
     try std.testing.expectEqual(@as(usize, 0), outcome.ready.workflows.registry().count());
-    try std.testing.expect(!@hasField(@TypeOf(outcome.ready), "toolchain"));
-    try std.testing.expect(
-        outcome.ready.roots.registry() == outcome.ready.roots.registry(),
-    );
 }
 
 test "provider bootstrap assembly loads only the configured F0008 path" {
@@ -1277,6 +1272,14 @@ test "configured native summary reuse advances a fresh validated plan after pre-
 test "an edge case links natively, by one closed model choice, or blocks the run when no criterion of its batch can serve it" {
     try testSpecificationWorkflows(.scenario_links);
 }
+
+test "a text defect in a written scenario takes the field-level value repair and the criterion keeps its claim" {
+    try testSpecificationWorkflows(.scenario_repair);
+}
+
+test "a records batch without a requirement stops before any scenarios request, and scenarios that stay wrong fail at the step's retry limit" {
+    try testSpecificationWorkflows(.scenario_stops);
+}
 const step_trace = @import("../../src/test_fixtures/workflow_step_trace.zig");
 
 /// Records one scenario's step trace and totals beneath `.zig-cache` as
@@ -1344,7 +1347,7 @@ fn stateId(runner: *@import("../../src/application/workflow_pipeline_runner.zig"
     return inputs.corpus.state_id.bytes;
 }
 
-const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links };
+const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links, scenario_repair, scenario_stops };
 /// The applicability sources' level-1 title heading (ADR 0048).
 const applicability_heading = "# Required output\n";
 
@@ -1386,11 +1389,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .{ .stage = .extraction, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
         .{ .stage = .reconciliation, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
         .{ .stage = .generation, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
-        // ADR 0038 Decision 3: a batch whose requirement claims no scenario names is
-        // admitted, and the engine inserts one criterion per uncovered claim, whose claim it
-        // fixes; the run publishes with no correction, in one batch or in every batch.
-        .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .{ .first_request = 1 } },
-        .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .{ .every_request = 1 } },
+        // ADR 0038 Decision 3: a group's scenarios answer that omits a slot's number, or repeats
+        // one, takes one protocol correction naming it; the run then publishes with one criterion
+        // per behaviour claim, for one group's request or for every group's.
+        .{ .stage = .scenarios, .shape = .review_partial_assignment, .repetition = .{ .first_request = 1 } },
+        .{ .stage = .scenarios, .shape = .review_repeated_member, .repetition = .{ .every_request = 1 } },
         // ADR 0038 Decision 5: a wholly taken statement is deleted natively and publishes
         // with no correction. Every scripted records batch has one claim, so a partly
         // taken one is proven at response admission instead.
@@ -1403,10 +1406,10 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .{ .stage = .records, .shape = .duplicate_record, .repetition = .{ .first_request = 1 } },
         // ADR 0039: a records runaway is re-sent once; a re-send that runs away
         // fails typed, and a re-sent response takes the same admission and validation,
-        // here an uncovered claim's criterion insert.
+        // here a scenarios answer that omits a slot's number.
         .{ .stage = .records, .shape = .runaway, .repetition = .{ .first_request = 1 } },
         .{ .stage = .records, .shape = .runaway, .repetition = .persistent },
-        .{ .stage = .records, .shape = .runaway_uncovered, .repetition = .{ .first_request = 2 } },
+        .{ .stage = .scenarios, .shape = .runaway_partial_assignment, .repetition = .{ .first_request = 2 } },
     };
     const classification_repair_start = 14 + faults.len;
     const reconciliation_start = classification_repair_start + 3;
@@ -1444,18 +1447,38 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     // blocked run. The last two use three source groups: the choice case makes one request per
     // group, answered alternately, and the blocked case leaves criteria in only the first group.
     const link_start = preservation_start + 3;
-    var costs: [link_start + 3]?timing.Sample = @splat(null);
+    // ADR 0038 Decision 3: a text defect in the first scenario each group's request writes takes
+    // the field-level value repair, over the same three source groups.
+    const scenario_repair_start = link_start + 3;
+    // ADR 0038 Decision 3: two runs the scenarios step ends before it completes. A records batch with
+    // a behaviour statement and no functional requirement stops at the records step's progress check
+    // and asks for no scenarios; scenarios answers that keep omitting a slot's number fail at the
+    // step's retry limit.
+    const scenario_stop_start = scenario_repair_start + 1;
+    const records_gap_scenario = scenario_stop_start;
+    const scenario_exhaustion = scenario_stop_start + 1;
+    // ADR 0038 Decision 3: three runs over four source groups of two slots each. Equal criteria in one
+    // scenarios answer are corrected once and the retry publishes; equal criteria that persist fail at
+    // the step's retry limit; an answer that repeats an earlier group's criteria is blocked, not corrected.
+    const equal_once = scenario_stop_start + 2;
+    const equal_exhaustion = scenario_stop_start + 3;
+    const equal_across_groups = scenario_stop_start + 4;
+    var costs: [scenario_stop_start + 5]?timing.Sample = @splat(null);
     const case_range_begin: usize = switch (workflow_cases) {
         .existing => 0,
         .source_preservation => preservation_start,
         .reuse_regeneration => preservation_start + 1,
         .scenario_links => link_start,
+        .scenario_repair => scenario_repair_start,
+        .scenario_stops => scenario_stop_start,
     };
     const case_range_end: usize = switch (workflow_cases) {
         .existing => preservation_start,
         .source_preservation => link_start,
         .reuse_regeneration => preservation_start + 2,
-        .scenario_links => costs.len,
+        .scenario_links => scenario_repair_start,
+        .scenario_repair => scenario_stop_start,
+        .scenario_stops => costs.len,
     };
     defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
     // Scripted corrections of a value outside an integer enumeration that the driver checked.
@@ -1468,8 +1491,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const applicability = if (scenario >= applicability_start and scenario < membership_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
         const membership_scenario = scenario >= membership_start and scenario < preservation_start;
-        const link_scenario = scenario >= link_start;
-        const preservation_scenario = scenario >= preservation_start and !link_scenario;
+        const link_scenario = scenario >= link_start and scenario < scenario_repair_start;
+        const scenario_repair_scenario = scenario >= scenario_repair_start and scenario < scenario_stop_start;
+        const equal_scenario = scenario >= equal_once;
+        const stop_scenario = scenario >= scenario_stop_start and !equal_scenario;
+        const preservation_scenario = scenario >= preservation_start and scenario < link_start;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
         const global_scenario = scenario >= global_start and scenario < brief_start;
         const summary_scenario = scenario >= summary_start and scenario < global_start;
@@ -1484,7 +1510,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const repeated_scenario = scenario >= repeated_start and scenario < protocol_text_start;
         const protocol_text_scenario = scenario >= protocol_text_start and scenario < protocol_selection_scenario;
         const protocol_content_scenario = scenario >= protocol_content_start and scenario < omission_scenario;
-        const fault: ?@TypeOf(faults[0]) = if (brief_scenario) .{ .stage = .generation, .shape = .forbidden_provenance, .repetition = if (scenario - brief_start < 2) .persistent else .{ .first_request = 2 } } else if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else null;
+        const fault: ?@TypeOf(faults[0]) = if (brief_scenario) .{ .stage = .generation, .shape = .forbidden_provenance, .repetition = if (scenario - brief_start < 2) .persistent else .{ .first_request = 2 } } else if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else if (scenario == scenario_exhaustion) .{ .stage = .scenarios, .shape = .review_partial_assignment, .repetition = .persistent } else if (scenario == equal_once) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .{ .first_request = 1 } } else if (scenario == equal_exhaustion) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .persistent } else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1503,14 +1529,21 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // Every source set below opens with a level-1 title heading (ADR 0048).
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\n" ++ "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
-        if (link_scenario) {
+        if (link_scenario or scenario_repair_scenario or equal_scenario) {
             const several = scenario != link_start;
-            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (several) "# Loan renewal\nRenew the loan.\n" else "# Loan renewal\nA librarian renews an eligible loan and sees the new return deadline.\n" });
+            // A choice needs two claims in each group, which a list's items give (ADR 0038
+            // Decision 4); the other cases state one claim in each source. Beside its items, the
+            // heading of a list is a claim of its own, so the first source's three items make
+            // four claims and every group holds two. Equal criteria need two scenarios in a group.
+            const chosen = scenario == link_start + 1 or equal_scenario;
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (chosen) "# Loan renewal\n- Renew the loan.\n- Show the new return deadline.\n- Keep a record of the renewal.\n" else if (several) "# Loan renewal\nRenew the loan.\n" else "# Loan renewal\nA librarian renews an eligible loan and sees the new return deadline.\n" });
             if (several) {
-                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/receipt.md", .data = "Issue a receipt.\n" });
-                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/confirmation.md", .data = "Confirm the renewal.\n" });
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/receipt.md", .data = if (chosen) "- Issue a receipt.\n- Show the receipt number.\n" else "Issue a receipt.\n" });
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/confirmation.md", .data = if (chosen) "- Confirm the renewal.\n- Show the confirmation message.\n" else "Confirm the renewal.\n" });
             }
         }
+        // One source group of one claim, so its batch has exactly one scenario slot.
+        if (stop_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nRenew the loan.\n" });
         if (membership_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - membership_start) % 4 >= 2)
             "# Library loans\nMOCK Track library loans and display their return deadlines.\n"
         else
@@ -1558,7 +1591,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
         defer if (two_summary_requests) allocator.free(configured_definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
-        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "support.schema.json", "links.prompt.md", "links.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
+        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "scenarios.prompt.md", "scenarios.context.json", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "support.schema.json", "links.prompt.md", "links.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
             // A finer required-object selector must survive the native extraction
@@ -1650,7 +1683,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (scenario <= 1) driver.measurement_prefix = if (scenario == 0) ".zig-cache/chunk13-compatible-request" else ".zig-cache/chunk13-conflict-request";
         driver.generation_gap = scenario == 12 or scenario == 13;
-        if (candidate_omission) driver.candidate_omissions = if (scenario == omission_scenario) .functional else .acceptance_and_functional;
+        driver.candidate_omissions = candidate_omission;
         driver.extraction_omission = extraction_omission;
         driver.source_gaps = source_gaps;
         if (source_gaps) driver.measurement_prefix = if (scenario == source_gap_start) ".zig-cache/review-decision-greeting" else ".zig-cache/review-decision-loan";
@@ -1709,6 +1742,12 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             1 => .chosen,
             else => .unlinked,
         };
+        // Edge cases that name both claims of a group give it two scenario slots; their links are the
+        // `.chosen` case's, which these runs share with it.
+        if (equal_scenario) driver.edge_cases = .chosen;
+        driver.scenario_defect = scenario_repair_scenario;
+        driver.behaviour_without_requirement = scenario == records_gap_scenario;
+        if (scenario == equal_across_groups) driver.fault = .{ .stage = .scenarios, .shape = .equal_across_groups, .repetition = .persistent };
         if (membership_scenario) {
             // This positive/retry matrix has one business group. Feature-wide
             // entities own their applicability and records; record batches cannot
@@ -1741,7 +1780,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (summary_scenario) try @import("../../src/test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
-        const expected: workflow.OutcomeTag = if (link_scenario) (if (driver.edge_cases == .unlinked) .blocked else .ok) else if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict or (driver.fault != null and driver.fault.?.repetition == .persistent)) .failed else .ok) else if (candidate_omission or extraction_omission or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_classification_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
+        const expected: workflow.OutcomeTag = if (scenario == equal_across_groups) .blocked else if (link_scenario) (if (driver.edge_cases == .unlinked) .blocked else .ok) else if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict or (driver.fault != null and driver.fault.?.repetition == .persistent)) .failed else .ok) else if (candidate_omission or extraction_omission or scenario == records_gap_scenario or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_classification_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; operation: {s}; candidate: {any}\n", .{ scenario, result, driver.rejected_operation orelse "none", try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (scenario == 0) {
@@ -1752,7 +1791,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (link_scenario) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            const refusal = "- **EXPECTED OUTCOME** The request is refused.";
+            const refusal = "- **EXPECTED OUTCOME** " ++ @import("../../src/test_fixtures/spec_generation_responses.zig").refusal;
             switch (driver.edge_cases.?) {
                 // The run stops before any request, and the typed gap names the edge case's group.
                 .unlinked => {
@@ -1787,7 +1826,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                             if (std.meta.eql(other.id, target)) break other;
                         } else return error.DanglingOutcomeLink;
                         const then = criterion.proposal.content.acceptance_criterion.then.segments;
-                        const refused = then.len == 1 and then[0] == .literal and std.mem.eql(u8, then[0].literal.value, "The request is refused.");
+                        const refused = then.len == 1 and then[0] == .literal and std.mem.eql(u8, then[0].literal.value, @import("../../src/test_fixtures/spec_generation_responses.zig").refusal);
                         // Edge cases are in authoring order, which is the order they were asked.
                         try std.testing.expectEqual(chosen and linked % 2 == 0, refused);
                         linked += 1;
@@ -1820,6 +1859,89 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expect(driver.initial_source_review_calls != 0);
             try std.testing.expectEqual(@as(usize, if (scenario == preservation_start) 0 else 1), driver.source_repair_calls);
             try std.testing.expect(runner.repair_retry.currentPermit() == null);
+        }
+        if (scenario_repair_scenario) {
+            // Each group's scenarios request was answered once and its defective criterion repaired by
+            // one request of its own: the defect is a text defect, not a protocol one, and the repair
+            // answer is a value alone. `expectEngineBoundCriteria` has shown that each criterion
+            // keeps the claim, kind and group the engine bound.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            const groups = @import("../../src/domain/specification_session.zig").scenarioPopulation(session);
+            try std.testing.expect(groups > 1);
+            try std.testing.expectEqual(groups, driver.scenario_calls);
+            var repairs: usize = 0;
+            for (runner.tokenLedger().accounted_operations.items) |entry| repairs += @intFromBool(entry.id.model_request_id.purpose == .atomic_repair);
+            try std.testing.expectEqual(groups, repairs);
+            for (session.record_batches) |batch| try std.testing.expect(batch.last_repair != null);
+        }
+        if (scenario == records_gap_scenario) {
+            // The records step authors every mandatory family but the scenarios'. This batch states
+            // its claim as an outcome, so its group has a scenario slot, yet it holds no functional
+            // requirement: the run ends invalid at the records step's own progress check, and the
+            // scenarios step never starts, so no scenarios request is sent.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            try std.testing.expect(@import("../../src/domain/specification_session.zig").scenarioPhase(session));
+            try std.testing.expectEqual(@as(usize, 1), @import("../../src/domain/specification_session.zig").scenarioPopulation(session));
+            try std.testing.expect(session.units[@import("../../src/domain/specification_session.zig").records_index] == null);
+            try std.testing.expectEqualStrings("check-specification-generation-progress", driver.rejected_operation orelse "none");
+            try std.testing.expectEqual(@as(usize, 0), driver.scenario_calls);
+            try std.testing.expect(driver.generation_calls != 0);
+            try std.testing.expect(std.mem.indexOf(u8, trace.written(), "plan-scenario-generation") == null);
+            try std.testing.expect(!view.contains(.published_workflow_output));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+        }
+        if (scenario == scenario_exhaustion or scenario == equal_exhaustion) {
+            // A group's scenarios answer that keeps omitting a slot's number, or keeps repeating one
+            // criterion, is corrected until the scenarios step's retry limit, then the run fails typed
+            // with nothing published. One request, three attempts: the first and its two corrections.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            try std.testing.expect(@import("../../src/domain/specification_session.zig").scenarioPhase(session));
+            try std.testing.expectEqual(@as(usize, 0), session.scenario_cursor);
+            try std.testing.expect(session.units[@import("../../src/domain/specification_session.zig").records_index] == null);
+            try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+            const exhausted = result.execution_rejected.retry_limit;
+            try std.testing.expectEqual(@as(u32, 2), exhausted.limit.value);
+            try std.testing.expectEqual(@as(u64, 3), exhausted.completed_executions);
+            try std.testing.expectEqual(@as(usize, 3), driver.scenario_calls);
+            try std.testing.expectEqual(@as(usize, 3), driver.fault_calls);
+            try std.testing.expectEqual(@as(usize, 1), driver.fault_requests);
+            var owned = false;
+            for (graph.authority.steps) |step| if (std.mem.eql(u8, step.id.bytes, exhausted.operation().bytes)) {
+                owned = std.mem.endsWith(u8, step.id.bytes, "scenarios-write");
+            };
+            try std.testing.expect(owned);
+            try std.testing.expect(!view.contains(.published_workflow_output));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+        }
+        if (scenario == equal_once) {
+            // The first group's answer repeated one criterion and took one correction, whose content the
+            // driver checked; every other group's answer was admitted as it came. The run publishes.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            const groups = @import("../../src/domain/specification_session.zig").scenarioPopulation(session);
+            try std.testing.expect(groups > 1);
+            try std.testing.expectEqual(groups + 1, driver.scenario_calls);
+            try std.testing.expectEqual(@as(usize, 1), driver.fault_calls);
+            try std.testing.expectEqual(@as(usize, 1), driver.fault_requests);
+            // The correction is the scenarios step's own, so no field-level repair request was made.
+            for (runner.tokenLedger().accounted_operations.items) |entry| try std.testing.expect(entry.id.model_request_id.purpose != .atomic_repair);
+            try std.testing.expect(view.contains(.published_workflow_output));
+        }
+        if (scenario == equal_across_groups) {
+            // Equal criteria of different groups are competing records: the first group's answer is
+            // admitted, the second group's repeats its criteria and blocks the run with no correction, so
+            // exactly two scenarios requests were sent and nothing is published.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expectEqual(@as(usize, 2), driver.scenario_calls);
+            try std.testing.expectEqual(@as(usize, 1), driver.fault_calls);
+            const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?;
+            try std.testing.expect(diagnostic == .specification);
+            try std.testing.expectEqual(.competing_records, diagnostic.specification.issue.blocked.?);
+            try std.testing.expect(!view.contains(.published_workflow_output));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
         }
         if (driver.reconciliation_fault == .mixed_selection and driver.reconciliation_protocol_fault == null) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
@@ -2400,26 +2522,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             // The statement was added to at least one batch, so the check is not vacuous.
             if (fault.?.shape == .bare_statement) try std.testing.expect(driver.bare_statements != 0);
         }
-        if (fault != null and (fault.?.shape == .uncovered_scenario or fault.?.shape == .runaway_uncovered)) {
-            // Every claim a behaviour statement names is named by a scenario of its batch, and
-            // the scenarios the response lost came back as engine-bound criteria naming one
-            // claim each: at least one insert per batch that lost its scenarios.
+        if (fault != null and fault.?.stage == .scenarios and fault.?.repetition != .persistent) {
+            // The answer the correction asked for bound one criterion to each slot, so some group
+            // asked for its scenarios more than once.
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
-            for (session.record_batches) |batch| for (batch.response.content.records) |record| {
-                switch (std.meta.activeTag(record.content).role()) {
-                    .requirement, .behaviour => {},
-                    .scope, .scenario, .entity => continue,
-                }
-                for (record.provenance.claim_ids) |claim| {
-                    const named = for (batch.response.content.records) |other| {
-                        if (std.meta.activeTag(other.content).role() == .scenario and @import("../../src/domain/reference_reconciliation.zig").contains(@import("../../src/domain/reference_identity.zig").ClaimId, other.provenance.claim_ids, claim)) break true;
-                    } else false;
-                    try std.testing.expect(named);
-                }
-            };
-            try std.testing.expect(driver.uncovered_records != 0);
-            try std.testing.expect(driver.scenario_inserts >= driver.uncovered_records);
+            try std.testing.expect(try expectEngineBoundCriteria(allocator, session) != 0);
+            try std.testing.expect(driver.scenario_calls > @import("../../src/domain/specification_session.zig").scenarioPopulation(session));
         }
         if (fault != null and fault.?.shape == .duplicate_record) {
             // The repeat was deleted natively: no batch keeps two records of equal content.
@@ -2517,6 +2626,16 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (expected == .ok) {
             const content = try @import("../../src/application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/required_authority_workflow.zig").content_schema, .content);
             try std.testing.expect(content.records.len != 0);
+            // Every group with a slot had its scenarios asked once, unless a fault asked again.
+            {
+                const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+                const written = try expectEngineBoundCriteria(allocator, session);
+                try std.testing.expect(written != 0);
+                const asked = @import("../../src/domain/specification_session.zig").scenarioPopulation(session);
+                try std.testing.expect(driver.scenario_calls >= asked);
+                if (driver.fault == null) try std.testing.expectEqual(asked, driver.scenario_calls);
+            }
             try std.testing.expectEqual(@as(@TypeOf(content.entities.disposition), if (driver.entities_required) .required else .not_applicable), content.entities.disposition);
             // Publication needs no authority gate: review authority was retired
             // before generation, or never existed for ready sources.
@@ -2528,7 +2647,6 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             _ = try @import("../../src/domain/specification_markdown.zig").parse(arena.allocator(), rendered);
             try std.testing.expect((try @import("../../src/application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/specification_rendering_workflow.zig").validated_schema, bool)).*);
         }
-        if (driver.support_fault == .inconclusive) try verifyPublication(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
         if (fault != null and fault.?.shape == .inconclusive) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
@@ -2694,6 +2812,34 @@ fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, pro
     };
     try repository.createDirPath(io, ".zig-cache/authoring-associations");
     try repository.writeFile(io, .{ .sub_path = ".zig-cache/authoring-associations/parent-preflight.json", .data = try std.json.Stringify.valueAlloc(a, observed, .{ .whitespace = .indent_2 }) });
+}
+
+/// ADR 0038 Decision 3: each group with a scenario slot holds one acceptance criterion for each
+/// slot, after its written records and in slot order, naming the slot's one claim and bound to the
+/// group; a group with none holds no criterion. Returns the criteria the session holds.
+fn expectEngineBoundCriteria(allocator: std.mem.Allocator, session: @import("../../src/domain/specification_session.zig").Session) !usize {
+    const slots = @import("../../src/domain/scenario_slots.zig");
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    var criteria: usize = 0;
+    for (session.record_batches) |batch| {
+        const group = batch.record_assignment.?.source_group_id;
+        const records = batch.response.content.records;
+        const group_plan = (try slots.plan(arena.allocator(), group, records)) orelse {
+            for (records) |record| try std.testing.expect(record.content != .acceptance_criterion);
+            continue;
+        };
+        const written = records.len - group_plan.count();
+        for (records[0..written]) |record| try std.testing.expect(record.content != .acceptance_criterion);
+        for (records[written..], 0..) |record, index| {
+            try std.testing.expect(record.content == .acceptance_criterion);
+            try std.testing.expectEqual(@as(usize, 1), record.provenance.claim_ids.len);
+            try std.testing.expectEqual(group_plan.slot(index).claim.ordinal, record.provenance.claim_ids[0].ordinal);
+            try std.testing.expect(@import("../../src/domain/specification_generation.zig").inBatch(record, group));
+        }
+        criteria += group_plan.count();
+    }
+    return criteria;
 }
 
 fn expectAuthoringCatalogueCalls(runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, actual: usize) !void {

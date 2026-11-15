@@ -2,12 +2,12 @@
 const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
-pub const Version = enum { @"model-request-debug/v18" };
+pub const Version = enum { @"model-request-debug/v19" };
 /// The one admitted description version, for readers that classify captures by it.
-pub const current_version = @tagName(Version.@"model-request-debug/v18");
+pub const current_version = @tagName(Version.@"model-request-debug/v19");
 
 pub const Description = struct {
-    version: Version = .@"model-request-debug/v18",
+    version: Version = .@"model-request-debug/v19",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -29,7 +29,8 @@ pub const Description = struct {
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
     exact_scope: ?@import("model_exact_values.zig").Scope = null,
-    /// Native assignment membership the schema bytes cannot express.
+    /// Native assignment membership, with the properties whose values its items must not all repeat
+    /// (ADR 0038 Decision 3), the schema bytes cannot express.
     members: []const @import("model_result_schema.zig").MemberChoice = &.{},
     /// Native cross-item coverage the schema bytes cannot express (ADR 0038).
     coverages: []const @import("model_result_schema.zig").CoverageChoice = &.{},

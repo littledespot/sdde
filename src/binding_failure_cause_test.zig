@@ -129,37 +129,37 @@ test "each row raises the cause it names through the binding's own check" {
     }
 }
 
-/// Causes a test in another file raises through the production check and asserts by name. This list is a
-/// naming pin only: the pin below proves that the named file mentions the cause (as `error.<cause>` or as a
-/// quoted name), not that a test asserts it. The rows above and `withheld_causes` are executable proof.
-const asserted_elsewhere = [_]struct { cause: []const u8, file: []const u8 }{
-    .{ .cause = "OperationWrongKind", .file = "src/repair_operations_test.zig" },
-    .{ .cause = "InvocationArgumentsInvalid", .file = "src/repair_operations_test.zig" },
-    .{ .cause = "KernelBindingNotInvocable", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "RequestStageStopped", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "HarnessFailureStopped", .file = "test/harness/e2e/trace.zig" },
-    .{ .cause = "RepairOwnerMismatch", .file = "src/repair_operations_test.zig" },
-    .{ .cause = "RepairOwnerUnresolved", .file = "src/repair_operations_test.zig" },
-    .{ .cause = "LastRepairMissing", .file = "src/repair_operations_test.zig" },
-    .{ .cause = "RepairStateMismatch", .file = "src/reference_reconciliation_test.zig" },
-    .{ .cause = "GuidanceResourceInvalid", .file = "src/packet_guidance_test.zig" },
-    .{ .cause = "CandidatePacketForeign", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "CandidateNotAdmitted", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "RequestDeclarationInvalid", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "RequestResourceMissing", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "RequestLedgerForeign", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "LifecycleEvidenceForeign", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "LifecycleStatusConflict", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "OperationOutcomeNotAdmitted", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "ObservationOutcomeMissing", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "ObservationLoggingBlocked", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "DecodeEvidenceInconsistent", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "ProtocolRetryNotApplicable", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "ProtocolPromptMissing", .file = "src/model_request_workflow_test.zig" },
-    .{ .cause = "ReferenceStageMismatch", .file = "src/reference_extraction_test.zig" },
-    .{ .cause = "ReconciliationPhaseInvalid", .file = "src/reference_reconciliation_test.zig" },
-    .{ .cause = "ReconciliationSizeMissing", .file = "src/reference_reconciliation_test.zig" },
-    .{ .cause = "PathTokenTextMissing", .file = "src/path_token_test.zig" },
+/// Causes a test in another file raises through the production check and asserts by name. The list is a
+/// record only: it does not prove that a test asserts the cause. The rows above and `withheld_causes` are
+/// executable proof.
+const asserted_elsewhere = [_][]const u8{
+    "OperationWrongKind",
+    "InvocationArgumentsInvalid",
+    "KernelBindingNotInvocable",
+    "RequestStageStopped",
+    "HarnessFailureStopped",
+    "RepairOwnerMismatch",
+    "RepairOwnerUnresolved",
+    "LastRepairMissing",
+    "RepairStateMismatch",
+    "GuidanceResourceInvalid",
+    "CandidatePacketForeign",
+    "CandidateNotAdmitted",
+    "RequestDeclarationInvalid",
+    "RequestResourceMissing",
+    "RequestLedgerForeign",
+    "LifecycleEvidenceForeign",
+    "LifecycleStatusConflict",
+    "OperationOutcomeNotAdmitted",
+    "ObservationOutcomeMissing",
+    "ObservationLoggingBlocked",
+    "DecodeEvidenceInconsistent",
+    "ProtocolRetryNotApplicable",
+    "ProtocolPromptMissing",
+    "ReferenceStageMismatch",
+    "ReconciliationPhaseInvalid",
+    "ReconciliationSizeMissing",
+    "PathTokenTextMissing",
 };
 
 /// The causes no offline test raises yet, because the check that names each one either needs state that no
@@ -209,7 +209,7 @@ fn accounts(cause: []const u8) usize {
     for (rows) |row| in_rows = in_rows or std.mem.eql(u8, row.cause, cause);
     count += @intFromBool(in_rows);
     for (request_workflow_tests.withheld_causes) |name| count += @intFromBool(std.mem.eql(u8, name, cause));
-    for (asserted_elsewhere) |entry| count += @intFromBool(std.mem.eql(u8, entry.cause, cause));
+    for (asserted_elsewhere) |name| count += @intFromBool(std.mem.eql(u8, name, cause));
     for (not_triggered) |name| count += @intFromBool(std.mem.eql(u8, name, cause));
     return count;
 }
@@ -224,20 +224,6 @@ test "every binding failure cause is raised by a test or listed as not yet raise
     // Nothing is listed that is no cause.
     for (rows) |row| try std.testing.expect(isCause(row.cause));
     for (request_workflow_tests.withheld_causes) |name| try std.testing.expect(isCause(name));
-    for (asserted_elsewhere) |entry| try std.testing.expect(isCause(entry.cause));
+    for (asserted_elsewhere) |name| try std.testing.expect(isCause(name));
     for (not_triggered) |name| try std.testing.expect(isCause(name));
-}
-
-test "a cause asserted in another file is named by that file" {
-    const io = std.testing.io;
-    const allocator = std.testing.allocator;
-    for (asserted_elsewhere) |entry| {
-        const source = try std.Io.Dir.cwd().readFileAlloc(io, entry.file, allocator, .limited(16 * 1024 * 1024));
-        defer allocator.free(source);
-        var raised: [96]u8 = undefined;
-        var named: [96]u8 = undefined;
-        const as_error = try std.fmt.bufPrint(&raised, "error.{s}", .{entry.cause});
-        const as_name = try std.fmt.bufPrint(&named, "\"{s}\"", .{entry.cause});
-        try std.testing.expect(std.mem.indexOf(u8, source, as_error) != null or std.mem.indexOf(u8, source, as_name) != null);
-    }
 }

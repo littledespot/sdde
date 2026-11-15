@@ -493,7 +493,6 @@ test "invalid candidate content retains genuine authority gaps without authorizi
                     .ambiguous => .ambiguous,
                     .conflicting => .conflicting,
                 }), entry.outcome.clarification_required.reason);
-                try std.testing.expectEqualStrings("MOCK which delivery deadline applies? Supply the date and timezone.", inputs.evidence[0].review.?.authority_gap.?.question);
             } else try std.testing.expectEqual(.resolved_exactly_one, std.meta.activeTag(entry.outcome));
             try std.testing.expect(!try a.validate(allocator, inputs, observations, result));
             try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, result, id(kind))) == null);

@@ -27,11 +27,65 @@ pub fn validate(candidate: *const envelope.Candidate) Result {
 }
 
 /// The admitted integer key one assignment item names, if present.
-fn memberKey(item: envelope.Value, property: []const u8) ?i64 {
+pub fn memberKey(item: envelope.Value, property: []const u8) ?i64 {
     if (item != .object) return null;
     const key = item.object.get(property) orelse return null;
     if (key != .number) return null;
     return exactInteger(key.number) catch null;
+}
+
+/// Whether two returned values are the same JSON value, as the response returned them: strings and
+/// booleans by value, numbers by integer value when both are integers and by lexeme otherwise, objects
+/// by their members in any order, arrays item by item. No typed normalization applies (ADR 0038).
+fn sameValue(left: envelope.Value, right: envelope.Value) bool {
+    if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
+    return switch (left) {
+        .null_value => true,
+        .boolean => |value| value == right.boolean,
+        .string => |value| std.mem.eql(u8, value, right.string),
+        .number => |value| blk: {
+            const first = exactInteger(value) catch break :blk std.mem.eql(u8, value, right.number);
+            const second = exactInteger(right.number) catch break :blk false;
+            break :blk first == second;
+        },
+        .array => |items| blk: {
+            if (items.count() != right.array.count()) break :blk false;
+            for (0..items.count()) |index| if (!sameValue(items.at(index).?, right.array.at(index).?)) break :blk false;
+            break :blk true;
+        },
+        .object => |members| blk: {
+            if (members.count() != right.object.count()) break :blk false;
+            for (0..members.count()) |index| {
+                const member = members.at(index).?;
+                const other = right.object.get(member.name) orelse break :blk false;
+                if (!sameValue(member.value, other)) break :blk false;
+            }
+            break :blk true;
+        },
+    };
+}
+
+/// Whether items `left` and `right` return the same value for every property `members.distinct` lists
+/// (ADR 0038 Decision 3). An item without a listed property equals no other. A correction finds every
+/// equal set by asking this of each pair.
+pub fn equalItems(items: *const envelope.Array, members: schema.Members, left: usize, right: usize) bool {
+    const first = items.at(left).?;
+    const second = items.at(right).?;
+    if (members.distinct.len == 0 or first != .object or second != .object) return false;
+    for (members.distinct) |name| {
+        const one = first.object.get(name) orelse return false;
+        const other = second.object.get(name) orelse return false;
+        if (!sameValue(one, other)) return false;
+    }
+    return true;
+}
+
+/// The first item, in response order, that a later item equals: the first item of the first equal set.
+/// Admission takes its rejection from it, and a correction lists every set.
+pub fn firstEqualItem(items: *const envelope.Array, members: schema.Members) ?usize {
+    if (members.distinct.len == 0) return null;
+    for (0..items.count()) |left| for (left + 1..items.count()) |right| if (equalItems(items, members, left, right)) return left;
+    return null;
 }
 
 fn hasKind(item: envelope.Value, kind_property: []const u8, kinds: []const []const u8) bool {
@@ -212,6 +266,14 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                         diagnostic.member = wanted;
                         return diagnostic;
                     }
+                }
+                // ADR 0038 Decision 3: items of one response that return equal values for every
+                // compared property take this correction. The location names the first item of
+                // the first equal set; equality across arrays is the session's, not admission's.
+                if (firstEqualItem(value.array, members)) |first| {
+                    var diagnostic = reject(.equal_items, node);
+                    diagnostic.members = members;
+                    return diagnostic.item(first);
                 }
             }
             // ADR 0038 Decision 5: no exclusive item names both taken and untaken values.

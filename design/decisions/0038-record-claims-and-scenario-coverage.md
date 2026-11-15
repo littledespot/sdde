@@ -34,8 +34,8 @@
   (Decision 5). Amended again on 12 November 2026 (SPEC01 Q14 b4; user: "approved decisions
   1, 3, 4 and 5", then "Approved five sub-option picks"): a second request per group writes
   one criterion for each claim a behaviour statement names, the engine fixing the claim, and
-  an edge case no longer counts as cover (Decisions 2 and 3). Not yet implemented: the code
-  still runs the previous amendment. Amended on 13 November 2026 (user: "it must use GIVEN,
+  an edge case no longer counts as cover (Decisions 2 and 3). Implemented on 15 November
+  2026. Amended on 13 November 2026 (user: "it must use GIVEN,
   WHEN, THEN, never anything else", one `GIVEN` holding both conditions, then "yes, amendment
   to ADR 0038, do not make any code changes"): an edge case is printed as a Given/When/Then
   scenario of the criterion it links to, and the model writes only its own given
@@ -43,8 +43,8 @@
   amendment names still state the 8 November rule. Amended on 14 November 2026 (SPEC01 Q14
   b4, D14.2; user: "update the documentation with the recommendation"): items of one
   scenarios response with equal content take the request's protocol correction, naming every
-  item's number, in place of the `competing_records` block (Decision 3). To be implemented
-  with the b4 amendment.
+  item's number, in place of the `competing_records` block (Decision 3). Implemented on 15
+  November 2026.
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -112,9 +112,9 @@
     constraints that stay native), §17.3 (the scenarios response's admission), §22.6 (the
     corrections that name extra fields), [ADR 0019](0019-single-request-debugger.md) (the
     request description records the rule) and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
-    (a re-sent scenarios response passes the same checks). In the implementing change,
-    request descriptions advance, and reports advance if its rejection reason is a closed
-    report member.
+    (a re-sent scenarios response passes the same checks). Implemented 15 November 2026:
+    request descriptions advanced to `model-request-debug/v19` and reports to
+    `spec-e2e-report/v20`, for the new `equal_items` rejection reason.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -166,7 +166,7 @@ only block.
      could split it, which is not adopted). A claim no behaviour statement names has none,
      a scope-only claim and an edge-case-only claim included. A group with no slot makes
      no call.
-   - **One request per group**, on the generation slot and the shared generation subgraph,
+   - **One request per group**, on the generation slot and the shared generation operations,
      as an initial generation: no invalid candidate exists, so it is not a repair and uses
      no repair slot. The step takes its own native iteration population, the groups with a
      slot. The request offers each slot, numbered from one, with its claim's source text
@@ -194,7 +194,7 @@ only block.
      applies, and exhaustion fails the run. No repair inserts or replaces a whole criterion,
      and no edge case is written here.
    - **Coverage is met by construction.** The session's scenario-coverage check stays on the
-     merged batch and at readback. It requires at least one criterion for each such claim,
+     merged batch; stored readback has no coverage rule. It requires at least one criterion for each such claim,
      so a stored specification whose one criterion names several claims still reads back,
      and a claim it finds without a criterion is an engine defect (`scenario_coverage`)
      that takes no repair.
@@ -439,7 +439,8 @@ only block.
   12 November amendment changed no record shape and no specification or state version; the
   recorded admission rule took `model-request-debug/v18`, and the report's closed rejection
   members `spec-e2e-report/v17`. The scenario-slot amendment changes no record shape or
-  content version; the amendment list above says when the other versions advance. The
+  content version. The equal-criteria amendment took `model-request-debug/v19`, which records
+  its `distinct` rule, and `spec-e2e-report/v20`. The
   edge-case scenario amendment renames the edge case's one field, and the amendment list
   says which versions advance.
 - **Tests.**

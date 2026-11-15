@@ -46,7 +46,7 @@ pub const Row = struct {
     outcome: Outcome,
 };
 pub const Report = struct {
-    version: enum { @"exact-value-production-admission/v2" } = .@"exact-value-production-admission/v2",
+    version: enum { @"exact-value-production-admission/v3" } = .@"exact-value-production-admission/v3",
     projection: enum { current_native_test_context_over_retained_source_bytes } = .current_native_test_context_over_retained_source_bytes,
     historical_metadata_promoted: bool = false,
     model_calls: usize = 0,
@@ -291,7 +291,7 @@ pub fn run(a: std.mem.Allocator) !Report {
     try rows.append(a, try replay(a, try proseCapture(a)));
     try rows.append(a, .{ .id = "generation-pass-review-budget-run", .requested_run_aedt = "16 October 20:33", .failure_class = .admitted_generation_then_review_failure, .origin = .unavailable_capture, .execution_id = "2026-10-16T09-33-15Z-d749fce107972fd4feaad6c9ac902538", .outcome = .{ .unavailable = .retained_raw_capture_not_found } });
     try rows.append(a, try replay(a, try syntaxCapture(a)));
-    try rows.append(a, try replay(a, .{ .id = "loan-native-lineage-control", .time = "independent scripted control", .class = .unrelated_loan_control, .origin = .scripted_control, .source = "# Loan renewal\nWhen an eligible borrower renews a loan, the service must extend the due date and display `Loan renewed!`.\n", .output = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"acceptance_criterion\",\"given\":\"An eligible borrower has a renewable loan.\",\"when\":\"The borrower requests renewal.\",\"then\":\"The service extends the due date and displays Loan renewed!\"},\"claim_ids\":[1]},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"The service must extend the renewable loan and display Loan renewed!\"},\"claim_ids\":[1]}]}", .unit = .records }));
+    try rows.append(a, try replay(a, .{ .id = "loan-native-lineage-control", .time = "independent scripted control", .class = .unrelated_loan_control, .origin = .scripted_control, .source = "# Loan renewal\nWhen an eligible borrower renews a loan, the service must extend the due date and display `Loan renewed!`.\n", .output = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"The service extends the due date and displays Loan renewed! for an eligible borrower who requests renewal.\"},\"claim_ids\":[1]},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"The service must extend the renewable loan and display Loan renewed!\"},\"claim_ids\":[1]}]}", .unit = .records }));
     var admitted_rows: usize = 0;
     var rejected_rows: usize = 0;
     var capture_rows: usize = 0;

@@ -140,8 +140,6 @@ pub const Merge = struct {
     };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .reference_reconciliation_repair, .result = .parsed_reference_reconciliation } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
-    pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
-    pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
     allocator: std.mem.Allocator,
     normalizer: @import("../ports/unicode_normalizer.zig").Normalizer,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {

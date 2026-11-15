@@ -158,8 +158,8 @@ as the selector; this ADR adds no second mechanism. Each variant is a complete c
 - its repair role;
 - whether retry authority is required or forbidden, and if required, its operation-local
   maximum. The native key population the compiler's execution bounds multiply by is the
-  repair scope's own, engine-wide (`workflow_retry.maximum_repair_keys`); a variant does
-  not declare one (F0005 §11, DE4 6).
+  repair scope's own, engine-wide (`workflow_retry.maximum_repair_keys`, 128, like
+  `maximum_request_assignments`); a variant does not declare one (F0005 §11, DE4 6).
 
 Enforcement:
 
@@ -205,7 +205,7 @@ requires.
 - **Defect keys** still include the validator-owned diagnostic family, so owners never
   alias keys at one step.
 - **Native key population** is the repair scope's own, engine-wide
-  (`workflow_retry.maximum_repair_keys`), so the compiler's execution bounds stay finite
+  (`workflow_retry.maximum_repair_keys`, 128), so the compiler's execution bounds stay finite
   and an owner or `owner` value cannot change them.
 
 ### What stays the same

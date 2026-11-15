@@ -51,15 +51,15 @@ pub const Reconciliation = enum {
     }
 };
 
-/// `generation.schema.json`: the specification units and their repairs.
+/// `generation.schema.json`: the specification units, the scenarios of a records batch and their repairs.
 pub const Generation = enum {
     brief,
     entities,
     records,
+    scenarios,
     value,
     attributed_value,
     repair_record_entity,
-    repair_record_acceptance_criterion,
 
     pub fn id(self: Generation) schema.DefinitionId {
         return .{ .bytes = @tagName(self) };

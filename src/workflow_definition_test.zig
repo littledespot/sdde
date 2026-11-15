@@ -220,7 +220,7 @@ test "compiled native repair roles retain their counter scope and finite bound" 
     try std.testing.expectEqual(.repair, graph.authority.steps[0].retry_authority.?.scope);
     const repair_visits: usize = @as(usize, retry.maximum_repair_keys) * 3;
     try std.testing.expectEqual(2 * (repair_visits + 1), graph.authority.maximum_step_executions);
-    for (0..5) |fault| {
+    for (0..6) |fault| {
         var invalid = graph;
         const steps = try a.dupe(compiled.CompiledStep, graph.authority.steps);
         invalid.authority.steps = steps;
@@ -230,6 +230,8 @@ test "compiled native repair roles retain their counter scope and finite bound" 
             2 => steps[0].retry_authority.?.scope = .model_request,
             3 => invalid.authority.maximum_step_executions -= 1,
             4 => steps[0].capabilities = &.{"model-provider"},
+            // The authority's limit is no longer the step's `retry-limit` parameter.
+            5 => steps[0].retry_authority.?.limit.value += 1,
             else => unreachable,
         }
         if (fault != 3) invalid.authority.maximum_step_executions = compiled.calculateExecutionLimit(steps).?;
@@ -243,9 +245,10 @@ test "compiled native repair roles retain their counter scope and finite bound" 
     bounded.retry_authority.?.scope = .repair;
     bounded.retry_authority.?.limit.value = 0;
     try std.testing.expectEqual(@as(usize, retry.maximum_repair_keys) + 1, compiled.calculateExecutionLimit(&.{bounded}).?);
+    // The widest limit a descriptor can carry is still counted exactly, not saturated or wrapped.
     bounded.retry_authority.?.limit.value = std.math.maxInt(u32);
     bounded.retry_authority.?.scope = .model_request;
-    try std.testing.expect(compiled.calculateExecutionLimit(&.{bounded}) == null);
+    try std.testing.expectEqual(1 + (@as(usize, std.math.maxInt(u32)) + 1) * (@as(usize, retry.maximum_repair_keys) + retry.maximum_request_assignments), compiled.calculateExecutionLimit(&.{bounded}).?);
 }
 
 test "non-schema resources are not parsed and a compiler cannot substitute a foreign schema" {

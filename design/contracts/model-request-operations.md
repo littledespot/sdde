@@ -43,18 +43,25 @@ The owner in code is `src/domain/model_request_kernel.zig`.
   envelope, and a correction replaces the payload result; the E2E harness reads every attempt's
   evidence from the recorded history, so a corrected or re-sent request that ends `ok` still reports
   each earlier provider stop, protocol rejection or schema rejection with its own call and origin.
+- **Retry limit.** At most 3 retries, so four attempts, each of which may also take its one runaway
+  re-send (up to eight provider calls, see Allowance): a request that does not pass in four attempts
+  will most likely fail. The operation's descriptor, the parameter's range and the attempt-accounting
+  stage's descriptor each declare this
+  one maximum (`maximum_retry_limit` in the owner above), the registry admits the kernel entry only
+  with it, and the compiler rejects a larger `retry-limit`.
 - **Allowance.** The step counts once toward the step ceiling. Its stages are bounded by
   2 x (1 + `retry-limit`) provider calls: each attempt, correction or not, plus its one runaway
   re-send ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), which
   lies outside `retry-limit`. The attempt-accounting stage refuses the entry past that bound as a
   retry exhaustion that names the stage. Every `request-model` step's retry authority counts in the
   compiled retry-derived execution allowance, including each attempt's one runaway re-send, as the
-  attempt-accounting step it replaced did (not yet implemented: the compiler skips these steps
-  today). An ordinary-scope request that a workflow revisits starts a new request assignment,
-  which restarts the attempt count, so across visits only this allowance and native iteration
-  bound it. That allowance is the finite ceiling [§6.3](06-pipeline-nodes.md) item 7 asks of a
-  cycle through the step, which declares its own finite `retry-limit`. The stage bound above
-  is separate from that allowance.
+  attempt-accounting step it replaced did. An ordinary-scope request that a workflow revisits for
+  another stage run, unit owner, model operation or purpose starts a new request assignment, which
+  restarts the attempt count, so across such visits only this allowance, native iteration and the
+  workflow token budget bound it; a revisit under the same assignment continues its count and ends
+  at the retry limit. That allowance is the finite ceiling [§6.3](06-pipeline-nodes.md) item 7 asks
+  of a cycle through the step, which declares its own finite `retry-limit`. The stage bound above is
+  separate from that allowance.
 - **Events.** Every event of a stage names the stage (its dashed `Stage` name in `step_id`). The
   step's own start and end events name none, except that a failed end names the stage that ended
   the request. Retry exhaustion names the step and the stage.
@@ -78,11 +85,11 @@ The owner in code is `src/domain/model_request_kernel.zig`.
   retry counter or reset history.
 - Retry authority names the `request-model` step, not the request origin.
 - Consumers retain that original request and must invalidate consumed attempt evidence
-  before a YAML retry revisits the accounting step.
+  before a YAML retry revisits the `request-model` step.
 - Foreign or stale evidence and a second initial attempt cannot reset an existing
   request's accounting.
 
-- That accounting step is the sole attempt limit on the model-request correction path.
+- The step's attempt-accounting stage is the sole attempt limit on the model-request correction path.
 - The protocol-retry builder only prepares a corrected request from retained original
   inputs and the latest rejection; it has no separate execution limit.
 - Runner exhaustion retains the compiled owner, limit and consumed execution count as a

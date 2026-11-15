@@ -46,7 +46,7 @@ pub const Issue = struct {
     repair_target: ?Target = null,
     membership: ?struct { disposition: g.spec.Applicability, entity_count: usize } = null,
     /// ADR 0038 Decision 3: the first claim a behaviour statement names that no
-    /// acceptance criterion or edge case of its batch names.
+    /// acceptance criterion of its batch names, an engine defect that takes no repair.
     uncovered_claim: ?@import("reference_identity.zig").ClaimId = null,
     native_error: ?enum { InvalidSpecification, InvalidReferenceReconciliation, InvalidSourceCitation, InvalidTypedText, InvalidPassiveLiteral } = null,
 };
@@ -142,11 +142,11 @@ pub const Origins = struct {
 };
 /// A whole record whose association the engine fixes and whose content the model writes.
 pub const FixedRecord = struct { fixed_provenance: g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId, evidence_bound: ?EvidenceBound = null };
+/// The whole-record repairs the engine authorizes. Entity membership is the one member today
+/// (22-repair.md names it the one whole-record authorization); a second policy would be a second member.
 pub const GroupPolicy = union(enum) {
     /// An entity the fixed applicability decision requires, or a contradictory one.
     membership: FixedRecord,
-    /// ADR 0038 Decision 3: an acceptance criterion naming one uncovered claim.
-    scenario: FixedRecord,
 
     pub fn fixed(self: GroupPolicy) FixedRecord {
         return switch (self) {

@@ -164,7 +164,7 @@ fn permit(target: u8, revision: u64, authorization: u8) retry.Permit {
     return .{ .key = .{ .scope = @splat(1), .target = @splat(target), .family = @splat(2) }, .authorization = @splat(authorization), .revision = revision, .maximum_targets = 8 };
 }
 
-fn apply(state: *retry.State, transition: retry.Transition) retry.StateError!void {
+fn apply(state: *retry.State, transition: retry.Transition) retry.AdmissionError!void {
     try state.commit(try state.prepare(transition));
 }
 
@@ -270,6 +270,114 @@ test "native population remains frozen and successful repairs cannot grow it" {
     try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .authorized = another }));
     another.key = first.key;
     try apply(&state, .{ .authorized = another });
+}
+
+/// A permit whose key has a scope of its own, frozen at one target, so that only the execution-wide
+/// population can refuse the key.
+fn populationPermit(index: usize) retry.Permit {
+    var scope: [32]u8 = @splat(0);
+    std.mem.writeInt(u32, scope[0..4], @intCast(index + 1), .little);
+    const authorization: u8 = @intCast(index % 200 + 1);
+    return .{ .key = .{ .scope = scope, .target = @splat(1), .family = @splat(2) }, .authorization = @splat(authorization), .revision = index + 1, .maximum_targets = 1 };
+}
+
+test "an execution holds at most one population of native repair keys, and a returning key is not a new one" {
+    // The one value the user decided for both populations.
+    try std.testing.expectEqual(@as(u32, 128), retry.maximum_population);
+    try std.testing.expectEqual(retry.maximum_population, retry.maximum_repair_keys);
+    var state = retry.State.init(std.testing.allocator);
+    defer state.deinit();
+    const population: usize = retry.maximum_repair_keys;
+    for (0..population) |index| {
+        const value = populationPermit(index);
+        try apply(&state, .{ .authorized = value });
+        try finish(&state, value, .resolved);
+    }
+    // A new key past the bound is refused as the repair-key population, and nothing changes.
+    const revision = state.revision;
+    try std.testing.expectError(error.RepairKeyPopulation, apply(&state, .{ .authorized = populationPermit(population) }));
+    try std.testing.expectEqual(revision, state.revision);
+    try std.testing.expectEqual(population, state.entries.items.len);
+    // A key the execution already counts returns with a later authorization.
+    var returning = populationPermit(0);
+    returning.revision = population + 1;
+    returning.authorization = @splat(255);
+    try apply(&state, .{ .authorized = returning });
+}
+
+test "a population refusal reaches a report as an authority reason, never as an operation cause" {
+    // The runner reports each refusal as its own reason, so neither is a member of the operation causes a
+    // report also carries: a name nothing raises there would be dead closed vocabulary.
+    comptime {
+        for (@typeInfo(retry.PopulationError).error_set.?) |refusal| {
+            for (@typeInfo(@import("domain/operation_error.zig").Error).error_set.?) |cause| {
+                if (std.mem.eql(u8, refusal.name, cause.name)) @compileError("a population refusal is an operation cause: " ++ refusal.name);
+            }
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 2), @typeInfo(retry.PopulationError).error_set.?.len);
+}
+
+/// `count` request IDs of one epoch, each of a unit owner of its own, so that none is another's revisit.
+fn populationRequests(a: std.mem.Allocator, epoch: @import("domain/execution_reference.zig").Ref, count: usize) ![]const @import("domain/model_request_identity.zig").ModelRequestId {
+    const requests = try a.alloc(@import("domain/model_request_identity.zig").ModelRequestId, count);
+    for (requests, 0..) |*request, index| request.* = .{
+        .stage_run_epoch_id = .{ .reference = epoch },
+        .immutable_unit_owner_id = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(a, "unit-{d}", .{index}) } } },
+        .model_operation_id = .{ .workflow_id = .{ .bytes = "review" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "prepare" } },
+        .purpose = .initial_generation,
+        .request_ordinal = .{ .value = 1 },
+    };
+    return requests;
+}
+
+test "the repair-key population and the request-assignment population are counted apart" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const epoch = try @import("domain/execution_reference.zig").create(std.testing.allocator);
+    defer epoch.release();
+    const requests = try populationRequests(a, epoch, retry.maximum_request_assignments + 1);
+    const operation: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "account" };
+    // A full population of request assignments leaves a new repair key free...
+    var assigned = retry.State.init(std.testing.allocator);
+    defer assigned.deinit();
+    for (requests[0..retry.maximum_request_assignments], 1..) |*request, record| _ = try assigned.beginAssignmentAttempt(operation, .{ .value = 1 }, .{ .request = request, .record = .{ .value = @intCast(record) } });
+    try apply(&assigned, .{ .authorized = populationPermit(0) });
+    // ...and a full population of repair keys leaves a new request assignment free.
+    var keyed = retry.State.init(std.testing.allocator);
+    defer keyed.deinit();
+    for (0..retry.maximum_repair_keys) |index| {
+        const value = populationPermit(index);
+        try apply(&keyed, .{ .authorized = value });
+        try finish(&keyed, value, .resolved);
+    }
+    try std.testing.expectEqualDeep(retry.AttemptResult{ .allowed = 1 }, try keyed.beginAssignmentAttempt(operation, .{ .value = 1 }, .{ .request = &requests[0], .record = .{ .value = 1 } }));
+}
+
+test "an execution holds at most one population of request assignments, and a counted assignment continues" {
+    try std.testing.expectEqual(@as(u32, 128), retry.maximum_population);
+    try std.testing.expectEqual(retry.maximum_population, retry.maximum_request_assignments);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const epoch = try @import("domain/execution_reference.zig").create(std.testing.allocator);
+    defer epoch.release();
+    const population: usize = retry.maximum_request_assignments;
+    const requests = try populationRequests(a, epoch, population + 1);
+    var state = retry.State.init(std.testing.allocator);
+    defer state.deinit();
+    const operation: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "account" };
+    for (requests[0..population], 1..) |*request, record| {
+        try std.testing.expectEqualDeep(retry.AttemptResult{ .allowed = 1 }, try state.beginAssignmentAttempt(operation, .{ .value = 1 }, .{ .request = request, .record = .{ .value = @intCast(record) } }));
+    }
+    // A new assignment past the bound is refused as the request-assignment population, and counts nothing...
+    const revision = state.revision;
+    try std.testing.expectError(error.RequestAssignmentPopulation, state.beginAssignmentAttempt(operation, .{ .value = 1 }, .{ .request = &requests[population], .record = .{ .value = @intCast(population + 1) } }));
+    try std.testing.expectEqual(revision, state.revision);
+    try std.testing.expectEqual(population, state.attempts.items.len);
+    // ...and one already counted continues under its own limit.
+    try std.testing.expectEqualDeep(retry.AttemptResult{ .allowed = 2 }, try state.beginAssignmentAttempt(operation, .{ .value = 1 }, .{ .request = &requests[0], .record = .{ .value = 1 } }));
 }
 
 test "prepared transitions allocate before commit and reject stale application" {

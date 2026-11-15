@@ -99,7 +99,12 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 
 - **Owner:** [`src/actions/specification/build_specification_model_input.zig`](../../../src/actions/specification/build_specification_model_input.zig)
 - **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Rejects:** `specification_session.Error`.
+- **Does:** Build the request of the unit in flight: the brief, entities or records packet or, while
+  scenarios are written ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md)
+  Decision 3), the next group's requirements, numbered from one, each with its claim's meaning and
+  source. The session's scenarios phase selects the branch.
+- **Rejects:** `scenario_request.Error`, which holds `specification_session.Error`, the slot
+  errors and the reference reconciliation errors.
 
 ## `CollectSpecificationModelResultAction` (`collect-specification-model-result`)
 
@@ -113,7 +118,10 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 
 - **Owner:** [`src/actions/specification/parse_specification_unit.zig`](../../../src/actions/specification/parse_specification_unit.zig)
 - **Reads:** `raw_specification_unit`, `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `parsed_specification_unit` · **Side effect:** `none`
-- **Rejects:** an unparsable body (`invalid`); `specification_session.Error`.
+- **Does:** Parse the unit's response. While scenarios are written, the answer's numbered scenarios
+  become the acceptance criteria of the group's batch, each bound to its slot's claim.
+- **Rejects:** an unparsable body (`invalid`); `scenario_request.Error` (`specification_session.Error`,
+  the slot errors and the reference reconciliation errors).
 
 ## `ValidateSpecificationUnitAction` (`validate-specification-unit`)
 
@@ -142,8 +150,42 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 
 - **Owner:** [`src/actions/specification/check_specification_generation_progress.zig`](../../../src/actions/specification/check_specification_generation_progress.zig)
 - **Reads:** `specification_generation_session` · **Writes:** none · **Side effect:** `none`
-- **Does:** Return `more` until every unit is complete, then `ok`.
-- **Rejects:** `invalid` when a required record family is missing.
+- **Does:** Return `more` while a source group still awaits its records, then `ok`.
+- **Rejects:** `invalid` when a mandatory record family the records step writes is missing; the
+  criterion family is the scenarios step's, checked by `check-scenario-generation-progress`.
+
+## `PlanScenarioGenerationAction` (`plan-scenario-generation`)
+
+- **Owner:** [`src/actions/specification/plan_scenario_generation.zig`](../../../src/actions/specification/plan_scenario_generation.zig)
+- **Reads:** `specification_generation_session`, `accounted_reference_reconciliation` · **Writes:** `scenario_generation_progress` · **Side effect:** `none`
+- **Does:** Plan the scenarios step's population, the groups with at least one scenario slot
+  ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3), once every
+  group's records are admitted. The session is unchanged.
+- **Rejects:** `InvalidSpecificationUnit` outside the scenario phase or after a group's scenarios
+  are written.
+
+## `CheckScenarioGenerationProgressAction` (`check-scenario-generation-progress`)
+
+- **Owner:** [`src/actions/specification/check_scenario_generation_progress.zig`](../../../src/actions/specification/check_scenario_generation_progress.zig)
+- **Reads:** `specification_generation_session`, `scenario_generation_progress` · **Writes:** none · **Side effect:** `none`
+- **Does:** Return `more` while a group with a slot awaits its scenarios, then `ok`.
+- **Rejects:** `invalid` when the held batches hold no criterion, the family this step writes.
+
+## `AdvanceScenarioGenerationAction` (`advance-scenario-generation`)
+
+- **Owner:** [`src/actions/specification/advance_scenario_generation.zig`](../../../src/actions/specification/advance_scenario_generation.zig)
+- **Reads:** `accounted_reference_reconciliation`, `specification_generation_session`, `scenario_generation_progress`, `validated_specification_unit` · **Writes:** replaces `specification_generation_session`, `scenario_generation_progress`; invalidates `raw_specification_unit`, `parsed_specification_unit`, `validated_specification_unit` · **Side effect:** `none`
+- **Does:** Join the validated criteria to their group's batch and count the group as written. It
+  completes no unit.
+- **Rejects:** `specification_session.Error`.
+
+## `CompleteScenarioGenerationAction` (`complete-scenario-generation`)
+
+- **Owner:** [`src/actions/specification/complete_scenario_generation.zig`](../../../src/actions/specification/complete_scenario_generation.zig)
+- **Reads:** `specification_generation_session` · **Writes:** replaces `specification_generation_session` · **Side effect:** `none`
+- **Does:** Merge the held batches once every group with a slot has its criteria. It is the only
+  operation that merges them.
+- **Rejects:** `specification_session.Error`.
 
 ## `PlanScenarioLinksAction` (`plan-scenario-links`)
 

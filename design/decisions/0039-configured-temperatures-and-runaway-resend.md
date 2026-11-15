@@ -208,7 +208,7 @@ constant, so projects couldn't choose it.
     events; at a higher level, only the events.
   - Same checks: a re-sent response is rejected exactly as a first response would be
     for malformed JSON, a schema violation and a missing assignment member; a scenarios
-    response's missing, repeated or foreign slot number is rejected as a first response's
-    is (ADR 0038 Decision 3); and the E2E report marks the re-send attempt.
+    response's missing, repeated or foreign slot number, or items that return equal values
+    (`equal_items`), is rejected as a first response's is (ADR 0038 Decision 3); and the E2E report marks the re-send attempt.
   - Replay: a current description round-trips each temperature, and a v12 description,
     which recorded no sampling, is refused.

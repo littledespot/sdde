@@ -315,8 +315,9 @@ fn validRequestKernel(entry: Entry, schemas: *const [data.key_count]?*const data
         if (!provided) return false;
     }
     const prepare = (entry.requestStage(.prepare_request) orelse return false).contract.parameters;
-    const accounting = (entry.requestStage(kernel.accounting_stage) orelse return false).contract.parameters;
-    const limit = findParameter(accounting, workflow_retry.parameter_id) orelse return false;
+    const accounting_contract = (entry.requestStage(kernel.accounting_stage) orelse return false).contract;
+    const limit = findParameter(accounting_contract.parameters, workflow_retry.parameter_id) orelse return false;
+    const stage_limit = accounting_contract.retry_limit orelse return false;
     if (entry.contract.parameters.len != prepare.len + 1 or !uniqueStrings(entry.binding.capabilities()) or model_provider_stages != 1) return false;
     for (prepare, entry.contract.parameters[0..prepare.len]) |expected, declared| if (!sameDescriptor(expected, declared)) return false;
     if (!sameDescriptor(limit, entry.contract.parameters[prepare.len])) return false;
@@ -333,7 +334,10 @@ fn validRequestKernel(entry: Entry, schemas: *const [data.key_count]?*const data
         }
     }
     if (model_slots != 1) return false;
-    return limit.kind == .integer and limit.required and limit.integer_min == 0 and limit.integer_max == std.math.maxInt(u32);
+    // The one maximum the domain fixes, in every place the kernel declares it: the operation's
+    // descriptor (`kernel.validContract`), the parameter's range and the accounting stage's descriptor.
+    return limit.kind == .integer and limit.required and limit.integer_min == 0 and
+        limit.integer_max == kernel.maximum_retry_limit and stage_limit.maximum == kernel.maximum_retry_limit;
 }
 
 fn sameDescriptor(left: operation.ParameterDescriptor, right: operation.ParameterDescriptor) bool {

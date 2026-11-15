@@ -92,6 +92,12 @@ pub const AuthorityReason = enum {
     accounting_transition,
     /// A retry allowance cannot be admitted or its exhaustion cannot be described.
     retry_admission,
+    /// A new native repair key would exceed the execution's `workflow_retry.maximum_population` keys.
+    /// A key the execution already counts is not new.
+    repair_key_population,
+    /// A new request-assignment counter would exceed the execution's `workflow_retry.maximum_population`
+    /// counters. An assignment the execution already counts is not new.
+    request_assignment_population,
     /// The step execution ceiling is spent.
     step_execution_ceiling,
     /// The publication finalizer refused to let publication proceed.

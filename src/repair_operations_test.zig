@@ -215,27 +215,6 @@ test "every variant states what the per-owner operation it replaced stated, but 
     for (frozen) |fact| try std.testing.expect(fact.owner.serves(fact.op));
 }
 
-test "the owners' retry maxima are the YAML values the per-owner merges declare today" {
-    try std.testing.expectEqual(@as(?u32, 128), repair_owner.retryMaximum(.reference_reconciliation));
-    try std.testing.expectEqual(@as(?u32, 1), repair_owner.retryMaximum(.source_omission_extraction));
-    try std.testing.expectEqual(@as(?u32, 1), repair_owner.retryMaximum(.source_omission_reconciliation));
-    try std.testing.expectEqual(@as(?u32, 64), repair_owner.retryMaximum(.specification_unit));
-    try std.testing.expectEqual(@as(?u32, 2), repair_owner.retryMaximum(.specification_support));
-    // The text and extraction merges forbid a `retry-limit`, as they do today.
-    try std.testing.expect(repair_owner.retryMaximum(.reference_text) == null);
-    try std.testing.expect(repair_owner.retryMaximum(.reference_extraction) == null);
-    // Only the dispositions authorizer drops an outcome it cannot reach.
-    inline for (@typeInfo(Operation).@"enum".fields) |op_field| {
-        const op: Operation = @enumFromInt(op_field.value);
-        inline for (@typeInfo(RepairOwner).@"enum".fields) |field| {
-            const owner: RepairOwner = @enumFromInt(field.value);
-            const dropped = repair_owner.unreachableOutcome(op, owner);
-            const expected: ?workflow.OutcomeTag = if (op == .authorize and owner == .reference_dispositions) .more else null;
-            try std.testing.expectEqual(expected, dropped);
-        }
-    }
-}
-
 // ---- registry, compiler and graph validation ----
 
 fn unused(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {

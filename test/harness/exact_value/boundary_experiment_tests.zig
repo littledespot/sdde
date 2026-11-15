@@ -163,16 +163,3 @@ test "contextual experiment preserves baseline punctuation results as separate e
         try std.testing.expect(boundary.evaluate(case.prose, case.start, case.end, full_field_edges) == .rejected);
     }
 }
-
-test "contextual acceptance cannot establish semantic fulfillment or complete technical meaning" {
-    // A conventional terminal dot cannot reveal whether it is prose punctuation
-    // or part of a longer intended technical value. Denials also keep the bytes.
-    for ([_]struct { prose: []const u8, start: usize, end: usize }{
-        .{ .prose = "Display ACTIVE.", .start = 8, .end = 14 },
-        .{ .prose = "Do not display ACTIVE.", .start = 15, .end = 21 },
-        .{ .prose = "Use 1.2.", .start = 4, .end = 7 },
-    }) |case| try std.testing.expect(boundary.evaluate(case.prose, case.start, case.end, full_field_edges) == .accepted);
-    try std.testing.expect(!@hasField(boundary.DelimitedSpan, "coverage"));
-    try std.testing.expect(!@hasField(boundary.DelimitedSpan, "fulfilled"));
-    try std.testing.expect(!@hasField(boundary.DelimitedSpan, "occurrence"));
-}

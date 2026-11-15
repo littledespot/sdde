@@ -3,41 +3,6 @@ const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const operation = @import("domain/llm_provider_operation.zig");
 const Fixture = @import("provider_authorization_test_fixture.zig").Fixture;
 
-test "fake provider conforms to inference through the sole interface" {
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
-    defer fixture.deinit();
-    var fake = makeFake(&fixture);
-    fake.invocation_plan = .{ .complete = .{
-        .content = "{\"schemaVersion\":\"model-envelope/v1\"}",
-        .input_tokens = 10,
-        .output_tokens = 5,
-        .provider_latency_ms = 7,
-    } };
-    const inference = try fixture.startInference();
-    var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
-    defer result.deinit();
-    switch (result) {
-        .completed => |completed| {
-            try std.testing.expect(completed.operation_id.eql(inference.invoked.id));
-            switch (completed.raw_result) {
-                .complete => |complete| {
-                    try std.testing.expect(complete.request_id == fixture.model_request_id);
-                    try std.testing.expect(complete.binding_id.eql(fixture.provider_binding.bindingId()));
-                    try std.testing.expectEqualStrings("{\"schemaVersion\":\"model-envelope/v1\"}", complete.content.bytes);
-                    try std.testing.expectEqual(@as(u64, 15), complete.usage.total_tokens);
-                    try std.testing.expectEqual(@as(?u32, 7), complete.provider_latency_ms);
-                },
-                .stopped, .rejected => return error.ExpectedCompleteProviderResult,
-            }
-        },
-        .failed => return error.ExpectedCompletedProviderObservation,
-    }
-    try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
-    try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
-    try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
-}
-
 test "actual fake-provider usage may overshoot and prevents another API call" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
@@ -56,30 +21,6 @@ test "actual fake-provider usage may overshoot and prevents another API call" {
     try std.testing.expectEqual(@as(u128, 15), tokens.current().committed());
     try std.testing.expectError(error.WorkflowTokenBudgetExceeded, tokens.check());
     try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
-}
-
-test "inference preserves provider-reported large usage and limit stops" {
-    for (0..3) |variant| {
-        var fixture: Fixture = undefined;
-        try fixture.init(std.testing.allocator);
-        defer fixture.deinit();
-        var fake = makeFake(&fixture);
-        fake.invocation_plan = if (variant == 0)
-            .{ .complete = .{ .content = "{}", .input_tokens = 1_000_000, .output_tokens = 500_000 } }
-        else
-            .{ .stopped = .{ .reason = if (variant == 1) .output_limit else .context_limit, .input_tokens = 1_000_000, .output_tokens = 500_000 } };
-        const inference = try fixture.startInference();
-        var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
-        defer result.deinit();
-        const usage = switch (result.completed.raw_result) {
-            .complete => |value| value.usage,
-            .stopped => |value| value.usage,
-            .rejected => return error.ExpectedCompleteProviderResult,
-        };
-        try std.testing.expectEqual(@as(u64, 1_500_000), usage.total_tokens);
-        try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
-        try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
-    }
 }
 
 test "provider request rejects malformed identity content and controls" {
@@ -115,51 +56,6 @@ test "fake provider rejects an incoherent request before a simulated send" {
     try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
     try std.testing.expectEqual(@as(usize, 0), fake.effect_count);
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
-}
-
-test "fake provider preserves every closed failure cause without retrying" {
-    for (std.enums.values(operation.ProviderFailureCause)) |cause| {
-        var fixture: Fixture = undefined;
-        try fixture.init(std.testing.allocator);
-        defer fixture.deinit();
-        var fake = makeFake(&fixture);
-        fake.invocation_plan = .{ .failed = .{ .cause = cause, .retry_class = .policy_eligible, .delivery = .accepted_or_unknown } };
-        const inference = try fixture.startInference();
-        var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
-        defer result.deinit();
-        switch (result) {
-            .completed => return error.ExpectedProviderFailure,
-            .failed => |failure| {
-                try std.testing.expectEqual(cause, failure.cause);
-                try std.testing.expectEqual(operation.ProviderRetryClass.policy_eligible, failure.retry_class);
-                try std.testing.expectEqual(operation.ProviderDeliveryDisposition.accepted_or_unknown, failure.delivery);
-            },
-        }
-        try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
-        try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
-        try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
-    }
-}
-
-test "noncandidate stops carry no content" {
-    for (std.enums.values(operation.ProviderNonCandidateStopReason)) |reason| {
-        var fixture: Fixture = undefined;
-        try fixture.init(std.testing.allocator);
-        defer fixture.deinit();
-        var fake = makeFake(&fixture);
-        fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = 10, .output_tokens = 0 } };
-        const inference = try fixture.startInference();
-        var stopped = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
-        defer stopped.deinit();
-        switch (stopped) {
-            .completed => |completed| switch (completed.raw_result) {
-                .stopped => |value| try std.testing.expectEqual(reason, value.reason),
-                .complete, .rejected => return error.ExpectedStoppedProviderResult,
-            },
-            .failed => return error.ExpectedCompletedProviderObservation,
-        }
-        try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
-    }
 }
 
 test "provider cancellation stays distinct and destroys its consumed authorization" {

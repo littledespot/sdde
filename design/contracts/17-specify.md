@@ -263,11 +263,11 @@ view adds no selection or stored authority; pending output has no generated
 record links. Original requirement IDs appear only when captured as validated
 source associations, never inferred from headings or claim ordinals.
 
-For each feature-brief or specification unit other than the engine-composed story, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
+For each feature-brief or specification unit other than the engine-composed story and a group's scenarios, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
 - **Consolidated generation:** the shipped workflow requests brief, feature entities,
-  source-group records and source-group scenarios as four sequential task types through one
-  shared generation subgraph: one call each for the brief and entities, one per record
+  source-group records and source-group scenarios as four sequential task types through the
+  shared generation operations: one call each for the brief and entities, one per record
   group, and one per record group that has a scenario slot (the scenarios bullet below).
   A further, closed request follows only when an edge case needs it (the link bullet below).
   Brief, entity-applicability and record drafting receive their
@@ -296,7 +296,12 @@ For each feature-brief or specification unit other than the engine-composed stor
   guidance from `spec/generation.context.json`: ordered fragments form one field
   value, prose expresses its meaning and types required exact values verbatim.
   Native recognition owns exact occurrence bookkeeping; supplied passive/source
-  references retain their allowed forms. Schemas remain the sole response-shape authority. Initial and native
+  references retain their allowed forms. Schemas remain the sole response-shape authority.
+  The scenarios request carries `spec/scenarios.context.json` instead, only the value and
+  reference fragments and a sources sentence, because its answer has no clarification,
+  inconclusive or signal selection form. Those fragments repeat the generation text's, which
+  owns them. Native repair is one operation for every unit, so the scenarios step's repair
+  keeps the generation text. Initial and native
   repair packets include an earlier draft only for the entities unit, which receives
   the brief. Brief and records requests receive no sibling draft, so a batch
   record can't copy unpublished draft wording (SPEC01 D12.1). The brief draft is
@@ -344,21 +349,26 @@ For each feature-brief or specification unit other than the engine-composed stor
   questions into a new generic subject. This changes no clarification admission rule.
 
 - **Scenario slots** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
-  Decision 3; not yet implemented, the code still inserts per ADR 0038's first
-  amendment): once every group's records are admitted and the native deletes have run,
+  Decision 3): once every group's records are admitted and the native deletes have run,
   native code plans each group's slots: one per distinct claim that a surviving
   functional requirement, business rule, user-visible outcome or prohibited behavior of its
   batch names, in record and claim order. A compound claim is one slot, and a claim no
-  behavior statement names, a scope-only or edge-case-only claim for one, has none. The
-  scenarios step takes its own native iteration population, the groups with at least one
-  slot, and makes one request per group on the generation slot through the shared
-  generation subgraph, as an initial generation and before `link-scenarios`. The request
-  offers the slots numbered from one, each with its claim's source text and exact values,
-  and no statement, entity, story or other batch (SPEC01 D12.1). Its result schema admits
+  behavior statement names, a scope-only or edge-case-only claim for one, has none. A records
+  response holds no acceptance criterion: its request neither offers nor requires the
+  family, and the records step's batch is merged only after the scenarios. The `generate-scenarios`
+  step takes its own native iteration population, the groups with at least one
+  slot, and makes one request per group on the generation slot with the shared request,
+  collection, validation and repair operations
+  ([13.5](actions/13-05-artifacts-rendering-traceability.md#planscenariogenerationaction-plan-scenario-generation)),
+  as an initial generation and before `link-scenarios`. The request
+  offers the slots as `requirements` numbered from one, each with its claim's meaning and
+  source and no kind, with the claims' exact values, and no statement, entity, story or other
+  batch (SPEC01 D12.1). Its result schema admits
   one item per slot, the slot's number and a content-only acceptance criterion, each number
-  exactly once (`exact_members`), with no claim, kind or group. Items with equal content
-  take the request's protocol correction, which names the number of every item in each equal
-  set. The engine fixes each
+  exactly once (`exact_members`), with no claim, kind or group. The answer has no clarification
+  or inconclusive form. Items that return equal
+  values for the criterion's given, when and then take the request's protocol correction,
+  which names the number of every item in each equal set (`distinct`, §12.2; §22.6). The engine fixes each
   criterion's kind, claim and group and appends the criteria to the group's batch in slot
   order; full unit validation and the field-level value repair then apply (§22.3), which
   never changes a criterion's claim. The session's scenario-coverage check requires at

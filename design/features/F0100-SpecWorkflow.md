@@ -25,8 +25,7 @@ primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0043](../decisions/0043-model-facing-exact-text-names.md),
 [0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md), and the engine-owned `request-model` step of
 [ADR 0030](../decisions/0030-engine-owned-model-request.md) and the four generic repair
-operations of [ADR 0033](../decisions/0033-generic-repair-operations.md) are implemented. Not yet implemented: the scenario slots of
-[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3 and
+operations of [ADR 0033](../decisions/0033-generic-repair-operations.md) are implemented. Not yet implemented:
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md);
 [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) is accepted, on hold
 since 30 October 2026. The
@@ -1188,7 +1187,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   obligations; the source-readiness projection always includes them (§3.10).
 
   - Generation that completes without a mandatory record family ends `invalid`
-    (`check-specification-generation-progress`); no model evidence supplies it.
+    (`check-specification-generation-progress`, and `check-scenario-generation-progress` for
+    the criterion family); no model evidence supplies it.
   - Natively, ADR 0038's one-statement-record rule applies to each records response, and a
     second request per group writes one criterion for each claim a surviving behaviour
     statement names on the batch the native deletes leave ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
@@ -1261,11 +1261,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   approval or artifact-path field is accepted.
 
 - Four configured task types (brief, entities, one call per record group and one call per
-  record group with a scenario slot) reuse the same generation subgraph and generic model
+  record group with a scenario slot) reuse the same generation operations and generic model
   path; narrative, applicability, records and scenarios use concise purpose-specific
   guidance. The registered action `compose-specification-story` composes the story between
-  the brief and entities, with no model call (ADR 0047). After the records, a scenarios
-  step (not yet implemented) writes one acceptance criterion per claim a surviving behaviour statement names,
+  the brief and entities, with no model call (ADR 0047). After the records, the
+  `generate-scenarios` step writes one acceptance criterion per claim a surviving behaviour statement names,
   each bound to its claim by the engine (ADR 0038 Decision 3, §17.3). After it, the `link-scenarios` step links each
   edge case to an acceptance criterion of its own batch that shares a claim: natively when
   one does, by one closed model request offering those criteria when several do, and by a
@@ -1520,8 +1520,7 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
   shared required-authority gate, the native content schema and Markdown codec, and
   registered publication of either completed output or the ADR 0017 incomplete
   specification with its clarification forms and pending state.
-- Not implemented: the scenario slots of ADR 0038 Decision 3 (SPEC01 Q14 b4),
-  authenticated answer application (ADR 0025, SPEC01 E7), additional
+- Not implemented: authenticated answer application (ADR 0025, SPEC01 E7), additional
   reference formats, the reference-feedback API (§16.5), and §5.5's failed-run
   incomplete publication (ADR 0041, accepted, on hold since 30 October 2026).
 - Offline verification does not establish live E2E acceptance; the

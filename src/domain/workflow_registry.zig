@@ -4,7 +4,6 @@ const workflow = @import("workflow.zig");
 const definition = @import("workflow_definition.zig");
 const compilation = @import("workflow_compilation.zig");
 const inventory = @import("workflow_inventory.zig");
-const workflow_retry = @import("workflow_retry.zig");
 
 pub const RegistryCandidate = struct {
     inventory: inventory.Inventory,
@@ -12,6 +11,9 @@ pub const RegistryCandidate = struct {
     resource_manifest: inventory.ResourceManifest,
     resource_captures: []const inventory.Capture,
     definitions: []const definition.Definition,
+    /// Precondition: graphs `workflow_graph_validation.validate` accepted, which the startup routine
+    /// meets by building the candidate only from `ValidatedGraphs` (ADR 0032). Publication runs no
+    /// check of a compiled step itself.
     graphs: []const compilation.CompiledWorkflow,
     /// The operation registry the graphs were compiled from: publication rechecks each step of a
     /// contract with variants against the variant it selected (ADR 0030 "Contract variants").
@@ -138,7 +140,6 @@ fn graphProjectsDefinition(
 ) bool {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
-    @import("workflow_outcome_flow.zig").validate(arena.allocator(), graph.authority) catch return false;
     const expanded = @import("workflow_subgraphs.zig").expand(arena.allocator(), source) catch return false;
     var declared = source;
     declared.steps = expanded.steps;
@@ -152,7 +153,8 @@ fn graphProjectsDefinition(
         !std.mem.eql(u8, graph.authority.start_step_id.bytes, declared.start_step_id.bytes) or
         graph.authority.resources.len != declared.resources.len or
         graph.authority.steps.len != declared.steps.len or
-        !compilation.publicationTerminates(graph.authority) or
+        // `cloneGraph` reads the resource each composition's alias names as a result schema and
+        // binds the copy to it: sound only when that resource is the composition's own schema.
         !compilation.validResourceBindings(graph.authority.resources)) return false;
 
     for (graph.authority.resources, declared.resources) |compiled, resource| {
@@ -163,37 +165,9 @@ fn graphProjectsDefinition(
     }
     var transition_count: usize = 0;
     for (graph.authority.steps, declared.steps) |compiled, step| {
-        if (!@import("workflow_outcome_association.zig").validDescriptor(compiled.outcome_association, compiled.requires, compiled.optional, compiled.produces, compiled.replaces, compiled.repair_role)) return false;
-        if (!@import("workflow_iteration.zig").validProjection(compiled)) return false;
-        // A `request-model` step takes the same validators as graph validation gives it, stated once
-        // at `kernel.takesSingleOperationValidators`; its stages were checked there, each as the step
-        // it is, and `kernel.validProjection` fixes everything about the step itself.
-        const single_operation = @import("model_request_kernel.zig").takesSingleOperationValidators(compiled);
-        if (single_operation and !@import("workflow_operation.zig").validAccounting(compiled.runner_accounting, compiled.requires, compiled.produces, compiled.side_effect, compiled.retry_authority != null)) return false;
-        if (!@import("workflow_model.zig").validProjection(compiled)) return false;
-        if (single_operation) {
-            if (!@import("workflow_model_request_lifecycle.zig").validProjection(compiled)) return false;
-            if (!@import("workflow_provider_operation.zig").validProjection(compiled)) return false;
-            if (!@import("workflow_provider_authorization.zig").validProjection(compiled)) return false;
-        } else if (!@import("model_request_kernel.zig").validProjection(compiled)) return false;
         if (!@import("workflow_source.zig").sameChain(compiled.source_chain, step.source_chain) or !std.mem.eql(u8, compiled.id.bytes, step.id.bytes) or
             !std.mem.eql(u8, compiled.operation_id.bytes, step.operation_id.bytes) or
             compiled.parameters.len != step.parameters.len or compiled.outcomes.len != step.outcomes.len) return false;
-        const retry_parameter = findCompiledParameter(compiled.parameters, workflow_retry.parameter_id);
-        if (compiled.retry_authority) |authority| {
-            if (!authority.isValid() or
-                !std.mem.eql(u8, authority.workflow_id.bytes, graph.authority.workflow_id.bytes) or
-                authority.workflow_version != graph.authority.workflow_version or
-                !std.mem.eql(u8, authority.operation_instance_id.bytes, compiled.id.bytes) or
-                retry_parameter == null or retry_parameter.?.value != .integer or
-                retry_parameter.?.value.integer < 0 or
-                authority.limit.value != retry_parameter.?.value.integer)
-            {
-                return false;
-            }
-        } else if (retry_parameter != null) {
-            return false;
-        }
         for (compiled.parameters, step.parameters) |compiled_parameter, parameter| {
             if (!sameParameter(compiled_parameter, parameter)) return false;
         }
@@ -325,11 +299,6 @@ fn cloneParameters(allocator: std.mem.Allocator, source: []const compilation.Com
         }
     }
     return values;
-}
-
-fn findCompiledParameter(values: []const compilation.CompiledParameter, id: []const u8) ?compilation.CompiledParameter {
-    for (values) |value| if (std.mem.eql(u8, value.id.bytes, id)) return value;
-    return null;
 }
 
 fn cloneStrings(allocator: std.mem.Allocator, source: []const []const u8) ![]const []const u8 {

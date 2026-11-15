@@ -2,8 +2,8 @@
 //! `parse-repair` and `merge-repair`. Each is one registered contract made of closed variants, one
 //! per owner that uses the operation today, selected per step by the required `owner` parameter
 //! (ADR 0030 "Contract variants"). A variant is built from its owner's own binding declarations
-//! (its data effects, outcomes, association, role and retry rule), so each of them exists once, in
-//! the owner's binding.
+//! (its data effects, outcomes, association and role) and from the owner's retry maximum
+//! (`repair_owner.retryMaximum`), so each of them exists once, in the owner's own declarations.
 //!
 //! The owner's rules stay in its own binding file; this file only selects them. Each operation holds
 //! its owners' bindings, and `invoke` selects one through one exhaustive `switch` over the closed
@@ -12,7 +12,6 @@
 //! only the owner's own keys, and checks them against the native facts they carry, so a step whose
 //! `owner` disagrees with the data it runs on fails as a terminal runner rejection, never as a YAML
 //! outcome. The model call stays a separate `request-model` step; release and routing stay YAML.
-const std = @import("std");
 const compilation = @import("../domain/workflow_compilation.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const operation = @import("../domain/workflow_operation.zig");
@@ -101,24 +100,23 @@ fn withoutOutcome(comptime outcomes: []const workflow.OutcomeTag, comptime dropp
     return &result;
 }
 
+/// A merge's `retry-limit` parameter: an integer from 0 to the owner's maximum.
+fn retryParameter(comptime maximum: u32) operation.ParameterDescriptor {
+    return .{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = maximum };
+}
+
 /// The variant of `owner`'s binding `T`: a complete contract built from the owner's own declarations,
-/// with the selector first among its parameters and the owner's retry maximum
-/// (`repair_owner.retryMaximum`) where its merge takes a `retry-limit`.
+/// with the selector first among its parameters. A merge takes a `retry-limit` exactly where the
+/// owner has a maximum (`repair_owner.retryMaximum`), the one statement of it: the parameter's range
+/// and the variant's retry descriptor both come from that value, and a binding states no retry rule.
 fn variantOf(comptime op: Operation, comptime owner: RepairOwner, comptime T: type) operation.Variant {
     const effects: repair_owner.Effects = T.effects;
     const declared: []const workflow.OutcomeTag = if (@hasDecl(T, "outcomes")) &T.outcomes else &.{ .ok, .failed };
-    const maximum: ?u32 = if (@hasDecl(T, "retry_limit"))
-        (repair_owner.retryMaximum(owner) orelse @compileError("a merge that takes a retry-limit states its owner's maximum"))
-    else
-        null;
+    const maximum: ?u32 = if (op == .merge) repair_owner.retryMaximum(owner) else null;
     const parameters = comptime blk: {
-        const own = if (@hasDecl(T, "parameters")) T.parameters else [0]operation.ParameterDescriptor{};
-        var list: [1 + own.len]operation.ParameterDescriptor = undefined;
+        var list: [if (maximum != null) 2 else 1]operation.ParameterDescriptor = undefined;
         list[0] = selectorDescriptor(op);
-        for (own, 0..) |descriptor, index| {
-            list[1 + index] = descriptor;
-            if (std.mem.eql(u8, descriptor.id, "retry-limit")) list[1 + index].integer_max = maximum.?;
-        }
+        if (maximum) |limit| list[1] = retryParameter(limit);
         const final = list;
         break :blk final;
     };
@@ -136,7 +134,7 @@ fn variantOf(comptime op: Operation, comptime owner: RepairOwner, comptime T: ty
         .repair_role = if (@hasDecl(T, "repair_role")) T.repair_role else .none,
         .outcome_association = if (@hasDecl(T, "outcome_association")) T.outcome_association else .independent,
         .gates = if (@hasDecl(T, "gates")) &T.gates else &.{},
-        .retry_limit = if (maximum) |limit| .{ .maximum = limit, .scope = T.retry_limit.scope } else null,
+        .retry_limit = if (maximum) |limit| .{ .maximum = limit, .scope = .repair } else null,
         .iteration = null,
     };
 }

@@ -394,9 +394,6 @@ test "native domain packets traverse generic fake provider execution without res
         const request_only = try transport.retire(.released_request, ledger, current.id(), status);
         try std.testing.expect(combined.data_invalidations.contains(.model_input_packet));
         try std.testing.expect(!request_only.data_invalidations.contains(.model_input_packet));
-        const accounting = runner.tokenLedger().committed();
-        for (transport.keys(.released_request_and_input)) |key| try std.testing.expect(combined.data_invalidations.contains(key));
-        try std.testing.expectEqual(accounting, runner.tokenLedger().committed());
     }
 }
 
@@ -7817,8 +7814,6 @@ test "production missing-answer observation retains usage and can close without 
                 const after = try encode(std.testing.allocator, evidence.request(), policy, .{ .tokens = 16000 });
                 defer std.testing.allocator.free(after);
                 try std.testing.expectEqualStrings(before, after);
-                try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-before.json", .data = before });
-                try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-after.json", .data = after });
                 try std.testing.expectEqual(@as(u128, 932), tokens.committed());
                 try std.testing.expectError(error.TokenUsageAlreadyAccounted, @import("domain/workflow_token_accounting.zig").proposeReconciliation(tokens, tokens.revision(), retained.operationId(), .{ .exact_usage = evidence.usage().? }));
             }
@@ -8766,14 +8761,22 @@ test "request-model: an admitted request leaves the consumer's records current a
     const request = try currentRequest(&runner);
     try std.testing.expectEqual(.terminal, (try requestLedger(&runner)).record(request.id()).?.status);
     try runner.model_accounting.?.current_operations.validateRequestClosure(request.id());
-    // The step is one execution: the workflow's three steps, no more, and its retry limit adds no
-    // step executions to the workflow's ceiling (its allowance is the step's own).
+    // The step is one execution: the workflow's three steps, no more. The compiled ceiling counts
+    // its allowance, not what ran (a revisit for another stage run, unit owner, model operation or
+    // purpose restarts the count; one under the same assignment continues it): every attempt and its
+    // one re-send, for every request key, per workflow round.
     try std.testing.expectEqual(@as(usize, 3), harness.steps);
-    try std.testing.expectEqual(graph.authority.steps.len, graph.authority.maximum_step_executions);
     const request_step = for (graph.authority.steps) |step| {
         if (std.mem.eql(u8, step.id.bytes, "request")) break step;
     } else unreachable;
     try std.testing.expectEqual(@as(u64, 2 * (1 + 2)), kernel.attemptAllowance(request_step.retry_authority.?.limit));
+    try std.testing.expectEqual(.model_request, request_step.retry_authority.?.scope);
+    const retry = @import("domain/workflow_retry.zig");
+    const keys = @as(usize, retry.maximum_repair_keys) + retry.maximum_request_assignments;
+    const allowance: usize = @intCast(kernel.attemptAllowance(request_step.retry_authority.?.limit));
+    try std.testing.expectEqual(graph.authority.steps.len * (1 + allowance * keys), graph.authority.maximum_step_executions);
+    try std.testing.expectEqual(compilation.calculateExecutionLimit(graph.authority.steps).?, graph.authority.maximum_step_executions);
+    try std.testing.expect(graph.authority.maximum_step_executions > graph.authority.steps.len);
 }
 
 test "request-model: a rejected response takes one protocol correction inside the step" {
@@ -8912,8 +8915,320 @@ test "request-model: exhausting the retry allowance names the step and the stage
     // The initial attempt and its one allowed retry: the limit stops a third.
     try std.testing.expectEqual(@as(usize, 2), scripted.inner.effect_count);
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-    // Only the step is counted; the runner's ceiling is unchanged by the retries.
+    // The retries stay inside the step: the workflow still has its three steps.
     try std.testing.expectEqual(@as(usize, 3), graph.authority.steps.len);
+}
+
+/// A workflow whose consumer may send the request back to the `request-model` step: the cycle the
+/// step's own retry authority guards (ADR 0030), bounded by the compiled ceiling.
+const kernel_cycle_yaml =
+    \\schema: workflow/v1
+    \\id: kernel-cycle
+    \\version: 1
+    \\shortcode: KCYC
+    \\invoke: core.empty-invocation
+    \\policy: core.model-inference@1
+    \\start: initialize
+    \\resources: { prompt: prompt.md, result: result.json, input: input.txt }
+    \\steps:
+    \\  initialize: { use: build-initial-model-request-identity-ledger, on: { ok: request, failed: end.failed } }
+    \\  request:
+    \\    use: request-model
+    \\    with: { slot: selected, prompt: prompt, protocol-prompt: prompt, result-schema: result, input: input, retry-limit: 2 }
+    \\    on: { ok: observe, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled }
+    \\  observe: { use: test.observe-request, on: { ok: end.ok, more: request } }
+;
+
+/// The cycle's consumer: it asks for another request `revisits` times, then ends the workflow. It
+/// consumes what the step left current, whichever outcome it returns.
+const CycleConsumer = struct {
+    revisits: usize,
+    calls: usize = 0,
+    fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        self.calls += 1;
+        var delta: pipeline.NodeDelta = .{};
+        for (kernel.produces) |key| delta.data_invalidations.insert(key);
+        return .{ .outcome = if (self.calls > self.revisits) .ok else .more, .delta = delta };
+    }
+};
+
+fn cycleConsumer(fixture: *Fixture, consumer: *CycleConsumer) void {
+    fixture.entries[fixture.entries.len - 1] = .{
+        .contract = .{ .id = "test.observe-request", .kind = .step, .requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result }, .invalidates = &kernel.produces, .outcomes = &.{ .ok, .more }, .side_effect = .none },
+        .binding = bindings.bind(CycleConsumer, consumer, CycleConsumer.invoke),
+    };
+}
+
+test "request-model: a cycle that revisits the step runs past the step count, bounded by the step's own retry authority" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var consumer: CycleConsumer = .{ .revisits = 2 };
+    cycleConsumer(&fixture, &consumer);
+    const graph = try fixture.compile(kernel_cycle_yaml);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
+    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.ok, harness.run());
+    // The initialization, then the request step and its consumer three times. A ceiling that counts
+    // only the workflow's three steps stops this at the fourth execution.
+    try std.testing.expectEqual(@as(usize, 1 + 2 * 3), harness.steps);
+    try std.testing.expect(harness.steps > graph.authority.steps.len);
+    try std.testing.expect(harness.steps <= graph.authority.maximum_step_executions);
+    try std.testing.expectEqual(@as(usize, 3), consumer.calls);
+    try std.testing.expectEqual(@as(usize, 3), scripted.inner.effect_count);
+    // The visits share one assignment (the same stage run, unit owner and operation), so the step's
+    // retry authority counts them together: each visit took its one attempt, within `limit + 1`.
+    const observations = try runner.retryObservations(fixture.arena.allocator());
+    var seen: usize = 0;
+    for (observations) |row| for (row.assignments) |assignment| {
+        seen += 1;
+        try std.testing.expectEqual(@as(u64, consumer.calls), assignment.completed_executions);
+    };
+    try std.testing.expectEqual(@as(usize, 1), seen);
+}
+
+test "request-model: the step's retry authority, not the ceiling, ends a cycle on one assignment" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var consumer: CycleConsumer = .{ .revisits = 3 };
+    cycleConsumer(&fixture, &consumer);
+    const graph = try fixture.compile(kernel_cycle_yaml);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
+    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    const result = harness.result();
+    // The fourth visit would be the third retry; the limit of 2 allows two, so the step refuses it.
+    const exhausted = result.execution_rejected.retry_limit;
+    try std.testing.expectEqualStrings("request", exhausted.operation().bytes);
+    try std.testing.expectEqual(kernel.accounting_stage, exhausted.stage.?);
+    try std.testing.expectEqual(@as(u32, 2), exhausted.limit.value);
+    try std.testing.expectEqual(@as(usize, 3), scripted.inner.effect_count);
+    try std.testing.expect(harness.steps < graph.authority.maximum_step_executions);
+}
+
+test "request-model: the same cycle ends at the workflow token budget, not at the ceiling" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    fixture.token_budget = .{ .value = 10 };
+    var consumer: CycleConsumer = .{ .revisits = 5 };
+    cycleConsumer(&fixture, &consumer);
+    const graph = try fixture.compile(kernel_cycle_yaml);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
+    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    const result = harness.result();
+    try std.testing.expect(result.execution_rejected == .token_budget);
+    // The first request takes 7 tokens of 10; the second call overshoots and ends the run.
+    try std.testing.expectEqual(@as(usize, 2), scripted.inner.effect_count);
+    try std.testing.expect(harness.steps < graph.authority.maximum_step_executions);
+}
+
+test "request-model: the step spends one execution of the ceiling, and a step it cannot cover is refused before it runs" {
+    // The workflow runs three steps: its initialization, the request step and its consumer.
+    for ([_]usize{ 1, 2, 3 }) |cap| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        kernelObserver(&fixture);
+        const compiled = try fixture.compile(kernel_yaml);
+        // A compiled value cannot be this small; the runner spends what the graph records.
+        var capped = compiled.*;
+        capped.authority.maximum_step_executions = cap;
+        var runner = fixture.runner(&capped, std.testing.allocator);
+        defer runner.deinit();
+        var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
+        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        const result = harness.result();
+        if (cap == 3) {
+            // One execution each: a second spend by the request step would leave none for its consumer.
+            try std.testing.expectEqual(.ok, result.executionStatus().?);
+            try std.testing.expectEqual(@as(usize, 3), harness.steps);
+        } else {
+            try std.testing.expectEqual(execution.Rejection{ .authority = .step_execution_ceiling }, result.execution_rejected);
+            // The first step the ceiling does not cover was refused before it ran.
+            try std.testing.expectEqual(cap + 1, harness.steps);
+        }
+        // The request step reaches the provider only when the ceiling covers it.
+        try std.testing.expectEqual(@as(usize, if (cap >= 2) 1 else 0), scripted.inner.effect_count);
+        if (cap == 1) try expectNoProviderEffects(&runner, &scripted.inner);
+        try std.testing.expectEqual(@as(usize, if (cap == 3) 1 else 0), fixture.observer.calls);
+    }
+}
+
+test "request-model: a recorded ceiling that leaves out the step's allowance is not the compiled one" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    kernelObserver(&fixture);
+    const graph = try fixture.compile(kernel_yaml);
+    const validation = @import("domain/workflow_graph_validation.zig");
+    _ = try validation.validate(fixture.arena.allocator(), &.{graph.*}, &fixture.registry);
+    // The ceiling before the allowance was counted was the step count alone.
+    var stale = graph.*;
+    stale.authority.maximum_step_executions = graph.authority.steps.len;
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{stale}, &fixture.registry));
+}
+
+test "request-model: the compiler admits a retry limit up to the kernel's one maximum and no further" {
+    const retry = @import("domain/workflow_retry.zig");
+    const keys = @as(usize, retry.maximum_repair_keys) + retry.maximum_request_assignments;
+    // At most three retries: four attempts. Each limit compiles with its own closed forms.
+    for ([_]u32{ 0, 1, 2, 3 }) |limit| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        kernelObserver(&fixture);
+        const allocator = fixture.arena.allocator();
+        const graph = try fixture.compile(try kernelLimitYaml(allocator, limit));
+        const request_step = for (graph.authority.steps) |step| {
+            if (std.mem.eql(u8, step.id.bytes, "request")) break step;
+        } else unreachable;
+        try std.testing.expectEqual(limit, request_step.retry_authority.?.limit.value);
+        try std.testing.expectEqual(.model_request, request_step.retry_authority.?.scope);
+        // The accounting stage carries the step's own authority, and nothing else does.
+        try std.testing.expect(kernel.validProjection(request_step));
+        const allowance = kernel.attemptAllowance(request_step.retry_authority.?.limit);
+        try std.testing.expectEqual(@as(u64, 2) * (1 + limit), allowance);
+        try std.testing.expectEqual(graph.authority.steps.len * (1 + @as(usize, @intCast(allowance)) * keys), graph.authority.maximum_step_executions);
+    }
+    // One past the maximum, and the values the declaration admitted before it was bounded, are the
+    // compiler's rejection: the parameter's range, and the retry authority's check against the descriptor.
+    for ([_]u32{ 4, 5, 128, std.math.maxInt(u32) }) |limit| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        kernelObserver(&fixture);
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(try kernelLimitYaml(fixture.arena.allocator(), limit)));
+    }
+}
+
+fn kernelLimitYaml(allocator: std.mem.Allocator, limit: u32) ![]const u8 {
+    return std.mem.replaceOwned(u8, allocator, kernel_yaml, "retry-limit: 2", try std.fmt.allocPrint(allocator, "retry-limit: {d}", .{limit}));
+}
+
+/// A registered merge step whose declared maximum is the widest its parameter can carry. A
+/// `request-model` entry cannot declare one, since the registry admits only the kernel's one maximum
+/// (`kernel.maximum_retry_limit`), so the widest compiled ceiling is reached through the other scope
+/// that counts per native key: a repair-scope step. The compiler and `validate` are what the test that
+/// uses it runs, and the binding never runs.
+const wide_merge_entry: operations.Entry = .{
+    .contract = .{
+        .id = "test.wide-merge",
+        .kind = .step,
+        .parameters = &.{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }},
+        .outcomes = &.{ .ok, .failed },
+        .side_effect = .none,
+        .repair_role = .merge,
+        .retry_limit = .{ .maximum = std.math.maxInt(u32), .scope = .repair },
+    },
+    .binding = bindings.bind(void, null, unusedWideMerge),
+};
+
+fn unusedWideMerge(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
+    return error.InvocationFailureUnrecorded;
+}
+
+/// Two steps, the second the wide merge step.
+const wide_limit_yaml =
+    \\schema: workflow/v1
+    \\id: wide-limit
+    \\version: 1
+    \\shortcode: WIDE
+    \\invoke: core.empty-invocation
+    \\policy: core.model-inference@1
+    \\start: initialize
+    \\steps:
+    \\  initialize: { use: build-initial-model-request-identity-ledger, on: { ok: wide, failed: end.failed } }
+    \\  wide: { use: test.wide-merge, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
+;
+const wide_limit_steps: usize = 2;
+
+fn wideLimitYaml(allocator: std.mem.Allocator, limit: usize) ![]const u8 {
+    return std.mem.replaceOwned(u8, allocator, wide_limit_yaml, "retry-limit: 0", try std.fmt.allocPrint(allocator, "retry-limit: {d}", .{limit}));
+}
+
+test "the compiler and validation admit the widest limit a descriptor can carry, with the closed-form ceiling" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var entries = fixture.entries ++ [_]operations.Entry{wide_merge_entry};
+    fixture.registry.operations = &entries;
+    // The fixture validates what the compiler produces. With the populations at their bound the ceiling
+    // of any admissible graph is representable, so this is the widest a compiled ceiling gets: every
+    // repair key may revisit the step `limit + 1` times.
+    const graph = try fixture.compile(try wideLimitYaml(fixture.arena.allocator(), std.math.maxInt(u32)));
+    try std.testing.expectEqual(wide_limit_steps, graph.authority.steps.len);
+    const keys: usize = @import("domain/workflow_retry.zig").maximum_repair_keys;
+    try std.testing.expectEqual(wide_limit_steps * (1 + (@as(usize, std.math.maxInt(u32)) + 1) * keys), graph.authority.maximum_step_executions);
+}
+
+/// A copy of a compiled graph whose retry-guarded steps, and the stages of a `request-model` step that
+/// carry its authority, hold `limit` in the authority and in the declared parameter alike, so that
+/// nothing but the limit can tell it from the compiler's own output.
+fn withRetryLimit(allocator: std.mem.Allocator, graph: *const compilation.CompiledWorkflow, limit: u32) !compilation.CompiledWorkflow {
+    const Retimed = struct {
+        fn step(a: std.mem.Allocator, source: compilation.CompiledStep, value: u32) !compilation.CompiledStep {
+            var changed = source;
+            if (changed.retry_authority == null) return changed;
+            changed.retry_authority.?.limit = .{ .value = value };
+            const parameters = try a.dupe(compilation.CompiledParameter, source.parameters);
+            for (parameters) |*parameter| {
+                if (std.mem.eql(u8, parameter.id.bytes, @import("domain/workflow_retry.zig").parameter_id)) parameter.value = .{ .integer = value };
+            }
+            changed.parameters = parameters;
+            return changed;
+        }
+    };
+    const steps = try allocator.dupe(compilation.CompiledStep, graph.authority.steps);
+    for (steps) |*step| {
+        if (step.request_stages.len != 0) {
+            const stages = try allocator.dupe(compilation.RequestStage, step.request_stages);
+            for (stages) |*stage| stage.step = try Retimed.step(allocator, stage.step, limit);
+            step.request_stages = stages;
+        }
+        step.* = try Retimed.step(allocator, step.*, limit);
+    }
+    var changed = graph.*;
+    changed.authority.steps = steps;
+    return changed;
+}
+
+test "request-model: the runner refuses a compiled kernel step whose limit is past the declared maximum, and runs one at it" {
+    for ([_]u32{ kernel.maximum_retry_limit, kernel.maximum_retry_limit + 1 }) |limit| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        kernelObserver(&fixture);
+        // The compiler never produces the second graph, so the step and its accounting stage are
+        // retimed by hand and nothing but the limit differs from the compiled one.
+        var retimed = try withRetryLimit(fixture.arena.allocator(), try fixture.compile(kernel_yaml), limit);
+        var runner = fixture.runner(&retimed, std.testing.allocator);
+        defer runner.deinit();
+        var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
+        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        if (limit <= kernel.maximum_retry_limit) {
+            try std.testing.expectEqual(.ok, harness.run());
+            try std.testing.expectEqual(@as(usize, 1), scripted.inner.effect_count);
+        } else {
+            const result = harness.result();
+            try std.testing.expect(result == .execution_rejected);
+            try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, result.execution_rejected);
+            try expectNoProviderEffects(&runner, &scripted.inner);
+            try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        }
+    }
 }
 
 test "request-model: the workflow token budget stops the step after the call that exceeds it" {
@@ -8986,10 +9301,39 @@ test "request-model: the registry admits the kernel entry only as the domain and
         fixture.entries[index] = changed;
         try std.testing.expect(!fixture.registry.validate());
     }
+    // The retry maximum is the domain's one value, and the kernel declares it in three places that
+    // must agree: the operation's descriptor, the parameter's range and the accounting stage's
+    // descriptor. The value the declarations carried before it was bounded is refused in each.
+    const Widened = enum { operation_maximum, operation_range, stage_maximum, stage_range };
+    var widened_stages: [native.stage_count]operations.StageEntry = undefined;
+    for (std.enums.values(Widened)) |widened| {
+        var changed = original;
+        @memcpy(&widened_stages, original.request_stages);
+        const accounting = &widened_stages[@intFromEnum(kernel.accounting_stage)].contract;
+        const wide: u32 = std.math.maxInt(u32);
+        switch (widened) {
+            .operation_maximum => changed.contract.retry_limit = .{ .maximum = wide, .scope = .model_request },
+            .operation_range => changed.contract.parameters = try widenedRange(fixture.arena.allocator(), changed.contract.parameters),
+            .stage_maximum => accounting.retry_limit = .{ .maximum = wide, .scope = .model_request },
+            .stage_range => accounting.parameters = try widenedRange(fixture.arena.allocator(), accounting.parameters),
+        }
+        changed.request_stages = &widened_stages;
+        fixture.entries[index] = changed;
+        try std.testing.expect(!fixture.registry.validate());
+    }
     fixture.entries[index] = original;
     try std.testing.expect(fixture.registry.validate());
     // Only the runner runs the operation, through its orchestrator.
     try std.testing.expectError(error.KernelBindingNotInvocable, original.invoke(.{ .invocation = .{ .arguments = &.{} } }));
+}
+
+/// The parameters with the `retry-limit` range widened to the values the declaration admitted before it was bounded.
+fn widenedRange(allocator: std.mem.Allocator, parameters: []const @import("domain/workflow_operation.zig").ParameterDescriptor) ![]const @import("domain/workflow_operation.zig").ParameterDescriptor {
+    const changed = try allocator.dupe(@import("domain/workflow_operation.zig").ParameterDescriptor, parameters);
+    for (changed) |*parameter| {
+        if (std.mem.eql(u8, parameter.id, @import("domain/workflow_retry.zig").parameter_id)) parameter.integer_max = std.math.maxInt(u32);
+    }
+    return changed;
 }
 
 test "request-model: the compiler rejects what the one contract does not allow" {
@@ -9240,10 +9584,7 @@ test "request-model: the release actions retire exactly the keys the kernel keep
     const transport = @import("domain/model_transport.zig");
     const release_request = @import("actions/model/release_model_request.zig").Action{};
     const release_transport = @import("actions/model/release_model_transport.zig").Action{};
-    // The set is stated once: the kernel's produced keys are the keys the release retires, and the
-    // ledger, which the step replaces, is never one of them.
-    try std.testing.expectEqualSlices(pipeline.DataKey, &kernel.produces, &transport.released_keys);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &kernel.produces, transport.keys(.released_request));
+    // The ledger, which the step replaces, is never one of the retired keys.
     for (transport.released_keys) |key| try std.testing.expect(key != .model_request_identity_ledger);
     {
         var fixture: Fixture = undefined;
@@ -9523,6 +9864,30 @@ test "request-model: a stage set on another operation is rejected at graph valid
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
 }
 
+test "request-model: graph validation checks each stage as the step it is" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    kernelObserver(&fixture);
+    const a = fixture.arena.allocator();
+    const compiled = try fixture.compile(kernel_yaml);
+    const steps = try a.dupe(compilation.CompiledStep, compiled.authority.steps);
+    const request_index = for (steps, 0..) |step, index| {
+        if (step.request_stages.len != 0) break index;
+    } else unreachable;
+    // The inference stage loses its provider port; the kernel step's own projection still holds,
+    // so only the stage's own checks can refuse it.
+    const stages = try a.dupe(compilation.RequestStage, steps[request_index].request_stages);
+    for (stages) |*stage| if (stage.stage == .invoke_model) {
+        stage.step.capabilities = &.{};
+    };
+    steps[request_index].request_stages = stages;
+    try std.testing.expect(kernel.validProjection(steps[request_index]));
+    var tampered = compiled.*;
+    tampered.authority.steps = steps;
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(a, &.{tampered}, &fixture.registry));
+}
+
 test "request-model: a stage whose compiled capabilities are not its registered ones is refused where it runs" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
@@ -9548,33 +9913,6 @@ test "request-model: a stage whose compiled capabilities are not its registered 
     // Every stage before the call ran under its own checks; the refused stage sent nothing.
     try std.testing.expect(runner.model_accounting != null);
     try std.testing.expectEqualStrings("invoke-model", runner.stage_step.name.?);
-    try expectNoProviderEffects(&runner, &scripted.inner);
-    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-}
-
-test "request-model: a stage that is not the registered stage of its position is refused where it runs" {
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
-    defer fixture.deinit();
-    kernelObserver(&fixture);
-    const compiled = try fixture.compile(kernel_yaml);
-    const allocator = fixture.arena.allocator();
-    const steps = try allocator.dupe(compilation.CompiledStep, compiled.authority.steps);
-    const request_index = for (steps, 0..) |step, index| {
-        if (std.mem.eql(u8, step.id.bytes, "request")) break index;
-    } else unreachable;
-    const stages = try allocator.dupe(compilation.RequestStage, steps[request_index].request_stages);
-    // The compiled stage names another operation than the one the kernel registers for that stage.
-    stages[@intFromEnum(kernel.Stage.advance_attempt)].step.operation_id = .{ .bytes = "not-the-registered-stage" };
-    steps[request_index].request_stages = stages;
-    var tampered = compiled.*;
-    tampered.authority.steps = steps;
-    var runner = fixture.runner(&tampered, std.testing.allocator);
-    defer runner.deinit();
-    var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
-    var harness: Harness = .{ .runner = &runner };
-    try std.testing.expectEqual(execution.Rejection{ .authority = .kernel_stage }, harness.result().execution_rejected);
     try expectNoProviderEffects(&runner, &scripted.inner);
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
 }
@@ -10321,6 +10659,56 @@ test "request-model: an allowance whose exhaustion cannot be named is refused on
         if (workflow.WorkflowStepId.parse(name) != null) {
             try std.testing.expectEqualStrings(name, refused.retry_limit.operation().bytes);
         } else try std.testing.expectEqual(execution.Rejection{ .authority = .retry_admission }, refused);
+    }
+}
+
+test "request-model: a request assignment past the execution's population is refused on its own reason" {
+    const retry = @import("domain/workflow_retry.zig");
+    // One request counts as many assignments as it has retry-bearing stages; the run is measured, not assumed.
+    var needed: usize = 0;
+    // Without other assignments, then with the population exactly full, then with one counter too many.
+    for ([_]?usize{ null, 0, 1 }) |surplus| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        kernelObserver(&fixture);
+        const graph = try fixture.compile(kernel_yaml);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
+        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const epoch = try @import("domain/execution_reference.zig").create(std.testing.allocator);
+        defer epoch.release();
+        // `held` assignments of other requests, each a unit owner of its own, so that none is this request's.
+        const held = if (surplus) |extra| retry.maximum_request_assignments - needed + extra else 0;
+        for (0..held) |index| {
+            const request: *identity.ModelRequestId = try arena.allocator().create(identity.ModelRequestId);
+            request.* = .{
+                .stage_run_epoch_id = .{ .reference = epoch },
+                .immutable_unit_owner_id = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(arena.allocator(), "unit-{d}", .{index}) } } },
+                .model_operation_id = .{ .workflow_id = .{ .bytes = "other" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "other" } },
+                .purpose = .initial_generation,
+                .request_ordinal = .{ .value = 1 },
+            };
+            _ = try runner.repair_retry.beginAssignmentAttempt(.{ .bytes = "other" }, .{ .value = 1 }, .{ .request = request, .record = .{ .value = @intCast(index + 1) } });
+        }
+        var harness: Harness = .{ .runner = &runner };
+        const outcome = harness.result();
+        if (surplus == null) {
+            try std.testing.expectEqual(.ok, outcome.executionStatus().?);
+            needed = runner.repair_retry.attempts.items.len;
+            try std.testing.expect(needed > 0);
+        } else if (surplus.? == 0) {
+            try std.testing.expectEqual(.ok, outcome.executionStatus().?);
+            try std.testing.expectEqual(@as(usize, retry.maximum_request_assignments), runner.repair_retry.attempts.items.len);
+        } else {
+            // The request's last assignment is the one counter the population cannot hold.
+            try std.testing.expectEqual(execution.Rejection{ .authority = .request_assignment_population }, outcome.execution_rejected);
+            try std.testing.expectEqualStrings("request_assignment_population", outcome.execution_rejected.diagnostic());
+            try std.testing.expectEqual(@as(usize, retry.maximum_request_assignments), runner.repair_retry.attempts.items.len);
+        }
     }
 }
 

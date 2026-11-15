@@ -23,17 +23,11 @@ const Seed = struct {
     primary_goal: []const u8,
     entity_disposition: spec.Applicability,
     entity_basis: []const u8,
-    given: []const u8,
-    when: []const u8,
-    then: []const u8,
     functional_requirement: []const u8,
     entity_name: ?[]const u8,
 };
 const RecordSeed = struct {
     group_id: u32,
-    given: ?[]const u8,
-    when: ?[]const u8,
-    then: ?[]const u8,
     functional_requirement: ?[]const u8,
     entity_name: ?[]const u8,
 };
@@ -222,6 +216,8 @@ pub fn run() !void {
             current = try admittedSeed(a, schema, current, prepared.context, .{ .content = .{ .records = records } });
             physical_sends += 2;
         }
+        // The seeds' scenarios are the engine's, bound to the records' claims (ADR 0038 Decision 3).
+        current = try @import("scenario_completion.zig").complete(a, current, prepared.context);
         for (1..3) |repeat| try trials.append(a, .{ .id = try std.fmt.allocPrint(a, "{s}-records-{d}", .{ example.id, repeat }), .case_id = example.id, .repetition = @intCast(repeat), .requests = record_requests.items });
         for (0..2) |_| try starts.append(a, records_start);
         states[index] = .{ .context = prepared.context, .seed = current };
@@ -359,8 +355,8 @@ fn narrativeSeeds(a: std.mem.Allocator, example: Case, selected: binding.Associa
 fn recordSeed(a: std.mem.Allocator, seed: RecordSeed, assigned: binding.RecordBound) ![]const spec.Values(.model).RecordProposal {
     var records: std.ArrayList(spec.Values(.model).RecordProposal) = .empty;
     const groups = try a.dupe(@import("../domain/reference_reconciliation.zig").SignalId, &.{assigned.signal});
+    // A records response holds no acceptance criterion: the scenarios step writes them (ADR 0038 Decision 3).
     if (seed.functional_requirement) |requirement| try records.append(a, .{ .content = .{ .functional_requirement = .{ .text = try business(a, requirement) } }, .source_group_ids = groups, .provenance = assigned.selection });
-    if (seed.given) |given| try records.append(a, .{ .content = .{ .acceptance_criterion = .{ .given = try business(a, given), .when = try business(a, seed.when orelse return error.InvalidCalibrationCase), .then = try business(a, seed.then orelse return error.InvalidCalibrationCase) } }, .source_group_ids = groups, .provenance = assigned.selection });
     return records.items;
 }
 fn admittedSeed(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, proposed: g.Response) !session.Session {

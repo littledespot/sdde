@@ -533,7 +533,7 @@ test "pending independent prohibiting outcome prevents publication finalization 
     }
 }
 
-test "maximum graph validates executes every operation and rejects cycles and overflow" {
+test "maximum graph validates executes every operation, rejects cycles and keeps a representable ceiling" {
     const definition = @import("domain/workflow_definition.zig");
     const validate = @import("domain/workflow_graph_validation.zig");
     const maximum = definition.max_steps;
@@ -590,7 +590,11 @@ test "maximum graph validates executes every operation and rejects cycles and ov
         .scope = .model_request,
     };
     @memset(steps[0..maximum], bounded);
-    try std.testing.expect(compilation.calculateExecutionLimit(steps[0..maximum]) == null);
+    // The largest graph at the widest limit a descriptor can carry still has a representable ceiling:
+    // each step counts `(limit + 1)` visits for every repair key and request assignment.
+    const retry = @import("domain/workflow_retry.zig");
+    const term = (@as(usize, std.math.maxInt(u32)) + 1) * (@as(usize, retry.maximum_repair_keys) + retry.maximum_request_assignments);
+    try std.testing.expectEqual(maximum * (1 + maximum * term), compilation.calculateExecutionLimit(steps[0..maximum]).?);
 }
 
 test "rerunning an abandoned workflow executes every step again from compiled start" {
@@ -1669,6 +1673,55 @@ test "a merge step whose allowance is bound to a repair permit the runner does n
         } else {
             try std.testing.expectEqual(execution.Rejection{ .authority = .repair_permit_mismatch }, rejected);
             try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+        }
+    }
+}
+
+test "a step that authorizes a repair key past the execution's population stops on the repair-key population" {
+    const retry = @import("domain/workflow_retry.zig");
+    const Authorize = struct {
+        permit: retry.Permit,
+        calls: usize = 0,
+        fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
+            context.?.calls += 1;
+            return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .authorized = context.?.permit } } };
+        }
+    };
+    // The 128th key is the last the execution admits; the 129th is refused on its own reason.
+    for ([_]usize{ retry.maximum_repair_keys - 1, retry.maximum_repair_keys }) |held| {
+        var steps = [_]compilation.CompiledStep{test_steps[0]};
+        steps[0].repair_role = .authorize;
+        var graph = try testGraph();
+        graph.authority.steps = &steps;
+        var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+        var registry = testRegistry(&control);
+        // A key of a scope of its own, so that only the execution-wide population can refuse it.
+        var scope: [32]u8 = @splat(0);
+        std.mem.writeInt(u32, scope[0..4], @intCast(held + 1), .little);
+        var authorize: Authorize = .{ .permit = .{ .key = .{ .scope = scope, .target = @splat(1), .family = @splat(2) }, .authorization = @splat(7), .revision = held + 1, .maximum_targets = 1 } };
+        control.entries[1].binding = operation_bindings.bind(Authorize, &authorize, Authorize.invoke);
+        control.entries[1].contract.repair_role = .authorize;
+        var barrier: FakeBarrier = .{};
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
+        defer runner.deinit();
+        try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+        for (0..held) |index| {
+            var counted = authorize.permit;
+            std.mem.writeInt(u32, counted.key.scope[0..4], @intCast(index + 1), .little);
+            counted.revision = index + 1;
+            try runner.repair_retry.commit(try runner.repair_retry.prepare(.{ .authorized = counted }));
+            try runner.repair_retry.commit(try runner.repair_retry.prepare(.{ .merged_validated = .{ .permit = counted, .revision_after = counted.revision + 1, .changed = true, .result = .resolved } }));
+        }
+        const applied = runner.bindings().invokeStep(steps[0].id);
+        try std.testing.expectEqual(@as(usize, 1), authorize.calls);
+        if (held == retry.maximum_repair_keys) {
+            try std.testing.expectEqual(execution.Rejection{ .authority = .repair_key_population }, applied.rejected);
+            try std.testing.expectEqualStrings("repair_key_population", applied.rejected.diagnostic());
+            // The refusal changed nothing: the key was not counted.
+            try std.testing.expectEqual(retry.maximum_repair_keys, runner.repair_retry.entries.items.len);
+        } else {
+            try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), applied);
+            try std.testing.expectEqual(retry.maximum_repair_keys, runner.repair_retry.entries.items.len);
         }
     }
 }

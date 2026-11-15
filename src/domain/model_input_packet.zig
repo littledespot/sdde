@@ -169,25 +169,7 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
     for (excluded, copy) |entry, *destination| destination.* = .{ .kind = try a.dupe(u8, entry.kind) };
     storage(result).excluded_variants = copy;
     const selected = try a.alloc(schema.IntegerChoice, choices.len);
-    for (choices, selected) |entry, *destination| {
-        destination.* = .{
-            .target = switch (entry.target) {
-                .tagged => |tag| .{ .tagged = .{ .kind = try a.dupe(u8, tag.kind), .field = try a.dupe(u8, tag.field) } },
-                .path => |path| blk: {
-                    const copy_path = try a.dupe(schema.ChoiceStep, path);
-                    for (copy_path) |*step| {
-                        if (step.* == .property) step.property = try a.dupe(u8, step.property);
-                    }
-                    break :blk .{ .path = copy_path };
-                },
-            },
-            .definition = if (entry.definition) |id| .{ .bytes = try a.dupe(u8, id.bytes) } else null,
-            .allowed = try a.dupe(i64, entry.allowed),
-            .collection = entry.collection,
-            .member_count = entry.member_count,
-            .coverage = if (entry.coverage) |rule| try rule.clone(a) else null,
-        };
-    }
+    for (choices, selected) |entry, *destination| destination.* = try entry.clone(a);
     storage(result).integer_choices = selected;
     const copied_contexts = try a.alloc(AssignmentContext, contexts.len);
     for (contexts, copied_contexts) |context, *destination| destination.* = .{

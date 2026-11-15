@@ -1,0 +1,5 @@
+{
+  "business_value": "Write ordinary prose as a string, typing required exact values verbatim. For supplied display references, use {\"fragments\":[text or passive references]}; fragments concatenate exactly as written, so strings include their own spaces and punctuation. Fulfil the assigned field purpose and preserve source-backed conditions, obligations and obligation strength.",
+  "references": "Reference objects insert supplied display values; they do not explain their use or authorize operations.",
+  "sources": "Original sources establish meaning, conditions and how exact values are used; code samples remain context."
+}

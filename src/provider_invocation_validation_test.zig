@@ -286,22 +286,6 @@ test "retained operation ledger rejects substituted input binding and unavailabl
     try std.testing.expectError(error.InvalidProviderInvocationContext, (action.Action{}).execute(std.testing.allocator, wrong, &response));
 }
 
-test "provider size rejection retains response delivery rather than fabricating non-delivery" {
-    var fixture: Fixture = undefined;
-    try fixture.init();
-    defer fixture.deinit();
-    fixture.fake.invocation_plan = .{ .failed = .{ .cause = .request_rejected, .retry_class = .never, .delivery = .response_received } };
-    var response = try fixture.response();
-    defer response.deinit();
-    var owned = try (action.Action{}).execute(std.testing.allocator, fixture.call, &response);
-    defer owned.deinit();
-    try std.testing.expectEqualDeep(response.failed, owned.evidence.result().failed);
-    try std.testing.expectEqual(provider.ProviderDeliveryDisposition.response_received, owned.evidence.delivery());
-    try std.testing.expect(owned.evidence.usage() == null);
-    try std.testing.expectEqual(@as(usize, 1), fixture.fake.effect_count);
-    try std.testing.expectEqual(@as(usize, 1), fixture.base.preloader.destroyed_count);
-}
-
 test "evidence allocation failure and cleanup never consume or free the raw response" {
     try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }

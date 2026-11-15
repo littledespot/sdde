@@ -145,7 +145,8 @@ change, not a Plan-local one:
   - §18.1 reads an edit back as authority (18-plan.md:52-79; 24-workflow-state.md:150).
   - A Spec rerun overwrites it (§4), so no edit becomes authority anywhere yet, although
     invariant 16 makes `spec.md` the one editable stage artifact (design.md:158).
-  - SPEC01 Q13 D13.7 is open for edited derived lines.
+  - SPEC01 Q13 D13.7 is decided for edited derived lines (regenerate, never block); it applies
+    when the edit path is built.
   - **Recommended for a first slice:** Plan accepts only an unedited `spec.md`, the "equal
     content" branch (18-plan.md:56-57), and blocks on any edit. The check is byte equality
     between `spec.md` and a fresh render of the validated stored specification through the
@@ -373,7 +374,7 @@ ask the LLM to answer it" (design.md:266). Applied to §18 with the mechanisms t
 - **The harness is Spec-only:**
   - case `spec-e2e-case/v3`, which requires Spec's four artifacts
     (`test/harness/e2e/contracts.zig:4`, `:23-26`);
-  - report `spec-e2e-report/v19` (`:161`): changing a closed member needs a new version
+  - report `spec-e2e-report/v20` (`:161`): changing a closed member needs a new version
     (SPEC01 §2 rule 12), and earlier runs need their own build (SPEC01 §1, Retained runs). **Recommended:** a Plan
     report of its own, which leaves Spec's decoder unchanged;
   - adjudication `spec-adjudication-record/v1` (`test/harness/adjudication.zig:13`, `:69`);

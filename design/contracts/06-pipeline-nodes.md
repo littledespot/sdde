@@ -205,6 +205,8 @@ member's exact cases.
 | `repair_permit_mismatch` | repair and retry | a retry-bearing step's repair permit or request assignment does not match |
 | `repair_transition` | repair and retry | a repair transition is missing, forbidden by the step's repair role or unchanged beyond its limit |
 | `retry_admission` | repair and retry | a retry allowance cannot be admitted or its exhaustion described |
+| `repair_key_population` | repair and retry | a new native repair key would exceed the execution's 128 keys; a key already counted is not new (§22.7) |
+| `request_assignment_population` | repair and retry | a new request-assignment counter would exceed the execution's 128 counters; a counter already held is not new (§22.7) |
 | `accounting_transition` | accounting | a runner-owned attempt or provider-operation transition cannot be prepared or applied, or the attempt accounting belongs to another stage run than the request |
 | `step_execution_ceiling` | ceiling | the step execution ceiling is spent |
 | `publication_finalizer` | publication | the publication finalizer refused to let publication proceed |
@@ -215,6 +217,10 @@ member's exact cases.
 | `kernel_stage` | kernel | a kernel stage does not match its registered stage |
 | `kernel_stage_outcome` | kernel | a kernel stage answered with an outcome its stage table does not allow |
 | `kernel_key_drop` | kernel | the kernel's engine-internal keys cannot be dropped at the end of the step |
+
+The retry state refuses a new repair key or request-assignment counter past a bound with its own typed
+refusal (`PopulationError`, `src/domain/workflow_retry.zig`), and the runner reports one reason for each
+population, never a shared one.
 
 #### Execution-local information stack
 

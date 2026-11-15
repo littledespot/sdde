@@ -193,7 +193,8 @@ fn validateBoundedCycles(
 
 /// A step's retry authority bounds how often a cycle may revisit it. A `request-model` step's
 /// authority does too, as the accounting step it replaces did: it counts attempts per request
-/// assignment, and each execution of the step counts toward the workflow's execution ceiling.
+/// assignment, and `calculateExecutionLimit` counts its allowance toward the workflow's execution
+/// ceiling.
 fn guardsCycle(step: compilation.CompiledStep) bool {
     return step.retry_authority != null;
 }
@@ -502,6 +503,42 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
         validate(arena.allocator(), &.{mismatched_retry_graph}, &no_operations),
     );
 
+    // Each other way the authority can disagree with its graph or its `retry-limit` parameter.
+    const negative_limit = [_]compilation.CompiledParameter{.{ .id = test_retry_parameters[0].id, .value = .{ .integer = -1 } }};
+    const textual_limit = [_]compilation.CompiledParameter{.{ .id = test_retry_parameters[0].id, .value = .{ .string = "2" } }};
+    for (0..4) |fault| {
+        var faulty_steps = guarded_steps;
+        switch (fault) {
+            0 => faulty_steps[0].retry_authority.?.workflow_id = workflow.WorkflowId.parse("other-graph").?,
+            1 => faulty_steps[0].retry_authority.?.workflow_version = 2,
+            2 => faulty_steps[0].parameters = &negative_limit,
+            3 => faulty_steps[0].parameters = &textual_limit,
+            else => unreachable,
+        }
+        try std.testing.expectError(
+            error.WorkflowGraphCompileInvalid,
+            validate(arena.allocator(), &.{testGraph(&faulty_steps, &transitions)}, &no_operations),
+        );
+    }
+
+    // A `retry-limit` parameter with no authority, on a step no cycle needs to guard.
+    const lone = [_]compilation.CompiledStep{testStep("lone", null)};
+    const lone_transitions = [_]workflow.Transition{
+        .{ .from = lone[0].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = lone[0].id, .outcome = .failed, .target = .{ .terminal = .failed } },
+    };
+    var lone_graph = testGraph(&lone, &lone_transitions);
+    lone_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&lone).?;
+    _ = try validate(arena.allocator(), &.{lone_graph}, &no_operations);
+    var parameterized = lone;
+    parameterized[0].parameters = &test_retry_parameters;
+    var parameterized_graph = testGraph(&parameterized, &lone_transitions);
+    parameterized_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&parameterized).?;
+    try std.testing.expectError(
+        error.WorkflowGraphCompileInvalid,
+        validate(arena.allocator(), &.{parameterized_graph}, &no_operations),
+    );
+
     var unguarded_steps = guarded_steps;
     unguarded_steps[0].retry_authority = null;
     unguarded_steps[0].parameters = &.{};
@@ -513,15 +550,77 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
     );
 }
 
-test "the compiled allowance gives each model attempt its one runaway re-send" {
-    // ADR 0039: a re-send runs outside `retry-limit`, so an attempt-accounting
-    // step's allowance covers one re-send for every attempt it admits.
+/// A step that carries stages is a `request-model` step (ADR 0030): the one marker the ceiling reads.
+fn kernelStep(id: []const u8, retry_limit: u32, stages: []const compilation.RequestStage) compilation.CompiledStep {
+    var step = testStep(id, retry_limit);
+    step.retry_authority.?.scope = .model_request;
+    step.request_stages = stages;
+    return step;
+}
+
+/// How many request assignments a request-scope retry authority counts, as the formula adds them.
+fn requestKeys() usize {
+    return @as(usize, workflow_retry.maximum_repair_keys) + workflow_retry.maximum_request_assignments;
+}
+
+test "a request-model step's allowance counts toward the compiled ceiling" {
+    // ADR 0030 and ADR 0039: the step makes its attempts and their one runaway re-send each inside
+    // one execution and counts them per request assignment: a revisit for another stage run, unit
+    // owner, model operation or purpose restarts the count, and a revisit under the same assignment
+    // continues it. Its allowance is counted like the attempt-accounting step it replaced.
+    const stages = [_]compilation.RequestStage{.{ .stage = .invoke_model, .step = testStep("stage", null) }};
+    for ([_]u32{ 0, 2 }) |limit| {
+        const steps = [_]compilation.CompiledStep{ testStep("before", null), kernelStep("request", limit, &stages), testStep("after", null) };
+        const allowance: usize = @intCast(kernel.attemptAllowance(.{ .value = limit }));
+        try std.testing.expectEqual(steps.len * (1 + allowance * requestKeys()), compilation.calculateExecutionLimit(&steps).?);
+    }
+}
+
+test "a request-model step's allowance adds to a repair-scope step's" {
+    const stages = [_]compilation.RequestStage{.{ .stage = .invoke_model, .step = testStep("stage", null) }};
+    var repair = testStep("repair", 1);
+    repair.retry_authority.?.scope = .repair;
+    const steps = [_]compilation.CompiledStep{ kernelStep("request", 2, &stages), repair };
+    const kernel_term = @as(usize, @intCast(kernel.attemptAllowance(.{ .value = 2 }))) * requestKeys();
+    const repair_term = (1 + 1) * @as(usize, workflow_retry.maximum_repair_keys);
+    try std.testing.expectEqual(steps.len * (1 + kernel_term + repair_term), compilation.calculateExecutionLimit(&steps).?);
+}
+
+test "a step without request stages counts no runaway re-send, whatever its accounting" {
+    // The re-send belongs to the `request-model` step; the attempt-accounting marker alone adds none.
     var counted = [_]compilation.CompiledStep{testStep("account", 2)};
     const ordinary = compilation.calculateExecutionLimit(&counted).?;
     const attempt_accounting: @FieldType(compilation.CompiledStep, "runner_accounting") = .increment_model_attempt;
     counted[0].runner_accounting = attempt_accounting;
-    const with_resends = compilation.calculateExecutionLimit(&counted).?;
-    // Operation scope: two corrections plus one re-send for each of three attempts.
+    // Operation scope: two corrections.
     try std.testing.expectEqual(@as(usize, 1 + 2), ordinary);
-    try std.testing.expectEqual(@as(usize, 1 + 2 + 3), with_resends);
+    try std.testing.expectEqual(ordinary, compilation.calculateExecutionLimit(&counted).?);
+    // Request scope: every assignment may revisit it three times, and still no re-send.
+    counted[0].retry_authority.?.scope = .model_request;
+    try std.testing.expectEqual(1 + 3 * requestKeys(), compilation.calculateExecutionLimit(&counted).?);
+}
+
+test "the ceiling is checked arithmetic: exact up to the step count a 64-bit usize sets, null past it" {
+    const stages = [_]compilation.RequestStage{.{ .stage = .invoke_model, .step = testStep("stage", null) }};
+    // Every step is a request-model step at the widest limit a descriptor can carry, the widest term the
+    // formula has. The ceiling is `n * (1 + n * term)` with `term = 2 * (limit + 1) * keys`, and the
+    // largest `n` whose ceiling fits is found with checked arithmetic of the test's own.
+    const limit: u32 = std.math.maxInt(u32);
+    const term = 2 * (@as(usize, limit) + 1) * requestKeys();
+    var largest: usize = 1;
+    while (ceilingOf(largest + 1, term) != null) largest += 1;
+    // A graph has at most `definition.max_steps` steps, so no graph's ceiling reaches null: neither the
+    // compiler nor `validate` can meet it (both refuse it rather than saturate).
+    try std.testing.expect(largest > definition.max_steps);
+    const steps = try std.testing.allocator.alloc(compilation.CompiledStep, largest + 1);
+    defer std.testing.allocator.free(steps);
+    @memset(steps, kernelStep("request", limit, &stages));
+    try std.testing.expectEqual(ceilingOf(largest, term).?, compilation.calculateExecutionLimit(steps[0..largest]).?);
+    try std.testing.expect(compilation.calculateExecutionLimit(steps) == null);
+}
+
+/// `n * (1 + n * term)`, or null when it does not fit `usize`.
+fn ceilingOf(n: usize, term: usize) ?usize {
+    const rounds = std.math.add(usize, 1, std.math.mul(usize, n, term) catch return null) catch return null;
+    return std.math.mul(usize, n, rounds) catch null;
 }

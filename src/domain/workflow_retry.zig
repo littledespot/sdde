@@ -125,10 +125,15 @@ pub const Observation = struct {
     }
 };
 pub const Role = enum { none, authorize, merge, validate, merge_validate };
-/// Native repair membership uses u32 ordinals. This representational bound also
-/// bounds the execution's distinct keys across multiple native scopes.
-pub const maximum_repair_keys: u32 = std.math.maxInt(u32);
-pub const maximum_request_assignments: u32 = std.math.maxInt(u32);
+/// The most distinct native repair keys, across every native scope, and the most request-assignment
+/// counters (one for each compiled step and request assignment) one execution may create (user
+/// decision, 15 November 2026). The compiled execution ceiling multiplies each step's allowance by
+/// these populations, so a small bound keeps it finite and small. A run that needs more is treated as
+/// a runaway, whatever its token budget: the runner's retry state refuses the new member with the
+/// `PopulationError` of its own population.
+pub const maximum_population: u32 = 128;
+pub const maximum_repair_keys: u32 = maximum_population;
+pub const maximum_request_assignments: u32 = maximum_population;
 
 pub const AssignmentCount = struct { request: identity.RecordIndex, completed_executions: u64 };
 /// Borrows canonical request identity from the runner's execution-long ledger.
@@ -209,7 +214,15 @@ pub const Transition = union(enum) {
     merged_validated: struct { permit: Permit, revision_after: u64, changed: bool, result: Validation },
 };
 pub const ProgressError = error{InvalidRepairProgress};
+/// A new member past `maximum_population`, one refusal for each population so the runner reports each
+/// as its own reason: `RepairKeyPopulation` for a native repair key (and for the suspended parents of
+/// one, which a key bound already covers) and `RequestAssignmentPopulation` for a request-assignment
+/// counter. A key or counter already counted is not a new member and is never refused here.
+pub const PopulationError = error{ RepairKeyPopulation, RequestAssignmentPopulation };
 pub const StateError = std.mem.Allocator.Error || ProgressError;
+/// What preparing a transition or counting an attempt can refuse: any state failure, or a population bound.
+/// `StateError` stays what operations may return, so a population refusal is no operation cause.
+pub const AdmissionError = StateError || PopulationError;
 pub const AttemptResult = union(enum) { allowed: u64, exhausted: u64 };
 
 /// Runner-owned execution state. Domain owners supply authorization and validated
@@ -353,7 +366,7 @@ pub const State = struct {
         return result;
     }
 
-    pub fn prepare(self: *State, transition: Transition) StateError!Prepared {
+    pub fn prepare(self: *State, transition: Transition) AdmissionError!Prepared {
         try self.validateTransition(transition);
         _ = std.math.add(u64, self.revision, 1) catch return error.InvalidRepairProgress;
         if (transition == .authorized) {
@@ -365,7 +378,7 @@ pub const State = struct {
         return .{ .owner = self, .revision = self.revision, .transition = transition };
     }
 
-    pub fn commit(self: *State, prepared: Prepared) ProgressError!void {
+    pub fn commit(self: *State, prepared: Prepared) (ProgressError || PopulationError)!void {
         if (prepared.owner != self or prepared.revision != self.revision) return error.InvalidRepairProgress;
         try self.validateTransition(prepared.transition);
         const next_revision = std.math.add(u64, self.revision, 1) catch return error.InvalidRepairProgress;
@@ -408,7 +421,7 @@ pub const State = struct {
 
     /// Returns the operation's completed count after admission, or its unchanged
     /// exhausted count. A resolved key retains every prior operation count.
-    pub fn beginAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, permit: Permit) StateError!AttemptResult {
+    pub fn beginAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, permit: Permit) AdmissionError!AttemptResult {
         _ = workflow.WorkflowStepId.parse(operation_id.bytes) orelse return error.InvalidRepairProgress;
         const active = self.active orelse return error.InvalidRepairProgress;
         if (!std.meta.eql(active.permit, permit) or active.phase != .authorized) return error.InvalidRepairProgress;
@@ -418,14 +431,14 @@ pub const State = struct {
         return result;
     }
 
-    pub fn beginAssignmentAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, assignment: Assignment) StateError!AttemptResult {
+    pub fn beginAssignmentAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, assignment: Assignment) AdmissionError!AttemptResult {
         if (assignment.request.purpose == .atomic_repair) return error.InvalidRepairProgress;
         const parent = self.currentDependentPermit();
         if (!std.meta.eql(assignment.parent, if (parent) |value| value.key else null)) return error.InvalidRepairProgress;
         return self.countAttempt(operation_id, limit, .{ .assignment = assignment });
     }
 
-    fn countAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, key: AttemptKey) StateError!AttemptResult {
+    fn countAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, key: AttemptKey) AdmissionError!AttemptResult {
         if (self.terminal_exhaustion != null) return error.InvalidRepairProgress;
         _ = workflow.WorkflowStepId.parse(operation_id.bytes) orelse return error.InvalidRepairProgress;
         for (self.attempts.items) |*attempt| {
@@ -442,7 +455,7 @@ pub const State = struct {
             for (self.attempts.items) |attempt| if (attempt.key == .assignment) {
                 count += 1;
             };
-            if (count >= maximum_request_assignments) return error.InvalidRepairProgress;
+            if (count >= maximum_request_assignments) return error.RequestAssignmentPopulation;
         }
         const next_revision = std.math.add(u64, self.revision, 1) catch return error.InvalidRepairProgress;
         const name = try self.allocator.dupe(u8, operation_id.bytes);
@@ -452,15 +465,16 @@ pub const State = struct {
         return .{ .allowed = 1 };
     }
 
-    fn validateTransition(self: *const State, transition: Transition) ProgressError!void {
+    fn validateTransition(self: *const State, transition: Transition) (ProgressError || PopulationError)!void {
         if (self.terminal_exhaustion != null) return error.InvalidRepairProgress;
         switch (transition) {
             .authorized => |permit| {
                 if (permit.revision == 0 or permit.maximum_targets == 0) return error.InvalidRepairProgress;
-                if (self.entryIndex(permit.key) == null and self.entries.items.len >= maximum_repair_keys) return error.InvalidRepairProgress;
+                if (self.entryIndex(permit.key) == null and self.entries.items.len >= maximum_repair_keys) return error.RepairKeyPopulation;
                 if (self.active) |active| {
                     if (self.suspendsParent()) {
-                        if (std.meta.eql(active.permit.key, permit.key) or self.deferred.items.len >= maximum_repair_keys) return error.InvalidRepairProgress;
+                        if (std.meta.eql(active.permit.key, permit.key)) return error.InvalidRepairProgress;
+                        if (self.deferred.items.len >= maximum_repair_keys) return error.RepairKeyPopulation;
                     } else {
                         if (active.phase != .recurring or !std.meta.eql(active.permit.key, permit.key)) return error.InvalidRepairProgress;
                     }

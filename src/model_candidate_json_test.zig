@@ -235,7 +235,9 @@ test "independent wire cases cover every selected specification result and neste
         const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
         if (comptime std.mem.eql(u8, record[0], "entity")) try candidateSchemaCase("generation", "records", need, .enum_mismatch, "/record_kind") else try checkCandidate("generation", "records", need);
         try candidateSchemaCase("generation", "brief", need, .unknown_property, "/record_kind");
-        if (comptime std.mem.eql(u8, record[0], "acceptance_criterion") or std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_" ++ record[0], bytes);
+        // No repair writes a whole criterion: the engine writes each one from its slot (ADR 0038 Decision 3).
+        if (comptime std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_" ++ record[0], bytes);
+        if (comptime std.mem.eql(u8, record[0], "acceptance_criterion")) try std.testing.expectError(error.MissingSchemaSelection, checkCandidate("generation", "repair_record_" ++ record[0], bytes));
     }
     try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.plain ++ "}");
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
@@ -474,6 +476,32 @@ test "an edge case authors its condition only and its outcome link is one closed
     try candidateSchemaCase("links", "scenario_link", "{\"criterion\":0}", .integer_range, "/criterion");
 }
 
+test "a claim-bound scenarios answer is a number and the criterion's three parts, and names nothing the engine fixes" {
+    // ADR 0038 Decisions 2 and 3: the engine binds each number to its slot's claim and fixes the
+    // criterion's kind and group, so the answer has no room for them. The count and the numbers are
+    // the request's restriction (`scenario_request.numberChoice`), not the canonical schema's.
+    const parts = "\"given\":" ++ response_wire.normalized ++ ",\"when\":" ++ response_wire.normalized ++ ",\"then\":" ++ response_wire.plain;
+    const first = "{\"number\":1," ++ parts ++ "}";
+    const second = "{\"number\":2," ++ parts ++ "}";
+    try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ first ++ "]}");
+    try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ second ++ "," ++ first ++ "]}");
+    inline for (.{
+        .{ "claim_ids", "[7]" },
+        .{ "kind", "\"acceptance_criterion\"" },
+        .{ "signal_ids", "[7]" },
+        .{ "provenance", response_wire.provenance },
+    }) |extra| {
+        try candidateCase("generation", "scenarios", "{\"scenarios\":[{\"number\":1," ++ parts ++ ",\"" ++ extra[0] ++ "\":" ++ extra[1] ++ "}]}", .unknown_property, "/scenarios/0/" ++ extra[0]);
+    }
+    try candidateCase("generation", "scenarios", "{\"scenarios\":[],\"claims\":[7]}", .unknown_property, "/claims");
+    try candidateCase("generation", "scenarios", "{}", .missing_required_property, "/scenarios");
+    try candidateCase("generation", "scenarios", "{\"scenarios\":[{" ++ parts ++ "}]}", .missing_required_property, "/scenarios/0/number");
+    try candidateCase("generation", "scenarios", "{\"scenarios\":[{\"number\":1,\"given\":" ++ response_wire.plain ++ ",\"when\":" ++ response_wire.plain ++ "}]}", .missing_required_property, "/scenarios/0/then");
+    try candidateCase("generation", "scenarios", "{\"scenarios\":[{\"number\":\"1\"," ++ parts ++ "}]}", .type_mismatch, "/scenarios/0/number");
+    try candidateSchemaCase("generation", "scenarios", "{\"scenarios\":[{\"number\":0," ++ parts ++ "}]}", .integer_range, "/scenarios/0/number");
+    try candidateCase("generation", "scenarios", "{\"scenarios\":[{\"number\":1,\"given\":[" ++ response_wire.plain ++ "],\"when\":" ++ response_wire.plain ++ ",\"then\":" ++ response_wire.plain ++ "}]}", .type_mismatch, "/scenarios/0/given");
+}
+
 test "preservation wire is closed and rejects old attribution choices" {
     try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[]}");
     try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{\"chunk_id\":{\"bytes\":\"MOCK source\"},\"lines\":{\"first\":1,\"last\":1}}],\"explanation\":\"MOCK The supplied collection lacks shutdown behavior.\"}]}");
@@ -549,6 +577,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
     } else if (comptime std.mem.eql(u8, name, "generation")) {
         const definition = selection.?;
         if (comptime std.mem.eql(u8, definition, "value")) return nativeWire(struct { value: @import("domain/specification.zig").BusinessValue }, a, bytes);
+        if (comptime std.mem.eql(u8, definition, "scenarios")) return nativeWire(@import("domain/scenario_request.zig").Response, a, bytes);
         if (comptime std.mem.startsWith(u8, definition, "repair_record_")) return nativeWire(@import("domain/specification.zig").Wire.RecordProposal, a, bytes);
         return nativeWire(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
     } else if (comptime std.mem.eql(u8, name, "links")) {

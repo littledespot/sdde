@@ -87,7 +87,7 @@ and an architecture test pins that.
 - **Owner:** [`src/actions/model/advance_model_attempt_accounting.zig`](../../../src/actions/model/advance_model_attempt_accounting.zig)
 - **Reads:** `model_request_identity_ledger` · **Writes:** runner accounting transition `increment_model_attempt` · **Side effect:** `none`
 - **Does:** Proposes the next model attempt for a live request: the initial attempt once, a correction only within the step's `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)), and a runaway re-send without counting against it ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
-- **Registered step:** [`model_attempt_workflow.zig`](../../../src/application/model_attempt_workflow.zig) reads `model_request_identity_ledger`, `prepared_model_request`, writes `accounted_model_attempt` and takes the required `retry-limit` parameter.
+- **Registered step:** [`model_attempt_workflow.zig`](../../../src/application/model_attempt_workflow.zig) reads `model_request_identity_ledger`, `prepared_model_request`, writes `accounted_model_attempt` and takes the required `retry-limit` parameter, within the step's maximum ([model-request-operations.md](../model-request-operations.md) "Retry limit").
 - **Rejects:** `ModelRetryLimitExhausted`, `InvalidAttemptClassification`, `ModelAttemptAccountingRevisionConflict`, `ModelRequestUnavailableForAttempt`, `ModelRequestLedgerRevisionConflict`.
 
 ## `CheckWorkflowTokenBudgetAction` (`check-workflow-token-budget`)

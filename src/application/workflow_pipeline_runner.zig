@@ -508,11 +508,11 @@ pub const Runner = struct {
         if (step.retry_authority) |authority| if (runaway_resend == null) {
             var admitted_count: u64 = 0;
             if (request_assignment) |assignment| {
-                const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .{ .authority = .retry_admission } };
+                const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = admissionRejected(err, .retry_admission) };
                 if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 admitted_count = admitted.allowed;
             } else if (repair_permit) |permit| {
-                const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .{ .authority = .retry_admission } };
+                const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = admissionRejected(err, .retry_admission) };
                 if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 admitted_count = admitted.allowed;
             } else {
@@ -973,7 +973,7 @@ pub const Runner = struct {
             }
         }
         const repair_pending = if (candidate.delta.repair_transition) |transition|
-            self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .{ .authority = .repair_transition } }
+            self.repair_retry.prepare(transition) catch |err| return .{ .rejected = admissionRejected(err, .repair_transition) }
         else
             null;
         self.envelope.validateDelta(contract, &candidate.delta) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .{ .authority = .candidate_delta } };
@@ -1041,6 +1041,17 @@ pub const Runner = struct {
 fn exhaustion(step: workflow.WorkflowStepId, limit: retry.Limit, completed: u64, stage: ?request_stage.Stage) ?retry.Exhaustion {
     const value = retry.Exhaustion.init(step, limit, completed) orelse return null;
     return if (stage) |named| value.atStage(named) else value;
+}
+
+/// What the retry state's refusal stops the run as: an allocation failure stays one, each population
+/// bound is its own reason, and any other refusal is `otherwise`, the reason of the step that asked.
+fn admissionRejected(err: retry.AdmissionError, otherwise: execution.AuthorityReason) execution.Rejection {
+    return switch (err) {
+        error.OutOfMemory => .{ .operation_failed = error.OutOfMemory },
+        error.RepairKeyPopulation => .{ .authority = .repair_key_population },
+        error.RequestAssignmentPopulation => .{ .authority = .request_assignment_population },
+        error.InvalidRepairProgress => .{ .authority = otherwise },
+    };
 }
 
 fn authorizationRejected(err: lease.Error) execution.Applied {

@@ -102,8 +102,9 @@ Each generation request contains only what the current unit needs:
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
   and local validation. Two admission constraints are exceptions, because
-  provider schema syntax cannot express them: `exact_members` uniqueness, and with a
-  native count its completeness (`missing_member`; below, ADR 0046), and
+  provider schema syntax cannot express them: `exact_members` uniqueness, with a
+  native count its completeness (`missing_member`; below, ADR 0046) and with a `distinct`
+  rule its distinctness (`equal_items`; below), and
   ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
@@ -125,6 +126,12 @@ Each generation request contains only what the current unit needs:
     owner declares the count native only where a decision requires the request
     itself to stay unchanged; otherwise the count is stated;
   - a repeated member rejects natively as `duplicate_member`;
+  - an owner may declare a `distinct` rule, a list of other item properties, each required in
+    every item variant and none the key: items that return equal values for every listed
+    property, compared as the response returned them, reject natively as `equal_items`,
+    located at the first item of the first equal set, after `duplicate_member` and
+    `missing_member`. The rule governs one array; equality across arrays is not admission's
+    (ADR 0038 Decision 3);
   - it applies only to a path ending in array items and one property, with a
     nonempty member set that fits the canonical item bounds;
   - the key must be a required, non-nullable scalar integer in every item variant;
@@ -215,7 +222,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v18` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v19` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 

@@ -61,19 +61,27 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
             if ((reason.coverage != null) != (reason.reason == .shared_member)) return error.ModelRequestAssociationInvalid;
             // Exactly a missing member's correction names the member no item names.
             if ((reason.member != null) != (reason.reason == .missing_member)) return error.ModelRequestAssociationInvalid;
+            // ADR 0038 Decision 3: exactly an equal-items correction names the rule that compares them.
+            if ((reason.members != null) != (reason.reason == .equal_items)) return error.ModelRequestAssociationInvalid;
             // Exactly an integer enumeration's mismatch names the value the candidate gave and
             // the set it missed (22-repair.md §22.6): the value from admission, the set from the
             // compiled node the request itself carries.
             const allowed = projection.allowedIntegers(reason.expected);
             if ((reason.rejected != null) != (reason.reason == .enum_mismatch and allowed != null)) return error.ModelRequestAssociationInvalid;
             const Exclusive = struct { kind_property: []const u8, kinds: []const []const u8, owning: []const []const u8 };
-            // ADR 0038 Decision 5: a partly taken item's correction lists every taken
-            // value's naming in such items, found by the admission owner from the same rule.
-            const shared: ?[]const []const u8 = if (reason.reason == .shared_member) listed: {
-                var document = @import("model_envelope.zig").parseContent(scratch, content orelse return error.ModelRequestAssociationInvalid, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.ModelRequestAssociationInvalid;
-                defer document.deinit();
-                break :listed try sharedPaths(scratch, @import("model_envelope.zig").value(&document.parsed.value), reason);
-            } else null;
+            // A correction that lists namings reads the rejected response again; the admission owner finds
+            // the namings from the rule that rejected it.
+            var document = if (reason.reason == .shared_member or reason.reason == .equal_items)
+                @import("model_envelope.zig").parseContent(scratch, content orelse return error.ModelRequestAssociationInvalid, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.ModelRequestAssociationInvalid
+            else
+                null;
+            defer if (document) |*parsed| parsed.deinit();
+            const rejected_root: ?@import("model_envelope.zig").Value = if (document) |*parsed| @import("model_envelope.zig").value(&parsed.parsed.value) else null;
+            // ADR 0038 Decision 5: a partly taken item's correction lists every taken value's naming in such items.
+            const shared: ?[]const []const u8 = if (reason.reason == .shared_member) try sharedPaths(scratch, rejected_root.?, reason) else null;
+            // ADR 0038 Decision 3: an equal-items correction lists the key of every item of each equal set.
+            const Equal = struct { key: []const u8, compared: []const []const u8, sets: []const []const i64 };
+            const equal: ?Equal = if (reason.reason == .equal_items) .{ .key = reason.members.?.property, .compared = reason.members.?.distinct, .sets = try equalSets(scratch, rejected_root.?, reason) } else null;
             break :value try std.json.Stringify.valueAlloc(scratch, .{
                 .diagnostic = .{ .schema = try reason.describe(scratch) },
                 .explanation = reason.explanation(),
@@ -85,6 +93,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
                 },
                 .exclusive = @as(?Exclusive, if (reason.reason == .shared_member) .{ .kind_property = reason.coverage.?.rule.kind_property, .kinds = reason.coverage.?.rule.exclusive, .owning = reason.coverage.?.rule.owning } else null),
                 .shared = shared,
+                .equal = equal,
                 .member = reason.member,
                 .rejected = reason.rejected,
                 .allowed = if (reason.rejected != null) allowed else null,
@@ -102,37 +111,75 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
     return preparation.build(allocator, source, parts);
 }
 
-/// Every taken value's naming in the rejected response's partly taken items, as JSON
-/// Pointer paths. The rejection's path ends in the first such item; the rest names the
-/// array.
-fn sharedPaths(allocator: std.mem.Allocator, root: @import("model_envelope.zig").Value, first: @import("model_payload_schema.zig").Diagnostic) preparation.Error![]const []const u8 {
-    const payload = @import("model_payload_schema.zig");
-    const pointer = @import("json_pointer.zig");
+/// The array a rejection's location ends in, read from the rejected response, and the item the location
+/// names. `path_length` is the length of the location without that item.
+const RejectedArray = struct { array: *const @import("model_envelope.zig").Array, item: usize, path_length: usize };
+
+fn rejectedArray(root: @import("model_envelope.zig").Value, first: @import("model_payload_schema.zig").Diagnostic) preparation.Error!RejectedArray {
     if (first.length < 1) return error.ModelRequestAssociationInvalid;
     const array_path = first.segments[0 .. first.length - 1];
     const rejected_item = switch (first.segments[first.length - 1]) {
         .index => |index| index,
         .property => return error.ModelRequestAssociationInvalid,
     };
-    const coverage = first.coverage orelse return error.ModelRequestAssociationInvalid;
     var cursor = root;
     for (array_path) |segment| cursor = switch (segment) {
         .property => |name| if (cursor == .object) cursor.object.get(name) orelse return error.ModelRequestAssociationInvalid else return error.ModelRequestAssociationInvalid,
         .index => |index| if (cursor == .array) cursor.array.at(index) orelse return error.ModelRequestAssociationInvalid else return error.ModelRequestAssociationInvalid,
     };
     if (cursor != .array) return error.ModelRequestAssociationInvalid;
+    return .{ .array = cursor.array, .item = rejected_item, .path_length = array_path.len };
+}
+
+/// Every taken value's naming in the rejected response's partly taken items, as JSON
+/// Pointer paths. The rejection's path ends in the first such item; the rest names the
+/// array.
+fn sharedPaths(allocator: std.mem.Allocator, root: @import("model_envelope.zig").Value, first: @import("model_payload_schema.zig").Diagnostic) preparation.Error![]const []const u8 {
+    const payload = @import("model_payload_schema.zig");
+    const pointer = @import("json_pointer.zig");
+    const located = try rejectedArray(root, first);
+    const coverage = first.coverage orelse return error.ModelRequestAssociationInvalid;
     var paths: std.ArrayList([]const u8) = .empty;
     var segments = first.segments;
     var from: payload.SharedNaming = .{ .item = 0, .position = 0 };
     // Admission located the first such item; any other means the response isn't the
     // one it rejected.
-    if ((payload.nextSharedNaming(cursor.array, coverage, from) orelse return error.ModelRequestAssociationInvalid).item != rejected_item) return error.ModelRequestAssociationInvalid;
-    while (payload.nextSharedNaming(cursor.array, coverage, from)) |found| {
-        segments[array_path.len] = .{ .index = found.item };
-        segments[array_path.len + 1] = .{ .property = coverage.property };
-        segments[array_path.len + 2] = .{ .index = found.position };
-        try paths.append(allocator, try pointer.render(allocator, segments[0 .. array_path.len + 3]));
+    if ((payload.nextSharedNaming(located.array, coverage, from) orelse return error.ModelRequestAssociationInvalid).item != located.item) return error.ModelRequestAssociationInvalid;
+    while (payload.nextSharedNaming(located.array, coverage, from)) |found| {
+        segments[located.path_length] = .{ .index = found.item };
+        segments[located.path_length + 1] = .{ .property = coverage.property };
+        segments[located.path_length + 2] = .{ .index = found.position };
+        try paths.append(allocator, try pointer.render(allocator, segments[0 .. located.path_length + 3]));
         from = .{ .item = found.item, .position = found.position + 1 };
     }
     return paths.toOwnedSlice(allocator);
+}
+
+/// Every set of items of the rejected response that return equal values for the compared properties, as
+/// the key of each item. The rejection's path ends in the first item of the first set.
+fn equalSets(allocator: std.mem.Allocator, root: @import("model_envelope.zig").Value, first: @import("model_payload_schema.zig").Diagnostic) preparation.Error![]const []const i64 {
+    const payload = @import("model_payload_schema.zig");
+    const located = try rejectedArray(root, first);
+    const members = first.members orelse return error.ModelRequestAssociationInvalid;
+    // Admission located the first such item; any other means the response isn't the one it rejected.
+    if ((payload.firstEqualItem(located.array, members) orelse return error.ModelRequestAssociationInvalid) != located.item) return error.ModelRequestAssociationInvalid;
+    const count = located.array.count();
+    const placed = try allocator.alloc(bool, count);
+    @memset(placed, false);
+    var sets: std.ArrayList([]const i64) = .empty;
+    // Each set opens at its first item in response order and takes every later item equal to it; equality
+    // is one relation, so a set is complete and no item is in two. An item with no readable key is never named.
+    for (0..count) |left| {
+        if (placed[left]) continue;
+        var keys: std.ArrayList(i64) = .empty;
+        try keys.append(allocator, payload.memberKey(located.array.at(left).?, members.property) orelse continue);
+        for (left + 1..count) |right| {
+            if (placed[right] or !payload.equalItems(located.array, members, left, right)) continue;
+            try keys.append(allocator, payload.memberKey(located.array.at(right).?, members.property) orelse continue);
+            placed[right] = true;
+        }
+        if (keys.items.len > 1) try sets.append(allocator, keys.items);
+    }
+    if (sets.items.len == 0) return error.ModelRequestAssociationInvalid;
+    return sets.items;
 }
