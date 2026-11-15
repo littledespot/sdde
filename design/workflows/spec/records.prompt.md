@@ -11,3 +11,5 @@ requirement is named by at most one functional requirement, business rule, user-
 outcome, assumption, non-goal or prohibited behavior.
 Entity records are authored by the feature-wide entities unit. This batch
 authors only the other record families.
+When supplied, principles are the project's standing principles, given as context.
+They are not sources: they add no requirement or condition of this feature.

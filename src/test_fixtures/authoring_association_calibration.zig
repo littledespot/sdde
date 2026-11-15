@@ -1,6 +1,7 @@
 //! Current authoring qualification preparation, without dispatch or semantic proof.
 //! Every packet, schema restriction, association and review projection uses its
-//! production owner; scripted context seeds are explicitly offline fixtures.
+//! production owner; scripted context seeds are explicitly offline fixtures. A records export leaves
+//! out the principle files that only the workflow's records request carries (D17.1).
 const std = @import("std");
 const shared = @import("source_loss_calibration.zig");
 const text = @import("reference_text.zig");

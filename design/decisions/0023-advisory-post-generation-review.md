@@ -152,7 +152,9 @@ Spec captures the exact current principle registry and runs no principle assessm
 ([ADR 0015](0015-specification-principle-review.md)). No model-reported conflict or
 uncertainty creates a Plan obligation or a Spec clarification. Plan validates current
 project policy and all native required decisions at its own gate. Missing or invalid
-principle capture remains a native failure.
+principle capture remains a native failure. The captured files are context for the
+records generation request, which is not an assessment (SPEC01 D17.1,
+[ADR 0015](0015-specification-principle-review.md)).
 
 This supersedes the semantic-finding-to-Plan-obligation handoff in ADR 0015,
 without adding an assessment model, configuration option or principle loader.

@@ -98,11 +98,12 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `BuildSpecificationModelInputAction` (`build-specification-model-input`)
 
 - **Owner:** [`src/actions/specification/build_specification_model_input.zig`](../../../src/actions/specification/build_specification_model_input.zig)
-- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance`, `principle_registry` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Does:** Build the request of the unit in flight: the brief, entities or records packet or, while
   scenarios are written ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md)
   Decision 3), the next group's requirements, numbered from one, each with its claim's meaning and
-  source. The session's scenarios phase selects the branch.
+  source. The session's scenarios phase selects the branch. The records packet also carries the
+  principle files (SPEC01 D17.1, [17-specify.md](../17-specify.md)); no other packet does.
 - **Rejects:** `scenario_request.Error`, which holds `specification_session.Error`, the slot
   errors and the reference reconciliation errors.
 

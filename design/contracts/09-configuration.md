@@ -334,7 +334,7 @@ Resolution is explicit:
 3. decode bounded UTF-8 text and preserve exact source-byte and line spans; no front matter, heading, Markdown structure, template placeholder, or content schema is required;
 4. split large files into deterministic transport chunks. A file with no headings or paragraph structure is still valid and receives a whole-file or fixed-window chunk;
 5. include every chunk of every captured file in stable source order; no model classifies, summarizes, ranks, or omits principle prose;
-6. include the exact raw spans in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; Specify captures them but sends them in no request ([ADR 0015](../decisions/0015-specification-principle-review.md)); provider size errors follow the workflow's explicit outcome transitions;
+6. include the exact raw spans in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; Specify captures them and sends them only in the records generation request ([ADR 0015](../decisions/0015-specification-principle-review.md)); provider size errors follow the workflow's explicit outcome transitions;
 7. validate only transport facts deterministically: configured root, containment, identity, UTF-8, source-capture byte/count ceilings, stable spans, and registry joins;
 8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations. Specify runs no principle assessment ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)); Plan validates current policy and resolves its native required decisions at its own gate.
 
@@ -352,7 +352,8 @@ Resolution is explicit:
 
 - The filename is no claim that the contents obey a schema, and it carries no category.
 - The model never chooses which files to open and never sees an operational principle path—only
-  registered IDs, raw bounded spans, and citations.
+  registered IDs, raw bounded spans, and citations; the Specify records request is the one
+  exception ([17-specify.md](17-specify.md)).
 
 - Principles are captured once per command-run bootstrap, bound into `BootstrapAuthorityState`,
   and compared by direct typed metadata/raw-byte equality at every consuming Spec capture,

@@ -9,10 +9,13 @@
   principle findings never become mandatory Plan obligations
 - **Amended (SPEC01 D13.1, 1 November 2026):** by the user's approval to remove both
   post-generation reviews. Spec runs no principle consistency assessment. Principle
-  capture stays: SPEC01 D17.1 will give the records call the captured principles as
+  capture stays: SPEC01 D17.1 gives the records call the captured principles as
   context. Principles are context and constraints, never a requirement's origin
   (D13.4), and the workflow never modifies principle files. Retitled 7 November 2026
   from "Review project principles during Specify" to match.
+- **Amended (SPEC01 D17.1, 1 November 2026):** by the user's decision that principles
+  are context for the records call only. The Decision states it and
+  [17-specify.md](../contracts/17-specify.md) owns the request.
 - **Amended (SPEC01 E10, 8 November 2026):** by the user's decision that unused code
   with no value is removed ("if it unused and brings no value then remove it"), after
   the registry's selection and guidance functions had no reader. The optional
@@ -28,7 +31,8 @@
 Specify captures the current principle registry through the canonical principle
 capture contract ([§9.4](../contracts/09-configuration.md#94-project-principle-resolution))
 and runs no principle assessment. Principles do not become business-source claims
-or permission to change requirements. Capturing principle files is not performing an
+or permission to change requirements; only the records generation request carries
+them, as context, each file's text unnumbered. Capturing principle files is not performing an
 assessment: state and evidence distinguish captured inputs from any executed
 assessment. Native principle capture and currentness checks remain mandatory; Plan
 validates current policy under its own required authority. This

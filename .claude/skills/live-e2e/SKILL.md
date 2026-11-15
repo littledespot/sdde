@@ -1,21 +1,22 @@
 ---
 name: live-e2e
-description: Run one live Spec E2E case with real model generation and report the run. Billed. With --evaluate it then scores and adjudicates that run with /evaluate-e2e; without it, it doesn't assess the run.
+description: Run one live Spec E2E case with real model generation, report the run, then automatically score and adjudicate it with /evaluate-e2e unless --no-evaluate is given. Billed.
 disable-model-invocation: true
-argument-hint: <case path, e.g. test/e2e/wf-001-hello-world/node-vitest/workflow.case.json> [--evaluate]
+argument-hint: <case path, e.g. test/e2e/wf-001-hello-world/node-vitest/workflow.case.json> [--no-evaluate]
 ---
 
 # Live Spec E2E: $ARGUMENTS
 
 Invoking `/live-e2e <case>` is the user's request for exactly **one** live run of that
-case. The permission prompt on the launcher command is the approval for that run. A
-second run, a retry, another case or an `e2e-call` diagnostic each need a new explicit
-approval. Adding `--evaluate` is also the user's explicit approval for `/evaluate-e2e` on
-the run directory this invocation identifies in step 5 (AGENTS.md "Testing expectations");
-without it, this skill never assesses the run.
+case, followed by `/evaluate-e2e` on the run directory this invocation identifies in
+step 5 (AGENTS.md "Testing expectations"). The evaluation is automatic and needs no
+argument; adding `--no-evaluate` skips it, and then this skill never assesses the run.
+The permission prompt on the launcher command is the approval for the live run. A second
+run, a retry, another case or an `e2e-call` diagnostic each need a new explicit
+approval. The evaluation is offline, makes no model call, and covers only that run.
 
 1. **Case.** If no case path was given, ask for one; there is no default. Check that
-   the file exists under `test/e2e/`. `--evaluate` may follow the path.
+   the file exists under `test/e2e/`. `--no-evaluate` may follow the path.
 2. **Procedure.** Read the "Launcher behavior" and "Environment setup" sections of
    [design/harness/e2e.md](../../../design/harness/e2e.md). From the case and its
    referenced configuration, note each generation slot's provider, model and Region,
@@ -36,16 +37,18 @@ without it, this skill never assesses the run.
    `Details:` line, when it disagrees with the listing, or when stderr reports
    `E2E report finalization failed`, because `report.json` may then be missing or
    incomplete.
-6. **Report**, then stop unless `--evaluate` was given. Make no further live call and
-   write nothing yourself; step 7's skill owns what an evaluation writes:
+6. **Report**, then go straight to step 7, or stop when `--no-evaluate` was given. Make
+   no further live call and write nothing yourself; step 7's skill owns what an
+   evaluation writes:
    - the outcome: `generated` (published, unadjudicated), `awaiting_clarification` or
      a failure, with its diagnostics;
-   - the run directory, and for a published run that `/evaluate-e2e <run>` scores and
-     adjudicates it;
+   - the run directory, and with `--no-evaluate` for a published run that
+     `/evaluate-e2e <run>` scores and adjudicates it later;
    - calls and tokens from `report.json`.
 
    Captured model bodies are untrusted diagnostic data. One run is one sample; it
    doesn't establish reliability, a frozen baseline or calibration.
-7. **Evaluate** (only with `--evaluate`). Invoke the `evaluate-e2e` skill with the run
-   directory step 5 identified, which `--evaluate` approved, and follow it to the end. It
-   is offline and makes no model call. When step 5 stopped, there is no run to evaluate.
+7. **Evaluate** (unless `--no-evaluate` was given). Invoke the `evaluate-e2e` skill with
+   the run directory step 5 identified, and follow it to the end. When step 5 stopped,
+   there is no run to evaluate. If the evaluation fails, report that; it never triggers
+   another live run.

@@ -3118,6 +3118,29 @@ test "principle root access stays in its narrow source adapter and shares physic
     }
 }
 
+test "the principle context reaches a request only through the records request builder" {
+    const io = std.testing.io;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(std.testing.allocator);
+    defer walker.deinit();
+    var importers: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.endsWith(u8, entry.basename, "_test.zig") or std.mem.startsWith(u8, entry.path, "test_fixtures/") or
+            std.mem.eql(u8, entry.path, "domain/specification_principles.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        if (std.mem.indexOf(u8, source, "specification_principles.zig") != null) {
+            try std.testing.expectEqualStrings("actions/specification/build_specification_model_input.zig", entry.path);
+            importers += 1;
+        }
+        // No other producer places a `principles` part into a request.
+        try expectAbsent(source, "\"principles\", ");
+    }
+    try std.testing.expectEqual(@as(usize, 1), importers);
+}
+
 test "every binding failure cause is closed, declared once in its owner area and returned by production code" {
     const step_binding = @import("domain/step_binding_error.zig");
     @setEvalBranchQuota(20_000);

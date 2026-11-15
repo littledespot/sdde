@@ -73,7 +73,7 @@ authority (intent.md:3-9).
 | Required-authority ledger, reconcile, routing, gate | Generic; Plan kinds declared; no Plan seed producer | `required_authority.zig:14`, `:57-59`, `:357-361`; seeds only `specification_authority.zig`, `source_preservation.zig` |
 | Clarification registry, `PNN` IDs, forms, refresh | Generic for S/P/T; answers rejected for every stage | `clarification_inputs.zig:16`; `clarification_refresh.zig:64-66`, `:105-113` |
 | Toolchain capture and registered policies | Generic; policies hold naming rules only | `src/composition/toolchain_policy_registry.zig:6-22` |
-| Principle capture | Generic, persisted, read by no model call | `spec.workflow.yaml` step `principles`; 09-configuration.md:337 |
+| Principle capture | Generic, persisted, read by the Spec records request only (SPEC01 Q17) | `spec.workflow.yaml` step `principles`; 09-configuration.md:337 |
 | `spec.md` codec | Renders and parses; used only in Spec publication | `src/domain/specification_markdown.zig:14`, `:84`; `validate_specification_rendering.zig:13-20` |
 | Bounded no-follow directory scan | Root-generic; two users; prunes nothing before descent | `src/adapters/filesystem/directory_inventory.zig:8-34`; users `src/adapters/filesystem/principle_source.zig:7`, `src/adapters/filesystem/reference_corpus_source.zig:37` |
 | Request-owner and state ID types | Declared, never built in production | `model_request_identity.zig:15-19`, `:61-68` |

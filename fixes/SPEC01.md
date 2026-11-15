@@ -418,24 +418,33 @@ principles "should be used for context when executing the spec workflow".
   operation against the semantic-principles root (11-path-validation.md:20). Every future step
   (Plan, Implement, init, repair) keeps it. ADR 0015 records it (0015:36); design.md §3.3
   doesn't (adding it is a design edit awaiting approval).
-- **Context:** today no generation call receives principles; only `capture-principle-registry`
-  reads them (`spec.workflow.yaml` step `principles`). Adding them changes generation requests, so it is a
-  model-input change measured by a set. Principles are context and constraints, never a
-  requirement's origin: items still cite only source claims (D13.4).
 - **D17.1 decided 1 November 2026:** the records call only (it writes the FR, AC, BR and other
   statement records principles constrain), with the principle files as the registry captures
   them, unnumbered (items never cite principles). The case principles are 28,067 (hello-world)
-  and 29,399 (loan-renewal) bytes, about 7k tokens per run. A measurement set after D12.2,
-  with unsupported addition and invented entity as watch items (§2 rule 6; decided 3 November
-  2026, user: "Yes, watch items").
+  and 29,399 (loan-renewal) bytes, about 7k tokens per records request (one per group, and
+  again on a correction or re-send). A measurement set, with
+  unsupported addition and invented entity as watch items (§2 rule 6; decided 3 November
+  2026, user: "Yes, watch items"). D12.2 is kept.
+- **Built offline, 15 November 2026; awaits its screen and set.** The records request, and no
+  other (not brief, entities, scenarios or an atomic repair), carries each principle file's
+  text as `principles` (`specification_principles.zig`; `build-specification-model-input`
+  requires `principle_registry`), and the records prompt says how to read them. A project with
+  no principle files gets no key. The freeze over 1,900 scripted requests: 1,888 identical, 12
+  records requests in 5 scenarios gain the key, nothing else changes. Amended: ADR 0015, ADR
+  0023, 17-specify.md, 09-configuration.md (:337, :354), 13-05 and F0100.
 - **Target and risk:** no current rubric criterion scores principle consistency, so a set can
   show only guards (unsupported addition and invented entity from principle text,
-  publication) unless the case rubrics gain a criterion. Amends ADR 0015 (0015:10-14 already
-  names D17.1), ADR 0023 "Principles" (0023:149-159), 17-specify.md's consolidated-generation
-  inputs (:266-341) and F0100.
-- **Sequence (recommended, not decided; D17.1 places it after D12.2):** a records screen
-  first: the loan-renewal rubric's proportionate-scope criterion penalises principle-derived
-  prescriptions, so its guards need a settled reference.
+  publication) unless the case rubrics gain a criterion. Principle text is no source: a record
+  that copies a principle's literal gets no passive or exact authorisation. The case
+  principles are technology, security and architecture standards, so the records prompt calls
+  them "principles, given as context" and says they add no requirement; stack or technology
+  content in a record is an unsupported addition (watch item).
+- **Open (Plan gate, ADR 0034):** whether a Spec generated under an older principle registry
+  is stale at Plan's gate. A changed registry already invalidates plan and task approvals
+  (09-configuration.md:367); Spec regenerates every run.
+- **Sequence (recommended, not decided):** a records screen first: the loan-renewal rubric's
+  proportionate-scope criterion penalises principle-derived prescriptions, so its guards need a
+  settled reference.
 
 ### Q21. Behaviour claims need statements
 
