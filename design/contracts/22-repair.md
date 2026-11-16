@@ -290,7 +290,9 @@ criterion for a claim a behaviour statement names is written by the scenarios re
 an initial generation, never inserted by repair. The engine fixes its kind, its authored
 selection `S` (its slot's one claim) and the batch's source group; the response is its
 content only. A defect in a written criterion's text takes the field-level value repair above,
-which never changes that association. No repair inserts or replaces a whole criterion or
+which never changes that association. The repair's evidence bound for such a criterion is
+`S` plus the values its claim holds, not set equality
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). No repair inserts or replaces a whole criterion or
 inserts an edge case, and a claim without its criterion after the merge is an engine
 defect that takes no repair.
 

@@ -44,6 +44,15 @@ pub fn candidateRequired(entry: extraction.TextValidatedResult, candidate: extra
     return false;
 }
 
+/// Whether `claim` holds `bytes`: it is a token of those bytes, or its text holds them (an
+/// insertion never does). A claim holds a value by its bytes, never by an occurrence's identity.
+pub fn claimHolds(claim: extraction.Claim, bytes: []const u8) bool {
+    return switch (claim.content) {
+        .preserved_token => |token| std.mem.eql(u8, token.value.raw_value.bytes, bytes),
+        .model => |content| contentRequires(content, bytes),
+    };
+}
+
 fn requiredBy(original: extraction.Claim, token: extraction.Claim) bool {
     return token.content == .preserved_token and original.content == .model and
         original.chunk_id.eql(token.chunk_id) and contentRequires(original.content.model, token.content.preserved_token.value.raw_value.bytes);

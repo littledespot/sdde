@@ -196,13 +196,12 @@ fn scalarInScopes(allocator: std.mem.Allocator, context: provenance.Context, val
 /// §23: the engine's code span is a delimiter, so an exact copy that the field's literal
 /// text already wraps in one balanced pair from the shared closed table gets none. A
 /// display atom touching the copy never supplies the pair, even when its bytes begin
-/// with the closer. A copy ending in terminal punctuation keeps its span: inside the
-/// pair, that punctuation reads as the prose's own. Passive values keep their span.
+/// with the closer. The copy's own final punctuation lies inside the pair and is the
+/// value's (ADR 0036 Decision 6). Passive values keep their span.
 fn delimitedByText(prose: @import("exact_value_boundary.zig").Utf8Prose, atoms: []const DisplayAtom, index: usize) bool {
     const atom = atoms[index];
     if (index != 0 and atoms[index - 1].end == atom.start) return false;
     if (index + 1 != atoms.len and atoms[index + 1].start == atom.end) return false;
-    if (@import("exact_value_boundary.zig").endsWithTerminal(prose.bytes[atom.start..atom.end])) return false;
     return prose.directlyWrapped(atom.start, atom.end, .{ .left = .field_edge, .right = .field_edge });
 }
 

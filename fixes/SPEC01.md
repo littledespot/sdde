@@ -23,20 +23,23 @@ gate is re-run on the build after E1–E4 land, as one closing set after the out
 no-regression check, not the closing set. **Closing set run 16 November 2026** (`2026-11-15T21-47-*`,
 build `ac1c8b80…`, every report `build.source.modified: true`; [Z_SPEC01](Z_SPEC01.md) "Closing set"):
 6 of 6 published and passed, no lost or weakened requirement; the gate stays the user's to declare.
+**Paragraph set run 16 November 2026** (`2026-11-16T01-49-*`, build `871192ea…`, every report
+`build.source.modified: true`; [Z_SPEC01](Z_SPEC01.md) "Claim wording as one paragraph"): 6 of 6 published and
+passed, no lost, weakened or contradicting requirement.
 
-**Reference** for quality phases (§2 rule 7): the closing set, the last kept state. Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
+**Reference** for quality phases (§2 rule 7): the paragraph set, the last kept state. Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
 as one evaluator ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
 | --- | --- | --- | --- | --- |
-| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 2 / 0 (the greeting-then-timestamp order, twice) | 89.3 (85.7–92.9) |
-| Loan-renewal | 3 of 3 | 3 of 3 | 0 / 0 / 0 / 0 | 94.0 (89.3–100) |
+| Hello-world | 3 of 3 | 3 of 3 | 0 / 0 / 1 / 0 (the greeting-then-timestamp order, once) | 91.7 (89.3–92.9) |
+| Loan-renewal | 3 of 3 | 3 of 3 | 0 / 0 / 0 / 0 | 92.9 (92.9–92.9) |
 
 Advisory scores are scored against the case rubrics (`evaluations/e2e/<run>/evaluation.json`);
 scorer judgment moves one by about ±3.6, and keep decisions use the accuracy counts (§2 rule 6).
 
-**Retained runs:** `zig-out/e2e-spec/` holds the closing set (`21-47-*`), Q4's set, the reverted D7.5 set (`09-04-*`), Q17's set
+**Retained runs:** `zig-out/e2e-spec/` holds the paragraph set (`2026-11-16T01-49-*`), the closing set (`21-47-*`), Q4's set, the reverted D7.5 set (`09-04-*`), Q17's set
 (and six zero-token `input_invalid` runs of `07-48-*`), the HEAD set and twenty runs of 8 November 2026
 (report v15, `build.source.modified` true): the `5b34dbc` "Repeated-statement text not
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
@@ -168,8 +171,9 @@ Q17 was kept 15 November 2026, Q7 D7.5 was built and not kept the same day, and 
 November 2026.
 
 **Set order, decided 14 November 2026** (user: "the above recommendations are approved"): the output-track
-items Q17, Q7 D7.5 and Q4 are done and **the closing set** (§1) was run on 16 November 2026. Each change set was measured on its own build against the previous item's kept state (§2
-rule 7); the closing set is the reference now ([Z_SPEC01](Z_SPEC01.md) "Closing set").
+items Q17, Q7 D7.5 and Q4 are done, **the closing set** (§1) was run on 16 November 2026, and the paragraph item
+followed. Each change set was measured on its own build against the previous item's kept state (§2
+rule 7); the paragraph set is the reference now ([Z_SPEC01](Z_SPEC01.md) "Claim wording as one paragraph").
 
 The order is approved, not a blanket go-ahead: each screen batch and live set still needs its
 own approval when it is ready (AGENTS.md; the project settings prompt for every live step).
@@ -179,7 +183,8 @@ above, inside the decided constraints):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
+| 1 | **Q14 check** an exact copy in a criterion must belong to its slot's own claims (ADR 0038) | restatement: AC-001 repeating other requirements' results (2 of 3 closing-set loan-renewal runs) | S–M | Built 16 November 2026: fixtures in two domains, mutation checks on the rule and the repair bound, freeze identical to the paragraph build's; its set ran 16 November 2026 (6 runs, evaluated, in `evaluations/e2e/2026-11-16T07-18-*`); keep or revert is the user's call | approved 16 November 2026 (user: "yes", and "recommendations approved" for the repair bound), amends ADR 0038 |
+| 2 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
 **Robustness track** (run completion and budget; no scored defect): the §22.6 correction
 location, outside E5 since DE5 7. Since D13.1 the measured runs show 0 runaways and 0 re-sends; the highest used 67,448
@@ -231,15 +236,13 @@ or the user records it as a model limitation.
     with no business data in about half of hello-world runs, and sometimes names the feature itself.
     No b4 call is involved, the cost is at most one point, and no prompt change targets it
     ([Z_SPEC01](Z_SPEC01.md) Q22).
-  - **One bundled FR for several requirements, sometimes weakened** (watch, from the D7.5 and Q4 sets;
-    no owner chosen): the records call writes a single FR that bundles the loan-renewal requirements
-    (list markers kept inline, or a paraphrase that says "may renew" for "must be able to renew").
-    Q4's set: 3 of 3 loan-renewal runs bundled, one a critical failure; D7.5's set: 1 of 3 (the critical
-    failure); Q17's set: 0 of 4 published runs; Q17's own records screen: one FR in 5 of 10 trials, Q4's
-    screen 1 of 10. The same
-    paraphrase appeared on a build without Q4's texts, and nothing isolates it to a change, so it is
-    a model limitation until it recurs on a build that explains it. A structural lever would be a
-    **Decision** on ADR 0036 Decision 2 (list markers in the model-facing requirement meaning).
+  - **One bundled FR for several requirements, sometimes weakened:** the records call writes a single
+    FR that bundles the loan-renewal requirements (list markers kept inline, or a paraphrase that says
+    "may renew" for "must be able to renew"). Q4's set: 3 of 3 loan-renewal runs bundled, one a critical
+    failure; D7.5's set: 1 of 3 (the critical failure); closing set: 2 of 3; paragraph set: 2 of 3 (none
+    weakened); Q17's set: 0 of 4 published runs. The marker and `&#10;` artefact has its structural lever, kept
+    16 November 2026 (ADR 0036 Decision 2; absent from all six paragraph-set runs); bundling itself and the
+    "may" paraphrase stay a model limitation, counted.
   - **Edge-case outcomes:** ADR 0038 Decision 7, kept ([Z_SPEC01](Z_SPEC01.md) Next 8). **Not
     accepted** (user, 7 November 2026: "that is a poor idea and I will not accept it"): the
     engine filling `then` and `expected_outcome` from the record's cited source lines. ADR 0038
@@ -308,12 +311,8 @@ Each change is a request change and needs its own set.
 **Defect:** rendering artefact, found in every publication of 31 October and of the D12.1,
 D16.1 and D16.2 sets:
 
-- **A. Doubled delimiter.** ADR 0036 Decision 6 removes only backtick runs around a value
-  (`exact_value_recognition.zig:134-152`); the model's `"` stays in the neighbouring text, and
-  the projection gives an exact copy its own code span (`specification_projection.zig:185-189`)
-  unless D7.4's exception applies (`delimitedByText`, `:201-207`), which excludes a value
-  ending in terminal punctuation and so every development-case value. Where the span stays,
-  the doubling is the engine's. Since ADR 0047, A remains in model-written FR and AC fields.
+- **A. Doubled delimiter:** ended 16 November 2026 ([Z_SPEC01](Z_SPEC01.md) Q7 D7.4): a copy a
+  balanced pair directly wraps gets no engine span, whatever it ends in.
 - **B. Plain value in an entity meaning:** ended 8 November 2026, when the entity lost its
   meaning (ADR 0038 Decision 6).
 - **C. Fragments joined without a separator:** the schema keeps the fragments option when no
@@ -380,8 +379,9 @@ line means beyond the advisory evaluate-e2e link check.
 - **Watch, from Q17's set** (second b4 set in brackets): the one-renewal criterion (claim 4) is a bare rule
   or changes modality in 3 of 4 published loan-renewal runs (3 of 3); AC-001 repeats other requirements'
   results in 3 of 4 (2 of 3), its Source then citing two of three claims. That is the "next set" the
-  **Decision** on ADR 0038 waited for (an exact copy in a criterion must belong to the slot's own claims),
-  so it is due. A Given that already holds the event its When names is in 3 of 3 hello-world runs (2 of
+  **Decision** on ADR 0038 waited for (an exact copy in a criterion must belong to the slot's own claims);
+  **approved and built 16 November 2026** (user: "2. yes", the §3 table), awaiting its own set. It judges
+  an exact value, so it leaves a restating criterion that holds no exact value as it is. A Given that already holds the event its When names is in 3 of 3 hello-world runs (2 of
   3). Run `2026-11-15T08-11-10Z-f080…` wrote "The loan is renewed only once." for claim 4, a judgement call
   between a minor ambiguity and a weakened limit, the same as `91f4`'s.
 - **Restated edge cases** from the records call recur (loan-renewal EC-001 and EC-002 repeat AC-005) and

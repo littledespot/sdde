@@ -291,7 +291,10 @@ For each feature-brief or specification unit other than the engine-composed stor
   below). Its exact role is incidental, so it discharges no
   exact-copy duty, and ADR 0035 never deletes a record naming a claim that no other
   record names. The story is no source-readiness subject and has no packet-guidance
-  purpose (ADR 0047 Decision 5).
+  purpose (ADR 0047 Decision 5). Records, entities and scenarios requests show each
+  claim's wording in the same paragraph reading, a quote of headings alone as written
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md) Decision 2); extraction,
+  reconciliation, source-review and omission requests keep the quote as written.
   Generation and native unit repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
   value, prose expresses its meaning and types required exact values verbatim.
@@ -379,7 +382,9 @@ For each feature-brief or specification unit other than the engine-composed stor
   which names the number of every item in each equal set (`distinct`, §12.2; §22.6). The engine fixes each
   criterion's kind, claim and group and appends the criteria to the group's batch in slot
   order; full unit validation and the field-level value repair then apply (§22.3), which
-  never changes a criterion's claim. The session's scenario-coverage check requires at
+  never changes a criterion's claim. A criterion's exact copy must be a value its slot's
+  claim holds, compared by bytes; a copy of another claim's value is a text defect of that
+  field (`foreign_exact`), not a repair of the claim. The session's scenario-coverage check requires at
   least one criterion for each such claim, and a claim it finds without one is an engine
   defect (`scenario_coverage`) that takes no repair. No criterion is inserted for an edge
   case.

@@ -161,8 +161,8 @@ fn previous(prose: []const u8, index: usize) Scalar {
     return next(prose, cursor);
 }
 /// Whether prose ends with terminal punctuation: the one closed policy that exact-value
-/// boundaries, the acceptance-criterion clause join and the exact-copy code span share
-/// (§23). Invalid or truncated UTF-8 at the end is not terminal.
+/// boundaries and the acceptance-criterion clause join share (§23). Invalid or truncated
+/// UTF-8 at the end is not terminal.
 pub fn endsWithTerminal(prose: []const u8) bool {
     var start = prose.len;
     while (start > 0) {

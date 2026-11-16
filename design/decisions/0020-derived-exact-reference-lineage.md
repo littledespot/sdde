@@ -17,7 +17,9 @@
   [ADR 0024](0024-native-exact-token-authority.md) (token-only groups get no
   record task; native exact duties are independent of semantic kind) and
   [ADR 0038](0038-record-claims-and-scenario-coverage.md) (a non-entity record's response names its supporting
-  claims, a subset of its one group; the group stays its association) and
+  claims, a subset of its one group; the group stays its association; since 16 November 2026 an
+  engine-bound acceptance criterion's value-repair bound is its claim plus the values that claim
+  holds, in place of the table's set equality: Decision 3) and
   [ADR 0047](0047-engine-composed-primary-story.md) (amended 3 November 2026: the story's
   group selection is native, the groups whose business claims it quotes).
 

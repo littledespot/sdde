@@ -137,7 +137,7 @@ pub fn dependencies(inputs: evidence.Inputs, registry: literals.Registry, curren
     return .{ .inputs = inputs, .grammar_contract = grammar.contract, .policy_contract = grammar.policy.contract, .policy_ids = grammar.policy.policy_ids, .rules = grammar.policy.rules, .reference_state_id = grammar.reference_state_id, .feature_id = grammar.feature_id, .reference_names = grammar.reference_names, .records = registry.records, .occurrences = registry.occurrences };
 }
 pub const Issue = struct {
-    reason: enum { empty, invalid_scalar, unknown_exact, ambiguous_exact, unknown_passive, unknown_source, blank, reference_only, prohibited_exact, prohibited_passive, prohibited_source, embedded_insertion_syntax },
+    reason: enum { empty, invalid_scalar, unknown_exact, foreign_exact, ambiguous_exact, unknown_passive, unknown_source, blank, reference_only, prohibited_exact, prohibited_passive, prohibited_source, embedded_insertion_syntax },
     first_node: usize,
     last_node: usize,
     rejected_passive: ?literals.Id = null,
@@ -145,7 +145,7 @@ pub const Issue = struct {
     pub fn isComposition(self: Issue) bool {
         return switch (self.reason) {
             .blank, .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax, .ambiguous_exact => true,
-            .empty, .invalid_scalar, .unknown_exact, .unknown_passive, .unknown_source => false,
+            .empty, .invalid_scalar, .unknown_exact, .foreign_exact, .unknown_passive, .unknown_source => false,
         };
     }
     pub fn description(self: Issue) []const u8 {
@@ -153,6 +153,7 @@ pub const Issue = struct {
             .empty, .blank => "Supply nonblank content using the supplied typed text choices.",
             .invalid_scalar => "Literal text must be nonempty valid Unicode without forbidden control characters.",
             .unknown_exact => "Preserve an eligible exact source value verbatim. Do not supply exact-copy handles.",
+            .foreign_exact => "Keep only the exact source values the requirement under test holds. Remove an exact value that belongs to another requirement.",
             .ambiguous_exact => "Exact source values have overlapping or competing occurrence identities in this field; no occurrence can be selected from matching bytes alone.",
             .unknown_passive => "Use only passive reference IDs supplied for this source scope.",
             .unknown_source => "Use only source IDs supplied for this source scope.",

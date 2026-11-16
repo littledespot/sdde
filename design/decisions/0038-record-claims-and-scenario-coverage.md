@@ -44,7 +44,11 @@
   b4, D14.2; user: "update the documentation with the recommendation"): items of one
   scenarios response with equal content take the request's protocol correction, naming every
   item's number, in place of the `competing_records` block (Decision 3). Implemented on 15
-  November 2026.
+  November 2026. Amended on 16 November 2026 (SPEC01 Q14 watch; user: "2. yes"): an exact
+  copy in a criterion must belong to its slot's own claim (Decision 3). The user then
+  approved, as part of its implementation, the repair bound that Decision 3 states
+  ("recommendations approved. implement", 16 November 2026). Implemented on 16 November
+  2026.
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -115,6 +119,12 @@
     (a re-sent scenarios response passes the same checks). Implemented 15 November 2026:
     request descriptions advanced to `model-request-debug/v19` and reports to
     `spec-e2e-report/v20`, for the new `equal_items` rejection reason.
+  - The exact-copy amendment of 16 November 2026, Decision 3: [ADR 0020](0020-derived-exact-reference-lineage.md)
+    (an engine-bound criterion's value-repair bound, stated in Decision 3), §17.3 (the
+    scenarios step's admission) and §22 (the repair bound). No version advances: the new
+    text-issue reason appears in no versioned request description, report or state, and the
+    first scenarios request is byte-identical. A specification state that an earlier build
+    published with such a copy no longer reads back, and nothing migrates it.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -185,6 +195,30 @@ only block.
      kinds, equality a field-level value repair produces, and items equal only after the
      typed duplicate rule (`equalContent`) normalizes them, such as a string and the same
      text as a one-fragment object, still block.
+   - **A criterion's exact copies are its own claim's** (16 November 2026, implemented the
+     same day). A criterion tests one claim, so it may hold an exact copy only of a value
+     that claim's own text holds: the request offers each slot the exact values of its own
+     claim, and a copy of another claim's value, such as a success message in the criterion
+     of a different requirement, is a defect of the criterion's text, not a repair of its
+     claim. That defect takes the existing field-level value repair above. The slot's own
+     claim may hold several values; the rule compares exact values with claims, and judges
+     no wording.
+     - **The comparison** is by bytes: a claim holds a value when its text holds those bytes
+       (an insertion never does), and a claim that is itself an exact token holds the value
+       of equal bytes. It runs on each admitted field of an acceptance criterion, after the
+       field's own text policy, and recognizes values group-wide as before, so a value the
+       slot's claim doesn't hold is found wherever the corpus holds it. The typed text
+       issue is `foreign_exact`, an exact-copy rejection of that field.
+     - **The repair bound** (ADR 0020's S and E; this bullet states it, and §22 points here)
+       is the slot's claim, S, plus the values that claim's text holds, in place of the
+       table's set equality. The value the defect names adds no claim to it. A repair may
+       therefore drop that value, or state a value the slot's claim holds in its place, and
+       it keeps every value the criterion already held. A repair that states the value
+       again, or another claim's value, is the same defect found again by the full
+       validation, so the rejection is typed and retryable, and retry exhaustion fails the
+       run; the rule never weakens. The rule applies only to the acceptance criterion the
+       engine binds to one claim, at admission, repair and stored readback. An edge case and
+       every record whose claims the model chose keep ADR 0020's union and set equality.
    - **The engine binds** each criterion's kind (`acceptance_criterion`), claims (the
      slot's one claim) and group (the batch's), and appends the criteria to the group's
      batch in slot order, so the batch spans both responses. The merged batch takes full
@@ -478,6 +512,15 @@ only block.
       the batch in slot order; the merged batch validates, equal content naming other
       claims in an earlier batch blocks as `competing_records`, and a text defect in a
       written criterion takes the field-level value repair and keeps its claim;
+    - an exact copy in a criterion must be a value its slot's claim holds, in two unrelated
+      domains: a copy of its own claim's value is admitted, a copy of the other claim's value
+      is rejected as an exact-copy defect of that field, the repair is bound to the slot's
+      claim alone, a repair that drops the copy, and one that states the slot's own value in
+      its place, are admitted with the claim, kind and group the engine bound, a repair that
+      states the other claim's value again is rejected again as the same typed defect, a
+      requirement whose claim doesn't hold the value keeps ADR 0020's union, stored readback
+      rejects the foreign copy, and the relation itself accepts a claim that holds several
+      values and a token slot's own value;
     - an edge case is not cover: a claim only an edge case names has no slot, and the edge
       case still blocks with `edge_case_without_criterion`, while an edge case naming one
       behaviour claim links natively to that claim's criterion with no model request;

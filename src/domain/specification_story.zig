@@ -8,14 +8,14 @@ const r = @import("reference_reconciliation.zig");
 const text = @import("typed_text.zig");
 const binding = @import("specification_source_binding.zig");
 const sessions = @import("specification_session.zig");
-const markdown = @import("markdown_code_spans.zig");
+const reading = @import("source_paragraph.zig");
 
 pub const Error = sessions.Error;
 pub const Composition = union(enum) { story: g.spec.Values(.model).AttributedValue, blocked: binding.Rejection };
 pub const Outcome = union(enum) { composed: sessions.Session, blocked: binding.Rejection };
 
 /// The story unit's value: its catalogue's business claims in source order, each
-/// quote flattened to one paragraph (`paragraph`) and joined by one space. A quote of
+/// quote flattened to one paragraph (`reading.paragraph`) and joined by one space. A quote of
 /// headings alone is skipped. The story selects the groups whose claims it quotes;
 /// unit validation recognises its exact values as in model text. Without a
 /// business claim to quote, it blocks.
@@ -25,14 +25,16 @@ pub fn compose(a: std.mem.Allocator, current: sessions.Session, context: p.Conte
         .brief, .entities, .records => return error.InvalidSpecificationUnit,
     };
     const groups = try binding.catalogue(a, available.records, .content);
-    var structure = try Structure.init(a, context.inputs);
+    var structure = try reading.Structure.init(a, context.inputs);
     var quotes: std.ArrayList(Quote) = .empty;
     for (groups) |group| for (group.claim_ids) |id| {
         if (quoted(quotes.items, id)) continue;
         const item = try r.item(available.records.items, id);
         if (item.claim.content != .model or item.claim.content.model != .business) continue;
-        const at = try sourcePosition(context.inputs, item);
-        const segments = (try paragraph(a, &structure, item, at.source)) orelse continue;
+        const at = try sourcePosition(structure, item);
+        const words = (try reading.paragraph(a, &structure, item)) orelse continue;
+        const segments = try a.alloc(text.BusinessSegment, 1);
+        segments[0] = .{ .literal = .{ .value = words } };
         try quotes.append(a, .{ .claim_id = id, .at = at, .segments = segments });
     };
     if (quotes.items.len == 0) return .{ .blocked = try binding.storyRejection(a, context.references, .no_requirements) };
@@ -73,65 +75,10 @@ fn quoted(quotes: []const Quote, id: r.ClaimId) bool {
     return false;
 }
 
-fn sourcePosition(inputs: @import("reference_evidence.zig").Inputs, item: r.Item) Error!Position {
-    const source = for (inputs.corpus.sources, 0..) |candidate, index| {
-        if (candidate.id.ordinal == item.source_id.ordinal) break index;
-    } else return error.InvalidSpecificationUnit;
+fn sourcePosition(structure: reading.Structure, item: r.Item) Error!Position {
+    const source = try structure.position(item);
     if (item.citations.len == 0) return error.InvalidSpecificationUnit;
     var byte: usize = std.math.maxInt(usize);
     for (item.citations) |citation| byte = @min(byte, citation.value.location.start.byte);
     return .{ .source = source, .byte = byte };
-}
-
-/// Each corpus source's line structure, read once through its source's reader.
-const Structure = struct {
-    inputs: @import("reference_evidence.zig").Inputs,
-    sources: []?[]const markdown.ListLine,
-
-    fn init(a: std.mem.Allocator, inputs: @import("reference_evidence.zig").Inputs) std.mem.Allocator.Error!Structure {
-        const sources = try a.alloc(?[]const markdown.ListLine, inputs.corpus.sources.len);
-        @memset(sources, null);
-        return .{ .inputs = inputs, .sources = sources };
-    }
-    fn of(self: *Structure, a: std.mem.Allocator, index: usize) std.mem.Allocator.Error![]const markdown.ListLine {
-        const source = self.inputs.corpus.sources[index];
-        if (self.sources[index] == null) self.sources[index] = switch (source.reader) {
-            .markdown_source_v1 => try markdown.listSegments(a, source.bytes),
-        };
-        return self.sources[index].?;
-    }
-};
-
-/// A claim's quote as one paragraph, read from its cited source lines (ADR 0036):
-/// blank and heading lines dropped, each other line's indentation and list marker
-/// removed, and the lines joined by one space. A code line keeps its words as text.
-/// Runs cited apart keep the quote's ellipsis between them. Null when no line has
-/// words, as for a quote of headings alone.
-fn paragraph(a: std.mem.Allocator, structure: *Structure, item: r.Item, source_index: usize) Error!?[]const text.BusinessSegment {
-    const source = structure.inputs.corpus.sources[source_index];
-    const lines = try structure.of(a, source_index);
-    var bytes: std.ArrayList(u8) = .empty;
-    for (item.citations) |citation| {
-        const span = citation.value.location;
-        if (citation.value.source_id.ordinal != source.id.ordinal or span.start.byte > span.end.byte or span.end.byte > source.bytes.len) return error.InvalidSpecificationUnit;
-        var run: std.ArrayList(u8) = .empty;
-        for (lines) |line| {
-            const end = std.mem.indexOfAnyPos(u8, source.bytes, line.start, "\r\n") orelse source.bytes.len;
-            if (line.start >= span.end.byte or end < span.start.byte or line.heading) continue;
-            const from = @max(line.start + line.wording, span.start.byte);
-            const to = @min(end, span.end.byte);
-            if (from >= to) continue;
-            const words = std.mem.trim(u8, source.bytes[from..to], " \t");
-            if (words.len == 0) continue;
-            if (run.items.len != 0) try run.append(a, ' ');
-            try run.appendSlice(a, words);
-        }
-        if (run.items.len == 0) continue;
-        if (bytes.items.len != 0) try bytes.appendSlice(a, " … ");
-        try bytes.appendSlice(a, run.items);
-    }
-    if (bytes.items.len == 0) return null;
-    const result = try a.alloc(text.BusinessSegment, 1);
-    result[0] = .{ .literal = .{ .value = bytes.items } };
-    return result;
 }

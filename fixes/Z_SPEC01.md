@@ -24,14 +24,17 @@ decision and what it removed are ADR 0023's removal amendment (0023:25-42).
 
 ## Q7 D7.4. No engine code span where the text already delimits an exact value
 
-**Committed in `340261e`** (user, 1 November 2026: "implement Q7 D7.4."; ADR 0036 records the
-authority). Decided 1 November 2026: D7.4 is not a punctuation rule (AGENTS.md "Prose heuristic").
+**Committed in `340261e`; its terminal-punctuation exception withdrawn 16 November 2026** (user,
+1 November 2026: "implement Q7 D7.4."; 16 November 2026: "yes as per recommendations"; ADR 0036
+Decision 6 records the authority). D7.4 is not a punctuation rule (AGENTS.md "Prose heuristic").
 `delimitedByText` (`specification_projection.zig`) gives an exact copy no code span when only
 literal text touches it and that text is directly one balanced pair from the closed wrapper
-table (`exact_value_boundary.zig`), unless the copy ends in terminal punctuation; passive values
-keep their span (ADR 0036 Decision 6; 23-rendering.md §23.1). No request carries the
-projection's spans. Every development-case value ends in punctuation, so no artefact-A
-occurrence changes (SPEC01 Q7); no scripted scenario quotes an exact copy (SPEC01 T3).
+table (`exact_value_boundary.zig`), whatever the copy ends in; passive values keep their span
+(23-rendering.md §23.1). The exception for a copy ending in terminal punctuation left every
+development-case value doubled (4 of 6 closing-set runs), so it was withdrawn: the model's bytes
+show whether the final punctuation belongs to the value. No request carries the projection's
+spans, so a request freeze before and after is byte-identical. No scripted scenario quotes an
+exact copy (SPEC01 T3).
 
 ## Q7 D7.2. ADR 0045 withdrawn
 
@@ -2054,7 +2057,51 @@ path (no authorizer blocked) and the deleted upstream-rework branch, so both res
 Cost: hello-world 18.7k to 18.8k tokens, loan-renewal 22.6k to 24.1k. **Judgement calls:** loan-renewal
 `e66c…` scored renewal-eligibility 3 on AC-004's text (as `f080` was; a stricter reading fails it), and
 hello-world `fdfd…` carries four minor defects in one run. The evidence supports the gate; declaring it stays
-the user's (ADR 0034). SPEC01 §1 now takes this set as the reference.
+the user's (ADR 0034). The paragraph set below replaced it as the reference.
+
+## Claim wording as one paragraph in generation requests (kept 16 November 2026)
+
+**Decided** 16 November 2026 (user: "yes as per recommendations"; the screen, then the set: "yes", "yes approve 6
+live runs"); **kept** 16 November (user: "yes", on the recommendation to keep it and the quote-mark change).
+**Defect class:** rendering artefact: list markers and `&#10;` in a bundled FR (3 of 3 Q4 and 2 of 3 closing-set
+loan-renewal runs bundled; closing-set `e66c…` carried them). **Built** with ADR 0036 Decision 6 (no engine code
+span for a copy a balanced pair directly wraps; [Q7 D7.4](#q7-d74-no-engine-code-span-where-the-text-already-delimits-an-exact-value)):
+`source_paragraph.zig` reads a claim's cited lines as one paragraph (headings and blank lines dropped, each line's
+indent and one list marker removed, lines joined by a space, runs cited apart joined by " … "), `displayCatalogue`
+shows it in records, entities and scenarios requests (repair included), and the story composer reuses it.
+Extraction, reconciliation, source-review and omission requests keep the stored quote as written. The quote-mark
+change moves no request; the paragraph change moves 630 of 1,900 scripted requests, every differing leaf a claim's
+wording. `zig build verify` 147 steps, 2,228 tests; an independent review's findings were fixed.
+
+**Screen** (40 replays of retained records call 9, `openai.gpt-oss-20b-1:0`, low reasoning effort, 10 per arm):
+loan-renewal 3 of 10 captured replays carried markers or a line break and 3 bundled; the edited 10 carried none and
+bundled none. Hello-world bundled 9 and 10 of 10 (its one group has three claims). 39 of 40 had the §22.6 opening
+normalized in both arms.
+
+**Set** (`2026-11-16T01-49-*`, 3 runs per case, none retried, build `871192ea…`, revision `c1a20f3`, every report
+`build.source.modified: true`; skill `3fe52a92…`, evaluated automatically): 6 of 6 published and passed, no
+critical failure; **lost 0, weakened 0, contradiction 0**, unsupported addition 1 (hello-world `c4ec…`, AC-003's
+Given "has displayed `Hello, World!`", the greeting-then-timestamp order). Hello-world 92.9, 92.9, 89.3
+(0 / 0 / 1 / 0 once); loan-renewal 92.9 in all three (0 / 0 / 0 / 0). Against the closing set: the doubled
+delimiter and the model's quote marks around the engine's span (4 of 6) are absent from all six, and the markers
+and `&#10;` of `e66c…` did not recur (0 of 6). **Not changed:** loan-renewal still bundled in 2 of 3 runs (one FR
+citing claims 1 to 7, one citing 1 to 5; five FRs in the third), as in 2 of 3 closing-set runs, so the screen's
+drop in bundling did not reproduce; one agent traced the bundle to the signals call, which returned one signal
+grouping all five claims (likely, not established). Hello-world bundled 2 of 3 (claims 1 to 4, and 1 to 3 with the
+exact value); the third split the greeting into UO-001. **Not exercised:** the balanced-pair path ran in 1 of 6
+runs (`c2fd…` rendered `"Hello, World!"` with no span); the model typed backticks or no quote pair in the other
+five, so the rule rests on its offline tests. No record was deleted as a story restatement (every record was an
+FR, which ADR 0035 exempts), so that interaction is untested. **Defects**, all minor and seen before: the Given
+that already holds its When's event (hello-world 3 of 3), an entity for a feature with no business data (2 of 3),
+AC-001 repeating other requirements' results (loan-renewal 3 of 3), AC-004 as the bare source sentence or a Given
+that repeats AC-001's (3 of 3). One repair, helpful (`5196…`: both inline exact values classified irrelevant at
+extraction, replaced by preserve; extraction requests do not change in this build), and one protocol correction
+(`c36f…`, 3,507 tokens, no change). 0 runaways and 0 re-sends. Cost: hello-world 19.0k to 19.2k tokens (closing set
+18.7k to 18.8k), loan-renewal 22.8k to 24.6k (22.6k to 24.1k). `reference-context.md` SIG-1 keeps `- ` markers and
+`&#10;` in several runs because reconciliation requests show the quote as written (Decision 2); it is a generated
+view, not the specification. **Judgement calls:** hello-world `c4ec…` organization 4 relies on ADR 0047's exemption
+for a story an FR repeats (3 gives 89.3); loan-renewal `a071…` AC-004's Given/When tension could be a contradiction
+(count 1, renewal-eligibility 3, 89.3). Same outcomes either way.
 
 ## Decisions that changed nothing (15 November 2026)
 

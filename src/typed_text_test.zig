@@ -366,7 +366,7 @@ test "composition routing includes blank native values without field metadata an
     for ([_]@FieldType(text.Issue, "reason"){ .blank, .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax }) |reason| {
         try std.testing.expect((text.Issue{ .reason = reason, .first_node = 0, .last_node = 0 }).isComposition());
     }
-    for ([_]@FieldType(text.Issue, "reason"){ .empty, .invalid_scalar, .unknown_exact, .unknown_passive, .unknown_source }) |reason| {
+    for ([_]@FieldType(text.Issue, "reason"){ .empty, .invalid_scalar, .unknown_exact, .foreign_exact, .unknown_passive, .unknown_source }) |reason| {
         try std.testing.expect(!(text.Issue{ .reason = reason, .field = .spec_story, .first_node = 0, .last_node = 0 }).isComposition());
     }
 }

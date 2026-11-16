@@ -100,11 +100,17 @@ fn valueEvidence(a: std.mem.Allocator, context: p.Context, response: g.Response,
     defer arena.deinit();
     const scratch = arena.allocator();
     const references = @import("reference_support.zig").records(context.references);
-    const values: []const g.spec.BusinessValue = if (field.subject == .record)
-        try p.recordValues(scratch, try p.recognizeRecord(scratch, references, (g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[field.subject.record].content, null))
-    else
-        &.{try p.recognizeValue(scratch, references, selected.value, try candidates.singletonTextField(field.subject), null)};
+    const values: []const g.spec.BusinessValue = if (field.subject == .record) record: {
+        const record = (g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[field.subject.record];
+        break :record try p.lineageValues(scratch, references, try p.recognizeRecord(scratch, references, record.content, null), record.provenance.claim_ids);
+    } else &.{try p.recognizeValue(scratch, references, selected.value, try candidates.singletonTextField(field.subject), null)};
     return p.lineageForRepair(a, context, selected.provenance, values);
+}
+
+/// How the value target's record joins its exact copies to its evidence; a singleton value is a union.
+fn bindingOf(response: g.Response, field: @FieldType(Target, "value")) Error!p.Binding {
+    if (field.subject != .record) return .union_copies;
+    return p.bindingOf((g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[field.subject.record].content);
 }
 
 fn recordEvidenceBound(a: std.mem.Allocator, context: p.Context, record: g.spec.Model.RecordProposal) Error!candidates.EvidenceBound {
@@ -230,9 +236,13 @@ fn targetValid(a: std.mem.Allocator, validator: @import("typed_text.zig").Valida
         .value => |field| {
             const evidence = try candidates.attributedValue(.model, response, field.subject, field.field);
             const references = @import("reference_support.zig").records(context.references);
-            const values: []const g.spec.BusinessValue = if (field.subject == .record) try p.recordValues(scratch, try p.recognizeRecord(scratch, references, (g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[field.subject.record].content, null)) else &.{try p.recognizeValue(scratch, references, evidence.value, try candidates.singletonTextField(field.subject), null)};
-            const policy_field = if (field.subject == .record) try candidates.recordTextField((g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[field.subject.record].content, field.field) else try candidates.singletonTextField(field.subject);
-            _ = p.checkValueInUnit(scratch, validator, context, evidence.provenance, values, evidence.value, policy_field) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+            const records = g.recordCollection(.model, response.content);
+            const values: []const g.spec.BusinessValue = if (field.subject == .record) record: {
+                const record = (records orelse return error.InvalidSpecificationRepair)[field.subject.record];
+                break :record try p.lineageValues(scratch, references, try p.recognizeRecord(scratch, references, record.content, null), record.provenance.claim_ids);
+            } else &.{try p.recognizeValue(scratch, references, evidence.value, try candidates.singletonTextField(field.subject), null)};
+            const policy_field = if (field.subject == .record) try candidates.recordTextField((records orelse return error.InvalidSpecificationRepair)[field.subject.record].content, field.field) else try candidates.singletonTextField(field.subject);
+            _ = p.checkValueInUnit(scratch, validator, context, evidence.provenance, values, evidence.value, policy_field, try bindingOf(response, field)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         },
         .attributed => |subject| _ = p.checkAttributed(.model, scratch, validator, context, selected.attributed, try candidates.singletonTextField(subject)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false,
         .record => {
@@ -431,10 +441,7 @@ pub fn merge(allocator: std.mem.Allocator, canonical: @import("typed_text.zig").
         if (authorization.target != .value or proposed == null or proposed.? != .value) return error.InvalidSpecificationRepair;
         const updated = try candidates.replace(allocator, candidate.response, authorization.target, proposed.?);
         const resolved = valueEvidence(allocator, context, updated, authorization.target.value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair;
-        if (resolved.provenance.claim_ids.len != bound.explicit.len) return error.InvalidSpecificationRepair;
-        for (resolved.provenance.claim_ids, bound.explicit) |actual, expected_id| if (actual.ordinal != expected_id.ordinal) return error.InvalidSpecificationRepair;
-        @import("reference_reconciliation.zig").sameSet(@import("reference_reconciliation.zig").ClaimId, bound.effective, resolved.effective_claim_ids) catch return error.InvalidSpecificationRepair;
-        @import("reference_reconciliation.zig").sameSet(@import("reference_reconciliation.zig").CitationId, bound.citations, resolved.provenance.citation_ids) catch return error.InvalidSpecificationRepair;
+        if (!p.keepsBound(try bindingOf(updated, authorization.target.value), bound, resolved)) return error.InvalidSpecificationRepair;
     }
     if (authorization.rule.group) |group| {
         const replacement = proposed orelse return error.InvalidSpecificationRepair;
