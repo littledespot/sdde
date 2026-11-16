@@ -2103,6 +2103,46 @@ view, not the specification. **Judgement calls:** hello-world `c4ec…` organiza
 for a story an FR repeats (3 gives 89.3); loan-renewal `a071…` AC-004's Given/When tension could be a contradiction
 (count 1, renewal-eligibility 3, 89.3). Same outcomes either way.
 
+## An exact copy in a criterion must belong to its slot's claim (kept 16 November 2026)
+
+**Decided** 16 November 2026 (user: "2. yes" and "yes" on the Q14 watch item, then "recommendations approved.
+implement", which included the repair bound; the set: "approved 3 live run per case"); **kept** 16 November (user:
+"yes keep the changes", after "does the change bring value?"). **Defect class:** restatement and a false link: a
+criterion repeating another requirement's exact value, its Source then citing a second claim (loan-renewal AC-001, 3
+of 3 paragraph-set runs). **Built** ([ADR 0038](../design/decisions/0038-record-claims-and-scenario-coverage.md)
+Decision 3): a criterion's exact copy must be a value its one slot claim holds, compared by bytes
+(`exact_token_obligation.claimHolds`); another claim's value is the text defect `foreign_exact` (rule `exact_copy`,
+field-level value repair); a repair's bound is the claim plus the values it holds, so it may drop the copy or state its
+own claim's value, and may not drop a value the criterion held. It applies at admission, repair and stored readback; an
+earlier build's state that holds such a copy no longer reads back. No version advanced, and the first scenarios request
+is byte-identical (`diff -r` of the freeze). `zig build verify` 147 steps, 2,229 tests; mutation checks on the rule, the
+bound's exclusion, the claim-bound bound and readback each fail the new test. **Review:** the first contract review found
+that a repair stating the slot's own value would have failed the run on its first repair (the bound was built from the
+defective text); fixed before the set, and the second review's findings were minor and addressed.
+
+**Set** (`2026-11-16T07-18-*`, 3 runs per case, none retried, build `904ba482…`, revision `c1a20f3`, every report
+`build.source.modified: true`; skill `3fe52a92…`, evaluated automatically; each adjudication's original report equals its
+run's): 6 of 6 published, 5 passed and 1 critical failure; **lost 0, weakened 1, unsupported addition 3, contradiction
+0**. Hello-world 96.4, 92.9, 89.3 (0 / 0 / 2 / 0, both minor, in the unchanged scenarios call); loan-renewal 100, 96.4
+and `c03e…` 89.3, **failed** (renewal-eligibility 2: FR-001 "may renew" for "must be able to renew" and "followed by the
+new due date", a partial link). The records request that wrote it is byte-identical to the three paragraph-set runs',
+and the check acts only after the scenarios call and never rejected anything there, so the failure is the known model
+paraphrase (the "may" limitation, SPEC01 §3), not this build. **The rule fired in 2 of 6 runs:** loan-renewal `3ca7…`
+(AC-001's Then held `Loan renewed!`, claim 6's value; the repair replaced the Then with AC-001's own sentence, graded
+helpful: the restatement and the partial link are gone) and hello-world `2446…` (AC-003's Given held `Hello, World!`,
+requirement 2's value; the repair replaced the Given with its own claim's wording, graded harmful: a new restatement,
+organization 3, though the borrowed value, an unsupported addition in a paragraph-set run, is gone). **No false
+rejection:** a criterion's own claim's value was accepted in four runs (`Loan renewed!`, `Renewal refused.`,
+`Hello, World!`). AC-001's restatement of other requirements' results: 0 of 3 (3 of 3 before), but only one of those
+runs had a foreign copy, so most of the drop is sampling. **Not reached:** a restating criterion that holds no exact
+value (hello-world AC-002 and AC-003 Givens repeat AC-001's result, 3 of 3; loan-renewal AC-004 borderline). Cost:
+hello-world 19.0k to 19.9k tokens (paragraph set 19.0k to 19.2k), loan-renewal 22.6k to 23.8k (22.8k to 24.6k); the two
+repairs 996 and 1,174 tokens; 0 runaways, 0 re-sends, 0 protocol corrections. **Judgement calls:** `2446…` D4 as
+restatement (organization 3, 89.3) or ambiguity (92.9); its AC-001 "executable" and "exits without error" is borderline
+material, which would fail source-grounding at 78.6; `3ca7…`'s repaired AC-001 scored checkable, and a stricter
+reading files it and grades the repair harmful; `7843…`'s criteria print "Given X, When Y, Then Z" with the model's
+straight quotes around an exact value, a rendering note not filed. One run each is one sample: no reliability claim.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a
