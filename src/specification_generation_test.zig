@@ -286,12 +286,13 @@ test "authoring assignments retain field purpose bound meaning and exact choices
     // the exported requests permit separate live semantic comparison.
     // Each claim cites its whole chunk and quotes it (ADR 0036). Hello's list splits
     // into the headings and one claim per item (ADR 0038). `authored` is the
-    // generated value.
-    const cases = [_]struct { name: []const u8, source: []const u8, quoted: []const []const u8, authored: []const u8 }{
-        .{ .name = "hello", .source = "# MOCK Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `MOCK Hello, World!`.\n- Must also output date and time in UTC\n", .quoted = &.{ "# MOCK Hello World Application\n\n## Requirements", "- The application must start successfully.", "- When started, the application must display `MOCK Hello, World!`.", "- Must also output date and time in UTC" }, .authored = "The application must start successfully.When started, the application must display `MOCK Hello, World!`.The application must also output date and time in UTC." },
-        .{ .name = "renewal", .source = "# Library Loan Renewal\nA borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date.\n", .quoted = &.{"# Library Loan Renewal\nA borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date."}, .authored = "Borrowers renew eligible loans for fourteen days and see confirmation and the new due date. Refused renewals retain the old due date." },
-        .{ .name = "exact-name", .source = "# Readiness confirmation\nThe feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation.\n", .quoted = &.{"# Readiness confirmation\nThe feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation."}, .authored = "The feature is named Ready! and lets an operator confirm readiness, then displays the required readiness message." },
-        .{ .name = "missing-choice", .source = "# Renewal Policy\nBorrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner.\n", .quoted = &.{"# Renewal Policy\nBorrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner."}, .authored = "Borrowers renew eligible loans and see the new due date; the owner has not decided the renewal duration." },
+    // generated value. `shown` is the first claim's wording in the request (ADR 0036
+    // Decision 2): its paragraph reading, or its quote as written when no line has words.
+    const cases = [_]struct { name: []const u8, source: []const u8, quoted: []const []const u8, shown: []const u8, authored: []const u8 }{
+        .{ .name = "hello", .source = "# MOCK Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `MOCK Hello, World!`.\n- Must also output date and time in UTC\n", .quoted = &.{ "# MOCK Hello World Application\n\n## Requirements", "- The application must start successfully.", "- When started, the application must display `MOCK Hello, World!`.", "- Must also output date and time in UTC" }, .shown = "# MOCK Hello World Application\n\n## Requirements", .authored = "The application must start successfully.When started, the application must display `MOCK Hello, World!`.The application must also output date and time in UTC." },
+        .{ .name = "renewal", .source = "# Library Loan Renewal\nA borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date.\n", .quoted = &.{"# Library Loan Renewal\nA borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date."}, .shown = "A borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date.", .authored = "Borrowers renew eligible loans for fourteen days and see confirmation and the new due date. Refused renewals retain the old due date." },
+        .{ .name = "exact-name", .source = "# Readiness confirmation\nThe feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation.\n", .quoted = &.{"# Readiness confirmation\nThe feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation."}, .shown = "The feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation.", .authored = "The feature is named Ready! and lets an operator confirm readiness, then displays the required readiness message." },
+        .{ .name = "missing-choice", .source = "# Renewal Policy\nBorrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner.\n", .quoted = &.{"# Renewal Policy\nBorrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner."}, .shown = "Borrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner.", .authored = "Borrowers renew eligible loans and see the new due date; the owner has not decided the renewal duration." },
     };
     try std.Io.Dir.cwd().createDirPath(std.testing.io, ".zig-cache/authoring-comparison");
     for (cases) |example| {
@@ -332,7 +333,7 @@ test "authoring assignments retain field purpose bound meaning and exact choices
             try std.testing.expect(!body.contains("citations"));
             try std.testing.expect(!body.contains("unit"));
             const selected_requirements = if (assigned == .records) assigned.records.requirements else (try codec.decode([]const binding.GroupGuidance, a, try std.json.Stringify.valueAlloc(a, body.get("source_groups").?, .{})))[0].requirements;
-            try std.testing.expectEqualStrings(example.quoted[0], selected_requirements[0].meaning);
+            try std.testing.expectEqualStrings(example.shown, selected_requirements[0].meaning);
             for (body.get("context_requirements").?.array.items) |requirement| try std.testing.expect(!binding.assigns(assigned, .{ .ordinal = @intCast(requirement.object.get("claim_id").?.integer) }));
             switch (assigned) {
                 .brief => |brief| {
@@ -507,6 +508,69 @@ fn quotedText(a: std.mem.Allocator, context: provenance.Context, value: spec.Bus
     return .{ .text = bytes.items, .exact = exact };
 }
 
+/// Sources whose claims cite lines of Markdown structure, with the one paragraph (ADR 0036
+/// Decision 2) their claims read as together. The story joins the claims' readings by one
+/// space; a request shows each claim's reading.
+const ReadingCase = struct { source: []const u8, citations: []const []const u32, story: []const u8 };
+const reading_cases = [_]ReadingCase{
+    .{
+        .source = "## Renewal\nA borrower must be able to renew an active loan.\n- Refuse renewal if the loan is inactive;\n  leave its due date unchanged.\n",
+        .citations = &.{ &.{ 1, 2 }, &.{ 3, 4 } },
+        .story = "A borrower must be able to renew an active loan. Refuse renewal if the loan is inactive; leave its due date unchanged.",
+    },
+    .{
+        .source = "- A loan may be renewed once.\nA note.\n- Show the new due date.\n",
+        .citations = &.{&.{ 1, 3 }},
+        .story = "A loan may be renewed once. Show the new due date.",
+    },
+    // A wrapped number is wording, not a list item, so the reading keeps every word:
+    // in an item, an indented continuation and a plain paragraph.
+    .{
+        .source = "- The fee is waived for loans opened in\n2024. Other loans pay the fee.\n",
+        .citations = &.{&.{ 1, 2 }},
+        .story = "The fee is waived for loans opened in 2024. Other loans pay the fee.",
+    },
+    .{
+        .source = "- Renew loans opened in\n  2024. Others wait.\n",
+        .citations = &.{&.{ 1, 2 }},
+        .story = "Renew loans opened in 2024. Others wait.",
+    },
+    .{
+        .source = "Renew the loan within\n3) days of the notice.\n",
+        .citations = &.{&.{ 1, 2 }},
+        .story = "Renew the loan within 3) days of the notice.",
+    },
+    // A comment line is not a list item, so its marker stays wording.
+    .{
+        .source = "<!--\n- Renewals stay open.\n-->\n",
+        .citations = &.{&.{2}},
+        .story = "- Renewals stay open.",
+    },
+    // Lines cited apart in one paragraph keep the quote's ellipsis between them.
+    .{
+        .source = "Renew active loans.\nA note.\nShow the new due date.\n",
+        .citations = &.{&.{ 1, 3 }},
+        .story = "Renew active loans. … Show the new due date.",
+    },
+    // A nested item keeps its words with its marker removed.
+    .{
+        .source = "- Renew the loan\n  - on the due date\n",
+        .citations = &.{&.{ 1, 2 }},
+        .story = "Renew the loan on the due date",
+    },
+};
+
+/// One business claim per `case.citations` entry over `case.source`.
+fn readingFixture(a: std.mem.Allocator, case: ReadingCase) !Fixture {
+    var proposals: std.ArrayList(@import("domain/reference_extraction.zig").Proposal) = .empty;
+    for (case.citations) |lines| {
+        var ids: std.ArrayList(@import("domain/source_selections.zig").Id) = .empty;
+        for (lines) |line| try ids.append(a, .{ .ordinal = line });
+        try proposals.append(a, .{ .category = .business, .citations = ids.items });
+    }
+    return Fixture.initClaims(a, case.source, null, .{ .selected = proposals.items });
+}
+
 const compose_story: @import("actions/specification/compose_specification_story.zig").Action = .{ .validator = text.validator };
 
 test "the engine composes the story from its catalogue's business claims in source order" {
@@ -596,54 +660,8 @@ test "the composed story skips heading and technical claims and blocks without a
     }
     // Each quote is one paragraph: a heading quoted with content, a wrapped list
     // item and lines cited apart keep their words, without headings or line breaks.
-    for ([_]struct { source: []const u8, citations: []const []const u32, story: []const u8 }{
-        .{
-            .source = "## Renewal\nA borrower must be able to renew an active loan.\n- Refuse renewal if the loan is inactive;\n  leave its due date unchanged.\n",
-            .citations = &.{ &.{ 1, 2 }, &.{ 3, 4 } },
-            .story = "A borrower must be able to renew an active loan. Refuse renewal if the loan is inactive; leave its due date unchanged.",
-        },
-        .{
-            .source = "- A loan may be renewed once.\nA note.\n- Show the new due date.\n",
-            .citations = &.{&.{ 1, 3 }},
-            .story = "A loan may be renewed once. Show the new due date.",
-        },
-        // A wrapped number is wording, not a list item, so the story keeps every word:
-        // in an item, an indented continuation and a plain paragraph.
-        .{
-            .source = "- The fee is waived for loans opened in\n2024. Other loans pay the fee.\n",
-            .citations = &.{&.{ 1, 2 }},
-            .story = "The fee is waived for loans opened in 2024. Other loans pay the fee.",
-        },
-        .{
-            .source = "- Renew loans opened in\n  2024. Others wait.\n",
-            .citations = &.{&.{ 1, 2 }},
-            .story = "Renew loans opened in 2024. Others wait.",
-        },
-        .{
-            .source = "Renew the loan within\n3) days of the notice.\n",
-            .citations = &.{&.{ 1, 2 }},
-            .story = "Renew the loan within 3) days of the notice.",
-        },
-        // A comment line is not a list item, so its marker stays wording.
-        .{
-            .source = "<!--\n- Renewals stay open.\n-->\n",
-            .citations = &.{&.{2}},
-            .story = "- Renewals stay open.",
-        },
-        // Lines cited apart in one paragraph keep the quote's ellipsis between them.
-        .{
-            .source = "Renew active loans.\nA note.\nShow the new due date.\n",
-            .citations = &.{&.{ 1, 3 }},
-            .story = "Renew active loans. … Show the new due date.",
-        },
-    }) |case| {
-        var proposals: std.ArrayList(@import("domain/reference_extraction.zig").Proposal) = .empty;
-        for (case.citations) |lines| {
-            var ids: std.ArrayList(@import("domain/source_selections.zig").Id) = .empty;
-            for (lines) |line| try ids.append(a, .{ .ordinal = line });
-            try proposals.append(a, .{ .category = .business, .citations = ids.items });
-        }
-        var fixture = try Fixture.initClaims(a, case.source, null, .{ .selected = proposals.items });
+    for (reading_cases) |case| {
+        var fixture = try readingFixture(a, case);
         defer fixture.deinit();
         const current = try sessionAtStory(a, &fixture);
         const next = (try compose_story.execute(a, current, fixture.context)).composed;
@@ -664,6 +682,109 @@ test "the composed story skips heading and technical claims and blocks without a
         defer fixture.deinit();
         const current = (try @import("domain/specification_session.zig").initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
         try std.testing.expectError(error.InvalidSpecificationUnit, story.compose(a, current, fixture.context));
+    }
+}
+
+test "a generation request shows each claim's wording as the paragraph its cited lines read as" {
+    const sessions = @import("domain/specification_session.zig");
+    const projected = @import("domain/model_evidence.zig");
+    const reconciled = @import("domain/reference_reconciliation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Each claim shows its reading, so the readings joined as the story joins them are the
+    // story's text for the same claims (the story test pins each text), while the stored
+    // quote and the evidence projection other requests use keep the lines as written.
+    for (reading_cases) |case| {
+        var fixture = try readingFixture(a, case);
+        defer fixture.deinit();
+        const display = try sessions.displayCatalogue(a, fixture.context, null);
+        const all = try provenance.items(fixture.context);
+        var joined: std.ArrayList(u8) = .empty;
+        for (display.requirements, 0..) |requirement, index| {
+            if (index != 0) try joined.append(a, ' ');
+            try joined.appendSlice(a, requirement.meaning);
+            const item = try reconciled.item(all, requirement.claim_id);
+            const stored = item.claim.content.model.business.value.segments[0].literal.value;
+            try std.testing.expectEqualStrings(stored, (try projected.requirement(a, item, fixture.context.inputs, fixture.context.registry)).meaning);
+        }
+        try std.testing.expectEqualStrings(case.story, joined.items);
+    }
+    // A list item loses its marker, and an exact value keeps its bytes whether it is a
+    // claim of its own or inside a claim's wording.
+    {
+        var fixture = try Fixture.init(a, "- A loan may be renewed only once.\n- Refuse renewal if the loan is inactive; display `Renewal refused.`.\n");
+        defer fixture.deinit();
+        const display = try sessions.displayCatalogue(a, fixture.context, null);
+        const all = try provenance.items(fixture.context);
+        var shown: usize = 0;
+        var exact: usize = 0;
+        for (display.requirements) |requirement| {
+            const item = try reconciled.item(all, requirement.claim_id);
+            switch (item.claim.content) {
+                .preserved_token => |token| {
+                    exact += 1;
+                    try std.testing.expectEqualStrings(token.value.raw_value.bytes, requirement.meaning);
+                },
+                .model => |content| {
+                    shown += 1;
+                    try std.testing.expect(std.mem.startsWith(u8, content.business.value.segments[0].literal.value, "- "));
+                    try std.testing.expect(!std.mem.startsWith(u8, requirement.meaning, "- "));
+                    try std.testing.expect(std.mem.indexOfScalar(u8, requirement.meaning, '\n') == null);
+                },
+            }
+        }
+        try std.testing.expect(shown != 0);
+        try std.testing.expectEqual(@as(usize, 1), exact);
+        try std.testing.expectEqual(exact, display.exact_choices.len);
+        try std.testing.expectEqualStrings("Renewal refused.", display.exact_choices[0].value);
+    }
+    // Every claim category shows its reading, not only business claims.
+    {
+        var fixture = try Fixture.initClaims(a, "- Store loans in a relational database.\n", null, .{ .selected = &.{.{ .category = .technical, .citations = &.{.{ .ordinal = 1 }} }} });
+        defer fixture.deinit();
+        const display = try sessions.displayCatalogue(a, fixture.context, null);
+        try std.testing.expectEqual(@as(usize, 1), display.requirements.len);
+        try std.testing.expectEqualStrings("Store loans in a relational database.", display.requirements[0].meaning);
+    }
+    // A quote with no words in its reading, a heading alone, is shown as written, so a claim
+    // the request assigns is never shown empty.
+    {
+        var fixture = try Fixture.initClaims(a, "# Loan Renewal\n", null, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = 1 }} }} });
+        defer fixture.deinit();
+        const display = try sessions.displayCatalogue(a, fixture.context, null);
+        try std.testing.expectEqual(@as(usize, 1), display.requirements.len);
+        try std.testing.expectEqualStrings("# Loan Renewal", display.requirements[0].meaning);
+    }
+}
+
+test "the paragraph reading rejects a citation that names another source or runs past its source" {
+    const reading = @import("domain/source_paragraph.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "- A loan may be renewed only once.\n");
+    defer fixture.deinit();
+    const all = try provenance.items(fixture.context);
+    const item = for (all.entries) |entry| {
+        if (entry.claim.content == .model) break entry;
+    } else return error.MissingTestClaim;
+    var structure = try reading.Structure.init(a, fixture.context.inputs);
+    try std.testing.expectEqualStrings("A loan may be renewed only once.", (try reading.paragraph(a, &structure, item)).?);
+    const length: usize = fixture.context.inputs.corpus.sources[0].bytes.len;
+    // Each case breaks one thing a validated citation keeps: its span inside its source, in order,
+    // and its source the claim's own.
+    for (0..4) |breakage| {
+        var broken = item;
+        const citations = try a.dupe(@TypeOf(item.citations[0]), item.citations);
+        switch (breakage) {
+            0 => citations[0].value.location.end.byte = @intCast(length + 1),
+            1 => citations[0].value.location.start.byte = citations[0].value.location.end.byte + 1,
+            2 => citations[0].value.source_id.ordinal += 1,
+            else => broken.source_id.ordinal += 1,
+        }
+        broken.citations = citations;
+        try std.testing.expectError(error.InvalidSpecificationUnit, reading.paragraph(a, &structure, broken));
     }
 }
 
@@ -2699,7 +2820,7 @@ test "native exact recognition shares equal bytes but rejects distinct overlappi
         if (item.claim.content == .preserved_token and std.mem.eql(u8, item.claim.content.preserved_token.value.raw_value.bytes, "ACTIVE")) break item.claim.id;
     } else return error.MissingTestToken;
     const wrapped: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Display `ACTIVE` VALUE." } }} };
-    const repaired = try provenance.checkValueInUnit(a, text.validator, ambiguous.context, .{ .claim_ids = &.{active}, .clarification_response_ids = &.{} }, &.{}, wrapped, .functional_requirement);
+    const repaired = try provenance.checkValueInUnit(a, text.validator, ambiguous.context, .{ .claim_ids = &.{active}, .clarification_response_ids = &.{} }, &.{}, wrapped, .functional_requirement, .union_copies);
     try std.testing.expectEqual(@as(usize, 3), repaired.segments.len);
     try std.testing.expectEqualStrings("Display `", repaired.segments[0].literal.value);
     try std.testing.expectEqualDeep(active, repaired.segments[1].exact_copy.claim_id);
@@ -2850,13 +2971,20 @@ test "an exact copy its own prose wraps in a balanced pair is projected without 
         .{ .source = "Export `report.csv` nightly.", .prefix = "Export (", .suffix = "), nightly.", .spans = 0 },
         .{ .source = "Export `report.csv` nightly.", .prefix = "Export \u{201c}", .suffix = "\u{201d} nightly.", .spans = 0 },
         .{ .source = "Display `Hello, World` when started.", .prefix = "Display the exact text \"", .suffix = "\" when started.", .spans = 0 },
-        // Both development-case shapes end in their own punctuation, which inside the
-        // pair reads as the prose's, so the engine still delimits them.
-        .{ .source = "Display `Hello, World!` when started.", .prefix = "Display the exact text \"", .suffix = "\" when started.", .spans = 1 },
-        .{ .source = "Refuse and display `Renewal refused.`.", .prefix = "The system refuses and displays \"", .suffix = "\"", .spans = 1 },
-        // No pair, or punctuation inside the pair: the engine delimits the value.
+        // A value that ends in its own punctuation is delimited by the pair as well (ADR 0036
+        // Decision 6, 16 November 2026), as the development cases' three values are, in any
+        // table pair and with a non-ASCII terminal.
+        .{ .source = "Display `Hello, World!` when started.", .prefix = "Display the exact text \"", .suffix = "\" when started.", .spans = 0 },
+        .{ .source = "Display `Hello, World!` when started.", .prefix = "Display the exact text \u{201c}", .suffix = "\u{201d} when started.", .spans = 0 },
+        .{ .source = "Display `Hello, World!` when started.", .prefix = "Display the exact text (", .suffix = ") when started.", .spans = 0 },
+        .{ .source = "Refuse and display `Renewal refused.`.", .prefix = "The system refuses and displays \"", .suffix = "\"", .spans = 0 },
+        .{ .source = "After renewal, display `Loan renewed!` and the new due date.", .prefix = "The system displays \"", .suffix = "\" and the new due date.", .spans = 0 },
+        .{ .source = "When done, show `完了。`.", .prefix = "When done, the system shows \u{300c}", .suffix = "\u{300d}.", .spans = 0 },
+        // No pair, or other punctuation between the copy and the pair: the engine delimits the value.
+        .{ .source = "Display `Hello, World!` when started.", .prefix = "Display the exact text ", .suffix = " when started.", .spans = 1 },
         .{ .source = "Export `report.csv` nightly.", .prefix = "Export ", .suffix = " nightly.", .spans = 1 },
         .{ .source = "Export `report.csv` nightly.", .prefix = "Export \"", .suffix = ".\" nightly.", .spans = 1 },
+        .{ .source = "Display `Hello, World!` when started.", .prefix = "Display the exact text \"", .suffix = ".\" when started.", .spans = 1 },
     }) |case| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -8740,7 +8868,12 @@ test "value repair retains raw native occurrence evidence from an unchanged sibl
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.init(a, "A user sees status `ACTIVE` and exports `report.csv`.");
+    // Each exact value is on the line of its own claim, so the criterion's claim holds only `ACTIVE`.
+    const line_claims = [_]@import("domain/reference_extraction.zig").Proposal{
+        .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+        .{ .category = .business, .citations = &.{.{ .ordinal = 2 }} },
+    };
+    var fixture = try Fixture.initClaims(a, "A user sees status `ACTIVE`.\nA user exports `report.csv`.\n", .business_exact_string, .{ .selected = &line_claims });
     defer fixture.deinit();
     const plain = try fixture.proposal("The user starts the requested operation.");
     const all = try provenance.items(fixture.context);
@@ -8777,7 +8910,11 @@ test "value repair retains raw native occurrence evidence from an unchanged sibl
     _ = (try validate_unit.execute(a, current, fixture.context, merged)).valid;
     try std.testing.expectEqual(.resolved, (try repair.retryValidation(a, text.validator, current, fixture.context, merged)).?.validated.result);
     const wider: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "The user exports report.csv." } }} };
-    try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, canonical, current, fixture.context, candidate, auth, .{ .value = wider }, null));
+    // The criterion's claim doesn't hold `report.csv`, so stating it is the foreign-copy defect (ADR 0038
+    // Decision 3): no evidence is added, and the full validation rejects it for another repair.
+    const widened = try repair.merge(a, canonical, current, fixture.context, candidate, auth, .{ .value = wider }, null);
+    try std.testing.expectEqualDeep(auth.rule.value_bound.?, widened.value_bound.?);
+    try std.testing.expectEqual(.foreign_exact, (try validate_unit.execute(a, current, fixture.context, widened)).invalid.issue.text_issue.?.reason);
 }
 
 test "feature entity insertion pins native occurrence scope independently of authored support" {
@@ -9569,8 +9706,13 @@ const MeetingRoom = struct {
     wording: spec.BusinessValue,
 
     fn init(a: std.mem.Allocator) !MeetingRoom {
+        return initIn(a, try Fixture.initClaimsGrouped(a, "MOCK Book a meeting room.\nMOCK Show free rooms.\nMOCK Hold a room for ten minutes.\nMOCK Release an unconfirmed hold.\nMOCK Refuse a double booking.\nMOCK Email the organiser.\n", null, .{ .selected = &meeting_room_claims }, &.{&.{ 0, 1, 2, 3, 4, 5 }}));
+    }
+
+    /// The first source group of `source`, as a records batch's group.
+    fn initIn(a: std.mem.Allocator, source: Fixture) !MeetingRoom {
         const sessions = @import("domain/specification_session.zig");
-        var fixture = try Fixture.initClaimsGrouped(a, "MOCK Book a meeting room.\nMOCK Show free rooms.\nMOCK Hold a room for ten minutes.\nMOCK Release an unconfirmed hold.\nMOCK Refuse a double booking.\nMOCK Email the organiser.\n", null, .{ .selected = &meeting_room_claims }, &.{&.{ 0, 1, 2, 3, 4, 5 }});
+        var fixture = source;
         errdefer fixture.deinit();
         var current = (try sessions.initialize(a, fixture.context.inputs.corpus.feature_id, fixture.context)).ready;
         current.completed = sessions.records_index;
@@ -9854,13 +9996,14 @@ test "claim-bound scenarios: a group's request offers its numbered slots with on
     defer arena.deinit();
     const a = arena.allocator();
     // Two source groups of two claims each, and two exact values on a line no group's claim cites.
+    // The claims are list items, whose markers the request's wording leaves out (ADR 0036 Decision 2).
     const claims = [_]@import("domain/reference_extraction.zig").Proposal{
         .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
         .{ .category = .business, .citations = &.{.{ .ordinal = 2 }} },
         .{ .category = .business, .citations = &.{.{ .ordinal = 3 }} },
         .{ .category = .business, .citations = &.{.{ .ordinal = 4 }} },
     };
-    var fixture = try Fixture.initClaimsGrouped(a, "MOCK Renew an eligible loan.\nMOCK Refuse renewal of an overdue loan.\nMOCK Show the new due date.\nMOCK Email the borrower.\nMOCK Display `Hello, World!` and `UTC` on startup.\n", .business_exact_string, .{ .selected = &claims }, &.{ &.{ 0, 1 }, &.{ 2, 3 } });
+    var fixture = try Fixture.initClaimsGrouped(a, "- MOCK Renew an eligible loan.\n- MOCK Refuse renewal of an overdue loan.\n- MOCK Show the new due date.\n- MOCK Email the borrower.\nMOCK Display `Hello, World!` and `UTC` on startup.\n", .business_exact_string, .{ .selected = &claims }, &.{ &.{ 0, 1 }, &.{ 2, 3 } });
     defer fixture.deinit();
     const context = fixture.context;
     // Each earlier unit and each other record carries wording of its own, so a request that leaked any
@@ -10432,6 +10575,132 @@ test "claim-bound scenarios: a text defect in a written criterion takes the fiel
     try std.testing.expectEqual(group_plan.slot(1).claim.ordinal, merged[2].provenance.claim_ids[0].ordinal);
     // The joined batch keeps the repair of its scenarios, so no later reading takes it for a first pass.
     try std.testing.expect(done.record_batches[0].last_repair != null);
+}
+
+fn literalValue(a: std.mem.Allocator, bytes: []const u8) !spec.BusinessValue {
+    return .{ .segments = try a.dupe(@import("domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = bytes } }}) };
+}
+
+fn holdsExactCopy(value: spec.BusinessValue) bool {
+    for (value.segments) |segment| if (segment == .exact_copy) return true;
+    return false;
+}
+
+test "claim-bound scenarios: an exact copy in a criterion must be a value its slot's claim holds, and its repair drops the copy that is not" {
+    const sessions = @import("domain/specification_session.zig");
+    const request = @import("domain/scenario_request.zig");
+    const repair = @import("domain/specification_repair.zig");
+    const Rule = @import("domain/specification_candidate.zig").Rule;
+    const Proposal = @import("domain/reference_extraction.zig").Proposal;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Two unrelated domains: each source group holds two claims, and each claim's line holds one exact value.
+    const cases = [_]struct { source: []const u8, first: []const u8, second: []const u8 }{
+        .{ .source = "- MOCK Renew an eligible loan and display `Loan renewed!`.\n- MOCK Refuse an overdue renewal and display `Renewal refused.`.\n", .first = "Loan renewed!", .second = "Renewal refused." },
+        .{ .source = "- MOCK Greet the visitor with `Hello, World!`.\n- MOCK Show the time zone `UTC`.\n", .first = "Hello, World!", .second = "UTC" },
+    };
+    for (cases) |case| {
+        const claims = [_]Proposal{
+            .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+            .{ .category = .business, .citations = &.{.{ .ordinal = 2 }} },
+        };
+        var room = try MeetingRoom.initIn(a, try Fixture.initClaimsGrouped(a, case.source, .business_exact_string, .{ .selected = &claims }, &.{&.{ 0, 1 }}));
+        defer room.fixture.deinit();
+        const context = room.fixture.context;
+        const supported = @import("domain/reference_support.zig").records(context.references);
+        const batch = [_]spec.Model.RecordProposal{try room.record(a, .{ .functional_requirement = .{ .text = room.wording } }, room.group)};
+        const current = try sessionInScenarios(a, &room.fixture, try room.fixture.proposalAllGroups("MOCK Book a meeting room."), &.{&batch});
+        const group_plan = try sessions.scenarioPlan(a, current);
+        try std.testing.expectEqual(@as(usize, 2), group_plan.count());
+        const answered = try request.parse(a, try scenariosAnswer(a, &.{ 1, 2 }), group_plan, room.bound);
+        // Each criterion states the exact value of its own slot's claim: admitted, with the value recognized.
+        const own = try a.dupe(spec.Model.RecordProposal, answered);
+        own[0].content.acceptance_criterion.then = try literalValue(a, try std.fmt.allocPrint(a, "MOCK Show {s} to the user.", .{case.first}));
+        own[1].content.acceptance_criterion.then = try literalValue(a, try std.fmt.allocPrint(a, "MOCK Show {s} to the user.", .{case.second}));
+        const admitted = (try validate_unit.execute(a, current, context, .{ .response = .{ .content = .{ .records = own } } })).valid.response.content.records;
+        try std.testing.expect(holdsExactCopy(admitted[0].content.acceptance_criterion.then) and holdsExactCopy(admitted[1].content.acceptance_criterion.then));
+        // The first criterion states the second claim's value instead: a defect of its text.
+        const foreign = try a.dupe(spec.Model.RecordProposal, own);
+        foreign[0].content.acceptance_criterion.then = try literalValue(a, try std.fmt.allocPrint(a, "MOCK Show {s} to the user.", .{case.second}));
+        var proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = foreign } } };
+        const rejection = (try validate_unit.execute(a, current, context, proposed)).invalid;
+        try std.testing.expectEqual(Rule.exact_copy, rejection.issue.rule);
+        try std.testing.expectEqual(.foreign_exact, rejection.issue.text_issue.?.reason);
+        try std.testing.expect(rejection.issue.field == .target and rejection.issue.field.target == .value);
+        try std.testing.expectEqual(@as(usize, 0), rejection.issue.field.target.value.subject.record);
+        try std.testing.expectEqual(@import("domain/specification_candidate.zig").ValueField.then, rejection.issue.field.target.value.field);
+        // It takes the field-level repair, and the evidence the repair is bound to is the slot's one claim:
+        // the claim whose value the copy repeats is not part of it.
+        const authorization = try repair.authorize(a, current, context, proposed, rejection, &packet_guidance.marked);
+        try std.testing.expect(authorization.operation == .replace);
+        const bound = authorization.rule.value_bound.?;
+        try std.testing.expectEqual(@as(usize, 1), bound.effective.len);
+        try std.testing.expectEqual(group_plan.slot(0).claim.ordinal, bound.effective[0].ordinal);
+        const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, context.inputs);
+        // A repair that states the value again is the same defect, found again by the full validation.
+        const again = try repair.merge(a, canonical, current, context, proposed, authorization, .{ .value = try literalValue(a, try std.fmt.allocPrint(a, "MOCK Display {s} again.", .{case.second})) }, null);
+        try std.testing.expectEqual(.foreign_exact, (try validate_unit.execute(a, current, context, again)).invalid.issue.text_issue.?.reason);
+        // A repair that states the value its own claim holds in its place is admitted too: the bound is the
+        // claim plus the values that claim holds, so the criterion then cites the claim and that value.
+        const swapped = try repair.merge(a, canonical, current, context, proposed, authorization, .{ .value = try literalValue(a, try std.fmt.allocPrint(a, "MOCK Show {s} to the user.", .{case.first})) }, null);
+        try std.testing.expectEqual(.resolved, (try repair.retryValidation(a, text.validator, current, context, swapped)).?.validated.result);
+        const swapped_records = (try validate_unit.execute(a, current, context, swapped)).valid.response.content.records;
+        try std.testing.expect(holdsExactCopy(swapped_records[0].content.acceptance_criterion.then));
+        try std.testing.expectEqualDeep(answered[0].provenance.claim_ids, swapped_records[0].provenance.claim_ids);
+        // A repair that drops it is admitted, with the claim, kind and group the engine bound.
+        proposed = try repair.merge(a, canonical, current, context, proposed, authorization, .{ .value = try literalValue(a, "MOCK Show it to the user.") }, null);
+        const repaired = (try validate_unit.execute(a, current, context, proposed)).valid.response.content.records;
+        try std.testing.expect(!holdsExactCopy(repaired[0].content.acceptance_criterion.then));
+        try std.testing.expectEqualDeep(answered[0].provenance.claim_ids, repaired[0].provenance.claim_ids);
+        try std.testing.expectEqualDeep(answered[0].source_group_ids, repaired[0].source_group_ids);
+        // The relation itself, at its owner: a claim holds a value by its bytes, so a claim that holds both
+        // accepts both, and a token slot accepts the value it is.
+        const recognized = try provenance.recognizeRecord(a, supported, own[0].content, null);
+        const first_value = try provenance.recordValues(a, recognized);
+        const claim_ids = [_]references.r.ClaimId{ group_plan.slot(0).claim, group_plan.slot(1).claim };
+        try std.testing.expectEqual(@as(?usize, null), try provenance.foreignCopy(supported, claim_ids[0..1], first_value[2]));
+        try std.testing.expectEqual(@as(?usize, 1), try provenance.foreignCopy(supported, claim_ids[1..2], first_value[2]));
+        try std.testing.expectEqual(@as(?usize, null), try provenance.foreignCopy(supported, &claim_ids, first_value[2]));
+        const token = for (first_value[2].segments) |segment| {
+            if (segment == .exact_copy) break segment.exact_copy.claim_id;
+        } else return error.TestUnexpectedResult;
+        try std.testing.expectEqual(@as(?usize, null), try provenance.foreignCopy(supported, &.{token}, first_value[2]));
+        // A criterion that already holds its own claim's value keeps it: the bound's claims stay, so a repair
+        // may drop the other claim's value but not both.
+        const both = try a.dupe(spec.Model.RecordProposal, own);
+        both[0].content.acceptance_criterion.then = try literalValue(a, try std.fmt.allocPrint(a, "MOCK Show {s} and {s} to the user.", .{ case.first, case.second }));
+        const held: repair.Candidate = .{ .response = .{ .content = .{ .records = both } } };
+        const held_rejection = (try validate_unit.execute(a, current, context, held)).invalid;
+        try std.testing.expectEqual(.foreign_exact, held_rejection.issue.text_issue.?.reason);
+        const held_authorization = try repair.authorize(a, current, context, held, held_rejection, &packet_guidance.marked);
+        try std.testing.expectEqual(@as(usize, 2), held_authorization.rule.value_bound.?.effective.len);
+        try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, canonical, current, context, held, held_authorization, .{ .value = try literalValue(a, "MOCK Show it to the user.") }, null));
+        const trimmed = try repair.merge(a, canonical, current, context, held, held_authorization, .{ .value = try literalValue(a, try std.fmt.allocPrint(a, "MOCK Show {s} to the user.", .{case.first})) }, null);
+        try std.testing.expect(holdsExactCopy((try validate_unit.execute(a, current, context, trimmed)).valid.response.content.records[0].content.acceptance_criterion.then));
+        // The rule is the engine-bound criterion's alone: a requirement whose claim doesn't hold the value
+        // keeps ADR 0020's union, so its lineage gains the value's claim.
+        const other = try room.record(a, .{ .functional_requirement = .{ .text = try literalValue(a, try std.fmt.allocPrint(a, "MOCK Show {s} to the user.", .{case.second})) } }, room.group[0..1]);
+        const kept = (try room.admitted(a, &.{other}))[0];
+        try std.testing.expect(holdsExactCopy(kept.content.functional_requirement.text));
+        const union_claims = (try provenance.storedRecordLineage(a, context.inputs, supported, kept)).effective_claim_ids;
+        try std.testing.expectEqual(@as(usize, 2), union_claims.len);
+        // Stored readback applies the same rule: the admitted criteria read back, and a criterion holding the
+        // other claim's value, with the lineage that value would give it, does not.
+        const brief = current.units[0].?.response.content.brief;
+        const passive: @import("domain/passive_literals.zig").Captured = .{ .records = context.registry.records, .occurrences = context.registry.occurrences };
+        const identity = @import("domain/specification_identity.zig");
+        const stored_basis = current.units[2].?.response.content.entities.decision();
+        const readable = (try identity.assign(a, .{ .display_name = current.title, .primary_user_story = brief.description, .entities = stored_basis, .records = admitted }, .{}, &.{})).content;
+        try provenance.validateStored(a, context.inputs, passive, supported, brief, readable);
+        const forged = try a.dupe(spec.RecordProposal, admitted);
+        const wrong = try a.dupe(spec.Model.RecordProposal, foreign);
+        const wrong_content = try provenance.recognizeRecord(a, supported, wrong[0].content, null);
+        forged[0].content = wrong_content;
+        forged[0].provenance = (try provenance.lineageForRepair(a, context, .{ .claim_ids = forged[0].provenance.claim_ids, .clarification_response_ids = &.{} }, try provenance.recordValues(a, wrong_content))).provenance;
+        const unreadable = (try identity.assign(a, .{ .display_name = current.title, .primary_user_story = brief.description, .entities = stored_basis, .records = forged }, .{}, &.{})).content;
+        try std.testing.expectError(error.InvalidTypedText, provenance.validateStored(a, context.inputs, passive, supported, brief, unreadable));
+    }
 }
 
 test "claim-bound scenarios: a pair that a field-level repair makes equal is no admission defect and blocks as a competing record" {

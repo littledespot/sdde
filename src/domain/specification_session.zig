@@ -266,16 +266,24 @@ pub const DisplayCatalogue = struct {
 
 /// The one owner of that catalogue, for the records and entities requests and the scenarios request
 /// alike. `exact_claims` narrows the exact values to those claims, as a repair's bound claims do.
+/// A claim's wording is the paragraph its cited lines read as (ADR 0036 Decision 2). A quote with no
+/// words, such as a heading alone, and an exact value keep their bytes.
 pub fn displayCatalogue(a: std.mem.Allocator, context: p.Context, exact_claims: ?[]const @import("reference_reconciliation.zig").ClaimId) Error!DisplayCatalogue {
     const all = try p.items(context);
     const projection = @import("model_evidence.zig");
+    const reading = @import("source_paragraph.zig");
+    var structure = try reading.Structure.init(a, context.inputs);
     var requirements: std.ArrayList(projection.Requirement) = .empty;
     var exact_choices: std.ArrayList(projection.ExactLiteral) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
     for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
         if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
         const item = try @import("reference_reconciliation.zig").item(all, disposition.claim_id);
-        try requirements.append(a, try projection.requirement(a, item, context.inputs, context.registry));
+        var requirement = try projection.requirement(a, item, context.inputs, context.registry);
+        if (item.claim.content == .model) if (try reading.paragraph(a, &structure, item)) |words| {
+            requirement.meaning = words;
+        };
+        try requirements.append(a, requirement);
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
         if (item.claim.content == .preserved_token) {
             const token = item.claim.content.preserved_token;

@@ -67,12 +67,18 @@ pub fn resolveRecords(comptime boundary: spec.Boundary, allocator: std.mem.Alloc
 pub fn lineageForRepair(allocator: std.mem.Allocator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue) Error!Resolved {
     return resolveUnitRecords(.model, allocator, context.inputs, @import("reference_support.zig").records(context.references), selection, values);
 }
-pub fn checkValueInUnit(allocator: std.mem.Allocator, validator: text.Validator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue, value: spec.BusinessValue, field: text.field_policy.Field) Error!spec.BusinessValue {
+/// A `claim_bound` field may hold no exact copy that the selection's claims don't hold.
+pub fn checkValueInUnit(allocator: std.mem.Allocator, validator: text.Validator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue, value: spec.BusinessValue, field: text.field_policy.Field, binding: Binding) Error!spec.BusinessValue {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
+    const supported = refs.records(context.references);
+    if (binding == .claim_bound) {
+        const grouped = try recognizeValue(arena.allocator(), supported, value, field, null);
+        if (try foreignCopy(supported, selection.claim_ids, grouped) != null) return error.InvalidTypedText;
+    }
     const resolved = try lineageForRepair(allocator, context, selection, values);
     var inspection: Inspection = .{};
-    const recognized = try recognizeValue(arena.allocator(), refs.records(context.references), value, field, resolved.effective_claim_ids);
+    const recognized = try recognizeValue(arena.allocator(), supported, value, field, resolved.effective_claim_ids);
     return valueIn(allocator, validator, context, resolved, recognized, field, &inspection);
 }
 
@@ -153,6 +159,72 @@ pub fn recordValues(a: std.mem.Allocator, content: spec.Content(spec.BusinessVal
         inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| try values.append(a, @field(fields, field.name)),
     }
     return values.toOwnedSlice(a);
+}
+
+/// How a record's exact copies join its evidence. The engine binds an acceptance criterion to one
+/// claim, so its copies must be values that claim holds (ADR 0038 Decision 3); a copy joins the
+/// evidence of every other record as ADR 0020's union. Whether a claim holds a value is the
+/// exact-token relation, compared by bytes (`exact_token_obligation.claimHolds`).
+pub const Binding = enum { union_copies, claim_bound };
+
+pub fn bindingOf(content: spec.Content(spec.BusinessValue)) Binding {
+    return if (std.meta.activeTag(content) == spec.scenario_family) .claim_bound else .union_copies;
+}
+
+/// Whether one of `claim_ids` holds the value of the exact token `copy`.
+fn holdsCopy(references: refs.Records, claim_ids: []const r.ClaimId, copy: r.ClaimId) Error!bool {
+    const bytes = (refs.exact(references.items, copy) catch return error.InvalidTypedText).value.raw_value.bytes;
+    for (claim_ids) |id| {
+        if (@import("exact_token_obligation.zig").claimHolds((try r.item(references.items, id)).claim, bytes)) return true;
+    }
+    return false;
+}
+
+/// The node of `value`'s first exact copy that none of `claim_ids` holds, if any.
+pub fn foreignCopy(references: refs.Records, claim_ids: []const r.ClaimId, value: spec.BusinessValue) Error!?usize {
+    for (value.segments, 0..) |segment, index| {
+        if (segment == .exact_copy and !try holdsCopy(references, claim_ids, segment.exact_copy.claim_id)) return index;
+    }
+    return null;
+}
+
+/// The values a record's evidence is resolved from. A criterion's exact copy that its claim doesn't
+/// hold is a defect of its text, so it adds no claim to the evidence a repair of that text is bound
+/// to: its bytes stay literal (ADR 0038 Decision 3). The caller owns an arena: the result lives until it is released.
+pub fn lineageValues(a: std.mem.Allocator, references: refs.Records, content: spec.Content(spec.BusinessValue), claim_ids: []const r.ClaimId) Error![]const spec.BusinessValue {
+    const values = try recordValues(a, content);
+    if (bindingOf(content) == .union_copies) return values;
+    const owned = try a.alloc(spec.BusinessValue, values.len);
+    for (values, owned) |value, *result| {
+        var segments: std.ArrayList(text.BusinessSegment) = .empty;
+        for (value.segments) |segment| {
+            if (segment == .exact_copy and !try holdsCopy(references, claim_ids, segment.exact_copy.claim_id)) {
+                const token = refs.exact(references.items, segment.exact_copy.claim_id) catch return error.InvalidTypedText;
+                try appendLiteral(a, &segments, token.value.raw_value.bytes);
+            } else try segments.append(a, segment);
+        }
+        result.* = .{ .segments = try segments.toOwnedSlice(a) };
+    }
+    return owned;
+}
+
+/// Whether a repaired value keeps the evidence bound its repair was authorized under (ADR 0020): the
+/// same explicit claims, effective claims and citations. A claim-bound criterion's bound is its
+/// slot's claim plus the values its own claim holds (ADR 0038 Decision 3): the repair keeps every
+/// claim the authorization named and may add the claim of a value its own claim holds. `resolved`
+/// is derived through `lineageValues`, so a copy its claims don't hold has added no claim and the
+/// citations follow the claims.
+pub fn keepsBound(binding: Binding, bound: @import("specification_candidate.zig").ValueEvidenceBound, resolved: Resolved) bool {
+    if (resolved.provenance.claim_ids.len != bound.explicit.len) return false;
+    for (resolved.provenance.claim_ids, bound.explicit) |actual, expected| if (actual.ordinal != expected.ordinal) return false;
+    switch (binding) {
+        .union_copies => {
+            r.sameSet(r.ClaimId, bound.effective, resolved.effective_claim_ids) catch return false;
+            r.sameSet(r.CitationId, bound.citations, resolved.provenance.citation_ids) catch return false;
+        },
+        .claim_bound => for (bound.effective) |id| if (!r.contains(r.ClaimId, resolved.effective_claim_ids, id)) return false,
+    }
+    return true;
 }
 
 pub const ValueChoices = struct {
@@ -507,6 +579,10 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
         defer a.free(groups);
         const values = try recordValues(a, record.proposal.content);
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, record.proposal.provenance, values);
+        // A criterion's copy must belong to its claims at readback too (ADR 0038 Decision 3).
+        if (bindingOf(record.proposal.content) == .claim_bound) for (values) |value| {
+            if (try foreignCopy(references, record.proposal.provenance.claim_ids, value) != null) return error.InvalidTypedText;
+        };
         switch (record.proposal.content) {
             inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 try storedValue(a, inputs, passive, references, resolved, @field(fields, field.name), spec.textField(kind, field.name));
@@ -606,6 +682,11 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
                 @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, @field(fields, field.name), spec.textField(kind, field.name), inspection);
+                // The admitted text is judged last, so a defect the field's own policy names comes first.
+                if (bindingOf(recognized_content) == .claim_bound) if (try foreignCopy(refs.records(context.references), candidate.provenance.claim_ids, @field(normalized, field.name))) |node| {
+                    inspection.text_issue = .{ .reason = .foreign_exact, .first_node = node, .last_node = node, .field = spec.textField(kind, field.name) };
+                    return error.InvalidTypedText;
+                };
             }
             result.content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), normalized);
         },

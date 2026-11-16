@@ -21,12 +21,17 @@
   - 1 November 2026, SPEC01 Q7 D7.4, decided and then "implement Q7 D7.4.": the engine adds
     no code span to an exact copy its text already wraps in a balanced pair (Decision 6);
   - 1 November 2026, "Yes, keep the span": a copy that ends in terminal punctuation keeps
-    its span, although every development-case value then stays doubled (Decision 6);
+    its span, although every development-case value then stays doubled (Decision 6;
+    withdrawn on 16 November 2026, below);
   - 3 November 2026, SPEC01 Q7 D7.2, "apply recommendations": Decision 6 stays, and ADR 0045,
     which would have extended it to entity meaning and relationships, is withdrawn;
   - 7 November 2026, SPEC01 Q8 D8.3, "i accept recommendation" and "implement D8.3": a quoted
     claim of the same category and cited lines as an earlier claim of its chunk is the same
-    claim (Decisions 3 and 4).
+    claim (Decisions 3 and 4);
+  - 16 November 2026, SPEC01 Q7 A and its bundled-FR watch, "yes as per recommendations":
+    the engine gives no code span to an exact copy a balanced pair directly wraps, including
+    a copy that ends in terminal punctuation (Decision 6), and generation requests show a
+    claim's wording as one paragraph, without list markers or line breaks (Decision 2).
 - **Amends:**
   - §12.7, the reference-claim proposal;
   - §16.3 and §16.4 step 6, extraction citations and repair;
@@ -79,6 +84,17 @@ same claim and native checks couldn't tell distinct duties apart.
      object that isn't in the source.
    - Nothing inside a run is rewritten: no marker, code delimiter or whitespace changes.
      A quote is therefore never empty, and exact values appear in it byte for byte.
+   - **Generation requests show the quote as one paragraph** (16 November 2026). The claim,
+     its stored quote, citations and exact-value duties are unchanged. The wording a records,
+     entities or scenarios request shows the model is the paragraph reading the primary story
+     uses ([ADR 0047](0047-engine-composed-primary-story.md) Decision 1), from the one
+     function the story and the generation display catalogue share. A requirement copied
+     from a list then shows no marker or line break for a model to carry into a field that
+     joins several requirements. An exact value is offered with its bytes in `exact_texts`,
+     and a value that sits on one line keeps them in the wording. A quote with no words in
+     its reading, such as a heading alone, is shown as written, so a claim the request
+     assigns is never shown empty. Every other request keeps the quote as written:
+     extraction, reconciliation, source review and omission.
 
    `business` and `scope_guard` claims become one literal `BusinessText`; other categories
    become one literal `ReferenceSemanticText`. The shared text validator then checks it as
@@ -160,18 +176,20 @@ same claim and native checks couldn't tell distinct duties apart.
      values in quotes, so `"Hello, World!"` rendered as quotes around the engine's code
      span. When the literal text directly around an exact copy is one balanced pair from
      the shared closed wrapper table ([ADR 0020](0020-derived-exact-reference-lineage.md)),
-     with no punctuation inside the pair, the projection gives the copy no code span and it
-     renders as escaped text.
+     with no punctuation between the copy and the pair, the projection gives the copy no
+     code span and it renders as escaped text.
      - The model's bytes, the stored segment and its lineage don't change, and no meaning
        is judged.
      - These keep the span: an unwrapped copy, a pair with punctuation inside it
        (`"report.csv."`), and a copy beside another display value. Passive values always
        keep theirs (§23).
-     - A copy that ends in terminal punctuation from the shared closed table also keeps
-       its span. Inside quotes a reader can't tell
-       whether `"Renewal refused."` requires the final period, and the span shows that it
-       does. All three exact values in the development cases end this way, so their
-       rendering is unchanged.
+     - A copy that ends in terminal punctuation from the shared closed table gets no span
+       either (16 November 2026, withdrawing the exception of 1 November 2026). The pair
+       delimits it, and the model's bytes show whether the final period belongs to the
+       value: `"Renewal refused."` renders as the value in its quotes. All three exact
+       values in the development cases end this way, so each renders once, not doubled as
+       quotes around the engine's span. A copy with other punctuation between it and the
+       pair (`"Hello, World!."`) is not directly wrapped and keeps its span.
      - The backtick is in the table, so a backtick run this decision keeps stays as
        written, with no second delimiter.
      - No renderer revision exists to change, and no Plan or Tasks review exists to renew
@@ -188,8 +206,13 @@ same claim and native checks couldn't tell distinct duties apart.
   - Items with different meanings in one split take the proposal's single category.
   - A cited heading, or other markup line such as a thematic break, split from its list
     becomes a short claim of its own.
-  - Claim wording keeps its Markdown, such as list markers and backticks. Later calls
-    receive it as the source wrote it.
+  - Claim wording keeps its Markdown, such as list markers and backticks, in storage and in
+    every request but the generation requests, which show its paragraph reading (Decision 2).
+    A code span or fenced block that crosses lines is flattened in that wording like any
+    lines; its exact value is still offered with its bytes.
+  - A model that copies a shown wording verbatim can now equal the story, so ADR 0035's
+    native deletion of a non-functional record that restates the story can apply to it;
+    functional requirements stay exempt.
   - A top-level marker indented by one to three spaces is treated as a continuation, so
     such a list doesn't split. Unindented text after a fence that closes inside an item
     stays with the item. Both err toward not splitting; neither changes wording.
@@ -220,9 +243,15 @@ same claim and native checks couldn't tell distinct duties apart.
       phrase, mismatched or one-sided wrappers, a continuation and a reference edge are
       not;
     - at the projection: an unrelated value in straight, curly and group pairs, with and
-      without a direct pair, and both development-case values, which end in punctuation
-      and keep the span, through rendering and the parse round trip; a copy touching a
-      passive value or another exact copy whose bytes begin with the closer keeps it.
+      without a direct pair, and the development cases' three exact values, which end in
+      punctuation and take no span inside their pair, through rendering and the parse
+      round trip, with a copy that has other punctuation inside the pair keeping its span; a
+      copy touching a passive value or another exact copy whose bytes begin with the
+      closer keeps it.
+  - Paragraph reading for generation requests: a list item, a nested item, a heading and
+    blank lines around a cited run, runs cited apart, a code line and an exact value in
+    the run, each against the story's reading of the same claim; the stored quote and
+    extraction and reconciliation requests unchanged.
   - Quoting and splitting: top-level, ordered and nested items, continuation lines,
     headings and prose in and out of a split, wrapped numbers, look-alike markers and a
     thematic break, HTML blocks and comments, spacing and trimmed indentation, fenced

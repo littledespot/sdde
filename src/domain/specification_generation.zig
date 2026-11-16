@@ -229,13 +229,11 @@ pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zi
     const target = (proposed.origins.currentTarget(bound.target, length) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit) orelse return error.InvalidSpecificationUnit;
     if (target != .value) return error.InvalidSpecificationUnit;
     const value = candidate.attributedValue(.canonical, result.valid.response, target.value.subject, target.value.field) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
-    const values = if (target.value.subject == .record) try provenance.recordValues(scratch, (recordCollection(.canonical, result.valid.response.content) orelse return error.InvalidSpecificationUnit)[target.value.subject.record].content) else &.{value.value};
+    const supported = @import("reference_support.zig").records(context.references);
+    const record_content: ?spec.Content(spec.BusinessValue) = if (target.value.subject == .record) (recordCollection(.canonical, result.valid.response.content) orelse return error.InvalidSpecificationUnit)[target.value.subject.record].content else null;
+    const values = if (record_content) |content| try provenance.lineageValues(scratch, supported, content, value.provenance.claim_ids) else &.{value.value};
     const resolved = try provenance.lineageForRepair(scratch, context, .{ .claim_ids = value.provenance.claim_ids, .clarification_response_ids = value.provenance.clarification_response_ids }, values);
-    if (resolved.provenance.claim_ids.len != bound.explicit.len) return error.InvalidSpecificationUnit;
-    for (resolved.provenance.claim_ids, bound.explicit) |actual, expected| if (actual.ordinal != expected.ordinal) return error.InvalidSpecificationUnit;
-    const r = @import("reference_reconciliation.zig");
-    r.sameSet(r.ClaimId, bound.effective, resolved.effective_claim_ids) catch return error.InvalidSpecificationUnit;
-    r.sameSet(r.CitationId, bound.citations, resolved.provenance.citation_ids) catch return error.InvalidSpecificationUnit;
+    if (!provenance.keepsBound(if (record_content) |content| provenance.bindingOf(content) else .union_copies, bound, resolved)) return error.InvalidSpecificationUnit;
     return result;
 }
 
@@ -471,6 +469,6 @@ fn rejectedPart(comptime boundary: spec.Boundary, unit: Unit, response: Response
     const observed = if (boundary == .model) candidate.select(response, target) catch return error.InvalidSpecificationUnit else null;
     var result = try rejected(unit, .{ .target = target }, observed, inspection.text_issue, err);
     result.invalid.value_choices = inspection.value_choices;
-    if (inspection.part == .value and (result.invalid.rule == .provenance or (inspection.text_issue != null and inspection.text_issue.?.reason == .unknown_exact))) result.invalid.rule = .exact_copy;
+    if (inspection.part == .value and (result.invalid.rule == .provenance or (inspection.text_issue != null and (inspection.text_issue.?.reason == .unknown_exact or inspection.text_issue.?.reason == .foreign_exact)))) result.invalid.rule = .exact_copy;
     return result;
 }
