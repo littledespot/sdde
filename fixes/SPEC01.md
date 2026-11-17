@@ -759,9 +759,11 @@ or trimming calls for cost alone is excluded (AGENTS.md; ADR 0011 for any size c
 
 ### H5. Model choice (R7)
 
-The user decides when to change or compare models; all live evidence is GPT-OSS-20B. Only if
-the user selects Claude Haiku 5.5: measure its maximum-output time to replace the interim
-180,000 ms `requestTimeoutMs`, and settle Claude's response mode.
+The user decides when to change or compare models; all retained call evidence is GPT-OSS-20B. On 17
+November 2026 the user selected `anthropic` / `claude-haiku-5-5` for every shipped E2E slot (ADR 0029)
+and set its response mode to native (`"json": true`; `fixes/JSON.md` D1). Open for its first set:
+measure its maximum-output time to replace the interim 180,000 ms `requestTimeoutMs`, and its
+response mode. §1's reference is a GPT-OSS state.
 
 ## 8. Research and backlog (R)
 
@@ -851,7 +853,7 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
   generation (user decision, 9 November 2026), but `test/harness/e2e/cli.zig:26`'s help still
   lists only the two Bedrock tuples and the Bedrock credential, and
   `test/harness/model_cost_policy.zig:23` cites ADR 0028 for the tuple. Correct both with the
-  next harness code change. No live Claude call has been made.
+  next harness code change. No live native-mode Claude call has been made.
 
 ## 9. Guardrails
 

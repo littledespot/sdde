@@ -5,8 +5,9 @@ and [loan-renewal](../../test/e2e/wf-002-loan-renewal/workflow.case.json) cases 
 separate sources and rubrics and share one workflow/model configuration. To run one
 live case from the repository root:
 
-1. Review the case's explicit Bedrock `openai.gpt-oss-20b-1:0` generation
-   selection from `ap-southeast-2`, and set its credential under
+1. Review the case's explicit generation selection (the shipped cases select
+   `anthropic` / `claude-haiku-5-5`, [ADR 0029](../decisions/0029-bedrock-model-families.md)),
+   and set its credential under
    [Environment setup](#environment-setup). Both cases share the native JSON
    catalogue; Spec generation and repair select low reasoning. The case's
    `.sddtoolkit.json` sets `temperature` `0.1` and `temperatureRunawayRetry` `1`
@@ -193,8 +194,9 @@ low reasoning and the configured temperature `0.1` (`1` on a runaway re-send).
 Each request sends the catalogue's
 recorded model maximum and no smaller allowance
 ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
-The shipped wf-001/wf-002 configuration selects exactly these slot controls and
-passes preflight; a drifted slot control rejects with `FrozenBindingRejected`. Any supplied reasoning remains separately captured diagnostic data.
+The frozen-protocol fixture configuration selects exactly these slot controls and
+passes preflight; the shipped wf-001/wf-002 configuration selects Claude and does
+not. A drifted slot control rejects with `FrozenBindingRejected`. Any supplied reasoning remains separately captured diagnostic data.
 No historical request is retargeted and no alternative model or response mode
 is substituted.
 
@@ -285,8 +287,8 @@ credentials. No model answer means no evidence yet about schema conformance.
   transitions, deterministic validators and publication.
 - Generation uses the model slots explicitly selected by that test's
   `.sddtoolkit.json` (step 1); all configured slots must pass the cost preflight.
-- The shipped cases' slots select Bedrock; its internal test credential is
-  `TEST_AWS_BEARER_TOKEN_BEDROCK`.
+- The shipped cases' slots select Anthropic; its internal test credential is
+  `TEST_ANTHROPIC_API_KEY`. A Bedrock slot uses `TEST_AWS_BEARER_TOKEN_BEDROCK`.
 - The harness supplies a validated credential snapshot to the shared runtime. The CLI
   supplies its environment, read only after model-binding validation. The runtime owns
   snapshot cleanup; neither path copies test credentials into production variables.
@@ -301,7 +303,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   never be accepted, so the run stops before generation with `threshold_unconfigured`
   and `ACCEPTANCE_THRESHOLD_UNCONFIGURED`.
 
-- Generation sends the model's documented maximum output (16,384 for GPT-OSS-20B)
+- Generation sends the model's documented maximum output (for example 16,384 for GPT-OSS-20B and 128,000 for Claude Haiku 5.5)
   from its configuration, never a smaller allowance, and
   every provider stop is logged with its reason
   ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).

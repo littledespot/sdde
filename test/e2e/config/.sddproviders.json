@@ -5,7 +5,7 @@
       "models": [
         {
           "model": "claude-haiku-5-5",
-          "json": false,
+          "json": true,
           "config": {
             "maxOutputTokens": 128000,
             "requestTimeoutMs": 180000
