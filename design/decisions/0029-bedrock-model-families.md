@@ -47,6 +47,9 @@
   direction ("update the providers to connect to claude") that
   `test/harness/model_cost_policy.zig` already implements. This amends ADR 0028 "Not
   decided here".
+- **Amended (17 November 2026, user decision: "change to claude-haiku-5-5 on anthropic,
+  not bedrock"):** the shipped E2E slots select `anthropic` / `claude-haiku-5-5`,
+  superseding the 24 October 2026 slot selection above; see "Live-test cost policy".
 
 ## Context
 
@@ -132,9 +135,11 @@ named tuples, each for named uses:
 | `anthropic` / `claude-haiku-5-5` | Generation only (amended 9 November 2026) |
 
 Rubric judging stays on GPT-OSS-20B ([acceptance.md](../harness/acceptance.md)). The
-shipped E2E cases select GPT-OSS-20B (amended 24 October 2026), with the frozen
-calibration protocol's slot controls, so the provider-compatibility probe, which is
-bound to that protocol, accepts them.
+shipped E2E cases select `anthropic` / `claude-haiku-5-5` in every slot (amended 17
+November 2026; user: "change to claude-haiku-5-5 on anthropic, not bedrock"), replacing
+the 24 October 2026 selection of GPT-OSS-20B. The provider-compatibility probe stays
+bound to the frozen calibration protocol's GPT-OSS slot controls, so it no longer
+accepts the shipped cases and checks only its own fixtures.
 
 ### Tests
 
