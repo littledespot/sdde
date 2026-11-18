@@ -26,21 +26,23 @@ gate is re-run on the build after E1–E4 land, as one closing set after the out
 "An exact copy in a criterion"): 6 of 6 published, 5 passed; one critical failure, a weakened "may renew"
 (records request unchanged). The gate stays the user's to declare.
 
-**Reference** for quality phases (§2 rule 7): D8.4's set (`2026-11-17T21-5*` and `22-0*`, `anthropic`
-`claude-haiku-5-5`, skill `3fe52a92…`), the last kept state ([Z_SPEC01](Z_SPEC01.md) "Q8 D8.4"). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
+**Reference** for quality phases (§2 rule 7): Q23's set (`2026-11-17T23-4*` to `23-58-08Z` and
+`2026-11-18T05-3*`, 6 runs per case, `anthropic` `claude-haiku-5-5`, build `26982bb`, source `0a61828b…`, skill
+`3fe52a92…`), the last kept state ([Z_SPEC01](Z_SPEC01.md) "Q23"). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
 as one evaluator ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
 | --- | --- | --- | --- | --- |
-| Hello-world | 2 of 3 | 2 of 3 | 0 / 0 / 0 / 0 | 94.6 (92.9–96.4) |
-| Loan-renewal | 0 of 3 | 0 of 3 | none published | none |
+| Hello-world | 5 of 6 | 5 of 6 | 0 / 0 / 3 / 0 | 93.6 (85.7–96.4) |
+| Loan-renewal | 5 of 6 | 5 of 6 | 0 / 0 / 0 / 0 | 95.0 (92.9–96.4) |
 
 Advisory scores are scored against the case rubrics (`evaluations/e2e/<run>/evaluation.json`);
 scorer judgment moves one by about ±3.6, and keep decisions use the accuracy counts (§2 rule 6).
 
 **Retained runs:** `zig-out/e2e-spec/` holds the Haiku set (`2026-11-17T08-4*`), D8.4's set (`21-5*` and
-`22-0*`) and two hello-world runs that failed at the first extraction call (`07-1*`). Earlier runs are removed;
+`22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`) and two hello-world runs that failed at the first
+extraction call (`2026-11-17T07-1*`). Earlier runs are removed;
 their evaluations and measures stay under `evaluations/`.
 The current build decodes only `spec-e2e-report/v21` (`test/harness/e2e/contracts.zig:223`); earlier runs, the `2026-11-17T08-4*` set included, need their own build.
 
@@ -180,8 +182,8 @@ above, inside the decided constraints):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Q23** the document title is not a claim | blocked runs and restatement from a title-only group | S | Its set (§4 Q23) | 18 November 2026 |
-| 2 | **Q24** a signal holds only retained claims | a blocked run: a retained claim loses its records group | S | After Q23's set: fixtures at the owner, the rule-10 projection, then a set | 18 November 2026 |
+| 1 | **Q24** a signal holds only retained claims | a blocked run: a retained claim loses its records group | S | Fixtures at the owner, the rule-10 projection, then a set | 18 November 2026 |
+| 2 | **Q25** a claim cited only by headings | a blocked or failed run from a title-only group | S–M | Fixtures at the owner, then a set | **Decision** (an ADR) |
 | 3 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
 **Robustness track** (run completion and budget; no scored defect): the §22.6 correction
@@ -419,7 +421,7 @@ line means beyond the advisory evaluate-e2e link check.
 passes coverage, because the brief fields, entity basis and composed story select whole
 groups and a claim maps through any field holding it (`specification_coverage.zig:52-61`,
 `:75`). In a one-group feature, as both development cases were with `openai.gpt-oss-20b-1:0` (with
-`claude-haiku-5-5` they form 1 to 5 groups, Q23), ADR 0038 Decision 2's scenario
+`claude-haiku-5-5` they form 1 to 5 groups, [Z_SPEC01](Z_SPEC01.md) "Q23"), ADR 0038 Decision 2's scenario
 rule never reaches an unnamed claim (ADR 0038 Consequences, Limits; pinned at
 `specification_generation_test.zig:9231-9234`). No failure since ADR 0047 is of this kind, so a
 set may show only "benefit not demonstrated".
@@ -450,75 +452,6 @@ extraction request, (c) losses nothing native detects. If it resumes, take (b).
 assumption, non-goal or scenario, rejects), then screens and a set (§2 rules 4 and 6). §10 C30
 records the blocking route's constant-result machinery.
 
-### Q23. The document title is not a claim
-
-**Decided** 18 November 2026 (user: "recommendations approved", to "Delete the headings sentence? Yes means
-`# Library Loan Renewal` stops becoming claim 1, and I'd implement it and run the measured set."). **Defect class:**
-blocked runs and restatement. In all 12 retained runs that reached grouping, extraction filed the level-1 heading as
-a `business` claim. Where grouping left it alone (5 runs), its records call had no requirement to state: two
-`competing_records` blocks (`2026-11-17T22-01-46Z-c032…`, `22-02-22Z-6ef4…`), a record holding lines 5 to 7
-(`22-00-28Z-7db6…`), and a published FR restating three siblings (`08-41-50Z-d817…`, organization 2); the fifth
-(`21-59-26Z-354f…`) ended `invalid` elsewhere. Grouped with a behaviour (7 runs), 6 published. **Cause:** the D5.1
-sentence "Include meaningful identity and purpose headings." asks for a claim restating what the engine owns: the
-title is the level-1 heading (ADR 0048) and the story skips heading-only quotes (ADR 0047 Decision 1); coverage then
-needs a target for the claim (`specification_coverage.zig:64-75`). **Change:** the sentence is deleted from `extraction.context.json` `claims`
-(§9 D5.1 permits it once a defect is traced). Every extraction and extraction-repair request changes
-(`spec.workflow.yaml:228`, `:280`, `:321`, `:882`). **Residual:** the `business` meaning still names "Feature
-identity" (`extraction.context.json:6`), and ADR 0036 Decision 3 makes a heading cited with list items a claim of
-its own. If heading-only claims persist, a structural rule (a claim whose cited lines are all headings) needs an ADR
-amending ADR 0036 Decisions 1 to 3 and ADR 0048's rejected test.
-
-**Screen (§2 rule 4): not run, a disclosed gap with no waiver.** `e2e-call` can't replay a call captured from the
-`anthropic` provider; it always requires the Bedrock credential (`test/harness/call/cli.zig:42-43`).
-
-**Set recorded before it runs (§2 rule 6; a hygiene phase, as D8.4 was):**
-- **Reference:** D8.4's set (§1), the last kept state. Loan-renewal published none there, so its accuracy guards,
-  watch items and restatement read against the two published Haiku runs whose extraction request is
-  byte-identical (`2026-11-17T08-44-26Z-287d…`, `08-45-19Z-a09d…`: 0 / 0 / 0 / 0, 3 restatements each).
-- **Targets:** publication rate per case (hello-world 2 of 3, loan-renewal 0 of 3), counting failed and blocked runs;
-  `competing_records` blocks per run (2 in 6), both from `report.json` and `e2e-measures`; restatement per
-  publication, content basis, from `/evaluate-e2e` (hello-world 1, loan-renewal 3).
-- **Guards:** any rise in lost source requirement per publication.
-- **Watch items, each blocking at the stated size:** weakened obligation or unsupported addition above the
-  reference's count by two or more in a case; any critical criterion below its minimum; any harmful repair; a
-  `no_feature_claim` outcome or a lost requirement stated only in a heading (each blocks at one).
-- **Reported, never a target:** T6 claims by category per extraction answer (`business` 4 for hello-world and 6 for
-  loan-renewal in every reference run, the title included), tokens and latency.
-- **Run maximum:** three runs of each development case, extended under §2 rule 4 to at most eight with approval;
-  each scored with `zig build e2e-measures` and `/evaluate-e2e`.
-
-**Set** (`2026-11-17T23-49-46Z` to `23-58-08Z`, 3 runs per case, none retried, build revision `26982bb`, source
-`0a61828b…`, every report `build.source.modified: true`; skill `3fe52a92…`): no extraction answer claims a heading (0 of
-6; reference 12 of 12) and no title-only group forms (0 of 6; 5 of 12). Hello-world 3 of 3 published and passed (92.9,
-96.4, 85.7); loan-renewal 2 of 3 (96.4, 92.9), the third (`23-53-26Z-15af…`) blocked on coverage by Q24's defect (claim
-4 a duplicate of claim 1, grouped `[1,4,5]`). **Targets:** publication 5 of 6 against 2 of 6 (one-sided conditional
-binomial p ≈ 0.19 over 5 failure events, below the evidence floor); `competing_records` 0 against 2; restatement per
-publication 0 and 3 against 1 and 3. **Guard:** lost source requirement 0, with one judgement call: hello-world
-`23-51-55Z-649d…` FR-002 names the UTC claim without stating it, filed `ambiguity` because AC-003 and the story state
-it; read as `lost_source_requirement` it breaches. **Watch:** unsupported addition in hello-world 2 against 0 ("is
-installed" in a Given, `23-51-16Z-c103…` and `649d…`, from the scenarios call; Haiku reference-era run `08-40-59Z` had
-the same addition) reaches the recorded +2, so §2 rule 6 recommends no keep. Cost: hello-world 41.1k to 41.3k tokens a
-run (D8.4's set 43.5k to 43.6k), loan-renewal publications 67.4k and 68.4k; 0 corrections, repairs, re-sends or
-runaways.
-
-**Extension** (user, 18 November 2026: "perform three more runs per case"; `2026-11-18T05-33-54Z` to `05-38-51Z`, same
-build and source, none retried): hello-world 2 of 3 published and passed (96.4, 96.4), loan-renewal 3 of 3 (96.4, 92.9,
-96.4). Hello-world `05-35-07Z-6629…` failed with `RepairNoProgress`: extraction filed the level-1 heading as a `business`
-claim, grouping left it alone, its records call copied its neighbours' requirement with `Hello, World!`, and the
-scenarios check rejected the copy (`foreign_exact`) through two repairs (neutral, then no progress). That is this phase's
-title class, reached through the residual "Feature identity" meaning. **Whole set, 6 runs per case:** heading claims 1 of
-12 (reference 12 of 12); title-only groups 1 of 12 (5 of 12). **Targets:** publication 10 of 12 against 2 of 6 (p =
-73/729 ≈ 0.100 over 6 failure events: just above 0.10 and below the evidence floor, which the run maximum can't reach
-unless this state fails more often); `competing_records` 0 against 2; restatement per publication 0 against 1
-(hello-world) and 3 against 3 (loan-renewal). **Guards hold:** lost source requirement 0 (the `649d…` judgement call
-stands), publication rate up in both cases, and no new class traced `established` to the changed file. **Watch:**
-unsupported addition in hello-world 3 against 0 (the "installed" Given in `c103…`, `649d…` and `05-33-54Z-502c…`, each
-from the scenarios call, `likely`) is past the recorded +2, and a count can't fall with more runs, so §2 rule 6's default
-is no keep. No other watch item crossed. Outside the targets, `05-38-51Z-ccdf…` published an exact value in the model's
-single quotes instead of as the exact value (`rendering_artefact`). Cost: hello-world publications 41.0k and 41.1k
-tokens, the failure 63.0k; loan-renewal 67.8k to 67.9k; 0 corrections, re-sends or runaways, 2 repair sends in the
-failure. **Open:** the keep decision; Q24 waits for it.
-
 ### Q24. A signal holds only retained claims
 
 **Decided** 18 November 2026 (user: "recommendations approved", to "Fix the signal-membership bug? Yes means a group
@@ -527,12 +460,24 @@ mixing claim 2 with its duplicate claim 5 is rejected at grouping, so claim 2 ca
 and grouping put both in one signal. Signal validation admitted it, since `signalEligible` rejects only `conflicting`
 claims (`reference_reconciliation_validation.zig:139-147`), but records binding drops a signal holding any claim
 that isn't retained (`reference_support.zig:13-24`, `specification_source_binding.zig:145-159`), so claim 2 got no
-records call and coverage blocked with no repair. **Change:** one rule for signal membership, as 17-specify.md:198-199
+records call and coverage blocked with no repair; Q23's set had one more (`2026-11-17T23-53-26Z-15af…`, claim 4 a
+duplicate of claim 1, grouped `[1,4,5]`). **Change:** one rule for signal membership, as 17-specify.md:198-199
 ("one complete retained group") and ADR 0022:101-105 state it: a model signal selects only retained claims, in the
-request and in validation. **Order:** lands after Q23's set (§2 rule 1). **Validation:** fixtures at the owner and the
+request and in validation. **Order:** next, on Q23's kept state (§1). **Validation:** fixtures at the owner and the
 §2 rule 10 request projection on the scripted matrix; the signals constraint text the request carries ("Signals may
 select only nonconflicting claims.", `reference_reconciliation_diagnostic.zig:128`) changes with the rule, so the
 signals request changes and a set with its own pre-set record follows.
+
+### Q25. A claim cited only by headings
+
+**Open; Decision.** Q23 ([Z_SPEC01](Z_SPEC01.md) "Q23") removed the extraction sentence that asked for heading claims,
+and heading claims fell from 12 of 12 runs to 1 of 12. The one left (`2026-11-18T05-35-07Z-6629…`) still failed the run:
+grouping left the title alone, its records call copied its neighbours' requirement with `Hello, World!`, and the
+scenarios check rejected the copy through two repairs (`RepairNoProgress`). **Cause:** the `business` meaning still
+names "Feature identity" (`extraction.context.json:6`), and ADR 0036 Decision 3 makes a heading cited with list items a
+claim of its own, while the title is the engine's (ADR 0048) and the story skips heading-only quotes (ADR 0047
+Decision 1). **Options:** a structural rule rejecting a claim whose cited lines are all headings, which needs an ADR
+amending ADR 0036 Decisions 1 to 3 and ADR 0048's rejected test; or record it as a model limitation at 1 in 12.
 
 ## 5. Engine track (E)
 

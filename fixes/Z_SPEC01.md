@@ -2166,6 +2166,29 @@ the targets are below the evidence floor (3 events), so §2 rule 6 recommended n
 byte-identical evidence. Evaluations: `evaluations/e2e/<run>/`; adjudications `adjudication-3681e6cd…` and
 `adjudication-dda538e2…`.
 
+## Q23. The document title is not a claim (kept 18 November 2026)
+
+**Decided** 18 November 2026 (user: "recommendations approved", to "Delete the headings sentence? Yes means
+`# Library Loan Renewal` stops becoming claim 1, and I'd implement it and run the measured set."); **extended** (user:
+"perform three more runs per case"); **kept** 18 November 2026 (user: "keep Q23"). **Defect class:** blocked runs and
+restatement from a title-only group. In all 12 retained runs before it, extraction filed the level-1 heading as a
+`business` claim; where grouping left it alone (5 runs), its records call had no requirement to state and copied a
+neighbour (`competing_records` blocks in `2026-11-17T22-01-46Z-c032…` and `22-02-22Z-6ef4…`). **Built:** the sentence
+"Include meaningful identity and purpose headings." is deleted from `extraction.context.json` `claims`; the title stays
+the engine's (ADR 0048). The screen did not run: `e2e-call` can't replay an `anthropic` capture.
+
+**Set** (`2026-11-17T23-4*` to `23-58-08Z` and `2026-11-18T05-3*`, 6 runs per case, none retried, build revision
+`26982bb`, source `0a61828b…`, every report `build.source.modified: true`; skill `3fe52a92…`; reference D8.4's set):
+heading claims 1 of 12 (12 of 12 before), title-only groups 1 of 12 (5 of 12), publication 10 of 12 against 2 of 6
+(p = 73/729 ≈ 0.100 over 6 failure events, below the evidence floor), `competing_records` 0 against 2, all 10
+publications passed. Guards held: no lost source requirement (one judgement call, `23-51-55Z-649d…` FR-002), publication
+up in both cases. The watch item crossed: unsupported addition in hello-world 3 against 0 (an "installed" Given from the
+scenarios call). §2 rule 6 recommended no keep; the user kept it on the recommendation that the addition traces to the
+scenarios call, not the changed file. The two failures: hello-world `05-35-07Z-6629…`, the title claimed once more and
+its copied exact value never repaired (SPEC01 Q25); loan-renewal `23-53-26Z-15af…`, SPEC01 Q24's defect. Evaluations:
+`evaluations/e2e/<run>/`; adjudications `adjudication-9a537163…`, `-94c42837…`, `-d5bd74b2…`, `-191a07d0…`,
+`-d90b773a…`, `-789b37ed…`, `-18c43709…`, `-f82f0460…`, `-2f90bbf5…` and `-0d1e8202…`.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a
