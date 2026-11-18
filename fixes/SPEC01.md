@@ -41,8 +41,8 @@ Advisory scores are scored against the case rubrics (`evaluations/e2e/<run>/eval
 scorer judgment moves one by about ±3.6, and keep decisions use the accuracy counts (§2 rule 6).
 
 **Retained runs:** `zig-out/e2e-spec/` holds the Haiku set (`2026-11-17T08-4*`), D8.4's set (`21-5*` and
-`22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`) and two hello-world runs that failed at the first
-extraction call (`2026-11-17T07-1*`). Earlier runs are removed;
+`22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`), Q24's set (`2026-11-18T06-5*`) and two
+hello-world runs that failed at the first extraction call (`2026-11-17T07-1*`). Earlier runs are removed;
 their evaluations and measures stay under `evaluations/`.
 The current build decodes only `spec-e2e-report/v21` (`test/harness/e2e/contracts.zig:223`); earlier runs, the `2026-11-17T08-4*` set included, need their own build.
 
@@ -182,9 +182,7 @@ above, inside the decided constraints):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Q24** a signal holds only retained claims | a blocked run: a retained claim loses its records group | S | Fixtures at the owner, the rule-10 projection, then a set | 18 November 2026 |
-| 2 | **Q25** a claim cited only by headings | a blocked or failed run from a title-only group | S–M | Fixtures at the owner, then a set | **Decision** (an ADR) |
-| 3 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
+| 1 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
 **Robustness track** (run completion and budget; no scored defect): the §22.6 correction
 location, outside E5 since DE5 7. Since D13.1 the measured runs show 0 runaways and 0 re-sends; the highest used 67,448
@@ -451,33 +449,6 @@ extraction request, (c) losses nothing native detects. If it resumes, take (b).
 **Next:** D21.1 (deferred); fixtures at the owner (an unnamed claim, or one named only by an
 assumption, non-goal or scenario, rejects), then screens and a set (§2 rules 4 and 6). §10 C30
 records the blocking route's constant-result machinery.
-
-### Q24. A signal holds only retained claims
-
-**Decided** 18 November 2026 (user: "recommendations approved", to "Fix the signal-membership bug? Yes means a group
-mixing claim 2 with its duplicate claim 5 is rejected at grouping, so claim 2 can't silently lose its records.").
-**Defect class:** a blocked run. In `2026-11-17T22-00-28Z-7db6…` dispositions marked claim 5 a duplicate of claim 2
-and grouping put both in one signal. Signal validation admitted it, since `signalEligible` rejects only `conflicting`
-claims (`reference_reconciliation_validation.zig:139-147`), but records binding drops a signal holding any claim
-that isn't retained (`reference_support.zig:13-24`, `specification_source_binding.zig:145-159`), so claim 2 got no
-records call and coverage blocked with no repair; Q23's set had one more (`2026-11-17T23-53-26Z-15af…`, claim 4 a
-duplicate of claim 1, grouped `[1,4,5]`). **Change:** one rule for signal membership, as 17-specify.md:198-199
-("one complete retained group") and ADR 0022:101-105 state it: a model signal selects only retained claims, in the
-request and in validation. **Order:** next, on Q23's kept state (§1). **Validation:** fixtures at the owner and the
-§2 rule 10 request projection on the scripted matrix; the signals constraint text the request carries ("Signals may
-select only nonconflicting claims.", `reference_reconciliation_diagnostic.zig:128`) changes with the rule, so the
-signals request changes and a set with its own pre-set record follows.
-
-### Q25. A claim cited only by headings
-
-**Open; Decision.** Q23 ([Z_SPEC01](Z_SPEC01.md) "Q23") removed the extraction sentence that asked for heading claims,
-and heading claims fell from 12 of 12 runs to 1 of 12. The one left (`2026-11-18T05-35-07Z-6629…`) still failed the run:
-grouping left the title alone, its records call copied its neighbours' requirement with `Hello, World!`, and the
-scenarios check rejected the copy through two repairs (`RepairNoProgress`). **Cause:** the `business` meaning still
-names "Feature identity" (`extraction.context.json:6`), and ADR 0036 Decision 3 makes a heading cited with list items a
-claim of its own, while the title is the engine's (ADR 0048) and the story skips heading-only quotes (ADR 0047
-Decision 1). **Options:** a structural rule rejecting a claim whose cited lines are all headings, which needs an ADR
-amending ADR 0036 Decisions 1 to 3 and ADR 0048's rejected test; or record it as a model limitation at 1 in 12.
 
 ## 5. Engine track (E)
 

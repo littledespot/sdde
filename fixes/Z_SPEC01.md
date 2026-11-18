@@ -2160,7 +2160,7 @@ exhausted (one extra send each). The engine split and merged each corrected answ
 so the next request (`22-00-28Z` dispositions, `22-01-46Z` summary) is byte-identical to that of published reference
 run `08-44-26Z`. **No failure traces to it:** two loan-renewal runs blocked as `competing_records` because grouping
 left the title claim alone and its records call restated claim 2 (SPEC01 Q23); one blocked on coverage because
-grouping put a duplicate claim with its target and binding dropped the group (SPEC01 Q24); one hello-world run ended
+grouping put a duplicate claim with its target and binding dropped the group ("Q24" below); one hello-world run ended
 `invalid` on a repeated `signal_ids` entry (decision C5 holds). The publication guard is breached at face value and
 the targets are below the evidence floor (3 events), so §2 rule 6 recommended no keep; the user kept it on the
 byte-identical evidence. Evaluations: `evaluations/e2e/<run>/`; adjudications `adjudication-3681e6cd…` and
@@ -2185,9 +2185,49 @@ publications passed. Guards held: no lost source requirement (one judgement call
 up in both cases. The watch item crossed: unsupported addition in hello-world 3 against 0 (an "installed" Given from the
 scenarios call). §2 rule 6 recommended no keep; the user kept it on the recommendation that the addition traces to the
 scenarios call, not the changed file. The two failures: hello-world `05-35-07Z-6629…`, the title claimed once more and
-its copied exact value never repaired (SPEC01 Q25); loan-renewal `23-53-26Z-15af…`, SPEC01 Q24's defect. Evaluations:
+its copied exact value never repaired ("Q25" below); loan-renewal `23-53-26Z-15af…`, "Q24" below. Evaluations:
 `evaluations/e2e/<run>/`; adjudications `adjudication-9a537163…`, `-94c42837…`, `-d5bd74b2…`, `-191a07d0…`,
 `-d90b773a…`, `-789b37ed…`, `-18c43709…`, `-f82f0460…`, `-2f90bbf5…` and `-0d1e8202…`.
+
+## Q24. A retired claim's meaning (recorded as a model limitation, 19 November 2026)
+
+**Decided** 19 November 2026 (user: "action the above recommendations", after "should I close Q24 as Option 1,
+leaving the engine unchanged and recording wrong retirement as a reported model limitation?"). **Defect:** a blocked
+run and a lost requirement, both from a retirement (`duplicate` or `superseded`) the model decides in dispositions.
+(a) Signal validation admits a group mixing a retained claim with a retired one (`signalEligible`,
+`reference_reconciliation_validation.zig:139-147`), but records binding drops it (`reference_support.zig:13-24`,
+`specification_source_binding.zig:145-159`), so the retained claim loses its records and coverage blocks with no
+repair: `2026-11-17T22-00-28Z-7db6…` and `23-53-26Z-15af…`. (b) Nothing judges that a retired claim's meaning
+survives: `2026-11-18T06-53-25Z-966d…` retired line 8 ("A loan may be renewed only once.") as `superseded` by claim
+1, which states no limit, and published without it. A retirement kept a claim out of 3 of the 12 loan-renewal runs of
+the D8.4, Q23 and Q24 sets. **Tried and reverted** (18 November 2026, user: "do not keep Q24"): a model signal selects
+only retained claims. Set `2026-11-18T06-51-49Z` to `06-55-50Z`: 6 of 6 published and 0 blocks of class (a), but
+`966d…` published without line 8 and failed adjudication (renewal-eligibility 2); §2 rule 6's guard on lost source
+requirement (1 in 6 publications against 0 in 10) blocked a keep. **Why no change:** a records request is assigned
+requirements only for retained claims (`specification_session.zig:279-294`, `specification_source_binding.zig:120-127`),
+a record may name only retained claims (`specification_provenance.zig:117`), and coverage skips every claim that isn't
+retained (`specification_coverage.zig:49-50`), so no admission or binding rule gets a wrongly retired meaning into a
+record. The old rule blocks a run only when grouping happens to mix the retired claim in; when grouping omits it, the
+line is lost silently. A rule letting a `duplicate` share its target's group would turn the block into a publication
+without that claim's wording, and would amend ADR 0022:93-95 and :117-122, ADR 0020:141-146, 17-specify.md:188-189 and
+:198, and F0100:1389-1391. A prompt change to the dispositions call is a prose patch after one run, and a second
+assessment of a retirement is excluded without an accepted exception (AGENTS.md). `/evaluate-e2e` reports each wrong
+retirement as `lost_source_requirement`, origin `model_noncompliance`
+(`reconciliation-dispositions.prompt.md:1-2`). Reopen if a decision changes what a retirement means for a requirement
+(ADR 0022, ADR 0046).
+
+## Q25. A claim cited only by headings (recorded as a model limitation, 19 November 2026)
+
+**Decided** 19 November 2026 (user: "action the above recommendations", after "I'd also keep Q25 as a model
+limitation"). **Defect:** a failed or blocked run from a title-only group. Q23 removed the extraction sentence that
+asked for heading claims, and heading claims fell from 12 of 12 runs to 1 of 18 (Q23's set 1 of 12, Q24's set 0 of 6).
+The one left, `2026-11-18T05-35-07Z-6629…`, filed the level-1 heading as a `business` claim; grouping left it alone,
+its records call copied its neighbours' requirement with `Hello, World!`, and the scenarios check rejected the copy
+through two repairs (`RepairNoProgress`). **Cause:** the `business` meaning still names "Feature identity"
+(`extraction.context.json:6`), and ADR 0036 Decision 3 makes a heading cited with list items a claim of its own, while
+the title is the engine's (ADR 0048) and the story skips heading-only quotes (ADR 0047 Decision 1). **Why no change:**
+a structural rule rejecting a claim whose cited lines are all headings needs an ADR amending ADR 0036 Decisions 1 to 3
+and ADR 0048's rejected test, for one failure in 18 runs. Reopen if heading claims persist in a later set.
 
 ## Decisions that changed nothing (15 November 2026)
 
