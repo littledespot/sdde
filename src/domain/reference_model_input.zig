@@ -14,7 +14,8 @@ pub const ReconciliationError = Error || reconciliation.Error;
 pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, registry: literals.Registry, tokens: extraction.tokens.Candidates, scope: evidence.Scope) Error!*packets.Packet {
     const base = try extractionBase(allocator, inputs, registry, tokens, scope);
     defer packets.release(base);
-    return withCitationChoices(allocator, base, inputs, scope, &.{ .{ .property = "claims" }, .{ .items = {} }, .{ .property = "citations" } });
+    // ADR 0036 Decision 7: claims of one answer that cite the same lines name one category.
+    return withCitationChoices(allocator, base, inputs, scope, &.{ .{ .property = "claims" }, .{ .items = {} }, .{ .property = "citations" } }, "category");
 }
 
 /// Chunk evidence shared by the initial request and every extraction repair.
@@ -48,14 +49,15 @@ pub fn extractionBase(allocator: std.mem.Allocator, inputs: evidence.Inputs, reg
 }
 
 /// ADR 0036: a claim cites only the chunk's citable lines, so its quoted wording
-/// always exists. `path` locates the citations it bounds.
-pub fn withCitationChoices(allocator: std.mem.Allocator, packet: *const packets.Packet, inputs: evidence.Inputs, scope: evidence.Scope, path: []const @import("model_result_schema.zig").ChoiceStep) Error!*packets.Packet {
+/// always exists. `path` locates the citations it bounds. `agree`, for an answer that holds
+/// several claims, names the claim property that claims citing the same lines must share.
+pub fn withCitationChoices(allocator: std.mem.Allocator, packet: *const packets.Packet, inputs: evidence.Inputs, scope: evidence.Scope, path: []const @import("model_result_schema.zig").ChoiceStep, agree: ?[]const u8) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     var lines: std.ArrayList(i64) = .empty;
     const selections = @import("source_selections.zig");
     for (try selections.lines(arena.allocator(), inputs, scope)) |line| if (selections.citable(line.text)) try lines.append(arena.allocator(), line.id.ordinal);
-    return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = path }, .allowed = lines.items, .collection = .unique_subset }});
+    return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = path }, .allowed = lines.items, .collection = .unique_subset, .agree = agree }});
 }
 
 /// `summary_purpose` is the workflow's guidance text, present exactly for a summary input.

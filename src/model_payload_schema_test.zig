@@ -10,7 +10,9 @@ const integer = "{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximu
 const variants =
     \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"content"},"value":{"type":"string","maxLength":8}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"question"},"subject":{"enum":["alpha","beta"]}},"required":["kind","subject"],"additionalProperties":false}]}
 ;
-const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null, expected_path: ?[]const u8 = null, member: ?i64 = null, shared: []const []const u8 = &.{}, equal: []const []const i64 = &.{}, foreign: []const []const u8 = &.{} };
+/// One group of values that items list in common yet disagree on, and the location of every item that lists them.
+const Disagreeing = struct { values: []const i64, items: []const []const u8 };
+const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null, expected_path: ?[]const u8 = null, member: ?i64 = null, shared: []const []const u8 = &.{}, equal: []const []const i64 = &.{}, agreement: []const Disagreeing = &.{}, foreign: []const []const u8 = &.{} };
 
 const child_objects =
     \\{"type":"object","properties":{"optional":{"type":"object","properties":{"a~/b":{"type":"boolean"},"deep":{"type":"object","properties":{"id":{"type":"boolean"}},"required":["id"],"additionalProperties":false}},"required":["a~/b","deep"],"additionalProperties":false},"empty":{"type":"object","properties":{},"required":[],"additionalProperties":false},"loose":{"type":"object","properties":{"flag":{"type":"boolean"}},"required":[],"additionalProperties":false},"items":{"type":"array","maxItems":2,"items":{"type":"boolean"}},"choice":
@@ -963,7 +965,7 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     }
 }
 
-test "only a shared value's correction carries a cross-item rule, only an equal-items one a member rule, and only a missing member's names it" {
+test "only a shared value's correction carries a cross-item rule, only an equal-items one a member rule, only a disagreeing-items one an agreement rule, and only a missing member's names it" {
     var fixture: Fixture = undefined;
     try fixture.init();
     defer fixture.deinit();
@@ -974,7 +976,13 @@ test "only a shared value's correction carries a cross-item rule, only an equal-
     const root = fixture.prepared.request.response_schema.root();
     const coverage: @import("domain/model_result_schema.zig").Coverage = .{ .property = "ids", .rule = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} } };
     const members: @import("domain/model_result_schema.zig").Members = .{ .property = "ordinal", .values = &.{ 1, 2 }, .distinct = &.{"given"} };
+    const agreement: @import("domain/model_result_schema.zig").Agreement = .{ .property = "refs", .agree = "topic" };
     for ([_]@import("domain/model_schema_diagnostic.zig").Diagnostic{
+        // A disagreeing-items correction needs the rule that compared the items, and finds the response's sets.
+        .{ .reason = .disagreeing_items, .expected = root },
+        .{ .reason = .disagreeing_items, .expected = root, .agreement = agreement },
+        .{ .reason = .array_length, .expected = root, .agreement = agreement },
+        .{ .reason = .equal_items, .expected = root, .members = members, .agreement = agreement },
         .{ .reason = .shared_member, .expected = root },
         // A shared value's correction must find the rejected response's namings.
         .{ .reason = .shared_member, .expected = root, .coverage = coverage },
@@ -1112,6 +1120,84 @@ test "items of one response that return equal values take one correction naming 
     try checkFixture(&corrected, .{ .bytes = distinct });
 }
 
+test "items listing a common value under different values take one correction naming each such value and every item that lists it" {
+    const schema = @import("domain/model_result_schema.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    // An unrelated domain: entries name a topic and the references they rest on.
+    const entry = "{\"type\":\"object\",\"properties\":{\"topic\":{\"enum\":[\"north\",\"south\",\"east\"]},\"refs\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":6,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":6}}},\"required\":[\"topic\",\"refs\"],\"additionalProperties\":false}";
+    const contract = "{\"type\":\"object\",\"properties\":{\"entries\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":" ++ entry ++ "},\"other\":{\"type\":\"array\",\"maxItems\":4,\"items\":" ++ entry ++ "}},\"required\":[\"entries\",\"other\"],\"additionalProperties\":false}";
+    const compiled = try adapter.compiler().compile(arena.allocator(), contract);
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "entries" }, .items, .{ .property = "refs" } };
+    const agreed = try schema.restrict(std.testing.allocator, compiled, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .unique_subset, .agree = "topic" }});
+    defer agreed.release();
+    // The same array without the rule: no other request changes.
+    const plain = try schema.restrict(std.testing.allocator, compiled, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .unique_subset }});
+    defer plain.release();
+    const item = struct {
+        fn of(comptime topic: []const u8, comptime refs: []const u8) []const u8 {
+            return "{\"topic\":\"" ++ topic ++ "\",\"refs\":[" ++ refs ++ "]}";
+        }
+    }.of;
+    const no_other = "],\"other\":[]}";
+    // Accepted: items that share no value, overlapping items under one value however they are ordered or
+    // repeated, and a shared value in another array.
+    const distinct = comptime "{\"entries\":[" ++ item("north", "1") ++ "," ++ item("south", "2") ++ "," ++ item("east", "3") ++ no_other;
+    const same_value = comptime "{\"entries\":[" ++ item("north", "1,2") ++ "," ++ item("north", "2,1") ++ "," ++ item("north", "1") ++ "," ++ item("north", "1,1,2") ++ no_other;
+    const across = comptime "{\"entries\":[" ++ item("north", "1") ++ "],\"other\":[" ++ item("north", "1") ++ "," ++ item("south", "1") ++ "]}";
+    // Rejected: a pair that shares one value, located at the first item that a later one disagrees with and
+    // named by location with the value they share.
+    const pair = comptime "{\"entries\":[" ++ item("east", "1") ++ "," ++ item("north", "3") ++ "," ++ item("east", "2") ++ "," ++ item("south", "3") ++ no_other;
+    // Lists that differ yet share a value: a whole list beside one of its items, and lists that overlap in
+    // two values, one group for each set of items that list a value.
+    const nested = comptime "{\"entries\":[" ++ item("north", "1,2,3") ++ "," ++ item("south", "2") ++ no_other;
+    const overlapping = comptime "{\"entries\":[" ++ item("north", "1,2") ++ "," ++ item("south", "2") ++ "," ++ item("east", "1") ++ no_other;
+    // Order and repeats don't matter, and values the same items list form one group.
+    const reordered = comptime "{\"entries\":[" ++ item("north", "1,2") ++ "," ++ item("south", "2,1") ++ no_other;
+    const repeated = comptime "{\"entries\":[" ++ item("north", "1,1") ++ "," ++ item("south", "1") ++ no_other;
+    // Three items that list a value are one group, and an item of the same value joins it.
+    const three = comptime "{\"entries\":[" ++ item("north", "4") ++ "," ++ item("south", "4") ++ "," ++ item("east", "4") ++ no_other;
+    const joined = comptime "{\"entries\":[" ++ item("north", "5") ++ "," ++ item("north", "5") ++ "," ++ item("south", "5") ++ no_other;
+    // Two groups are two, in the order their first values arrive.
+    const separate = comptime "{\"entries\":[" ++ item("north", "1") ++ "," ++ item("north", "2") ++ "," ++ item("south", "2") ++ "," ++ item("south", "1") ++ no_other;
+    // A shared value that agrees is no defect beside one that doesn't, and isn't named.
+    const beside = comptime "{\"entries\":[" ++ item("north", "1") ++ "," ++ item("north", "1") ++ "," ++ item("east", "2") ++ "," ++ item("south", "3") ++ "," ++ item("north", "3") ++ no_other;
+    for ([_]Case{
+        .{ .bytes = distinct },
+        .{ .bytes = same_value },
+        .{ .bytes = across },
+        .{ .bytes = pair, .rejection = .disagreeing_items, .path = "/entries/1", .expected_path = "/entries", .agreement = &.{.{ .values = &.{3}, .items = &.{ "/entries/1", "/entries/3" } }}, .foreign = &.{ distinct, same_value, separate } },
+        .{ .bytes = nested, .rejection = .disagreeing_items, .path = "/entries/0", .expected_path = "/entries", .agreement = &.{.{ .values = &.{2}, .items = &.{ "/entries/0", "/entries/1" } }}, .foreign = &.{ distinct, pair } },
+        .{ .bytes = overlapping, .rejection = .disagreeing_items, .path = "/entries/0", .expected_path = "/entries", .agreement = &.{ .{ .values = &.{1}, .items = &.{ "/entries/0", "/entries/2" } }, .{ .values = &.{2}, .items = &.{ "/entries/0", "/entries/1" } } }, .foreign = &.{ distinct, pair } },
+        .{ .bytes = reordered, .rejection = .disagreeing_items, .path = "/entries/0", .expected_path = "/entries", .agreement = &.{.{ .values = &.{ 1, 2 }, .items = &.{ "/entries/0", "/entries/1" } }}, .foreign = &.{ distinct, pair } },
+        .{ .bytes = repeated, .rejection = .disagreeing_items, .path = "/entries/0", .expected_path = "/entries", .agreement = &.{.{ .values = &.{1}, .items = &.{ "/entries/0", "/entries/1" } }}, .foreign = &.{distinct} },
+        .{ .bytes = three, .rejection = .disagreeing_items, .path = "/entries/0", .expected_path = "/entries", .agreement = &.{.{ .values = &.{4}, .items = &.{ "/entries/0", "/entries/1", "/entries/2" } }}, .foreign = &.{ distinct, pair } },
+        .{ .bytes = joined, .rejection = .disagreeing_items, .path = "/entries/0", .expected_path = "/entries", .agreement = &.{.{ .values = &.{5}, .items = &.{ "/entries/0", "/entries/1", "/entries/2" } }}, .foreign = &.{ distinct, same_value } },
+        .{ .bytes = separate, .rejection = .disagreeing_items, .path = "/entries/0", .expected_path = "/entries", .agreement = &.{ .{ .values = &.{1}, .items = &.{ "/entries/0", "/entries/3" } }, .{ .values = &.{2}, .items = &.{ "/entries/1", "/entries/2" } } }, .foreign = &.{ distinct, pair } },
+        .{ .bytes = beside, .rejection = .disagreeing_items, .path = "/entries/3", .expected_path = "/entries", .agreement = &.{.{ .values = &.{3}, .items = &.{ "/entries/3", "/entries/4" } }}, .foreign = &.{ distinct, same_value } },
+    }) |case| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithCompiledSchema(agreed.selected());
+        defer fixture.deinit();
+        try checkFixture(&fixture, case);
+    }
+    // A selection without the rule admits every one of them, so no other unique-subset request changes.
+    for ([_][]const u8{ distinct, same_value, across, pair, nested, overlapping, reordered, repeated, three, joined, separate, beside }) |bytes| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithCompiledSchema(plain.selected());
+        defer fixture.deinit();
+        try checkFixture(&fixture, .{ .bytes = bytes });
+    }
+    // The retry that names the values is itself admitted once every item that lists one agrees.
+    for ([_][]const u8{ distinct, same_value }) |bytes| {
+        var corrected: Fixture = undefined;
+        try corrected.initWithCompiledSchema(agreed.selected());
+        defer corrected.deinit();
+        try checkFixture(&corrected, .{ .bytes = bytes });
+    }
+}
+
 /// A response whose rejection is not `diagnostic`'s cannot take the correction that diagnostic builds.
 fn expectForeignRefused(fixture: *Fixture, case: Case, diagnostic: validation.Diagnostic) !void {
     for (case.foreign) |bytes| {
@@ -1184,7 +1270,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             const integer_choice = reason == .enum_mismatch and result.invalid.expected.* == .integer_enumeration;
             // ADR 0038 Decision 5: only a shared value's correction names the exclusive kinds. Decision 3: only an
             // equal-items correction names the sets.
-            try std.testing.expectEqual(@as(usize, 3) + 2 * @as(usize, @intFromBool(reason == .shared_member)) + @intFromBool(reason == .missing_member) + 2 * @as(usize, @intFromBool(integer_choice)) + @intFromBool(reason == .equal_items), guidance.value.object.count());
+            try std.testing.expectEqual(@as(usize, 3) + 2 * @as(usize, @intFromBool(reason == .shared_member)) + @intFromBool(reason == .missing_member) + 2 * @as(usize, @intFromBool(integer_choice)) + @intFromBool(reason == .equal_items) + @intFromBool(reason == .disagreeing_items), guidance.value.object.count());
             // ADR 0038 Decision 5: a partly taken item's correction lists every taken value's naming.
             if (reason == .shared_member) {
                 const listed = guidance.value.object.get("shared").?.array.items;
@@ -1209,6 +1295,26 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                 }
                 try expectForeignRefused(fixture, case, result.invalid);
             } else try std.testing.expect(!guidance.value.object.contains("equal"));
+            // ADR 0036 Decision 7: a disagreeing-items correction names the list and the agreed property, and
+            // lists the location of every item of each set whose items disagree.
+            if (reason == .disagreeing_items) {
+                const agreement = guidance.value.object.get("agreement").?.object;
+                try std.testing.expectEqual(@as(usize, 3), agreement.count());
+                try std.testing.expectEqualStrings(result.invalid.agreement.?.property, agreement.get("property").?.string);
+                try std.testing.expectEqualStrings(result.invalid.agreement.?.agree, agreement.get("agree").?.string);
+                const sets = agreement.get("sets").?.array.items;
+                try std.testing.expectEqual(case.agreement.len, sets.len);
+                for (case.agreement, sets) |wanted, listed| {
+                    try std.testing.expectEqual(@as(usize, 2), listed.object.count());
+                    const values = listed.object.get("values").?.array.items;
+                    try std.testing.expectEqual(wanted.values.len, values.len);
+                    for (wanted.values, values) |value, named| try std.testing.expectEqual(value, named.integer);
+                    const listing = listed.object.get("items").?.array.items;
+                    try std.testing.expectEqual(wanted.items.len, listing.len);
+                    for (wanted.items, listing) |location, named| try std.testing.expectEqualStrings(location, named.string);
+                }
+                try expectForeignRefused(fixture, case, result.invalid);
+            } else try std.testing.expect(!guidance.value.object.contains("agreement"));
             // Only a missing member's correction names the member no item names.
             if (result.invalid.member) |member| {
                 try std.testing.expectEqual(member, guidance.value.object.get("member").?.integer);
@@ -1254,6 +1360,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                 .shared_member => "exclusive.kinds",
                 .missing_member => "no item names this assigned member",
                 .equal_items => "equal.compared",
+                .disagreeing_items => "agreement.agree",
             };
             try std.testing.expect(std.mem.indexOf(u8, explanation, expected_words) != null);
             try std.testing.expect(std.mem.indexOf(u8, wire, explanation) != null);

@@ -2143,6 +2143,29 @@ material, which would fail source-grounding at 78.6; `3ca7…`'s repaired AC-001
 reading files it and grades the repair harmful; `7843…`'s criteria print "Given X, When Y, Then Z" with the model's
 straight quotes around an exact value, a rendering note not filed. One run each is one sample: no reliability claim.
 
+## Q8 D8.4. A line is cited under one category (ADR 0036 Decision 7; kept 18 November 2026)
+
+**Decided** 18 November 2026 (user: "implement At extraction: yes ...", then "Wider rule: yes"; the set:
+"Keep-or-revert set: approved"); **kept** 18 November 2026 (user: "recommendations approved", to "Keep D8.4? Yes
+means the line-pair correction stays in the engine."). **Defect class:** a blocked run: loan-renewal
+`2026-11-17T08-43-22Z-46a7…` filed line 8 as `business` and `scope_guard`, and records authoring blocked as
+`competing_records`. **Built:** [ADR 0036](../design/decisions/0036-source-quoted-claims.md) Decision 7.
+
+**Set** (`2026-11-17T21-5*` and `22-0*`, 3 runs per case, none retried, `anthropic` `claude-haiku-5-5`, build
+revision `98cb49a`, source `111573…`, every report `build.source.modified: true`; skill `3fe52a92…`; reference the
+Haiku set `2026-11-17T08-4*`, hello-world 3 of 3 and loan-renewal 2 of 3 published): hello-world 2 of 3 published,
+both passed (96.4, 92.9; 0 / 0 / 0 / 0); loan-renewal 0 of 3. **The rule fired in 2 of 3 loan-renewal runs**, each on
+a first answer filing lines 8 and 9 under `business` and `scope_guard`, each corrected at the first retry, none
+exhausted (one extra send each). The engine split and merged each corrected answer into the reference's six claims,
+so the next request (`22-00-28Z` dispositions, `22-01-46Z` summary) is byte-identical to that of published reference
+run `08-44-26Z`. **No failure traces to it:** two loan-renewal runs blocked as `competing_records` because grouping
+left the title claim alone and its records call restated claim 2 (SPEC01 Q23); one blocked on coverage because
+grouping put a duplicate claim with its target and binding dropped the group (SPEC01 Q24); one hello-world run ended
+`invalid` on a repeated `signal_ids` entry (decision C5 holds). The publication guard is breached at face value and
+the targets are below the evidence floor (3 events), so §2 rule 6 recommended no keep; the user kept it on the
+byte-identical evidence. Evaluations: `evaluations/e2e/<run>/`; adjudications `adjudication-3681e6cd…` and
+`adjudication-dda538e2…`.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a

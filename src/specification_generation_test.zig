@@ -9969,7 +9969,7 @@ fn expectScenariosReplay(a: std.mem.Allocator, offered: *const @import("domain/m
     const Stored = struct { members: []const schema.MemberChoice };
     const stored = try strict_json.decode(Stored, a, try std.json.Stringify.valueAlloc(a, Stored{ .members = live.memberChoices() }, .{}), .{ .maximum_depth = 64 });
     const captured = try strict_json.parse(a, live.modelBytes(), .{ .maximum_depth = schema.max_json_depth }, true, null);
-    const replayed = try schema.restrictRecorded(a, try schema.compileSelected(a, captured.value, live.modelBytes()), stored.members, live.coverageChoices());
+    const replayed = try schema.restrictRecorded(a, try schema.compileSelected(a, captured.value, live.modelBytes()), stored.members, live.coverageChoices(), live.agreementChoices());
     defer replayed.release();
     try std.testing.expectEqualDeep(live.memberChoices(), replayed.selected().memberChoices());
     // The rule that no two scenarios repeat all three parts is part of the record, and survives it.

@@ -1463,7 +1463,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     const equal_once = scenario_stop_start + 2;
     const equal_exhaustion = scenario_stop_start + 3;
     const equal_across_groups = scenario_stop_start + 4;
-    var costs: [scenario_stop_start + 5]?timing.Sample = @splat(null);
+    // ADR 0036 Decision 7: an extraction answer that files one set of lines under two categories takes one
+    // protocol correction naming both claims, and the run publishes from the answer that keeps one. It
+    // follows the others so that no earlier scenario changes its number.
+    const split_claim_once = scenario_stop_start + 5;
+    var costs: [scenario_stop_start + 6]?timing.Sample = @splat(null);
     const case_range_begin: usize = switch (workflow_cases) {
         .existing => 0,
         .source_preservation => preservation_start,
@@ -1493,7 +1497,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const membership_scenario = scenario >= membership_start and scenario < preservation_start;
         const link_scenario = scenario >= link_start and scenario < scenario_repair_start;
         const scenario_repair_scenario = scenario >= scenario_repair_start and scenario < scenario_stop_start;
-        const equal_scenario = scenario >= equal_once;
+        const equal_scenario = scenario >= equal_once and scenario != split_claim_once;
         const stop_scenario = scenario >= scenario_stop_start and !equal_scenario;
         const preservation_scenario = scenario >= preservation_start and scenario < link_start;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
@@ -1510,7 +1514,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const repeated_scenario = scenario >= repeated_start and scenario < protocol_text_start;
         const protocol_text_scenario = scenario >= protocol_text_start and scenario < protocol_selection_scenario;
         const protocol_content_scenario = scenario >= protocol_content_start and scenario < omission_scenario;
-        const fault: ?@TypeOf(faults[0]) = if (brief_scenario) .{ .stage = .generation, .shape = .forbidden_provenance, .repetition = if (scenario - brief_start < 2) .persistent else .{ .first_request = 2 } } else if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else if (scenario == scenario_exhaustion) .{ .stage = .scenarios, .shape = .review_partial_assignment, .repetition = .persistent } else if (scenario == equal_once) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .{ .first_request = 1 } } else if (scenario == equal_exhaustion) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .persistent } else null;
+        const fault: ?@TypeOf(faults[0]) = if (brief_scenario) .{ .stage = .generation, .shape = .forbidden_provenance, .repetition = if (scenario - brief_start < 2) .persistent else .{ .first_request = 2 } } else if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else if (scenario == scenario_exhaustion) .{ .stage = .scenarios, .shape = .review_partial_assignment, .repetition = .persistent } else if (scenario == equal_once) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .{ .first_request = 1 } } else if (scenario == equal_exhaustion) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .persistent } else if (scenario == split_claim_once) .{ .stage = .extraction, .shape = .split_claim, .repetition = .{ .first_request = 1 } } else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -2529,6 +2533,10 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
             try std.testing.expect(try expectEngineBoundCriteria(allocator, session) != 0);
             try std.testing.expect(driver.scenario_calls > @import("../../src/domain/specification_session.zig").scenarioPopulation(session));
+        }
+        if (fault != null and fault.?.shape == .split_claim) {
+            // The correction named the split claims, and the answer it asked for published, so the fault was not vacuous.
+            try std.testing.expect(driver.split_claim_corrections != 0);
         }
         if (fault != null and fault.?.shape == .duplicate_record) {
             // The repeat was deleted natively: no batch keeps two records of equal content.

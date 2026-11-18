@@ -213,7 +213,7 @@ Before any invocation/step executes, typed compiled output/replacement keys and
 side-effect policy are checked for publication capability. A publication-capable
 child stops at `publication_prohibited`, even before the first exchange.
 
-Each invocation retains `report.json` (`provider-compatibility-report/v3`) and
+Each invocation retains `report.json` (`provider-compatibility-report/v4`) and
 `report.md` beneath `zig-out/provider-compatibility/<UTC-date-time>-<unique-id>/`.
 The report links available immutable request/response captures and records the
 revision, exact model/settings, request/response identity and bytes, protocol and
@@ -355,7 +355,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v20`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v21`; it stays null until ADR 0041 is
   implemented (SPEC01 E0).
 
 ### Rubric assessment
@@ -607,10 +607,10 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v20`,
-`e2e-step-event/v5`, `baseline-freeze/v3`, `baseline-acquisition/v14`,
-`baseline-score/v6`, `baseline-budget-feasibility/v2`, the evaluator packets'
-`baseline-assessment-inputs/v2` and `provider-compatibility-report/v3`; assessor
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v21`,
+`e2e-step-event/v6`, `baseline-freeze/v3`, `baseline-acquisition/v15`,
+`baseline-score/v7`, `baseline-budget-feasibility/v2`, the evaluator packets'
+`baseline-assessment-inputs/v2` and `provider-compatibility-report/v4`; assessor
 documents use numeric schema `3`. Current readers reject superseded versions and
 fields: retained runs and captures of an earlier version stay immutable evidence,
 readable only by the build that made them. Feasibility evidence retains the single
@@ -740,8 +740,9 @@ request-projection freezes, not by a live run.
 
 - The offline Spec scenarios record every request the fake provider receives, at the
   provider port, as its `model_request_description` without `version`,
-  `workflow_version` and `request_step`, which refactors change by design. Member order
-  and number spelling stay the description's own.
+  `workflow_version` and `request_step`, which refactors change by design, and without
+  `agreements`, the admission rule recorded for replay (ADR 0036 Decision 7), which is no
+  model input. Member order and number spelling stay the description's own.
 - `SDDE_REQUEST_PROJECTION=<dir> zig build test-integration` writes
   `<dir>/<group>/scenario-NNN/call-NNNN.json`, one file per invocation in provider-call
   order within each scenario, grouped by scenario case so groups never overwrite each

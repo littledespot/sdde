@@ -16,7 +16,10 @@ pub const Fault = struct {
     /// the second scenario of each pair of a group's answer repeat the first's given, when and then (a
     /// set of equal criteria in one answer, ADR 0038 Decision 3), and `equal_across_groups` makes every
     /// group's answer after the first repeat the first group's wording, which the engine blocks.
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, shared_statement, bare_statement, duplicate_record, runaway, runaway_partial_assignment, equal_criteria, equal_across_groups },
+    /// `split_claim` adds, to an extraction answer that holds claims, a copy of its first claim in
+    /// another category: one set of lines filed under two categories (ADR 0036 Decision 7). Any other
+    /// extraction answer, such as a token classification, is returned unchanged.
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, shared_statement, bare_statement, duplicate_record, runaway, runaway_partial_assignment, equal_criteria, equal_across_groups, split_claim },
     repetition: union(enum) { once, first_request: u32, every_request: u32, recover_then_exhaust: u32, persistent } = .once,
     pub fn reviewShape(self: Fault) bool {
         return switch (self.shape) {
@@ -73,6 +76,9 @@ pub const Driver = struct {
     bare_statements: usize = 0,
     /// Records requests whose response gained an exact repeat of a requirement.
     duplicate_records: usize = 0,
+    /// Extraction corrections that named the claims citing the same lines under two categories
+    /// (ADR 0036 Decision 7).
+    split_claim_corrections: usize = 0,
     /// Calls of the requests that ask a group's scenarios (ADR 0038 Decision 3), retries included.
     scenario_calls: usize = 0,
     /// The scenarios answer of the first group, kept for `equal_across_groups` and released by `run`.
@@ -510,6 +516,37 @@ pub const Driver = struct {
                         std.testing.expectEqual(@as(usize, 2), set.array.items.len) catch |err| return self.hookFailed(err);
                         for (set.array.items, items[2 * index ..][0..2]) |named, item| std.testing.expectEqual(item.object.get("number").?.integer, named.integer) catch |err| return self.hookFailed(err);
                     }
+                }
+                if (matches_stage and fault.shape == .split_claim and attempt > 1) {
+                    // ADR 0036 Decision 7: claims of one answer that cite a common line under two categories take the
+                    // request's protocol correction, which names the lines and the location of every claim that cites
+                    // them, and retains the rejected bytes.
+                    const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
+                    std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch |err| return self.hookFailed(err);
+                    const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                    const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
+                    std.testing.expectEqualStrings("disagreeing_items", diagnostic.get("reason").?.string) catch |err| return self.hookFailed(err);
+                    std.testing.expectEqualStrings("/claims/0", diagnostic.get("path").?.string) catch |err| return self.hookFailed(err);
+                    const expected = correction.value.object.get("expected").?.object;
+                    std.testing.expectEqualStrings("/claims", expected.get("path").?.string) catch |err| return self.hookFailed(err);
+                    std.testing.expectEqualStrings("parent", expected.get("scope").?.string) catch |err| return self.hookFailed(err);
+                    const agreement = correction.value.object.get("agreement").?.object;
+                    std.testing.expectEqualStrings("citations", agreement.get("property").?.string) catch |err| return self.hookFailed(err);
+                    std.testing.expectEqualStrings("category", agreement.get("agree").?.string) catch |err| return self.hookFailed(err);
+                    // The group is the first claim's lines and the claims that cite them: the claim and its copy, which the
+                    // fault appended after the claims the answer held.
+                    const answered = (std.json.parseFromSlice(std.json.Value, arena.allocator(), body, .{}) catch unreachable).value.object.get("claims").?.array.items;
+                    const sets = agreement.get("sets").?.array.items;
+                    std.testing.expectEqual(@as(usize, 1), sets.len) catch |err| return self.hookFailed(err);
+                    const lines = answered[0].object.get("citations").?.array.items;
+                    const group = sets[0].object.get("values").?.array.items;
+                    std.testing.expectEqual(lines.len, group.len) catch |err| return self.hookFailed(err);
+                    for (lines, group) |cited, named| std.testing.expectEqual(cited.integer, named.integer) catch |err| return self.hookFailed(err);
+                    const holders = sets[0].object.get("items").?.array.items;
+                    std.testing.expectEqual(@as(usize, 2), holders.len) catch |err| return self.hookFailed(err);
+                    std.testing.expectEqualStrings("/claims/0", holders[0].string) catch |err| return self.hookFailed(err);
+                    std.testing.expectEqualStrings(std.fmt.allocPrint(arena.allocator(), "/claims/{d}", .{answered.len}) catch unreachable, holders[1].string) catch |err| return self.hookFailed(err);
+                    self.split_claim_corrections += 1;
                 }
                 // ADR 0038 Decision 3: the first group's answer is kept, and every later group answers with that
                 // wording on its own numbers: equal criteria of different groups, which the engine blocks.
@@ -1112,6 +1149,15 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
         while (index + 1 < items.items.len) : (index += 2) {
             for ([_][]const u8{ "given", "when", "then" }) |part| items.items[index + 1].object.getPtr(part).?.* = items.items[index].object.get(part).?;
         }
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .split_claim) {
+        const claims = &(parsed.value.object.getPtr("claims") orelse return body).array;
+        if (claims.items.len == 0) return body;
+        var split = try claims.items[0].object.clone(allocator);
+        const category: []const u8 = if (std.mem.eql(u8, claims.items[0].object.get("category").?.string, "scope_guard")) "business" else "scope_guard";
+        try split.put(allocator, "category", .{ .string = category });
+        try claims.append(.{ .object = split });
         return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
     }
     if (shape == .review_partial_assignment or shape == .review_repeated_member) {

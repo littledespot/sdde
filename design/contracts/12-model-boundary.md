@@ -101,11 +101,12 @@ Each generation request contains only what the current unit needs:
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
-  and local validation. Two admission constraints are exceptions, because
+  and local validation. Three admission constraints are exceptions, because
   provider schema syntax cannot express them: `exact_members` uniqueness, with a
   native count its completeness (`missing_member`; below, ADR 0046) and with a `distinct`
-  rule its distinctness (`equal_items`; below), and
-  ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3). Local admission, request descriptions and replay
+  rule its distinctness (`equal_items`; below),
+  ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3),
+  and ADR 0036's claim agreement (`disagreeing_items`; below). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -116,6 +117,19 @@ Each generation request contains only what the current unit needs:
   cardinality unless the native owner declares a unique-subset selector: its maximum
   is the smaller of the canonical maximum and eligible-ID count. This fact applies
   only to integer collections, never scalar choices, and introduces no token limit.
+  A unique-subset selector on an array's item list may also declare an `agree` property
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md) Decision 7): items that list a
+  common value return the same value for it, or admission rejects the first item that a
+  later one disagrees with as `disagreeing_items`, located at that item with scope `parent`
+  like `equal_items`:
+  - `agree` is a required enumeration of every item other than the list itself, so only IDs
+    and closed tags are compared, the items are objects, and the list is a required integer
+    list (an empty list holds no value, so it shares none);
+  - the selector governs one array, so an outer array rejects, and it excludes a coverage
+    on the same selector;
+  - a part whose schema lacks the array leaves the selector unused and records nothing,
+    while a selector that no schema holds rejects;
+  - the request description records the applied rule (`agreements`), so replay applies it.
   An `exact_members` selector instead names an integer property of array items:
   - the array must contain exactly one item for each allowed value;
   - its item count is fixed to the member count, which the guidance schema states
@@ -222,7 +236,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v19` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v20` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 

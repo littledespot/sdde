@@ -88,6 +88,57 @@ pub fn firstEqualItem(items: *const envelope.Array, members: schema.Members) ?us
     return null;
 }
 
+/// The integer list `property` of one item, when it has one.
+fn listOf(item: envelope.Value, property: []const u8) ?*const envelope.Array {
+    if (item != .object) return null;
+    const listed = item.object.get(property) orelse return null;
+    return if (listed == .array) listed.array else null;
+}
+
+/// The integer at `position` of `list`, when it is one.
+pub fn valueAt(list: *const envelope.Array, position: usize) ?i64 {
+    return listedValue(list.at(position).?);
+}
+
+/// Whether `list` holds `wanted`. A value that is no integer is in no list.
+pub fn lists(list: *const envelope.Array, wanted: i64) bool {
+    for (0..list.count()) |position| if ((listedValue(list.at(position).?) orelse continue) == wanted) return true;
+    return false;
+}
+
+/// Whether items `left` and `right` list a common value in `agreement.property` (ADR 0036
+/// Decision 7). An item without that list shares no value with another.
+pub fn sharesValue(items: *const envelope.Array, agreement: schema.Agreement, left: usize, right: usize) bool {
+    const first = listOf(items.at(left).?, agreement.property) orelse return false;
+    const second = listOf(items.at(right).?, agreement.property) orelse return false;
+    for (0..second.count()) |position| if (lists(first, listedValue(second.at(position).?) orelse continue)) return true;
+    return false;
+}
+
+/// Whether items `left` and `right` list a common value yet return different values for
+/// `agreement.agree`, compared as the response returned them. An item without that property
+/// disagrees with no other. A correction finds every disagreeing value by asking this of each pair.
+pub fn disagree(items: *const envelope.Array, agreement: schema.Agreement, left: usize, right: usize) bool {
+    const first = items.at(left).?;
+    const second = items.at(right).?;
+    if (first != .object or second != .object) return false;
+    const one = first.object.get(agreement.agree) orelse return false;
+    const other = second.object.get(agreement.agree) orelse return false;
+    return !sameValue(one, other) and sharesValue(items, agreement, left, right);
+}
+
+/// The integer list `agreement.property` of item `index`, when it has one.
+pub fn itemList(items: *const envelope.Array, agreement: schema.Agreement, index: usize) ?*const envelope.Array {
+    return listOf(items.at(index).?, agreement.property);
+}
+
+/// The first item, in response order, that a later item disagrees with. Admission takes its
+/// rejection from it, and a correction lists every disagreeing value.
+pub fn firstDisagreeingItem(items: *const envelope.Array, agreement: schema.Agreement) ?usize {
+    for (0..items.count()) |left| for (left + 1..items.count()) |right| if (disagree(items, agreement, left, right)) return left;
+    return null;
+}
+
 fn hasKind(item: envelope.Value, kind_property: []const u8, kinds: []const []const u8) bool {
     if (item != .object) return false;
     const tagged = item.object.get(kind_property) orelse return false;
@@ -284,6 +335,16 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                     var diagnostic = reject(.shared_member, contract.items);
                     diagnostic.coverage = coverage;
                     return diagnostic.within(.{ .index = shared.item });
+                }
+            }
+            // ADR 0036 Decision 7: items that list a common value return the same value for the
+            // agreed property. The location names the first item that a later one disagrees with,
+            // and the contract violated is the enclosing array's.
+            if (contract.agreement) |agreement| {
+                if (firstDisagreeingItem(value.array, agreement)) |first| {
+                    var diagnostic = reject(.disagreeing_items, node);
+                    diagnostic.agreement = agreement;
+                    return diagnostic.item(first);
                 }
             }
         },

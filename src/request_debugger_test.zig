@@ -213,6 +213,8 @@ test "captured descriptions round-trip controls and reject a retired output allo
     // ADR 0038 Decision 3 (amended): v18 recorded no properties its exact members must not all repeat,
     // so a replay would admit what the request refused.
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v18")));
+    // ADR 0036 Decision 7: v19 recorded no agreements, so a replay would admit a claim set the request corrected.
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v19")));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, ",\"sampling\":\"configured\"", "")));
     // A re-send records its sampling, and the value it sent round-trips.
     var resend = description;
@@ -1010,7 +1012,7 @@ test "source snapshots retain static JSON guidance with its prompt resource kind
 // Exercise capture, fragmentation, graph release, inspection and replay through
 // the same shared owners for whole, named, composed and narrowed request shapes.
 test "selected request schemas survive capture and graph release without whole-schema fallback" {
-    for (0..9) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
+    for (0..10) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
@@ -1064,6 +1066,7 @@ test "selected request schemas survive capture and graph release without whole-s
         if (shape == 2 or shape == 6) try std.testing.expect(selected.field_policies.len != 0);
         if (shape == 7) try expectReplayedMembers(a, &fixture, selected);
         if (shape == 8) try expectReplayedCoverage(a, &fixture, selected);
+        if (shape == 9) try expectReplayedAgreements(a, &fixture, selected);
         const inspected = try fixture.provider.provider().inspect(a, selected, parent.response.?);
         if (inspected.schema != .valid) std.debug.print("selected shape {d}: {s}\n", .{ shape, try std.json.Stringify.valueAlloc(a, inspected, .{}) });
         try std.testing.expectEqual(.valid, inspected.schema);
@@ -1127,6 +1130,11 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
             \\{"$defs":{"repair":{"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"],"additionalProperties":false}},"type":"object","properties":{"whole":{"$ref":"#/$defs/repair"}},"required":["whole"],"additionalProperties":false}
         );
         return .{ .schema = canonical.select(.{ .bytes = "repair" }).?, .response = "{\"enabled\":true}" };
+    }
+    if (shape == 9) {
+        const canonical = try compiler.compile(a, agreement_schema);
+        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = agreement_path }, .allowed = &.{ 2, 4 }, .collection = .unique_subset, .agree = "topic" }});
+        return .{ .schema = restriction.selected(), .response = "{\"entries\":[{\"topic\":\"north\",\"refs\":[2]},{\"topic\":\"south\",\"refs\":[4]}]}", .restriction = restriction };
     }
     if (shape == 8) {
         const canonical = try compiler.compile(a, coverage_schema);
@@ -1197,7 +1205,7 @@ fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debu
     var foreign = selected;
     foreign.members = &.{.{ .path = member_path, .allowed = &.{ 2, 4, 6 } }};
     try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
-    try std.testing.expectEqualStrings("Captured schema and native membership or coverage disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
+    try std.testing.expectEqualStrings("Captured schema and native membership, coverage or agreement disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
     // So is a rule naming a property the captured schema's items do not have.
     var unknown = selected;
@@ -1260,6 +1268,40 @@ fn expectReplayedCoverage(a: std.mem.Allocator, fixture: *Fixture, selected: deb
     const unowned = try std.mem.replaceOwned(u8, a, recorded, ",\"owning\":[]", "");
     try std.testing.expect(!std.mem.eql(u8, recorded, unowned));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, unowned));
+}
+
+const agreement_schema = "{\"type\":\"object\",\"properties\":{\"entries\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"topic\":{\"enum\":[\"north\",\"south\"]},\"refs\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}}},\"required\":[\"topic\",\"refs\"],\"additionalProperties\":false}}},\"required\":[\"entries\"],\"additionalProperties\":false}";
+const agreement_path: []const @import("domain/model_result_schema.zig").ChoiceStep = &.{ .{ .property = "entries" }, .{ .items = {} }, .{ .property = "refs" } };
+
+/// A captured request replays admission's native agreement rule (ADR 0036 Decision 7),
+/// which the recorded provider schema bytes cannot express.
+fn expectReplayedAgreements(a: std.mem.Allocator, fixture: *Fixture, selected: debug.Description) !void {
+    try std.testing.expectEqual(@as(usize, 1), selected.agreements.len);
+    try std.testing.expectEqual(@as(usize, 0), selected.coverages.len);
+    try std.testing.expectEqualStrings("topic", selected.agreements[0].agree);
+    try std.testing.expectEqualSlices(i64, &.{ 2, 4 }, selected.agreements[0].allowed);
+    // The record replays the rule: the same lines under two topics are rejected at the first of the two, in any order,
+    // as they were live, and the same lines under one topic are admitted.
+    const split = try debugResponse(a, "{\"entries\":[{\"topic\":\"north\",\"refs\":[4,2]},{\"topic\":\"south\",\"refs\":[2,4]}]}");
+    const checked = try fixture.provider.provider().inspect(a, selected, split);
+    try std.testing.expectEqual(.invalid, checked.schema);
+    try std.testing.expectEqualStrings("disagreeing_items", checked.reason.?);
+    try std.testing.expectEqualStrings("/entries/0", checked.path.?);
+    const agreeing = try debugResponse(a, "{\"entries\":[{\"topic\":\"north\",\"refs\":[4,2]},{\"topic\":\"north\",\"refs\":[2,4]}]}");
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, selected, agreeing)).schema);
+    // Without the record the same bytes pass, so the record is what replays admission.
+    var unrestricted = selected;
+    unrestricted.agreements = &.{};
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, split)).schema);
+    // A record that does not fit the captured schema cannot be read or replayed.
+    var foreign = selected;
+    foreign.agreements = &.{.{ .path = agreement_path, .allowed = &.{ 2, 4 }, .agree = "ghost" }};
+    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
+    var unfitted = selected;
+    unfitted.agreements = &.{.{ .path = agreement_path, .allowed = &.{ 2, 4, 6 }, .agree = "topic" }};
+    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, unfitted));
+    try std.testing.expectEqualDeep(selected.agreements, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).agreements);
 }
 
 fn debuggerExtractionShape(a: std.mem.Allocator, selected: *const @import("domain/model_result_schema.zig").Schema, response: []const u8) !DebuggerSelectedShape {

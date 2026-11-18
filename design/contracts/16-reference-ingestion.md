@@ -168,6 +168,11 @@ Initial readers should cover:
   A quoted claim with the same category and cited lines as an earlier claim of its chunk is
   that claim (ADR 0036 Decision 3, SPEC01 D8.3); the first is kept before claim IDs are
   assigned, and the raw response is unchanged. Omission-repair insertions follow the same rule.
+  An extraction answer in which two claims cite a common line under different categories is
+  rejected at response admission (`disagreeing_items`) and corrected by the existing bounded
+  protocol correction, so an initial extraction answer never files a line under two
+  categories. An omission-repair insertion is not compared
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md) Decision 7).
 - IDs are local to the immutable request's source/chunk scope.
 - Each selectable unit preserves one original line, including its line ending, or the remaining
   line fragment at a chunk boundary.

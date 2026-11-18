@@ -297,7 +297,9 @@ explicit in the selected YAML:
 - These are shape descriptions, not literal JSON examples.
 - Each claim has only a `category` and a `citations` set of source-line IDs
   ([ADR 0036](../decisions/0036-source-quoted-claims.md)). Admission restricts the IDs to
-  the chunk's citable (non-blank) lines.
+  the chunk's citable (non-blank) lines, and rejects two claims that cite a common line
+  under different categories (ADR 0036 Decision 7): the existing bounded protocol
+  correction names the lines and both claims, so the model files a line under one category.
 - The model supplies no wording. The engine quotes each claim's cited lines as written,
   Markdown included, trimming each run only at its ends (never inside fenced code) and
   joining separate runs with an ellipsis line. A claim spanning several top-level list

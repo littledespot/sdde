@@ -1,7 +1,7 @@
 {
   "purpose": "Reference extraction field meanings. Apply only to selected fields. Use only supplied IDs.",
   "kind": "Use claims when source facts or exact-token obligations exist. Meaningful prose requires claims; claims may be empty only when there are exact-token obligations but no prose facts to extract. Use no_feature_claim with a reason only when neither exists.",
-  "claims": "One independently meaningful source fact per entry. Include meaningful identity and purpose headings. Separate independent behavior, implementation and verification facts.",
+  "claims": "One independently meaningful source fact per entry. Separate independent behavior, implementation and verification facts.",
   "category": {
     "business": "Feature identity, purpose, goals or observable product behavior, including outputs, conditions and behavioral constraints. Preserve technical qualifiers with the behavior.",
     "design": "An explicit design decision or constraint.",

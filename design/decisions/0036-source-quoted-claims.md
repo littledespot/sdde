@@ -32,7 +32,22 @@
     the engine gives no code span to an exact copy a balanced pair directly wraps, including
     a copy that ends in terminal punctuation (Decision 6), and generation requests show a
     claim's wording as one paragraph, without list markers or line breaks (Decision 2).
+  - 18 November 2026, "implement At extraction: yes. The engine can compute, from line IDs
+    alone, that two claims cite exactly the same lines. It could return the existing protocol
+    correction naming both, so the model keeps one category. The cost is that one line can no
+    longer be filed under two categories.": response admission corrects an extraction answer
+    that files one line under two categories (Decision 7). The rule first read "exactly the
+    same lines" as the same set of line IDs; on the user's "Wider rule: yes", to the question
+    whether it should cover claims whose line sets differ, it binds any line cited by claims
+    of two categories. It binds only where the categories differ, because the same category
+    on the same lines is already one claim (SPEC01 D8.3, Decision 3).
 - **Amends:**
+  - §12.2 and §22.6, whose admission constraints and corrections gain Decision 7's
+    agreement rule and its `disagreeing_items` correction;
+  - §16.3, extraction claims that cite a common line;
+  - [ADR 0019](0019-single-request-debugger.md), whose request description records the
+    rule, and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) Decision 5,
+    whose list of native admission constraints gains it;
   - §12.7, the reference-claim proposal;
   - §16.3 and §16.4 step 6, extraction citations and repair;
   - §22, reference-extraction repair;
@@ -129,9 +144,11 @@ same claim and native checks couldn't tell distinct duties apart.
      category and the same cited lines as an earlier claim of its chunk is the same
      evidence, because its wording is the quote of those lines. Extraction text validation
      keeps the first, with its origin, after the split and before claim identities exist.
-     A different category, or different or partly overlapping lines, stays a separate
-     claim. The raw model response is unchanged, so duplicates stay countable. This applies
-     to model claims only; preserved-token claims keep ADR 0024's occurrences.
+     Different or partly overlapping lines stay separate claims of their category. A line
+     cited under two categories is corrected at admission (Decision 7), so a different
+     category on shared lines reaches this step only through an omission-repair insertion.
+     The raw model response is unchanged, so duplicates stay countable. This applies to
+     model claims only; preserved-token claims keep ADR 0024's occurrences.
 4. **Repair routes that served model wording are deleted.**
    - Text repair keeps only the `no_feature_claim` reason, still model text.
    - Citation repair (`citation_replacement`, `source_selection_replacement`), its
@@ -194,6 +211,55 @@ same claim and native checks couldn't tell distinct duties apart.
        written, with no second delimiter.
      - No renderer revision exists to change, and no Plan or Tasks review exists to renew
        ([ADR 0034](0034-spec-quality-gate.md)).
+7. **A line is cited under one category** (18 November 2026; the decision authority
+   above).
+   - **The rule.** In one chunk's claims answer, two claims whose `citations` hold a common
+     line ID return the same `category`. IDs compare as integers, without order or repeats.
+     Response admission rejects an answer that breaks it as `disagreeing_items`, located at
+     the first claim that a later one disagrees with (`/claims/<i>`, scope `parent`). It is a
+     native cross-item constraint beside `equal_items` and `shared_member`: the provider
+     schema can't express it, so request descriptions record it (`agreements`) and replay
+     applies it. The check reads line IDs and category tags only, never prose.
+   - **Where it applies.** The initial extraction request, whose `/claims/*/citations`
+     selector names `category` as the property that claims citing a common line share. A
+     quote that a list split makes equal to another claim's lines always comes from claims
+     that cite a common line, so admission sees it before the split. The omission repair
+     returns one claim, which has no sibling to agree with, so it keeps Decision 3's rule:
+     the same lines in another category are inserted.
+   - **The correction.** The existing bounded protocol correction (§22.6) resubmits the
+     complete part under the request's `retry-limit` and adds no counter, insertion or
+     deletion. Its guidance adds `agreement`: `property` (`citations`), `agree`
+     (`category`) and `sets`. Each set is `values`, line IDs that the same claims cite, and
+     `items`, the JSON Pointer of every claim that cites them, in response order; a line
+     whose claims share one category is not named. The model chooses which category to
+     keep, or whether to keep one claim; the engine never chooses. Exhaustion fails the run
+     (§22.6).
+   - **Why admission.** A sentence filed under two categories can't be reconciled: a
+     summary statement names claims of one category, and a duplicate or superseded target
+     must share its claim's category. The pair therefore reached records authoring, where
+     two groups wrote equal records and the run blocked as `competing_records` (ADR 0035
+     Decision 3, ADR 0038). A defect of the response's own contract takes admission's
+     correction, as member sets do (ADR 0023, ADR 0038 Decision 3, ADR 0046); it works around
+     no model limitation, because the rule judges no meaning and is checked by the engine.
+   - **What it does not change.**
+     - The same category on the same lines stays one claim natively (Decision 3), and
+       claims of one category may share lines.
+     - Claims that cite no common line stay separate, in any categories.
+     - An omission-repair insertion is not compared: that repair exists to add a claim in
+       another category over lines already filed, so it can still reach extraction text
+       validation as two categories on the same lines.
+   - **Cost.** A line can no longer be filed under two categories: a sentence that is both
+     a requirement and a scope boundary is one claim of the category the model keeps, and a
+     heading line cited beside two bullets of different categories is cited by one of them.
+     Under ADR 0024 a code span in a `business` or `scope_guard` claim is forced and one in
+     another category is not, so the kept category decides that duty.
+   - **Versions.** `model-request-debug/v20` records the rule. The new rejection reason is
+     a closed member of the reports, so `spec-e2e-report/v21`, `e2e-step-event/v6`,
+     `baseline-acquisition/v15`, `baseline-score/v7`,
+     `provider-compatibility-report/v4` and `exact-value-production-admission/v4` advance
+     with it, and earlier runs and captures stay readable only by the build that made
+     them. Persisted specification state and the extraction schema, composition and
+     operation bytes don't change.
 
 ## Consequences
 
@@ -203,6 +269,11 @@ same claim and native checks couldn't tell distinct duties apart.
   call, so ADR 0038's scenario rule can check each list requirement.
 - **Limits.**
   - Several requirements in one prose sentence or paragraph stay one claim.
+  - Decision 7 covers the model's citations in one initial answer. An omission-repair
+    insertion can still file a line under two categories, and a correction that keeps
+    failing ends the run at extraction instead of at records authoring. Whether it raises
+    the publication rate is for repeated runs of both development cases on one build
+    (SPEC01 D8.4 holds the evidence).
   - Items with different meanings in one split take the proposal's single category.
   - A cited heading, or other markup line such as a thematic break, split from its list
     becomes a short claim of its own.
@@ -269,9 +340,33 @@ same claim and native checks couldn't tell distinct duties apart.
     item is held adds only the second, with the repair's origin; the same lines in another
     category are inserted.
   - One evidence, one claim: identical proposals, and duplicates per item after the split,
-    are one claim; the same lines in two categories, different lines and partly overlapping
-    lines stay separate; the raw proposals are unchanged; duplicate claims quoting an exact
-    value keep the single claim's exact-value duty.
+    are one claim; the same lines in two categories (here, as an omission-repair
+    insertion makes them), different lines and partly overlapping lines stay separate;
+    the raw proposals are unchanged; duplicate claims quoting an exact value keep the
+    single claim's exact-value duty.
+  - A line is cited under one category (Decision 7):
+    - the extraction request's schema admits one claim, claims on different lines, and
+      shared lines in one category in any order or with repeats; it rejects a line cited
+      under two categories at the first of the claims, whether the lines are the same, a
+      whole list sits beside one of its items, or one line is shared, and among other
+      claims, for the development cases' two source shapes;
+    - the omission repair's request names no agreement;
+    - the rule at the owning boundary, in an unrelated domain: a pair sharing one value,
+      a whole list beside one of its items, lists that overlap in two values, three items,
+      two groups, a shared value that agrees beside one that doesn't, a shared value in
+      another array, and a selection without the rule that admits all of them;
+    - the correction lists each group of values its items disagree on, the values that the
+      same items cite forming one group, with the location of every item that cites them,
+      refuses a response whose first disagreeing item is elsewhere or that has none, and
+      is refused for a diagnostic of another reason;
+    - a composition part that lacks the claims array leaves the selector unused and
+      records nothing, and a selector that no schema holds is refused;
+    - the recorded rule restores the same admission over the captured bytes, so replay
+      rejects what live admission does, and a record that fits no captured schema is
+      refused;
+    - a scripted extraction answer that files one set of lines under two categories takes
+      one correction naming the lines and both claims, and the run publishes from the
+      answer that keeps one.
   - Ingestion rejects C1 and DEL characters.
   - A proposal carrying wording is rejected as an unknown property.
   - Scripted models cite only citable lines. Scenarios that need a discarded token or

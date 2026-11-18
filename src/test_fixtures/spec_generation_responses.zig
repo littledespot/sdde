@@ -126,7 +126,11 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 var response = try @import("../domain/model_candidate_json.zig").decode(response_type, allocator, body);
                 const claims = try allocator.alloc(r.extraction.Proposal, 2);
                 claims[0] = response.claims.claims[0];
-                claims[1] = .{ .category = .technical, .citations = claims[0].citations };
+                // A line cited under two categories is corrected at admission (ADR 0036 Decision 7), so the
+                // second kind cites the first line alone and the first claim keeps the rest.
+                if (claims[0].citations.len < 2) return error.InvalidFixture;
+                claims[1] = .{ .category = .technical, .citations = claims[0].citations[0..1] };
+                claims[0].citations = claims[0].citations[1..];
                 response.claims.claims = claims;
                 response.claims.token_classifications = try @import("reference_tokens.zig").classifications(allocator, candidates, chunk);
                 return @import("../domain/model_candidate_json.zig").encode(response_type, allocator, response);

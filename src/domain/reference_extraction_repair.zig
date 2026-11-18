@@ -181,7 +181,7 @@ pub const Omission = struct {
         const result = try Atomic.packetPresenting(a, auth, guidance, base, @as(@import("specification_result_definitions.zig").Extraction, if (auth.target == .classification) .classification else .claim).id(), try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
         if (auth.target == .classification) return result;
         defer packets.release(result);
-        return input.withCitationChoices(a, result, facts.extraction.inputs, scope, &.{.{ .property = "citations" }});
+        return input.withCitationChoices(a, result, facts.extraction.inputs, scope, &.{.{ .property = "citations" }}, null);
     }
     fn sourceOrigin(facts: OmissionFacts, auth: OmissionAuthorization) OmissionError!?@import("model_candidate_origin.zig").Origin {
         const entry = try entryAt(facts.extraction.candidate, try Omission.scopeOf(auth));

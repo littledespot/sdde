@@ -2,7 +2,7 @@
 //! field names and expected shapes; reports copy only reason and JSON Pointer.
 const std = @import("std");
 const schema = @import("model_result_schema.zig");
-pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, shared_member, missing_member, equal_items };
+pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, shared_member, missing_member, equal_items, disagreeing_items };
 pub const Segment = @import("json_pointer.zig").Segment;
 pub const Description = struct { reason: Reason, path: []const u8 };
 pub const Diagnostic = struct {
@@ -18,6 +18,10 @@ pub const Diagnostic = struct {
     /// For `equal_items` (ADR 0038 Decision 3), the compiled member rule whose `distinct` properties the
     /// equal items repeat, borrowed like `expected`, so a correction can find every equal set.
     members: ?schema.Members = null,
+    /// For `disagreeing_items` (ADR 0036 Decision 7), the compiled agreement rule whose listed
+    /// property the disagreeing items share a value of, borrowed like `expected`, so a correction
+    /// can find every value its items disagree on.
+    agreement: ?schema.Agreement = null,
     /// For `enum_mismatch` on an integer enumeration, the out-of-set integer the candidate
     /// gave, so a correction can name it beside the node's allowed set.
     rejected: ?i64 = null,
@@ -43,6 +47,7 @@ pub const Diagnostic = struct {
             .missing_member => "Schema validation failed: no item names this assigned member; return exactly one item for every assigned member.",
             .shared_member => "Schema validation failed: this item names values that an item of a kind in exclusive.owning names, or an earlier item of a kind in exclusive.kinds names, as well as values none of those items names. Rewrite this item to name and state only the values none of those items names. shared lists every such naming in this response.",
             .equal_items => "Schema validation failed: items of this array return the same values for every property in equal.compared. equal.sets lists, for each set of such items, the equal.key value of every item in it. Return every item again, each with the values its own equal.key value calls for, so that no two items of a set stay equal.",
+            .disagreeing_items => "Schema validation failed: items of this array list a common value in agreement.property but return different values for agreement.agree. agreement.sets lists, for each group of such values, the values and the location of every item that lists them. Return every item again so that items listing a common value return the same value for agreement.agree.",
         };
     }
 
@@ -68,7 +73,7 @@ pub const Diagnostic = struct {
     pub fn eql(self: Diagnostic, other: Diagnostic) bool {
         if (self.reason != other.reason or self.expected != other.expected or
             self.expected_location != other.expected_location or self.length != other.length or
-            !std.meta.eql(self.coverage, other.coverage) or !std.meta.eql(self.members, other.members) or self.member != other.member or self.rejected != other.rejected) return false;
+            !std.meta.eql(self.coverage, other.coverage) or !std.meta.eql(self.members, other.members) or !std.meta.eql(self.agreement, other.agreement) or self.member != other.member or self.rejected != other.rejected) return false;
         for (self.segments[0..self.length], other.segments[0..other.length]) |left, right| {
             if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
             switch (left) {

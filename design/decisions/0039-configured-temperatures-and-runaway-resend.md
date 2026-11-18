@@ -164,8 +164,8 @@ constant, so projects couldn't choose it.
 5. **Every retry response passes the same checks.** A re-sent response, like every
    protocol correction's response, goes through exactly the checks a first response
    does, in the same order: observation and usage validation, envelope decoding,
-   payload-schema validation, the native admission constraints (assignment membership
-   and statement exclusivity), domain validation, the evidence and repair rules, and every
+   payload-schema validation, the native admission constraints (assignment membership,
+   statement exclusivity and claim agreement), domain validation, the evidence and repair rules, and every
    publication check. No check is skipped, relaxed or reordered for a retry, and a
    retry response can't be accepted on less evidence than a first response. A retry
    that succeeds removes no earlier failure from the logs or the report.

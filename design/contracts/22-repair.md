@@ -565,8 +565,8 @@ defined response-level correction containing:
   schema, and concise schema-derived immediate fields, required fields and allowed
   discriminator values. The single complete schema retains every alternative and
   every constraint that schema syntax can express; [§12.2](12-model-boundary.md#122-initial-guidance-packet)
-  owns the admission constraints that stay native, and `duplicate_member` and `equal_items`
-  are reported with parent scope on the enclosing array.
+  owns the admission constraints that stay native, and `duplicate_member`, `equal_items`
+  and `disagreeing_items` are reported with parent scope on the enclosing array.
   A `missing_member` correction also names the first omitted member (`member`), and a
   `shared_member` correction, located at
   the partly taken record and offering its shape, names its exclusive and owning kinds
@@ -578,7 +578,11 @@ defined response-level correction containing:
   D13.6, 12 November 2026); a string enumeration keeps its correction. An `equal_items`
   correction, located at the first item of the first equal set, names the key and the compared
   properties of the rule and lists, for each equal set, the key of every item in it (`equal`:
-  `key`, `compared` and `sets`; ADR 0038 Decision 3). No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
+  `key`, `compared` and `sets`; ADR 0038 Decision 3). A `disagreeing_items` correction, located at
+  the first item that a later one disagrees with, names the list and the agreed property of the
+  rule and lists, for each group of values that the same items list yet disagree on, those values
+  and the JSON Pointer of every item that lists them, in response order (`agreement`: `property`,
+  `agree` and `sets` of `values` and `items`; ADR 0036 Decision 7). No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
   (`repeated_statement`, ADR 0038 Decision 5), without judging its text, unless it holds
   the only copy of an exact value, which keeps it and its text under the usual rules. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or

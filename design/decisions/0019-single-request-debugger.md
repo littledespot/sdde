@@ -9,9 +9,10 @@
   [ADR 0023](0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)
   (18 October 2026), [ADR 0028](0028-anthropic-messages-provider.md) (21 October 2026,
   Anthropic provider configuration), [ADR 0038](0038-record-claims-and-scenario-coverage.md) (25 October,
-  2, 12 and 14 November 2026) and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
+  2, 12 and 14 November 2026), [ADR 0036](0036-source-quoted-claims.md) (18 November 2026)
+  and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
   (26 October 2026), which change what the request description records ("Capture and
-  lineage" and "Replay" below; current version `model-request-debug/v19`, which also carries
+  lineage" and "Replay" below; current version `model-request-debug/v20`, which also carries
   [ADR 0043](0043-model-facing-exact-text-names.md)'s model-facing names and, since
   [ADR 0048](0048-engine-derived-specification-title.md), no brief-title field binding).
   [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, amended 23 October
@@ -69,7 +70,9 @@ wire-field bindings to the composition registry, so the selected schema and diag
 replay enforce the same permitted insertions; the immutable exact-occurrence scope
 (ADR 0020); and each applied exact-membership selection (ADR 0023), with the item properties
 that no two items may all repeat (`distinct`, ADR 0038 Decision 3; from v19), and native coverage
-rule, with its exclusive and owning kinds (ADR 0038; until v18 also covered and covering kinds), which the
+rule, with its exclusive and owning kinds (ADR 0038; until v18 also covered and covering kinds), and each
+applied agreement, the item property that items listing a common value must share (ADR 0036
+Decision 7; from v20), which the
 schema bytes cannot express, so replay reapplies them through the same schema
 restriction owner. This metadata is diagnostic input, not provider-visible authority.
 Older descriptions remain unchanged and reject readback; replay requires a new capture,

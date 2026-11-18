@@ -63,6 +63,8 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
             if ((reason.member != null) != (reason.reason == .missing_member)) return error.ModelRequestAssociationInvalid;
             // ADR 0038 Decision 3: exactly an equal-items correction names the rule that compares them.
             if ((reason.members != null) != (reason.reason == .equal_items)) return error.ModelRequestAssociationInvalid;
+            // ADR 0036 Decision 7: exactly a disagreeing-items correction names the rule that compares them.
+            if ((reason.agreement != null) != (reason.reason == .disagreeing_items)) return error.ModelRequestAssociationInvalid;
             // Exactly an integer enumeration's mismatch names the value the candidate gave and
             // the set it missed (22-repair.md §22.6): the value from admission, the set from the
             // compiled node the request itself carries.
@@ -71,7 +73,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
             const Exclusive = struct { kind_property: []const u8, kinds: []const []const u8, owning: []const []const u8 };
             // A correction that lists namings reads the rejected response again; the admission owner finds
             // the namings from the rule that rejected it.
-            var document = if (reason.reason == .shared_member or reason.reason == .equal_items)
+            var document = if (reason.reason == .shared_member or reason.reason == .equal_items or reason.reason == .disagreeing_items)
                 @import("model_envelope.zig").parseContent(scratch, content orelse return error.ModelRequestAssociationInvalid, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.ModelRequestAssociationInvalid
             else
                 null;
@@ -82,6 +84,9 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
             // ADR 0038 Decision 3: an equal-items correction lists the key of every item of each equal set.
             const Equal = struct { key: []const u8, compared: []const []const u8, sets: []const []const i64 };
             const equal: ?Equal = if (reason.reason == .equal_items) .{ .key = reason.members.?.property, .compared = reason.members.?.distinct, .sets = try equalSets(scratch, rejected_root.?, reason) } else null;
+            // ADR 0036 Decision 7: a disagreeing-items correction lists each group of values its items disagree on, with the location of every item that lists them.
+            const Agreed = struct { property: []const u8, agree: []const u8, sets: []const Disagreement };
+            const agreement: ?Agreed = if (reason.reason == .disagreeing_items) .{ .property = reason.agreement.?.property, .agree = reason.agreement.?.agree, .sets = try disagreeingSets(scratch, rejected_root.?, reason) } else null;
             break :value try std.json.Stringify.valueAlloc(scratch, .{
                 .diagnostic = .{ .schema = try reason.describe(scratch) },
                 .explanation = reason.explanation(),
@@ -94,6 +99,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
                 .exclusive = @as(?Exclusive, if (reason.reason == .shared_member) .{ .kind_property = reason.coverage.?.rule.kind_property, .kinds = reason.coverage.?.rule.exclusive, .owning = reason.coverage.?.rule.owning } else null),
                 .shared = shared,
                 .equal = equal,
+                .agreement = agreement,
                 .member = reason.member,
                 .rejected = reason.rejected,
                 .allowed = if (reason.rejected != null) allowed else null,
@@ -182,4 +188,63 @@ fn equalSets(allocator: std.mem.Allocator, root: @import("model_envelope.zig").V
     }
     if (sets.items.len == 0) return error.ModelRequestAssociationInvalid;
     return sets.items;
+}
+
+/// One group of values that items of the rejected response list in common yet disagree on: the values,
+/// and the JSON Pointer of every item that lists them (ADR 0036 Decision 7).
+const Disagreement = struct { values: []const i64, items: []const []const u8 };
+
+/// Every value that items of the rejected response list in common yet disagree on, grouped: values that
+/// the same items list form one group, in the order their first value arrives, and each group names every
+/// one of those items in response order. The rejection's path ends in the first item that a later one
+/// disagrees with.
+fn disagreeingSets(allocator: std.mem.Allocator, root: @import("model_envelope.zig").Value, first: @import("model_payload_schema.zig").Diagnostic) preparation.Error![]const Disagreement {
+    const payload = @import("model_payload_schema.zig");
+    const pointer = @import("json_pointer.zig");
+    const located = try rejectedArray(root, first);
+    const agreement = first.agreement orelse return error.ModelRequestAssociationInvalid;
+    // Admission located the first such item; any other means the response isn't the one it rejected.
+    if ((payload.firstDisagreeingItem(located.array, agreement) orelse return error.ModelRequestAssociationInvalid) != located.item) return error.ModelRequestAssociationInvalid;
+    const count = located.array.count();
+    const Group = struct { members: []const usize, values: std.ArrayList(i64) };
+    var groups: std.ArrayList(Group) = .empty;
+    var seen: std.ArrayList(i64) = .empty;
+    for (0..count) |index| {
+        const list = payload.itemList(located.array, agreement, index) orelse continue;
+        for (0..list.count()) |position| {
+            const value = payload.valueAt(list, position) orelse continue;
+            if (std.mem.indexOfScalar(i64, seen.items, value) != null) continue;
+            try seen.append(allocator, value);
+            // The items that list this value, which disagree when some one differs from the first of them.
+            var members: std.ArrayList(usize) = .empty;
+            var differs = false;
+            for (0..count) |other| {
+                const other_list = payload.itemList(located.array, agreement, other) orelse continue;
+                if (!payload.lists(other_list, value)) continue;
+                if (members.items.len != 0 and payload.disagree(located.array, agreement, members.items[0], other)) differs = true;
+                try members.append(allocator, other);
+            }
+            if (!differs) continue;
+            const joined = for (groups.items) |*group| {
+                if (std.mem.eql(usize, group.members, members.items)) break group;
+            } else null;
+            if (joined) |group| try group.values.append(allocator, value) else {
+                var values: std.ArrayList(i64) = .empty;
+                try values.append(allocator, value);
+                try groups.append(allocator, .{ .members = members.items, .values = values });
+            }
+        }
+    }
+    if (groups.items.len == 0) return error.ModelRequestAssociationInvalid;
+    var segments = first.segments;
+    const sets = try allocator.alloc(Disagreement, groups.items.len);
+    for (groups.items, sets) |group, *set| {
+        const locations = try allocator.alloc([]const u8, group.members.len);
+        for (group.members, locations) |item, *location| {
+            segments[located.path_length] = .{ .index = item };
+            location.* = try pointer.render(allocator, segments[0 .. located.path_length + 1]);
+        }
+        set.* = .{ .values = group.values.items, .items = locations };
+    }
+    return sets;
 }

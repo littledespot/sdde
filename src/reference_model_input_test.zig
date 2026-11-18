@@ -508,6 +508,67 @@ test "extraction claims may cite only the supplied nonblank source lines" {
     }
 }
 
+test "extraction claims that cite the same lines name one category, and nothing else about claims is constrained" {
+    // The rule is native: the model-visible schema bytes can't express it, so the restricted schema itself is checked.
+    const check = @import("model_payload_schema_test.zig").checkCompiled;
+    const schema = @import("domain/model_result_schema.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.schema.json", a, .unlimited));
+    // Each source has text on lines 1 and 3 and a blank line 2, so two claims can cite the same lines, overlap or differ.
+    for ([_][]const u8{ "- A loan may be renewed once.\n\n- Refuse overdue loans.\n", "Display `Hello, World!`.\n\nShow the date.\n" }) |source_bytes| {
+        var ids: source.IdSource = .{};
+        const inputs = try source.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "requirements.md", source_bytes));
+        const passive = try text.prepare(a, inputs);
+        defer passive.deinit();
+        const scope: @import("domain/reference_evidence.zig").Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
+        const packet = try input.extractionPacket(std.testing.allocator, inputs, passive.registry, try tokens.candidates(a, inputs), scope);
+        defer packets.release(packet);
+        // The initial request names the claim property that claims citing the same lines must share.
+        try std.testing.expectEqual(@as(usize, 1), packet.integerChoices().len);
+        try std.testing.expectEqualStrings("category", packet.integerChoices()[0].agree.?);
+        const restricted = try schema.restrict(std.testing.allocator, schemas, packet.excludedVariants(), packet.integerChoices());
+        defer restricted.release();
+        const contract = restricted.selected();
+        const answer = struct {
+            fn of(allocator: std.mem.Allocator, comptime claims: []const u8, args: anytype) ![]const u8 {
+                return std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[" ++ claims ++ "],\"token_classifications\":[]}}", args);
+            }
+        }.of;
+        const claim = "{{\"category\":\"{s}\",\"citations\":{s}}}";
+        // Admitted: one claim, claims on different lines, and shared lines in one category, which the engine's
+        // one-evidence rule keeps as one claim when they are the same (ADR 0036 Decision 3).
+        for ([_][]const u8{
+            try answer(a, claim, .{ "business", "[1]" }),
+            try answer(a, claim ++ "," ++ claim, .{ "business", "[1]", "scope_guard", "[3]" }),
+            try answer(a, claim ++ "," ++ claim, .{ "business", "[1,3]", "business", "[3]" }),
+            try answer(a, claim ++ "," ++ claim, .{ "business", "[1]", "business", "[1]" }),
+            try answer(a, claim ++ "," ++ claim, .{ "business", "[1,3]", "business", "[3,1]" }),
+            try answer(a, claim ++ "," ++ claim, .{ "business", "[1,1]", "business", "[1]" }),
+        }) |bytes| try check(contract, .{ .bytes = bytes });
+        // Rejected: a line cited under two categories, located at the first of the claims, whether the lines are the
+        // same in any order, a whole list beside one of its items, or only one is shared, and among other claims.
+        // The same line under two categories is the pair a records group could not publish.
+        for ([_]struct { bytes: []const u8, path: []const u8 }{
+            .{ .bytes = try answer(a, claim ++ "," ++ claim, .{ "business", "[1]", "scope_guard", "[1]" }), .path = "/claims/0" },
+            .{ .bytes = try answer(a, claim ++ "," ++ claim, .{ "business", "[1,3]", "design", "[3,1]" }), .path = "/claims/0" },
+            .{ .bytes = try answer(a, claim ++ "," ++ claim, .{ "business", "[1,1]", "scope_guard", "[1]" }), .path = "/claims/0" },
+            .{ .bytes = try answer(a, claim ++ "," ++ claim, .{ "business", "[1,3]", "scope_guard", "[3]" }), .path = "/claims/0" },
+            .{ .bytes = try answer(a, claim ++ "," ++ claim, .{ "business", "[1]", "scope_guard", "[1,3]" }), .path = "/claims/0" },
+            .{ .bytes = try answer(a, claim ++ "," ++ claim ++ "," ++ claim, .{ "business", "[3]", "technical", "[1]", "scope_guard", "[1]" }), .path = "/claims/1" },
+        }) |case| try check(contract, .{ .bytes = case.bytes, .rejection = .disagreeing_items, .path = case.path });
+        // The omission repair offers one claim's citations and no agreement, since one inserted claim has no sibling to agree with.
+        const base = try input.extractionBase(std.testing.allocator, inputs, passive.registry, try tokens.candidates(a, inputs), scope);
+        defer packets.release(base);
+        const repair = try input.withCitationChoices(std.testing.allocator, base, inputs, scope, &.{.{ .property = "citations" }}, null);
+        defer packets.release(repair);
+        try std.testing.expectEqual(@as(usize, 1), repair.integerChoices().len);
+        try std.testing.expect(repair.integerChoices()[0].agree == null);
+    }
+}
+
 test "summary and signal schemas restrict semantic claim choices while retaining native token evidence" {
     const r = reconciliation.r;
     const stage = @import("domain/reference_reconciliation_stage.zig");
