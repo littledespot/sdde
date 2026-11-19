@@ -1252,7 +1252,7 @@ const OperationState = struct {
     stops_to: pipeline.RuntimeStatus = .cancelled,
     /// The address of the runtime handle the last step invocation received from the runner.
     runtime_context: usize = 0,
-    failure: enum { generic, reconciliation, omission, allocation } = .generic,
+    failure: enum { generic, reconciliation, omission, allocation, cancelled } = .generic,
     diagnostic: enum { none, unsafe, allocation } = .none,
     delta_fault: ?DeltaFault = null,
 };
@@ -1332,6 +1332,7 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
                     .reconciliation => error.InvalidReferenceReconciliation,
                     .omission => error.InvalidSpecificationCoverageRepair,
                     .allocation => error.OutOfMemory,
+                    .cancelled => error.Cancelled,
                 };
             }
             var delta: pipeline.NodeDelta = .{};
@@ -1393,6 +1394,23 @@ test "an operation that fails after the runtime stopped reports the stop, not an
         try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = expected }), runner.bindings().invokeStep(test_steps[0].id));
         // The operation received the runner's own runtime handle, not the always-active default.
         try std.testing.expectEqual(@intFromPtr(&runtime), control.state.runtime_context);
+    }
+}
+
+test "an operation that reports a cancellation ends the step cancelled, whatever the runtime reports" {
+    // The runtime stays active in the first case: a cancelled filesystem call is no runtime stop.
+    for ([_]?pipeline.RuntimeStatus{ null, .cancelled, .deadline_exhausted }) |stop| {
+        var runtime: PublicationRuntime = .{};
+        var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1, .failure = .cancelled, .stops = if (stop != null) &runtime else null, .stops_to = stop orelse .cancelled } };
+        var barrier: FakeBarrier = .{};
+        var graph = try testGraph();
+        var registry = testRegistry(&control);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{ .context = &runtime, .status_fn = PublicationRuntime.status }, null, .{ .budget = .{ .value = 1000 } });
+        defer runner.deinit();
+        try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+        // A deadline that ran out first is still the deadline; any other state of the runtime ends the run cancelled.
+        const expected: execution.Rejection = if (stop == .deadline_exhausted) .deadline_exhausted else .cancelled;
+        try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = expected }), runner.bindings().invokeStep(test_steps[0].id));
     }
 }
 

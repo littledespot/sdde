@@ -252,7 +252,7 @@ abandoned execution's resources.
 
 ### 14.9 `FeatureLoggingFailureOrchestrator`
 
-This instrumentation-internal orchestrator is entered once for a feature-sink failure. It coordinates transient-handle cleanup, one bounded emergency diagnostic and fail-closed execution abandonment. It performs no transaction stabilization or recovery, has no sink/filesystem capability itself, and is excluded from logging observation.
+This instrumentation-internal orchestrator is entered once for a feature-sink failure. A cancellation under the feature log is no sink failure: it does not enter this orchestrator, emits no emergency diagnostic and ends the run `cancelled` after the lock is released ([ADR 0032](../decisions/0032-engine-routines.md), "Cancellation mapping"). It coordinates transient-handle cleanup, one bounded emergency diagnostic and fail-closed execution abandonment. It performs no transaction stabilization or recovery, has no sink/filesystem capability itself, and is excluded from logging observation.
 
 Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), the feature-logging orchestrators in §§14.9–14.10 become typed engine routines in its second conversion. They convert only once its logging preconditions hold. The emergency diagnostic stays exactly once, non-recursive and unobserved, and every lock is released on every path.
 
@@ -287,7 +287,8 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
 - No normal event/model/node occurs between the route's adoption of the changed candidate and
   this switch.
 - Any failure emits the one fixed emergency record and enters `block_new_work`; the engine never
-  continues on an obsolete or partially switched policy.
+  continues on an obsolete or partially switched policy. A cancellation is no failure: it emits no
+  record and ends the run `cancelled`.
 
 - A process restart deliberately creates a fresh `runId`; it never pretends to resume or
   activate the crashed run's in-memory transition.

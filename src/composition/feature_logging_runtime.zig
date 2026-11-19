@@ -10,7 +10,8 @@ const runtime = @import("active_feature_log_runtime.zig");
 const run = @import("../domain/run_outcome.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const telemetry = @import("../domain/telemetry.zig");
-const Failure = @import("../domain/feature_log_stream.zig").FailureCode;
+const log_stream = @import("../domain/feature_log_stream.zig");
+const Failure = log_stream.FailureCode;
 
 pub const Assembly = struct {
     allocator: std.mem.Allocator,
@@ -25,7 +26,8 @@ pub const Assembly = struct {
     artifact_owner: ?*artifacts.Owner = null,
     runtime_owner: ?*runtime.Owner = null,
     shortcode: ?telemetry.WorkflowShortcode = null,
-    failure: ?Failure = null,
+    /// What stopped this log: a logging failure, or a cancellation, which is no logging failure.
+    failure: ?log_stream.Stop = null,
     /// The rejection this log's own failure replaced at the end of the run, kept beside it (27-observability.md).
     replaced: ?execution.FirstCause = null,
     finalized: bool = false,
@@ -54,10 +56,14 @@ pub const Assembly = struct {
         };
         const directory = active.capability(self.directory_owner.?);
         self.artifact_owner = artifacts.createForActive(self.allocator, self.roots.featureOutputWrite(), selected_binding, directory) catch return self.fail(.LOG_SINK_FAILURE);
-        self.runtime_owner = runtime.create(self.allocator, self.io, self.project, self.logs.policy(), artifacts.registry(self.artifact_owner.?), selected_binding) catch return self.fail(.LOG_SINK_FAILURE);
+        self.runtime_owner = runtime.create(self.allocator, self.io, self.project, self.logs.policy(), artifacts.registry(self.artifact_owner.?), selected_binding) catch |err| return switch (err) {
+            error.Cancelled => .cancelled,
+            error.InvalidArtifactRegistry, error.ArtifactStorageUnavailable, error.InsecurePermissions, error.OutOfMemory => self.fail(.LOG_SINK_FAILURE),
+        };
         switch (self.logs.activate(runtime.runner(self.runtime_owner.?).childBindings(), shortcode)) {
             .ok => {},
             .blocked => |failure| return self.fail(failure),
+            .cancelled => return .cancelled,
             .invalid => return self.fail(.LOG_SINK_FAILURE),
         }
         // §26: retention follows recovery and rotation, before the run starts.
@@ -69,7 +75,10 @@ pub const Assembly = struct {
         self.inputs.active_feature = directory;
         self.outputs.active_feature = directory;
         const events: @import("../application/workflow_event_capture.zig").Capture = .{ .barrier = self.logs.barrier(), .shortcode = shortcode };
-        if (events.emit(.{ .event_type = .run_started })) |failure| return self.fail(failure);
+        if (events.emit(.{ .event_type = .run_started })) |stop| return switch (stop) {
+            .blocked => |failure| self.fail(failure),
+            .cancelled => .cancelled,
+        };
         return .{ .ready = active.directory(directory) };
     }
 
@@ -116,6 +125,7 @@ pub const Assembly = struct {
             switch (self.logs.retainHistorical(retention.childBindings(), shortcode)) {
                 .ok => {},
                 .blocked => |failure| return .{ .blocked = failure },
+                .cancelled => return .cancelled,
             }
         }
         return .ok;
@@ -134,8 +144,18 @@ pub const Assembly = struct {
             const emergency: @import("../actions/log/emit_emergency_log_failure_record.zig").Action = .{ .sink = output.emergency() };
             emergency.execute(shortcode, failure);
         };
-        self.failure = failure;
+        self.failure = .{ .blocked = failure };
         return .{ .blocked = failure };
+    }
+
+    /// A cancellation never replaces a failure already recorded; a failure replaces whatever preceded it.
+    fn stopped(self: *Assembly, stop: log_stream.Stop) void {
+        switch (stop) {
+            .blocked => self.failure = stop,
+            .cancelled => if (self.failure == null) {
+                self.failure = stop;
+            },
+        }
     }
 
     fn finish(context: *port.Context, reason: port.Finalizer.Reason) run.Outcome {
@@ -149,7 +169,7 @@ pub const Assembly = struct {
                     .terminal => events.terminal(outcome),
                     .publication => |prepared| events.emit(.{ .event_type = .publication_prepared, .fields = .{ .outcome = if (prepared == .needs_user) .needs_user else .completed } }),
                 };
-                if (event_failure) |failure| self.failure = failure;
+                if (event_failure) |stop| self.stopped(stop);
                 var finalization: @import("../application/feature_log_finalization_runner.zig").Runner = .{
                     .target = runtime.runner(self.runtime_owner.?),
                     .mode = .active,
@@ -157,18 +177,22 @@ pub const Assembly = struct {
                 };
                 switch (self.logs.finalizeActive(finalization.childBindings())) {
                     .ok => {},
-                    .blocked => |failure| self.failure = failure,
-                    .invalid => self.failure = .LOG_SINK_FAILURE,
+                    .blocked => |failure| self.stopped(.{ .blocked = failure }),
+                    .cancelled => self.stopped(.cancelled),
+                    .invalid => self.stopped(.{ .blocked = .LOG_SINK_FAILURE }),
                 }
             }
         }
-        if (self.failure) |failure| {
+        if (self.failure) |stop| {
             if (outcome == .execution_rejected and outcome.execution_rejected == .model_capture) {
                 var detail = outcome.execution_rejected.model_capture;
-                detail.subsequent_logging_failure = failure;
+                // A cancellation is no logging failure, so it leaves the capture failure whole.
+                if (stop == .blocked) detail.subsequent_logging_failure = stop.blocked;
                 return .{ .execution_rejected = .{ .model_capture = detail } };
             }
-            const terminal: execution.Rejection = .{ .logging = failure };
+            // A run that is already cancelled stays the outcome it was; the log's own cancellation adds nothing.
+            if (stop == .cancelled and outcome.executionStatus() == .cancelled) return outcome;
+            const terminal = execution.Rejection.logStop(stop);
             // An outcome that is no rejection is replaced with no first cause. Finalizing again keeps what
             // the first failure replaced, as it keeps the failure itself; the runner alone decides which
             // cause of the whole run is the first.

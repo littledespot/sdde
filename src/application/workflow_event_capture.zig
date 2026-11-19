@@ -8,25 +8,24 @@ pub const Model = struct {
     origin: @import("../domain/model_candidate_origin.zig").Origin,
     binding: @import("../domain/llm_provider_binding.zig").ValidatedProviderModelBinding,
 };
+/// An event no safe record can be built for is a logging failure, not a cancellation.
+const serialization_failure: stream.Stop = .{ .blocked = .LOG_SERIALIZATION_FAILURE };
 pub const Capture = struct {
     barrier: @import("../ports/telemetry_barrier.zig").Barrier,
     shortcode: t.WorkflowShortcode,
 
-    pub fn emit(self: Capture, fact: t.TelemetryFact) ?stream.FailureCode {
-        return switch (self.barrier.process(.{ .workflow_shortcode = self.shortcode, .fact = fact })) {
-            .persisted, .dropped => null,
-            .blocked => |failure| failure,
-        };
+    pub fn emit(self: Capture, fact: t.TelemetryFact) ?stream.Stop {
+        return self.barrier.process(.{ .workflow_shortcode = self.shortcode, .fact = fact }).stop();
     }
     /// `stage_step` is the internal step a stage action stopped at (ADR 0031); only a failed
     /// action's event records it.
-    pub fn action(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError, stage_step: ?[]const u8) ?stream.FailureCode {
+    pub fn action(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError, stage_step: ?[]const u8) ?stream.Stop {
         return self.actionEvent(node, result, rejection, .{ .stopped_at = stage_step });
     }
 
     /// One event of one stage of a `request-model` step (ADR 0030): whatever the stage's status,
     /// the event names the stage, so a report can tell where the request was at any time.
-    pub fn requestStage(self: Capture, node: workflow.WorkflowStepId, stage: []const u8, result: ?execution.Applied, rejection: ?execution.OperationError) ?stream.FailureCode {
+    pub fn requestStage(self: Capture, node: workflow.WorkflowStepId, stage: []const u8, result: ?execution.Applied, rejection: ?execution.OperationError) ?stream.Stop {
         return self.actionEvent(node, result, rejection, .{ .stage = stage });
     }
 
@@ -38,12 +37,12 @@ pub const Capture = struct {
         stage: []const u8,
     };
 
-    fn actionEvent(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError, internal: Internal) ?stream.FailureCode {
+    fn actionEvent(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError, internal: Internal) ?stream.Stop {
         var code: [96]u8 = undefined;
         const named: ?t.Identifier = switch (internal) {
-            .stage => |name| t.Identifier.validate(name) orelse return .LOG_SERIALIZATION_FAILURE,
+            .stage => |name| t.Identifier.validate(name) orelse return serialization_failure,
             .stopped_at => |step| if (result) |value| switch (value.status()) {
-                .failed, .blocked, .cancelled => if (step) |name| t.Identifier.validate(name) orelse return .LOG_SERIALIZATION_FAILURE else null,
+                .failed, .blocked, .cancelled => if (step) |name| t.Identifier.validate(name) orelse return serialization_failure else null,
                 else => null,
             } else null,
         };
@@ -53,62 +52,62 @@ pub const Capture = struct {
                 .invalid => .action_invalid,
                 .failed, .blocked, .cancelled => .action_failed,
             } else .action_started,
-            .node_id = t.Identifier.validate(node.bytes) orelse return .LOG_SERIALIZATION_FAILURE,
+            .node_id = t.Identifier.validate(node.bytes) orelse return serialization_failure,
             .fields = if (result) |value| .{
                 .outcome = outcome(value.status()),
                 .diagnostic_code = switch (value.status()) {
                     .ok, .more, .needs_user => null,
-                    else => if (value == .rejected) rejectionCode(&code, value.rejected) orelse return .LOG_SERIALIZATION_FAILURE else diagnostic(&code, if (rejection) |cause| @errorName(cause) else @tagName(value.outcome)) orelse return .LOG_SERIALIZATION_FAILURE,
+                    else => if (value == .rejected) rejectionCode(&code, value.rejected) orelse return serialization_failure else diagnostic(&code, if (rejection) |cause| @errorName(cause) else @tagName(value.outcome)) orelse return serialization_failure,
                 },
                 .step_id = named,
             } else .{ .step_id = named },
         });
     }
-    pub fn model(self: Capture, node: workflow.WorkflowStepId, info: Model, event: t.EventType, status: ?workflow.OutcomeTag, reason: ?[]const u8, usage: ?@import("../domain/llm_provider_operation.zig").ProviderUsage) ?stream.FailureCode {
+    pub fn model(self: Capture, node: workflow.WorkflowStepId, info: Model, event: t.EventType, status: ?workflow.OutcomeTag, reason: ?[]const u8, usage: ?@import("../domain/llm_provider_operation.zig").ProviderUsage) ?stream.Stop {
         var correlation: [96]u8 = undefined;
         var code: [96]u8 = undefined;
-        const id = @import("../domain/model_call_lineage.zig").callId(&correlation, info.origin) catch return .LOG_SERIALIZATION_FAILURE;
+        const id = @import("../domain/model_call_lineage.zig").callId(&correlation, info.origin) catch return serialization_failure;
         return self.emit(.{
             .event_type = event,
-            .node_id = t.Identifier.validate(node.bytes) orelse return .LOG_SERIALIZATION_FAILURE,
+            .node_id = t.Identifier.validate(node.bytes) orelse return serialization_failure,
             .correlation_id = .{ .bytes = id },
             .attempt = info.origin.attempt.value,
             .fields = .{
-                .model_route_id = t.Identifier.validate(info.binding.operation_id.workflow_step_id.bytes) orelse return .LOG_SERIALIZATION_FAILURE,
-                .model_profile_id = t.Identifier.validate(info.binding.slot_id.bytes) orelse return .LOG_SERIALIZATION_FAILURE,
+                .model_route_id = t.Identifier.validate(info.binding.operation_id.workflow_step_id.bytes) orelse return serialization_failure,
+                .model_profile_id = t.Identifier.validate(info.binding.slot_id.bytes) orelse return serialization_failure,
                 .outcome = if (status) |value| outcome(value) else null,
-                .diagnostic_code = if (reason) |value| diagnostic(&code, value) orelse return .LOG_SERIALIZATION_FAILURE else null,
+                .diagnostic_code = if (reason) |value| diagnostic(&code, value) orelse return serialization_failure else null,
                 .input_tokens = if (usage) |value| value.input_tokens else null,
                 .output_tokens = if (usage) |value| value.output_tokens else null,
             },
         });
     }
-    pub fn validation(self: Capture, node: workflow.WorkflowStepId, status: workflow.OutcomeTag, reason: ?[]const u8, origin: ?@import("../domain/model_candidate_origin.zig").Origin) ?stream.FailureCode {
+    pub fn validation(self: Capture, node: workflow.WorkflowStepId, status: workflow.OutcomeTag, reason: ?[]const u8, origin: ?@import("../domain/model_candidate_origin.zig").Origin) ?stream.Stop {
         var code: [96]u8 = undefined;
         var correlation: [96]u8 = undefined;
-        const id = if (origin) |value| @import("../domain/model_call_lineage.zig").callId(&correlation, value) catch return .LOG_SERIALIZATION_FAILURE else null;
+        const id = if (origin) |value| @import("../domain/model_call_lineage.zig").callId(&correlation, value) catch return serialization_failure else null;
         return self.emit(.{ .event_type = if (reason != null) .validation_failed else .validation_completed, .node_id = .{ .bytes = node.bytes }, .correlation_id = if (id) |value| .{ .bytes = value } else null, .attempt = if (origin) |value| value.attempt.value else null, .fields = .{
             .validator_id = .{ .bytes = node.bytes },
             .outcome = outcome(status),
-            .diagnostic_code = if (reason) |value| diagnostic(&code, value) orelse return .LOG_SERIALIZATION_FAILURE else null,
+            .diagnostic_code = if (reason) |value| diagnostic(&code, value) orelse return serialization_failure else null,
         } });
     }
-    pub fn repair(self: Capture, node: workflow.WorkflowStepId, event: t.EventType, status: workflow.OutcomeTag, reason: ?[]const u8) ?stream.FailureCode {
+    pub fn repair(self: Capture, node: workflow.WorkflowStepId, event: t.EventType, status: workflow.OutcomeTag, reason: ?[]const u8) ?stream.Stop {
         var code: [96]u8 = undefined;
         return self.emit(.{ .event_type = event, .node_id = .{ .bytes = node.bytes }, .fields = .{
             .outcome = if (event == .repair_requested) null else outcome(status),
             .repair_unit_kind = if (event == .repair_applied) null else .authorized_unit,
-            .diagnostic_code = if (reason) |value| diagnostic(&code, value) orelse return .LOG_SERIALIZATION_FAILURE else null,
+            .diagnostic_code = if (reason) |value| diagnostic(&code, value) orelse return serialization_failure else null,
         } });
     }
-    pub fn terminal(self: Capture, value: @import("../domain/run_outcome.zig").Outcome) ?stream.FailureCode {
+    pub fn terminal(self: Capture, value: @import("../domain/run_outcome.zig").Outcome) ?stream.Stop {
         const status = value.executionStatus() orelse .failed;
-        if (status == .more) return .LOG_SERIALIZATION_FAILURE;
+        if (status == .more) return serialization_failure;
         var code: [96]u8 = undefined;
         var correlation: [96]u8 = undefined;
         const captured = if (value == .execution_rejected and value.execution_rejected == .model_capture) value.execution_rejected.model_capture else null;
         const origin = if (captured) |failure| failure.origin else null;
-        const call_id = if (origin) |call| @import("../domain/model_call_lineage.zig").callId(&correlation, call) catch return .LOG_SERIALIZATION_FAILURE else null;
+        const call_id = if (origin) |call| @import("../domain/model_call_lineage.zig").callId(&correlation, call) catch return serialization_failure else null;
         return self.emit(.{ .event_type = switch (status) {
             .ok => .run_completed,
             .more => unreachable,
@@ -118,10 +117,10 @@ pub const Capture = struct {
             .invalid, .failed => .run_failed,
         }, .correlation_id = if (call_id) |id| .{ .bytes = id } else null, .attempt = if (origin) |call| call.attempt.value else null, .fields = .{ .outcome = outcome(status), .diagnostic_code = switch (status) {
             .ok, .needs_user, .cancelled => null,
-            else => if (value == .execution_rejected) rejectionCode(&code, value.execution_rejected) orelse return .LOG_SERIALIZATION_FAILURE else diagnostic(&code, @tagName(status)) orelse return .LOG_SERIALIZATION_FAILURE,
+            else => if (value == .execution_rejected) rejectionCode(&code, value.execution_rejected) orelse return serialization_failure else diagnostic(&code, @tagName(status)) orelse return serialization_failure,
         } } });
     }
-    pub fn retryAttempt(self: Capture, node: workflow.WorkflowStepId, count: u64, exhausted: bool) ?stream.FailureCode {
+    pub fn retryAttempt(self: Capture, node: workflow.WorkflowStepId, count: u64, exhausted: bool) ?stream.Stop {
         return self.emit(.{ .event_type = if (exhausted) .retry_exhausted else .retry_admitted, .node_id = .{ .bytes = node.bytes }, .fields = .{
             .count = count,
             .outcome = if (exhausted) .failed else null,

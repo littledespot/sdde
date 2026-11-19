@@ -4,6 +4,19 @@ const prompt_log = @import("../domain/sanitized_prompt_log.zig");
 const telemetry = @import("../domain/telemetry.zig");
 
 pub const StepOutcome = union(enum) { ok, failed: log_stream.FailureCode };
+/// A step that touches the sink and so can observe a cancellation, which is no logging failure.
+pub const SinkOutcome = union(enum) {
+    ok,
+    failed: log_stream.FailureCode,
+    cancelled,
+
+    pub fn of(stop: log_stream.Stop) SinkOutcome {
+        return switch (stop) {
+            .blocked => |code| .{ .failed = code },
+            .cancelled => .cancelled,
+        };
+    }
+};
 pub const EventValidationOutcome = union(enum) {
     valid: event_registry.EventDefinition,
     failed: log_stream.FailureCode,
@@ -15,6 +28,14 @@ pub const ClockOutcome = union(enum) {
 pub const PersistenceOutcome = union(enum) {
     persisted: log_stream.PersistedEvidence,
     failed: log_stream.FailureCode,
+    cancelled,
+
+    pub fn of(stop: log_stream.Stop) PersistenceOutcome {
+        return switch (stop) {
+            .blocked => |code| .{ .failed = code },
+            .cancelled => .cancelled,
+        };
+    }
 };
 pub const Decision = enum { emit, drop };
 pub const RuntimeIdentity = *const anyopaque;
@@ -31,7 +52,7 @@ pub const ChildBindings = struct {
         validate_prompt: *const fn (*anyopaque, prompt_log.SanitizedPromptFragment) StepOutcome,
         evaluate_prompt: *const fn (*const anyopaque, prompt_log.SanitizedPromptFragment) Decision,
         read_clock: *const fn (*anyopaque) ClockOutcome,
-        acquire: *const fn (*anyopaque, log_stream.Stream) StepOutcome,
+        acquire: *const fn (*anyopaque, log_stream.Stream) SinkOutcome,
         persist_event: *const fn (*anyopaque, telemetry.WorkflowTelemetryFact, event_registry.EventDefinition, log_stream.ClockReading) PersistenceOutcome,
         persist_prompt: *const fn (*anyopaque, prompt_log.SanitizedPromptFragment, log_stream.ClockReading) PersistenceOutcome,
         release: *const fn (*anyopaque) StepOutcome,
@@ -61,7 +82,7 @@ pub const ChildBindings = struct {
     pub fn invokeReadClock(self: ChildBindings) ClockOutcome {
         return self.vtable.read_clock(self.context);
     }
-    pub fn invokeAcquire(self: ChildBindings, stream: log_stream.Stream) StepOutcome {
+    pub fn invokeAcquire(self: ChildBindings, stream: log_stream.Stream) SinkOutcome {
         return self.vtable.acquire(self.context, stream);
     }
     pub fn invokePersistEvent(self: ChildBindings, fact: telemetry.WorkflowTelemetryFact, definition: event_registry.EventDefinition, reading: log_stream.ClockReading) PersistenceOutcome {

@@ -49,8 +49,25 @@ pub const PersistedEvidence = struct {
     flushed: bool,
 };
 
+/// Why a logging step stopped: a logging failure with its closed code, or a cancellation. A cancellation
+/// is no logging failure; it carries no code, and no emergency line reports it.
+pub const Stop = union(enum) {
+    blocked: FailureCode,
+    cancelled,
+};
+
 pub const Outcome = union(enum) {
     dropped,
     persisted: PersistedEvidence,
     blocked: FailureCode,
+    cancelled,
+
+    /// The stop this outcome reports, or null when the fact was dropped or persisted.
+    pub fn stop(self: Outcome) ?Stop {
+        return switch (self) {
+            .dropped, .persisted => null,
+            .blocked => |code| .{ .blocked = code },
+            .cancelled => .cancelled,
+        };
+    }
 };

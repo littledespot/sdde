@@ -23,7 +23,7 @@ pub const Step = enum {
 pub const Diagnostic = struct { step: ?Step = null };
 
 /// The failure representation of the six absorbed actions, unchanged. `Cancelled` means the
-/// runtime stopped being active; the runner reports which stop it was.
+/// runtime stopped being active or a port call was cancelled; the runner reports the cancellation.
 pub const Error = grammar.Error || literals.Error || tokens.Error || error{Cancelled};
 
 /// What crosses the stage edge: the grammar, the validated passive-literal registry and the

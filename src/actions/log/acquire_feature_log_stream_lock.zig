@@ -4,14 +4,15 @@ const log_binding = @import("../../domain/feature_log_binding.zig");
 const log_stream = @import("../../domain/feature_log_stream.zig");
 const sink_port = @import("../../ports/feature_log_sink.zig");
 
-pub const Error = error{ LogLockTimeout, LogSinkFailure };
+pub const Error = error{ LogLockTimeout, LogSinkFailure, Cancelled };
 
 /// F0002: only a lock held elsewhere is a timeout. A binding the sink rejects, or a lock file
-/// it cannot use, is a sink failure.
-pub fn failureCode(failure: Error) log_stream.FailureCode {
+/// it cannot use, is a sink failure. A cancellation is no logging failure.
+pub fn stop(failure: Error) log_stream.Stop {
     return switch (failure) {
-        error.LogLockTimeout => .LOG_LOCK_TIMEOUT,
-        error.LogSinkFailure => .LOG_SINK_FAILURE,
+        error.LogLockTimeout => .{ .blocked = .LOG_LOCK_TIMEOUT },
+        error.LogSinkFailure => .{ .blocked = .LOG_SINK_FAILURE },
+        error.Cancelled => .cancelled,
     };
 }
 
@@ -27,6 +28,7 @@ pub const Action = struct {
     pub fn execute(self: Action, binding: *const log_binding.ValidatedFeatureLogBinding, stream: log_stream.Stream) Error!void {
         self.sink.acquire(binding, stream, log_limits.stream_lock_deadline_ms) catch |failure| return switch (failure) {
             error.LockUnavailable => error.LogLockTimeout,
+            error.Cancelled => error.Cancelled,
             error.InvalidBinding, error.CorruptStream, error.SegmentLimitExhausted, error.SinkFailure, error.FlushFailure, error.ReleaseFailure => error.LogSinkFailure,
         };
     }

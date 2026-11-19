@@ -535,7 +535,7 @@ test "debugger reconstructs entire reasoning responses including output-limit an
         // Call.redacted describes request redaction, which controls replay.
         try std.testing.expect(!calls[0].redacted);
         try std.testing.expect(std.mem.indexOf(u8, sink.rows.items, secret) == null);
-        try std.testing.expect(logger.failure == null);
+        try std.testing.expect(logger.failure() == null);
     }
 }
 

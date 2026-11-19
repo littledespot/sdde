@@ -204,7 +204,7 @@ pub const Runner = struct {
         const result = self.executeStep(id);
         if (self.actionEnd(id, started, result, self.stage_step.name, null)) |rejection| return .{ .rejected = rejection };
         if (self.eventsActive() and result == .rejected and result.rejected == .retry_limit) {
-            if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |failure| return .{ .rejected = self.replacing(result.rejected, .{ .logging = failure }) };
+            if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |stop| return .{ .rejected = self.replacing(result.rejected, execution.Rejection.logStop(stop)) };
         }
         return result;
     }
@@ -215,7 +215,7 @@ pub const Runner = struct {
     /// that run then names it (ADR 0030).
     fn actionStart(self: *Runner, id: workflow.WorkflowStepId, started: *bool, stage: ?request_stage.Stage) ?execution.Rejection {
         started.* = self.eventsActive();
-        if (started.*) if (self.logActionStart(id, stage)) |failure| return .{ .logging = failure };
+        if (started.*) if (self.logActionStart(id, stage)) |stop| return execution.Rejection.logStop(stop);
         return null;
     }
 
@@ -225,14 +225,14 @@ pub const Runner = struct {
         if (!self.eventsActive()) return null;
         // A logging failure here replaces the step's own rejection, when it ended in one.
         const replaced: ?execution.Rejection = if (result == .rejected) result.rejected else null;
-        if (!started) if (self.logActionStart(id, stage)) |failure| return self.replacing(replaced, .{ .logging = failure });
+        if (!started) if (self.logActionStart(id, stage)) |stop| return self.replacing(replaced, execution.Rejection.logStop(stop));
         const diagnostic = if (self.last_effects) |effects| effects.diagnostic else null;
         const failure = if (stage) |named| self.events().requestStage(id, named.name(), result, diagnostic) else self.events().action(id, result, diagnostic, stage_name);
         if (failure) |value| return self.replacing(replaced, self.captureRejectionWithLogging(value));
         return null;
     }
 
-    fn logActionStart(self: *Runner, id: workflow.WorkflowStepId, stage: ?request_stage.Stage) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logActionStart(self: *Runner, id: workflow.WorkflowStepId, stage: ?request_stage.Stage) ?@import("../domain/feature_log_stream.zig").Stop {
         return if (stage) |named| self.events().requestStage(id, named.name(), null, null) else self.events().action(id, null, null, null);
     }
 
@@ -521,7 +521,7 @@ pub const Runner = struct {
                 self.retry_execution_counts[index] += 1;
                 admitted_count = self.retry_execution_counts[index];
             }
-            if (self.eventsActive()) if (self.events().retryAttempt(id, admitted_count, false)) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.eventsActive()) if (self.events().retryAttempt(id, admitted_count, false)) |stop| return .{ .rejected = execution.Rejection.logStop(stop) };
         };
         // The compiler supplies the retry-derived allowance. Only a committed
         // advance through a validated finite population grants another traversal.
@@ -548,7 +548,7 @@ pub const Runner = struct {
             // ADR 0039: a re-send is logged only once every send check has
             // passed, immediately before it is sent; a logging rejection stops it.
             if (retained_request.?.runawayResend()) |repeated| if (invoked.operation_id.model_attempt_ordinal.value == repeated.model_attempt_ordinal.value + 1) {
-                if (self.logRunawayResend(id, retained_request.?, repeated)) |failure| return .{ .rejected = .{ .logging = failure } };
+                if (self.logRunawayResend(id, retained_request.?, repeated)) |stop| return .{ .rejected = execution.Rejection.logStop(stop) };
             };
             const ledger = identity.ledger(self.model_accounting.?.requests);
             const origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, invoked.operation_id) orelse return .{ .rejected = .{ .authority = .lifecycle_evidence } };
@@ -577,9 +577,9 @@ pub const Runner = struct {
                 .description = @import("../domain/model_request_description.zig").Description.from(invoked.request, invoked.provider_binding, invoked.operation_id.kind),
                 .source_context = .{ .graph = self.selected.graph, .request = retained_request.? },
             });
-            if (self.eventsActive()) if (self.events().model(id, .{ .origin = origin, .binding = invoked.provider_binding.* }, .model_requested, null, null, null)) |failure| {
+            if (self.eventsActive()) if (self.events().model(id, .{ .origin = origin, .binding = invoked.provider_binding.* }, .model_requested, null, null, null)) |stop| {
                 self.model_capture.end();
-                return .{ .rejected = .{ .logging = failure } };
+                return .{ .rejected = execution.Rejection.logStop(stop) };
             };
         }
         defer if (calls_model) self.model_capture.end();
@@ -618,9 +618,12 @@ pub const Runner = struct {
                 if (reconciled.rejection) |reason| return .{ .rejected = self.replacing(reconciled.replaced, reason) };
             }
             // A non-model operation that stopped because the runtime did reports that stop, as the
-            // checks before and after the invocation do. An allocation failure stays itself. A model
-            // call returned above: reconciling a failed call always leaves its rejection.
+            // checks before and after the invocation do. One that reports `Cancelled` was cancelled
+            // while the runtime still reports active (a cancelled filesystem call), and ends the run
+            // `cancelled` too. An allocation failure stays itself. A model call returned above:
+            // reconciling a failed call always leaves its rejection.
             if (err != error.OutOfMemory) if (runtimeTerminal(self.runtime)) |terminal| return .{ .rejected = terminal };
+            if (err == error.Cancelled) return .{ .rejected = .cancelled };
             return .{ .rejected = .{ .operation_failed = err } };
         };
         defer self.envelope.discard(&candidate.delta);
@@ -653,14 +656,14 @@ pub const Runner = struct {
         const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected, step.iteration, step.outcome_association, terminal);
         authorization_published = prepared and applied == .outcome and applied.outcome == .ok;
         if (applied == .outcome and self.eventsActive()) {
-            if (self.logDiagnostics(step.*, candidate)) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.logDiagnostics(step.*, candidate)) |stop| return .{ .rejected = execution.Rejection.logStop(stop) };
         }
         return applied;
     }
 
-    fn logModelCompletion(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logModelCompletion(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag) ?@import("../domain/feature_log_stream.zig").Stop {
         if (!self.eventsActive()) return null;
-        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .LOG_SERIALIZATION_FAILURE;
+        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         var usage: ?provider.ProviderUsage = null;
         for (self.tokenLedger().accounted_operations.items) |accounted| {
             if (accounted.id.eql(call.operation_id) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
@@ -670,9 +673,9 @@ pub const Runner = struct {
 
     /// ADR 0039: logged after the runaway's stop and before its one re-send is
     /// sent, with the runaway attempt's reported usage.
-    fn logRunawayResend(self: *Runner, id: workflow.WorkflowStepId, request: *const @import("../domain/model_request_handoff.zig").Request, runaway: provider.ProviderOperationId) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logRunawayResend(self: *Runner, id: workflow.WorkflowStepId, request: *const @import("../domain/model_request_handoff.zig").Request, runaway: provider.ProviderOperationId) ?@import("../domain/feature_log_stream.zig").Stop {
         if (!self.eventsActive()) return null;
-        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), runaway) orelse return .LOG_SERIALIZATION_FAILURE;
+        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), runaway) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         var usage: ?provider.ProviderUsage = null;
         for (self.tokenLedger().accounted_operations.items) |accounted| {
             if (accounted.id.eql(runaway) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
@@ -698,37 +701,46 @@ pub const Runner = struct {
 
     /// Every provider-applied stop, including its own output maximum, is logged at
     /// warning level with its exact closed reason; usage alone never implies it.
-    fn logProviderStop(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag, stop: ProviderStop) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logProviderStop(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag, stop: ProviderStop) ?@import("../domain/feature_log_stream.zig").Stop {
         if (!self.eventsActive()) return null;
-        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .LOG_SERIALIZATION_FAILURE;
+        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_provider_stopped, status, @tagName(stop.reason), stop.usage);
     }
 
     fn captureRejection(self: *const Runner) ?execution.Rejection {
-        if (self.model_capture.failure) |failure| return .{ .model_capture = failure };
-        return null;
+        const stopped = self.model_capture.stopped orelse return null;
+        return switch (stopped) {
+            .failed => |failure| .{ .model_capture = failure },
+            .cancelled => .cancelled,
+        };
     }
 
-    fn captureRejectionWithLogging(self: *const Runner, failure: @import("../domain/feature_log_stream.zig").FailureCode) execution.Rejection {
-        if (self.model_capture.failure) |captured| {
+    /// A capture failure is its own first cause, and a later logging failure reaches it as
+    /// `subsequent_logging_failure`. A cancellation is no logging failure, so it leaves the capture
+    /// failure whole.
+    fn captureRejectionWithLogging(self: *const Runner, stop: @import("../domain/feature_log_stream.zig").Stop) execution.Rejection {
+        if (self.model_capture.failure()) |captured| {
             var detail = captured;
-            detail.subsequent_logging_failure = failure;
+            switch (stop) {
+                .blocked => |failure| detail.subsequent_logging_failure = failure,
+                .cancelled => {},
+            }
             return .{ .model_capture = detail };
         }
-        return .{ .logging = failure };
+        return execution.Rejection.logStop(stop);
     }
 
-    fn logDiagnostics(self: *Runner, step: compilation.CompiledStep, candidate: execution.Candidate) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logDiagnostics(self: *Runner, step: compilation.CompiledStep, candidate: execution.Candidate) ?@import("../domain/feature_log_stream.zig").Stop {
         const view: data.View = .{ .slots = self.envelope.slots };
         const decoded = @import("model_envelope_workflow.zig");
         const schema_check = @import("model_payload_schema_workflow.zig");
         const produces_decode = std.mem.indexOfScalar(pipeline.DataKey, step.produces, .model_envelope_result) != null;
         const produces_schema = std.mem.indexOfScalar(pipeline.DataKey, step.produces, .model_payload_schema_result) != null;
         if (produces_decode or produces_schema) {
-            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .LOG_SERIALIZATION_FAILURE;
-            const evidence = values.read(&view, decoded.schema, decoded.Result) catch return .LOG_SERIALIZATION_FAILURE;
+            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            const evidence = values.read(&view, decoded.schema, decoded.Result) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             const source = evidence.source();
-            const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), source.operationId()) orelse return .LOG_SERIALIZATION_FAILURE;
+            const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), source.operationId()) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             const info: event_capture.Model = .{ .origin = origin, .binding = request.binding().* };
             var reason: ?[]const u8 = null;
             var event: @import("../domain/telemetry.zig").EventType = .model_protocol_failed;
@@ -748,7 +760,7 @@ pub const Runner = struct {
                 },
             };
             if (produces_schema and reason == null) {
-                const checked = values.read(&view, schema_check.schema, schema_check.Result) catch return .LOG_SERIALIZATION_FAILURE;
+                const checked = values.read(&view, schema_check.schema, schema_check.Result) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
                 if (checked.outcome() == .schema_rejected) {
                     reason = @tagName(checked.outcome().schema_rejected.reason);
                     event = .model_schema_failed;
@@ -763,7 +775,7 @@ pub const Runner = struct {
         inline for (.{ step.produces, step.replaces }) |keys| for (keys) |key| {
             produced.slots[@intFromEnum(key)] = view.slots[@intFromEnum(key)];
         };
-        const diagnostic = @import("candidate_validation_diagnostics.zig").read(&produced) catch return .LOG_SERIALIZATION_FAILURE;
+        const diagnostic = @import("candidate_validation_diagnostics.zig").read(&produced) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         if (diagnostic) |value| {
             if (value == .support_findings and value.support_findings.repair_rejection == null) {
                 if (self.events().emit(.{ .event_type = .review_rejected, .node_id = .{ .bytes = step.id.bytes }, .fields = .{ .outcome = event_capture.outcome(candidate.outcome) } })) |failure| return failure;
@@ -1011,8 +1023,7 @@ pub const Runner = struct {
             pending = null;
         }
         for (candidate.delta.addedTelemetryFacts()) |fact| {
-            const logging_result = self.barrier.process(fact);
-            if (logging_result == .blocked) return .{ .rejected = .{ .logging = logging_result.blocked } };
+            if (self.barrier.process(fact).stop()) |stop| return .{ .rejected = execution.Rejection.logStop(stop) };
         }
         // Workflow edges may inspect an operation outcome only after its delta
         // and runner transitions have been accepted and applied.

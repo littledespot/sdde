@@ -31,6 +31,10 @@ pub const Runner = struct {
     actions: action_set.Set,
     event_state: ?log_stream.StreamState = null,
     prompt_state: ?log_stream.StreamState = null,
+    /// The streams whose cached state a cancellation dropped. A cancellation can land after bytes were
+    /// written, so the file may be ahead of the cache; the next persist recovers such a stream from its
+    /// bytes, as after a crash, and finalization recovers it before closing it.
+    dropped: std.EnumSet(log_stream.Stream) = .initEmpty(),
     prepared: bool = false,
     retired: bool = false,
 
@@ -82,10 +86,16 @@ pub const Runner = struct {
         if (self.prepared) return .dropped;
         const reading = self.actions.read_clock.execute() catch return self.block(shortcode, .LOG_SERIALIZATION_FAILURE);
         if (self.event_state == null) {
-            if (self.prepareOne(.event, reading)) |failure| return self.block(shortcode, failure);
+            if (self.prepareOne(.event, reading)) |stop| return self.stopped(shortcode, stop);
         }
         if (log_policy.promptCaptureEnabled(self.policy.*) and self.prompt_state == null) {
-            if (self.prepareOne(.prompt, reading)) |failure| return self.block(shortcode, failure);
+            if (self.prepareOne(.prompt, reading)) |stop| {
+                // A run whose activation stopped is never finalized, so the event stream this prepare
+                // opened is closed here instead of being left without a trailer. The prompt stop is the
+                // one reported; a stop of this close is not, as the first stop is kept.
+                if (self.closeStream(.event, reading)) |_| {}
+                return self.stopped(shortcode, stop);
+            }
         }
         self.prepared = true;
         return .dropped;
@@ -94,41 +104,95 @@ pub const Runner = struct {
     fn invokeClose(self: *Runner, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
         if (self.retired) return self.block(shortcode, .LOG_SINK_FAILURE);
         const reading = self.actions.read_clock.execute() catch return self.block(shortcode, .LOG_SERIALIZATION_FAILURE);
-        if (self.event_state) |state| {
-            if (self.closeOne(.event, state, reading)) |failure| return self.block(shortcode, failure);
-            self.event_state = null;
+        // Every stream is closed, the second even when the first stopped; the first stop is the one reported.
+        var first: ?log_stream.Stop = null;
+        for ([_]log_stream.Stream{ .event, .prompt }) |stream| {
+            if (self.closeStream(stream, reading)) |stop| first = first orelse stop;
         }
-        if (self.prompt_state) |state| {
-            if (self.closeOne(.prompt, state, reading)) |failure| return self.block(shortcode, failure);
-            self.prompt_state = null;
-        }
+        if (first) |stop| return self.stopped(shortcode, stop);
         self.prepared = false;
         self.retired = true;
         return .dropped;
     }
 
-    fn prepareOne(self: *Runner, stream: log_stream.Stream, reading: log_stream.ClockReading) ?log_stream.FailureCode {
-        self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return acquire_lock.failureCode(failure);
-        var failure: ?log_stream.FailureCode = null;
+    /// Close one stream. A stream a cancelled step dropped is recovered first, so a trailer follows the rows
+    /// that really are on disk.
+    fn closeStream(self: *Runner, stream: log_stream.Stream, reading: log_stream.ClockReading) ?log_stream.Stop {
+        if (self.recoverDropped(stream)) |stop| return stop;
+        const state = (switch (stream) {
+            .event => self.event_state,
+            .prompt => self.prompt_state,
+        }) orelse return null;
+        if (self.closeOne(stream, state, reading)) |stop| return stop;
+        switch (stream) {
+            .event => self.event_state = null,
+            .prompt => self.prompt_state = null,
+        }
+        return null;
+    }
+
+    /// Drop a stream's cached state because a cancelled step may have left its bytes ahead of it.
+    fn forget(self: *Runner, stream: log_stream.Stream) void {
+        switch (stream) {
+            .event => self.event_state = null,
+            .prompt => self.prompt_state = null,
+        }
+        self.dropped.insert(stream);
+    }
+
+    /// Recover a stream whose state was dropped, under its lock, so finalization can close it. A stream
+    /// the recovery finds closed, or without a segment, has nothing to close.
+    fn recoverDropped(self: *Runner, stream: log_stream.Stream) ?log_stream.Stop {
+        if (!self.dropped.contains(stream)) return null;
+        self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return acquire_lock.stop(failure);
+        var scratch = std.heap.ArenaAllocator.init(self.allocator);
+        defer scratch.deinit();
+        const heading = if (stream == .event) feature_log_format.event_heading else feature_log_format.prompt_heading;
+        var recover_stop: ?log_stream.Stop = null;
+        const recovered = self.actions.recover_stream.execute(scratch.allocator(), self.binding, stream, heading) catch |failure| blk: {
+            recover_stop = switch (failure) {
+                error.LogSinkFailure => .{ .blocked = .LOG_SINK_FAILURE },
+                error.Cancelled => .cancelled,
+            };
+            break :blk null;
+        };
+        self.actions.release_lock.execute() catch return .{ .blocked = .LOG_RELEASE_FAILURE };
+        if (recover_stop) |stop| return stop;
+        switch (recovered.?) {
+            .active => |state| switch (stream) {
+                .event => self.event_state = state,
+                .prompt => self.prompt_state = state,
+            },
+            .empty => {},
+        }
+        self.dropped.remove(stream);
+        return null;
+    }
+
+    fn prepareOne(self: *Runner, stream: log_stream.Stream, reading: log_stream.ClockReading) ?log_stream.Stop {
+        self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return acquire_lock.stop(failure);
+        var open_stop: ?log_stream.Stop = null;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
         const state = switch (stream) {
             .event => self.openEventStream(scratch.allocator(), reading),
             .prompt => self.openPromptStream(scratch.allocator(), reading),
         } catch |open_failure| blk: {
-            failure = failureCode(open_failure);
+            open_stop = persistStop(open_failure);
             break :blk null;
         };
-        self.actions.release_lock.execute() catch return .LOG_RELEASE_FAILURE;
-        if (failure) |code| return code;
+        // The lock is released on every path, a cancelled open included.
+        self.actions.release_lock.execute() catch return .{ .blocked = .LOG_RELEASE_FAILURE };
+        if (open_stop) |stop| return stop;
         switch (stream) {
             .event => self.event_state = state.?,
             .prompt => self.prompt_state = state.?,
         }
+        self.dropped.remove(stream);
         return null;
     }
 
-    fn closeOne(self: *Runner, stream: log_stream.Stream, state: log_stream.StreamState, reading: log_stream.ClockReading) ?log_stream.FailureCode {
+    fn closeOne(self: *Runner, stream: log_stream.Stream, state: log_stream.StreamState, reading: log_stream.ClockReading) ?log_stream.Stop {
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
         const allocator = scratch.allocator();
@@ -140,14 +204,22 @@ pub const Runner = struct {
             state.segment_ordinal,
             state.next_sequence - 1,
             reading.utc(),
-        ) catch return .LOG_SERIALIZATION_FAILURE;
-        self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return acquire_lock.failureCode(failure);
-        var failure: ?log_stream.FailureCode = null;
+        ) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return acquire_lock.stop(failure);
+        var close_stop: ?log_stream.Stop = null;
         self.actions.close_stream.execute(self.binding, stream, state, trailer) catch |close_failure| {
-            failure = if (close_failure == error.LogFlushFailure) .LOG_FLUSH_FAILURE else .LOG_SINK_FAILURE;
+            close_stop = switch (close_failure) {
+                error.LogFlushFailure => .{ .blocked = .LOG_FLUSH_FAILURE },
+                error.LogSinkFailure => .{ .blocked = .LOG_SINK_FAILURE },
+                // The trailer may already be written, so the state is dropped whatever the release does next.
+                error.Cancelled => cancelled: {
+                    self.forget(stream);
+                    break :cancelled .cancelled;
+                },
+            };
         };
-        self.actions.release_lock.execute() catch return .LOG_RELEASE_FAILURE;
-        return failure;
+        self.actions.release_lock.execute() catch return .{ .blocked = .LOG_RELEASE_FAILURE };
+        return close_stop;
     }
 
     fn persistEvent(
@@ -203,7 +275,7 @@ pub const Runner = struct {
                     trailer,
                     feature_log_format.event_heading,
                     next_header,
-                ) catch return error.RotateFailure;
+                ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.RotateFailure;
                 record = (build_event.Action{}).execute(&event_id_buffer, self.binding, state, &reading, attributed) catch {
                     return error.SerializationFailure;
                 };
@@ -228,10 +300,15 @@ pub const Runner = struct {
         ) catch |failure| return switch (failure) {
             error.LogFlushFailure => error.FlushFailure,
             error.LogSinkFailure => error.AppendFailure,
+            error.Cancelled => error.Cancelled,
         };
-        if (self.policy.console) self.actions.write_console.execute(row) catch return error.ConsoleFailure;
+        if (self.policy.console) self.actions.write_console.execute(row) catch |failure| return switch (failure) {
+            error.ConsoleLogWriteFailure => error.ConsoleFailure,
+            error.Cancelled => error.Cancelled,
+        };
         state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
         self.event_state = state;
+        self.dropped.remove(.event);
         return evidence;
     }
 
@@ -245,7 +322,7 @@ pub const Runner = struct {
             self.binding,
             .event,
             feature_log_format.event_heading,
-        ) catch return error.RecoveryFailure;
+        ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.RecoveryFailure;
         const state = switch (recovered) {
             .active => |active| active,
             .empty => |seed| blk: {
@@ -265,7 +342,7 @@ pub const Runner = struct {
                     seed,
                     feature_log_format.event_heading,
                     header,
-                ) catch return error.CreateFailure;
+                ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.CreateFailure;
             },
         };
         return state;
@@ -313,7 +390,7 @@ pub const Runner = struct {
                     trailer,
                     feature_log_format.prompt_heading,
                     next_header,
-                ) catch return error.RotateFailure;
+                ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.RotateFailure;
                 record = (build_prompt.Action{}).execute(&event_id_buffer, self.binding, state, &reading, fragment) catch return error.SerializationFailure;
                 row = (serialize_prompt.Action{}).execute(allocator, record) catch return error.SerializationFailure;
             },
@@ -334,10 +411,15 @@ pub const Runner = struct {
         ) catch |failure| return switch (failure) {
             error.LogFlushFailure => error.FlushFailure,
             error.LogSinkFailure => error.AppendFailure,
+            error.Cancelled => error.Cancelled,
         };
-        if (self.policy.console) self.actions.write_console.execute(row) catch return error.ConsoleFailure;
+        if (self.policy.console) self.actions.write_console.execute(row) catch |failure| return switch (failure) {
+            error.ConsoleLogWriteFailure => error.ConsoleFailure,
+            error.Cancelled => error.Cancelled,
+        };
         state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
         self.prompt_state = state;
+        self.dropped.remove(.prompt);
         return evidence;
     }
 
@@ -347,7 +429,7 @@ pub const Runner = struct {
             self.binding,
             .prompt,
             feature_log_format.prompt_heading,
-        ) catch return error.RecoveryFailure;
+        ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.RecoveryFailure;
         const state = switch (recovered) {
             .active => |active| active,
             .empty => |seed| blk: {
@@ -367,7 +449,7 @@ pub const Runner = struct {
                     seed,
                     feature_log_format.prompt_heading,
                     header,
-                ) catch return error.CreateFailure;
+                ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.CreateFailure;
             },
         };
         return state;
@@ -380,6 +462,15 @@ pub const Runner = struct {
 
     fn block(self: *Runner, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) log_stream.Outcome {
         return .{ .blocked = self.reportFailure(shortcode, failure) };
+    }
+
+    /// A failure is reported once through the emergency line; a cancellation is no logging failure and
+    /// emits none.
+    fn stopped(self: *Runner, shortcode: telemetry.WorkflowShortcode, stop: log_stream.Stop) log_stream.Outcome {
+        return switch (stop) {
+            .blocked => |failure| self.block(shortcode, failure),
+            .cancelled => .cancelled,
+        };
     }
 };
 
@@ -434,20 +525,23 @@ fn readClockBinding(context: *anyopaque) child_bindings.ClockOutcome {
     return .{ .ready = reading };
 }
 
-fn acquireBinding(context: *anyopaque, stream: log_stream.Stream) child_bindings.StepOutcome {
+fn acquireBinding(context: *anyopaque, stream: log_stream.Stream) child_bindings.SinkOutcome {
     const self = cast(context);
-    self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return .{ .failed = acquire_lock.failureCode(failure) };
+    self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return child_bindings.SinkOutcome.of(acquire_lock.stop(failure));
     return .ok;
 }
 
+/// A cancelled persist drops the stream's cached state (see `Runner.dropped`); any other failure keeps it.
 fn persistEventBinding(
     context: *anyopaque,
     attributed: telemetry.WorkflowTelemetryFact,
     definition: log_event_registry.EventDefinition,
     reading: log_stream.ClockReading,
 ) child_bindings.PersistenceOutcome {
-    const evidence = cast(context).persistEvent(attributed, definition, reading) catch |failure| {
-        return .{ .failed = failureCode(failure) };
+    const self = cast(context);
+    const evidence = self.persistEvent(attributed, definition, reading) catch |failure| {
+        if (failure == error.Cancelled) self.forget(.event);
+        return child_bindings.PersistenceOutcome.of(persistStop(failure));
     };
     return .{ .persisted = evidence };
 }
@@ -457,8 +551,10 @@ fn persistPromptBinding(
     fragment: prompt_log.SanitizedPromptFragment,
     reading: log_stream.ClockReading,
 ) child_bindings.PersistenceOutcome {
-    const evidence = cast(context).persistPrompt(fragment, reading) catch |failure| {
-        return .{ .failed = failureCode(failure) };
+    const self = cast(context);
+    const evidence = self.persistPrompt(fragment, reading) catch |failure| {
+        if (failure == error.Cancelled) self.forget(.prompt);
+        return child_bindings.PersistenceOutcome.of(persistStop(failure));
     };
     return .{ .persisted = evidence };
 }
@@ -532,18 +628,20 @@ const PersistError = error{
     ConsoleFailure,
     FlushFailure,
     SegmentLimitExhausted,
+    Cancelled,
 };
 
-fn failureCode(failure: PersistError) log_stream.FailureCode {
+fn persistStop(failure: PersistError) log_stream.Stop {
     return switch (failure) {
-        error.SerializationFailure => .LOG_SERIALIZATION_FAILURE,
+        error.SerializationFailure => .{ .blocked = .LOG_SERIALIZATION_FAILURE },
         error.RecoveryFailure,
         error.CreateFailure,
         error.RotateFailure,
         error.AppendFailure,
         error.ConsoleFailure,
-        => .LOG_SINK_FAILURE,
-        error.FlushFailure => .LOG_FLUSH_FAILURE,
-        error.SegmentLimitExhausted => .LOG_SEGMENT_LIMIT_EXHAUSTED,
+        => .{ .blocked = .LOG_SINK_FAILURE },
+        error.FlushFailure => .{ .blocked = .LOG_FLUSH_FAILURE },
+        error.SegmentLimitExhausted => .{ .blocked = .LOG_SEGMENT_LIMIT_EXHAUSTED },
+        error.Cancelled => .cancelled,
     };
 }

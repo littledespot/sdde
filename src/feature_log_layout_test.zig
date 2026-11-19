@@ -2,39 +2,12 @@ const std = @import("std");
 const layout = @import("adapters/filesystem/feature_log_layout.zig");
 const active = @import("domain/active_feature_directory.zig");
 const roots = @import("domain/bootstrap_root_registry.zig");
-const root_contract = @import("domain/bootstrap_roots.zig");
 const artifacts = @import("domain/workflow_artifact_registry.zig");
 const log_binding = @import("domain/feature_log_binding.zig");
 const feature = @import("domain/feature_directory.zig");
 const directories = @import("adapters/filesystem/directory_access.zig");
 
-fn rootOwner(allocator: std.mem.Allocator, project: std.Io.Dir) !*roots.Owner {
-    var arena: std.heap.ArenaAllocator = .init(allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const names = [_][]const u8{ "requirements/current", "references", "archive", "workflows", "presets", "principles", "templates" };
-    var inspector = @import("adapters/filesystem/bootstrap_root_inspector.zig").Adapter.init(std.testing.io, project);
-    var configured: [root_contract.PathKey.count]root_contract.ValidatedConfiguredRoot = undefined;
-    for (&configured, names, 0..) |*entry, name, index| {
-        const key: root_contract.PathKey = @enumFromInt(index);
-        entry.* = .{
-            .path_key = key,
-            .root_role = key.role(),
-            .canonical_project_root = "/project",
-            .configured_relative_path = name,
-            .canonical_path = try std.mem.concat(a, u8, &.{ "/project/", name }),
-            .access_class = key.accessClass(),
-            .existence_policy = key.existencePolicy(),
-            .observation = try inspector.inspector().inspect(name),
-        };
-    }
-    return roots.createValidated(allocator, .{
-        .id = .{ .canonical_project_root = "/project", .contract_version = root_contract.bootstrap_root_contract_version },
-        .config_location = .{ .canonical_project_root = "/project", .canonical_config_path = "/project/.sddtoolkit.json", .no_follow_file_identity = .{ .filesystem_id = 1, .file_id = 1 } },
-        .configured_roots = configured,
-        .llm_provider_config_path = .{ .relative_path = ".sddproviders.json", .canonical_project_root = "/project", .canonical_path = "/project/.sddproviders.json" },
-    });
-}
+const rootOwner = @import("test_fixtures/project_roots.zig").owner;
 
 fn logOwner(allocator: std.mem.Allocator, selected: []const u8) !*log_binding.BindingOwner {
     return log_binding.createValidated(allocator, .{
@@ -57,14 +30,70 @@ fn observe(allocator: std.mem.Allocator, project: std.Io.Dir, registry: *const r
 const CloseFault = struct {
     original: @import("ports/feature_log_sink.zig").StreamCloser,
     fail: bool,
+    /// The close observes a cancellation, which is no logging failure.
+    cancel: bool = false,
     calls: usize = 0,
     fn close(context: *anyopaque, selected: *const log_binding.ValidatedFeatureLogBinding, stream: @import("domain/feature_log_stream.zig").Stream, state: @import("domain/feature_log_stream.zig").StreamState, trailer: []const u8) @import("ports/feature_log_sink.zig").Error!void {
         const self: *@This() = @ptrCast(@alignCast(context));
         self.calls += 1;
+        if (self.cancel) return error.Cancelled;
         if (self.fail) return error.FlushFailure;
         return self.original.close(selected, stream, state, trailer);
     }
 };
+
+/// A record append that passes, cancels or fails on request, so finalization's terminal event meets a stop of its own.
+const AppendFault = struct {
+    original: @import("ports/feature_log_sink.zig").RecordAppender,
+    mode: enum { pass, cancel, fail },
+    fn append(context: *anyopaque, selected: *const log_binding.ValidatedFeatureLogBinding, stream: @import("domain/feature_log_stream.zig").Stream, state: @import("domain/feature_log_stream.zig").StreamState, row: []const u8, flush: bool) @import("ports/feature_log_sink.zig").Error!@import("domain/feature_log_stream.zig").PersistedEvidence {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        return switch (self.mode) {
+            .pass => self.original.append(selected, stream, state, row, flush),
+            .cancel => error.Cancelled,
+            .fail => error.SinkFailure,
+        };
+    }
+};
+
+test "finalization keeps a logging failure over a cancellation, and a later failure over an earlier cancellation" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const Stop = enum { none, cancel, fail };
+    const Failure = @import("domain/feature_log_stream.zig").FailureCode;
+    // The terminal event's append fails with a sink fault and the close with a flush fault, so the code names which won.
+    const cases = [_]struct { event: Stop, close: Stop, expected: ?Failure }{
+        .{ .event = .cancel, .close = .none, .expected = null },
+        .{ .event = .cancel, .close = .cancel, .expected = null },
+        .{ .event = .cancel, .close = .fail, .expected = .LOG_FLUSH_FAILURE },
+        .{ .event = .fail, .close = .cancel, .expected = .LOG_SINK_FAILURE },
+        .{ .event = .fail, .close = .fail, .expected = .LOG_FLUSH_FAILURE },
+    };
+    for (cases) |case| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var run: Run = undefined;
+        try std.testing.expectEqual(.ready, std.meta.activeTag(try run.start(a, io, project.dir)));
+        const log_runner = @import("composition/active_feature_log_runtime.zig").runner(run.assembly.runtime_owner.?);
+        var append_fault: AppendFault = .{ .original = log_runner.actions.append_record.sink, .mode = switch (case.event) {
+            .none => .pass,
+            .cancel => .cancel,
+            .fail => .fail,
+        } };
+        log_runner.actions.append_record.sink = .{ .context = &append_fault, .append_fn = AppendFault.append };
+        var close_fault: CloseFault = .{ .original = log_runner.actions.close_stream.sink, .fail = case.close == .fail, .cancel = case.close == .cancel };
+        log_runner.actions.close_stream.sink = .{ .context = &close_fault, .close_fn = CloseFault.close };
+        const finished = run.finishWith(.{ .execution = .ok });
+        if (case.expected) |code| {
+            try std.testing.expectEqual(code, finished.execution_rejected.logging);
+            try std.testing.expectEqual(.blocked, finished.executionStatus().?);
+        } else {
+            try std.testing.expect(finished.execution_rejected == .cancelled);
+            try std.testing.expectEqual(.cancelled, finished.executionStatus().?);
+        }
+    }
+}
 
 test "production finalization preserves capture cause through close failure and repeated cleanup" {
     const io = std.testing.io;
@@ -105,7 +134,7 @@ test "production finalization preserves capture cause through close failure and 
         });
         defer capture.end();
         try std.testing.expectEqual(.blocked, capture.port().capture(.request, .{ .provider_body = "must not be dispatched" }, &.{}));
-        const original = capture.failure.?;
+        const original = capture.failure().?;
         try std.testing.expectEqual(.missing_source, original.cause.lineage);
         const reason: @import("domain/run_outcome.zig").Outcome = .{ .execution_rejected = .{ .model_capture = original } };
         const finalized = assembly.finalizer().finish(reason);
@@ -159,6 +188,189 @@ test "production finalization keeps the rejection its own logging failure replac
         try std.testing.expectEqualDeep(finished, finalizer.finish(finished));
         try std.testing.expectEqualDeep(replaced, finalizer.replaced());
     };
+}
+
+test "production finalization ends cancelled when its own log is cancelled, and keeps what it replaces" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const run_outcome = @import("domain/run_outcome.zig");
+    const capture_failure: @import("domain/model_capture_failure.zig").Failure = .{ .code = .LOG_SERIALIZATION_FAILURE, .stage = .lineage, .cause = .{ .lineage = .missing_source }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .direction = .request };
+    const rejected: run_outcome.Outcome = .{ .execution_rejected = .{ .operation_failed = error.InvalidCandidatePayload } };
+    const inputs = [_]run_outcome.Outcome{ rejected, .{ .execution = .ok }, .{ .execution = .cancelled }, .{ .execution_rejected = .{ .model_capture = capture_failure } } };
+    for (inputs) |input| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var run: Run = undefined;
+        try std.testing.expectEqual(.ready, std.meta.activeTag(try run.start(a, io, project.dir)));
+        defer run.finish();
+        const log_runner = @import("composition/active_feature_log_runtime.zig").runner(run.assembly.runtime_owner.?);
+        var close_fault: CloseFault = .{ .original = log_runner.actions.close_stream.sink, .fail = false, .cancel = true };
+        log_runner.actions.close_stream.sink = .{ .context = &close_fault, .close_fn = CloseFault.close };
+        const finalizer = run.assembly.finalizer();
+        const finished = finalizer.finish(input);
+        // Both streams are closed, the prompt stream even though the event stream's close was cancelled.
+        try std.testing.expectEqual(@as(usize, 2), close_fault.calls);
+        try std.testing.expect(run.logs.lifecycle.active == null);
+        switch (input) {
+            // A run that was already cancelled stays the outcome it was, and nothing was replaced.
+            .execution => |status| if (status == .cancelled) {
+                try std.testing.expectEqualDeep(input, finished);
+                try std.testing.expect(finalizer.replaced() == null);
+            } else {
+                // An outcome that was no rejection ends cancelled, not blocked on a logging failure.
+                try std.testing.expect(finished.execution_rejected == .cancelled);
+                try std.testing.expectEqual(.cancelled, finished.executionStatus().?);
+                try std.testing.expect(finalizer.replaced() == null);
+            },
+            .execution_rejected => |reason| if (reason == .model_capture) {
+                // A cancellation is no logging failure: the capture failure stays whole, with none recorded beside it.
+                try std.testing.expectEqualDeep(capture_failure, finished.execution_rejected.model_capture);
+                try std.testing.expectEqual(.blocked, finished.executionStatus().?);
+            } else {
+                // A rejection is replaced by the cancellation and kept beside it as the first cause.
+                try std.testing.expect(finished.execution_rejected == .cancelled);
+                try std.testing.expectEqual(.cancelled, finished.executionStatus().?);
+                try std.testing.expectEqual(reason.operation_failed, finalizer.replaced().?.operation_failed);
+            },
+            .bootstrap_failed, .invocation_invalid => unreachable,
+        }
+        // Finishing the finished outcome again replaces nothing and keeps the same first cause.
+        const replaced = finalizer.replaced();
+        try std.testing.expectEqualDeep(finished, finalizer.finish(finished));
+        try std.testing.expectEqualDeep(replaced, finalizer.replaced());
+    }
+}
+
+test "a cancelled directory check is a cancellation and any other storage fault is not" {
+    const boundary = @import("adapters/filesystem/feature_log_directory.zig");
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    var directory = std.testing.tmpDir(.{ .iterate = true });
+    defer directory.cleanup();
+    var cancel: cancelling.CancellingIo = undefined;
+    cancel.init(.dir_stat, 0);
+    defer cancel.deinit();
+    try std.testing.expectError(error.Cancelled, boundary.validateOwner(cancel.io(), directory.dir));
+    try std.testing.expect(cancel.fired);
+    // The mapping owner: a cancellation is its own outcome, and every other fault stays the one it was.
+    try std.testing.expectEqual(error.Cancelled, boundary.storageFault(error.Canceled));
+    try std.testing.expectEqual(error.Cancelled, boundary.storageFault(error.Cancelled));
+    try std.testing.expectEqual(error.ArtifactStorageUnavailable, boundary.storageFault(error.AccessDenied));
+}
+
+test "activation cancelled under the log lock or during retention ends cancelled and deletes nothing" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    // Retention: a prior run's expired segments are due, and the first delete observes the cancellation.
+    {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        const expired = try completedRun(a, io, project.dir);
+        defer expired.deinit(a);
+        try ageRun(a, io, project.dir, expired);
+        var cancel: cancelling.CancellingIo = undefined;
+        cancel.init(.delete_file, 0);
+        defer cancel.deinit();
+        var run: Run = undefined;
+        try std.testing.expectEqual(.cancelled, std.meta.activeTag(try run.start(a, cancel.io(), project.dir)));
+        run.finish();
+        try std.testing.expect(cancel.fired);
+        try expectKept(io, project.dir, expired);
+    }
+    // Recovery and creation under the stream lock, each the first of its kind in a fresh activation.
+    for ([_]cancelling.Op{ .try_lock, .write_streaming, .sync }) |op| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var cancel: cancelling.CancellingIo = undefined;
+        cancel.init(op, 0);
+        defer cancel.deinit();
+        var run: Run = undefined;
+        try std.testing.expectEqual(.cancelled, std.meta.activeTag(try run.start(a, cancel.io(), project.dir)));
+        try std.testing.expect(cancel.fired);
+        // A cancellation is no logging failure: none was recorded, and no stream is left active.
+        try std.testing.expect(run.assembly.failure == null);
+        try std.testing.expect(run.logs.lifecycle.active == null);
+        run.finish();
+    }
+}
+
+test "a cancellation at any directory or file read call of activation ends it cancelled, never blocked" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    // A prior closed run makes retention and discovery open and read its directories and segments too.
+    for ([_]cancelling.Op{ .open_dir, .create_dir, .real_path_file, .dir_access, .dir_read, .dir_stat, .open_file, .stat, .read_positional }) |op| {
+        var cancelled_calls: usize = 0;
+        var pass: usize = 0;
+        while (true) : (pass += 1) {
+            var project = std.testing.tmpDir(.{});
+            defer project.cleanup();
+            try project.dir.createDir(io, "workflows", .default_dir);
+            const prior = try completedRun(a, io, project.dir);
+            defer prior.deinit(a);
+            var cancel: cancelling.CancellingIo = undefined;
+            cancel.init(op, pass);
+            defer cancel.deinit();
+            var run: Run = undefined;
+            const started = try run.start(a, cancel.io(), project.dir);
+            // A cancellation ends activation as `cancelled`; any other call finishes it as it would have been.
+            try std.testing.expectEqual(cancel.fired, started == .cancelled);
+            if (!cancel.fired) try std.testing.expectEqual(.ready, std.meta.activeTag(started));
+            run.finish();
+            if (!cancel.fired) break;
+            cancelled_calls += 1;
+        }
+        // Every operation class is reached by activation at least once.
+        try std.testing.expect(cancelled_calls >= 1);
+    }
+}
+
+test "a cancellation after bytes were written still ends the run cancelled, never blocked on the state it left behind" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    const run_outcome = @import("domain/run_outcome.zig");
+    const Capture = @import("application/workflow_event_capture.zig").Capture;
+    // The nth durable flush is cancelled. A flush follows its bytes, so the row or trailer is already on disk
+    // when the cancellation lands; a later event or the close then meets a file ahead of the runner's state.
+    var cancelled_runs: usize = 0;
+    var pass: usize = 0;
+    while (true) : (pass += 1) {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var cancel: cancelling.CancellingIo = undefined;
+        cancel.init(.sync, pass);
+        defer cancel.deinit();
+        var run: Run = undefined;
+        const started = try run.start(a, cancel.io(), project.dir);
+        var outcome: run_outcome.Outcome = .{ .execution = .ok };
+        if (started == .cancelled) {
+            outcome = .{ .execution = .cancelled };
+        } else {
+            try std.testing.expectEqual(.ready, std.meta.activeTag(started));
+            const events: Capture = .{ .barrier = run.logs.barrier(), .shortcode = try @import("domain/telemetry.zig").WorkflowShortcode.parse("TEST") };
+            // Terminal stage events are always flushed.
+            for (0..3) |_| if (events.emit(.{ .event_type = .stage_completed, .fields = .{ .outcome = .completed } })) |stop| {
+                try std.testing.expect(stop == .cancelled);
+                outcome = .{ .execution_rejected = .cancelled };
+                break;
+            };
+        }
+        const finished = run.finishWith(outcome);
+        if (!cancel.fired) {
+            // Past the last flush of a run: nothing was cancelled, and the run finishes as it began.
+            try std.testing.expectEqualDeep(run_outcome.Outcome{ .execution = .ok }, finished);
+            break;
+        }
+        cancelled_runs += 1;
+        try std.testing.expectEqual(.cancelled, finished.executionStatus().?);
+    }
+    // Activation, appended events and the close each flush: more than one place was reached.
+    try std.testing.expect(cancelled_runs >= 3);
 }
 
 test "feature log layout activates absent and present directories without changing bootstrap observations" {
@@ -292,10 +504,16 @@ const Run = struct {
     }
 
     fn finish(self: *Run) void {
-        _ = self.assembly.finalizer().finish(.{ .execution = .ok });
+        _ = self.finishWith(.{ .execution = .ok });
+    }
+
+    /// Finalize with the run's terminal outcome, release everything and return the finished outcome.
+    fn finishWith(self: *Run, outcome: @import("domain/run_outcome.zig").Outcome) @import("domain/run_outcome.zig").Outcome {
+        const finished = self.assembly.finalizer().finish(outcome);
         self.assembly.deinit();
         self.logs.deinit();
         roots.deinitOwner(self.root_owner);
+        return finished;
     }
 };
 

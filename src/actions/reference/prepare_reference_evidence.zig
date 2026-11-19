@@ -28,7 +28,7 @@ pub const Step = enum {
 pub const Diagnostic = struct { step: ?Step = null };
 
 /// The failure representation of the eight absorbed actions, unchanged. `Cancelled` means the
-/// runtime stopped being active; the runner reports which stop it was.
+/// runtime stopped being active or a port call was cancelled; the runner reports the cancellation.
 pub const Error = corpus_port.Error || reference.Error || evidence.Error || identity_port.Error || error{Cancelled};
 
 /// One stage: enumerate, validate, capture and decode the selected reference directory, check the

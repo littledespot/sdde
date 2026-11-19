@@ -15,7 +15,9 @@
   single responsibility and narrow ports per function, function-local intermediate
   values, and model calls and every real branch kept in YAML. The choices under "Derived
   under existing rules" follow from existing authority; the user confirmed choices 1–3 and
-  6–8 on 12 November 2026 ("yes").
+  6–8 on 12 November 2026 ("yes"). On 19 November 2026 the user approved ("yes") that an
+  operation's own `Cancelled` ends the run `cancelled` while the runtime still reports active,
+  amending the runtime-status rule under "Cancellation".
 - **Amends:**
   - AGENTS.md "Actions, orchestrators, and runner" (one responsibility and narrow ports)
     and "Testing expectations" (action tests);
@@ -218,6 +220,11 @@ engine-startup graph, the feature-logging pipeline or the invocation operation.
     after the runtime stopped reports that stop (cancelled or deadline exhausted), not an
     operation failure, as the checks before and after the invocation do. An allocation
     failure stays itself, and a model call keeps its own reconciled status.
+  - A non-model operation that fails with `Cancelled` while the runtime still reports active
+    (a cancelled filesystem or random-source call) also ends the run `cancelled`. The runtime
+    status no longer decides that alone. A runtime that stopped for its deadline still reports
+    the deadline. An adapter maps the standard library's cancellation to `Cancelled`; any other
+    failure of the same call stays the port's own error.
 
 ### Runner, compiler and registry
 

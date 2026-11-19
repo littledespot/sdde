@@ -3217,10 +3217,12 @@ fn InvocationErrorSpy(comptime cause: execution.OperationError) type {
 }
 
 /// A logging sink that accepts every event until `at`, then fails: the first event with
-/// `LOG_FLUSH_FAILURE` and, when `persistent`, every later one with `LOG_SINK_FAILURE`.
+/// `LOG_FLUSH_FAILURE` and, when `persistent`, every later one with `LOG_SINK_FAILURE`. With `cancel`
+/// the first event is a cancellation under the log instead, which is no logging failure.
 const FailingEvents = struct {
     at: @import("domain/telemetry.zig").EventType,
     persistent: bool,
+    cancel: bool = false,
     failed: bool = false,
 
     fn barrier(self: *@This()) @import("ports/telemetry_barrier.zig").Barrier {
@@ -3231,7 +3233,7 @@ const FailingEvents = struct {
         if (self.failed) return if (self.persistent) .{ .blocked = .LOG_SINK_FAILURE } else .dropped;
         if (fact.fact.event_type != self.at) return .dropped;
         self.failed = true;
-        return .{ .blocked = .LOG_FLUSH_FAILURE };
+        return if (self.cancel) .cancelled else .{ .blocked = .LOG_FLUSH_FAILURE };
     }
 };
 
@@ -3332,6 +3334,50 @@ test "a step's own rejection whose end event cannot be logged is kept as the fir
     // ...and the refusal itself is the first cause.
     try std.testing.expectEqual(execution.AuthorityReason.authorization_denied, runner.first_cause.?.authority);
     try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+}
+
+test "a log cancellation while a step's end event is recorded ends the step cancelled and keeps its rejection as the first cause" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try invocationYaml(&fixture));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    try prepareInvocable(&runner);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "call" }).outcome);
+    values.destroy(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)].?);
+    runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] = null;
+    try activateEvents(&runner);
+    var events: FailingEvents = .{ .at = .action_failed, .persistent = false, .cancel = true };
+    runner.barrier = events.barrier();
+    const stopped = runner.bindings().invokeStep(.{ .bytes = "call" });
+    // The log observing a cancellation ends the step as the run's own cancellation, not a logging rejection...
+    try std.testing.expect(stopped.rejected == .cancelled);
+    try std.testing.expectEqual(workflow.OutcomeTag.cancelled, stopped.status());
+    // ...and the refusal it replaced is still the first cause.
+    try std.testing.expectEqual(execution.AuthorityReason.authorization_denied, runner.first_cause.?.authority);
+}
+
+test "a log cancellation at an exhausted retry allowance ends the run cancelled and keeps the exhaustion as the first cause" {
+    const limit: u32 = 1;
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try accountingYaml(&fixture, limit, true));
+    fixture.observer.retry_until = limit + 2;
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    try activateEvents(&runner);
+    var events: FailingEvents = .{ .at = .retry_exhausted, .persistent = false, .cancel = true };
+    runner.barrier = events.barrier();
+    var harness: Harness = .{ .runner = &runner };
+    const outcome = harness.result();
+    try std.testing.expect(outcome.execution_rejected == .cancelled);
+    try std.testing.expectEqual(workflow.OutcomeTag.cancelled, outcome.executionStatus().?);
+    try std.testing.expectEqual(limit, runner.first_cause.?.retry_limit.limit.value);
 }
 
 test "an exhausted retry allowance whose event cannot be logged is kept as the first cause" {
@@ -7233,6 +7279,8 @@ const ModelCaptureSink = struct {
     const stream = @import("domain/feature_log_stream.zig");
     allocator: std.mem.Allocator,
     fail_direction: ?prompt.PromptDirection = null,
+    /// The direction whose first fragment observes a cancellation under the log, which is no logging failure.
+    cancel_direction: ?prompt.PromptDirection = null,
     fragments: std.ArrayList(prompt.SanitizedPromptFragment) = .empty,
 
     fn barrier(self: *@This()) @import("ports/telemetry_barrier.zig").Barrier {
@@ -7243,6 +7291,7 @@ const ModelCaptureSink = struct {
     }
     fn process(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) stream.Outcome {
         const self: *@This() = @ptrCast(@alignCast(context));
+        if (self.cancel_direction == fragment.direction) return .cancelled;
         if (self.fail_direction == fragment.direction) return .{ .blocked = .LOG_FLUSH_FAILURE };
         var retained = fragment;
         retained.request_id.bytes = self.allocator.dupe(u8, fragment.request_id.bytes) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
@@ -7285,7 +7334,7 @@ test "production request capture failure records non-delivery and response captu
             try std.testing.expectEqual(.persistence, failure.stage);
             try std.testing.expectEqualDeep(@import("domain/model_capture_failure.zig").Cause{ .sink = .LOG_FLUSH_FAILURE }, failure.cause);
             try std.testing.expectEqual(case.direction, failure.direction);
-            try std.testing.expectEqualDeep(failure, runner.model_capture.failure.?);
+            try std.testing.expectEqualDeep(failure, runner.model_capture.failure().?);
             try std.testing.expectEqualStrings("MODEL_CAPTURE_PERSISTENCE_FAILURE", outcome.execution_rejected.diagnostic());
             // A capture failure is recorded while its call runs, so it is its own first cause: nothing
             // formed from the call's result (a blocked send, an overshoot) is kept beside it.
@@ -7317,6 +7366,48 @@ test "production request capture failure records non-delivery and response captu
             }
         }
     }
+}
+
+test "a cancellation under the log while a body is captured is no capture failure; a request is never sent, a response already was" {
+    for (std.enums.values(contracts.BedrockFamily)) |family| for ([_]ModelCaptureSink.prompt.PromptDirection{ .request, .response }) |direction| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .cancel_direction = direction };
+        runner.model_capture.logs = sink.barrier();
+        try runtime.bind(&runner);
+        var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+        runtime.provider.?.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        const outcome = harness.result();
+        // The run is cancelled, not blocked on a capture failure: no failure is recorded.
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, outcome.executionStatus().?);
+        try std.testing.expect(runner.model_capture.failure() == null);
+        try std.testing.expect(runner.model_capture.stopped.? == .cancelled);
+        try std.testing.expect(runner.model_capture.current == null);
+        // A request whose capture was cancelled is never sent; a response's capture follows an exchange that happened.
+        try std.testing.expectEqual(@as(usize, if (direction == .request) 0 else 1), wire.calls);
+        for (sink.fragments.items) |fragment| try std.testing.expectEqual(.request, fragment.direction);
+        try std.testing.expectEqual(direction == .response, sink.fragments.items.len > 0);
+        // The response's usage is still accounted: the exchange happened, whatever its capture did.
+        if (direction == .response) {
+            const tokens = runner.tokenLedger();
+            try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
+            try std.testing.expect(tokens.accounted_operations.items[0].reconciliation == .exact_usage);
+        }
+    };
 }
 
 test "production source snapshot capture failure preserves its cause and unsent accounting" {
@@ -7357,7 +7448,7 @@ test "production source snapshot capture failure preserves its cause and unsent 
         try std.testing.expectEqual(.source_snapshot, failure.stage);
         try std.testing.expectEqualDeep(@import("domain/model_capture_failure.zig").Cause{ .source_snapshot = .missing_source_chain }, failure.cause);
         try std.testing.expectEqual(.request, failure.direction);
-        try std.testing.expectEqualDeep(failure, runner.model_capture.failure.?);
+        try std.testing.expectEqualDeep(failure, runner.model_capture.failure().?);
         try std.testing.expectEqualStrings("MODEL_CAPTURE_SOURCE_SNAPSHOT_FAILURE", outcome.execution_rejected.diagnostic());
         try std.testing.expectEqual(@as(usize, 0), wire.calls);
         try std.testing.expectEqual(@as(usize, 0), sink.fragments.items.len);
@@ -7417,7 +7508,7 @@ test "production capture accepts an authorized repair packet without a single pr
         const packet = (try currentRequest(&runner)).packet().?;
         try std.testing.expect(packet.repairPermit() != null);
         try std.testing.expect(packet.repairOrigin() == null);
-        try std.testing.expect(runner.model_capture.failure == null);
+        try std.testing.expect(runner.model_capture.failure() == null);
         try std.testing.expect(runner.model_capture.current == null);
         try std.testing.expectEqual(@as(usize, 1), wire.calls);
         try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());

@@ -7,6 +7,11 @@ const clarification = @import("../../domain/clarification_inputs.zig");
 const source = @import("../../ports/feature_input_source.zig");
 const directories = @import("directory_access.zig");
 
+/// What a failed directory or file call is to this port: a cancellation, or unavailable input.
+fn unavailable(err: anyerror) source.Error {
+    return if (directories.isCancellation(err)) error.Cancelled else error.FeatureInputUnavailable;
+}
+
 pub const Adapter = struct {
     io: std.Io,
     project_root: std.Io.Dir,
@@ -66,20 +71,20 @@ pub const Adapter = struct {
             for (forms.items) |form| allocator.free(form.bytes);
             forms.deinit(allocator);
         }
-        const specs = directories.openObserved(self.io, self.project_root, binding.paths.specs, binding.specs_observation) catch return error.FeatureInputUnavailable;
+        const specs = directories.openObserved(self.io, self.project_root, binding.paths.specs, binding.specs_observation) catch |err| return unavailable(err);
         if (specs) |root| {
             defer root.close(self.io);
-            const selected = directories.openObserved(self.io, root, observed.selector.feature_id.bytes, observed.observation) catch return error.FeatureInputUnavailable;
+            const selected = directories.openObserved(self.io, root, observed.selector.feature_id.bytes, observed.observation) catch |err| return unavailable(err);
             if (selected) |target| {
                 defer target.close(self.io);
                 const collection = directories.open(self.io, target, std.fs.path.basename(paths.get(.clarification_forms).root_relative)) catch |err| switch (err) {
                     error.DirectoryMissing => null,
-                    else => return error.FeatureInputUnavailable,
+                    else => return unavailable(err),
                 };
                 if (collection) |folder| {
                     defer folder.close(self.io);
                     var iterator = folder.iterate();
-                    while (iterator.next(self.io) catch return error.FeatureInputUnavailable) |entry| {
+                    while (iterator.next(self.io) catch |err| return unavailable(err)) |entry| {
                         if (entry.kind != .file or forms.items.len == clarification.max_forms or entry.name.len != 6 or
                             !std.mem.endsWith(u8, entry.name, ".md")) return error.FeatureInputUnavailable;
                         const id = clarification.Id.parse(entry.name[0..3]) orelse return error.FeatureInputUnavailable;
@@ -98,11 +103,11 @@ pub const Adapter = struct {
         return .{ .state = state, .forms = try forms.toOwnedSlice(allocator) };
     }
     fn captureState(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, state_path: artifacts.ArtifactPath, maximum: usize) source.Error!?[]const u8 {
-        const workflow_root = (directories.openObserved(self.io, self.project_root, binding.paths.workflows, .{ .directory = binding.workflows_identity }) catch return error.FeatureInputUnavailable) orelse return error.FeatureInputUnavailable;
+        const workflow_root = (directories.openObserved(self.io, self.project_root, binding.paths.workflows, .{ .directory = binding.workflows_identity }) catch |err| return unavailable(err)) orelse return error.FeatureInputUnavailable;
         defer workflow_root.close(self.io);
         const parent = directories.open(self.io, workflow_root, std.fs.path.dirname(state_path.root_relative).?) catch |err| switch (err) {
             error.DirectoryMissing => null,
-            else => return error.FeatureInputUnavailable,
+            else => return unavailable(err),
         };
         return if (parent) |folder| blk: {
             defer folder.close(self.io);
@@ -116,5 +121,5 @@ fn lessForm(_: void, left: clarification.FormCapture, right: clarification.FormC
 }
 
 fn readFile(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, name: []const u8, maximum: usize) source.Error!?[]const u8 {
-    return @import("file_access.zig").capture(io, allocator, parent, name, null, maximum) catch return error.FeatureInputUnavailable;
+    return @import("file_access.zig").capture(io, allocator, parent, name, null, maximum) catch |err| return unavailable(err);
 }

@@ -131,6 +131,15 @@ pub const Rejection = union(enum) {
     token_budget: @import("workflow_token_accounting.zig").BudgetError,
     retry_limit: @import("workflow_retry.zig").Exhaustion,
 
+    /// What a logging stop rejects the run as: a logging failure is a `logging` rejection, and a
+    /// cancellation under the feature log is the run's own `cancelled` (ADR 0026, ADR 0032).
+    pub fn logStop(stop: @import("feature_log_stream.zig").Stop) Rejection {
+        return switch (stop) {
+            .blocked => |code| .{ .logging = code },
+            .cancelled => .cancelled,
+        };
+    }
+
     /// The stable name every surface shows for this rejection (events, the command line, reports and
     /// traces). An authority rejection names its reason; the reason sits beside the tag and moves no
     /// failure across the publish line, which `status()` alone decides (ADR 0041).

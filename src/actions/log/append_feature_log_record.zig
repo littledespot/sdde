@@ -3,7 +3,7 @@ const log_binding = @import("../../domain/feature_log_binding.zig");
 const log_stream = @import("../../domain/feature_log_stream.zig");
 const sink_port = @import("../../ports/feature_log_sink.zig");
 
-pub const Error = error{ LogSinkFailure, LogFlushFailure };
+pub const Error = error{ LogSinkFailure, LogFlushFailure, Cancelled };
 pub const Action = struct {
     sink: sink_port.RecordAppender,
     pub const contract: pipeline.NodeContract = .{
@@ -16,7 +16,8 @@ pub const Action = struct {
     pub fn execute(self: Action, binding: *const log_binding.ValidatedFeatureLogBinding, stream: log_stream.Stream, state: log_stream.StreamState, row: []const u8, flush: bool) Error!log_stream.PersistedEvidence {
         return self.sink.append(binding, stream, state, row, flush) catch |failure| return switch (failure) {
             error.FlushFailure => error.LogFlushFailure,
-            else => error.LogSinkFailure,
+            error.Cancelled => error.Cancelled,
+            error.LockUnavailable, error.InvalidBinding, error.CorruptStream, error.SegmentLimitExhausted, error.SinkFailure, error.ReleaseFailure => error.LogSinkFailure,
         };
     }
 };

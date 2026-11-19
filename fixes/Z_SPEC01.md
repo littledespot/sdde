@@ -412,9 +412,117 @@ parts: SPEC01 E6.
 published-output defect class (a wrong failure code in the feature log); no request, report or
 state change. `acquire_feature_log_stream_lock.zig` fails with `LogLockTimeout` only for
 `LockUnavailable` and with `LogSinkFailure` for every other sink error (an exhaustive switch in
-`Action.execute`), and its `failureCode` gives each one's log code, `LOG_LOCK_TIMEOUT` or
+`Action.execute`), and its `stop` gives each one's log code, `LOG_LOCK_TIMEOUT` or
 `LOG_SINK_FAILURE` (F0002:545, :556-557); the feature log runner and the retention runner call
-it. The cancellation half stays in SPEC01 E6.
+it. The cancellation half is the next entry.
+
+## E6. Cancellation under the feature log is the run's cancellation (built 19 November 2026)
+
+**Decided** 8 November 2026 (user: "recommendations accepted for 1 to 6"); **approved** 19 November 2026
+(user: "yes, and implement E6"), with the amendments to ADR 0032, ADR 0026, contract 27, §14.9 and §14.10,
+13-09 and F0002. **Defect class:** a terminal state reported as another (AGENTS.md "Keep failed, blocked,
+cancelled and completed distinct"). No published-output defect class: nothing supplies a cancellation status in
+production (SPEC01 §10 C28), so the outcome is proven only by fixtures, and no quality benefit is claimed.
+**Built:** the feature-log sink port carries `Cancelled` (`operation_error.zig`), the log outcome and a new
+`Stop` carry `cancelled` beside `blocked` (`feature_log_stream.zig`), and a cancellation under the lock, while a
+segment is read, appended, closed or pruned, or while the sink's directories are opened ends the run `cancelled`.
+It has no `LOG_*` code, emits no emergency line and releases its lock. A cancellation during segment creation or
+rotation is reported as one too, but see "Not done" for the torn segment it can leave.
+- **Adapters:** one owner of the mapping per boundary replaces the `SinkFailure` sites that wrapped an Io call:
+  `feature_log_file.sinkFault` and `flushFault` (about 26 calls), `feature_log_directory.storageFault` (about 6),
+  and `log_output` for the console mirror write. About 11 validation `SinkFailure`s stay. Recovery no longer
+  reports a cancellation as `CorruptStream`, and a read the reader gave up on shows its cancellation in
+  `reader.err`. The five filesystem adapters, the sink's activation, the historical stream and `requireExactName`
+  in `directory_access.zig` (a directory open's `realPathFile`) map it.
+- **Actions:** the seven sink actions and the console action pass `Cancelled` on, each with an exhaustive `switch`
+  over the sink's closed error set, so a new sink error forces a decision.
+- **Application:** child-binding results split so only the steps that touch the sink can be `cancelled`
+  (`SinkOutcome`); the orchestrator and the retention, finalization and policy-transition coordinators carry it;
+  the event capture returns a `Stop`, and `Rejection.logStop` is the one place a stop becomes a `logging` or
+  `cancelled` rejection (about 21 pipeline-runner sites). The model-exchange capture holds one typed `stopped`
+  state, a capture failure or a cancellation, and a cancelled prompt capture ends the call `cancelled`.
+- **Stale stream state:** a cancellation can land after a row's or trailer's bytes were written (a flush, the
+  console mirror), leaving the file ahead of the runner's cached stream state; finalization then failed its size
+  check and the run ended `blocked`. A cancelled persist or close now drops that state (`Runner.dropped`), the next
+  persist recovers it from the bytes, and finalization recovers a dropped stream under its lock before closing it,
+  as after a crash (`feature_log_runner.zig`, ADR 0032 "Cancellation mapping"). Production finalizes once, so what
+  matters there is the recovery of a stream a cancelled persist dropped; that a cancelled close drops its state too
+  is the runner's own contract for a caller that closes again.
+- **Every stream is closed:** finalization closes the prompt stream even when the event stream's close stopped,
+  and reports the first stop; an activation whose prompt prepare stops closes the event stream it opened, since
+  that run is never finalized. Both apply to a failure as to a cancellation.
+- **Decided with it:** a cancelled log step emits no emergency line; finalization still runs after it. In
+  finalization a cancellation never replaces a logging failure and a later logging failure replaces an earlier
+  cancellation; when finalization's own log step is cancelled, a rejection the run already had is replaced by
+  `cancelled` and kept as its first cause, a run already cancelled stays as it was, and a capture failure stays
+  whole. A lock that cannot be released after a cancelled step is a logging failure of its own; retention keeps its
+  first stop.
+- **Proof:** a request-projection freeze after the change is byte-identical to one taken before it
+  (`diff -r` empty, manifest included; 145 scenarios, 1,969 calls); `zig build test-integration` 134 of 134;
+  26 new tests (2100 to 2126 repository tests) with a new `src/test_fixtures/cancelling_io.zig`, a real
+  filesystem `Io` that cancels the nth call of one operation class. Through the real adapter it drives the lock,
+  recovery, segment creation, append, flush, close (by flush, stat and write), the run-history scan, retention, the
+  console mirror and the sink's directory check, and for an activation every directory open, create, `realPathFile`,
+  access, read and stat (each ends activation `cancelled`, never blocked), and every durable flush of a run through
+  to its finish (each ends `cancelled`). Segment rotation is driven only through a fake sink. Each mapping and
+  state rule above fails a test when removed: the shared mapping, the recovery and reader-cause mappings, the
+  `realPathFile` mapping, the dropped state of each stream, the finalization recovery, the runner's `stopped`, the
+  orchestrator's release on a cancelled append, `Rejection.logStop`, and the runner's capture-cancel check.
+- **Not done:** a cancellation that lands
+  between creating a segment and writing its header leaves a torn segment, which recovery refuses
+  (`feature_log_recovery.zig` rejects an empty or header-less current segment), so that run's finalization fails and
+  it ends `blocked` as it did before this change. **Decided no** (user, 19 November 2026: "apply recommendation"):
+  current-run recovery doesn't rewrite a torn last segment; ADR 0032 "Cancellation mapping" records the limit. A
+  non-cancel failure after a row's bytes were written (a flush or console fault) leaves the same stale cache,
+  and its run ends `blocked` anyway. A stream's cache is a `?StreamState` beside the `dropped` set, not one
+  per-stream value. Hand-written `Canceled` mappings outside the sink boundary stay as they were
+  (`feature_log_history.zig`), as do the `else =>` arms over closed sets in `feature_logging_runtime.zig` that this
+  change didn't add and the inferred error set of the run-history scan. A cancelled request capture is accounted
+  like any cancelled provider call. The scope was wider than the record's estimate of about 35 sites and 9
+  consumers, one contract throughout.
+
+### Cancellation outside logging
+
+Built 19 November 2026 (user: "yes", to amending ADR 0031's runtime-status rule so that an operation's own
+`Cancelled` ends the run `cancelled` while the runtime still reports active).
+
+- **Defect:** the filesystem and system adapters a stage reads or publishes through reported a cancelled `std.Io`
+  call as their port's ordinary fault (`FeatureInputUnavailable`, `InvalidToolchainSource`, `OutputWriteFailed`
+  and the like), and the runner ended such a run `operation_failed` unless the runtime had itself stopped.
+- **Change:** `Cancelled` is in the error set of each read port (feature input and workflow state, feature
+  directory, reference directory, reference corpus, principle, toolchain authority and reference state identity)
+  and of the workflow output port. Each adapter maps a cancellation at its `Io` calls and keeps every other fault as it was,
+  by a local helper over `directory_access.isCancellation` (the random draw tests its own closed `Io` error set).
+  `directory_inventory.zig` and `file_access.zig` carry
+  it for the adapters above them, `prepare_toolchain.zig` converts a source's `InvalidToolchainSource` to
+  `InvalidToolchain` and a `Cancelled` to `Cancelled`, and the runner reports an operation's `Cancelled` as a
+  cancelled run (`workflow_pipeline_runner.zig`, after the runtime-stop check; ADR 0031 "Cancellation").
+- **Found by the sweep:** a std file reader that is not given the file's size stats the file itself and swallows a
+  cancelled stat, so the read succeeded and the cancellation was lost. Every reader that already holds the observed
+  size now passes it (`File.Reader.initSize` in `file_access.zig`, `toolchain_authority_source.zig`, and the log
+  readers in `feature_log_recovery.zig` and `feature_log_retention_store.zig`, which E6 had left with the same gap).
+  Startup configuration readers run before any runtime exists and are not part of this.
+- **Proof:** `cancelling_io.sweep` cancels each call of one operation class in turn on a real directory and requires
+  `Cancelled` from the cancelled attempt and success from the rest. `src/adapter_cancellation_test.zig` sweeps the
+  feature directory inspector, the feature input and workflow-state readers, the reference inspector, enumerator and
+  capturer, the principle reader, the toolchain readers and the random draw (the `Io` fixture gained `stat_file` and
+  `random_secure`); `workflow_output.zig` sweeps a full publication (open, create, access, stat, read, truncate,
+  write and sync); `feature_log_layout_test.zig` now sweeps file opens, stats and reads of activation as well; the
+  runner test covers an operation's `Cancelled` under an active, cancelled and deadline-exhausted runtime; the
+  toolchain stage test covers each source step. 2126 to 2135 repository tests. Breaking each adapter's mapping, the
+  toolchain conversion or the runner rule, and restoring the log recovery's unseeded reader, each failed a named test.
+- **Not done:** a cancelled write in the publication leaves what a failed write leaves (the adapter's header: no
+  journal, no rollback): the files already replaced stay, and a file created for the write stays, possibly empty. The
+  workflow state is the last file written, so its bytes are on disk only if its write completed before the
+  cancellation landed (a cancelled sync or verification read leaves them). The run ends `cancelled`. The sweep
+  asserts the returned error, not the disk.
+- **Open, found in review:** the adapters' helpers take the failed call's error as `anyerror`, as the `catch return
+  error.X` they replaced did, so an allocation failure under a publication recheck is reported as `OutputChanged`
+  or the port's fault (`principle_source.zig` passes it through); a failing-allocator case and a shared mapper over
+  the closed `Io` error sets would close it. The stages that only propagate a port's `Cancelled` (`prepare_inputs`,
+  `prepare_reference_evidence`) have no test of a port-originated cancellation, only of the runtime stop. The
+  harness oracle (`test/harness/e2e/oracle.zig`) reports a `Cancelled` from `file_access.capture` as an unreadable
+  artefact; nothing in the harness cancels.
 
 ## Next 6. An entity is a name and its groups (ADR 0038 Decision 6)
 

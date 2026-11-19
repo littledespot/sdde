@@ -49,14 +49,17 @@ pub const Runner = struct {
         ) catch return .{ .failed = .LOG_SINK_FAILURE };
         return .ok;
     }
-    fn invokeAcquire(context: *anyopaque) bindings.StepOutcome {
+    fn invokeAcquire(context: *anyopaque) bindings.SinkOutcome {
         const self = cast(context);
-        self.acquire_action.execute(self.historical, self.selected_stream.?) catch |failure| return .{ .failed = acquire.failureCode(failure) };
+        self.acquire_action.execute(self.historical, self.selected_stream.?) catch |failure| return bindings.SinkOutcome.of(acquire.stop(failure));
         return .ok;
     }
-    fn invokePrune(context: *anyopaque) bindings.StepOutcome {
+    fn invokePrune(context: *anyopaque) bindings.SinkOutcome {
         const self = cast(context);
-        self.prune_action.execute(self.historical, self.authorization orelse return .{ .failed = .LOG_SINK_FAILURE }) catch return .{ .failed = .LOG_SINK_FAILURE };
+        self.prune_action.execute(self.historical, self.authorization orelse return .{ .failed = .LOG_SINK_FAILURE }) catch |failure| return switch (failure) {
+            error.LogSinkFailure => .{ .failed = .LOG_SINK_FAILURE },
+            error.Cancelled => .cancelled,
+        };
         return .ok;
     }
     fn invokeRelease(context: *anyopaque) bindings.StepOutcome {

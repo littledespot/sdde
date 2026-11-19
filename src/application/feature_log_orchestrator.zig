@@ -17,20 +17,27 @@ pub fn processEvent(children: bindings.ChildBindings, fact: telemetry.WorkflowTe
     switch (children.invokeAcquire(.event)) {
         .ok => {},
         .failed => |failure| return block(children, fact.workflow_shortcode, failure),
+        .cancelled => return .cancelled,
     }
-    var failure: ?log_stream.FailureCode = null;
+    var stop: ?log_stream.Stop = null;
     const evidence = switch (children.invokePersistEvent(fact, definition, reading)) {
         .persisted => |value| value,
         .failed => |value| failed: {
-            failure = value;
+            stop = .{ .blocked = value };
             break :failed null;
         },
+        .cancelled => cancelled: {
+            stop = .cancelled;
+            break :cancelled null;
+        },
     };
+    // The lock is released whatever the append did, a cancellation included. A release failure is a
+    // logging failure of its own and outranks the stop that preceded it.
     switch (children.invokeRelease()) {
         .ok => {},
-        .failed => |value| failure = value,
+        .failed => |value| stop = .{ .blocked = value },
     }
-    if (failure) |value| return block(children, fact.workflow_shortcode, value);
+    if (stop) |value| return finish(children, fact.workflow_shortcode, value);
     return .{ .persisted = evidence.? };
 }
 
@@ -48,20 +55,25 @@ pub fn processPrompt(children: bindings.ChildBindings, fragment: prompt_log.Sani
     switch (children.invokeAcquire(.prompt)) {
         .ok => {},
         .failed => |failure| return block(children, fragment.workflow_shortcode, failure),
+        .cancelled => return .cancelled,
     }
-    var failure: ?log_stream.FailureCode = null;
+    var stop: ?log_stream.Stop = null;
     const evidence = switch (children.invokePersistPrompt(fragment, reading)) {
         .persisted => |value| value,
         .failed => |value| failed: {
-            failure = value;
+            stop = .{ .blocked = value };
             break :failed null;
+        },
+        .cancelled => cancelled: {
+            stop = .cancelled;
+            break :cancelled null;
         },
     };
     switch (children.invokeRelease()) {
         .ok => {},
-        .failed => |value| failure = value,
+        .failed => |value| stop = .{ .blocked = value },
     }
-    if (failure) |value| return block(children, fragment.workflow_shortcode, value);
+    if (stop) |value| return finish(children, fragment.workflow_shortcode, value);
     return .{ .persisted = evidence.? };
 }
 
@@ -75,4 +87,12 @@ pub fn close(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShor
 
 fn block(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) log_stream.Outcome {
     return .{ .blocked = children.invokeReportFailure(shortcode, failure) };
+}
+
+/// A logging failure is reported once; a cancellation is no logging failure and reports nothing.
+fn finish(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShortcode, stop: log_stream.Stop) log_stream.Outcome {
+    return switch (stop) {
+        .blocked => |failure| block(children, shortcode, failure),
+        .cancelled => .cancelled,
+    };
 }

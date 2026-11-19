@@ -79,18 +79,19 @@ the Specify workflow.
   3. `inspectFeature`: through the bound read capability, observes only the selected directory and
      its specs root: absent, or a readable directory with its identity. No other feature is
      scanned. Rejects `FeatureDirectoryUnavailable` for a missing capability, a selector that no
-     longer revalidates, or an unreadable or unsafe node.
+     longer revalidates, or an unreadable or unsafe node, and `Cancelled` for a cancelled call.
   4. `normalizeReference`: NFC-normalizes the raw `--reference` value within the selector byte
      limit, then normalizes it as a relative directory path. Rejects the Unicode port's errors.
   5. `validateReference`: requires a safe relative selector. Rejects `InvalidReferenceSelector`.
   6. `inspectReference`: observes the selected reference directory through the read-only
-     inspector. Rejects `ReferenceDirectoryUnavailable`.
+     inspector. Rejects `ReferenceDirectoryUnavailable`, and `Cancelled` for a cancelled call.
   7. `resolvePaths`: derives every registered artifact path for the feature (specification,
      reference context, clarification forms and state, workflow state, event and prompt logs)
      from the configured roots; no model or user supplies a path. Rejects
      `InvalidFeatureArtifactPath` when roots are unbound or the selector no longer revalidates.
   8. `captureState`: reads the feature's canonical workflow-state file through the state-source
-     port, or reports it absent; it never parses the bytes. Rejects `FeatureInputUnavailable`.
+     port, or reports it absent; it never parses the bytes. Rejects `FeatureInputUnavailable`,
+     and `Cancelled` for a cancelled call.
   9. `parseState`: parses the feature's prior `specification-state` or incomplete state; a first
      run has none. Rejects `specification_state.Error`, including `InvalidSpecificationState`.
   10. `captureClarifications`: captures the feature's clarification-state bytes and every

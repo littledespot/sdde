@@ -205,8 +205,8 @@ exhaustion, never budget, in two modes, each reported with no lever:
   first answers in 24 runs of three builds, a model limitation under a coherent contract.
 
 **Engine track, in gaps:** E2 stops
-at its three preparation stages (decided 14 November 2026); E3's feature logging waits on E6; E6
-in any gap; the evaluator partial-body gap (§5 E5) in any gap; E7 last. E0 is on hold.
+at its three preparation stages (decided 14 November 2026); E3's feature logging waits on its
+preconditions (§5 E3); the evaluator partial-body gap (§5 E5) in any gap; E7 last. E0 is on hold.
 **Tests:** T2 and T3 in any gap; T4 with
 E1–E4. **Adjudication:** H1 (the evaluate-e2e skill) for every set.
 **Human:** H2 when required source review is labelled or review returns; H3 when the user
@@ -496,7 +496,8 @@ Revisit when Plan work begins (ADR 0034).
 
 Startup and provider bootstrap implemented 12 November 2026 and kept 14 November 2026; record in
 [Z_SPEC01](Z_SPEC01.md) E3. Open: feature logging, which waits on its preconditions (ADR
-0032:152-179): no test covers cancellation under a log lock, and no test counts the emergency lines.
+0032, "Scope and order"). The baseline tests for cancellation under a lock and for the emergency
+lines exist since E6.
 The policy-transition coordinator's authority is decided on both sides (prior-run finalization's, ADR
 0026; the same-run transition's, ADR 0032, decided 14 November 2026, §8).
 
@@ -523,18 +524,10 @@ November 2026, user: "yes", to the E5 preflight's ten recommendations). Open:
 
 ### E6. Logging and visibility gaps
 
-- **Cancellation** during segment reads and under the log lock ends the run `blocked`, not
-  `cancelled` (`operation_error.zig:16-24`; `feature_log_recovery.zig:29-61`;
-  `feature_log_historical_stream.zig:95-97`). **Decided yes** (8 November 2026; user:
-  "recommendations accepted for 1 to 6"): it ends `cancelled`, as its own phase after the
-  entity and escaping set (user, 8 November 2026: "after"). Not implemented: it adds
-  `Cancelled` to the `FeatureLogSink` error set and a `cancelled` log outcome, amending ADR
-  0032:319-320's "Not decided" bullet, with no new `LOG_*` code. Measured scope: about 35
-  `SinkFailure` mapping sites in the log adapters (`feature_log_segment_store.zig` 21,
-  `feature_log_retention_store.zig` 6, `feature_log_lock.zig` 5, `feature_log_recovery.zig` 2,
-  `feature_log_historical_stream.zig` 1) and about 9 consumers of the log outcome, not a small
-  change; it affects no model request. No production code supplies a cancellation status today
-  (§10 C28).
+- **Cancellation** under the feature log and in the other filesystem and system adapters: built
+  19 November 2026 ([Z_SPEC01](Z_SPEC01.md) E6, "Cancellation" and "Cancellation outside logging").
+  No production code supplies a cancellation status today (§10 C28), so neither part changes a
+  published specification.
 - **Prior-run crash finalization** (§14.10). **Authority decided 14 November 2026** (user:
   "recommendation accepted"): segment-header identity alone, with no persisted bootstrap
   lineage (ADR 0026 amended; §14.10 and ADR 0032 updated). Building it is deferred: a crashed
@@ -542,8 +535,8 @@ November 2026, user: "yes", to the E5 preflight's ten recommendations). Open:
   building it, check that header identity suffices where the runner selects the prompt stream
   from the policy (`feature_log_runner.zig:87`), and decide its order against the current
   activation. The same-run policy transition's authority is decided separately (§8 "Mid-run logging
-  transition", ADR 0032); E3's feature-logging conversion waits on the cancellation change above and
-  on ADR 0032's other preconditions (§5 E3).
+  transition", ADR 0032); E3's feature-logging conversion waits on ADR 0032's other preconditions
+  (§5 E3).
 - **Redaction policy ID: dropped 14 November 2026** (user: "recommendation accepted").
   `redaction/default-v1` is gone from 26-security.md and F0002 §6.4 (the row is :548). No code
   carried it, and a record field would invalidate every `feature-log/v2` segment. F0002's

@@ -112,7 +112,7 @@ configured-level canonicalization and logging-policy compilation; both reject
 - **Owner:** [`src/actions/log/write_console_log_record.zig`](../../../src/actions/log/write_console_log_record.zig)
 - **Reads:** `serialized_log_record` · **Writes:** none · **Side effect:** `filesystem_write`
 - **Does:** Mirrors one serialized row to the console sink when the policy enables it.
-- **Rejects:** `ConsoleLogWriteFailure`.
+- **Rejects:** `ConsoleLogWriteFailure`; `Cancelled` when the sink observes a cancellation.
 
 ## Streams and segments
 
@@ -128,7 +128,7 @@ configured-level canonicalization and logging-policy compilation; both reject
 - **Owner:** [`src/actions/log/acquire_feature_log_stream_lock.zig`](../../../src/actions/log/acquire_feature_log_stream_lock.zig)
 - **Reads:** `feature_log_binding` · **Writes:** `feature_log_stream_lock` · **Side effect:** `filesystem_write`
 - **Does:** Makes one attempt for the stream's exclusive lock within the fixed deadline, with no retry ([F0002](../../features/F0002-LogService.md)).
-- **Rejects:** `LogLockTimeout` (`LOG_LOCK_TIMEOUT`) only for a lock held elsewhere; every other sink fault is `LogSinkFailure` (`LOG_SINK_FAILURE`).
+- **Rejects:** `LogLockTimeout` (`LOG_LOCK_TIMEOUT`) only for a lock held elsewhere; `Cancelled` when the sink observes a cancellation, which is no logging failure and has no `LOG_*` code; every other sink fault is `LogSinkFailure` (`LOG_SINK_FAILURE`).
 
 ## `ReleaseFeatureLogStreamLockAction` (`release-feature-log-stream-lock`)
 
@@ -141,14 +141,14 @@ configured-level canonicalization and logging-policy compilation; both reject
 - **Owner:** [`src/actions/log/create_feature_log_segment.zig`](../../../src/actions/log/create_feature_log_segment.zig)
 - **Reads:** `feature_log_binding`, `feature_log_stream_lock` · **Writes:** `feature_log_stream_state` · **Side effect:** `filesystem_write`
 - **Does:** Creates a stream's first segment with its column heading and `segment_header` row.
-- **Rejects:** `LogSinkFailure`.
+- **Rejects:** `LogSinkFailure`; `Cancelled` when the sink observes a cancellation.
 
 ## `RecoverFeatureLogStreamAction` (`recover-feature-log-stream`)
 
 - **Owner:** [`src/actions/log/recover_feature_log_stream.zig`](../../../src/actions/log/recover_feature_log_stream.zig)
 - **Reads:** `feature_log_binding`, `feature_log_stream_lock` · **Writes:** `feature_log_stream_state` · **Side effect:** `filesystem_write`
 - **Does:** Recovers an existing stream's state from its segments under the held lock.
-- **Rejects:** `LogSinkFailure`.
+- **Rejects:** `LogSinkFailure`; `Cancelled` when the sink observes a cancellation.
 
 ## `EvaluateFeatureLogRotationNeedAction` (`evaluate-feature-log-rotation-need`)
 
@@ -162,7 +162,7 @@ configured-level canonicalization and logging-policy compilation; both reject
 - **Owner:** [`src/actions/log/rotate_feature_log_segment.zig`](../../../src/actions/log/rotate_feature_log_segment.zig)
 - **Reads:** `feature_log_binding`, `feature_log_stream_lock`, `feature_log_stream_state` · **Writes:** replaces `feature_log_stream_state` · **Side effect:** `filesystem_write`
 - **Does:** Writes the old segment's trailer and creates the next segment with its heading and header, under the held lock.
-- **Rejects:** `LogSinkFailure`.
+- **Rejects:** `LogSinkFailure`; `Cancelled` when the sink observes a cancellation.
 
 ## `EvaluateFeatureLogFlushNeedAction` (`evaluate-feature-log-flush-need`)
 
@@ -176,7 +176,7 @@ configured-level canonicalization and logging-policy compilation; both reject
 - **Owner:** [`src/actions/log/append_feature_log_record.zig`](../../../src/actions/log/append_feature_log_record.zig)
 - **Reads:** `feature_log_binding`, `feature_log_stream_lock`, `feature_log_stream_state`, `serialized_log_record` · **Writes:** `feature_log_append_evidence` · **Side effect:** `filesystem_write`
 - **Does:** Appends one row under the held lock, flushing when decided.
-- **Rejects:** `LogFlushFailure`, `LogSinkFailure`.
+- **Rejects:** `LogFlushFailure`, `LogSinkFailure`; `Cancelled` when the sink observes a cancellation.
 
 ## `AdvanceFeatureLogStreamStateAction` (`advance-feature-log-stream-state`)
 
@@ -190,7 +190,7 @@ configured-level canonicalization and logging-policy compilation; both reject
 - **Owner:** [`src/actions/log/close_feature_log_stream.zig`](../../../src/actions/log/close_feature_log_stream.zig)
 - **Reads:** `feature_log_binding`, `feature_log_stream_lock`, `feature_log_stream_state` · **Writes:** invalidates `feature_log_stream_state` · **Side effect:** `filesystem_write`
 - **Does:** Writes the final `segment_trailer` and closes the stream.
-- **Rejects:** `LogFlushFailure`, `LogSinkFailure`.
+- **Rejects:** `LogFlushFailure`, `LogSinkFailure`; `Cancelled` when the sink observes a cancellation.
 
 ## Retention
 
@@ -213,7 +213,7 @@ configured-level canonicalization and logging-policy compilation; both reject
 - **Owner:** [`src/actions/log/prune_feature_log_segments.zig`](../../../src/actions/log/prune_feature_log_segments.zig)
 - **Reads:** `feature_log_binding`, `feature_log_stream_lock`, `feature_log_retention_authorization` · **Writes:** invalidates `feature_log_retention_authorization` · **Side effect:** `filesystem_write`
 - **Does:** Consumes the single-use authorization and prunes the stream's segments older than its cutoff.
-- **Rejects:** `LogSinkFailure`, including an authorization that doesn't match the binding.
+- **Rejects:** `LogSinkFailure`, including an authorization that doesn't match the binding; `Cancelled` when the sink observes a cancellation.
 
 ## Emergency
 

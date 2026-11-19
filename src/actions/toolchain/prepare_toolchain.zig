@@ -28,7 +28,7 @@ pub const Step = enum {
 pub const Diagnostic = struct { step: ?Step = null };
 
 /// The failure representation of the nine absorbed actions, unchanged. `Cancelled` means the
-/// runtime stopped being active; the runner reports which stop it was.
+/// runtime stopped being active or a port call was cancelled; the runner reports the cancellation.
 pub const Error = toolchain.Error || error{Cancelled};
 
 /// One stage: capture the project and preset documents, parse them, validate, resolve,
@@ -69,6 +69,15 @@ fn stopped(diagnostic: *Diagnostic, step: Step, err: Error) Error {
     return err;
 }
 
+/// A toolchain source that fails stays an invalid toolchain, as before; one that reports a cancellation
+/// is a cancellation.
+fn invalidSource(err: source_port.Error) Error {
+    return switch (err) {
+        error.InvalidToolchainSource => error.InvalidToolchain,
+        error.Cancelled => error.Cancelled,
+    };
+}
+
 fn checkpoint(diagnostic: *Diagnostic, runtime: pipeline.NodeRuntime, next: Step) Error!void {
     if (runtime.status() != .active) return stopped(diagnostic, next, error.Cancelled);
 }
@@ -77,20 +86,20 @@ fn checkpoint(diagnostic: *Diagnostic, runtime: pipeline.NodeRuntime, next: Step
 /// registered, addressable or composable from workflow YAML. A step that reaches a port takes
 /// exactly that port, never the `Action`, and a step that reads does not parse.
 pub const steps = struct {
-    pub fn captureProject(source: source_port.ProjectCapturer, allocator: std.mem.Allocator) toolchain.Error!toolchain.Capture {
-        return source.captureProject(allocator) catch error.InvalidToolchain;
+    pub fn captureProject(source: source_port.ProjectCapturer, allocator: std.mem.Allocator) Error!toolchain.Capture {
+        return source.captureProject(allocator) catch |err| return invalidSource(err);
     }
 
-    pub fn inventoryPresets(source: source_port.PresetEnumerator, allocator: std.mem.Allocator) toolchain.Error![]const toolchain.Entry {
-        return source.inventoryPresets(allocator) catch error.InvalidToolchain;
+    pub fn inventoryPresets(source: source_port.PresetEnumerator, allocator: std.mem.Allocator) Error![]const toolchain.Entry {
+        return source.inventoryPresets(allocator) catch |err| return invalidSource(err);
     }
 
     /// The capture budget is checked before any preset is read.
-    pub fn capturePresets(source: source_port.PresetCapturer, allocator: std.mem.Allocator, project: toolchain.Capture, entries: []const toolchain.Entry) toolchain.Error![]const toolchain.Capture {
+    pub fn capturePresets(source: source_port.PresetCapturer, allocator: std.mem.Allocator, project: toolchain.Capture, entries: []const toolchain.Entry) Error![]const toolchain.Capture {
         try accounting.validateCaptureBudget(project, entries);
         const captures = allocator.alloc(toolchain.Capture, entries.len) catch return error.InvalidToolchain;
         for (entries, captures) |entry, *capture| {
-            capture.* = source.capturePreset(entry, allocator) catch return error.InvalidToolchain;
+            capture.* = source.capturePreset(entry, allocator) catch |err| return invalidSource(err);
         }
         return captures;
     }

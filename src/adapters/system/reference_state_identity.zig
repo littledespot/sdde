@@ -11,7 +11,7 @@ pub const Adapter = struct {
     fn next(context: *anyopaque) port.Error![16]u8 {
         const self: *Adapter = @ptrCast(@alignCast(context));
         var nonce: [16]u8 = undefined;
-        self.io.randomSecure(&nonce) catch return error.IdentityUnavailable;
+        self.io.randomSecure(&nonce) catch |err| return if (err == error.Canceled) error.Cancelled else error.IdentityUnavailable;
         return nonce;
     }
 };

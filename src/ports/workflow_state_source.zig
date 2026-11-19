@@ -2,7 +2,7 @@ const std = @import("std");
 const roots = @import("../domain/bootstrap_root_registry.zig");
 const feature = @import("../domain/feature_directory.zig");
 const artifacts = @import("../domain/workflow_artifact_registry.zig");
-pub const Error = std.mem.Allocator.Error || error{FeatureInputUnavailable};
+pub const Error = @import("../domain/operation_error.zig").FeatureInputSource;
 pub const Capturer = struct {
     context: *anyopaque,
     capability: ?*const roots.FeatureInputReadCapability = null,

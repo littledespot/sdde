@@ -38,7 +38,7 @@ pub const Step = enum {
 pub const Diagnostic = struct { step: ?Step = null };
 
 /// The failure representation of the thirteen absorbed actions, unchanged. `Cancelled` means the
-/// runtime stopped being active; the runner reports which stop it was.
+/// runtime stopped being active or a port call was cancelled; the runner reports the cancellation.
 pub const Error = normalizer_port.Error || feature.Error || feature_port.Error || reference.Error ||
     reference_port.Error || artifacts.FeaturePathError || state_port.Error || state.Error ||
     input_port.Error || clarification.Error || error{Cancelled};

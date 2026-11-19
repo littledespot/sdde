@@ -24,11 +24,11 @@ pub fn create(
         .exclusive = true,
         .permissions = feature_log_file.ownerOnlyPermissions(),
         .resolve_beneath = true,
-    }) catch return error.SinkFailure;
+    }) catch |err| return feature_log_file.sinkFault(err);
     defer file.close(io);
-    file.writeStreamingAll(io, heading) catch return error.SinkFailure;
-    file.writeStreamingAll(io, header) catch return error.SinkFailure;
-    file.sync(io) catch return error.FlushFailure;
+    file.writeStreamingAll(io, heading) catch |err| return feature_log_file.sinkFault(err);
+    file.writeStreamingAll(io, header) catch |err| return feature_log_file.sinkFault(err);
+    file.sync(io) catch |err| return feature_log_file.flushFault(err);
     return .{
         .segment_ordinal = ordinal,
         .next_sequence = seed.next_sequence,
@@ -56,16 +56,16 @@ pub fn rotate(
         .allow_directory = false,
         .follow_symlinks = false,
         .resolve_beneath = true,
-    }) catch return error.SinkFailure;
+    }) catch |err| return feature_log_file.sinkFault(err);
     defer old.close(io);
-    const stat = old.stat(io) catch return error.SinkFailure;
+    const stat = old.stat(io) catch |err| return feature_log_file.sinkFault(err);
     if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or
         stat.size != state.segment_bytes or stat.size + trailer.len > log_limits.max_segment_bytes)
     {
         return error.SinkFailure;
     }
-    old.writePositionalAll(io, trailer, stat.size) catch return error.SinkFailure;
-    old.sync(io) catch return error.FlushFailure;
+    old.writePositionalAll(io, trailer, stat.size) catch |err| return feature_log_file.sinkFault(err);
+    old.sync(io) catch |err| return feature_log_file.flushFault(err);
     return create(io, directory, state.segment_ordinal + 1, .{
         .next_segment_ordinal = state.segment_ordinal + 1,
         .next_sequence = state.next_sequence,
@@ -90,14 +90,14 @@ pub fn append(
         .allow_directory = false,
         .follow_symlinks = false,
         .resolve_beneath = true,
-    }) catch return error.SinkFailure;
+    }) catch |err| return feature_log_file.sinkFault(err);
     defer file.close(io);
-    const stat = file.stat(io) catch return error.SinkFailure;
+    const stat = file.stat(io) catch |err| return feature_log_file.sinkFault(err);
     if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size != state.segment_bytes) {
         return error.SinkFailure;
     }
-    file.writePositionalAll(io, row, stat.size) catch return error.SinkFailure;
-    if (flush) file.sync(io) catch return error.FlushFailure;
+    file.writePositionalAll(io, row, stat.size) catch |err| return feature_log_file.sinkFault(err);
+    if (flush) file.sync(io) catch |err| return feature_log_file.flushFault(err);
     return .{
         .segment_ordinal = state.segment_ordinal,
         .sequence = state.next_sequence,
@@ -119,14 +119,14 @@ pub fn close(
         .allow_directory = false,
         .follow_symlinks = false,
         .resolve_beneath = true,
-    }) catch return error.SinkFailure;
+    }) catch |err| return feature_log_file.sinkFault(err);
     defer file.close(io);
-    const stat = file.stat(io) catch return error.SinkFailure;
+    const stat = file.stat(io) catch |err| return feature_log_file.sinkFault(err);
     if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or
         stat.size != state.segment_bytes or stat.size + trailer.len > log_limits.max_segment_bytes)
     {
         return error.SinkFailure;
     }
-    file.writePositionalAll(io, trailer, stat.size) catch return error.SinkFailure;
-    file.sync(io) catch return error.FlushFailure;
+    file.writePositionalAll(io, trailer, stat.size) catch |err| return feature_log_file.sinkFault(err);
+    file.sync(io) catch |err| return feature_log_file.flushFault(err);
 }

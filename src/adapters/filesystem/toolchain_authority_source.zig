@@ -3,6 +3,12 @@ const roots = @import("../../domain/bootstrap_root_registry.zig");
 const toolchain = @import("../../domain/toolchain.zig");
 const source_port = @import("../../ports/toolchain_authority_source.zig");
 const file_identity = @import("file_identity.zig");
+const directories = @import("directory_access.zig");
+
+/// What a failed `std.Io` call is to this port: a cancellation, or an invalid toolchain source.
+fn invalid(err: anyerror) source_port.Error {
+    return if (directories.isCancellation(err)) error.Cancelled else error.InvalidToolchainSource;
+}
 
 pub const Adapter = struct {
     io: std.Io,
@@ -35,11 +41,11 @@ pub const Adapter = struct {
         defer directory.close(self.io);
         var entries: std.ArrayList(toolchain.Entry) = .empty;
         var iterator = directory.iterate();
-        while (iterator.next(self.io) catch return error.InvalidToolchainSource) |entry| {
+        while (iterator.next(self.io) catch |err| return invalid(err)) |entry| {
             if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, toolchain.preset_suffix) or entries.items.len == toolchain.max_presets) return error.InvalidToolchainSource;
-            var file = directory.openFile(self.io, entry.name, .{ .mode = .read_only, .allow_directory = false, .follow_symlinks = false, .resolve_beneath = true }) catch return error.InvalidToolchainSource;
+            var file = directory.openFile(self.io, entry.name, .{ .mode = .read_only, .allow_directory = false, .follow_symlinks = false, .resolve_beneath = true }) catch |err| return invalid(err);
             defer file.close(self.io);
-            const stat = file.stat(self.io) catch return error.InvalidToolchainSource;
+            const stat = file.stat(self.io) catch |err| return invalid(err);
             if (stat.kind != .file or stat.size > toolchain.max_document_bytes) return error.InvalidToolchainSource;
             entries.append(allocator, .{
                 .name = allocator.dupe(u8, entry.name) catch return error.InvalidToolchainSource,
@@ -59,22 +65,25 @@ pub const Adapter = struct {
         return .{ .name = entry.name, .bytes = try self.readExact(directory, entry.name, entry.size, entry.identity, allocator) };
     }
     fn openBound(self: *Adapter, binding: roots.ToolchainAuthorityAdapterBinding) source_port.Error!std.Io.Dir {
-        var directory = self.project_root.openDir(self.io, binding.project_relative_path, .{ .iterate = true, .follow_symlinks = false }) catch return error.InvalidToolchainSource;
+        var directory = self.project_root.openDir(self.io, binding.project_relative_path, .{ .iterate = true, .follow_symlinks = false }) catch |err| return invalid(err);
         errdefer directory.close(self.io);
         if (!(file_identity.inspect(directory.handle) catch return error.InvalidToolchainSource).eql(binding.physical_identity)) return error.InvalidToolchainSource;
         return directory;
     }
     fn readExact(self: *Adapter, directory: std.Io.Dir, name: []const u8, expected_size: ?u64, expected_identity: ?@import("../../domain/filesystem_identity.zig").FileIdentity, allocator: std.mem.Allocator) source_port.Error![]const u8 {
-        var file = directory.openFile(self.io, name, .{ .mode = .read_only, .allow_directory = false, .follow_symlinks = false, .resolve_beneath = true }) catch return error.InvalidToolchainSource;
+        var file = directory.openFile(self.io, name, .{ .mode = .read_only, .allow_directory = false, .follow_symlinks = false, .resolve_beneath = true }) catch |err| return invalid(err);
         defer file.close(self.io);
-        const before = file.stat(self.io) catch return error.InvalidToolchainSource;
+        const before = file.stat(self.io) catch |err| return invalid(err);
         const identity = file_identity.inspect(file.handle) catch return error.InvalidToolchainSource;
         if (before.kind != .file or before.size > toolchain.max_document_bytes or
             (expected_size != null and expected_size.? != before.size) or
             (expected_identity != null and !identity.eql(expected_identity.?))) return error.InvalidToolchainSource;
-        var reader = file.reader(self.io, &.{});
-        const bytes = reader.interface.allocRemaining(allocator, .limited(toolchain.max_document_bytes + 1)) catch return error.InvalidToolchainSource;
-        const after = file.stat(self.io) catch return error.InvalidToolchainSource;
+        // The size is the one already observed: a reader that stats the file itself would swallow a cancellation.
+        var reader: std.Io.File.Reader = .initSize(file, self.io, &.{}, before.size);
+        // A read the reader gave up on keeps its cause in `reader.err`, which is where a cancellation shows.
+        const bytes = reader.interface.allocRemaining(allocator, .limited(toolchain.max_document_bytes + 1)) catch |err| return invalid(reader.err orelse err);
+        errdefer allocator.free(bytes);
+        const after = file.stat(self.io) catch |err| return invalid(err);
         if (bytes.len != before.size or after.size != before.size or !(file_identity.inspect(file.handle) catch return error.InvalidToolchainSource).eql(identity)) return error.InvalidToolchainSource;
         return bytes;
     }

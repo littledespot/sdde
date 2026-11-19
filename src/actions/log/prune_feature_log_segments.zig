@@ -3,7 +3,7 @@ const log_retention = @import("../../domain/feature_log_retention.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 const sink_port = @import("../../ports/feature_log_sink.zig");
 
-pub const Error = error{LogSinkFailure};
+pub const Error = error{ LogSinkFailure, Cancelled };
 pub const Action = struct {
     sink: sink_port.SegmentPruner,
     pub const contract: pipeline.NodeContract = .{
@@ -15,6 +15,9 @@ pub const Action = struct {
     };
     pub fn execute(self: Action, binding: *const log_binding.ValidatedFeatureLogBinding, authorization: *log_retention.AuthorizationOwner) Error!void {
         const authorized = log_retention.consume(authorization, binding) orelse return error.LogSinkFailure;
-        self.sink.prune(binding, authorized.stream, authorized.cutoff_unix_ms) catch return error.LogSinkFailure;
+        self.sink.prune(binding, authorized.stream, authorized.cutoff_unix_ms) catch |failure| return switch (failure) {
+            error.Cancelled => error.Cancelled,
+            error.LockUnavailable, error.InvalidBinding, error.CorruptStream, error.SegmentLimitExhausted, error.SinkFailure, error.FlushFailure, error.ReleaseFailure => error.LogSinkFailure,
+        };
     }
 };

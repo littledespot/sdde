@@ -32,6 +32,7 @@ pub const Lifecycle = struct {
                 break :blk .ok;
             },
             .blocked => |failure| .{ .blocked = failure },
+            .cancelled => .cancelled,
         };
     }
 
@@ -77,6 +78,7 @@ pub const Lifecycle = struct {
         return switch (retention.run(children)) {
             .ok => .ok,
             .blocked => |failure| .{ .blocked = current.invokeReportFailure(shortcode, failure) },
+            .cancelled => .cancelled,
         };
     }
 

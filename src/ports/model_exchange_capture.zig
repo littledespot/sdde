@@ -1,7 +1,7 @@
 //! Provider-side observation only. It grants no model, filesystem or workflow capability.
 const prompt = @import("../domain/sanitized_prompt_log.zig");
 pub const Context = opaque {};
-pub const Outcome = enum { recorded, disabled, blocked };
+pub const Outcome = enum { recorded, disabled, blocked, cancelled };
 pub const Body = @import("../domain/model_exchange.zig").Body;
 pub const Port = struct {
     context: *Context,

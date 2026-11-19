@@ -141,6 +141,7 @@ fn openValidated(io: Io, parent: Io.Dir, path: []const u8) port.Error!Io.Dir {
     directory_boundary.validateOwner(io, directory) catch |err| return switch (err) {
         error.InsecurePermissions => error.InvalidHistory,
         error.ArtifactStorageUnavailable => error.HistoryUnavailable,
+        error.Cancelled => error.Cancelled,
     };
     return directory;
 }

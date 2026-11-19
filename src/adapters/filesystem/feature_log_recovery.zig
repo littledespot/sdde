@@ -26,12 +26,12 @@ pub fn recover(
     var ordinals: std.ArrayList(u16) = .empty;
     defer ordinals.deinit(allocator);
     var iterator = source.directory.iterate();
-    while (iterator.next(source.io) catch return error.SinkFailure) |entry| switch (feature_log_file.classifyBindingEntry(entry)) {
+    while (iterator.next(source.io) catch |err| return feature_log_file.sinkFault(err)) |entry| switch (feature_log_file.classifyBindingEntry(entry)) {
         .segment => |ordinal| ordinals.append(allocator, ordinal) catch return error.SinkFailure,
         .ignored => {},
         .invalid => return error.CorruptStream,
     };
-    const others = scanOtherBindings(source, stream, heading, allocator) catch return error.CorruptStream;
+    const others = scanOtherBindings(source, stream, heading, allocator) catch |err| return if (err == error.Canceled) error.Cancelled else error.CorruptStream;
     const run_segments = std.math.add(usize, ordinals.items.len, others.segments) catch return error.CorruptStream;
     if (run_segments > log_limits.max_segments) return error.CorruptStream;
     const total_segments: u8 = @intCast(run_segments);
@@ -58,7 +58,10 @@ pub fn recover(
             heading,
             if (index + 1 == ordinals.items.len) .truncate else .reject,
             std.math.add(u64, prior_sequence, 1) catch return error.CorruptStream,
-        ) catch return error.CorruptStream;
+        ) catch |err| return switch (err) {
+            error.Cancelled => error.Cancelled,
+            error.InvalidSegment, error.SegmentUnavailable, error.OutOfMemory => error.CorruptStream,
+        };
         prior_sequence = inspection.last_sequence;
         if (!inspection.closed) {
             if (index + 1 != ordinals.items.len or active != null) return error.CorruptStream;
@@ -161,11 +164,9 @@ pub fn segmentPolicy(io: Io, directory: Io.Dir, allocator: std.mem.Allocator, or
     // The segment's bytes stay in a local arena; only the policy is returned.
     var local: std.heap.ArenaAllocator = .init(allocator);
     defer local.deinit();
-    var reader = file.reader(io, &.{});
-    const bytes = reader.interface.allocRemaining(local.allocator(), .limited64(stat.size + 1)) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => error.SegmentUnavailable,
-    };
+    // The size is the one already observed: a reader that stats the file itself would swallow a cancellation.
+    var reader: Io.File.Reader = .initSize(file, io, &.{}, stat.size);
+    const bytes = reader.interface.allocRemaining(local.allocator(), .limited64(stat.size + 1)) catch |err| return readError(&reader, err);
     if (bytes.len != stat.size) return error.InvalidSegment;
     const heading = if (stream == .event) format.event_heading else format.prompt_heading;
     const header = (try headerRow(bytes, heading, stream)) orelse return null;
@@ -212,6 +213,12 @@ pub fn segmentOrdinals(io: Io, directory: Io.Dir, ordinals: *[log_limits.max_seg
     return count;
 }
 
+/// A read the reader gave up on keeps its cause in `reader.err`, which is where a cancellation shows.
+fn readError(reader: *const Io.File.Reader, err: anyerror) InspectError {
+    if (err == error.OutOfMemory) return error.OutOfMemory;
+    return if ((reader.err orelse err) == error.Canceled) error.Cancelled else error.SegmentUnavailable;
+}
+
 fn fileError(err: anyerror) InspectError {
     return switch (err) {
         error.Canceled => error.Cancelled,
@@ -245,11 +252,8 @@ fn inspectSegment(
     if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
         return error.InvalidSegment;
     }
-    var reader = file.reader(io, &.{});
-    var bytes = reader.interface.allocRemaining(allocator, .limited64(stat.size + 1)) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => error.SegmentUnavailable,
-    };
+    var reader: Io.File.Reader = .initSize(file, io, &.{}, stat.size);
+    var bytes = reader.interface.allocRemaining(allocator, .limited64(stat.size + 1)) catch |err| return readError(&reader, err);
     if (bytes.len != stat.size) return error.InvalidSegment;
     // A crash while a segment was created can leave it torn before its header
     // row is complete. Read-only inspection reports that as an active tail.
@@ -361,8 +365,8 @@ fn scanOtherBindings(
             if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
                 return error.CorruptStream;
             }
-            var reader = file.reader(source.io, &.{});
-            const bytes = try reader.interface.allocRemaining(allocator, .limited64(stat.size + 1));
+            var reader: Io.File.Reader = .initSize(file, source.io, &.{}, stat.size);
+            const bytes = reader.interface.allocRemaining(allocator, .limited64(stat.size + 1)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else if ((reader.err orelse err) == error.Canceled) error.Canceled else err;
             if (bytes.len != stat.size or !std.mem.startsWith(u8, bytes, heading) or bytes.len == 0 or bytes[bytes.len - 1] != '\n') {
                 return error.CorruptStream;
             }

@@ -12,8 +12,9 @@ Part of the [proposed design](../design.md#27-observability), as amended by the
   implemented), those actions become the steps of a feature-logging engine routine, once its
   logging preconditions hold.
   - The event outcomes, emergency diagnostic and finalization rules here are unchanged.
-  - Cancellation under a log lock is reported as a logging failure; ADR 0032 leaves
-    changing that shared sink contract undecided.
+  - Cancellation under a log lock, or while a segment is read, is the run's `cancelled`, not a
+    logging failure: it has no `LOG_*` code and emits no emergency diagnostic (ADR 0032,
+    "Cancellation mapping").
 
 [View the Observability events sample](../code.md#observability-events).
 

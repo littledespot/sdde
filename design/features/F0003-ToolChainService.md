@@ -100,7 +100,8 @@ intermediate keys no longer exist; `compile-naming-policy` stays a separate oper
 - The registered `core.toolchain@1` profile allows those two capabilities only.
 - Unreferenced setup operations perform no reads.
 - Cancellation is checked between the stage action's internal steps, the runner reports the
-  runtime's own stop, and the stage cleans up what it owns.
+  runtime's own stop, and the stage cleans up what it owns. A source port's `Cancelled` ends the
+  stage `Cancelled`; any other source fault is `InvalidToolchain`.
 
 ## 2. Path authority and the requested upstream service
 

@@ -1,7 +1,7 @@
 const console_port = @import("../../ports/console_log_sink.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 
-pub const Error = error{ConsoleLogWriteFailure};
+pub const Error = error{ ConsoleLogWriteFailure, Cancelled };
 
 pub const Action = struct {
     sink: console_port.Sink,
@@ -14,6 +14,9 @@ pub const Action = struct {
     };
 
     pub fn execute(self: Action, bytes: []const u8) Error!void {
-        self.sink.write(bytes) catch return error.ConsoleLogWriteFailure;
+        self.sink.write(bytes) catch |failure| return switch (failure) {
+            error.Cancelled => error.Cancelled,
+            error.ConsoleWriteFailure => error.ConsoleLogWriteFailure,
+        };
     }
 };

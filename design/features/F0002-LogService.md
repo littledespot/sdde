@@ -66,11 +66,12 @@ The graph returns the existing common `Outcome` and composite `NodeDelta`:
 | `ok` with drop evidence | Section 26.5's emission rule drops the event; no event identity, sequence, lock, or write is created. |
 | `ok` with persistence evidence | The complete safe record was appended, any required flush completed, and the stream lock was released. |
 | `blocked` | Logging failed; cleanup, emergency reporting, and execution cleanup completed before new work was blocked. |
+| `cancelled` | The sink observed a cancellation, which is no logging failure: the stream lock was released, no emergency line was written, and the run ends `cancelled` (ADR 0032, "Cancellation mapping"). |
 
 There is no logging-specific public response type or direct producer-to-sink
 call. `WorkflowLog.log` returns only candidate-delta construction success or
-failure; the runner-owned logging graph owns the later drop, persistence, or
-blocked outcome.
+failure; the runner-owned logging graph owns the later drop, persistence,
+blocked, or cancelled outcome.
 
 ## 3. Authority and single ownership
 
@@ -617,6 +618,8 @@ An initialized logging failure follows the governing
 
 The failure path is not logged through F0002 and cannot recurse. The atomic
 execution contract in ADR 0009 applies; log state never resumes a workflow.
+A cancellation under the log is not an initialized logging failure: it does not
+enter this path and writes no emergency line.
 
 - Before a current feature binding exists, the bounded content-free emergency path is
   available only after the selected compiled workflow's runner-created `WorkflowLog`
@@ -670,8 +673,8 @@ F0002 does not:
 5. Producers use only `workflowLog.log(delta, TelemetryFact)`; the operation
    performs no I/O, and producers cannot select a level, message, path, format,
    sensitivity, or sink capability.
-6. Every fact reaches exactly one drop, persisted, or blocked outcome through
-   the common runner contract.
+6. Every fact reaches exactly one drop, persisted, blocked, or cancelled outcome
+   through the common runner contract.
 7. Event definition, threshold decision, workflow attribution, path binding,
    and runner scheduling each retain their single governing owner.
 8. Every serialized event, prompt-fragment, console-mirror, and emergency
@@ -704,7 +707,10 @@ F0002 does not:
 14. Storage/recovery follows the governing lock, ordering, rotation, retention,
    restart, and policy-transition contracts without a second implementation.
 15. Logging failure cleans up, reports once without recursion, abandons the
-   execution candidate, and blocks before new work without recovery.
+   execution candidate, and blocks before new work without recovery. A
+   cancellation under the log is no logging failure: it releases the lock,
+   writes no emergency line, abandons the candidate, and ends the run
+   `cancelled`.
 16. Logs cannot affect workflow state, approval, evidence, or completion.
 17. The packaged executable has no dependency on source examples, the source
     tree, build cache, or Zig toolchain.

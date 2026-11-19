@@ -45,6 +45,10 @@
   unimplemented, and its order relative to the current activation stays undecided. The
   same-run policy transition is separate: its authority is decided in
   [ADR 0032](0032-engine-routines.md) (14 November 2026).
+- **Amended 19 November 2026** (user: "yes, and implement E6"): this amendment reaches the
+  "Cancellation" decision below, which no longer reports a cancellation under the lock or
+  during a segment read as a logging failure. It is decided and built in
+  [ADR 0032](0032-engine-routines.md) ("Cancellation mapping").
 
 ## Context
 
@@ -98,11 +102,12 @@ in those segments.
 
   Every retention failure goes through the active logger's failure report, which
   writes the bounded emergency line.
-- **Cancellation.** Cancellation while a prior directory or segment is opened
-  stays cancellation. Cancellation during a directory check, a segment read, or
-  any step under the lock is reported as a logging failure, because the shared
-  readers and the sink port have no cancellation outcome. The current run's sink
-  has the same gap, which is open work.
+- **Cancellation.** A cancellation is the run's own outcome, never a logging
+  failure. It stays a cancellation while a prior directory or segment is opened,
+  a directory is checked, a segment is read, or any step under the lock runs, in
+  discovery, in retention and in the current run's sink alike. The sink port
+  carries `Cancelled` ([ADR 0032](0032-engine-routines.md)). A cancelled step
+  releases its lock, carries no `LOG_*` code and writes no emergency line.
 - **Crashed runs are kept whole.** A crash leaves a binding's last segment in one
   of three shapes, in either stream:
   - torn before its header row was complete, including empty, when a segment was
@@ -175,8 +180,10 @@ in those segments.
   failure propagation: a prune failure stays the reported cause when release
   also fails. `src/architecture_test.zig` keeps discovery read-only,
   limits the historical adapter to lock, prune and release, and keeps pruning out
-  of the current run's sink. Cancellation under the lock, and the number of
-  emergency lines, have no direct test.
+  of the current run's sink. `src/feature_log_runtime_test.zig` and
+  `src/feature_log_layout_test.zig` also cover a cancellation at each sink
+  operation, in the run-history scan and under the retention lock: the run ends
+  `cancelled`, the lock is released and no emergency line is written.
 
 ## Log-folder entries amendment — 21 October 2026
 

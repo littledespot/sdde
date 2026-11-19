@@ -11,6 +11,9 @@
   the criteria for this proof of concept: "refactoring to best possible outcomes is the
   most important". The user confirmed the choices under "Derived under existing rules" on
   12 November 2026 (DE3), including that offline evidence replaces a live run for startup.
+  The user decided on 8 November 2026 ("recommendations accepted for 1 to 6") that
+  cancellation under a log lock ends the run `cancelled`, and on 19 November 2026 approved
+  its build with the amendments to this ADR and ADR 0026.
 - **Amends:**
   - AGENTS.md "Actions, orchestrators, and runner" (the startup-graph line), "Testing
     expectations" and the capability-leak review rule;
@@ -22,7 +25,7 @@
   - [ADR 0018](0018-debug-model-exchange-logging.md): "retain the fixed logging
     orchestration under §13.9";
   - [ADR 0026](0026-header-identity-log-retention.md): the retention coordinator's
-    step-order test;
+    step-order test, and its cancellation decision (see "Cancellation mapping");
   - [ADR 0030](0030-engine-owned-model-request.md): its precedent sentence;
   - [ADR 0031](0031-stage-actions.md): its scope exclusion of the invocation operation,
     its stage-action definition (the `invoke:` exception) and its data rules (validated
@@ -126,8 +129,8 @@ and produces no `NodeDelta`.
 - **Service construction.** Each service is still built only after its complete
   validation (F0001, F0004, F0005 and F0008).
 - **Public error codes** stay identical. Failure, cancellation and success stay distinct,
-  except for a tracked gap: cancellation under a log lock is still reported as a logging
-  failure (see Scope).
+  including under the feature log: a cancellation under a log lock, or while a segment is
+  read, is the run's `cancelled`, not a logging failure (see Scope).
 - **Failure mapping.** Each step keeps its current failure mapping.
   - Startup and provider steps today map every error to their fixed public code,
     including allocation failure and deadline exhaustion, and they keep doing so.
@@ -153,7 +156,7 @@ and produces no `NodeDelta`.
    finalization, retention and policy-transition coordinators. It writes, locks and
    prunes, so it converts only after its own preconditions are met:
    - **Baseline tests first.** Tests for cancellation under a lock, and for the number of
-     emergency lines, exist and pass before conversion (ADR 0026 records neither).
+     emergency lines, exist and pass before conversion.
    - **Locks.** Every lock is released on every success, error and cancellation path
      (§26.5, 13-09).
    - **Emergency diagnostic.** It stays exactly once and is never recursive or observed
@@ -162,9 +165,31 @@ and produces no `NodeDelta`.
      (ADR 0018).
    - **Retention** keeps its five-step order, and pruning stays its only deletion path
      (ADR 0026).
-   - **Cancellation mapping.** Cancellation under a lock is still reported as a logging
-     failure; fixing that is separate known work. A cancellation check between steps
-     never skips a lock release.
+   - **Cancellation mapping.** The feature-log sink port carries `Cancelled`, and a log
+     outcome is `cancelled` beside `dropped`, `persisted` and `blocked`. A cancellation
+     during a directory check, a segment read, creation, rotation, append, close, prune or
+     any step under the lock stops the run as `cancelled`, never as a logging failure. It has
+     no `LOG_*` code and emits no emergency line, and its lock is released. A cancellation
+     check between steps never skips a lock release. A cancellation can land after a row's
+     or trailer's bytes were written, so a cancelled persist or close drops the runner's cached
+     stream state. The next persist, and finalization before it closes the stream, recover that
+     state from the bytes, as after a crash.
+     - **Precedence.** A lock that cannot be released after a cancelled step is a logging
+       failure of its own and outranks the cancellation, as a release failure outranks any step
+       before it. Retention keeps its first stop. In finalization a cancellation never replaces
+       a logging failure, and a later logging failure replaces an earlier cancellation.
+     - **Finalization.** When its own log step is cancelled, a rejection the run already had is
+       kept beside the `cancelled` outcome as its first cause, a run that was already cancelled
+       stays as it was, and a capture failure stays whole. Finalization closes every stream,
+       the second even when the first stopped, and reports the first stop. An activation whose
+       prompt prepare stops closes the event stream it opened, since that run is never
+       finalized.
+     - **Accepted limit** (user, 19 November 2026: "apply recommendation"). A cancellation
+       between creating a segment and writing its header leaves a torn segment, which
+       current-run recovery refuses, so that run's finalization fails and it ends `blocked`. It
+       is the crash shape ADR 0026 names. Recovery does not rewrite a torn last segment of the
+       current run: no production code supplies a cancellation (SPEC01 §10 C28), and the repair
+       would extend what recovery may do to a retained log file.
    - **The policy-transition coordinator.** Prior-run crash finalization's authority is
      [ADR 0026](0026-header-identity-log-retention.md)'s (amended 14 November 2026). The
      same-run transition's authority is decided (user, 14 November 2026, approving the
@@ -316,6 +341,4 @@ All offline, for each conversion:
 
 - The order of prior-run crash finalization against the current activation
   ([ADR 0026](0026-header-identity-log-retention.md)).
-- Reporting cancellation under a log lock as cancellation instead of a logging failure.
-  That is separate known work, and it changes the shared sink contract.
 - The order of the remaining logging conversions after startup has been measured.

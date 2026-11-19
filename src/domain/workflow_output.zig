@@ -14,7 +14,7 @@ pub const Prepared = struct {
     prior_workflow_state: union(enum) { unselected, captured: ?[]const u8 } = .unselected,
     files: []const File,
 };
-pub const Error = std.mem.Allocator.Error || error{ InvalidWorkflowOutput, OutputChanged, OutputWriteFailed };
+pub const Error = std.mem.Allocator.Error || error{ InvalidWorkflowOutput, OutputChanged, OutputWriteFailed, Cancelled };
 
 pub fn path(allocator: std.mem.Allocator, paths: artifacts.FeaturePaths, target: Target) Error!artifacts.ArtifactPath {
     return switch (target) {

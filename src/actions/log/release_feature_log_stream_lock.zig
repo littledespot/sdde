@@ -12,6 +12,9 @@ pub const Action = struct {
         .side_effect = .filesystem_write,
     };
     pub fn execute(self: Action) Error!void {
-        self.sink.release() catch return error.LogReleaseFailure;
+        // A release is no cancellation point: a sink that reports `Cancelled` here has failed to release.
+        self.sink.release() catch |failure| switch (failure) {
+            error.Cancelled, error.LockUnavailable, error.InvalidBinding, error.CorruptStream, error.SegmentLimitExhausted, error.SinkFailure, error.FlushFailure, error.ReleaseFailure => return error.LogReleaseFailure,
+        };
     }
 };

@@ -366,7 +366,8 @@ the steps of the provider-bootstrap routine.
 - **Reads:** `prepared_workflow_output` · **Writes:** `published_workflow_output` · **Side effect:** `workflow_publication`
 - **Does:** Writes the prepared whole-workflow output through the output port
   ([§25](../25-publication.md)).
-- **Rejects:** `InvalidWorkflowOutput`, `OutputChanged`, `OutputWriteFailed`.
+- **Rejects:** `InvalidWorkflowOutput`, `OutputChanged`, `OutputWriteFailed`, `Cancelled`. A
+  cancelled write leaves what a failed write leaves: the files already replaced stay.
 
 ## Toolchain
 
@@ -381,11 +382,12 @@ steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays sep
 - **Ports:** the toolchain source ports (project capture, preset inventory, preset capture) and the
   toolchain-parser port, so the binding derives `toolchain-read` and `toolchain-parser` only.
 - **Outcomes:** `ok`, `failed`. Each internal step's success continues to the next and every
-  failure ends the stage with the step's own error (`InvalidToolchain`). The stage records the
+  failure ends the stage with the step's own error (`InvalidToolchain`), except that a source
+  port's `Cancelled` ends the stage `Cancelled`. The stage records the
   step it stopped at in its diagnostic slot, which the binding hands the runner's step slot, and
   the runner records it as `step_id` in the failed action's event ([§27](../27-observability.md)).
   It checks the runtime between steps, so a cancelled run stops before the next step and the
-  runner reports the runtime's own stop.
+  runner reports the runtime's own stop, or the cancellation the stage returned.
 - **Does:** Runs these functions in order. Each keeps its former action's responsibility, input,
   output and rejection rules; intermediates are function-local values, and only the last step
   constructs `ValidToolchain`.
@@ -431,7 +433,7 @@ its detailed steps through the same source port. Capture reads no alternate root
 
 - **Owner:** [`src/actions/principle/inventory_principle_sources.zig`](../../../src/actions/principle/inventory_principle_sources.zig)
 - **Reads:** none · **Writes:** `raw_principle_inventory` · **Side effect:** `filesystem_read`
-- **Rejects:** `PrincipleSourceUnavailable`.
+- **Rejects:** `PrincipleSourceUnavailable`, `Cancelled`.
 
 ## `ValidatePrincipleInventoryAction` (`validate-principle-inventory`)
 
@@ -445,7 +447,7 @@ its detailed steps through the same source port. Capture reads no alternate root
 - **Owner:** [`src/actions/principle/capture_principle_sources.zig`](../../../src/actions/principle/capture_principle_sources.zig)
 - **Reads:** `principle_inventory` · **Writes:** `captured_principles` · **Side effect:** `filesystem_read`
 - **Does:** Captures each semantic source once, within the bounds above.
-- **Rejects:** `PrincipleSourceUnavailable`.
+- **Rejects:** `PrincipleSourceUnavailable`, `Cancelled`.
 
 ## `BuildPrincipleRegistryAction` (`build-principle-registry`)
 
@@ -461,7 +463,7 @@ its detailed steps through the same source port. Capture reads no alternate root
 - **Reads:** none (optional: `prior_principle_registry`) · **Writes:** `principle_registry` · **Side effect:** `filesystem_read`
 - **Does:** Runs inventory, validation, capture and registry construction in one operation
   through the same port and functions; invokes no other action.
-- **Rejects:** `PrincipleSourceUnavailable`, `InvalidPrincipleRegistry`.
+- **Rejects:** `PrincipleSourceUnavailable`, `InvalidPrincipleRegistry`, `Cancelled`.
 
 ## Proposals named elsewhere
 

@@ -75,6 +75,8 @@ const Fake = struct {
     documents: []const toolchain.RawDocument = &.{ project_document, preset_document },
     entries: []const toolchain.Entry = &.{entry_a},
     fail: ?stage.Step = null,
+    /// The failing source step reports a cancellation instead of an invalid source.
+    cancel: bool = false,
     project_reads: usize = 0,
     inventories: usize = 0,
     preset_reads: usize = 0,
@@ -94,20 +96,23 @@ const Fake = struct {
     fn captureProject(context: *anyopaque, _: *const roots.ConfiguredBaseRootCapability, allocator: std.mem.Allocator) @import("ports/toolchain_authority_source.zig").Error!toolchain.Capture {
         const self: *Fake = @ptrCast(@alignCast(context));
         self.project_reads += 1;
-        if (self.fail == .capture_project) return error.InvalidToolchainSource;
+        if (self.fail == .capture_project) return self.sourceFault();
         return .{ .name = toolchain.project_filename, .bytes = allocator.dupe(u8, "project") catch return error.InvalidToolchainSource };
     }
     fn inventory(context: *anyopaque, _: *const roots.ConfiguredBaseRootCapability, allocator: std.mem.Allocator) @import("ports/toolchain_authority_source.zig").Error![]const toolchain.Entry {
         const self: *Fake = @ptrCast(@alignCast(context));
         self.inventories += 1;
-        if (self.fail == .inventory_presets) return error.InvalidToolchainSource;
+        if (self.fail == .inventory_presets) return self.sourceFault();
         return allocator.dupe(toolchain.Entry, self.entries) catch error.InvalidToolchainSource;
     }
     fn capturePreset(context: *anyopaque, _: *const roots.ConfiguredBaseRootCapability, entry: toolchain.Entry, allocator: std.mem.Allocator) @import("ports/toolchain_authority_source.zig").Error!toolchain.Capture {
         const self: *Fake = @ptrCast(@alignCast(context));
         self.preset_reads += 1;
-        if (self.fail == .capture_presets) return error.InvalidToolchainSource;
+        if (self.fail == .capture_presets) return self.sourceFault();
         return .{ .name = entry.name, .bytes = allocator.dupe(u8, "preset") catch return error.InvalidToolchainSource };
+    }
+    fn sourceFault(self: *const Fake) @import("ports/toolchain_authority_source.zig").Error {
+        return if (self.cancel) error.Cancelled else error.InvalidToolchainSource;
     }
     fn parse(context: *anyopaque, _: std.mem.Allocator, captures: []const toolchain.Capture) @import("ports/toolchain_document_parser.zig").Error![]const toolchain.RawDocument {
         const self: *Fake = @ptrCast(@alignCast(context));
@@ -200,6 +205,16 @@ test "a failure in each internal step names that step and propagates the step's 
     // The project selects a policy the safety registry does not hold.
     var validate_safety: Fake = .{ .documents = &.{ unknown_policy_project_document, preset_document } };
     try expectStops(&validate_safety, no_policies, .validate_safety, error.InvalidToolchain);
+}
+
+test "a source that reports a cancellation stops its step cancelled, and one that fails stays an invalid toolchain" {
+    // The same three steps as above, each failing once as a cancellation: the step is named, the error is the cancellation.
+    var capture_project: Fake = .{ .fail = .capture_project, .cancel = true };
+    try expectStops(&capture_project, no_policies, .capture_project, error.Cancelled);
+    var inventory_presets: Fake = .{ .fail = .inventory_presets, .cancel = true };
+    try expectStops(&inventory_presets, no_policies, .inventory_presets, error.Cancelled);
+    var capture_presets: Fake = .{ .fail = .capture_presets, .cancel = true };
+    try expectStops(&capture_presets, no_policies, .capture_presets, error.Cancelled);
 }
 
 test "a parser result that is not one document per capture fails the parse step" {
@@ -407,15 +422,15 @@ test "a failed action's event records the stage step, and no other action event 
     const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "toolchain" };
     const rejected: execution.Applied = .{ .rejected = .{ .operation_failed = error.InvalidToolchain } };
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").FailureCode, null), capture.action(node, rejected, null, "validate_registry"));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, rejected, null, "validate_registry"));
     const failed = recorder.last.?.fact;
     try std.testing.expectEqual(telemetry.EventType.action_failed, failed.event_type);
     try std.testing.expectEqualStrings("validate_registry", failed.fields.step_id.?.bytes);
     _ = try registry.validateFact(failed);
     // A failure with no stage step, and a completed action given one, record none.
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").FailureCode, null), capture.action(node, rejected, null, null));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, rejected, null, null));
     try std.testing.expectEqual(@as(?telemetry.Identifier, null), recorder.last.?.fact.fields.step_id);
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").FailureCode, null), capture.action(node, .{ .outcome = .ok }, null, "validate_registry"));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, .{ .outcome = .ok }, null, "validate_registry"));
     try std.testing.expectEqual(telemetry.EventType.action_completed, recorder.last.?.fact.event_type);
     try std.testing.expectEqual(@as(?telemetry.Identifier, null), recorder.last.?.fact.fields.step_id);
     // The field is for action events only: no other event type admits it.
@@ -432,7 +447,7 @@ test "every event of a request stage names the stage, and a stage action's other
     var recorder: Recorder = .{};
     const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "request" };
-    const failure: ?@import("domain/feature_log_stream.zig").FailureCode = null;
+    const failure: ?@import("domain/feature_log_stream.zig").Stop = null;
     // A stage's start and each kind of end name the stage, and the registry admits each fact.
     const ends = [_]struct { result: ?execution.Applied, event: telemetry.EventType }{
         .{ .result = null, .event = .action_started },
@@ -487,7 +502,7 @@ test "an authority rejection's events carry its reason as their diagnostic code"
     var recorder: CodeRecorder = .{};
     const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "request" };
-    const accepted: ?@import("domain/feature_log_stream.zig").FailureCode = null;
+    const accepted: ?@import("domain/feature_log_stream.zig").Stop = null;
     for (std.enums.values(execution.AuthorityReason)) |reason| {
         // The existing token rule upper-cases the reason: no new code family, and each reason is its own code.
         var upper: [64]u8 = undefined;

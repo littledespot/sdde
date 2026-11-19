@@ -1,8 +1,20 @@
 const std = @import("std");
+const sink_port = @import("../../ports/feature_log_sink.zig");
 
 const Io = std.Io;
 
 pub const lock_name = ".stream.lock";
+
+/// What a failed `std.Io` call is to the sink: a cancellation request, which is no sink fault, or a sink
+/// fault. The one owner of that mapping for the sink's filesystem calls (ADR 0026, ADR 0032).
+pub fn sinkFault(err: anyerror) sink_port.Error {
+    return if (err == error.Canceled) error.Cancelled else error.SinkFailure;
+}
+
+/// The same for a durable flush.
+pub fn flushFault(err: anyerror) sink_port.Error {
+    return if (err == error.Canceled) error.Cancelled else error.FlushFailure;
+}
 
 pub fn segmentName(ordinal: u16, buffer: []u8) ![]const u8 {
     return std.fmt.bufPrint(buffer, "{d:0>4}.log", .{ordinal});

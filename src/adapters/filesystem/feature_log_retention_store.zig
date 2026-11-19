@@ -17,7 +17,7 @@ pub fn prune(io: Io, allocator: std.mem.Allocator, directory: Io.Dir, cutoff_uni
     var entries: [log_limits.max_segments]Entry = undefined;
     var count: usize = 0;
     var iterator = directory.iterate();
-    while (iterator.next(io) catch return error.SinkFailure) |directory_entry| {
+    while (iterator.next(io) catch |err| return feature_log_file.sinkFault(err)) |directory_entry| {
         const ordinal = switch (feature_log_file.classifyBindingEntry(directory_entry)) {
             .segment => |ordinal| ordinal,
             .ignored => continue,
@@ -28,14 +28,16 @@ pub fn prune(io: Io, allocator: std.mem.Allocator, directory: Io.Dir, cutoff_uni
             .allow_directory = false,
             .follow_symlinks = false,
             .resolve_beneath = true,
-        }) catch return error.SinkFailure;
+        }) catch |err| return feature_log_file.sinkFault(err);
         defer file.close(io);
-        const stat = file.stat(io) catch return error.SinkFailure;
+        const stat = file.stat(io) catch |err| return feature_log_file.sinkFault(err);
         if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
             return error.CorruptStream;
         }
-        var reader = file.reader(io, &.{});
-        const bytes = reader.interface.allocRemaining(allocator, .limited(@intCast(stat.size + 1))) catch return error.SinkFailure;
+        // The size is the one already observed: a reader that stats the file itself would swallow a cancellation.
+        var reader: std.Io.File.Reader = .initSize(file, io, &.{}, stat.size);
+        // A read the reader gave up on keeps its cause in `reader.err`, which is where a cancellation shows.
+        const bytes = reader.interface.allocRemaining(allocator, .limited(@intCast(stat.size + 1))) catch |err| return feature_log_file.sinkFault(reader.err orelse err);
         defer allocator.free(bytes);
         if (bytes.len != stat.size) return error.CorruptStream;
         if (count == entries.len) return error.CorruptStream;
@@ -47,7 +49,7 @@ pub fn prune(io: Io, allocator: std.mem.Allocator, directory: Io.Dir, cutoff_uni
         if (entry.closed_at_unix_ms > cutoff_unix_ms) break;
         var name_buffer: [32]u8 = undefined;
         const file_name = feature_log_file.segmentName(entry.ordinal, &name_buffer) catch return error.SinkFailure;
-        directory.deleteFile(io, file_name) catch return error.SinkFailure;
+        directory.deleteFile(io, file_name) catch |err| return feature_log_file.sinkFault(err);
     }
 }
 

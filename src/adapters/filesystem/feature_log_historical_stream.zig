@@ -39,16 +39,16 @@ pub const Adapter = struct {
         var specs_root = project_root.openDir(io, authority.specs_root_path, .{
             .access_sub_paths = true,
             .follow_symlinks = false,
-        }) catch |err| return if (err == error.Canceled) error.Cancelled else error.ArtifactStorageUnavailable;
+        }) catch |err| return directory_boundary.storageFault(err);
         defer specs_root.close(io);
         if (!(file_identity.inspect(specs_root.handle) catch return error.ArtifactStorageUnavailable).eql(authority.specs_root_identity)) {
             return error.InvalidArtifactRegistry;
         }
-        var run = directory_boundary.openOwner(io, specs_root, authority.run_path) catch |err| return if (err == error.Cancelled) error.Cancelled else error.ArtifactStorageUnavailable;
+        var run = directory_boundary.openOwner(io, specs_root, authority.run_path) catch |err| return directory_boundary.storageFault(err);
         errdefer run.close(io);
         // The pruned directory is opened beneath the run directory whose lock
         // guards it, never by a second walk from the specs root.
-        var binding_directory = directory_boundary.openOwner(io, run, authority.expected_binding.binding_id.bytes) catch |err| return if (err == error.Cancelled) error.Cancelled else error.ArtifactStorageUnavailable;
+        var binding_directory = directory_boundary.openOwner(io, run, authority.expected_binding.binding_id.bytes) catch |err| return directory_boundary.storageFault(err);
         errdefer binding_directory.close(io);
         try directory_boundary.validateOwner(io, run);
         try directory_boundary.validateOwner(io, binding_directory);
@@ -94,7 +94,8 @@ pub const Adapter = struct {
         if (self.lock_file == null or stream != self.stream or !log_binding.sameBinding(binding, self.expected_binding)) return error.InvalidBinding;
         const state = recovery.inspectGroup(self.io, self.binding_directory, self.allocator, binding, stream) catch |err| return switch (err) {
             error.InvalidSegment => error.CorruptStream,
-            error.SegmentUnavailable, error.Cancelled, error.OutOfMemory => error.SinkFailure,
+            error.Cancelled => error.Cancelled,
+            error.SegmentUnavailable, error.OutOfMemory => error.SinkFailure,
         };
         switch (state) {
             .empty => return,

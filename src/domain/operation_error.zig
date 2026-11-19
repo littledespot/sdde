@@ -2,15 +2,15 @@
 //! No dynamic error names or payloads cross the runner boundary.
 const std = @import("std");
 pub const ProviderAuthorizationLease = error{ AuthorizationDenied, AuthorizationExpired, ClockUnavailable, Cancelled };
-pub const FeatureInputSource = std.mem.Allocator.Error || error{FeatureInputUnavailable};
-pub const ReferenceStateIdentity = error{IdentityUnavailable};
+pub const FeatureInputSource = std.mem.Allocator.Error || error{ FeatureInputUnavailable, Cancelled };
+pub const ReferenceStateIdentity = error{ IdentityUnavailable, Cancelled };
 pub const ReferenceCorpusSource = std.mem.Allocator.Error || error{ ReferenceUnavailable, ReferenceInventoryChanged, ReferenceLimitExceeded, Cancelled };
-pub const FeatureDirectoryInspector = std.mem.Allocator.Error || error{FeatureDirectoryUnavailable};
-pub const PrincipleSource = @import("principle_registry.zig").Error || error{PrincipleSourceUnavailable};
-pub const ReferenceDirectoryInspector = std.mem.Allocator.Error || error{ReferenceDirectoryUnavailable};
+pub const FeatureDirectoryInspector = std.mem.Allocator.Error || error{ FeatureDirectoryUnavailable, Cancelled };
+pub const PrincipleSource = @import("principle_registry.zig").Error || error{ PrincipleSourceUnavailable, Cancelled };
+pub const ReferenceDirectoryInspector = std.mem.Allocator.Error || error{ ReferenceDirectoryUnavailable, Cancelled };
 pub const UnicodeNormalizer = std.mem.Allocator.Error || error{ InvalidUtf8, NormalizationLimitExceeded, NormalizationFailed };
 pub const ReferenceDecoder = std.mem.Allocator.Error || error{ UnsupportedMedia, MalformedText, DecodeLimitExceeded };
-pub const ToolchainAuthoritySource = error{InvalidToolchainSource};
+pub const ToolchainAuthoritySource = error{ InvalidToolchainSource, Cancelled };
 pub const ToolchainDocumentParser = error{InvalidToolchainDocument};
 pub const FeatureLogLayout = std.mem.Allocator.Error || error{ InvalidFeatureLogLayout, FeatureLogLayoutUnavailable, InsecurePermissions, Cancelled };
 pub const FeatureLogSink = error{
@@ -21,6 +21,7 @@ pub const FeatureLogSink = error{
     SinkFailure,
     FlushFailure,
     ReleaseFailure,
+    Cancelled,
 };
 pub const LlmProviderInterface = std.mem.Allocator.Error || error{ Cancelled, ModelLoggingBlocked };
 pub const PortError = ProviderAuthorizationLease ||

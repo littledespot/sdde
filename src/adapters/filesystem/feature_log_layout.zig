@@ -90,5 +90,6 @@ fn mapLogDirectoryError(err: log_directories.Error) port_module.Error {
     return switch (err) {
         error.InsecurePermissions => error.InsecurePermissions,
         error.ArtifactStorageUnavailable => error.FeatureLogLayoutUnavailable,
+        error.Cancelled => error.Cancelled,
     };
 }
