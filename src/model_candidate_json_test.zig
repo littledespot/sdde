@@ -284,7 +284,7 @@ test "fixed source review reconstructs bound claims and rejects an echoed union"
     try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, "{\"kind\":\"supported\",\"provenance\":{\"claim_ids\":[1,2]},\"source_ids\":[],\"detail\":\"\"}", required));
 }
 
-test "D1 source variants require questions only for gaps in focused findings" {
+test "source variants require questions only for gaps in focused findings" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();

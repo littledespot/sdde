@@ -432,7 +432,7 @@ ask the LLM to answer it" (design.md:266). Applied to §18 with the mechanisms t
 - **The harness is Spec-only:**
   - case `spec-e2e-case/v3`, which requires Spec's four artifacts
     (`test/harness/e2e/contracts.zig:6`, `:25-28`);
-  - report `spec-e2e-report/v21` (`:223`): changing a closed member needs a new version
+  - report `spec-e2e-report/v22` (`:223`): changing a closed member needs a new version
     (SPEC01 §2 rule 12), and earlier runs need their own build (SPEC01 §1, Retained runs). **Recommended:** a Plan
     report of its own, which leaves Spec's decoder unchanged;
   - adjudication `spec-adjudication-record/v1` (`test/harness/adjudication.zig:13`, `:69`);

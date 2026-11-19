@@ -125,7 +125,7 @@ their claims; a partly taken statement is `shared_member`, a wholly taken one a 
 `model-request-debug/v16`, `spec-e2e-report/v14`, `baseline-acquisition/v11`. Evidence:
 `evaluations/q16-measures-set.json`, `evaluations/d162-measures-set.json` (Keep if not met:
 restatement 4 → 3, "not enough evidence"). The native delete first fired on 3 November; the
-report lists only some deletes (SPEC01 T8).
+report then listed only some deletes (fixed: T8 below).
 
 ## Q19 D19.2. The engine composes the story (ADR 0047)
 
@@ -276,11 +276,86 @@ or an outcome without its verb, isn't weakening. `e2e-assistant-evaluation/v4` r
 exactly; the run publishes with no correction, and no batch keeps two records of equal content
 (`workflow_tests.zig`, beside D16.2's `shared_statement` scenario). Open parts: SPEC01 T3.
 
+## T3. The story restatement and the reference-text repair route in the scripted matrix (built 19 November 2026)
+
+**Decided** 19 November 2026 (user: "implement next item", then "implement T3"); test-only. ADR 0035's `restatement`
+rule had unit coverage only. Two scenarios, `story-restatement-business_rule` and `-non_goal`, follow
+`split-claim-once` in the `scenario_stops` group (`workflow_tests.zig`, so no earlier scenario changes its name). The scripted records
+generator's `story_restatement` option (`spec_generation_responses.zig`) leaves the first group's first story-quoted
+claim without a functional requirement and offers, in order, a record of that kind holding the admitted story's own
+text (read from the session, not written out) and an outcome naming the claim. Both runs publish with the restating
+record gone, the outcome and the other claim's requirement kept, no repair request, and the driver's counter
+(`story_restatements`) showing the record was offered. **Why differential:** the baseline generator gives every record
+the group's whole claim selection and every claim a requirement, so ADR 0038 Decision 5 deletes a story-equal record as
+well, and the end state is the same whichever rule fires. The rule's name is read nowhere outside the domain. Here no
+requirement names the claim, so Decision 5 would keep the first record that names it and delete the later outcome, and
+the published batch tells the two rules apart; the first batch keeps per-record claims for that (`own_claims`). The runs
+use the equal-criteria sources with `.chosen` edge cases, which pair the claims into groups of two. **Proof:** with
+`restatement` disabled each run fails at `story-restatement-kept-record` (a record of the restating kind survived),
+checked once for each kind, while no earlier scenario noticed. A freeze beside one without the two runs differed only
+in their two directories and `manifest.json`; every other request was byte-identical. **Not covered:** the rule's other
+single-statement kinds (`assumption`, `prohibited_behavior`) and a restatement whose evidence the story doesn't cover
+(unit tests only).
+
+**The reference-text repair route** (`authorize-text-repair` to `text-repair-release` in `extract-references`) had unit
+coverage only: the reference-ingestion fixture's rejected reasons (`unbound`, `unknown_literal`) end `.invalid` before
+it. The scenario `text-repair-reason`, last in the `scenario_stops` group, gives the feature a notes source and a
+stories source, and the notes source must sort first because the generator's first chunk is the first source in path
+order. The scripted generator's `defective_reason` option answers that chunk with a no-feature-claim reason holding a
+control character, which response admission accepts and the text validation rejects as an invalid scalar. The route
+runs and its one repair request is answered with a valid reason, the extraction validates again and the run publishes.
+In this fixture a reason naming a path is accepted, and an unknown passive literal never reaches the validation:
+admission corrects it first. **Proof:** with the merge no longer applying the repaired reason
+(`reference_extraction_text_repair.zig`), the scenario fails (retry limit at the repair's request, the candidate still
+rejected as an invalid scalar) and no other integration test does. Making the route unreachable in the shipped workflow
+fails the load of every test that runs it, so the workflow compiler already guards the wiring. A freeze beside one
+without the scenario differed only in its directory and `manifest.json`.
+
+## T2. Tests compare with the owner of model-facing text, not a copy (built 19 November 2026)
+
+**Decided** 19 November 2026 (user: "implement E1 then T2"). The tests and fixtures that copied model-facing English
+or checked its absence now derive the text from the code or resource that sends it, so a wording change at the owner
+fails no test and a wrong wiring still does. About 25 of the record's 32 lines were real prose copies in seven files;
+the rest were identifiers or structure. Owners: the retry module's `repetition_notice` and
+`missing_final_text_explanation` (`model_protocol_retry.zig`; the notice was an inline format string); `Diagnostic.explanation()`
+for schema and decoder rejections; `Constraint.descriptionFor(scope)` and `description()` for packet rules
+(`reference_reconciliation_diagnostic.zig`); `selectedGuidance` and `guidance` for field guidance
+(`text_field_policy.zig`); `ValueChoices.correction` (`specification_provenance.zig`); the shipped packet guidance through
+`test_fixtures/packet_guidance.zig`; and `insertion_requirement` and `correction_requirement` for an entity-membership
+repair (`specification_repair.zig`). **Production edits:** the two retry constants and the two repair requirements, each
+the old literal moved into a `pub const` its consumer now reads, nothing else.
+
+**Deleted, not replaced:** the phrase pins "identical response" (the rule is that the notice doesn't claim byte identity,
+which an absent phrase can't enforce; the notice's count of 1 on a confirmed repetition and 0 otherwise is the guard that
+remains), "same projection kind" and "native code" (the test `no rule text the model reads carries engine vocabulary`
+already bars "native" and "projection kind" in every rule text), "Assess policy compliance" (named nowhere in the
+repository), and the phrase checks on `protocol.prompt.md` (the test compares the prompt with the one the correction carries).
+"Together, the statements must cover every assigned claim ID" and
+"Every retained claim must appear" narrowed to the owner's full sentence, which no longer detects a reworded leak. A check
+that an explanation names the guidance objects it sends the model to (`exclusive.`, `equal.`, `agreement.`) replaced the
+per-reason word list.
+
+**Renamed:** dumps r35, r36, r37, r40, r41 and fix002 to what they hold (`summary-protocol-request`,
+`global-protocol-failure` and `-recovery`, `alternating-missing-recovery`, `brief-request`, `false-conflict-questions`
+and `-recovery`); the tests, comments and fixture headers named R21, R22, R35, R36, R42, R46, D1 and Q17; and the
+matching `build/test_run_inputs.zig` entries, whose orphans (`d1-review`, `r42-recovery`, `r43-recovery`,
+`principle-citation-*`, `chunk13-admission-`, `chunk18-stack-request-*`) went. **Proof:** a freeze beside one taken before
+the first edits printed nothing under `diff -r`, manifest included; a freeze after the repair constants carries both
+requirements in the same scenarios and calls as the retained `q22-final` (four insertions, two corrections). With the
+repair constants swapped, the identity-label guidance branches equal, or an explanation that no longer names
+`exclusive.`, the three assertions that replaced a deleted pin fail, and no other test does. The `contract-reviewer`
+found no blocker and four minor defects, all fixed: three assertions weakened without an owner-derived substitute and
+five copies or pins the sweep missed. **Not done:** the unread dump files (SPEC01 C47); copies under 25 characters; the
+harness-facing reason in `request_debugger_test.zig`, which no model reads. **T5 retaken 19 November 2026** (table under
+E5): T5.1 `tests_copying_model_text` 19 to 10, all single-word absence literals. The retry notice is now an exact span of
+the freeze's guidance, and T5.6 `model_text_outside_owner` counts 15 in 4 files against 12, two of them the retry
+module's constants: a measurement effect, not new model text.
+
 ## T5. Brittleness counts
 
 **Committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes them to the
 `brittleness` member of `code-heuristics/v2` (`build/code_heuristics/brittleness.zig`). Latest
-counts: E5 below; when they are due: SPEC01 T5.
+counts: the table under E5 below (19 November 2026, after T2); when they are due: SPEC01 T5.
 - **Definitions** (approved 1 November 2026; exact matches only):
   - A is every `.md` and JSON string value under `design/workflows/`, whitespace-collapsed.
   - M is production literals outside tests, of 3+ whitespace-separated runs, whose decoded
@@ -1028,8 +1103,10 @@ has been reduce E1 should be kept"): kept for the reduced brittleness; no outcom
     (SPEC01 §2.12).
   - **DE1b, 13 November 2026** ("yes for all 3 decisions"): a runtime orchestrator with runner-owned child
     bindings and one runner invocation per stage (ADR 0030:136-160), not a compiled stage graph; the non-kept
-    request keys are engine-internal in E1 and their removal from the `DataKey` enum is a follow-up (open,
-    SPEC01 E1); steps 2 and 3 first, reported at the end of step 3.
+    request keys are engine-internal in E1; steps 2 and 3 first, reported at the end of step 3. Removing those
+    keys from the `DataKey` enum was a follow-up: **decided no** 19 November 2026 (user: "E1 DataKey - NO"). It
+    needs a kernel-private store for stage values and an ADR 0030 amendment for about 8 of 143 members, with no
+    change to any model request, so the keys stay.
   - **DE1c, 13 November 2026** ("yes, recommendations approved"): the three evidence keys the E2E harness
     reads after a step (`provider_authorization_result`, `model_envelope_result`,
     `provider_invocation_result`) are recorded-retention keys, read through history, and every stage event of
@@ -1777,34 +1854,47 @@ publishes nothing.
   | E5 | `authority` rejection producers, and the reasons they name | 148 sites, no reason | 149 sites, 24 reasons | 149 sites, 24 reasons |
   | E8 | T5.2 raw-string schema-name branches in production (tests) | 19 (89) | 0 (69) | 0 (68) |
 
-  The `code-heuristics` counts, taken with `zig build code-heuristics -- --freeze
-  evaluations/request-projection/e5-final` (T5.4 by hand). No retake exists between the one below and now except
-  E8's T5.2, so each change's share of these is not recorded.
+  The `code-heuristics` counts, taken with `zig build code-heuristics -- --freeze <dir>` (T5.4 by hand): the 14
+  November column with `evaluations/request-projection/e5-final`, the 19 November column with a freeze taken by
+  `SDDE_REQUEST_PROJECTION=<dir> zig build test-integration` on the working tree after T2 (a modified build; 145
+  scenarios, 1,969 calls; not retained). No retake exists between the columns except E8's T5.2, so no change's share
+  of a difference is recorded.
 
-  | Count (report member) | 2 November 2026, `b38628c` (recorded, SPEC01 T5) | Now |
-  | --- | --- | --- |
-  | T5.1 model-facing text in tests (`tests_copying_model_text`) | 19 | 19 |
-  | T5.2 raw-string schema-name branches (`schema_name_branches`) | 20 (tests 88) | 0 (tests 68) |
-  | T5.3 instructions with more than one site (`repeated_instructions`) | 5 at 11 sites | 5 at 11 sites |
-  | T5.4 repair steps whose prompt no non-repair step binds | 6 | 6 |
-  | T5.5 model- or case-specific branches (`model_or_case_branches`) | 0 | 0 |
-  | T5.6 model-facing English outside its owner (`model_text_outside_owner`) | 13 in 4 files | 12 in 4 files |
+  | Count (report member) | 2 November 2026, `b38628c` (recorded, SPEC01 T5) | 14 November 2026, after E5 | 19 November 2026, after T2 |
+  | --- | --- | --- | --- |
+  | T5.1 model-facing text in tests (`tests_copying_model_text`) | 19 | 19 | 10 |
+  | T5.2 raw-string schema-name branches (`schema_name_branches`) | 20 (tests 88) | 0 (tests 68) | 0 (tests 69) |
+  | T5.3 instructions with more than one site (`repeated_instructions`) | 5 at 11 sites | 5 at 11 sites | 8 at 17 sites |
+  | T5.4 repair steps whose prompt no non-repair step binds | 6 | 6 | 7 |
+  | T5.5 model- or case-specific branches (`model_or_case_branches`) | 0 | 0 | 0 |
+  | T5.6 model-facing English outside its owner (`model_text_outside_owner`) | 13 in 4 files | 12 in 4 files | 15 in 4 files |
+
+  **19 November reading.** T5.1 is the count T2 targeted: it fell from 19 to 10, and all ten sites are single-word
+  absence literals (`packet`, `repair`, `fragments`, `$defs` three times, `reference`, `principles`,
+  `passive_literal_id`, `Judge`), so none is a copied sentence. T2 touched no prompt, schema or `spec.workflow.yaml`,
+  so it didn't move T5.3 (of the eight instructions, two sit in `model_schema_diagnostic.zig` and six in
+  `design/workflows/spec/`; which three are new isn't recorded) or T5.4 (the seventh site is `repair` in
+  `generate-scenarios`, `spec.workflow.yaml:772`); both are the net of the changes since 14 November,
+  unattributed. T5.6's 15 sites are `model_controls.zig` 1, `model_protocol_retry.zig` 2,
+  `model_schema_diagnostic.zig` 10 and `strict_json.zig` 2. The two in the retry module are T2's constants, and
+  the T2 entry expected at most one more. The 14 November breakdown by file isn't recorded, so how many of the
+  three extra sites T2 caused isn't established.
 
   **Method.** The `grep -c` and `wc` counts use the pattern in the row on the file named; the `DataKey` members,
   the `src/actions` files, the `anyopaque` lines, the `.authority = .<reason>` producers and the `error{}` members
   were counted by a short script over the same files and patterns; the T5 counts are the tool's, and T5.4 is the
-  six `repair-prompt` bindings in `spec.workflow.yaml`, each in a `slot: repair` step, with no non-repair step
-  binding it.
+  `repair-prompt` bindings in `spec.workflow.yaml` (six on 14 November, seven on 19 November), each in a
+  `slot: repair` step, with no non-repair step binding it.
   **Reading it.** A later change moves what an earlier one measured, so "Now" minus "Recorded after" is not that
   change's. The YAML's 27 lines between E1's 883 and today's 910 are not attributed in the records (E4 records
   910 after its edits). `anyopaque` lines in `src/application/` rose by 6 since E3: E1 recorded 2 of them (the
   runner-owned child-binding context), and the other 4 are not attributed, because no per-file record exists; the
   files E5 added or rewrote hold none (`step_binding_error.zig`, `workflow_execution.zig`, `repair_owner.zig`,
   `workflow_model_invocation.zig`, `feature_log_activation.zig`, `feature_logging_runtime.zig`), apart from the
-  runner's 6 that E4 recorded. T5.1's 19 now include two architecture pins whose literal is a word that also
-  occurs in a prompt (the result-schema authority test, E8's rule, and the generic repair operations test, E4's),
-  a recorded limit of the tool
-  (short absence literals match by substring). E5's gain is in payload-free failure names, which no T5 count
+  runner's 6 that E4 recorded. T5.1's 19 on 14 November included two architecture pins whose literal is a word that
+  also occurs in a prompt (the result-schema authority test, E8's rule, and the generic repair operations test, E4's),
+  a recorded limit of the tool (short absence literals match by substring); both are still among the ten of 19
+  November (`architecture_test.zig:209`, `:3006`). E5's gain is in payload-free failure names, which no T5 count
   measures.
 
 ## Design–code conflicts resolved (14 November 2026)
@@ -2175,7 +2265,7 @@ restatement from a title-only group. In all 12 retained runs before it, extracti
 `business` claim; where grouping left it alone (5 runs), its records call had no requirement to state and copied a
 neighbour (`competing_records` blocks in `2026-11-17T22-01-46Z-c032…` and `22-02-22Z-6ef4…`). **Built:** the sentence
 "Include meaningful identity and purpose headings." is deleted from `extraction.context.json` `claims`; the title stays
-the engine's (ADR 0048). The screen did not run: `e2e-call` can't replay an `anthropic` capture.
+the engine's (ADR 0048). The screen did not run: `e2e-call` couldn't replay an `anthropic` capture (it can since 19 November 2026, below).
 
 **Set** (`2026-11-17T23-4*` to `23-58-08Z` and `2026-11-18T05-3*`, 6 runs per case, none retried, build revision
 `26982bb`, source `0a61828b…`, every report `build.source.modified: true`; skill `3fe52a92…`; reference D8.4's set):
@@ -2228,6 +2318,38 @@ through two repairs (`RepairNoProgress`). **Cause:** the `business` meaning stil
 the title is the engine's (ADR 0048) and the story skips heading-only quotes (ADR 0047 Decision 1). **Why no change:**
 a structural rule rejecting a claim whose cited lines are all headings needs an ADR amending ADR 0036 Decisions 1 to 3
 and ADR 0048's rejected test, for one failure in 18 runs. Reopen if heading claims persist in a later set.
+
+## T8, C40 and `e2e-call` for Anthropic captures (built 19 November 2026)
+
+**Decided** 19 November 2026 (user: "implement group 1 with above recommendations"). Measurement and harness only.
+Two request-projection freezes under the new names, one taken after C40 and one after the rest of this set, are
+byte-identical (6 groups, 142 scenarios, 1,910 calls); none was taken before C40, which only renames directories.
+
+- **T8. Report repairs cover every unit.** `report.json` `repairs` kept only the last merge of each candidate still
+  retained at run end, so `e2e-measures` and the evaluation missed earlier merges in a unit and every merge of an
+  earlier unit (`2026-11-08T09-23-55Z-149a…`: seven deletes in `events.jsonl`, 7→8 alone in the report). `Trace`
+  now accumulates each step's retained merges in `repair_log.Log` (once per authorization, in the order first seen)
+  and `invoke.zig` projects them into the report: `spec-e2e-report/v22`. A repair attempt that ends without a merge is
+  still not listed, and the step event's `repairs` stays per step. F0100 and e2e.md say so. Proof: `repair_log.zig`'s
+  tests (merges a later step replaced are reported once, in order; the final state's merges follow them), and a
+  harness integration test that drives `invoke.run` through a scripted Messages transport
+  (`test/harness/integration/tests.zig`). Two sources each answer with a reason the text validation rejects, and two
+  repair requests follow, both merging the one extraction candidate, so the run's final state keeps only the later
+  merge. The finished report lists both. Removing `invoke.zig`'s call to `projectRepairs`, or `Trace.recordStep`'s
+  call to `observe`, fails that test and no other. Every retained run is v21 or earlier, so `e2e-measures` marks its
+  report `unavailable` and `adjudicate-spec` rejects it; they need the build that made them.
+- **C40. A scenario is named, not numbered.** The request-projection freeze keys each scripted scenario by a stable
+  name (`base-NN`, `brief-NN`, `source-repair-<tag>` and so on, `runSpecificationWorkflows`), a `Name` of 1 to 80
+  characters of `a-z 0-9 - _`, and a name used twice in one sink is rejected at the scenario's first call
+  (`request_projection.zig`). The 17 literal-index branches stay. Freezes taken before this change are keyed
+  `scenario-NNN` and don't line up with named ones.
+- **`e2e-call` replays an `anthropic` capture.** The captured call's provider family selects the test credential
+  (`TEST_AWS_BEARER_TOKEN_BEDROCK` or `TEST_ANTHROPIC_API_KEY`) and the production variable the replay adapter reads
+  (`cli.zig` `bindCredential`); `diagnostic_binding.zig` admits any keyed family instead of Bedrock alone. The
+  `e2e-spec` and `e2e-call` help and the rejection text read the cost policy's list of generation tuples and the
+  families' variable names (`model_cost_policy.generation_tuples`, `environment.generation_key_help`), so they no
+  longer restate them. Each screen still needs its own live approval. The Q23 screen that "didn't run" can now be
+  taken.
 
 ## Decisions that changed nothing (15 November 2026)
 

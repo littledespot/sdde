@@ -58,6 +58,22 @@ pub fn generationKeyName(family: Family) []const u8 {
     };
 }
 
+/// Each generation family's test variable, for help text.
+pub const generation_key_help: []const u8 = blk: {
+    var text: []const u8 = "";
+    for (std.enums.values(Family)) |family| {
+        text = text ++ (if (text.len == 0) "" else " or ") ++ generationKeyName(family) ++ " for " ++ family.configSchema().providerId().?;
+    }
+    break :blk text;
+};
+
+/// The validated test key of one generation family.
+pub fn generationKey(environment: *const std.process.Environ.Map, family: Family) error{ MissingTestApiKey, InvalidTestApiKey }![]const u8 {
+    const key = environment.get(generationKeyName(family)) orelse return error.MissingTestApiKey;
+    if (!http.validKey(key)) return error.InvalidTestApiKey;
+    return key;
+}
+
 /// Read exactly the keys of the families the configured slots select, after
 /// the cost policy has accepted every slot.
 pub fn generationKeys(environment: *const std.process.Environ.Map, models: *const @import("../../src/domain/config.zig").ModelsConfig) error{ MissingTestApiKey, InvalidTestApiKey, DisallowedTestModel }!GenerationKeys {
@@ -67,9 +83,7 @@ pub fn generationKeys(environment: *const std.process.Environ.Map, models: *cons
             if (std.mem.eql(u8, candidate.configSchema().providerId().?, slot.provider)) break candidate;
         } else return error.DisallowedTestModel;
         if (keys.get(family) != null) continue;
-        const key = environment.get(generationKeyName(family)) orelse return error.MissingTestApiKey;
-        if (!http.validKey(key)) return error.InvalidTestApiKey;
-        keys.set(family, key);
+        keys.set(family, try generationKey(environment, family));
     }
     return keys;
 }

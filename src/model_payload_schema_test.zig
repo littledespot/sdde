@@ -390,9 +390,8 @@ test "selected protocol guidance explains duplicate property names and preserves
         try std.testing.expectEqualStrings(prompt, content[content.len - 3].guidance);
         const duplicate = diagnostic.?.reason == .DuplicateField;
         try std.testing.expectEqual(@as(usize, 2), guidance.value.object.count());
-        try std.testing.expect(std.mem.startsWith(u8, guidance.value.object.get("explanation").?.string, "JSON decoding failed:"));
+        try std.testing.expectEqualStrings(diagnostic.?.explanation(), guidance.value.object.get("explanation").?.string);
         if (duplicate) {
-            try std.testing.expectEqualStrings("JSON decoding failed: property names must be unique within each object. This diagnostic concerns repeated names, not repeated identifier values.", guidance.value.object.get("explanation").?.string);
             try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .decoder = diagnostic.? }), prompt });
         }
         const supplied = guidance.value.object.get("diagnostic").?.object.get("decoder").?.object;
@@ -1345,25 +1344,12 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                 for (rule.owning, owning) |kind, listed| try std.testing.expectEqualStrings(kind, listed.string);
             } else try std.testing.expect(!guidance.value.object.contains("exclusive"));
             const explanation = guidance.value.object.get("explanation").?.string;
-            try std.testing.expect(std.mem.startsWith(u8, explanation, "Schema validation failed:"));
-            const expected_words = switch (reason) {
-                .unknown_property => "not allowed",
-                .missing_required_property => "required property is missing",
-                .type_mismatch => if (result.invalid.expected_location == .parent) "discriminator must be a string" else "wrong type",
-                .string_length => "string length",
-                .integer_range => "integer is outside",
-                .array_length => "number of array items",
-                .constant_mismatch => "expected constant",
-                .enum_mismatch => "allowed values",
-                .unknown_variant => "allowed kind",
-                .duplicate_member => "repeats an assigned member",
-                .shared_member => "exclusive.kinds",
-                .missing_member => "no item names this assigned member",
-                .equal_items => "equal.compared",
-                .disagreeing_items => "agreement.agree",
-            };
-            try std.testing.expect(std.mem.indexOf(u8, explanation, expected_words) != null);
+            try std.testing.expectEqualStrings(result.invalid.explanation(), explanation);
             try std.testing.expect(std.mem.indexOf(u8, wire, explanation) != null);
+            // The explanation sends the model to the guidance objects by name; each object present is one it names.
+            inline for (.{ "exclusive", "equal", "agreement" }) |key| {
+                if (guidance.value.object.contains(key)) try std.testing.expect(std.mem.indexOf(u8, explanation, key ++ ".") != null);
+            }
             if (reason == .array_length) {
                 const shape = expected.get("shape").?.object;
                 try std.testing.expectEqual(result.invalid.expected.array.minimum, shape.get("minItems").?.integer);

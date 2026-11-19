@@ -1,4 +1,4 @@
-//! R36 candidate faults; only the production runner executes recovery.
+//! Global-reconciliation protocol candidate faults; only the production runner executes recovery.
 const std = @import("std");
 const r = @import("../domain/reference_reconciliation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");

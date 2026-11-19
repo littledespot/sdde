@@ -44,7 +44,7 @@ scorer judgment moves one by about ±3.6, and keep decisions use the accuracy co
 `22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`), Q24's set (`2026-11-18T06-5*`) and two
 hello-world runs that failed at the first extraction call (`2026-11-17T07-1*`). Earlier runs are removed;
 their evaluations and measures stay under `evaluations/`.
-The current build decodes only `spec-e2e-report/v21` (`test/harness/e2e/contracts.zig:223`); earlier runs, the `2026-11-17T08-4*` set included, need their own build.
+The current build decodes only `spec-e2e-report/v22` (`test/harness/e2e/contracts.zig:223`); every run above is v21 or earlier, so its report is `unavailable` to `e2e-measures` and `adjudicate-spec` rejects it. Each needs the build that made it.
 
 ## 2. Rules for measured phases
 
@@ -204,10 +204,10 @@ exhaustion, never budget, in two modes, each reported with no lever:
   closing-set run `2026-11-15T21-47-31Z-863a…` (the one protocol correction fixed it): 3 reasoning-only
   first answers in 24 runs of three builds, a model limitation under a coherent contract.
 
-**Engine track, in gaps:** E1's `DataKey` removal (§5 E1); E2 stops
+**Engine track, in gaps:** E2 stops
 at its three preparation stages (decided 14 November 2026); E3's feature logging waits on E6; E6
-in any gap; the evaluator partial-body gap (§5 E5) in any gap; E7 last. E0 is on hold. E1's
-`DataKey` removal and T8 land only under §2.12. **Tests:** T2, T3 and T8 in any gap; T4 with
+in any gap; the evaluator partial-body gap (§5 E5) in any gap; E7 last. E0 is on hold.
+**Tests:** T2 and T3 in any gap; T4 with
 E1–E4. **Adjudication:** H1 (the evaluate-e2e skill) for every set.
 **Human:** H2 when required source review is labelled or review returns; H3 when the user
 reviews the panels; H4 before any formal baseline freeze; H5 at the user's choice. **Closing
@@ -253,11 +253,11 @@ or the user records it as a model limitation.
   `records.prompt.md:8`, `generation.context.json:4`) stay as they are after the one-owner
   hygiene change's revert. Report the remaining AC elaboration as a model limitation (AGENTS.md)
   and let H1 judge it.
-- **Repair requests without step guidance:** six repair sites take their task only from the
+- **Repair requests without step guidance:** seven repair sites take their task only from the
   three-line `repair.prompt.md` (`spec.workflow.yaml` steps `text-repair` in `extract-references`,
   the extraction repair in `validate-extraction`, `request` in `repair-reconciliation-candidate`,
-  `repair` in `generate-unit`, `request` in `repair-source-extraction` and `request` in
-  `repair-source-candidate`), and the two reconciliation repairs among them
+  `repair` in `generate-unit`, `repair` in `generate-scenarios`, `request` in `repair-source-extraction`
+  and `request` in `repair-source-candidate`), and the two reconciliation repairs among them
   (`repair-reconciliation-candidate` and `repair-source-candidate`) bind no context.
   Binding definitions (Q2) wasn't kept; counted as a brittleness measure (T5).
 - **Provider doesn't enforce the response schema:** the engine's request matches AWS's
@@ -269,7 +269,7 @@ or the user records it as a model limitation.
   inside an open string. ADR 0039:67-72 records it as a provider defect (decided 1 November
   2026). Open: whether Bedrock applies the grammar partly or not at all. The live comparison
   (one retained request with and without native JSON mode) is deferred: it needs an `e2e-call`
-  change (it keeps the captured response mode, design/harness/e2e.md:113-114) and approval.
+  change (it keeps the captured response mode, design/harness/e2e.md:117-118) and approval.
   Since D13.1 the prefix caused two faults, both extract-classifications call 2
   (`2026-11-01T08-24-09Z-46f4…`, `2026-11-07T01-19-36Z-728d…`), each corrected by the next
   call. No model or provider change (H5).
@@ -478,8 +478,6 @@ Budget-stopped runs publish nothing while it is on hold (none since D13.1).
 
 Implemented and kept 13 November 2026; record in [Z_SPEC01](Z_SPEC01.md) E1. Open:
 
-- **`DataKey` enum:** removing the engine-internal request keys from it is a follow-up change (DE1b,
-  [Z_SPEC01](Z_SPEC01.md) E1); it lands under §2.12.
 - **Retention:** recorded retention keeps every call's raw exchange for the run, and its growth is
   unmeasured.
 
@@ -605,37 +603,24 @@ counts input tokens that a failed Claude stream reported in `message_start`.
 
 ### T2. Test decoupling
 
-Tests copy model-facing English or check its absence: about 32 lines of 25 or more characters
-in 7 files (2 November 2026). Compare with the owning constant or resource instead: copies in
-`model_request_workflow_test.zig`, `model_payload_schema_test.zig` (and its `:362` phrase
-checks on `protocol.prompt.md`), `reference_model_input_test.zig`,
-`test_fixtures/spec_generation_driver.zig`, `model_text_field_test.zig`,
-`reference_reconciliation_test.zig`, `specification_generation_test.zig`; absence checks at
-`model_text_field_test.zig:177` and `model_request_workflow_test.zig:4529`. Rename tests,
-fixtures and `measurement_prefix` dumps named after live runs: dumps r35, r36, r37, r40, r41
-and fix002 (`workflow_tests.zig:1633-1698`); tests R36 (`model_envelope_test.zig:381`), R42
-(`specification_generation_test.zig:6843`) and D1
-(`model_candidate_json_test.zig:285`); fixture headers R35 and R36
-(`summary_protocol_sequence.zig:1`, `global_protocol_sequence.zig:1`); and their
-`build/test_run_inputs.zig` entries (`:22`, `:33-38`), deleting its orphaned `d1-review`,
-`r42-recovery` and `r43-recovery` entries (`:20`, `:39`, `:40`; the test at `:145` uses
-`d1-review` as an example). §10 C47 adds further unnamed inputs and the unread dump files.
+Built 19 November 2026 ([Z_SPEC01](Z_SPEC01.md)). **Open:** the unread dump files of §10 C47;
+and copies shorter than 25 characters, which the count of 32 didn't cover.
 
 ### T3. Coverage gaps (B5, B7)
 
-- No integration scenario reaches ADR 0035's story `restatement`; unit coverage only.
-  D16.2's `repeated_statement` has one (`workflow_tests.zig:1402`, `:2380-2387`).
-- The no-feature-claim text-repair route (`authorize-text-repair` to `text-repair` in `extract-references`) has unit coverage only;
-  the integration `.unbound` mode ends `.invalid` before it.
-- The retained GPT-OSS compatibility exchange is assessed `incompatible` since ADR 0036
-  (`provider_compatibility_tests.zig:261-262`, `:305-309`), so the normal §22.6-normalized path
-  has no compatible-assessment coverage.
+- The §22.6-normalized path has no compatible-assessment coverage: the only exchange that carries
+  the prefix is a retained live GPT-OSS capture of the claim shape ADR 0036 removed, so it is
+  assessed `incompatible` (`provider_compatibility_tests.zig:61`, `:262`, `:305-309`), while
+  `.complete` is assessed `compatible` (`:261`, `:412`). Covering it needs a current-shape GPT-OSS
+  exchange, from an approved `provider-compatibility` run, or a derived fixture that adds a scenario
+  to about eight switches; no slot selects that model now.
 - Proof limits recorded at implementation ([Z_SPEC01](Z_SPEC01.md)): no scripted scenario
   quotes an exact copy, so D7.4's freeze doesn't reach its path; Q13's two-source citations
-  are covered at the codec, not the projection (the fixture reads one file); every scripted
-  records batch has one claim, so D16.2's partly taken record is proven only at admission.
-  A scripted multi-claim batch needs a per-group generator, since the baseline one names one
-  claim per record (`spec_generation_responses.zig:769`).
+  are covered at the codec, not the projection (the fixture reads one file); no scripted
+  statement record names both a taken and an untaken claim, so D16.2's partly taken record is
+  proven only at admission. The baseline generator gives every record the group's whole claim
+  selection (`associateFixtureResponse`); only the story-restatement runs keep per-record claims
+  (`own_claims`), in their first batch, so a partly taken record needs a per-group generator.
 - Scripted branches no scenario selects, and stages the development cases rarely exercise: §10
   C44 and C48.
 
@@ -654,29 +639,15 @@ T5.3 `repeated_instructions`, T5.5 `model_or_case_branches`, T5.6 `model_text_ou
 T5.4 isn't in it. Each change set that a phase reports on
 retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>` with the
 freeze §2.10 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a `slot: repair`
-step whose prompt no non-repair step binds). Last taken 14 November 2026 on the working tree after
-E5 (a modified build) with freeze `evaluations/request-projection/e5-final`; its counts, beside the
-ones taken 2 November 2026 on the `b38628c` tree with freeze `evaluations/request-projection/b38628c`
-(130 scenarios, 1,714 calls), are in [Z_SPEC01](Z_SPEC01.md) E5. No retake lies between the two, so the
-difference is the net of the kept ADR 0047 and D12.3 change set (`f6ef0f6`, `39fd9ff`), E1 to E5 and E8,
-not each change's share. **Due:** with the next change set that a phase reports on. T5.4 is still 6
-(the six sites that bind `repair-prompt`, listed under "Repair requests without step guidance").
-
-### T8. Report repairs cover every unit
-
-**Defect (measurement):** `report.json` `repairs` keeps only the last merge of each candidate
-still retained at run end (F0100:1368-1371, "These are retained merge snapshots"), so
-`e2e-measures` and the evaluation miss earlier merges in a unit and every merge of an earlier
-unit. Retained `2026-11-08T09-23-55Z-149a…`: seven distinct deletes (revisions 1→2 to 7→8) in
-`events.jsonl`, 7→8 alone in `report.json`. §2 rule 5 grades every repair, and the harmful
-repair watch item depends on it. Each step event already carries that step's merges
-(`test/harness/e2e/trace.zig:570`, `:640`); only the report reads them once, from the last
-state (`invoke.zig:118`, `observation.zig:130`). **Owner:** the E2E observer. **Next:** collect
-the distinct merges (by authorization) across the step captures, in sequence order, into the
-report (a report version, §2 rule 12), amending those F0100 lines and e2e.md:641-643 (which
-states the limit meanwhile); F0100:1366-1367, the engine's rule, stays. Each `Merge` already
-carries its `operation` and `origin` (`atomic_repair.zig:35`, `:39`). Proof: a scripted run with
-several merges in one unit and merges in two units reports each merge once, in order.
+step whose prompt no non-repair step binds). Last taken 19 November 2026 on the working tree after
+T2 (a modified build; 145 scenarios, 1,969 calls, a freeze not retained). Its counts, beside the ones
+taken 14 November 2026 after E5 (freeze `evaluations/request-projection/e5-final`) and 2 November 2026
+on the `b38628c` tree (freeze `evaluations/request-projection/b38628c`, 130 scenarios, 1,714 calls), are
+in [Z_SPEC01](Z_SPEC01.md) T5. No retake lies between them, so each difference is the net of every
+change between the two dates, not one change's share. **Due:** with the next change set that a phase
+reports on. T5.4 is now 7, the sites under "Repair requests without step guidance". That list named
+six until this count; `repair` in `generate-scenarios` (`spec.workflow.yaml:772`) is the seventh, and
+when it joined isn't recorded.
 
 ## 7. Human and decision track (H)
 
@@ -763,9 +734,11 @@ or trimming calls for cost alone is excluded (AGENTS.md; ADR 0011 for any size c
 
 The user decides when to change or compare models; all retained call evidence is GPT-OSS-20B. On 17
 November 2026 the user selected `anthropic` / `claude-haiku-5-5` for every shipped E2E slot (ADR 0029)
-and set its response mode to native (`"json": true`; `fixes/JSON.md` D1). Open for its first set:
-measure its maximum-output time to replace the interim 180,000 ms `requestTimeoutMs`, and its
-response mode. §1's reference is a GPT-OSS state.
+and set its response mode to native (`"json": true`; `fixes/JSON.md` D1). **Decided** 19 November 2026
+(user: "implement group 1 with above recommendations"): keep the 180,000 ms `requestTimeoutMs`. In the 18 Haiku runs
+of the Q23 and Q24 sets the event span of a whole run was 18.8 to 34.8 seconds (`measures.json`
+`latency_ms`) and no run reported a provider diagnostic, so no call neared the deadline. No call produced a
+maximum-output answer, so that time is still unmeasured; reopen if a call times out.
 
 ## 8. Research and backlog (R)
 
@@ -851,11 +824,6 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
     the first non-Spec publisher lands;
   - live negative cases as separate fixtures: none exist (`test/e2e/` holds the two
     development cases); adding them means live spend, the user's call.
-- **Live-test cost policy help:** ADR 0029 names `anthropic` / `claude-haiku-5-5` for
-  generation (user decision, 9 November 2026), but `test/harness/e2e/cli.zig:26`'s help still
-  lists only the two Bedrock tuples and the Bedrock credential, and
-  `test/harness/model_cost_policy.zig:23` cites ADR 0028 for the tuple. Correct both with the
-  next harness code change. No live native-mode Claude call has been made.
 
 ## 9. Guardrails
 
@@ -1347,19 +1315,6 @@ lock first. 13-05:209 and ADR 0021:24-25 predate the source-preservation project
 
 ### 10.6 Tests and harness
 
-**C40. A scripted scenario is identified by its position, and the position names its
-request-projection freeze.** `runSpecificationWorkflows`
-(`test/integration/workflow_tests.zig`) derives its scenario indices from list lengths
-(`classification_repair_start` to `link_start`), and 17 of its lines branch on a literal index
-(grep). The index names the freeze directory (`Recorder` at `:1621`;
-`src/test_fixtures/request_projection.zig:168-170`), so one added fault renumbers every later
-scenario: under `evaluations/request-projection/` the three
-source-preservation scenarios are 177–179 in freeze `93476e7`, 125–127 in `2b3dc8b`, 126–128 in
-`b38628c` and 128–130 in `lever-after`. Two freezes taken either side of such a change don't
-line up by path for §2 rule 10's byte comparison, and each scenario T3 asks for causes one
-shift. **Class:** measurement. **Owner:** `runSpecificationWorkflows` and
-`request_projection.zig`. **Next:** key a scenario and its freeze directory by a stable name.
-
 **C41. The scripted driver is also the oracle, and its checks are gated on name literals (adds to
 E8).** `src/test_fixtures/spec_generation_driver.zig` gates checks on operation IDs on seven lines
 (`:558-560`, `:578`, `:609`, `:630`, `:634`), on the `extraction-schema` resource (`:275`) and on
@@ -1374,20 +1329,19 @@ harness's `invoke.run` stops before publication (traced), so the harness's succe
 to end only live.
 
 **C43. Scenarios patch shipped assets by exact text with no check that the patch applied.**
-`workflow_tests.zig:1558` (`"group-size: 8"`) and `:1567` (`"/reason"` in
+`workflow_tests.zig` (`"group-size: 8"` and `"/reason"` in
 `extraction.composition.json`). If either text changes, the scenario runs unpatched and passes.
 The guarded form is at `test/harness/integration/tests.zig:145-146`.
 
 **C44. Scripted branches that no test selects (adds to T3).** 8 of the driver's 25 fault shapes
-(`spec_generation_driver.zig:13`: seven of the nine `review_*` shapes and
-`runaway_partial_assignment`) and 10 of the 11 support faults
-(`spec_generation_responses.zig:12`; only `foreign_source_single` is set,
-`workflow_tests.zig:1649`, `:1703`). Checked by grep.
+(`Fault.shape` in `spec_generation_driver.zig`: seven of the nine `review_*` shapes and
+`runaway_partial_assignment`). Checked by grep. `SupportFault` has since shrunk to its one
+selected member, `foreign_source_single`.
 
 **C45. Versions, layouts and lists repeated by hand.**
 
-- `spec-e2e-report/v21` is spelled on 82 lines in 16 test files (with 11 more lines naming a
-  superseded version in the rejection tests), because the schema field has no default
+- `spec-e2e-report/v22` is spelled on every test line that builds a report, in 16 test files (and
+  its predecessor on the lines of the rejection tests), because the schema field has no default
   (`test/harness/e2e/contracts.zig:223`). `baseline-acquisition/v15`, `e2e-step-event/v6`,
   `baseline-score/v7` and `provider-compatibility-report/v4` add 14 more. §2 rule 12 makes each
   closed-member change a version bump.
@@ -1412,7 +1366,6 @@ comment containing "plan", "hard" or "reference" fails a test with no boundary c
   graph (traced).
 - Each integration run writes about 1,000 files that nothing reads: 18 dump prefixes and an
   unconditional step trace for every scenario (`workflow_tests.zig:1728-1729`; traced).
-  `build/test_run_inputs.zig:28-30` lists three `principle-citation-*` inputs that nothing names.
   Adds to T2.
 - `src/test_fixtures/authoring_association_calibration.zig:16` reads a retained run of 11 October
   2026 that is no longer under `zig-out/e2e-spec/`, so part of a unit test returns `.unavailable`

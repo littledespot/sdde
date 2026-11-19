@@ -96,9 +96,12 @@ ambiguous, redacted or inconsistent captures reject before dispatch. Current
 workflow sources cannot replace missing historical request data.
 
 The launcher loads the same optional `.env.e2e` as `e2e-spec.sh`, with the same
-local-file override behavior. It uses `TEST_AWS_BEARER_TOKEN_BEDROCK` for the
-captured Bedrock provider; evaluator settings are not required. A direct invocation
-uses the caller's environment:
+local-file override behavior. The captured call's provider family selects the
+credential: `TEST_AWS_BEARER_TOKEN_BEDROCK` for `aws-bedrock` or
+`TEST_ANTHROPIC_API_KEY` for `anthropic`
+([ADR 0028](../decisions/0028-anthropic-messages-provider.md)). No other family's
+key and no production variable stands in. Evaluator settings are not required. A
+direct invocation uses the caller's environment:
 
 ```sh
 zig build e2e-call -- \
@@ -110,9 +113,9 @@ zig build e2e-call -- \
 The selected model must resolve through the selected run's retained provider
 catalogue and the current registered model-binding contracts. The diagnostic
 creates an ephemeral in-memory binding: it inherits the captured provider and takes
-the selected model's Bedrock configuration (Region, family, maximum output and
-deadline) from the catalogue. Captured response mode and other inference controls are
-preserved. Unsupported combinations reject before
+the selected model's configuration from the catalogue (Bedrock: Region, family,
+maximum output and deadline; Anthropic: maximum output and deadline). Captured
+response mode and other inference controls are preserved. Unsupported combinations reject before
 dispatch; no model, response mode or control silently falls back. The effective
 binding must also pass the live cost policy before the credential is read. A retained
 catalogue must satisfy the current catalogue contract, including `requestTimeoutMs`
@@ -122,7 +125,8 @@ command does not rewrite those controls or add catalogue entries. The capture
 and its configuration remain unchanged. Browser exact and modified replay retain
 their existing model/settings restrictions.
 
-The launcher reuses the canonical Bedrock Converse encoder and decoder. The catalogue
+The launcher reuses the canonical encoder and decoder of the captured provider's
+family: Bedrock Converse or the Anthropic Messages API. For Bedrock the catalogue
 entry's compiled family ([ADR 0029](../decisions/0029-bedrock-model-families.md)) fixes
 the provider-specific `additionalModelRequestFields`; supported common controls use
 `inferenceConfig`. Complete engine validation still applies. No model-name prefix
@@ -355,7 +359,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v21`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v22`; it stays null until ADR 0041 is
   implemented (SPEC01 E0).
 
 ### Rubric assessment
@@ -607,7 +611,7 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v21`,
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v22`,
 `e2e-step-event/v6`, `baseline-freeze/v3`, `baseline-acquisition/v15`,
 `baseline-score/v7`, `baseline-budget-feasibility/v2`, the evaluator packets'
 `baseline-assessment-inputs/v2` and `provider-compatibility-report/v4`; assessor
@@ -658,9 +662,10 @@ a stop leaves no partial output.
   runaway re-sends); re-sends; the admission escape; repair merges; and each stage's
   sends, input, output and total tokens and shares, from each sent attempt's request
   purpose and owner through the baseline scorer's stage classification and
-  accumulation. Repair merges are the report's `repairs`: the last merge of each
-  candidate still retained when the run ends, not every repair, so earlier merges in a
-  unit and every merge of an earlier unit are missed (SPEC01 T8). Only the `schema` member is read
+  accumulation. Repair merges are the report's `repairs`: every merge a step of the run
+  retained, once for each authorization and in the order first seen, so a merge a later
+  merge or unit replaced is still counted. A repair attempt that ends without a merge isn't
+  listed, so the list isn't a count of repair attempts. Only the `schema` member is read
   first. A missing report, or one of an earlier `spec-e2e-report` version, is recorded
   as `unavailable`, and the run still counts as attempted. A current-version report
   that doesn't decode, or any other version, makes the run unmeasurable.
@@ -744,12 +749,19 @@ request-projection freezes, not by a live run.
   `agreements`, the admission rule recorded for replay (ADR 0036 Decision 7), which is no
   model input. Member order and number spelling stay the description's own.
 - `SDDE_REQUEST_PROJECTION=<dir> zig build test-integration` writes
-  `<dir>/<group>/scenario-NNN/call-NNNN.json`, one file per invocation in provider-call
+  `<dir>/<group>/<scenario name>/call-NNNN.json`, one file per invocation in provider-call
   order within each scenario, grouped by scenario case so groups never overwrite each
-  other's numbers, and `<dir>/manifest.json`, the group, scenario and call counts of
-  the whole directory. Unset, projections stay in memory. Set to an empty value or a
-  directory that can't be created or opened, each recording scenario panics, naming
-  the value, and the run fails.
+  other's scenarios, and `<dir>/manifest.json`, the group, scenario and call counts of
+  the whole directory. A scenario's name says what it exercises (a range and its member,
+  such as `reconciliation-cycle` or `fault-repair-missing_answer-persistent`, or a range
+  and its offset, such as `summary-02`), so adding a scenario shifts only the later
+  members of its own offset range. A name is one to 80 lowercase letters, digits, hyphens
+  or underscores, and doesn't start with a hyphen. Two scenarios of one group never share
+  one: the second would overwrite the first, so the sink rejects it at the scenario's
+  first call. Freezes taken before the names key their directories `scenario-NNN` by
+  position and aren't comparable with later ones. Unset, projections stay in memory.
+  Set to an empty value or a directory that can't be created or opened, each recording
+  scenario panics, naming the value, and the run fails.
 - A freeze needs a fresh run. `-Dreuse-test-runs` passes the test process only `PATH`
   and `HOME`, so a reused or fresh opt-in run writes no freeze.
 - Take each freeze in a new directory, such as

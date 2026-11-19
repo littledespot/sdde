@@ -148,9 +148,10 @@ and qualification. No real grader is currently qualified by these pending record
   Bedrock family, and explicit grader/acceptance evidence with an always-unresolved
   decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v21` (v18 plus the closed `reason` of an `authority` terminal rejection,
-  which includes the repair-key and request-assignment population bounds, and
-  the `first_cause` the run kept beside its terminal rejection): the
+- `spec-e2e-report/v22` (v18 plus the closed `reason` of an `authority` terminal rejection,
+  which includes the repair-key and request-assignment population bounds, the
+  `first_cause` the run kept beside its terminal rejection, and every repair merge the
+  steps retained in `repairs`, not the last of each candidate): the
   single total token budget and aggregate actual usage,
   each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and

@@ -403,7 +403,7 @@ test "Bedrock evaluation validates explicit test selection and registered contro
     try models.appendSlice(a, &@import("../../src/model_contract_test_fixture.zig").bedrock_model_ids);
     for (cost_policy.permitted) |tuple| try models.append(a, tuple.model);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family.
+        // The Bedrock-only evaluator binding covers the Bedrock family.
         const family = entry.facts.bedrockFamily() orelse continue;
         for (std.enums.values(domain.BedrockRegion)) |region| for (models.items) |raw_model| {
             const model = c.ModelId.parse(raw_model).?;
@@ -495,7 +495,7 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
     const a = arena.allocator();
     const inputs = try capture(a);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family,
+        // The Bedrock-only evaluator binding covers the Bedrock family,
         // with a judge model and Region that name nothing real (ADR 0029).
         const family = entry.facts.bedrockFamily() orelse continue;
         const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
@@ -580,7 +580,7 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
     const response = try std.fmt.allocPrint(a, "HTTP/1.1 200 OK\r\nX-Amzn-RequestId: bedrock-request-1\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
     const fixture_module = @import("../../src/model_http_test_fixture.zig");
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family,
+        // The Bedrock-only evaluator binding covers the Bedrock family,
         // with a judge model and Region that name nothing real (ADR 0029).
         const family = entry.facts.bedrockFamily() orelse continue;
         const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
@@ -1903,7 +1903,7 @@ test "Bedrock judge temperature is the evaluator's own value, present exactly wh
     const a = arena.allocator();
     const inputs = try capture(a);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family.
+        // The Bedrock-only evaluator binding covers the Bedrock family.
         const family = entry.facts.bedrockFamily() orelse continue;
         const selection: configuration.Selection = .{
             .api = .bedrock_converse,

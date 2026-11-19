@@ -173,19 +173,20 @@ builds send the same schemas. The largest request kinds:
   `bedrock-mantle` Messages endpoint serves Claude Haiku 5.5 only in `us-gov-west-1`. ADR 0029
   covers Converse only, and ADR 0029:147-148 leaves Bedrock's Messages API endpoint undecided.
 
-### J3. Claude's response mode is native and unmeasured
+### J3. Claude's response mode is native
 
 - **Class:** successful completion: a malformed answer costs a correction.
 - **Owner:** the catalogue `json` flag (`design/contracts/12-model-boundary.md:359-361`); the
   decision is SPEC01 H5's, and ADR 0028:177-179 still lists it as waiting on measured
   compatibility.
-- **Status:** set native by D1. Native mode is implemented, admitted by the registered contract (§2)
-  and tested offline (`src/adapters/provider/anthropic_request.zig:92-108`). It has never been sent
-  live: the entry ran prompt-only on 9 November, and every E2E slot selects it since 17 November.
+- **Status:** set native by D1 and measured on 19 November 2026. All 18 Haiku runs of SPEC01's Q23
+  and Q24 sets sent `native_schema` from their first call and had 0 protocol corrections
+  (`measures.json`), so Anthropic accepted the projection's root `anyOf` (every run's first call) and no
+  malformed answer appeared. The mode stays native.
 - **Evidence:** §3.1 (no Claude answer failed to parse); the native projection emits only features in
-  Claude's documented subset (§1; `src/domain/model_schema_projection.zig:139-181`); and §3.2 (the
-  counts are within the explicit limits; the root `anyOf` and the grammar size are unverified).
-- **Next:** the first approved Claude set measures native mode (D1).
+  Claude's documented subset (§1; `src/domain/model_schema_projection.zig:139-181`); §3.2 (the
+  counts are within the explicit limits).
+- **Open:** the grammar-size limit and the compilation time (§6).
 
 ### Checked, no change
 
@@ -229,7 +230,7 @@ day (ADR 0029), so the next approved run sends native mode.
   against the selection's prompt-only set as a reference. That reference extends SPEC01 §2 rule 7,
   which names the last kept state. With the flag set, the first Claude set has none, so a quality
   change in it isn't split between model and mode, and no rule 4 screen can precede it, since
-  `e2e-call` keeps the captured response mode (`design/harness/e2e.md:113-114`). The phase's own
+  `e2e-call` keeps the captured response mode (`design/harness/e2e.md:117-118`). The phase's own
   class is malformed answers (J3), none of which Claude's 22 answers so far has shown. Its Keep if
   measures are the user's to set before that set (rule 6); no provider 400 and no new rejection
   class are proposed. Its revert is the one catalogue line (rule 1).
@@ -265,9 +266,9 @@ stop sending `outputConfig` while keeping the full schema text.
 
 ## 6. Open
 
-- Any native Claude request, on either route: whether Anthropic's compiler accepts the projection's
-  root `anyOf` (§3.2), its internal grammar-size limit, its compilation time against the
-  180-second deadline, and the effect of its format prompt on output are unmeasured.
+- Any native Claude request, on either route: Anthropic's internal grammar-size limit, its
+  compilation time against the 180-second deadline, and the effect of its format prompt on output
+  are unmeasured. Its compiler accepts the projection's root `anyOf` (J3).
 - Whether a provider's count limits make a schema "unsupported" under ADR 0006:120 and :284-285, so
   that the engine refuses it before the call rather than taking the provider's 400: undecided. No
   current schema is near a documented limit (§3.2).

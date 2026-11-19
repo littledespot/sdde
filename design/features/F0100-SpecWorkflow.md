@@ -1369,8 +1369,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   candidate.
 - A native observer copies them into the existing E2E events and reports; it neither
   parses model text nor decides progress.
-- These are retained merge snapshots, not a total repair count or proof of validation
-  acceptance.
+- The E2E report lists every merge its steps retained, once for each authorization. A repair
+  attempt that ends without a merge isn't listed, so the list is not a total repair count or
+  proof of validation acceptance.
 - Protocol corrections remain separate provider attempts.
 
 - A records response with a non-requirement statement naming both taken and untaken

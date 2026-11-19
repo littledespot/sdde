@@ -10,39 +10,30 @@ const std = @import("std");
 /// parent directory whose name starts with its last component, recursively.
 /// Locations that tests also write are included, at the cost of fewer reuses.
 pub const ignored = [_][]const u8{
+    ".zig-cache/alternating-missing-recovery",
     ".zig-cache/authoring-associations",
     ".zig-cache/authoring-comparison",
-    ".zig-cache/chunk13-admission-",
+    ".zig-cache/brief-request",
     ".zig-cache/chunk13-compatible-request",
     ".zig-cache/chunk13-conflict-request",
-    ".zig-cache/chunk18-stack-request-after.json",
-    ".zig-cache/chunk18-stack-request-before.json",
-    ".zig-cache/d1-review",
     ".zig-cache/exact-value-production-admission",
-    ".zig-cache/fix002-question-conflict",
+    ".zig-cache/false-conflict-questions",
+    ".zig-cache/false-conflict-recovery",
+    ".zig-cache/global-protocol-failure",
+    ".zig-cache/global-protocol-recovery",
     ".zig-cache/membership-extra",
     ".zig-cache/membership-missing",
     ".zig-cache/phase4-complete",
     ".zig-cache/phase4-question",
     ".zig-cache/phase4-unjustified",
-    ".zig-cache/principle-citation-alternating",
-    ".zig-cache/principle-citation-recovery",
-    ".zig-cache/principle-citation-repeated",
     ".zig-cache/provenance-answer-exhaustion",
     ".zig-cache/provenance-answer-recovery",
-    ".zig-cache/r35-request",
-    ".zig-cache/r36-failure",
-    ".zig-cache/r36-recovery",
-    ".zig-cache/r37-recovery",
-    ".zig-cache/r40-request",
-    ".zig-cache/r41-recovery",
-    ".zig-cache/r42-recovery",
-    ".zig-cache/r43-recovery",
     ".zig-cache/representation-admission",
     ".zig-cache/review-decision-greeting",
     ".zig-cache/review-decision-loan",
     ".zig-cache/semantic-simplicity/phase0",
     ".zig-cache/source-loss-citation-completeness-current-contract",
+    ".zig-cache/summary-protocol-request",
     ".zig-cache/workflow-step-trace",
     "zig-out/baseline/claims",
     "zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959",
@@ -133,7 +124,7 @@ test "every ignored path that test sources name is keyed or a live output root" 
 
 test "ignored-path coverage accepts listed locations and rejects new ones" {
     try std.testing.expect(covered(".zig-cache/authoring-associations/v14-text", false));
-    try std.testing.expect(covered(".zig-cache/chunk13-admission-", true));
+    try std.testing.expect(covered(".zig-cache/workflow-step-trace", true));
     try std.testing.expect(covered("zig-out/e2e-spec", false));
     try std.testing.expect(!covered("zig-out/e2e-spec", true));
     try std.testing.expect(!covered("zig-out/e2e-spec/2026-01-01T00-00-00Z-new-run", false));
@@ -142,7 +133,7 @@ test "ignored-path coverage accepts listed locations and rejects new ones" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var uncovered: std.ArrayList([]const u8) = .empty;
-    try scan(arena.allocator(), "sample.zig", "const a = \".zig-cache/new-evidence/{s}.json\"; const b = \".zig-cache/d1-review\"; const c = \"zig-out/e2e-spec/{s}/report.json\";", &uncovered);
+    try scan(arena.allocator(), "sample.zig", "const a = \".zig-cache/new-evidence/{s}.json\"; const b = \".zig-cache/phase4-complete\"; const c = \"zig-out/e2e-spec/{s}/report.json\";", &uncovered);
     try std.testing.expectEqual(@as(usize, 2), uncovered.items.len);
     try std.testing.expectEqualStrings("sample.zig: .zig-cache/new-evidence/{s}.json", uncovered.items[0]);
     try std.testing.expectEqualStrings("sample.zig: zig-out/e2e-spec/{s}/report.json", uncovered.items[1]);

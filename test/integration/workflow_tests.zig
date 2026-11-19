@@ -1140,6 +1140,24 @@ test "request projection records every provider invocation, keyed and determinis
     try untraced_allocator.run(checkRequestProjection, .{});
 }
 
+test "a scenario's freeze directory is its stable name: one safe directory name that no other scenario holds" {
+    const Name = request_projection.Name;
+    for ([_][]const u8{ "base-00", "fault-repair-missing_answer-persistent", "a", "x" ** request_projection.max_name }) |text| {
+        try std.testing.expectEqualStrings(text, (try Name.parse(text)).slice());
+    }
+    // A name is never a path, an option, empty, over long or in another case.
+    for ([_][]const u8{ "", "-fault", "Fault", "a/b", "a b", "a.b", "..", "x" ** (request_projection.max_name + 1) }) |text| {
+        try std.testing.expectError(error.InvalidScenarioName, Name.parse(text));
+    }
+    var sink: request_projection.Sink = .{ .allocator = std.testing.allocator, .io = std.testing.io };
+    defer sink.entries.deinit(std.testing.allocator);
+    try sink.entries.append(std.testing.allocator, .{ .scenario = 0, .name = try Name.parse("one"), .call = 1, .request = 1, .attempt = 1, .owner = .reference_chunk, .purpose = .initial_generation, .digest = @splat(0) });
+    // The scenario that holds a name may claim it again; another scenario may take another name, never that one.
+    try sink.claim(0, try Name.parse("one"));
+    try sink.claim(1, try Name.parse("two"));
+    try std.testing.expectError(error.DuplicateScenarioName, sink.claim(1, try Name.parse("one")));
+}
+
 test "an outcome link request is projected as a closed choice with its own prompt, once per pending edge case" {
     try untraced_allocator.run(checkLinkProjection, .{});
 }
@@ -1155,7 +1173,11 @@ fn checkLinkProjection(allocator: std.mem.Allocator) !void {
     // case, after every other request of its run, and each request offers its own edge case.
     const native = sink.entries.items[0].scenario;
     var calls: usize = 0;
-    for (sink.entries.items) |entry| calls += @intFromBool(entry.scenario == native + 1);
+    var asking: request_projection.Name = .{};
+    for (sink.entries.items) |entry| if (entry.scenario == native + 1) {
+        calls += 1;
+        asking = entry.name;
+    };
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1163,7 +1185,7 @@ fn checkLinkProjection(allocator: std.mem.Allocator) !void {
     var asked: usize = 0;
     var bodies: std.ArrayList([]const u8) = .empty;
     for (1..calls + 1) |call| {
-        const path = try std.fmt.allocPrint(a, "scenario_links/scenario-{d:0>3}/call-{d:0>4}.json", .{ native + 1, call });
+        const path = try std.fmt.allocPrint(a, "scenario_links/{s}/call-{d:0>4}.json", .{ asking.slice(), call });
         const projection = try request_projection.Projection.decode(a, try freeze.dir.readFileAlloc(io, path, a, .limited(16 * 1024 * 1024)));
         const schema = (try std.json.parseFromSlice(std.json.Value, a, projection.schema, .{})).value;
         const properties = if (schema == .object) schema.object.get("properties") else null;
@@ -1234,7 +1256,7 @@ fn checkRequestProjection(allocator: std.mem.Allocator) !void {
     // A written projection keeps the request's model-visible members and omits the
     // three that refactors change by design.
     const entry = first.entries.items[0];
-    const path = try std.fmt.allocPrint(allocator, "source_preservation/scenario-{d:0>3}/call-{d:0>4}.json", .{ entry.scenario, entry.call });
+    const path = try std.fmt.allocPrint(allocator, "source_preservation/{s}/call-{d:0>4}.json", .{ entry.name.slice(), entry.call });
     defer allocator.free(path);
     const bytes = try freeze.dir.readFileAlloc(io, path, allocator, .limited(16 * 1024 * 1024));
     defer allocator.free(bytes);
@@ -1357,6 +1379,19 @@ fn testSpecificationWorkflows(workflow_cases: SpecificationCases) !void {
     return untraced_allocator.run(runSpecificationWorkflows, .{ workflow_cases, null });
 }
 
+/// A fault scenario's name: its stage, shape and repetition, which identify it without its position.
+fn faultName(buffer: []u8, prefix: []const u8, fault: @import("../../src/test_fixtures/spec_generation_driver.zig").Fault) ![]const u8 {
+    const stage = @tagName(fault.stage);
+    const shape = @tagName(fault.shape);
+    return switch (fault.repetition) {
+        .once => std.fmt.bufPrint(buffer, "{s}-{s}-{s}", .{ prefix, stage, shape }),
+        .persistent => std.fmt.bufPrint(buffer, "{s}-{s}-{s}-persistent", .{ prefix, stage, shape }),
+        .first_request => |count| std.fmt.bufPrint(buffer, "{s}-{s}-{s}-first{d}", .{ prefix, stage, shape, count }),
+        .every_request => |count| std.fmt.bufPrint(buffer, "{s}-{s}-{s}-every{d}", .{ prefix, stage, shape, count }),
+        .recover_then_exhaust => |count| std.fmt.bufPrint(buffer, "{s}-{s}-{s}-recover{d}", .{ prefix, stage, shape, count }),
+    };
+}
+
 /// `projection` collects the request projection; without one, a sink
 /// that writes a freeze only when the environment names one.
 fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: SpecificationCases, projection: ?*request_projection.Sink) !void {
@@ -1467,7 +1502,16 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     // protocol correction naming both claims, and the run publishes from the answer that keeps one. It
     // follows the others so that no earlier scenario changes its number.
     const split_claim_once = scenario_stop_start + 5;
-    var costs: [scenario_stop_start + 6]?timing.Sample = @splat(null);
+    // ADR 0035: a record that restates the story is deleted natively and the outcome naming its claim
+    // stays. The runs share the equal-criteria runs' sources and `.chosen` edge cases, which pair the claims
+    // into groups of two, so the first group has a second claim that keeps its requirement. One run for each
+    // kind of restating record. They follow the others so that no earlier scenario changes its number.
+    const story_restatement_start = scenario_stop_start + 6;
+    const story_restatement_kinds = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").RestatingKind);
+    // A no-feature-claim answer whose reason the text validation rejects takes the reference-text repair
+    // route of `extract-references`, and its repaired answer validates. It follows the restatement runs.
+    const text_repair_index = story_restatement_start + story_restatement_kinds.len;
+    var costs: [text_repair_index + 1]?timing.Sample = @splat(null);
     const case_range_begin: usize = switch (workflow_cases) {
         .existing => 0,
         .source_preservation => preservation_start,
@@ -1497,8 +1541,10 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const membership_scenario = scenario >= membership_start and scenario < preservation_start;
         const link_scenario = scenario >= link_start and scenario < scenario_repair_start;
         const scenario_repair_scenario = scenario >= scenario_repair_start and scenario < scenario_stop_start;
-        const equal_scenario = scenario >= equal_once and scenario != split_claim_once;
-        const stop_scenario = scenario >= scenario_stop_start and !equal_scenario;
+        const text_repair_scenario = scenario == text_repair_index;
+        const story_restatement_scenario = scenario >= story_restatement_start and !text_repair_scenario;
+        const equal_scenario = scenario >= equal_once and scenario != split_claim_once and !story_restatement_scenario and !text_repair_scenario;
+        const stop_scenario = scenario >= scenario_stop_start and !equal_scenario and !story_restatement_scenario and !text_repair_scenario;
         const preservation_scenario = scenario >= preservation_start and scenario < link_start;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
         const global_scenario = scenario >= global_start and scenario < brief_start;
@@ -1515,6 +1561,12 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const protocol_text_scenario = scenario >= protocol_text_start and scenario < protocol_selection_scenario;
         const protocol_content_scenario = scenario >= protocol_content_start and scenario < omission_scenario;
         const fault: ?@TypeOf(faults[0]) = if (brief_scenario) .{ .stage = .generation, .shape = .forbidden_provenance, .repetition = if (scenario - brief_start < 2) .persistent else .{ .first_request = 2 } } else if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else if (scenario == scenario_exhaustion) .{ .stage = .scenarios, .shape = .review_partial_assignment, .repetition = .persistent } else if (scenario == equal_once) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .{ .first_request = 1 } } else if (scenario == equal_exhaustion) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .persistent } else if (scenario == split_claim_once) .{ .stage = .extraction, .shape = .split_claim, .repetition = .{ .first_request = 1 } } else null;
+        // A scenario's freeze directory is keyed by what it exercises, so adding a fault or a range
+        // leaves every other range's names alone. An enumeration or a fault list names its member; a
+        // numbered range names its member by its offset.
+        var name_buffer: [request_projection.max_name]u8 = undefined;
+        const name_text = if (scenario < 14) try std.fmt.bufPrint(&name_buffer, "base-{d:0>2}", .{scenario}) else if (brief_scenario) try std.fmt.bufPrint(&name_buffer, "brief-{d:0>2}", .{scenario - brief_start}) else if (scenario == records_gap_scenario) "records-gap" else if (scenario == scenario_exhaustion) "scenario-exhaustion" else if (scenario == equal_once) "equal-once" else if (scenario == equal_exhaustion) "equal-exhaustion" else if (scenario == equal_across_groups) "equal-across-groups" else if (scenario == split_claim_once) "split-claim-once" else if (scenario < classification_repair_start) try faultName(&name_buffer, "fault", faults[scenario - 14]) else if (classification_scenario) try std.fmt.bufPrint(&name_buffer, "classification-{d:0>2}", .{scenario - classification_repair_start}) else if (reconciliation_scenario) try std.fmt.bufPrint(&name_buffer, "reconciliation-{s}", .{@tagName(reconciliation_faults[scenario - reconciliation_start])}) else if (repeated_scenario) try std.fmt.bufPrint(&name_buffer, "repeated-{d:0>2}", .{scenario - repeated_start}) else if (protocol_text_scenario) try std.fmt.bufPrint(&name_buffer, "protocol-text-{d:0>2}", .{scenario - protocol_text_start}) else if (scenario == protocol_selection_scenario) "protocol-selection" else if (protocol_content_scenario) try std.fmt.bufPrint(&name_buffer, "protocol-content-{d:0>2}", .{scenario - protocol_content_start}) else if (candidate_omission) try std.fmt.bufPrint(&name_buffer, "candidate-omission-{d:0>2}", .{scenario - omission_scenario}) else if (extraction_omission) try std.fmt.bufPrint(&name_buffer, "extraction-omission-{d:0>2}", .{scenario - extraction_omission_start}) else if (source_gaps) try std.fmt.bufPrint(&name_buffer, "source-gap-{d:0>2}", .{scenario - source_gap_start}) else if (evidence_scenario) try std.fmt.bufPrint(&name_buffer, "evidence-{d:0>2}", .{scenario - evidence_start}) else if (disposition_scenario) try std.fmt.bufPrint(&name_buffer, "disposition-{d:0>2}", .{scenario - disposition_start}) else if (source_repair_scenario and scenario - source_repair_start < source_losses.len) try std.fmt.bufPrint(&name_buffer, "source-repair-{s}", .{@tagName(source_losses[scenario - source_repair_start])}) else if (scenario == finer_composition_scenario) "source-repair-finer-composition" else if (source_repair_scenario) try faultName(&name_buffer, "loss-fault", loss_faults[scenario - loss_fault_start]) else if (summary_scenario) try std.fmt.bufPrint(&name_buffer, "summary-{d:0>2}", .{scenario - summary_start}) else if (global_scenario) try std.fmt.bufPrint(&name_buffer, "global-{d:0>2}", .{scenario - global_start}) else if (applicability) |mode| try std.fmt.bufPrint(&name_buffer, "applicability-{s}{s}", .{ @tagName(mode), if (other_applicability) "-other" else "" }) else if (membership_scenario) try std.fmt.bufPrint(&name_buffer, "membership-{d:0>2}", .{scenario - membership_start}) else if (preservation_scenario) try std.fmt.bufPrint(&name_buffer, "preservation-{d:0>2}", .{scenario - preservation_start}) else if (link_scenario) try std.fmt.bufPrint(&name_buffer, "link-{d:0>2}", .{scenario - link_start}) else if (scenario_repair_scenario) try std.fmt.bufPrint(&name_buffer, "scenario-repair-{d:0>2}", .{scenario - scenario_repair_start}) else if (story_restatement_scenario) try std.fmt.bufPrint(&name_buffer, "story-restatement-{s}", .{@tagName(story_restatement_kinds[scenario - story_restatement_start])}) else if (text_repair_scenario) "text-repair-reason" else return error.UnnamedScenario;
+        const scenario_name = try request_projection.Name.parse(name_text);
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1533,13 +1585,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // Every source set below opens with a level-1 title heading (ADR 0048).
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\n" ++ "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
-        if (link_scenario or scenario_repair_scenario or equal_scenario) {
+        if (link_scenario or scenario_repair_scenario or equal_scenario or story_restatement_scenario) {
             const several = scenario != link_start;
             // A choice needs two claims in each group, which a list's items give (ADR 0038
             // Decision 4); the other cases state one claim in each source. Beside its items, the
             // heading of a list is a claim of its own, so the first source's three items make
             // four claims and every group holds two. Equal criteria need two scenarios in a group.
-            const chosen = scenario == link_start + 1 or equal_scenario;
+            const chosen = scenario == link_start + 1 or equal_scenario or story_restatement_scenario;
             try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (chosen) "# Loan renewal\n- Renew the loan.\n- Show the new return deadline.\n- Keep a record of the renewal.\n" else if (several) "# Loan renewal\nRenew the loan.\n" else "# Loan renewal\nA librarian renews an eligible loan and sees the new return deadline.\n" });
             if (several) {
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/receipt.md", .data = if (chosen) "- Issue a receipt.\n- Show the receipt number.\n" else "Issue a receipt.\n" });
@@ -1548,6 +1600,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         // One source group of one claim, so its batch has exactly one scenario slot.
         if (stop_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nRenew the loan.\n" });
+        // A first source that states nothing about the feature, so a no-feature-claim answer is the right one
+        // for it, beside one that states a requirement. The scripted generator defects the first chunk, which
+        // is the first source in path order, so `notes.md` must sort before `stories.md`.
+        if (text_repair_scenario) {
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/notes.md", .data = "Reading notes.\n" });
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nRenew the loan.\n" });
+        }
         if (membership_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - membership_start) % 4 >= 2)
             "# Library loans\nMOCK Track library loans and display their return deadlines.\n"
         else
@@ -1655,7 +1714,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var authorization: @import("../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = allocator };
         native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
         var fake = @import("../../src/model_request_workflow_test.zig").invocationProvider(&runner, allocator);
-        var recorder: request_projection.Recorder = .{ .sink = sink, .scenario = scenario, .inner = fake.interface() };
+        var recorder: request_projection.Recorder = .{ .sink = sink, .scenario = scenario, .name = scenario_name, .inner = fake.interface() };
         native.model_requests.invoke_model.action = .{ .provider = recorder.interface() };
         var driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .allocator = allocator, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .entities_required = scenario == 11 };
         driver.repeated_provenance_fault = scenario == 6;
@@ -1668,7 +1727,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 driver.repair_across_units = selected_fault.repetition == .recover_then_exhaust;
                 driver.measurement_prefix = if (selected_fault.repetition == .persistent) ".zig-cache/provenance-answer-exhaustion" else ".zig-cache/provenance-answer-recovery";
             }
-            if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/r37-recovery";
+            if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/alternating-missing-recovery";
         }
         if (applicability) |mode| {
             driver.applicability = mode;
@@ -1717,23 +1776,23 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (disposition_scenario) driver.disposition_sequence = if (scenario - disposition_start < 2) .exhaust else .recover;
         if (source_repair_scenario) {
             driver.source_loss = source_repairs[scenario - source_repair_start];
-            if (driver.source_loss == .false_conflict) driver.measurement_prefix = ".zig-cache/r41-recovery";
-            if (driver.source_loss == .false_conflict_questions) driver.measurement_prefix = ".zig-cache/fix002-question-conflict";
+            if (driver.source_loss == .false_conflict) driver.measurement_prefix = ".zig-cache/false-conflict-recovery";
+            if (driver.source_loss == .false_conflict_questions) driver.measurement_prefix = ".zig-cache/false-conflict-questions";
             if (scenario >= loss_fault_start) driver.fault = loss_faults[scenario - loss_fault_start];
         }
         if (preservation_scenario and scenario != preservation_start) driver.source_loss = .partial;
         if (summary_scenario) {
             driver.summary_sequence = if (scenario - summary_start < 2) .exhaust else .recover;
-            if (scenario == summary_start) driver.measurement_prefix = ".zig-cache/r35-request";
+            if (scenario == summary_start) driver.measurement_prefix = ".zig-cache/summary-protocol-request";
             driver.malformed_once = true;
         }
         if (global_scenario) {
             driver.global_sequence = if (scenario - global_start < 2) .exhaust else .recover;
-            driver.measurement_prefix = if (scenario == global_start) ".zig-cache/r36-failure" else if (scenario == global_start + 2) ".zig-cache/r36-recovery" else null;
+            driver.measurement_prefix = if (scenario == global_start) ".zig-cache/global-protocol-failure" else if (scenario == global_start + 2) ".zig-cache/global-protocol-recovery" else null;
             driver.malformed_once = true;
         }
         if (brief_scenario) {
-            if (scenario == brief_start) driver.measurement_prefix = ".zig-cache/r40-request";
+            if (scenario == brief_start) driver.measurement_prefix = ".zig-cache/brief-request";
             // Model provenance remains forbidden during correction. Native
             // binding supplies evidence after the semantic fields are admitted.
             const summary_first = (scenario - brief_start) % 2 == 0;
@@ -1748,9 +1807,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         };
         // Edge cases that name both claims of a group give it two scenario slots; their links are the
         // `.chosen` case's, which these runs share with it.
-        if (equal_scenario) driver.edge_cases = .chosen;
+        if (equal_scenario or story_restatement_scenario) driver.edge_cases = .chosen;
         driver.scenario_defect = scenario_repair_scenario;
         driver.behaviour_without_requirement = scenario == records_gap_scenario;
+        if (story_restatement_scenario) driver.story_restatement = story_restatement_kinds[scenario - story_restatement_start];
+        driver.defective_reason = text_repair_scenario;
         if (scenario == equal_across_groups) driver.fault = .{ .stage = .scenarios, .shape = .equal_across_groups, .repetition = .persistent };
         if (membership_scenario) {
             // This positive/retry matrix has one business group. Feature-wide
@@ -2537,6 +2598,44 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (fault != null and fault.?.shape == .split_claim) {
             // The correction named the split claims, and the answer it asked for published, so the fault was not vacuous.
             try std.testing.expect(driver.split_claim_corrections != 0);
+        }
+        if (story_restatement_scenario) {
+            assertion_context = "story-restatement";
+            // ADR 0035: the first group's batch holds a record that states the story's own text ahead of an
+            // outcome naming the same claim, and no requirement names that claim. ADR 0038 Decision 5 would
+            // delete that outcome and keep the restatement, so a batch that keeps the outcome and holds no
+            // record of the restating kind shows the story comparison ran. The scripts offer no other record of that kind.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            const sessions = @import("../../src/domain/specification_session.zig");
+            const story = session.units[sessions.story_index].?.response.content.primary_user_story;
+            var outcomes: usize = 0;
+            assertion_context = "story-restatement-kept-record";
+            for (session.record_batches) |batch| for (batch.response.content.records) |record| {
+                try std.testing.expect(!std.mem.eql(u8, @tagName(std.meta.activeTag(record.content)), @tagName(driver.story_restatement.?)));
+                try std.testing.expect(!try @import("../../src/domain/specification_generation.zig").restatesStory(allocator, story, record));
+                if (record.content == .user_visible_outcome) outcomes += 1;
+            };
+            assertion_context = "story-restatement-kept-outcome";
+            try std.testing.expect(outcomes != 0);
+            // The restating record was offered, and the run made no repair request: the engine deleted it itself.
+            assertion_context = "story-restatement-offered";
+            try std.testing.expect(driver.story_restatements != 0);
+            assertion_context = "story-restatement-no-repair-request";
+            for (runner.tokenLedger().accounted_operations.items) |operation| try std.testing.expect(operation.id.model_request_id.purpose != .atomic_repair);
+        }
+        if (text_repair_scenario) {
+            assertion_context = "text-repair";
+            // The rejected reason took one model request of the repair route, which belongs to an extraction
+            // chunk, and its corrected answer validated, so the run publishes instead of ending at the rejection.
+            var repairs: usize = 0;
+            for (runner.tokenLedger().accounted_operations.items) |operation| {
+                const id = operation.id.model_request_id;
+                if (id.purpose != .atomic_repair) continue;
+                try std.testing.expect(std.meta.activeTag(id.immutable_unit_owner_id) == .reference_chunk);
+                repairs += 1;
+            }
+            try std.testing.expectEqual(@as(usize, 1), repairs);
         }
         if (fault != null and fault.?.shape == .duplicate_record) {
             // The repeat was deleted natively: no batch keeps two records of equal content.

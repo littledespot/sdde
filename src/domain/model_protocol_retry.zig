@@ -38,6 +38,13 @@ pub const Diagnostic = union(enum) {
 /// A handoff-proven comparison, never an attempt count or response identity claim.
 pub const Repetition = enum { unconfirmed, confirmed };
 
+/// Appended to a correction's prompt only on retained evidence that the previous correction failed the
+/// same validation (design/contracts/22-repair.md §22.6.2).
+pub const repetition_notice = "The previous correction still failed this validation.";
+
+/// The correction's explanation when the provider returned no final answer.
+pub const missing_final_text_explanation = "Final-answer admission failed: no final answer was received.";
+
 pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_content: []const provider.ModelVisibleContent, rejected: *const @import("provider_invocation_validation.zig").Evidence, diagnostic: Diagnostic, repetition: Repetition, prompt: []const u8) preparation.Error!preparation.Owned {
     const original = rejected.request();
     if (original.model_request_id != source.request_binding.modelRequestId() or original.response_schema != try source.resultSchema()) return error.ModelRequestAssociationInvalid;
@@ -52,7 +59,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
     defer arena.deinit();
     const scratch = arena.allocator();
     const guidance = switch (diagnostic) {
-        .missing_final_text => try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .provider_content = provider.ProviderContentDiagnostic.missing_final_text }, .explanation = "Final-answer admission failed: no final answer was received." }, .{}),
+        .missing_final_text => try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .provider_content = provider.ProviderContentDiagnostic.missing_final_text }, .explanation = missing_final_text_explanation }, .{}),
         .decoder => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason }, .explanation = reason.explanation() }, .{}),
         .composition => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .composition = try reason.describe(scratch) }, .explanation = "Model-text composition failed. Correct every listed field within this same response and retain the original assignment." }, .{}),
         .schema => |reason| value: {
@@ -109,7 +116,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
     const parts = try scratch.alloc(provider.ModelVisibleContent, base_content.len + 2 + @as(usize, @intFromBool(content != null)));
     @memcpy(parts[0..base_content.len], base_content);
     parts[base_content.len] = .{ .guidance = if (repetition == .confirmed)
-        try std.fmt.allocPrint(scratch, "{s}\nThe previous correction still failed this validation.", .{prompt})
+        try std.fmt.allocPrint(scratch, "{s}\n{s}", .{ prompt, repetition_notice })
     else
         prompt };
     parts[base_content.len + 1] = .{ .guidance = guidance };

@@ -236,6 +236,40 @@ test "call report distinguishes protocol success from semantic and workflow acce
     try std.testing.expect(!report.succeeded());
 }
 
+test "a captured call replays with its own provider family's key and no other" {
+    const Family = @import("../../../src/adapters/provider/provider_api_key.zig").Family;
+    const production = @import("../../../src/adapters/system/provider_api_key_source.zig");
+    const names = @import("../environment.zig");
+    for (std.enums.values(Family)) |family| {
+        var source: std.process.Environ.Map = .init(std.testing.allocator);
+        defer source.deinit();
+        var replay: std.process.Environ.Map = .init(std.testing.allocator);
+        defer replay.deinit();
+        // Production variables and another family's test key never stand in.
+        for (std.enums.values(Family)) |other| {
+            try source.put(production.variable(other), "production-key");
+            if (other != family) try source.put(names.generationKeyName(other), "other-family-key");
+        }
+        try std.testing.expectError(error.MissingTestApiKey, @import("cli.zig").bindCredential(&source, &replay, family));
+        try source.put(names.generationKeyName(family), "invalid key");
+        try std.testing.expectError(error.InvalidTestApiKey, @import("cli.zig").bindCredential(&source, &replay, family));
+        for (std.enums.values(Family)) |other| try std.testing.expect(replay.get(production.variable(other)) == null);
+        try source.put(names.generationKeyName(family), "family-test-key");
+        try std.testing.expectEqualStrings("family-test-key", try @import("cli.zig").bindCredential(&source, &replay, family));
+        // The replay adapter finds the family's key and no other family's.
+        for (std.enums.values(Family)) |other| {
+            var material = production.read(std.testing.allocator, &replay, other);
+            defer material.deinit();
+            if (other == family) {
+                try std.testing.expect(material == .ready);
+                try std.testing.expectEqualStrings("family-test-key", material.ready.bytes);
+            } else {
+                try std.testing.expect(material == .unavailable);
+            }
+        }
+    }
+}
+
 test "an edit file replaces the captured content and schema through a closed contract" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

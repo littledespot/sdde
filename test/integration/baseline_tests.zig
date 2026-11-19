@@ -329,8 +329,8 @@ test "test.integration.baseline source-only native acquisition retains exact fir
         const old_version = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "baseline-acquisition/v15", "baseline-acquisition/v14");
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, old_version, frozen, freeze_sha256));
         // The native report it embeds is versioned too: a retained run's previous report no longer decodes.
-        const stale_report = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "spec-e2e-report/v21", "spec-e2e-report/v20");
-        try std.testing.expect(std.mem.indexOf(u8, stale_report, "spec-e2e-report/v20") != null);
+        const stale_report = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "spec-e2e-report/v22", "spec-e2e-report/v21");
+        try std.testing.expect(std.mem.indexOf(u8, stale_report, "spec-e2e-report/v21") != null);
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, stale_report, frozen, freeze_sha256));
         _ = try acquisition.decode(a, try std.json.Stringify.valueAlloc(a, report, .{}), frozen, freeze_sha256);
         // Rehashing a changed receipt cannot make it match native evidence.

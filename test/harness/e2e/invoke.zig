@@ -116,6 +116,8 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     if (invocation.pipeline_runner) |*runner| {
         if (outcome == .needs_user) report.clarifications = try @import("../../../src/application/workflow_clarification_report.zig").capture(allocator, &.{ .slots = runner.envelope.slots });
         try @import("observation.zig").capture(allocator, runner, report);
+        // Right after the capture, so no later failure leaves a report with only each candidate's last merge.
+        try trace.projectRepairs(allocator, report);
         try trace.last_rejection.project(allocator, trace.calls, report);
         try trace.correlate(allocator, report);
         try trace.progress.project(allocator, report);

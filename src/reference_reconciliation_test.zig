@@ -1,4 +1,6 @@
 const std = @import("std");
+/// The summary assignment's selection rule, as its owner words it: no repair scope's rules carry it.
+const summary_selection_rule = @import("domain/reference_reconciliation_diagnostic.zig").Constraint.nonempty_unique_allowed_claims.descriptionFor(.{ .assignment = .summary });
 
 test "collection producers survive field repairs and native insertions without a synthetic root origin" {
     const d = @import("domain/reference_reconciliation_diagnostic.zig");
@@ -590,7 +592,7 @@ test "summary signal and conflict repair packets retain precise shared text issu
                 defer packets.release(packet);
                 const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
                 const repair_input = body.value.object.get("input").?.object;
-                try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") == null);
+                try std.testing.expect(std.mem.indexOf(u8, packet.body(), summary_selection_rule) == null);
                 if (stage == 0) {
                     const initial_packet = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, input, fixture.inputs, fixture.text.registry, packet_guidance.marked.summary_purpose);
                     defer packets.release(initial_packet);
@@ -1132,7 +1134,7 @@ test "authorized content payloads cover every kind across statement and signal i
                 _ = (try f.finish(a, input, merged.proposal.global, fixture.context())).valid;
             } else try std.testing.expectEqualDeep(parsed.proposal.summary.statements[@intFromBool(!insert)..], merged.proposal.summary.statements[@intFromBool(!insert)..parsed.proposal.summary.statements.len]);
 
-            // Replay R22's native merge sequence: malformed semantics never gain
+            // Replay the native merge sequence: malformed semantics never gain
             // authority, even when an unchanged value has a new request origin.
             if (kind == .business and global and insert) {
                 const invalid = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context()).inputs), parsed, fixture.context(), auth, bad, correction);
@@ -2329,7 +2331,7 @@ test "mixed claim kinds choose independent selection repair across summaries and
             try std.testing.expectEqual(@as(i64, business.ordinal), choices.get("selection").?.array.items[0].integer);
             const repair_input = body.value.object.get("input").?.object;
             try std.testing.expectEqual(!global, repair_input.contains("summary_purpose"));
-            try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") == null);
+            try std.testing.expect(std.mem.indexOf(u8, packet.body(), summary_selection_rule) == null);
             const constraints = repair_input.get("constraints").?.array.items;
             var selection_rule = false;
             for (constraints) |constraint| {

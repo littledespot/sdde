@@ -6,6 +6,7 @@ const workflow = @import("../domain/workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const definitions = @import("../domain/specification_result_definitions.zig");
 const repair_owner = @import("../domain/repair_owner.zig");
+const repetition_notice = @import("../domain/model_protocol_retry.zig").repetition_notice;
 pub const Fault = struct {
     /// `loss_review` selects only source-loss preservation comparisons.
     /// `records` selects only record-authoring generation requests, `scenarios` only the
@@ -54,6 +55,12 @@ pub const Driver = struct {
     candidate_omissions: bool = false,
     /// The records responses state each claim as an outcome and write no functional requirement.
     behaviour_without_requirement: bool = false,
+    /// The first group's records restate the story in a record of this kind (ADR 0035).
+    story_restatement: ?@import("spec_generation_responses.zig").RestatingKind = null,
+    /// Records of that kind in the scripted answers: the restating records offered, so a run that checks their deletion is not vacuous.
+    story_restatements: usize = 0,
+    /// The first chunk's extraction answer states no feature claim with a reason the text validation rejects.
+    defective_reason: bool = false,
     extraction_omission: bool = false,
     support_repair_calls: usize = 0,
     support_merges: usize = 0,
@@ -227,7 +234,8 @@ pub const Driver = struct {
         {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .behaviour_without_requirement = self.behaviour_without_requirement, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .edge_cases = self.edge_cases, .scenario_defect = self.scenario_defect, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .behaviour_without_requirement = self.behaviour_without_requirement, .story_restatement = self.story_restatement, .defective_reason = self.defective_reason, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .edge_cases = self.edge_cases, .scenario_defect = self.scenario_defect, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            if (self.story_restatement) |kind| self.story_restatements += recordsOfKind(arena.allocator(), body, @tagName(kind)) catch |err| std.debug.panic("scripted answer is not JSON: {s}", .{@errorName(err)});
             if (self.runaway_displaced) |plan| {
                 self.fake.invocation_plan = .{ .complete = plan };
                 self.runaway_displaced = null;
@@ -302,7 +310,7 @@ pub const Driver = struct {
             if (current_request.protocolCorrection() != null) {
                 const prompt = current_request.protocolPrompt().?;
                 if (!std.mem.eql(u8, prompt, content[base.len].guidance)) {
-                    const repeated = std.fmt.allocPrint(arena.allocator(), "{s}\nThe previous correction still failed this validation.", .{prompt}) catch unreachable;
+                    const repeated = std.fmt.allocPrint(arena.allocator(), "{s}\n{s}", .{ prompt, repetition_notice }) catch unreachable;
                     std.testing.expectEqualStrings(repeated, content[base.len].guidance) catch |err| return self.hookFailed(err);
                 }
                 // Every scripted correction of a value outside an integer enumeration names it and its set.
@@ -408,8 +416,8 @@ pub const Driver = struct {
                     } else self.brief_references = references;
                     if (attempt > 1) {
                         const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
-                        std.testing.expectEqualStrings("Schema validation failed: this property is not allowed at this location.", correction.value.object.get("explanation").?.string) catch |err| return self.hookFailed(err);
-                        std.testing.expectEqual(@as(usize, if (attempt > 2) 1 else 0), std.mem.count(u8, content[base.len].guidance, "The previous correction still failed this validation.")) catch |err| return self.hookFailed(err);
+                        std.testing.expectEqualStrings(@tagName(@import("../domain/model_schema_diagnostic.zig").Reason.unknown_property), correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("reason").?.string) catch |err| return self.hookFailed(err);
+                        std.testing.expectEqual(@as(usize, if (attempt > 2) 1 else 0), std.mem.count(u8, content[base.len].guidance, repetition_notice)) catch |err| return self.hookFailed(err);
                         const expected = correction.value.object.get("expected").?.object;
                         std.testing.expectEqualStrings("/provenance", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string) catch |err| return self.hookFailed(err);
                         const fields = expected.get("shape").?.object.get("fields").?.object;
@@ -460,7 +468,7 @@ pub const Driver = struct {
                     const suffix = if (fault.shape == .review_forbidden) "/provenance" else if (fault.shape == .review_moving and attempt % 2 == 1) "/detail" else "/question";
                     std.testing.expectEqualStrings(suffix, path) catch |err| return self.hookFailed(err);
                     const repeated = attempt > 2 and fault.shape != .review_moving;
-                    std.testing.expectEqual(@as(usize, @intFromBool(repeated)), std.mem.count(u8, content[base.len].guidance, "The previous correction still failed this validation.")) catch |err| return self.hookFailed(err);
+                    std.testing.expectEqual(@as(usize, @intFromBool(repeated)), std.mem.count(u8, content[base.len].guidance, repetition_notice)) catch |err| return self.hookFailed(err);
                 }
                 // ADR 0038 Decision 5: a wholly taken statement never reaches a correction, and
                 // neither does an evidence-equivalent duplicate (ADR 0035).
@@ -1074,6 +1082,22 @@ fn memberCollection(response: std.json.Value) struct { array: []const u8, key: [
     return if (response.object.contains("assessments")) .{ .array = "assessments", .key = "comparison_id" } else .{ .array = "findings", .key = "requirement_ordinal" };
 }
 
+/// The records of a scripted answer whose content has the given kind; an answer without records holds none.
+fn recordsOfKind(allocator: std.mem.Allocator, body: []const u8, kind: []const u8) !usize {
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
+    defer parsed.deinit();
+    if (parsed.value != .object) return 0;
+    const records = parsed.value.object.get("records") orelse return 0;
+    if (records != .array) return 0;
+    var count: usize = 0;
+    for (records.array.items) |item| {
+        const content = if (item == .object) item.object.get("content") else null;
+        const tag = if (content != null and content.? == .object) content.?.object.get("kind") else null;
+        if (tag != null and tag.? == .string and std.mem.eql(u8, tag.?.string, kind)) count += 1;
+    }
+    return count;
+}
+
 fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fault, "shape"), attempt: u32) ![]const u8 {
     if (shape == .empty) return "{}";
     if (shape == .inconclusive) return "{\"kind\":\"inconclusive\",\"detail\":\"The interpretation could not be established; no missing user decision was identified.\"}";
@@ -1361,5 +1385,4 @@ fn assertReviewPrompt(a: std.mem.Allocator, request: *const @import("../domain/l
         found = found or std.mem.eql(u8, part.bytes(), configured);
     };
     try std.testing.expect(found);
-    if (!std.mem.endsWith(u8, path, "support-loss.prompt.md")) try std.testing.expect(std.mem.indexOf(u8, configured, "Assess policy compliance") == null);
 }

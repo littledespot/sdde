@@ -2565,7 +2565,7 @@ test "consolidated records preserve mixed siblings origins and competing-evidenc
         _ = try sessions.assemble(a, text.validator, fixture.context, required_entities, &.{});
         required_entities.units[2].?.response.content.entities.disposition = .not_applicable;
         try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, fixture.context, required_entities, &.{}));
-        // R46: duplicate optional content with different valid claim evidence
+        // Duplicate optional content with different valid claim evidence
         // remains unsafe; consolidation cannot silently delete or publish it.
         var misclassified = records[3];
         misclassified.content.non_goal.text = good.value;
@@ -7307,7 +7307,7 @@ test "false conflicts repair a closed relation group with exact preconditions an
     }
 }
 
-test "R42 selected question schemas match retained decisions and text defects share one retry identity" {
+test "selected question schemas match retained decisions and text defects share one retry identity" {
     const review = @import("domain/specification_support.zig").Source;
     const repair = @import("domain/specification_support_repair.zig").Source;
     const json = @import("domain/model_candidate_json.zig");
@@ -7715,8 +7715,10 @@ test "empty display choices reject invented and misbound references and permit b
         defer selected.release();
         {
             try std.testing.expectEqual(.value, std.meta.activeTag(auth.target));
-            // The authorizer composes the native correction with the workflow's tail.
-            const tailed = "Validation failed: passive reference ID 1 is unavailable for this field's authorized evidence. Return source-backed prose without reference handles. MOCK repair_tails.value_choices";
+            // The authorizer composes the native correction with the workflow's tail, as the owner of the
+            // value-choice correction does for a field that offers no reference handle.
+            const no_handles: @import("domain/specification_provenance.zig").ValueChoices = .{ .exact_copy = &.{} };
+            const tailed = try no_handles.correction(a, &packet_guidance.marked, rejected.issue.text_issue.?);
             try std.testing.expectEqualStrings(tailed, auth.rule.requirement);
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
             try std.testing.expectEqualStrings(tailed, body.value.object.get("repair").?.object.get("rule").?.object.get("requirement").?.string);
@@ -8933,8 +8935,6 @@ test "feature entity insertion pins native occurrence scope independently of aut
     try std.testing.expectEqual(.entity_membership, rejected.issue.rule);
     const auth = try repair.authorize(a, current, fixture.context, candidate, rejected, &packet_guidance.marked);
     try std.testing.expectEqualDeep(plain.provenance, auth.rule.group.?.membership.fixed_provenance);
-    // Insertion and record correction each keep their own native requirement.
-    try std.testing.expectEqualStrings("Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records.", auth.rule.requirement);
     const record: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "ACTIVE" } }} } } }, .source_group_ids = plain.source_group_ids, .provenance = plain.provenance };
     const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs);
     const inserted = try repair.merge(a, canonical, current, fixture.context, candidate, auth, .{ .record = record }, null);
@@ -8947,8 +8947,9 @@ test "feature entity insertion pins native occurrence scope independently of aut
     broken.response.content.entities.records = records;
     const next_rejection = (try validate_unit.execute(a, current, fixture.context, broken)).invalid;
     const correction = try repair.authorize(a, current, fixture.context, broken, next_rejection, &packet_guidance.marked);
-    // A record correction keeps its native requirement.
-    try std.testing.expectEqualStrings("Return the complete corrected entity record and all siblings.", correction.rule.requirement);
+    // Insertion and record correction each keep their own native requirement.
+    try std.testing.expectEqualStrings(repair.insertion_requirement, auth.rule.requirement);
+    try std.testing.expectEqualStrings(repair.correction_requirement, correction.rule.requirement);
     const packet = try repair.packet(a, current, fixture.context, correction, &packet_guidance.marked);
     defer @import("domain/model_input_packet.zig").release(packet);
     try std.testing.expectEqual(@as(usize, 1), packet.exactScope().?.occurrences.len);
@@ -10844,7 +10845,7 @@ test "claim-bound scenarios: only the awaited group's own criteria join its batc
     try std.testing.expectEqual(@as(usize, 1), current.record_batches[0].response.content.records.len);
 }
 
-test "Q17 only the records request carries the principle files, as captured and unnumbered" {
+test "only the records request carries the principle files, as captured and unnumbered" {
     const sessions = @import("domain/specification_session.zig");
     const packets = @import("domain/model_input_packet.zig");
     const building: @import("actions/specification/build_specification_model_input.zig").Action = .{};

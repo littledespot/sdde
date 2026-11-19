@@ -80,12 +80,43 @@ pub fn project(
     return std.json.Stringify.valueAlloc(a, value, .{ .whitespace = .indent_1 });
 }
 
+/// The longest scenario name a freeze directory carries.
+pub const max_name = 80;
+
+/// A scenario's stable name: the directory its calls are written to. It names what the scenario
+/// exercises, so a freeze taken before a scenario is added lines up by path with one taken after,
+/// except within a numbered range, where an insertion shifts the later members. It is a fixed buffer,
+/// so an entry that holds one compares by value and owns nothing.
+pub const Name = struct {
+    bytes: [max_name]u8 = @splat(0),
+    len: u8 = 0,
+
+    pub const Error = error{InvalidScenarioName};
+
+    /// A name is one to `max_name` lowercase letters, digits, hyphens or underscores, and doesn't
+    /// start with a hyphen, so it is one directory name and never a path or an option.
+    pub fn parse(text: []const u8) Error!Name {
+        if (text.len == 0 or text.len > max_name or text[0] == '-') return error.InvalidScenarioName;
+        for (text) |byte| switch (byte) {
+            'a'...'z', '0'...'9', '-', '_' => {},
+            else => return error.InvalidScenarioName,
+        };
+        var result: Name = .{ .len = @intCast(text.len) };
+        @memcpy(result.bytes[0..text.len], text);
+        return result;
+    }
+
+    pub fn slice(self: *const Name) []const u8 {
+        return self.bytes[0..self.len];
+    }
+};
+
 pub const Sink = struct {
     allocator: std.mem.Allocator,
     io: std.Io,
     root: ?std.Io.Dir = null,
     /// The scenario group, so groups that share a freeze never overwrite each other's
-    /// scenario numbers: `<group>/scenario-NNN/call-NNNN.json`.
+    /// scenarios: `<group>/<scenario name>/call-NNNN.json`.
     group: []const u8 = "",
     entries: std.ArrayList(Entry) = .empty,
 
@@ -93,9 +124,11 @@ pub const Sink = struct {
     /// E2E evidence's `call-NNNN` numbering): a request ordinal restarts for each unit,
     /// and the run's ledger position isn't visible at the provider port. The request,
     /// attempt, kind and digest serve the projection's own tests; the freeze holds the
-    /// bytes.
+    /// bytes. The number is the scenario's position in this run, and its name is its
+    /// freeze directory.
     pub const Entry = struct {
         scenario: usize,
+        name: Name,
         call: usize,
         request: u32,
         attempt: u32,
@@ -104,7 +137,7 @@ pub const Sink = struct {
         digest: [32]u8,
     };
 
-    /// Writes `<group>/scenario-NNN/call-NNNN.json` under the directory the environment names,
+    /// Writes `<group>/<scenario name>/call-NNNN.json` under the directory the environment names,
     /// creating it when missing; without one, records in memory. A named directory that
     /// can't be used ends the test process, so a freeze is never silently empty.
     pub fn fromEnvironment(allocator: std.mem.Allocator, io: std.Io) !Sink {
@@ -142,20 +175,31 @@ pub const Sink = struct {
         try root.writeFile(self.io, .{ .sub_path = "manifest.json", .data = bytes });
     }
 
+    /// Two scenarios of one freeze may not share a name, or the later would write over the earlier's
+    /// calls. Checked at a scenario's first call.
+    pub fn claim(self: *const Sink, scenario: usize, name: Name) error{DuplicateScenarioName}!void {
+        for (self.entries.items) |entry| {
+            if (entry.scenario != scenario and std.mem.eql(u8, entry.name.slice(), name.slice())) return error.DuplicateScenarioName;
+        }
+    }
+
     fn record(
         self: *Sink,
         scenario: usize,
+        name: Name,
         call: usize,
         request: *const operation.IdentifiedProviderNeutralModelRequest,
         selected: *const binding.ValidatedProviderModelBinding,
         invoked: *const operation.InvokedProviderOperation,
     ) !void {
+        if (call == 1) try self.claim(scenario, name);
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
         const a = arena.allocator();
         const bytes = try project(a, request, selected, invoked.id.kind);
         var entry: Entry = .{
             .scenario = scenario,
+            .name = name,
             .call = call,
             .request = request.model_request_id.request_ordinal.value,
             .attempt = invoked.id.model_attempt_ordinal.value,
@@ -167,13 +211,13 @@ pub const Sink = struct {
         try self.entries.append(self.allocator, entry);
         const root = self.root orelse return;
         if (self.group.len == 0) return error.UngroupedProjection;
-        var directory = try root.createDirPathOpen(self.io, try std.fmt.allocPrint(a, "{s}/scenario-{d:0>3}", .{ self.group, scenario }), .{});
+        var directory = try root.createDirPathOpen(self.io, try std.fmt.allocPrint(a, "{s}/{s}", .{ self.group, name.slice() }), .{});
         defer directory.close(self.io);
         try directory.writeFile(self.io, .{ .sub_path = try std.fmt.allocPrint(a, "call-{d:0>4}.json", .{call}), .data = bytes });
     }
 };
 
-/// The call files a freeze directory holds, as `<group>/scenario-NNN/call-NNNN.json`
+/// The call files a freeze directory holds, as `<group>/<scenario name>/call-NNNN.json`
 /// paths relative to it, with the counts its manifest records.
 pub const Listing = struct { manifest: Manifest, paths: []const []const u8 };
 
@@ -189,7 +233,7 @@ pub fn calls(a: std.mem.Allocator, io: std.Io, root: std.Io.Dir) !Listing {
         defer group_directory.close(io);
         var scenarios = group_directory.iterate();
         while (try scenarios.next(io)) |scenario| {
-            if (scenario.kind != .directory or !std.mem.startsWith(u8, scenario.name, "scenario-")) continue;
+            if (scenario.kind != .directory) continue;
             manifest.scenarios += 1;
             var directory = try group_directory.openDir(io, scenario.name, .{ .iterate = true });
             defer directory.close(io);
@@ -213,6 +257,7 @@ pub fn calls(a: std.mem.Allocator, io: std.Io, root: std.Io.Dir) !Listing {
 pub const Recorder = struct {
     sink: *Sink,
     scenario: usize,
+    name: Name,
     inner: provider_interface.LLMProviderInterface,
     recorded: usize = 0,
 
@@ -231,7 +276,7 @@ pub const Recorder = struct {
     ) provider_interface.Error!operation.ProviderInvocationObservation {
         const self: *Recorder = @ptrCast(@alignCast(context));
         self.recorded += 1;
-        self.sink.record(self.scenario, self.recorded, request, selected, invoked) catch |err| std.debug.panic("request projection failed: {s}", .{@errorName(err)});
+        self.sink.record(self.scenario, self.name, self.recorded, request, selected, invoked) catch |err| std.debug.panic("request projection failed: {s}", .{@errorName(err)});
         return self.inner.invoke(selected, request, authorization, invoked);
     }
 };

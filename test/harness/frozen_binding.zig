@@ -120,6 +120,12 @@ test "frozen slot controls retain each role's effort without substituting genera
         changed = description;
         changed.provider_config.aws_bedrock.request_timeout = .{ .milliseconds = 60000 };
         try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, changed, wire, &models));
+        // Another provider family's binding is no frozen Bedrock binding, whatever its wire says.
+        changed = description;
+        changed.provider = "anthropic";
+        changed.model = "claude-haiku-5-5";
+        changed.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 }, .request_timeout = .{ .milliseconds = 180000 } } };
+        try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, changed, wire, &models));
         for ([_][]const u8{ "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":4096}}", "{\"inferenceConfig\":{\"temperature\":0.1}}", "{}" }) |body| {
             var drifted = wire;
             drifted.body = body;

@@ -1,4 +1,4 @@
-//! R35-shaped scripted responses and assertions; production owns every transition.
+//! Summary-reconciliation protocol scripted responses and assertions; production owns every transition.
 const std = @import("std");
 const r = @import("../domain/reference_reconciliation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");

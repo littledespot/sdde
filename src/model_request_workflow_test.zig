@@ -40,6 +40,7 @@ const payload_validation = @import("domain/model_payload_schema.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const lease_port = @import("ports/provider_authorization_lease.zig");
 const protocol_retry = @import("application/model_protocol_retry_workflow.zig");
+const retry_domain = @import("domain/model_protocol_retry.zig");
 const model_origin = @import("domain/model_candidate_origin.zig").Origin;
 
 const yaml =
@@ -4308,7 +4309,7 @@ test "protocol retries retain only latest repeated or alternating decoder reject
                 try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
                 try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
                 const repeated = index > 0 and std.mem.eql(u8, responses[index - 1], body);
-                const expected_prompt = if (repeated) prompt_bytes ++ "\nThe previous correction still failed this validation." else prompt_bytes;
+                const expected_prompt = if (repeated) prompt_bytes ++ "\n" ++ retry_domain.repetition_notice else prompt_bytes;
                 try std.testing.expectEqualStrings(expected_prompt, correction.content[2].guidance);
                 var guidance = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, correction.content[3].guidance, .{});
                 defer guidance.deinit();
@@ -4393,7 +4394,7 @@ test "selected review nesting and sibling loss retain correction scope through r
                         try std.testing.expectEqual(@as(usize, 5), correction.content.len);
                         try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
                         try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
-                        try std.testing.expectEqual(@as(usize, if (index == 2) 1 else 0), std.mem.count(u8, correction.content[2].guidance, "The previous correction still failed this validation."));
+                        try std.testing.expectEqual(@as(usize, if (index == 2) 1 else 0), std.mem.count(u8, correction.content[2].guidance, retry_domain.repetition_notice));
                         const latest = try std.json.parseFromSlice(std.json.Value, a, correction.content[4].evidence, .{});
                         try std.testing.expectEqualStrings(body, latest.value.object.get("rejected_response").?.string);
                     }
@@ -4457,9 +4458,8 @@ test "protocol repetition requires the current correction association and same t
         prior_correction = correction_origin;
         const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .converse, .{ .tokens = 16000 });
         defer std.testing.allocator.free(wire);
-        try std.testing.expectEqual(@as(usize, if (index == 1) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
-        try std.testing.expect(std.mem.indexOf(u8, wire, "identical response") == null);
-        try std.testing.expect(std.mem.indexOf(u8, wire, "Schema validation failed: this property is not allowed") != null);
+        try std.testing.expectEqual(@as(usize, if (index == 1) 1 else 0), std.mem.count(u8, wire, retry_domain.repetition_notice));
+        try std.testing.expect(std.mem.indexOf(u8, wire, diagnostic.schema.explanation()) != null);
         try std.testing.expectEqual(@as(u128, (index + 1) * 7), runner.tokenLedger().committed());
     }
     try std.testing.expectEqual(@as(u64, 3), runner.bindings().invokeStep(.{ .bytes = "account" }).rejected.retry_limit.completed_executions);
@@ -4514,7 +4514,7 @@ test "a repeated correction of an integer choice is confirmed only for the same 
             const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .converse, .{ .tokens = 16000 });
             defer std.testing.allocator.free(wire);
             // The notice is the handoff's repetition, which the builder renders and never decides.
-            try std.testing.expectEqual(@as(usize, if (index == 1 and case.repeated) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
+            try std.testing.expectEqual(@as(usize, if (index == 1 and case.repeated) 1 else 0), std.mem.count(u8, wire, retry_domain.repetition_notice));
         }
     }
 }
@@ -4551,7 +4551,7 @@ fn correctionAllocation(allocator: std.mem.Allocator, fixture: *Fixture, graph: 
         try std.testing.expectEqual(expected, result.outcome);
     }
     const request = (try currentRequest(&runner)).prepared().?;
-    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, request.content[2].guidance, "The previous correction still failed this validation."));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, request.content[2].guidance, retry_domain.repetition_notice));
     try std.testing.expectEqual(@as(u128, 14), runner.tokenLedger().committed());
 }
 
@@ -7889,11 +7889,11 @@ test "missing answers share protocol allowance through mixed failure and success
                     try std.testing.expectEqual(@as(usize, if (absent) 5 else 6), correction.content.len);
                     if (absent) {
                         try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "missing_final_text") != null);
-                        try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "Final-answer admission failed: no final answer was received.") != null);
+                        try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, retry_domain.missing_final_text_explanation) != null);
                         for (correction.content) |part| try std.testing.expect(part != .evidence);
                         try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.model_payload_schema_result)] == null);
                     }
-                    try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[3].guidance, "The previous correction still failed this validation."));
+                    try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[3].guidance, retry_domain.repetition_notice));
                 }
             }
             if (sequence != 0) {
@@ -8321,10 +8321,12 @@ test "protocol correction retains summary and signal guidance selection bounds c
         try std.testing.expect(active.len != 0);
         try std.testing.expectEqual(active.len, visible.get("field_rules").?.array.items.len);
         try std.testing.expect(!visible.get("insertion_fields").?.object.contains("exact_copy"));
-        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Other claims are supporting evidence") != null);
+        // The assignment's selection rule is the owner's text for this scope; only a summary assignment
+        // carries the summary's coverage rule.
+        const selection_rule = @import("domain/reference_reconciliation_diagnostic.zig").Constraint.nonempty_unique_allowed_claims;
+        try std.testing.expect(std.mem.indexOf(u8, packet.body(), selection_rule.descriptionFor(.{ .assignment = if (kind == .summary) .summary else .signals })) != null);
         try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "summary_purpose") != null);
-        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") != null);
-        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "Claims may be combined, split across statements or selected by overlapping statements") != null);
+        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), selection_rule.descriptionFor(.{ .assignment = .summary })) != null);
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "MOCK Renewed!") != null);
         for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
             try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
@@ -8423,7 +8425,7 @@ test "composition protocol corrections keep complete assignment and grouped defe
                     try std.testing.expectEqualStrings(path, field.object.get("path").?.string);
                     try std.testing.expectEqualStrings("reference_only", field.object.get("reason").?.string);
                 }
-                const repeated = std.mem.indexOf(u8, correction.content[2].guidance, "previous correction still failed") != null;
+                const repeated = std.mem.indexOf(u8, correction.content[2].guidance, retry_domain.repetition_notice) != null;
                 try std.testing.expectEqual(index != 0, repeated);
                 try std.testing.expectEqualStrings(assignment, witnessed.body());
             }

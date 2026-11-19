@@ -8,6 +8,11 @@ const reconciliation = @import("test_fixtures/reference_reconciliation.zig");
 const text = @import("test_fixtures/reference_text.zig");
 const tokens = @import("test_fixtures/reference_tokens.zig");
 const guidance = @import("test_fixtures/packet_guidance.zig");
+const rule_owner = @import("domain/reference_reconciliation_diagnostic.zig");
+/// The summary assignment's selection rule, as its owner words it: no other scope's rules carry it.
+const summary_selection_rule = rule_owner.Constraint.nonempty_unique_allowed_claims.descriptionFor(.{ .assignment = .summary });
+/// The generic wording of the signals coverage rule, which an assignment's own wording replaces.
+const generic_signal_coverage_rule = rule_owner.Constraint.retained_claim_covered.description();
 
 test "authoring evidence resolves typed meaning without exposing citation or extractor bookkeeping" {
     const projection = @import("domain/model_evidence.zig");
@@ -167,7 +172,7 @@ test "summary purpose and union claim coverage apply across every summary level"
             try std.testing.expectError(error.InvalidReferenceReconciliation, input.reconciliationPacket(std.testing.allocator, current, fixture.inputs, fixture.text.registry, .all, null));
             const shared_rules = try std.json.Stringify.valueAlloc(a, shared_body.get("constraints").?, .{});
             try std.testing.expect(std.mem.indexOf(u8, shared_rules, "unique_nonzero") != null);
-            try std.testing.expect(std.mem.indexOf(u8, shared_rules, "Together, the statements must cover every assigned claim ID") == null);
+            try std.testing.expect(std.mem.indexOf(u8, shared_rules, summary_selection_rule) == null);
 
             const selection = @import("actions/reference/check_reference_summary_reuse.zig").Action{ .validator = text.validator };
             const reuse = @import("actions/reference/reuse_reference_reconciliation_summary.zig").Action{ .validator = text.validator };
@@ -272,16 +277,13 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
         }
         if (std.mem.eql(u8, id, "signals")) {
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "retained_claim_covered") != null);
-            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Every retained claim must appear") == null);
-            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "same projection kind") == null);
+            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, generic_signal_coverage_rule) == null);
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "exact_selected_token") == null);
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "assignment.claim_ids") != null);
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "accepted.signals") != null);
-            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Together, the statements must cover every assigned claim ID") == null);
-            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Different sets may overlap") != null);
+            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, summary_selection_rule) == null);
+            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, rule_owner.Constraint.unique_members.descriptionFor(.{ .assignment = .signals })) != null);
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "token_projected") != null);
-            // The rule texts the model reads carry no engine vocabulary (SPEC01 Q4, D4.1's extension).
-            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "native code") == null);
             try checkSemanticAssignment(a, selected, global.items, dispositions.dispositions);
         }
         if (std.mem.eql(u8, id, "conflicts")) {

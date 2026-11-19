@@ -131,12 +131,13 @@ fn checkEvidenceBound(expected: candidates.EvidenceBound, actual: candidates.Evi
     r.sameSet(r.CitationId, expected.citations, actual.citations) catch return error.InvalidSpecificationRepair;
 }
 
+/// The repair requirements of an entity-membership group: one inserts a missing record, the other corrects an existing one.
+pub const insertion_requirement = "Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records.";
+pub const correction_requirement = "Return the complete corrected entity record and all siblings.";
+
 fn authorizeGroup(a: std.mem.Allocator, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
     const requirement = switch (policy) {
-        .membership => if (insert)
-            "Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records."
-        else
-            "Return the complete corrected entity record and all siblings.",
+        .membership => if (insert) insertion_requirement else correction_requirement,
     };
     const rule: Rule = .{ .requirement = requirement, .text_issue = rejection.issue.text_issue, .value_choices = null, .group = policy };
     var authorization = if (insert)

@@ -16,6 +16,7 @@ const frozen_binding = @import("../frozen_binding.zig");
 const request_identity = @import("../../../src/domain/model_request_identity.zig");
 const stages = @import("../baseline/stages.zig");
 const admission = @import("../baseline/admission.zig");
+const repair_log = @import("repair_log.zig");
 
 pub const MechanicalRejection = union(enum) {
     protocol: c.ProtocolRejection,
@@ -190,6 +191,8 @@ pub const Trace = struct {
     attempts_observed: usize = 0,
     progress: @import("progress.zig").Progress,
     admission_audit: admission.Tracker,
+    /// Every repair merge a step retained: the final state keeps only each candidate's last.
+    repairs: repair_log.Log,
     sequence: usize = 0,
     current: ?operation.ProviderOperationId = null,
     last_step: ?workflow.WorkflowStepId = null,
@@ -217,7 +220,7 @@ pub const Trace = struct {
 
     pub fn init(store: evidence.Store, invocation: *@import("../../../src/composition/engine_invocation.zig").Assembly, purpose: Purpose) !Trace {
         try store.run.createDirPath(store.io, "evidence");
-        return .{ .store = store, .invocation = invocation, .purpose = purpose, .progress = .init(store.allocator), .admission_audit = .init(store.allocator), .events = try store.run.createFile(store.io, "events.jsonl", .{ .exclusive = true, .permissions = .fromMode(0o600) }) };
+        return .{ .store = store, .invocation = invocation, .purpose = purpose, .progress = .init(store.allocator), .admission_audit = .init(store.allocator), .repairs = .init(store.allocator), .events = try store.run.createFile(store.io, "events.jsonl", .{ .exclusive = true, .permissions = .fromMode(0o600) }) };
     }
     pub fn close(self: *Trace) void {
         if (self.pending) |pending| if (self.experiment) |gate| {
@@ -228,6 +231,7 @@ pub const Trace = struct {
         self.last_rejection.deinit(self.store.allocator);
         self.progress.deinit();
         self.admission_audit.deinit();
+        self.repairs.deinit();
         for (self.call_records.items) |call| {
             self.store.allocator.free(call.step);
             if (call.exception) |bytes| self.store.allocator.free(bytes);
@@ -612,7 +616,7 @@ pub const Trace = struct {
         const accounted = runner.tokenLedger().accounted_operations.items;
         if (accounted.len <= self.attempts_observed + 1) return;
         for (accounted[self.attempts_observed .. accounted.len - 1]) |attempt| {
-            var earlier: c.Report = .{ .schema = .@"spec-e2e-report/v21", .started_at_utc = "", .status = .workflow_failed };
+            var earlier: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed };
             try @import("observation.zig").attemptRejection(a, runner, attempt.id, &earlier);
             if (earlier.provider_diagnostic == null and earlier.model_diagnostic == null) continue;
             const origin = earlier.last_model_origin orelse continue;
@@ -620,7 +624,7 @@ pub const Trace = struct {
                 if (std.meta.eql(record.origin, origin)) break ordinal;
             } else continue;
             try self.last_rejection.observe(self.store.allocator, call, earlier);
-            var projected: c.Report = .{ .schema = .@"spec-e2e-report/v21", .started_at_utc = "", .status = .workflow_failed };
+            var projected: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed };
             try self.last_rejection.project(a, call, &projected);
             if (self.capture) |log| try log.observeRejections(projected);
         }
@@ -631,8 +635,10 @@ pub const Trace = struct {
         var arena: std.heap.ArenaAllocator = .init(self.store.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v21", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
         try @import("observation.zig").capture(a, runner, &report);
+        // The report's repairs are this step's retained merges; the log keeps the ones a later step replaces.
+        try self.repairs.observe(report.repairs);
         if (self.pending) |pending| {
             const usage = try reconcileExperiment(self.experiment.?, pending.send, pending.origin, report.attempts, pending.uncertain_delivery);
             self.pending = null;
@@ -726,6 +732,12 @@ pub const Trace = struct {
     pub fn correlate(self: *Trace, a: std.mem.Allocator, report: *c.Report) !void {
         if (self.call_records.items.len != self.calls) return error.MissingRequestEvidence;
         try @import("observation.zig").correlate(a, self.call_records.items, report);
+    }
+
+    /// The report's repairs are every merge the steps retained, once for each authorization and in the
+    /// order first seen, not each candidate's last merge in the final state.
+    pub fn projectRepairs(self: *Trace, a: std.mem.Allocator, report: *c.Report) !void {
+        report.repairs = try self.repairs.finish(a, report.repairs);
     }
 
     pub fn projectAdmission(self: *Trace, a: std.mem.Allocator, report: *c.Report) !void {
@@ -1066,7 +1078,7 @@ test "native receipt failure proofs preserve intermediate upstream rejections af
     var log: CaptureLog = .init(std.testing.allocator);
     defer log.deinit();
     for (1..4) |call| try appendReceiptFixture(&log, call);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v21", .started_at_utc = "", .status = .workflow_failed };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed };
     report.last_protocol_rejection = .{ .call = 1, .origin = log.records.items[0].origin, .reason = "MOCK initial schema rejection", .json_error = null, .schema_error = .{ .reason = .missing_required_property, .path = "/claims" } };
     try log.observeRejections(report);
     report.last_protocol_rejection = null;
@@ -1092,7 +1104,7 @@ fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
     var log: CaptureLog = .init(a);
     defer log.deinit();
     try appendReceiptFixture(&log, 1);
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v21", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
         .call = 1,
         .origin = log.records.items[0].origin,
         .reason = "MOCK malformed JSON",
