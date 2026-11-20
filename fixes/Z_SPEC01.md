@@ -269,6 +269,14 @@ count as one evaluator:
   edge case's linked Then once, on the criterion (ADR 0038 Decision 7); no reference run has an
   outcome link.
 
+**`43c04100…` follows `3fe52a92…`** (user, 20 November 2026: "R3: YES", on the advisory R3 of the
+`2026-11-20T07-4*` and `07-5*` evaluations): a requirement's designed shape (its story quote, its one
+record and its one bound criterion) isn't `restatement`. Those evaluations scored that shape as
+restatement in loan-renewal (`organization` 3 in all three runs) and not in hello-world (4 in all three).
+The ruling changes only `organization`, never an accuracy class, so the accuracy counts that decide keeps
+(SPEC01 §2 rule 6) read the same under both versions and no reference is re-scored; `organization`
+isn't compared across the change. The six evaluations and their applied records stand.
+
 **Readings made rules, 3 November 2026** (user: "YES"; in SKILL.md §2): a link defect costs
 nothing beyond its content defect; a repeat that gives a requirement's value states it, one that
 gives none is a summary; a weaker restatement in a checkable outcome also costs

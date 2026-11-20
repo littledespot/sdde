@@ -29,7 +29,7 @@ gate is re-run on the build after E1–E4 land, as one closing set after the out
 **Reference** for quality phases (§2 rule 7): Q23's set (`2026-11-17T23-4*` to `23-58-08Z` and
 `2026-11-18T05-3*`, 6 runs per case, `anthropic` `claude-haiku-5-5`, build `26982bb`, source `0a61828b…`, skill
 `3fe52a92…`), the last kept state ([Z_SPEC01](Z_SPEC01.md) "Q23"). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
-as one evaluator ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
+as one evaluator, and `43c04100…` keeps `3fe52a92…`'s accuracy counts ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
@@ -168,7 +168,8 @@ above, inside the decided constraints):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
+| 1 | **Q26** a Given only where the source states one | unsupported addition and ambiguity in a criterion's Given (all 3 accuracy defects and 5 ambiguities of the 20 November set) | M | Fixtures at the owners, screens of the scenarios call, then a set | Decided 20 November 2026 |
+| 2 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
 **Engine track, in gaps:** E3's feature logging waits on its preconditions (§5 E3); E7 last. E0 is on
 hold. **Tests:** T3 in any gap; T4 with E1–E4. **Adjudication:** the evaluate-e2e skill for every set.
@@ -268,6 +269,44 @@ extraction request, (c) losses nothing native detects. If it resumes, take (b).
 **Next:** D21.1 (deferred); fixtures at the owner (an unnamed claim, or one named only by an
 assumption, non-goal or scenario, rejects), then screens and a set (§2 rules 4 and 6). §10 C30
 records the blocking route's constant-result machinery.
+
+### Q26. A Given only where the source states one
+
+**Decided** 20 November 2026 (user: "R1: YES", on the advisory R1 of the `2026-11-20T07-4*` and `07-5*`
+evaluations); unbuilt. **Defect:** unsupported addition and ambiguity in an acceptance criterion's Given.
+The scenarios request requires a Given even when a requirement states only a trigger: the response schema
+gives `given` `minLength` 1, its field rule says "Write nonblank prose", and the purpose names "a
+precondition, trigger and expected result". It also forbids invention and asks for "what its own wording
+presupposes" (`scenarios.prompt.md:4-5`). So the model repeats the trigger or invents a prerequisite:
+
+- hello-world AC-002 gives Given "has been started" and When "is started", and loan-renewal AC-005 gives
+  Given "has successfully renewed" and When "The renewal completes successfully";
+- hello-world AC-001 gives Given "installed and ready to be run", as in two runs of the 15 November sets.
+
+In that set, a modified build so indicative only (§2 rule 3), 5 criteria in 4 of 6 runs repeat one
+event as Given and When. All 3 accuracy defects are unsupported additions in a Given: "installed" once,
+and "due date is known" twice. Cause: likely. The request is read from call 10 of `07-47-57Z`; that an
+optional Given removes the choice is inferred.
+
+**Change:**
+- `given` is optional in the scenarios response and in the acceptance-criterion content, with its content
+  and state versions advanced. Its field guidance (`packet-guidance.json:21`) says it is omitted when the
+  sources state no starting situation. The criterion is the only record with a Given; an edge case has a
+  condition.
+- The prompt's presupposition sentence (`scenarios.prompt.md:3-5`) goes. Not adopted: restating the
+  Given's meaning in the prompt, which the request already carries from the field guidance (one owner).
+- A criterion without a Given renders "**When** … **Then** …".
+- It amends ADR 0038 Decision 3, 17-specify.md:174 and :511, 23-rendering.md:24 and :134, and F0100:1081.
+  The design text lands with the code.
+
+**Expected effect:** fewer Givens that repeat the trigger or add a prerequisite. Loan-renewal AC-003's
+"due date is known" sits beside a starting situation line 9 states, so only the removed sentence bears on
+it, unproven. **Risk:** a criterion drops a Given its source states, such as loan-renewal AC-001's
+eligibility conditions. Guards: lost source requirement and weakened obligation. **Not covered:** a Then
+that repeats its own Given (loan-renewal AC-001 in `07-49-33Z`).
+
+**Next:** `/preflight`, including how the equal-items correction and the duplicate rule compare an absent
+Given; then fixtures at the owners, screens of the scenarios call and a set (§2 rules 4 and 6).
 
 ## 5. Engine track (E)
 
@@ -482,12 +521,28 @@ code, do complete end 2 end analysis, do not guess").
 **C4. Most failures report one payload-free name.**
 
 - **Provider and authorization (built 20 November 2026, Z_SPEC01):** the run report and the CLI
-  carry the last call's typed failure (contract 08). Still open: the feature log's
-  `model.completed` has no cause field (an F0002 change); a missing key and a malformed one are
-  the same case (`provider_api_key.zig:35-37`), so both read `authentication_failed`; the
-  response decode diagnostic is still dropped (`provider_response_assembly.zig:127`); and a
-  provider stop (`output_limit`, `context_limit`) and a runner rejection such as retry
-  exhaustion print no provider line.
+  carry the last call's typed failure (contract 08). **Decided** 20 November 2026 (user: "update the
+  documatation with above recommendations"):
+  - **Closed, no change.** The feature log's `model.completed` gains no cause field
+    (27-observability.md:103-105): the E2E report's `last_provider_rejection` and the CLI carry the
+    cause. A provider stop and a runner rejection print no provider line (contract 08:37-39): every
+    stop writes a warning `model.provider_stopped` with its reason (27-observability.md:141), and
+    retry exhaustion prints its own line (`main.zig:65-68`).
+  - **To build as one change (unbuilt).** The provider failure line gains two enum reasons, never a
+    key byte, a length or provider text. Class: none (diagnosability). Order: after C38's cost table.
+    - `credential=missing|malformed`. An unset key, an empty one and a malformed one (a space,
+      control or non-ASCII byte, such as a CR from CRLF line endings) all read `authentication_failed;
+      delivery=not_sent` (`provider_api_key.zig:35-37`), and `.env.e2e` can't be read to tell them
+      apart. Owners: the key capture, a `malformed` key state, `api_key_authorization.zig:25` and the
+      port's failure enum, `ProviderFailure` and `provider_failure_detail.zig`, the replay's
+      unavailable-key arm (`request_replay.zig:92`) and the packaged smoke's pin.
+    - `decode=<reason>`. Every `response_invalid` without a content diagnostic names why: a body that
+      isn't JSON (`provider_response_assembly.zig:122`), a body the decoder refuses (`:127`, where its
+      diagnostic is dropped today), the assembly step (`:132`) and an error body the error table
+      doesn't know (`:144`). The JSON path is never printed, because it is built from provider field
+      names (contract 08:42). ADR 0028 rejects an undocumented field, so a new provider field would
+      fail every call with no retry; no retained run has shown it.
+    - It amends contract 08:41 and F0006 §8; the design text lands with the code.
 - **Workflow definition (built 20 November 2026, Z_SPEC01):** a rejection used to be one of two
   codes with no step, key or rule. It now prints a rule class, the definition's path and the
   step or resource after its code; the schema, compile and graph owners still return one error
@@ -528,11 +583,17 @@ validates and then rejects the first run that takes it. The authorizer's `blocke
 reader needs a non-empty needs record to be reached. A missing branch can't be told from a failed read of the
 owner's data: both end `InvalidOutcomeAssociation`. The item names no defect class and no registered contract
 breaks, so it reports a fact.
-**Decision, if wanted,** for `clarification_route` and the request descriptors: should each name its reader
-the same way?
-- Yes amends F0005:660-663 for them and replaces their key tests. It shrinks C21 without closing it, because
-  the tags add owner names to the generic domain file.
-- No keeps their branches.
+**Decided** 20 November 2026 (user: "update the docs with the above recommendations"); unbuilt, and the
+`clarification_route` part needs its preflight. Its place in the order is under C49.
+- **`clarification_route`: yes.** It names a closed reader of two members, read in an exhaustive switch, as
+  the diagnostic admission does. Its two producers (`clarification_refresh_workflow.zig:19`, `:99`) each read
+  a different owner's result. With it, the authorizer, the diagnostic admission and the clarification route
+  each read a closed table. It amends F0005:660-663 and replaces the branch's key tests. It shrinks C21
+  without closing it, because the tag adds owner names to the generic domain file.
+- **Request descriptors: no; this part is closed.** Their 14 producers are stages of the engine's request
+  kernel (ADR 0030), which a workflow definition can't author. Every model call runs every stage, so every
+  integration scenario and live run reads each evidence key, and a wrong key fails the first test. A tag of
+  nine members would only repeat the keys. `requestOperation` keeps its branches.
 
 **C8. Clarification records (adds to E7).**
 
@@ -789,15 +850,21 @@ switches on closed sets.
 any step that wrote to stderr, and the default summary mode prints no success line; only `--summary line`
 shows `N/N steps succeeded; M/M tests passed`. Built 20 November 2026 ([Z_SPEC01](Z_SPEC01.md) "A passing
 run is quiet"): `test-integration` fell from 9.9 MB of stderr to 0.46 MB. What still writes to stderr:
-the scenario cost table (`scenario_timing.zig`, deliberate: `test-scenario-timing` tests its format, not
-that it prints); about 300 feature-log rows from the baseline acquisition tests, whose production code
+the scenario cost table (`scenario_timing.zig`), which nothing reads (no script, skill, record, design
+file or evaluation names `scenario-cost` or `scenario-total`); about 300 feature-log rows from the baseline acquisition tests, whose production code
 materializes the frozen case config itself; and 33 `SDDE_LOG_FAILURE` emergency lines in `test` from the
 layout tests, because the composition builds `log_output.Adapter` inline (`feature_logging_runtime.zig:143`).
 **Decided** 20 November 2026 (user: "update the documentations with the above recommendations"): judge the
 pass where it is read.
 - `/verify` runs `zig build verify --summary line` and judges the run by its exit status and the
   `N/N steps succeeded` line (`.claude/skills/verify/SKILL.md` step 6, changed the same day).
-- Printing the cost table only on request, through a build option, is optional and unbuilt.
+- **The cost table goes** (decided 20 November 2026, user: "update the documatation with above
+  recommendations"; unbuilt). Delete `report`, `write` and their test, the `test-scenario-timing` step
+  and its registration, and the timing arithmetic; keep the phase that a failing scenario's message
+  names (`workflow_tests.zig:1556`). Not adopted: printing it on request through a build option, for
+  output nothing reads. Unverified: whether it is `test-integration`'s last stderr writer (0.46 MB
+  remains, more than the table); the preflight measures it. First in the order, before C4's two
+  reasons.
 - **No** injectable emergency sink. ADR 0032:168-169 keeps the emergency line exactly once, and the composition
   root builds every adapter (ADR 0032:114; 29-package-structure.md:11-12), so a seam there would serve only 33
   predictable test lines.
@@ -873,7 +940,14 @@ comment containing "plan", "hard" or "reference" fails a test with no boundary c
 ### 10.7 Unconfirmed readings
 
 **C49. Four readings, each now shown by a test.** The tests record current behavior at the owner
-and propose no change (20 November 2026); each remedy is a **Decision** for the user and unbuilt.
+(20 November 2026). **Decided** 20 November 2026 (user: "update the docs with the above
+recommendations"): the remedy under each bullet, unbuilt. Each needs its own preflight, and the story and
+records-batch remedies are Q phases that also need phase approval (§2).
+- **Order:** the story, the retry scope, the records batch, C6's `clarification_route`, the clock.
+- **Evidence:** neither development case's source has a fence, table, Setext heading or open question,
+  and the retry fault needs a reconciliation repair, a source-omission merge and another reconciliation
+  repair in one run. A set can therefore show only that nothing regresses ("benefit not demonstrated",
+  §2 rule 6); the offline tests at each owner carry the evidence.
 
 - **A records batch bound to a group that holds an open question: confirmed.** Test "a records batch
   is bound to a group that holds an open question, and record content over that group is refused"
@@ -882,30 +956,51 @@ and propose no change (20 November 2026); each remedy is a **Decision** for the 
   bound with `.content` (`specification_provenance.zig:626`), which refuses it
   (`resolveGroups` returns `InvalidSpecificationBinding`). By reading, not executed: the refusal
   ends the run blocked (`specification_repair.zig:82`). **Class:** successful completion.
-  **Decision:** should a records batch bound to a group holding an `open_question` be offered only the
-  clarification outcome? The alternative, excluding such groups from the record catalogue, changes
-  17-specify.md:198-199.
+  **Decided: offer only the clarification outcome.** A records batch whose group fails the content rule
+  gets only the clarification variant, through the engine's existing exclusion of result variants per
+  request, so the rule reads structure, not prose. A source asking "Which renewal period applies?" then
+  ends `awaiting_clarification` with a form instead of blocked. Grounds: design invariant 20 (an unresolved
+  authority gap becomes a typed clarification), ADR 0020:197-198 (a positive association can't select an
+  open-question group) and 17-specify.md:516 (no question becomes a content record). Amends
+  17-specify.md:198-199. Not adopted: excluding such groups from the record catalogue, because the
+  question might never be asked and a business claim sharing the group would get no record. **Open for
+  the preflight:** how a group whose question has been answered is authored on the rerun.
 - **The composed story copies fence, table and Setext lines: confirmed.** Test "the story reading
   of a claim that cites fence, table and Setext lines". The story's text is `source_paragraph.paragraph`
   (ADR 0047), which drops only ATX heading lines (`markdown_code_spans.zig:200`): a code fence reads
   ```` ``` loan.renew() ``` ````, a table `| Field | Value | | --- | --- | | Period | 14 days |` and a
   Setext heading `Loan renewal ============ A loan may be renewed once.` (`source_paragraph.zig:57`).
   **Class:** rendering artefact in the published story, so a decided fix is a Q phase with this class.
-  **Decision:** should the paragraph reading drop fence delimiter, table and Setext underline
-  lines? It amends ADR 0036 Decision 2 and ADR 0047 Decision 1, and changes the records, entities
-  and scenarios requests, which show the same reading.
+  **Decided: drop the lines that carry no words.** The paragraph reading drops fence delimiter lines,
+  table separator rows and Setext underlines, and reads a Setext heading as a heading, which ADR 0047
+  Decision 1 already drops ("blank and Markdown heading lines are dropped"; the code knows only ATX
+  headings). Every line with words stays, table rows and code lines included, so a requirement stated
+  in a table keeps its words. The line classifiers of `markdown_code_spans.zig` recognise these lines, so
+  no meaning is judged. Amends ADR 0036 Decision 2, ADR 0047 Decision 1 and 17-specify.md:281-284, the
+  design text landing with the code. It changes the records, entities and scenarios requests, which show
+  the same reading. First in the order: it is the only remedy that changes published text.
 - **Two clocks for one request deadline: confirmed.** Test "the provider operation clock reads boot
   time while the exchange timer sleeps on awake time" (`provider_operation_clock.zig`). The deadline
   reads `.boot` (`provider_operation_clock.zig:13`) and the exchange sleeps the remainder on
   `.awake` (`model_http_exchange.zig:84`), so time the machine is suspended counts toward the
   deadline and not toward the sleep. A unit test cannot suspend the machine, so it reads the clock
-  and pins the exchange's choice by its source text. **Class:** none. **Decision:** does a request
-  deadline count time the machine is suspended?
+  and pins the exchange's choice by its source text. **Class:** none. **Decided: the deadline counts
+  suspended time.** The exchange sleeps the remainder on `.boot` (`model_http_exchange.zig:84`), and the
+  test's `.awake` pin flips. ADR 0030's deadline "bounds a stalled exchange", and a connection rarely
+  survives a suspend. The provider operation clock stays as it is. Where the OS can't count suspended time,
+  `.boot` behaves as `.awake` does today. Last in the order: it changes only how long a stalled call waits
+  after a suspend, not the output.
 - **A retry population differs after a source-omission merge: confirmed under an unchanged scope.**
   Test: the block added to "false conflicts repair a closed relation group with exact preconditions and
   preserved siblings" (`specification_generation_test.zig`). The ordinary reconciliation permit read
   from the source and proposal before the merge and after it has the same scope bytes and another
   `maximum_targets`. By reading, not executed: `workflow_retry.zig:485` refuses a permit whose scope
   exists with another maximum, which would end a run that made an ordinary repair before the merge.
-  **Class:** successful completion. **Decision:** after a source-omission merge, does a reconciliation
-  repair keep the scope, frozen population and counters it had, or get a new scope?
+  **Class:** successful completion. **Decided: keep the scope, frozen population and counters.** No
+  amendment: identities survive replacement (22-repair.md:741), a population freezes at first
+  authorization (:757), and a new authorization can't erase earlier failures (:768). By reading, the
+  merge overwrites `source.last_repair` (`reference_reconciliation_repair.zig:501`, `:889`), and
+  `retryPermit` carries the frozen maximum only from `last_repair.retry` under the same scope (`:145`).
+  The merge already keeps its own permit in `source.omission_retry` (`:789`), so the fix stops it
+  overwriting the ordinary record; the preflight confirms the owner. Not adopted: a new scope, which
+  would grant a fresh allowance after each merge. Second in the order: today such a run fails.
