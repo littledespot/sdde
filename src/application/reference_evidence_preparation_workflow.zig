@@ -27,7 +27,11 @@ pub const PrepareReferenceEvidence = struct {
         const result = self.action.execute(scratch.allocator(), input.step.runtime, &diagnostic, directory.*, selected.selector.feature_id) catch |operation_error| {
             // The stage-owned slot is read before the unchanged error propagates; the runner
             // records the step in the failed action's event (ADR 0031).
-            if (input.step.stage_step) |slot| slot.name = if (diagnostic.step) |step| @tagName(step) else null;
+            if (input.step.stage_step) |slot| {
+                slot.name = if (diagnostic.step) |step| @tagName(step) else null;
+                // A value copy, so it outlives the scratch arena released on return.
+                slot.entry_path = diagnostic.entry_path;
+            }
             return operation_error;
         };
         return publish(self.allocator, evidence_values.inputs_schema, evidence.Inputs, result);

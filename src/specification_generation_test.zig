@@ -788,6 +788,30 @@ test "the paragraph reading rejects a citation that names another source or runs
     }
 }
 
+// SPEC01 C49: `reading.paragraph` is the text the composed story takes from a claim (ADR 0047). It drops blank and
+// heading lines and removes list markers. This records what it publishes when the claim cites a code fence, a table
+// and a Setext heading. The test records current behaviour; it proposes no change.
+test "the story reading of a claim that cites fence, table and Setext lines" {
+    const reading = @import("domain/source_paragraph.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_]struct { source: []const u8, words: []const u8 }{
+        .{ .source = "Renewals are recorded as follows.\n\n```\nloan.renew()\n```\n", .words = "Renewals are recorded as follows. ``` loan.renew() ```" },
+        .{ .source = "| Field | Value |\n| --- | --- |\n| Period | 14 days |\n", .words = "| Field | Value | | --- | --- | | Period | 14 days |" },
+        .{ .source = "Loan renewal\n============\n\nA loan may be renewed once.\n", .words = "Loan renewal ============ A loan may be renewed once." },
+    }) |case| {
+        var fixture = try Fixture.init(a, case.source);
+        defer fixture.deinit();
+        const item = for ((try provenance.items(fixture.context)).entries) |entry| {
+            if (entry.claim.content == .model) break entry;
+        } else return error.MissingTestClaim;
+        var structure = try reading.Structure.init(a, fixture.context.inputs);
+        const words = (try reading.paragraph(a, &structure, item)).?;
+        try std.testing.expectEqualStrings(case.words, words);
+    }
+}
+
 test "the registered story composition advances the session or replaces it with its typed rejection" {
     const values = @import("application/pipeline_values.zig");
     const native = @import("application/specification_workflow.zig");
@@ -1290,6 +1314,45 @@ test "authoring schema reuse keeps positive support separate from open question 
         const admitted = (try g.validate(a, text.validator, fixture.context, .brief, try g.parse(a, wire, bound))).valid;
         try std.testing.expectEqualDeep(question.source_group_ids, admitted.response.clarification.question.source_group_ids);
         try std.testing.expectEqualDeep(question.provenance, selection(admitted.response.clarification.question.provenance));
+    }
+}
+
+// SPEC01 C49: a records batch is assigned its group with `.question` (`binding.record`, `recordCount`), and every
+// record over a group is validated with `.content` (`validateRecordAssociation`). A group that holds an open question
+// passes the first and not the second. The test records this current behaviour; it proposes no change.
+test "a records batch is bound to a group that holds an open question, and record content over that group is refused" {
+    const binding = @import("domain/specification_source_binding.zig");
+    const refs = @import("domain/reference_support.zig");
+    const extraction_contract = @import("domain/reference_extraction.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_]struct { behavior: []const u8, question: []const u8 }{
+        .{ .behavior = "MOCK Show the startup time.", .question = "MOCK Which timezone applies?" },
+        .{ .behavior = "MOCK Renew an eligible loan.", .question = "MOCK Which renewal period applies?" },
+    }) |case| {
+        const claims = [_]extraction_contract.Proposal{
+            .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+            .{ .category = .open_question, .citations = &.{.{ .ordinal = 2 }} },
+        };
+        var fixture = try Fixture.initClaims(a, try std.fmt.allocPrint(a, "{s}\n{s}\n", .{ case.behavior, case.question }), null, .{ .selected = &claims });
+        defer fixture.deinit();
+        const records = refs.records(fixture.context.references);
+        try std.testing.expectEqual(@as(usize, 2), records.signals.len);
+        const business = records.signals[0];
+        const question = records.signals[1];
+        try std.testing.expect(!spec.permitsPositiveMapping((try references.r.item(records.items, question.value.claim_ids[0])).claim.content));
+        // Both groups get a records batch, the question's included, and the batch carries its claim.
+        try std.testing.expectEqual(@as(usize, 2), try binding.recordCount(records));
+        const bound = (try binding.record(a, records, fixture.context.inputs, 1)).records;
+        try std.testing.expectEqualDeep(question.id, bound.signal);
+        try std.testing.expectEqualDeep(question.value.claim_ids, bound.selection.claim_ids);
+        // Record content is bound with `.content`: the business group resolves and the question group does not,
+        // which is the first check of `validateRecordAssociation`.
+        _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{business.id}, .content);
+        try std.testing.expectError(error.InvalidSpecificationBinding, binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .content));
+        // Question mode resolves it, so the offered batch and its validation read the same group differently.
+        _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .question);
     }
 }
 
@@ -7086,7 +7149,7 @@ test "clarification excerpts follow evidence selections and collapse exact conta
         const question = "Which reporting interval is required? Give its duration.";
         const reason = "The source establishes the output but gives no interval.";
         const scoped = try preparation.prepare(a, question, reason, &.{item}, .{ .citation_ids = &.{ outer.id, inner.id }, .source_ids = &.{item.source_id} });
-        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, scoped.question, "Source 1, lines"));
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, scoped.question, "Source 1, line 1: "));
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, scoped.question, source));
         const source_only = try preparation.prepare(a, question, reason, &.{item}, .{ .source_ids = &.{item.source_id} });
         try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, source_only.question, source));
@@ -7101,6 +7164,45 @@ test "clarification excerpts follow evidence selections and collapse exact conta
         try std.testing.expect(std.mem.indexOf(u8, narrow.question, inner.value.verbatim.?) != null);
         try std.testing.expectEqualStrings(before, try std.json.Stringify.valueAlloc(a, item, .{}));
     }
+}
+
+// SPEC01 Q13: a clarification question cites a span's lines as `spec.md` does, from `source_coordinates.lines`: a
+// whole line ends at column 1 of the next and is one line, a mid-line token is one line, and a run is `lines A–B`.
+test "clarification excerpts cite a span's lines as spec.md does" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const preparation = @import("domain/clarification_preparation.zig");
+    var fixture = try Fixture.init(a, "Startup greeting and UTC date.");
+    defer fixture.deinit();
+    const original = (try provenance.items(fixture.context)).entries[0];
+    const question = "Which reporting interval is required? Give its duration.";
+    const reason = "The source establishes the output but gives no interval.";
+    const Case = struct { start: [2]u32, end: [2]u32, shown: []const u8, absent: []const u8 };
+    for ([_]Case{
+        .{ .start = .{ 5, 1 }, .end = .{ 6, 1 }, .shown = "\nSource 1, line 5: ", .absent = "lines 5–6" },
+        .{ .start = .{ 5, 1 }, .end = .{ 8, 1 }, .shown = "\nSource 1, lines 5–7: ", .absent = "lines 5–8" },
+        .{ .start = .{ 6, 9 }, .end = .{ 6, 23 }, .shown = "\nSource 1, line 6: ", .absent = "lines 6–6" },
+        .{ .start = .{ 3, 1 }, .end = .{ 5, 1 }, .shown = "\nSource 1, lines 3–4: ", .absent = "lines 3–5" },
+    }) |case| {
+        var citation = original.citations[0];
+        citation.value.location.start.line = case.start[0];
+        citation.value.location.start.column = case.start[1];
+        citation.value.location.end.line = case.end[0];
+        citation.value.location.end.column = case.end[1];
+        var item = original;
+        item.citations = &.{citation};
+        const prepared = try preparation.prepare(a, question, reason, &.{item}, .{ .citation_ids = &.{citation.id} });
+        try std.testing.expect(std.mem.indexOf(u8, prepared.question, case.shown) != null);
+        try std.testing.expect(std.mem.indexOf(u8, prepared.question, case.absent) == null);
+    }
+    // A span that closes before it opens is no citation: the preparation rejects it.
+    var broken = original.citations[0];
+    broken.value.location.start.line = 4;
+    broken.value.location.end.line = 3;
+    var broken_item = original;
+    broken_item.citations = &.{broken};
+    try std.testing.expectError(error.InvalidClarificationInput, preparation.prepare(a, question, reason, &.{broken_item}, .{ .citation_ids = &.{broken.id} }));
 }
 
 fn introduceConflict(fixture: *Fixture) ![]const references.r.ClaimId {
@@ -7278,6 +7380,31 @@ test "false conflicts repair a closed relation group with exact preconditions an
         // Group repair cannot itself invent replacement signals; full validation
         // must require their rebuilding by the existing coverage-repair owner.
         try std.testing.expect((try references.finish(a, fixed.input, fixed.proposal.global, ctx)) == .invalid);
+        // SPEC01 C49: a reconciliation repair's retry permit has a scope, a snapshot of the source's origin and four
+        // collection positions, and a population that `workflow_retry.zig` compares by scope (a permit whose scope
+        // exists with another maximum is refused, by reading, not executed here). This takes one authorization and
+        // reads its permit from the source and proposal before the source-omission merge and after it: the scope is
+        // the same and the population is not. The test records current behaviour; it proposes no change.
+        {
+            const ordinary = @import("domain/reference_reconciliation_repair.zig");
+            const probe: r.Parsed = .{ .input = fixed.input, .proposal = fixed.proposal };
+            const rejected_after = (try references.finish(a, fixed.input, fixed.proposal.global, ctx)).invalid;
+            const base = switch (try ordinary.authorize(a, probe, ctx, rejected_after)) {
+                .model => |authorization| authorization,
+                .automatic => |automatic| automatic.authorization,
+                .blocked => return error.TestUnexpectedResult,
+            };
+            var before = base;
+            before.dependencies.source = parsed.source;
+            before.dependencies.proposal = parsed.proposal;
+            var after = base;
+            after.dependencies.source = fixed.source;
+            after.dependencies.proposal = fixed.proposal;
+            const permit_before = try ordinary.retryPermit(a, before);
+            const permit_after = try ordinary.retryPermit(a, after);
+            try std.testing.expectEqualSlices(u8, &permit_before.key.scope, &permit_after.key.scope);
+            try std.testing.expect(permit_before.maximum_targets != permit_after.maximum_targets);
+        }
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (ctx).inputs), fixed, ctx, support, auth, replacement, null));
         changed[0].claim_id = business[2];
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (ctx).inputs), parsed, ctx, support, auth, .{ .conflict_group = .{ .claim_dispositions = changed, .conflicts = &.{} } }, null));

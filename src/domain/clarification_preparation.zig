@@ -3,6 +3,7 @@
 const std = @import("std");
 const c = @import("clarification_inputs.zig");
 const r = @import("reference_reconciliation.zig");
+const coordinates = @import("source_coordinates.zig");
 const reference_view = @import("workflow_artifact_registry.zig").reference_context_filename;
 pub const Prepared = struct { question: []const u8, why_required: []const u8 };
 pub const Evidence = struct { citation_ids: []const r.CitationId = &.{}, source_ids: []const @import("reference_identity.zig").SourceId = &.{} };
@@ -29,7 +30,14 @@ pub fn prepare(allocator: std.mem.Allocator, question: []const u8, reason: []con
     }
     for (selected.items) |citation| {
         const value = citation.value;
-        const line = try std.fmt.allocPrint(allocator, "\nSource {d}, lines {d}–{d}: {s}", .{ value.source_id.ordinal, value.location.start.line, value.location.end.line, value.verbatim orelse "See " ++ reference_view ++ " for the captured source." });
+        // The lines a span covers are `source_coordinates.lines`'s, as in `spec.md`: a whole line ends at column 1 of
+        // the next, which is not part of the citation, and one line reads `line N`.
+        const cited = coordinates.lines(value.location) catch return error.InvalidClarificationInput;
+        const excerpt = value.verbatim orelse "See " ++ reference_view ++ " for the captured source.";
+        const line = if (cited.first == cited.last)
+            try std.fmt.allocPrint(allocator, "\nSource {d}, line {d}: {s}", .{ value.source_id.ordinal, cited.first, excerpt })
+        else
+            try std.fmt.allocPrint(allocator, "\nSource {d}, lines {d}–{d}: {s}", .{ value.source_id.ordinal, cited.first, cited.last, excerpt });
         defer allocator.free(line);
         try context.appendSlice(allocator, line);
     }

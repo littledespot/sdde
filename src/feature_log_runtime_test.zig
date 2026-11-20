@@ -1433,9 +1433,8 @@ test "a cancelled console mirror write under the lock is a cancellation, and the
     try std.testing.expect(runner.process(fact) == .cancelled);
     try std.testing.expect(sink.lock_file == null);
     try std.testing.expectEqual(@as(usize, 0), outputs.emergency_calls);
-    // The second row was appended before its console write, so the runner's cached state is behind the file. It
-    // drops that state and recovers it: the next event continues the sequence instead of failing on the size
-    // it expected.
+    // The second row was appended and the state advanced before its console write; a cancellation still drops that
+    // state (ADR 0032) and the next persist recovers it from the bytes, so the next event continues the sequence.
     outputs.console_cancel = false;
     const next = runner.process(fact);
     try std.testing.expect(next == .persisted);
@@ -1483,10 +1482,12 @@ const FlushFailsAfterWrite = struct {
     }
 };
 
-// A cancelled persist recovers its stream's state from the bytes (ADR 0032). This records what any other failure after
-// an appended row does today: the stream's state stays behind the file, so the next append and the close fail, and the
-// segment keeps the failed row without a trailer, the crash shape ADR 0026 keeps whole.
-test "after a console or flush failure that followed an appended row, the next append and the close leave the file as it was" {
+// A cancelled persist recovers its stream's state from the bytes (ADR 0032). The console is only a mirror (ADR 0018), so
+// a console failure after an appended row leaves the stream's state level with the file: the next append and the close
+// continue it. A flush failure after the write may or may not have made the bytes durable and recovers nothing: the
+// state stays behind the file, so the next append and the close fail, and the segment keeps the failed row without a
+// trailer, the crash shape ADR 0026 keeps whole.
+test "after a console failure the next append and the close continue the file, and after a flush failure they leave it as it was" {
     const io = std.testing.io;
     const Kind = enum { console, flush };
     for ([_]log_stream.Stream{ .event, .prompt }) |stream| for ([_]Kind{ .console, .flush }) |kind| {
@@ -1536,7 +1537,7 @@ test "after a console or flush failure that followed an appended row, the next a
             .console => outputs.console_failure = true,
             .flush => sink.fail = true,
         }
-        // The row reaches the file before the failure, so the file is one row ahead of the runner's state.
+        // The row reaches the file before the failure.
         const failed = switch (stream) {
             .event => runner.process(fact),
             .prompt => runner.processPrompt(fragment),
@@ -1545,22 +1546,35 @@ test "after a console or flush failure that followed an appended row, the next a
         const directory = if (stream == .event) event_directory else prompt_directory;
         const before = try directory.readFileAlloc(io, "0001.log", std.testing.allocator, .limited(log_limits.max_segment_bytes));
         defer std.testing.allocator.free(before);
-        // The sink works again, but the runner's state is one row behind the file: no later row is written at a
-        // wrong offset and no trailer is written over the row.
         outputs.console_failure = false;
         sink.fail = false;
         const next = switch (stream) {
             .event => runner.process(fact),
             .prompt => runner.processPrompt(fragment),
         };
-        try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, next.blocked);
-        try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, runner.close(shortcode).blocked);
+        const closed = runner.close(shortcode);
         const after = try directory.readFileAlloc(io, "0001.log", std.testing.allocator, .limited(log_limits.max_segment_bytes));
         defer std.testing.allocator.free(after);
-        try std.testing.expectEqualStrings(before, after);
-        // The segment keeps the failed row and no trailer: the crash shape ADR 0026 keeps whole.
-        try std.testing.expectEqual(@as(usize, 0), std.mem.count(u8, after, "segment_trailer|"));
-        try std.testing.expect(std.mem.endsWith(u8, after, "\n"));
+        switch (kind) {
+            .console => {
+                // The failed row stays, the next row follows it at the right offset, and the stream closes with its
+                // trailer.
+                try std.testing.expect(next == .persisted);
+                try std.testing.expect(closed != .blocked);
+                try std.testing.expect(after.len > before.len and std.mem.startsWith(u8, after, before));
+                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, after, "segment_trailer|"));
+            },
+            .flush => {
+                // The runner's state is one row behind the file: no later row is written at a wrong offset and no
+                // trailer is written over the row.
+                try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, next.blocked);
+                try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, closed.blocked);
+                try std.testing.expectEqualStrings(before, after);
+                // The segment keeps the failed row and no trailer: the crash shape ADR 0026 keeps whole.
+                try std.testing.expectEqual(@as(usize, 0), std.mem.count(u8, after, "segment_trailer|"));
+                try std.testing.expect(std.mem.endsWith(u8, after, "\n"));
+            },
+        }
     };
 }
 

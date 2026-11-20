@@ -51,7 +51,11 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
      `ReferenceMalformedText`, `ReferenceDecodedBudget`), so the source fails at ingestion with a
      typed reason (ADR 0036). The capturer blocks an entry it observed as no file, so an entry
      observed as a symlink, a special file or an unreadable one that was captured anyway, and any
-     other mismatch of the books, rejects `InvalidReferenceAccounting`.
+     other mismatch of the books, rejects `InvalidReferenceAccounting`. The stage's diagnostic names
+     the first entry that fails with its own `Failure` by its display path, for the CLI (the
+     directory's project-relative path and the entry's normalized path from the validated
+     inventory, never a symlink target); a path longer than 512 bytes names none
+     ([ADR 0031](../../decisions/0031-stage-actions.md), [§8](../08-diagnostics-evidence.md)).
   6. `assignIdentities`: numbers sources in document order and maps each provisional source and
      block to its canonical ID under a fresh reference-state ID. It is the only step that draws
      system entropy, through its own port. Rejects errors of `reference_evidence.Error` and

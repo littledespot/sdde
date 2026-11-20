@@ -67,7 +67,9 @@ pub fn main(init: std.process.Init) !void {
                 try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "{s}: {s}; retry-limit={d}; completed executions={d}", .{ reason.diagnostic(), failure.operation().bytes, failure.limit.value, failure.completed_executions }));
                 if (failure.defect) |defect| try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), defect, .{}));
             } else {
-                try writeFailure(init.io, reason.diagnostic());
+                if (report.reference_entry_path) |*path| {
+                    try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "{s}: {s}", .{ reason.diagnostic(), path.text() }));
+                } else try writeFailure(init.io, reason.diagnostic());
                 if (reason == .model_capture) try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), reason.model_capture, .{}));
             }
             std.process.exit(1);

@@ -145,6 +145,7 @@ pub fn reportInvocation(io: std.Io, allocator: std.mem.Allocator, project_root: 
             if (invocation.pipeline_runner) |*runner| {
                 report.last_operation_rejection = runner.last_operation_rejection;
                 report.provider_failure = runner.last_provider_failure;
+                report.reference_entry_path = runner.last_entry_path;
                 if (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })) |diagnostic|
                     report.candidate_error = try diagnostic.copy(report.arena.allocator());
             }

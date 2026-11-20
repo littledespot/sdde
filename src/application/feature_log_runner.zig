@@ -302,13 +302,15 @@ pub const Runner = struct {
             error.LogSinkFailure => error.AppendFailure,
             error.Cancelled => error.Cancelled,
         };
+        // The row is on disk, so the stream's state advances before the console mirror. A failed mirror (the console
+        // is only a mirror, ADR 0018) then leaves the cached state level with the file, not one row behind it.
+        state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
+        self.event_state = state;
+        self.dropped.remove(.event);
         if (self.policy.console) self.actions.write_console.execute(row) catch |failure| return switch (failure) {
             error.ConsoleLogWriteFailure => error.ConsoleFailure,
             error.Cancelled => error.Cancelled,
         };
-        state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
-        self.event_state = state;
-        self.dropped.remove(.event);
         return evidence;
     }
 
@@ -413,13 +415,14 @@ pub const Runner = struct {
             error.LogSinkFailure => error.AppendFailure,
             error.Cancelled => error.Cancelled,
         };
+        // As for an event: the row is on disk, so the state advances before the console mirror.
+        state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
+        self.prompt_state = state;
+        self.dropped.remove(.prompt);
         if (self.policy.console) self.actions.write_console.execute(row) catch |failure| return switch (failure) {
             error.ConsoleLogWriteFailure => error.ConsoleFailure,
             error.Cancelled => error.Cancelled,
         };
-        state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
-        self.prompt_state = state;
-        self.dropped.remove(.prompt);
         return evidence;
     }
 
@@ -531,7 +534,8 @@ fn acquireBinding(context: *anyopaque, stream: log_stream.Stream) child_bindings
     return .ok;
 }
 
-/// A cancelled persist drops the stream's cached state (see `Runner.dropped`); any other failure keeps it.
+/// A cancelled persist drops the stream's cached state (see `Runner.dropped`). Any other failure keeps it: the state
+/// already includes a row that reached the file, so only a failed append or flush leaves it behind the bytes.
 fn persistEventBinding(
     context: *anyopaque,
     attributed: telemetry.WorkflowTelemetryFact,

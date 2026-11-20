@@ -41,6 +41,17 @@ as retry exhaustion, show none. The CLI prints it after an `invalid`, `blocked`,
 `provider_failure: <cause>; delivery=<d>; retry=<r>[; transport=<phase>/<cause>][; content=<c>]`;
 only these enum names are printed, never a key, header, body, URL or provider text.
 
+The run report and the CLI also carry the display path of the reference entry whose own
+reason ended the run, as presentation data beside the error name (approved by the user on
+20 November 2026). The CLI prints `<Name>: <path>` for `ReferenceSymlink`,
+`ReferenceSpecialFile`, `ReferenceUnreadable`, `ReferenceSourceSize`, `ReferenceSourceBudget`,
+`ReferenceSourceCapture`, `ReferenceUnsupportedMedia`, `ReferenceMalformedText` and
+`ReferenceDecodedBudget`, for the first failing entry in inventory order
+([13-03](actions/13-03-references.md)). The path is the validated inventory's, never
+authority, and no symlink target is printed. An inventory failure, which includes a path that
+fails UTF-8 or NFC, an accounting fault and a path longer than 512 bytes print the name
+alone. It adds no tag, code or branch.
+
 Diagnostics are sorted deterministically by stage, artifact, location, validator priority, and code. Human-facing messages are rendered from codes and fields; repair logic does not parse prose.
 
 Evidence is separate from diagnostics. It records facts such as a decoded source location, a successfully parsed AST, a passing command, or a successfully published output set. A checklist or task status is derived from evidence and cannot be set by the LLM.

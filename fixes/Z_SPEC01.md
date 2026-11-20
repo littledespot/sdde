@@ -491,8 +491,8 @@ rotation is reported as one too, but see "Not done" for the torn segment it can 
   (`feature_log_recovery.zig` rejects an empty or header-less current segment), so that run's finalization fails and
   it ends `blocked` as it did before this change. **Decided no** (user, 19 November 2026: "apply recommendation"):
   current-run recovery doesn't rewrite a torn last segment; ADR 0032 "Cancellation mapping" records the limit. A
-  non-cancel failure after a row's bytes were written (a flush or console fault) leaves the same stale cache,
-  and its run ends `blocked` anyway. A stream's cache is a `?StreamState` beside the `dropped` set, not one
+  non-cancel failure after a row's bytes were written (a flush fault; a console fault since "C3 console failure")
+  leaves the same stale cache, and its run ends `blocked` anyway. A stream's cache is a `?StreamState` beside the `dropped` set, not one
   per-stream value. Hand-written `Canceled` mappings outside the sink boundary stay as they were
   (`feature_log_history.zig`), as do the `else =>` arms over closed sets in `feature_logging_runtime.zig` that this
   change didn't add and the inferred error set of the run-history scan. A cancelled request capture is accounted
@@ -2287,6 +2287,54 @@ equals the key its owner stores the decision under. Mutations: removing the rule
 defaulting a missing reader in the binding fails the accepted-path test; a producer without its reader fails the
 production registry test. Graph validation shares the rule and its call site; no test sends the admission rule
 through it.
+
+## C3 console failure. The stream state advances before the console mirror (20 November 2026)
+
+**Decided** 20 November 2026 (user: "update the documentations with the above recommendations"), built the same
+day. **Defect class:** none; log completeness after a console failure, not a published-output defect. **Failure:**
+`persistEvent` and `persistPrompt` appended a row, wrote the console mirror and only then advanced the stream's
+cached state, so a console failure left the row on disk and the state one row behind it: every later append and
+the close then failed on the file size, and the segment kept the row without a trailer. **Change** (`feature_log_runner.zig`):
+both functions advance the state, assign it and clear the dropped mark straight after the append, before the
+console write. The console is only a mirror (ADR 0018); a cancelled console write still drops the state through
+`forget` and the next persist recovers it from the bytes (ADR 0032, unchanged). A flush failure stays as it was:
+the bytes may or may not be durable, nothing is recovered, and the segment keeps the failed row without a
+trailer (the crash shape ADR 0026 keeps whole). No design text states the order, so none changes. **Test**
+(`feature_log_runtime_test.zig`, "after a console failure the next append and the close continue the file, and
+after a flush failure they leave it as it was"): in the event and the prompt stream, after a console failure the
+next row follows the failed one and the stream closes with its trailer; the flush assertions stand. Reverting
+the event ordering fails it.
+
+## C4 reference entry path. The CLI names the failing entry (20 November 2026)
+
+**Decided** 20 November 2026 (user: "update the documentations with the above recommendations"); the ADR 0031
+amendment it needs approved the same day ("Yes, amend ADR 0031"); built. **Defect class:** none; a diagnosability
+change that names no published-output defect. **Change:** `pipeline.StageEntryPath`, a 512-byte bounded copy, joins
+`StageStepSlot`. `prepare-reference-evidence` records, in its diagnostic, the display path (the directory's
+project-relative path, `/`, the entry's normalized path) of the first entry the capturer or decoder blocked, only
+when the returned error is that entry's own reason; its binding copies the value before the scratch arena is
+released; the runner keeps it as `last_entry_path` when the stage's own error rejects the step, not when a later
+cancellation or log stop replaces it; `Report.reference_entry_path` carries
+it; the CLI prints `<Name>: <path>` after the error name. An inventory, accounting, port or identity error names
+none, no symlink target is kept, and a path longer than 512 bytes names none. No event, log or E2E report records it,
+so the report version is unchanged. Amends ADR 0031 ("Failures and diagnostics"), 13-03 step 5, contract 08 and
+27-observability; F0005 criterion 22 is unchanged, because it governs workflow-definition rejections.
+**Tests:** every `Failure` tag, the decoder's block and the unnamed faults at the stage, with several entries (a valid
+one first, two blocked, a fault of the books first); the slot at the binding; each
+failure class's path through the run report in the integration scenarios; the packaged executable's stderr
+(`ReferenceUnsupportedMedia: references/Unsupported/.hidden.json`). Dropping the runner's copy fails the integration
+scenario and dropping the action's path fails the stage and binding tests.
+
+## Q13 clarification question lines (20 November 2026)
+
+**Decided** (user, 20 November 2026: "make clarification question lines use `source_coordinates.lines`"), built the
+same day. **Defect class:** none; a displayed line number that disagreed with `spec.md`'s, in a clarification form no
+development case reaches. **Change** (`clarification_preparation.zig`): the excerpt line takes `Source N, line A` for
+one line and `Source N, lines A–B` for a run from `source_coordinates.lines`, so a whole line ends at column 1 of the
+next without reading as "lines 5–6", and a span that closes before it opens is `InvalidClarificationInput`. No
+clause fixes the form's wording, so no design text changes. **Test:** whole line, run, mid-line token and two-line
+spans, with the old reading absent, and the invalid span; the existing count of the one-line citation changed to
+`Source 1, line 1:`. Printing the raw end line again fails them.
 
 ## Upstream rework. A form never carries an earlier owner's gap (16 November 2026)
 

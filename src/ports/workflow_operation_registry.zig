@@ -31,7 +31,8 @@ pub const StepInput = struct {
     /// internal steps (ADR 0031). A caller that invokes a binding outside the runner has none to
     /// supply, so it stays always active.
     runtime: pipeline.NodeRuntime = .{},
-    /// The runner's slot for the internal step a stage action stopped at; absent outside the runner.
+    /// The runner's slot for the internal step a stage action stopped at, and the display path of the entry whose
+    /// own reason it stopped on; absent outside the runner.
     stage_step: ?*pipeline.StageStepSlot = null,
     model_request_lifecycle: ?*const @import("../domain/provider_operation_lifecycle.zig").Ledger = null,
     provider_invocation: ?@import("../domain/provider_invocation_validation.zig").Call = null,

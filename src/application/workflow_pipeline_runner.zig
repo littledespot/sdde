@@ -72,12 +72,16 @@ pub const Runner = struct {
     remaining_step_executions: usize,
     events_closed: bool = false,
     last_effects: ?execution.AppliedEffects = null,
-    /// The internal step a stage action stopped at during the current step invocation.
+    /// The internal step a stage action stopped at during the current step invocation, and the display path of the
+    /// entry whose own reason it stopped on (ADR 0031).
     stage_step: pipeline.StageStepSlot = .{},
     last_operation_rejection: ?execution.OperationRejection = null,
     /// The typed failure of the last model call, or null when that call did not fail. It is set by each
     /// call's result, so a later call that completes clears it: it names what ended a run, never an earlier fault.
     last_provider_failure: ?@import("../domain/provider_failure_detail.zig").Detail = null,
+    /// The display path of the input entry a rejected stage step named (ADR 0031), kept for the CLI beside the
+    /// terminal rejection. It is presentation data: no event, log or report of the run records it.
+    last_entry_path: ?pipeline.StageEntryPath = null,
     /// The rejection a later one replaced, kept beside the terminal rejection (27-observability.md). The earliest
     /// replacement sets it; a later one never overwrites it, and a lone failure leaves it unset.
     first_cause: ?execution.FirstCause = null,
@@ -205,6 +209,10 @@ pub const Runner = struct {
         var started: bool = undefined;
         if (self.actionStart(id, &started, null)) |rejection| return .{ .rejected = rejection };
         const result = self.executeStep(id);
+        // Only the stage's own error names its entry: a later cancellation, deadline or log stop that replaces it does not.
+        if (result == .rejected and result.rejected == .operation_failed) if (self.stage_step.entry_path) |path| {
+            self.last_entry_path = path;
+        };
         if (self.actionEnd(id, started, result, self.stage_step.name, null)) |rejection| return .{ .rejected = rejection };
         if (self.eventsActive() and result == .rejected and result.rejected == .retry_limit) {
             if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |stop| return .{ .rejected = self.replacing(result.rejected, execution.Rejection.logStop(stop)) };

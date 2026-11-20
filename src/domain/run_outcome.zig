@@ -18,6 +18,9 @@ pub const Report = struct {
     /// The typed cause of the last model call when it failed, printed after the terminal outcome. A
     /// later call that completes leaves none.
     provider_failure: ?@import("provider_failure_detail.zig").Detail = null,
+    /// The display path of the reference entry whose own reason ended the run, printed after that reason's name
+    /// (13-03, contract 08). Never authority, and no event, log or E2E report records it.
+    reference_entry_path: ?@import("pipeline.zig").StageEntryPath = null,
     arena: std.heap.ArenaAllocator,
 
     pub fn deinit(self: *Report) void {

@@ -24,8 +24,9 @@ pub const Step = enum {
 };
 
 /// Stage-owned diagnostic slot: the step a failing run stopped at, or the step a cancelled run
-/// did not start. The binding hands it to the runner (ADR 0031).
-pub const Diagnostic = struct { step: ?Step = null };
+/// did not start, and, when the error is one entry's own reason, that entry's display path. The
+/// binding hands it to the runner (ADR 0031).
+pub const Diagnostic = struct { step: ?Step = null, entry_path: ?pipeline.StageEntryPath = null };
 
 /// The failure representation of the eight absorbed actions, with `validateAccounting` failing an entry that could
 /// not be read or decoded as its own `reference.Failure`. `Cancelled` means the
@@ -61,7 +62,10 @@ pub const Action = struct {
         try checkpoint(diagnostic, runtime, .decode_markdown);
         const decoded = steps.decodeMarkdown(self.decoder, scratch, captured) catch |err| return stopped(diagnostic, .decode_markdown, err);
         try checkpoint(diagnostic, runtime, .validate_accounting);
-        const inputs = steps.validateAccounting(scratch, decoded) catch |err| return stopped(diagnostic, .validate_accounting, err);
+        const inputs = steps.validateAccounting(scratch, decoded) catch |err| {
+            diagnostic.entry_path = failingEntryPath(decoded, err);
+            return stopped(diagnostic, .validate_accounting, err);
+        };
         try checkpoint(diagnostic, runtime, .assign_identities);
         const corpus = steps.assignIdentities(self.identities, scratch, inputs, feature) catch |err| return stopped(diagnostic, .assign_identities, err);
         try checkpoint(diagnostic, runtime, .build_chunks);
@@ -74,6 +78,29 @@ pub const Action = struct {
 fn stopped(diagnostic: *Diagnostic, step: Step, err: Error) Error {
     diagnostic.step = step;
     return err;
+}
+
+/// The display path of the first entry the capturer or decoder blocked, when `err` is that entry's own reason
+/// (`validateAccounting` stops at it). Any other error is a fault of the books or the inventory, which names no
+/// entry; a symlink names its own entry path and no target, which the inventory never kept. The path is built in a
+/// buffer of the bound's size, so the only way to name none is a path that does not fit it: no allocation can fail.
+fn failingEntryPath(candidate: reference.DecodedCorpus, err: Error) ?pipeline.StageEntryPath {
+    if (candidate.captured.entries.len != candidate.entries.len) return null;
+    for (candidate.captured.entries, candidate.entries) |captured, decoded| {
+        const failure = switch (captured.source) {
+            .blocked => |reason| reason,
+            else => switch (decoded.result) {
+                .blocked => |reason| reason,
+                else => continue,
+            },
+        };
+        if (reference.failureError(failure) != err) return null;
+        var buffer: [@typeInfo(@FieldType(pipeline.StageEntryPath, "buffer")).array.len]u8 = undefined;
+        var fixed: std.heap.FixedBufferAllocator = .init(&buffer);
+        const display = reference.displayPath(fixed.allocator(), .{ .bytes = candidate.captured.inventory.directory.project_relative_path }, captured.entry.path) catch return null;
+        return pipeline.StageEntryPath.init(display);
+    }
+    return null;
 }
 
 fn checkpoint(diagnostic: *Diagnostic, runtime: pipeline.NodeRuntime, next: Step) Error!void {

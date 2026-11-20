@@ -17,7 +17,9 @@
   under existing rules" follow from existing authority; the user confirmed choices 1–3 and
   6–8 on 12 November 2026 ("yes"). On 19 November 2026 the user approved ("yes") that an
   operation's own `Cancelled` ends the run `cancelled` while the runtime still reports active,
-  amending the runtime-status rule under "Cancellation".
+  amending the runtime-status rule under "Cancellation". On 20 November 2026 the user approved
+  ("Yes, amend ADR 0031") that the reference stage's failure slot also carries the failing
+  entry's display path, under "Failures and diagnostics".
 - **Amends:**
   - AGENTS.md "Actions, orchestrators, and runner" (one responsibility and narrow ports)
     and "Testing expectations" (action tests);
@@ -212,6 +214,17 @@ engine-startup graph, the feature-logging pipeline or the invocation operation.
     (`StepInput.stage_step`), the binding writes the failing step's name before it returns its
     unchanged error, and the failed action's event records it as `step_id`
     (`event-columns/v3`, F0002).
+- **A failing entry is named by its display path.** The reference stage's slot also carries
+  the display path of the entry whose own reason the error is.
+  - It is copied by value from the validated inventory: the selected directory's
+    project-relative path, `/` and the entry's normalized path. It is bounded to 512 bytes
+    and is none when it does not fit; the text is never cut.
+  - Only the reference stage's binding writes it, and only for the nine entry-level failures
+    ([13-03](../contracts/actions/13-03-references.md)). An inventory, accounting, port or
+    identity error names none.
+  - The runner keeps it beside the terminal rejection for the CLI
+    ([§8](../contracts/08-diagnostics-evidence.md)). It is presentation data, never
+    authority, and no event, log or E2E report records it.
 - **Cancellation** is checked between internal steps. Unlike other actions today, a stage
   action's `execute` also takes the capability-free `NodeRuntime` (from
   `domain/pipeline.zig`) and checks its status between steps. A cancelled stage stops

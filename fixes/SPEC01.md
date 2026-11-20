@@ -159,8 +159,8 @@ human-reviewed labels, never by native code or a new judge.
 
 Ranked by expected reduction of published-output defects (AGENTS.md). Tracks: **Q** quality
 phases (model input or published output change, each measured), **E** engine (no model-input
-change except E7), **T** tests, **C** code-review findings (§10; the parts of C3 and C4 decided
-20 November 2026 are unbuilt, the rest unscheduled). "Gap" means between measurement sets. Each screen
+change except E7), **T** tests, **C** code-review findings (§10; unscheduled unless an item says
+otherwise). "Gap" means between measurement sets. Each screen
 batch and live set needs its own approval (AGENTS.md; the project settings prompt for every live step).
 
 **Output track** (rank order of the table; each item's screens and set follow the set order
@@ -217,11 +217,6 @@ D13.1 (post-generation reviews removed) and the inline source lines are in
 [Z_SPEC01](Z_SPEC01.md). **D13.4** (decided 1 November 2026): principles are context and
 constraints only, never origins, and never modified (design.md §3.3 invariant 33). Nothing checks what a shown source
 line means beyond the advisory evaluate-e2e link check.
-
-- **Clarification question lines disagree.** `clarification_preparation.zig:32` prints
-  `lines {start}–{end.line}`, so a citation of line 5 reads "lines 5–6" there and "line 5" in
-  `spec.md`. Fix: use `source_coordinates.lines`. It changes clarification form bytes; no
-  development case reaches a clarification today.
 
 ### Q14. Scenarios bound to their claims
 
@@ -484,39 +479,6 @@ code, do complete end 2 end analysis, do not guess").
 
 ### 10.1 Failures first
 
-**C3. A console or flush failure after a successful append leaves the log unclosable.**
-`persistEvent` (`feature_log_runner.zig:294-310`) appends the row, writes it to the console and only
-then advances `event_state`; the append writes before it syncs (`feature_log_segment_store.zig:99-100`).
-After either failure the row is on disk and the state isn't advanced, so every later append and the
-close fail on the file size (`:96`, `:125-126`). `persistPrompt` (`:405-423`) has the same shape.
-**Result built 20 November 2026** (`src/feature_log_runtime_test.zig`, "after a console or flush
-failure that followed an appended row, the next append and the close leave the file as it was"): in the
-event and the prompt stream, after a console failure and after a failed flush that followed the write,
-the next append and the close both return `LOG_SINK_FAILURE`, and the file is byte-identical to its
-state after the failed row, with no trailer. The test records current behavior. ADR 0026:111-119 keeps
-a last segment without a trailer whole, as a crashed run's shape, and only a cancelled persist
-recovers its stream's state from the bytes (ADR 0032, "Cancellation mapping"). ADR 0018:128-133
-introduces no recovery continuation for the exchange capture it governs, and no text says what a later
-append or close must do after another failure. The first failure already abandons the run
-(F0002:612-617), so the later failures change the log's completeness, not the run's outcome: the
-class "successful completion" doesn't apply.
-**Decided** 20 November 2026 (user: "update the documentations with the above recommendations"), not
-built:
-- **Console failure:** advance the stream state straight after the append, before the console mirror, in
-  `persistEvent` and `persistPrompt`.
-  - ADR 0018:128-133 makes the console "only a mirror", and F0002:541 says console success never
-    substitutes for file success, so a failed mirror must not leave the cached state behind the file.
-  - Nothing is dropped or recovered, so ADR 0032 isn't amended.
-  - The test's console assertions flip: the file gains the next row and the trailer. By reading, not
-    executed: the terminal path appends the terminal event and closes after a logging rejection
-    (`feature_logging_runtime.zig:164-183`). A console that stays broken fails that append's mirror again,
-    which replaces nothing (27-observability.md:99-100).
-- **Flush failure: no.** The bytes may or may not be durable.
-  - ADR 0032 recovers a stream from its bytes only after a cancellation, and ADR 0018:132-133 adds no
-    recovery continuation.
-  - ADR 0026:111-119 keeps the segment whole as a crashed run's shape.
-  - The test's flush assertions stand.
-
 **C4. Most failures report one payload-free name.**
 
 - **Provider and authorization (built 20 November 2026, Z_SPEC01):** the run report and the CLI
@@ -546,19 +508,8 @@ built:
   for a diagnostic that names no published-output defect. Four unrecorded returns in
   `compileResources` (`:253`, `:256`, `:257`, `:275`) print the step only.
 - **Reference ingestion (built 20 November 2026, Z_SPEC01):** an entry that could not be read or
-  decoded now fails `validateAccounting` with the error of its own reason. **Decided** 20 November 2026
-  (user: "update the documentations with the above recommendations"), not built:
-  - The nine operation-failure names stay (ADR 0033:137; e2e.md:564-565).
-  - The CLI prints the failing entry's display path after the name, in F0005 §9's form (`: <path>`,
-    F0005:848-850). The path is copied from the validated inventory and is never authority
-    (F0005:861-863).
-  - The path is already published, in `reference-context.md` and the specification's sources
-    (`reference_context.zig:18`, `specification_projection.zig:73`).
-  - No symlink target is printed. An entry whose name fails UTF-8 or NFC normalization
-    (16-reference-ingestion.md:88) prints the reason alone.
-  - F0005 §9, or 13-03 with contract 08, records the rule with the code.
-
-  Only the first failing entry is reported.
+  decoded fails `validateAccounting` with the error of its own reason, and the CLI prints the first
+  failing entry's display path after that name (contract 08). The nine names stay.
 - **Toolchain:** every toolchain failure is `error.InvalidToolchain`; the stage names the
   failing step in the event (`Step` in `prepare_toolchain.zig`), not the rule that failed.
 
@@ -773,8 +724,8 @@ definition.
 
 - Reconciliation writes statement, signal and conflict logic once a kind (`select` in
   `reference_reconciliation_repair.zig`).
-- `persistEvent` and `persistPrompt` (`feature_log_runner.zig:153-236`, `:274-342`) differ in
-  builder, serialiser and stream tag, so C3 has to be fixed twice.
+- `persistEvent` and `persistPrompt` (`feature_log_runner.zig:225-315`, `:353-427`) differ in
+  builder, serialiser and stream tag, so a change to how a row persists is made twice.
 - The open-fstat-check sequence for a log segment is written seven times, and the bounded read
   helper is re-implemented five times.
 - The ledger owner block is written five times, and four identical revision structs exist.
@@ -921,19 +872,40 @@ comment containing "plan", "hard" or "reference" fails a test with no boundary c
 
 ### 10.7 Unconfirmed readings
 
-**C49. Four readings to confirm or drop.** Each is read from the cited lines only and proposes no
-change. **Next** for each: a test at its owner that shows the behaviour.
+**C49. Four readings, each now shown by a test.** The tests record current behavior at the owner
+and propose no change (20 November 2026); each remedy is a **Decision** for the user and unbuilt.
 
-- A records batch bound to a group that holds an open question is offered record content that
-  validation refuses, which would block the run (`specification_source_binding.zig:157`;
-  `specification_provenance.zig:559`; `specification_repair.zig:80`). **Owner:**
-  `specification_source_binding.zig`. **Class:** successful completion.
-- The composed story copies fence, table and Setext lines when a claim cites them
-  (`specification_story.zig:120`). **Owner:** `specification_story.zig`. **Class:** rendering
-  artefact in the published story.
-- The provider operation clock reads `.boot` (`provider_operation_clock.zig:13`) and the HTTP
-  exchange sleeps on `.awake` (`model_http_exchange.zig:84`), so a request deadline is measured
-  on two clocks. **Owner:** the provider adapters. **Class:** none.
-- A retry population can differ after a source-omission merge
-  (`reference_reconciliation_repair.zig:145-147`; `workflow_retry.zig:471`). **Owner:**
-  `reference_reconciliation_repair.zig`. **Class:** successful completion.
+- **A records batch bound to a group that holds an open question: confirmed.** Test "a records batch
+  is bound to a group that holds an open question, and record content over that group is refused"
+  (`specification_generation_test.zig`). `recordCount` and `record` give the question group a batch
+  with `.question` (`specification_source_binding.zig:156-158`, `:203`); record content over it is
+  bound with `.content` (`specification_provenance.zig:626`), which refuses it
+  (`resolveGroups` returns `InvalidSpecificationBinding`). By reading, not executed: the refusal
+  ends the run blocked (`specification_repair.zig:82`). **Class:** successful completion.
+  **Decision:** should a records batch bound to a group holding an `open_question` be offered only the
+  clarification outcome? The alternative, excluding such groups from the record catalogue, changes
+  17-specify.md:198-199.
+- **The composed story copies fence, table and Setext lines: confirmed.** Test "the story reading
+  of a claim that cites fence, table and Setext lines". The story's text is `source_paragraph.paragraph`
+  (ADR 0047), which drops only ATX heading lines (`markdown_code_spans.zig:200`): a code fence reads
+  ```` ``` loan.renew() ``` ````, a table `| Field | Value | | --- | --- | | Period | 14 days |` and a
+  Setext heading `Loan renewal ============ A loan may be renewed once.` (`source_paragraph.zig:57`).
+  **Class:** rendering artefact in the published story, so a decided fix is a Q phase with this class.
+  **Decision:** should the paragraph reading drop fence delimiter, table and Setext underline
+  lines? It amends ADR 0036 Decision 2 and ADR 0047 Decision 1, and changes the records, entities
+  and scenarios requests, which show the same reading.
+- **Two clocks for one request deadline: confirmed.** Test "the provider operation clock reads boot
+  time while the exchange timer sleeps on awake time" (`provider_operation_clock.zig`). The deadline
+  reads `.boot` (`provider_operation_clock.zig:13`) and the exchange sleeps the remainder on
+  `.awake` (`model_http_exchange.zig:84`), so time the machine is suspended counts toward the
+  deadline and not toward the sleep. A unit test cannot suspend the machine, so it reads the clock
+  and pins the exchange's choice by its source text. **Class:** none. **Decision:** does a request
+  deadline count time the machine is suspended?
+- **A retry population differs after a source-omission merge: confirmed under an unchanged scope.**
+  Test: the block added to "false conflicts repair a closed relation group with exact preconditions and
+  preserved siblings" (`specification_generation_test.zig`). The ordinary reconciliation permit read
+  from the source and proposal before the merge and after it has the same scope bytes and another
+  `maximum_targets`. By reading, not executed: `workflow_retry.zig:485` refuses a permit whose scope
+  exists with another maximum, which would end a run that made an ordinary repair before the merge.
+  **Class:** successful completion. **Decision:** after a source-omission merge, does a reconciliation
+  repair keep the scope, frozen population and counters it had, or get a new scope?

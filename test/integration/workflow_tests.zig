@@ -767,8 +767,19 @@ test "reference failures are not skipped and cannot change closed clarification 
             directory.setPermissions(io, .fromMode(0o700)) catch @panic("restore test directory permissions");
             directory.close(io);
         };
-        const rejected = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" });
+        var rejected_report = reportInvocation(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, .{}, null) catch return error.TestUnexpectedResult;
+        defer rejected_report.deinit();
+        const rejected = rejected_report.outcome;
         try std.testing.expectEqual(workflow.OutcomeTag.failed, rejected.executionStatus().?);
+        // The run's report names the failing entry by its display path, from the validated inventory.
+        const failing_name = switch (failure) {
+            .unsupported => "data.json",
+            .disguised, .malformed, .oversized => "other.md",
+            .hidden => ".unknown",
+            .symlink => "alias.md",
+            .unreadable => "locked",
+        };
+        try std.testing.expectEqualStrings(try std.fmt.allocPrint(allocator, "source-material/first/{s}", .{failing_name}), rejected_report.reference_entry_path.?.text());
         // The stage's error names why the source failed: one reason for each class of failure.
         try std.testing.expectEqualStrings(switch (failure) {
             .unsupported, .disguised, .hidden => "ReferenceUnsupportedMedia",

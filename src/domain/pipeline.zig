@@ -195,11 +195,17 @@ pub const NodeRuntime = struct {
     }
 };
 
+/// The display path of the input entry a stage failed on, copied by value and bounded: an entry whose
+/// path does not fit names none, and the text is never cut (ADR 0031).
+pub const StageEntryPath = @import("definition_rejection.zig").Bounded(512);
+
 /// Where inside a stage action a failing invocation stopped (ADR 0031). A Zig error carries no
 /// payload, so the runner lends each step invocation this slot and the binding writes the failing
 /// internal step's name, a static enum tag, before it returns its unchanged error. The runner
-/// records it in the failed action's event.
-pub const StageStepSlot = struct { name: ?[]const u8 = null };
+/// records it in the failed action's event. The reference stage's binding also writes the display
+/// path of the entry whose own reason the error is, copied from the validated inventory: it is
+/// presentation data for the CLI, never authority, and no event, log or report records it.
+pub const StageStepSlot = struct { name: ?[]const u8 = null, entry_path: ?StageEntryPath = null };
 
 pub const NodeDelta = struct {
     data_writes: data.Slots = data.empty_slots,
