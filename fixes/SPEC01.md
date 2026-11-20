@@ -161,7 +161,7 @@ Ranked by expected reduction of published-output defects (AGENTS.md). Tracks: **
 phases (model input or published output change, each measured), **E** engine (no model-input
 change except E7), **T** tests, **C** code-review findings (§10; unscheduled unless an item says
 otherwise). "Gap" means between measurement sets. Each screen
-batch and live set needs its own approval (AGENTS.md; the project settings prompt for every live step).
+batch and live set needs its own approval (AGENTS.md).
 
 **Output track** (rank order of the table; each item's screens and set follow the set order
 above, inside the decided constraints):
@@ -582,19 +582,6 @@ code, do complete end 2 end analysis, do not guess").
 
 ### 10.2 Optimisation
 
-**C10. The conflicts request is sent when only one answer is admissible** (class: successful completion
-in principle: with no conflict group the call can only return `{"conflicts":[]}` or fail; no failure is
-observed, so no benefit is demonstrated). `check-conflicts` tests only the phase
-(`reference_reconciliation_stage.zig:106`), so with no group the choice set is empty (`:79-81`) and the
-schema owner narrows the array to `maxItems: 0`; five of the six runs of 14 November sent such a request,
-and the sixth (loan-renewal) had a conflict group, so its call was a real choice. **D:** ADR
-0022:108-109 ("Empty eligible catalogues admit only an empty authored collection"); `:136-138` already
-constructs forced token classifications natively with no call. **Decision:** whether ADR 0022's native
-rule extends to the conflicts stage. **Decided 15 November 2026:** yes, conflicts only: a forced answer
-is computable structure and the call adds failure exposure and no information; tokens are reported,
-never the reason. It amends ADR 0022:64-66 and :108-109 and changes the step trace, the freeze and one
-scripted fault test; implementation is its own phase.
-
 **C15. Repeated native work (no time to recover; one rule kept at many sites).**
 
 - Every executed step revalidates the whole operation registry, a pairwise ID loop over every
@@ -603,8 +590,9 @@ scripted fault test; implementation is its own phase.
   every call").
 - The clean path re-runs validators in all six runs: `validate-dispositions` three times and
   `validate-signals` twice, because each release returns to the first validator
-  (the `ok` routes of `release-signals` and `release-conflicts` in `validate-reconciliation`);
-  `check-summary-reuse` and `validate-summary` twice, once for the requested leaf summary and
+  (the `ok` routes of `release-signals` and `release-conflicts` in `validate-reconciliation`; a
+  source with no conflict group has no `release-conflicts` since ADR 0022's forced conflicts answer,
+  so each validator runs once fewer); `check-summary-reuse` and `validate-summary` twice, once for the requested leaf summary and
   once for the parent partition that reuses it.
 - One request packet is built through 10 to 15 full copies (traced), each copying every source's
   bytes (`cloneWith` and `copyOriginalSources` in `model_input_packet.zig`).

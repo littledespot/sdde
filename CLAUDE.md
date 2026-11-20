@@ -38,11 +38,14 @@ toward smaller semantic decisions hasn't been accepted.
 
 ## Live and billed steps
 
-AGENTS.md lists them. The project settings make every one prompt, and the build
-rejects any `test`, `test-*`, `smoke*` or `verify` step that depends on a live step.
-The user starts a live Spec case with `/live-e2e <case>`, which then runs
-`/evaluate-e2e` on the run it produced unless `--no-evaluate` is given; that invocation
-is the approval for both.
+AGENTS.md lists them. The project settings and the guard hook make every one prompt, and
+the build rejects any `test`, `test-*`, `smoke*` or `verify` step that depends on a live
+step. The one exception is a set of live Spec runs. The user asks for it with
+`/live-e2e <case>... [--repeat <n>]`, or in words, which invokes that skill after one
+confirmation. That request is the approval for every run it names and for running
+`/evaluate-e2e` on each, unless the user says not to evaluate (`--no-evaluate`). The
+hooks record the cases and counts it names, and the guard hook passes exactly those
+launcher runs unprompted, counting each, until the user's next message.
 `/evaluate-e2e <run>` assesses and adjudicates a retained run; AGENTS.md "Testing
 expectations" says who triggers it ([R8](design/harness/acceptance.md)). A published run
 exits nonzero until it is adjudicated.
@@ -79,5 +82,4 @@ the project allow list, so in every Bash call, yours and every subagent's:
   text, since it runs no git command.
 - These files are policy: AGENTS.md, CLAUDE.md, accepted ADRs, and the Claude Code
   settings and hooks. Change them only when the request includes that policy change.
-  Markdown edits and `zig` commands don't prompt. Edits to the settings and hooks do,
-  and so does every live or billed step.
+  Markdown edits and `zig` commands don't prompt. Edits to the settings and hooks do.

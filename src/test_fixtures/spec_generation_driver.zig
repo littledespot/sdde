@@ -257,8 +257,6 @@ pub const Driver = struct {
                 _ = parsed.value.object.getPtr("claim_dispositions").?.array.items[0].object.getPtr("disposition").?.object.swapRemove("kind");
                 self.fake.invocation_plan.complete.content = std.json.Stringify.valueAlloc(arena.allocator(), parsed.value, .{}) catch unreachable;
             }
-            if (self.reconciliation_fault == .misbound_signals and std.mem.eql(u8, phase, "conflicts") and attempt == 1)
-                self.fake.invocation_plan.complete.content = "{\"conflicts\":{  \"conflicts\": [] }";
             const validated = requests.readCurrent(&view, requests.validated_schema) catch unreachable;
             var base_buffer: @import("../domain/model_request_handoff.zig").ContentBuffer = undefined;
             const base = validated.content(&base_buffer);

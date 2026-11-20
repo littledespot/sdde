@@ -4,7 +4,9 @@
 # (AGENTS.md "Commands" owns that list), and approve Python only when it makes
 # no external calls. The permission rules in .claude/settings.json are the
 # declarative baseline and name the same steps; this hook also matches what
-# those rules miss, such as a live step inside `sh -c` or behind `env`.
+# those rules miss, such as a live step inside `sh -c` or behind `env`. The
+# Spec launcher is the one step this hook alone gates, because a settings ask
+# rule would also prompt for the runs the user approved through /live-e2e.
 set -u
 
 input=$(cat)
@@ -31,6 +33,33 @@ matches() {
 if matches '\.env\.e2e([^.[:alnum:]_-]|$)'; then
     decide deny ".env.e2e holds live provider credentials. Do not read, print, source, copy or edit it; the scripts/*.sh launchers load it themselves. Use .env.e2e.example for variable names."
 fi
+
+# The live-e2e approval records hold the user's word; only the hooks write
+# them. One command that can't write a file (no redirect, chain, substitution
+# or second line) may still read them; find's writing and executing actions
+# stay with the settings ask rules.
+if matches 'live-e2e-approvals'; then
+    store_read=no
+    case $command in
+        *[\;\&\|\<\>\`\$]* | *'
+'*) ;;
+        'find '* | 'ls '* | 'cat '* | 'head '* | 'tail '* | 'wc '* | 'grep '* | 'jq '* | 'diff '*)
+            store_read=yes
+            ;;
+    esac
+    [ "$store_read" = yes ] ||
+        decide deny "The live-e2e approval records hold the user's approval of live runs; only the hooks write them."
+fi
+
+# One Spec launcher run the user approved through /live-e2e runs without
+# another prompt; live-e2e-approval.py checks the exact command and counts it.
+case $command in
+    './scripts/e2e-spec.sh --case '*)
+        if printf '%s' "$input" | python3 -I "$(dirname "$0")/live-e2e-approval.py" consume; then
+            decide allow "The user approved this live Spec run through /live-e2e."
+        fi
+        ;;
+esac
 
 # Steps and launchers that can make billed model calls, and execution of the
 # engine or harness binaries against a project. A step counts wherever a

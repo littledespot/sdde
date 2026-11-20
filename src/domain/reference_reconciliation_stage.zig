@@ -103,7 +103,10 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
         .signals => |v| {
             result.proposal.global.signals = try @import("reference_reconciliation_projection.zig").signals(a, prior.signals, v.signals);
             for (prior.signals.proposal.signals.len..result.proposal.global.signals.len) |index| result.source.signals = result.source.signals.inserting(a, index, index) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
-            result.phase = if (result.proposal.global.conflicts.len > 0) .complete else .signals;
+            // ADR 0022 (amended 20 November 2026): with no conflict group the conflicts answer is the empty
+            // collection and nothing else, so the signals leave the phase complete and no conflicts request follows.
+            // A group makes the answer a choice, which stays the model's. The other stages' requests are always sent.
+            result.phase = if (result.proposal.global.conflicts.len > 0 or conflictsForced(result.proposal.global.conflict_groups)) .complete else .signals;
         },
         .conflicts => |v| {
             result.proposal.global.conflicts = try @import("reference_conflict_groups.zig").explain(a, prior.conflicts.prior.proposal.conflict_groups, v.conflicts);
@@ -134,6 +137,10 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
     result.source.fields = try fields.toOwnedSlice(a);
     return result;
 }
+/// The only admissible conflicts answer is the empty collection when no conflict group exists to explain.
+fn conflictsForced(declared: []const @import("reference_conflict_groups.zig").Group) bool {
+    return declared.len == 0;
+}
 pub const Response = union(Stage) { dispositions: @import("reference_conflict_groups.zig").Selection, signals: struct { signals: []const @import("reference_reconciliation_projection.zig").SemanticSignal }, conflicts: struct { conflicts: []const @import("reference_conflict_groups.zig").Explanation } };
 
 fn definition(stage: Stage) @import("model_result_schema.zig").DefinitionId {
@@ -158,6 +165,7 @@ fn accepts(prior: Prior) bool {
     return switch (prior) {
         .dispositions => |v| v.purpose == .global,
         .signals => |v| v.phase == .dispositions,
-        .conflicts => |v| v.prior.phase == .signals,
+        // A conflicts request needs a group to explain: with none its only answer is forced (ADR 0022).
+        .conflicts => |v| v.prior.phase == .signals and !conflictsForced(v.prior.proposal.conflict_groups),
     };
 }

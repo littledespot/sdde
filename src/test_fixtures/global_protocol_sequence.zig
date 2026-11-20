@@ -113,10 +113,11 @@ pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @im
         try std.testing.expect(source.origin == null);
         const dispositions = source.at(.dispositions, .record).?;
         const signals = source.at(.signals, .record).?;
-        const conflicts = source.at(.conflicts, .record).?;
-        try std.testing.expect(dispositions.request.value != signals.request.value and conflicts.request.value != signals.request.value);
+        // The source has no conflict group, so its conflicts answer is the empty collection the engine constructs
+        // (ADR 0022): no request and no origin.
+        try std.testing.expectEqual(@as(?@TypeOf(dispositions), null), source.at(.conflicts, .record));
+        try std.testing.expect(dispositions.request.value != signals.request.value);
         try std.testing.expectEqual(@as(u32, 2), dispositions.attempt.value);
         try std.testing.expectEqual(@as(u32, 3), signals.attempt.value);
-        try std.testing.expectEqual(@as(u32, 1), conflicts.attempt.value);
     }
 }

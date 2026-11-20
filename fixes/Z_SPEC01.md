@@ -2835,6 +2835,41 @@ ADR 0047 Decision 1, 17-specify.md, F0005 "Execution guards").
   `nanosleep`, which takes no clock, so there the change is not observable; on Linux `.boot` is `CLOCK_BOOTTIME`.
   Counting suspended time on macOS would need the timer to read the clock again after a wake.
 
+## C10. The conflicts request is skipped when its only valid answer is empty (built 20 November 2026)
+
+**Decided** 15 November 2026 (yes, conflicts only; tokens are reported, never the reason), built on user instruction
+("preflight and implement C10: skip the conflicts call when the only valid answer is empty. This lands with the ADR 0022
+amendment."). **Class:** successful completion, by removing a request whose answer was fixed. No failure had been observed,
+so no benefit is demonstrated. Built offline only; no live run was approved.
+
+- **Defect:** with no conflict group, the choice set is empty and the schema owner narrows `conflicts` to `maxItems: 0`,
+  yet the request was built, sent, collected and released.
+- **Change:** `reference_reconciliation_stage.collect` leaves the phase `complete` when the signals are collected and the
+  dispositions declared no conflict group (`conflictsForced`), so the YAML phase check at `check-conflicts` routes to
+  `validate-conflicts`, which still runs every validator in order. No operation, step or version was added or advanced:
+  an explicit new step would have formed a static cycle through `validate-dispositions` with no retry guard, which the
+  graph rejects (`unbounded_cycle`), and the conflicts validator reads the phase from the re-validated signals. The
+  conflicts record carries no origin, as native projections have none. The dispositions, signals and summary requests
+  are always sent. ADR 0022 states it as the closed "Forced conflicts answer" policy, with 16-reference-ingestion.md
+  (step 10 and the carry-forward sentence), 13-03's signals-collection entry and F0100 §3.9 following.
+- **Proof:** a stage test over two sources (no group completes the phase and records no conflicts origin; a group leaves
+  the phase at signals and builds the request; the dispositions stage is never forced); the stage module also refuses to
+  build or collect a conflicts request for a prior with no group (a rejected case in the premature and stale handoff
+  test, whose conflicts fixtures now hold a group); each of the 17 reconciliation fault scenarios that reach accounted
+  reconciliation asserts a conflicts request exists exactly when a conflict group does, and the source-repair
+  `false_conflict` scenario, whose repair removes the only group, asserts its one conflicts request is the first pass's;
+  the `misbound_signals` scenario's corrections fall from 2 to 1 and its conflicts-phase fault injection, which no
+  scenario can reach, is deleted (no scenario now sends a malformed body to a conflicts request; foreign handles stay
+  covered); the global-protocol-sequence test asserts no conflicts origin. Disabling the rule fails the stage test;
+  the opposite mutation was not run.
+- **Request projection** (`SDDE_REQUEST_PROJECTION`, before and after on the same tree): 145 scenarios; 136 conflicts
+  requests removed from 126 of them (manifest calls 1969 to 1833); none other removed; 1826 of the 1833 surviving
+  requests are byte-identical to their before counterparts and 7 differ only in a producer's request ordinal inside a
+  source-review or source-repair request (a request number falls by one); the 19 scenarios with a conflict group are
+  unchanged. Later calls in a changed scenario renumber.
+- **Not measured:** the step trace and the live cost. Neither development case's run was repeated, and no accuracy class
+  is claimed.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a

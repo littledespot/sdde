@@ -414,7 +414,7 @@ merges) are variants of the generic repair operations, specified once in
 
 - **Owner:** [`src/actions/reference/collect_reference_signals_candidate.zig`](../../../src/actions/reference/collect_reference_signals_candidate.zig)
 - **Reads:** `validated_reference_dispositions`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `parsed_reference_reconciliation`; invalidates `validated_reference_dispositions` · **Side effect:** `none`
-- **Does:** Collects the signals response; a prior phase other than signals is `InvalidReferenceReconciliation`.
+- **Does:** Collects the signals response; a prior phase other than signals is `InvalidReferenceReconciliation`. When the dispositions declare no conflict group, it leaves the phase `complete`, so no conflicts request follows (the conflicts answer is the empty collection and nothing else, [ADR 0022](../../decisions/0022-native-reference-phase-handoffs.md) "Forced conflicts answer").
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
 ## `CollectReferenceConflictsCandidateAction` (`collect-reference-conflicts-candidate`)

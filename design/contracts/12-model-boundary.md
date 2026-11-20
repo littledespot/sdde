@@ -492,7 +492,7 @@ findings. Only complete native collection validation permits authority advanceme
   The engine derives its enclosing member IDs from the supplied partition; model-authored
   statements select supporting claims, and validators require complete partition coverage.
 - The final global partition assembles one `ReferenceReconciliationProposal` from
-  separate disposition, signal-grouping and conflict responses (ADR 0022).
+  separate disposition, signal-grouping and conflict responses (ADR 0022; with no conflict group the conflicts answer is constructed, not requested).
   Conflict resolution is `unresolved` until a separate authorized decision exists, so
   model conflict proposals omit that fixed status and the engine constructs it.
 - Neither variant can redefine claim/token content or mint canonical

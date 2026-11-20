@@ -6,8 +6,9 @@ zig-out/
 .DS_Store
 /.env.e2e
 
-# Claude Code personal overrides and worktrees
+# Claude Code personal overrides, worktrees and hook-recorded approvals
 .claude/settings.local.json
 .claude/worktrees/
+.claude/live-e2e-approvals/
 CLAUDE.local.md
 __pycache__/

@@ -2248,6 +2248,14 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     const references = (try @import("../../src/application/specification_workflow.zig").readContext(&view)).references.records;
                     try std.testing.expectEqual(@as(usize, 0), references.conflicts.len);
                     try std.testing.expect(view.contains(.published_workflow_output));
+                    // The repair removes the only conflict group, so the re-pass has none and its conflicts answer is
+                    // forced (ADR 0022): the one conflicts request is the first pass's, and no second one follows.
+                    var conflicts_requests: usize = 0;
+                    for (runner.tokenLedger().accounted_operations.items) |operation| {
+                        const owner = operation.id.model_request_id.immutable_unit_owner_id;
+                        if (owner == .reference_global and std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-conflicts-") != null) conflicts_requests += 1;
+                    }
+                    try std.testing.expectEqual(@as(usize, 1), conflicts_requests);
                 }
                 if (expected == .failed) {
                     try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
@@ -2353,6 +2361,20 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             } else if (expected == .needs_user) {
                 try std.testing.expect(diagnostic != null and diagnostic.? == .support_findings);
             } else try std.testing.expect(diagnostic == null);
+            // ADR 0022 (amended 20 November 2026): a conflicts request is sent exactly when a conflict group exists to
+            // explain; with none the answer is the empty collection, which the engine constructs. These scenarios make
+            // no source repair, so the final groups are the groups the request saw; the source-repair scenarios below
+            // assert their own count.
+            if (runner.envelope.slots[@intFromEnum(pipeline.DataKey.accounted_reference_reconciliation)] != null) {
+                const accounted = try @import("../../src/application/reference_extraction_workflow.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
+                var conflicts_requests: usize = 0;
+                for (runner.tokenLedger().accounted_operations.items) |operation| {
+                    const owner = operation.id.model_request_id.immutable_unit_owner_id;
+                    if (owner == .reference_global and std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-conflicts-") != null) conflicts_requests += 1;
+                }
+                const conflict_groups = accounted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.proposal.conflict_groups.len;
+                try std.testing.expectEqual(conflict_groups != 0, conflicts_requests != 0);
+            }
             if (driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals) {
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
@@ -2382,7 +2404,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     try std.testing.expectEqual(@as(u32, 2), operation.id.model_attempt_ordinal.value);
                     corrections += 1;
                 };
-                try std.testing.expectEqual(@as(usize, if (driver.reconciliation_fault == .misbound_signals) 2 else 1), corrections);
+                // The one correction is the faulted summary or signals answer's. A signals answer is the last global
+                // request of a source with no conflict group, since its conflicts answer is forced (ADR 0022).
+                try std.testing.expectEqual(@as(usize, 1), corrections);
                 var readback: std.heap.ArenaAllocator = .init(allocator);
                 defer readback.deinit();
                 const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));

@@ -240,17 +240,16 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
     try std.testing.expectError(error.InvalidReferenceReconciliation, input.reconciliationCompositionPacket(allocator, global, fixture.inputs, fixture.text.registry, purpose));
     try std.testing.expectError(error.InvalidReferenceReconciliation, input.reconciliationPacket(allocator, global, fixture.inputs, fixture.text.registry, .all, purpose));
     const stage = @import("domain/reference_reconciliation_stage.zig");
-    var candidate: reconciliation.r.Parsed = .{ .phase = .dispositions, .input = global, .proposal = .{ .global = try reconciliation.global(a, global) } };
+    const candidate: reconciliation.r.Parsed = .{ .phase = .dispositions, .input = global, .proposal = .{ .global = try reconciliation.global(a, global) } };
     const dispositions = (try reconciliation.validate_dispositions.execute(a, candidate)).valid;
-    candidate.phase = .signals;
-    const signals = (try reconciliation.validate_signals.execute(a, (try reconciliation.validate_dispositions.execute(a, candidate)).valid, fixture.context())).valid;
     const full = try input.reconciliationPacket(allocator, global, fixture.inputs, fixture.text.registry, .all, null);
     defer packets.release(full);
     const full_json = try std.json.parseFromSlice(std.json.Value, a, full.body(), .{});
     defer full_json.deinit();
     try std.testing.expect(!full_json.value.object.contains("summary_purpose"));
-    for ([_][]const u8{ "dispositions", "signals", "conflicts" }) |id| {
-        const prior: stage.Prior = if (std.mem.eql(u8, id, "dispositions")) .{ .dispositions = global } else if (std.mem.eql(u8, id, "signals")) .{ .signals = dispositions } else .{ .conflicts = signals };
+    // The conflicts packet needs a group to explain (ADR 0022), so it is checked where a group exists, below.
+    for ([_][]const u8{ "dispositions", "signals" }) |id| {
+        const prior: stage.Prior = if (std.mem.eql(u8, id, "dispositions")) .{ .dispositions = global } else .{ .signals = dispositions };
         const selected = try stage.packet(allocator, prior, fixture.inputs, fixture.text.registry);
         defer packets.release(selected);
         try std.testing.expectEqual(fixture.inputs.corpus.sources.len, selected.originalSources().len);

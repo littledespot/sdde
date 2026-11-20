@@ -502,7 +502,7 @@ each model's catalogue entry carries `requestTimeoutMs`
 Extraction parts derive from one complete extraction schema; reconciliation summaries
 use one composition part of the reconciliation schema. Under
 [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md) each global phase is a
-separate request; dependent phases receive natively validated phase facts, not JSON
+separate request, a conflicts phase with no group excepted; dependent phases receive natively validated phase facts, not JSON
 prerequisites (§3.9). Part schemas validate before retention. Complete assembly undergoes relationship, signal, conflict and coverage validation.
 Native repair revalidates the complete candidate without reassembling provider JSON.
 Composition adds no retry allowance or token budget.

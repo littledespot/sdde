@@ -3220,7 +3220,7 @@ test "phase assignments reject premature and stale handoffs and retain conflict 
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const fixture = try prepare(a, &.{"Display the renewal date and `Loan renewed!`.\n"});
+    const fixture = try prepare(a, &.{ "Display the renewal date.\n", "Display the renewal message.\n" });
     defer fixture.deinit();
     const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
     const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 13 }, .attempt = .{ .value = 2 } };
@@ -3232,7 +3232,8 @@ test "phase assignments reject premature and stale handoffs and retain conflict 
     const admitted = try stage.collect(a, .{ .dispositions = input }, disposition_packet, try json.encodeSelected(stage.Response, a, .{ .dispositions = .{ .claim_dispositions = choices, .conflict_groups = &.{} } }), origin);
     try std.testing.expect(admitted.source.origin == null);
     try std.testing.expectEqualDeep(origin, admitted.source.at(.dispositions, .record).?);
-    var parsed: r.Parsed = .{ .phase = .dispositions, .input = input, .proposal = .{ .global = try f.global(a, input) } };
+    // The two claims conflict, so their conflicts answer is a choice among a declared group.
+    var parsed: r.Parsed = .{ .phase = .dispositions, .input = input, .proposal = .{ .global = try conflicting(a, input) } };
     const dispositions = (try f.validate_dispositions.execute(a, parsed)).valid;
     try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_signals.execute(a, dispositions, fixture.context()));
     parsed.phase = .signals;
@@ -3247,10 +3248,15 @@ test "phase assignments reject premature and stale handoffs and retain conflict 
     stale.prior.source.revision += 1;
     try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .conflicts = stale }, packet, "{}", origin));
     var changed = signals;
-    const changed_signals = try a.dupe(r.ValidatedSignal, signals.signals);
-    changed_signals[0].content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A different accepted meaning." } }} } } } };
-    changed.signals = changed_signals;
+    const changed_dispositions = try a.dupe(r.ClaimDisposition, signals.prior.dispositions);
+    changed_dispositions[0].disposition = .retained;
+    changed.prior.dispositions = changed_dispositions;
     try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .conflicts = changed }, packet, "{}", origin));
+    // With no group to explain the conflicts answer is forced (ADR 0022): nothing is built or collected for it.
+    var bare = signals;
+    bare.prior.proposal.conflict_groups = &.{};
+    try std.testing.expectError(error.InvalidReferenceReconciliation, stage.packet(a, .{ .conflicts = bare }, fixture.inputs, fixture.context().registry));
+    try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .conflicts = bare }, packet, "{}", origin));
     const owner = try @import("domain/reference_candidate_value.zig").create(std.testing.allocator, null);
     owner.payload = .{ .reconciliation_rejected = conflicts.invalid };
     const descriptor = @import("application/reference_reconciliation_workflow.zig").conflicts_schema;
@@ -3262,6 +3268,54 @@ test "phase assignments reject premature and stale handoffs and retain conflict 
     const retained = (try @import("application/candidate_validation_diagnostics.zig").read(&view)).?;
     try std.testing.expectEqualDeep(origin, retained.reconciliation.origin.?);
     try std.testing.expectEqual(.cardinality, retained.reconciliation.issue.rule);
+}
+
+// ADR 0022 (amended 20 November 2026): with no conflict group the conflicts answer can only be the empty collection, so
+// the signals leave the phase complete and no conflicts request follows; a group makes it a choice, so the phase stays
+// signals and the conflicts request is built. The dispositions and signals stages are always requested.
+test "the signals collection completes the phase when no conflict group exists and leaves the conflicts to the model when one does" {
+    const stage = @import("domain/reference_reconciliation_stage.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const []const u8{
+        &.{"Display the renewal date and `Loan renewed!`.\n"},
+        &.{ "Keep the first requirement.\n", "Keep the second requirement.\n" },
+    }) |sources| {
+        const fixture = try prepare(a, sources);
+        defer fixture.deinit();
+        const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+        const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 13 }, .attempt = .{ .value = 1 } };
+        const parsed: r.Parsed = .{ .phase = .dispositions, .input = input, .proposal = .{ .global = try f.global(a, input) } };
+        const dispositions = (try f.validate_dispositions.execute(a, parsed)).valid;
+        const answer = try json.encodeSelected(stage.Response, a, .{ .signals = .{ .signals = &.{} } });
+        // No group: the phase is complete as the signals leave it, and no conflicts origin exists to record.
+        try std.testing.expectEqual(@as(usize, 0), dispositions.proposal.conflict_groups.len);
+        const bare = try stage.packet(a, .{ .signals = dispositions }, fixture.inputs, fixture.context().registry);
+        defer @import("domain/model_input_packet.zig").release(bare);
+        const forced = try stage.collect(a, .{ .signals = dispositions }, bare, answer, origin);
+        try std.testing.expectEqual(.complete, forced.phase);
+        try std.testing.expectEqual(@as(usize, 0), forced.proposal.global.conflicts.len);
+        try std.testing.expect(forced.source.at(.conflicts, .record) == null);
+        // A group: the answer is a choice, so the phase is not complete.
+        var grouped = dispositions;
+        grouped.proposal.conflict_groups = &.{.{ .claim_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } } }};
+        const offered = try stage.packet(a, .{ .signals = grouped }, fixture.inputs, fixture.context().registry);
+        defer @import("domain/model_input_packet.zig").release(offered);
+        try std.testing.expectEqual(.signals, (try stage.collect(a, .{ .signals = grouped }, offered, answer, origin)).phase);
+        // The dispositions answer is never forced, whether or not it declares a group.
+        const first = try stage.packet(a, .{ .dispositions = input }, fixture.inputs, fixture.context().registry);
+        defer @import("domain/model_input_packet.zig").release(first);
+        try std.testing.expectEqual(.dispositions, (try stage.collect(a, .{ .dispositions = input }, first, try json.encodeSelected(stage.Response, a, .{ .dispositions = .{ .claim_dispositions = try retainedChoices(a, input), .conflict_groups = &.{} } }), origin)).phase);
+    }
+}
+
+fn retainedChoices(a: std.mem.Allocator, input: r.Input) ![]const @import("domain/reference_conflict_groups.zig").Choice {
+    const semantic = try @import("domain/reference_reconciliation_projection.zig").semanticClaimIds(a, input.items);
+    const choices = try a.alloc(@import("domain/reference_conflict_groups.zig").Choice, semantic.len);
+    for (semantic, choices) |id, *choice| choice.* = .{ .claim_id = id, .disposition = .{ .retained = .{} } };
+    return choices;
 }
 
 test "checked phase facts retire resolved receipts and preserve repairs owned by later validators" {
