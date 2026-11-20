@@ -41,6 +41,9 @@
     whether it should cover claims whose line sets differ, it binds any line cited by claims
     of two categories. It binds only where the categories differ, because the same category
     on the same lines is already one claim (SPEC01 D8.3, Decision 3).
+  - 20 November 2026, SPEC01 C49 ("update the docs with the above recommendations", then
+    "preflight and implement"): the paragraph reading of Decision 2 drops the Markdown
+    structure lines that have no wording and reads a Setext heading's text as a heading.
 - **Amends:**
   - §12.2 and §22.6, whose admission constraints and corrections gain Decision 7's
     agreement rule and its `disagreeing_items` correction;
@@ -110,6 +113,17 @@ same claim and native checks couldn't tell distinct duties apart.
      its reading, such as a heading alone, is shown as written, so a claim the request
      assigns is never shown empty. Every other request keeps the quote as written:
      extraction, reconciliation, source review and omission.
+   - **The reading drops Markdown structure that has no wording** (20 November 2026, SPEC01
+     C49, "update the docs with the above recommendations", then "preflight and implement"):
+     a code fence's opening and closing line, a table delimiter row, a thematic break and a
+     Setext underline, and the text lines of a Setext heading, which is a heading. Every line
+     with words stays, table rows and code lines included. The classes are Markdown's own
+     block syntax, recognised by the line reader of Decision 3, so no meaning is judged. A
+     thematic break joins the three the decision named (fence delimiters, table delimiter
+     rows, Setext underlines) because it carries no words either. A Setext underline heads the
+     paragraph above it, so a line of text directly above a `---` or `===` line is heading
+     text, and YAML front matter reads the same way. A quote left with no words, a fence
+     alone for example, reads as one with none, as a heading alone does.
 
    `business` and `scope_guard` claims become one literal `BusinessText`; other categories
    become one literal `ReferenceSemanticText`. The shared text validator then checks it as
@@ -322,7 +336,10 @@ same claim and native checks couldn't tell distinct duties apart.
   - Paragraph reading for generation requests: a list item, a nested item, a heading and
     blank lines around a cited run, runs cited apart, a code line and an exact value in
     the run, each against the story's reading of the same claim; the stored quote and
-    extraction and reconciliation requests unchanged.
+    extraction and reconciliation requests unchanged. Structure with no wording: a fence
+    with and without an info string in either fence kind, an empty fence, a table delimiter
+    row with and without alignment, `=` and `-` underlines with the heading text above them,
+    a thematic break, and the same bytes inside a fence, which stay; a quote left with none.
   - Quoting and splitting: top-level, ordered and nested items, continuation lines,
     headings and prose in and out of a split, wrapped numbers, look-alike markers and a
     thematic break, HTML blocks and comments, spacing and trimmed indentation, fenced

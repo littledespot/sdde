@@ -142,7 +142,8 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@im
         source.at(.summary, .record), source.at(.dispositions, .record), source.at(.signals, .record), source.at(.conflicts, .record),
     } };
     permit.key.scope = (try shared.snapshot(@TypeOf(scope), a, scope)).bytes;
-    if (source.last_repair) |prior| if (prior.retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
+    // A scope keeps the maximum its first authorization froze, through any merge between (22-repair.md:757).
+    if (source.ordinary_retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
         permit.maximum_targets = previous.maximum_targets;
     };
     return permit;
@@ -407,6 +408,7 @@ pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").Canonica
     const target = authorization.target;
     const merged = try atomic.checkMerge(a, canonical, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
     var result = try apply(a, parsed, target, replacement, merged, origin);
+    result.source.ordinary_retry = authorization.retry orelse result.source.ordinary_retry;
     if (authorization.retry) |permit| result.source.pending_repair = .{ .permit = permit, .target = .{
         .selected = if (target == .insert_conflict) .{ .insert_conflict = .{ .index = target.insert_conflict.index, .claims = try a.dupe(r.ClaimId, target.insert_conflict.claims) } } else target,
         .stable = try stableTarget(a, parsed.source, parsed.proposal, target),

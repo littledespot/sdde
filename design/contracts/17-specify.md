@@ -197,7 +197,11 @@ Do not invent an actor, benefit or entity to fill a field.
 
 Record authoring binds one complete retained group containing at least one
 non-token claim and may return multiple records
-or none. Each record names the claims it supports, a nonempty subset of that group's
+or none. A batch over a group that holds an open question is offered only its
+clarification outcome, never record content (the engine excludes the records variant
+from that batch's request, through the schema restriction it already applies): a
+positive record cannot map an open question, so the request offers what validation
+accepts. Each record names the claims it supports, a nonempty subset of that group's
 claims kept in the group's order, and keeps exactly one group occurrence. Requirements
 own their claims: in one response, a business rule, outcome, assumption, non-goal or
 prohibition whose every claim a requirement or an earlier such record names is deleted
@@ -280,8 +284,11 @@ For each feature-brief or specification unit other than the engine-composed stor
   business claims in source order (corpus source, then first cited byte), each quote
   made one paragraph from its cited source lines, whose heading, code and list
   structure comes from the source reader's line structure (blank and heading lines
-  dropped, each line's indentation and leading list marker removed, code lines kept
-  as text, lines joined by one space; a quote of headings alone skipped), the quotes
+  dropped, a Setext heading's text included, and the lines that are Markdown structure
+  with no wording: a code fence's opening and closing line, a table delimiter row, a
+  thematic break, a Setext underline; each line's indentation and leading list marker
+  removed, code lines and table rows kept as text, lines joined by one space; a quote
+  with no words left skipped), the quotes
   joined by one space. The story selects the groups whose claims it quotes and it
   passes the same unit validation as any unit, which recognises its exact values as
   in model text. It has no clarification or inconclusive outcome; a catalogue with no

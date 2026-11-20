@@ -194,13 +194,16 @@ pub fn prepare(
             if (candidate.outcome == .ok or candidate.outcome == .needs_user) {
                 const needs = values.read(&after, clarification.needs_schema, @import("../domain/clarification_refresh.zig").Needs) catch return error.InvalidOutcomeAssociation;
                 if (needs.entries.len == 0) return error.InvalidOutcomeAssociation;
-                if (binding.evidence == .required_authority_result) {
-                    const result = authority_values.read(&before, authority.result_schema, .result) catch return error.InvalidOutcomeAssociation;
-                    if (result.continuation != .needs_user) return error.InvalidOutcomeAssociation;
-                } else if (binding.evidence == .validated_specification_unit) {
-                    const result = @import("specification_values.zig").storage.read(&before, @import("specification_workflow.zig").checked_schema, .checked) catch return error.InvalidOutcomeAssociation;
-                    if (result.response != .clarification) return error.InvalidOutcomeAssociation;
-                } else return error.InvalidOutcomeAssociation;
+                switch (binding.route_reader orelse return error.InvalidOutcomeAssociation) {
+                    .required_authority => {
+                        const result = authority_values.read(&before, authority.result_schema, .result) catch return error.InvalidOutcomeAssociation;
+                        if (result.continuation != .needs_user) return error.InvalidOutcomeAssociation;
+                    },
+                    .specification_unit => {
+                        const result = @import("specification_values.zig").storage.read(&before, @import("specification_workflow.zig").checked_schema, .checked) catch return error.InvalidOutcomeAssociation;
+                        if (result.response != .clarification) return error.InvalidOutcomeAssociation;
+                    },
+                }
                 const need_subject = try nativeSubject(envelope, occurrence, candidate, .clarification, .clarification_needs, true);
                 try changes.add(.{ .resolve = .{ .clarification_routed = .{ .subject = subject, .needs = need_subject } } });
             }
@@ -996,6 +999,47 @@ test "registration admits a diagnostic admission only with the reader of its own
             .{ .contract = .{ .id = "test.admit", .kind = .step, .requires = &.{ subject_schema.key, reviewed_schema.key }, .outcomes = &.{ .ok, .invalid }, .side_effect = .none, .outcome_association = .{ .diagnostic_admission = case.binding } }, .binding = bound.bind(void, null, Unused.invoke) },
         };
         const registry: operations.Registry = .{ .operations = &entries, .data_schemas = &.{ subject_schema, reviewed_schema }, .policies = &.{}, .gates = &.{} };
+        try std.testing.expectEqual(case.admitted, registry.validate());
+    }
+}
+
+test "each route reader names the evidence key its owner stores its decision under" {
+    // The switch is exhaustive, so a new reader has to state its owner's schema here too.
+    inline for (@typeInfo(association.RouteReader).@"enum".fields) |field| {
+        const reader: association.RouteReader = @enumFromInt(field.value);
+        const stored = switch (reader) {
+            .specification_unit => @import("specification_workflow.zig").checked_schema.key,
+            .required_authority => authority.result_schema.key,
+        };
+        try std.testing.expectEqual(stored, reader.evidence());
+    }
+}
+
+test "registration admits a clarification route only with the reader of its own evidence" {
+    const operations = @import("../ports/workflow_operation_registry.zig");
+    const bound = @import("workflow_operation_binding.zig");
+    const Unused = struct {
+        fn invoke(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
+            return error.InvocationFailureUnrecorded;
+        }
+    };
+    const routed_schema = values.schema(.validated_specification_unit, u8, 1, 16).captured();
+    const unread: association.Binding = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = routed_schema.key };
+    var read = unread;
+    read.route_reader = .specification_unit;
+    var foreign = read;
+    foreign.evidence = subject_schema.key;
+    // Each differs from the admitted case in one respect: no reader, or evidence the reader does not read.
+    const cases = [_]struct { binding: association.Binding, admitted: bool }{
+        .{ .binding = read, .admitted = true },
+        .{ .binding = unread, .admitted = false },
+        .{ .binding = foreign, .admitted = false },
+    };
+    for (cases) |case| {
+        const entries = [_]operations.Entry{
+            .{ .contract = .{ .id = "test.route", .kind = .step, .requires = &.{ subject_schema.key, routed_schema.key }, .outcomes = &.{ .ok, .needs_user }, .side_effect = .none, .outcome_association = .{ .clarification_route = case.binding } }, .binding = bound.bind(void, null, Unused.invoke) },
+        };
+        const registry: operations.Registry = .{ .operations = &entries, .data_schemas = &.{ subject_schema, routed_schema }, .policies = &.{}, .gates = &.{} };
         try std.testing.expectEqual(case.admitted, registry.validate());
     }
 }

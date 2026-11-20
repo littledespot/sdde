@@ -2789,6 +2789,52 @@ after every model call, and again at the publish step's repeat of the capture.
 wrapped a `*const ValidToolchain` and returned it; no production code constructed it, and consumers read
 `valid_toolchain` from the envelope (F0003). No model request or published output changes.
 
+## C49 and C6 route. Five remedies (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "update the docs with the above recommendations", then "preflight and
+implement"); SPEC01 C49 and C6. Built offline only: no live set ran, and the two Q phases (story reading, records
+batch) each need the user's approval for one. Both development sources are plain lists with no fence, table, Setext
+heading or open question, so their requests are unchanged. The design text moved with the code (ADR 0036 Decision 2,
+ADR 0047 Decision 1, 17-specify.md, F0005 "Execution guards").
+
+- **Story reading** (class: rendering artefact). `source_paragraph.paragraph` skips a line that is `markup` or
+  `heading`. `ListLine.markup` marks a code fence's opening and closing line (the fence scan owns them, so an empty
+  fence is found too), a table delimiter row (a GFM row of dashes with optional colons between pipes, at least one
+  pipe), and a thematic break or Setext underline (`isBlockSeparator`); `heading` also marks the text lines of a
+  Setext heading, found by one finder that `levelOneHeading` now shares (it still takes only a level-1 heading, so a
+  title is derived as before). `=` and `-` underlines both head the paragraph above them, as CommonMark reads them, so
+  a line of text directly above `---` is a heading, the way an ATX heading line is. Segments, claim splitting and
+  extraction quotes are unchanged. Proof: structure flags by line for fences (info string, either kind, empty), table
+  rows with and without alignment or outer pipes, underlines of both levels, a thematic break, code lines that look
+  like structure, a list, and an underline under a list item; the story reading of ten sources, two of them
+  reading no words; the title and extraction tests unchanged. A thematic break is dropped too: it carries no words,
+  though the decision named only fence delimiters, table separator rows and Setext underlines. YAML front matter
+  (`---`, `title: X`, `---`) reads `title: X` as a Setext heading and drops it; neither development source has one.
+- **Retry scope** (class: successful completion). A reconciliation repair's permit takes its scope's frozen maximum
+  from `Source.ordinary_retry`, which only the ordinary merge writes. The decision said the source-omission merge
+  should stop overwriting `last_repair`; it can't, because `last_repair` is also that merge's own runner transition
+  (`source_omission_repair_workflow.zig:149`) and the report's repair observation
+  (`candidate_repair_observations.zig:16-18`). The extraction permits take a maximum of 1, so the fault is
+  reconciliation's alone. Proof: the ordinary merge records its permit; an omission merge from a source that holds one
+  leaves it, and the next ordinary permit then has the same scope and maximum; without a held permit a scope gets the
+  maximum its proposal gives; a held permit of another scope isn't carried. Disabling the carry fails that block and
+  the runner-state test that depends on it.
+- **Records batch** (class: successful completion). `bindsContent` is the content rule the validation already applies
+  (`activeSignal` in content mode); a batch whose group fails it gets the records variant excluded and no claim choice,
+  leaving the clarification and inconclusive outcomes. Proof: both batches at their own request, in two sources. The
+  business batch accepts a records answer and the question batch's schema rejects it; each accepts a clarification
+  over its own group. Removing the exclusion fails it. A run that ended blocked on such a group now ends
+  awaiting clarification; answering is E7, so a rerun asks again.
+- **Clarification route** (class: none). `RouteReader` has the two members, the validated specification unit and the
+  required-authority result, each naming its evidence key; `validDescriptor` requires one on a clarification route
+  and on no other descriptor; the binding switches on it exhaustively. The request descriptors stay as they are. Proof:
+  accepted and rejected cases at `validDescriptor` and registry admission, and each reader's key equals the key its
+  owner stores under. A route without its reader fails the production registry test.
+- **Clock** (class: none). The exchange timer sleeps on `.boot`, the clock the deadline is read on. The test pins both
+  owners by source text. On macOS the threaded `Io` has no `clock_nanosleep` and sleeps a relative duration with
+  `nanosleep`, which takes no clock, so there the change is not observable; on Linux `.boot` is `CLOCK_BOOTTIME`.
+  Counting suspended time on macOS would need the timer to read the clock again after a wake.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a

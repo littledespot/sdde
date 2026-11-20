@@ -19,6 +19,12 @@ pub fn scan(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.E
 /// One source-coordinate scan owns opaque code regions and explicit link
 /// destinations. The inline-only operation above is a projection of this result.
 pub fn scanAll(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const Range {
+    return scanLines(allocator, bytes, null);
+}
+
+/// `scanAll`, which also appends the start of each line that opens or closes a code fence to `delimiters`.
+/// An empty fence has no range, so its two delimiter lines are known only here.
+fn scanLines(allocator: std.mem.Allocator, bytes: []const u8, delimiters: ?*std.ArrayList(usize)) std.mem.Allocator.Error![]const Range {
     var result: std.ArrayList(Range) = .empty;
     errdefer result.deinit(allocator);
     var runs: std.ArrayList(Run) = .empty;
@@ -51,12 +57,14 @@ pub fn scanAll(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocato
             const length = runLength(content, 0, active.byte);
             if (length >= active.length and std.mem.trim(u8, content[length..], " \t").len == 0) {
                 if (offset > active.start) try result.append(allocator, .{ .start = active.start, .end = offset, .form = .code_block });
+                if (delimiters) |list| try list.append(allocator, offset);
                 fence = null;
             }
         } else if (content.len > 0 and (content[0] == '`' or content[0] == '~')) {
             const length = runLength(content, 0, content[0]);
             if (length >= 3 and (content[0] == '~' or std.mem.indexOfScalar(u8, content[length..], '`') == null)) {
                 fence = .{ .byte = content[0], .length = length, .start = next };
+                if (delimiters) |list| try list.append(allocator, offset);
                 fenced = true;
                 excluded = true;
             }
@@ -122,15 +130,20 @@ fn lineAt(bytes: []const u8, offset: usize) struct { usize, usize } {
 /// One source line, the top-level list item it belongs to and whether it is
 /// fenced code. Segments never decrease through a source: item `k` is segment
 /// `2k + 1`, and the lines after `k` items and before the next are segment `2k`.
-/// A heading line ends any item. `wording` is where the line's words start: after
-/// its indentation, and after a list marker only where `listSegments` accepts it as
-/// an item (so a wrapped `2024.` stays wording); a code line keeps every byte (0).
-/// `html` marks a line of an HTML block or comment, its opening line included.
+/// An ATX heading line ends any item. `heading` also marks the text lines of a Setext
+/// heading, which change no segment. `markup` marks a line that is Markdown structure
+/// and has no wording of its own: a code fence's opening or closing line, a table
+/// delimiter row, a thematic break or a Setext underline. `wording` is where the
+/// line's words start: after its indentation, and after a list marker only where
+/// `listSegments` accepts it as an item (so a wrapped `2024.` stays wording); a code
+/// line keeps every byte (0). `html` marks a line of an HTML block or comment, its
+/// opening line included.
 pub const ListLine = struct {
     start: usize,
     segment: u32,
     code: bool,
     heading: bool,
+    markup: bool,
     html: bool,
     wording: usize,
 
@@ -148,8 +161,11 @@ pub const ListLine = struct {
 /// or as a sibling with the open list's delimiter, after CommonMark's
 /// paragraph-interruption rule, so a wrapped number stays wording.
 pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const ListLine {
-    const ranges = try scanAll(allocator, bytes);
+    var delimiters: std.ArrayList(usize) = .empty;
+    defer delimiters.deinit(allocator);
+    const ranges = try scanLines(allocator, bytes, &delimiters);
     defer allocator.free(ranges);
+    var fence_cursor: usize = 0;
     var result: std.ArrayList(ListLine) = .empty;
     errdefer result.deinit(allocator);
     var block: usize = 0;
@@ -222,9 +238,16 @@ pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.All
             }
             boundary = false;
         }
-        try result.append(allocator, .{ .start = offset, .segment = if (item) |value| 2 * value + 1 else 2 * items, .code = code, .heading = heading, .html = html, .wording = wording });
+        while (fence_cursor < delimiters.items.len and delimiters.items[fence_cursor] < offset) fence_cursor += 1;
+        const fence_delimiter = fence_cursor < delimiters.items.len and delimiters.items[fence_cursor] == offset;
+        const markup = fence_delimiter or (!code and !html and !blank and markupText(line));
+        try result.append(allocator, .{ .start = offset, .segment = if (item) |value| 2 * value + 1 else 2 * items, .code = code, .heading = heading, .markup = markup, .html = html, .wording = wording });
         offset = next;
     }
+    // A Setext heading's text is heading text, the way an ATX heading line is (ADR 0047).
+    for (result.items, 0..) |_, index| if (setextHeading(bytes, result.items, index)) |setext| {
+        for (result.items[setext.first..index]) |*member| member.heading = true;
+    };
     return result.toOwnedSlice(allocator);
 }
 
@@ -247,16 +270,11 @@ pub fn levelOneHeading(allocator: std.mem.Allocator, bytes: []const u8) std.mem.
             if (level == 1 and content.len != 0) return try allocator.dupe(u8, content);
             continue;
         }
-        if (!setextUnderline(text)) continue;
-        var first = index;
-        while (first > 0 and paragraphLine(bytes, lines[first - 1])) first -= 1;
-        // The paragraph must open at a top-level boundary, not continue an item, a quote or
-        // an HTML block, and its first line must not be indented code.
-        if (first == index or (first > 0 and !paragraphBoundary(bytes, lines[first - 1])) or
-            indentedCode(lineText(bytes, lines[first]))) continue;
+        const setext = setextHeading(bytes, lines, index) orelse continue;
+        if (setext.level != 1) continue;
         var joined: std.ArrayList(u8) = .empty;
         errdefer joined.deinit(allocator);
-        for (lines[first..index], 0..) |member, position| {
+        for (lines[setext.first..index], 0..) |member, position| {
             if (position != 0) try joined.append(allocator, '\n');
             try joined.appendSlice(allocator, std.mem.trim(u8, lineText(bytes, member), " \t"));
         }
@@ -299,11 +317,52 @@ fn atxText(line: []const u8) []const u8 {
     return content;
 }
 
-/// A Setext level-1 underline: `=` after at most three spaces, then only spaces and tabs.
-fn setextUnderline(line: []const u8) bool {
-    const indent = std.mem.indexOfNone(u8, line, " ") orelse return false;
-    if (indent > 3 or line[indent] != '=') return false;
-    return std.mem.trim(u8, line[indent + runLength(line, indent, '=') ..], " \t").len == 0;
+/// A Setext underline's heading level: a run of `=` is level 1 and a run of `-` is level 2, after at
+/// most three spaces and with only spaces and tabs after the run.
+fn setextLevel(line: []const u8) ?usize {
+    const indent = std.mem.indexOfNone(u8, line, " ") orelse return null;
+    if (indent > 3 or (line[indent] != '=' and line[indent] != '-')) return null;
+    if (std.mem.trim(u8, line[indent + runLength(line, indent, line[indent]) ..], " \t").len != 0) return null;
+    return if (line[indent] == '=') 1 else 2;
+}
+
+const SetextHeading = struct { first: usize, level: usize };
+
+/// The heading that the underline at `lines[index]` closes: the paragraph above it and the underline's
+/// level. The paragraph must open at a top-level boundary, not continue an item, a quote or an HTML
+/// block, and its first line must not be indented code.
+fn setextHeading(bytes: []const u8, lines: []const ListLine, index: usize) ?SetextHeading {
+    if (!topLevel(lines[index])) return null;
+    const level = setextLevel(lineText(bytes, lines[index])) orelse return null;
+    var first = index;
+    while (first > 0 and paragraphLine(bytes, lines[first - 1])) first -= 1;
+    if (first == index or (first > 0 and !paragraphBoundary(bytes, lines[first - 1])) or
+        indentedCode(lineText(bytes, lines[first]))) return null;
+    return .{ .first = first, .level = level };
+}
+
+/// A line that is Markdown structure with no wording: a thematic break, a Setext underline or a table
+/// delimiter row. A code fence's lines are found by the scan that owns fences.
+fn markupText(line: []const u8) bool {
+    return isBlockSeparator(std.mem.trimStart(u8, line, " \t")) or tableDelimiter(line);
+}
+
+/// A GFM table delimiter row: dashes with optional alignment colons in each cell, the cells set apart
+/// by pipes. At least one pipe, so a bare run of dashes stays a thematic break or an underline.
+fn tableDelimiter(line: []const u8) bool {
+    var row = std.mem.trim(u8, line, " \t");
+    if (std.mem.indexOfScalar(u8, row, '|') == null) return false;
+    if (row[0] == '|') row = row[1..];
+    if (row.len != 0 and row[row.len - 1] == '|') row = row[0 .. row.len - 1];
+    if (row.len == 0) return false;
+    var cells = std.mem.splitScalar(u8, row, '|');
+    while (cells.next()) |raw| {
+        var cell = std.mem.trim(u8, raw, " \t");
+        if (cell.len != 0 and cell[0] == ':') cell = cell[1..];
+        if (cell.len != 0 and cell[cell.len - 1] == ':') cell = cell[0 .. cell.len - 1];
+        if (cell.len == 0 or std.mem.indexOfNone(u8, cell, "-") != null) return false;
+    }
+    return true;
 }
 
 /// A top-level line of paragraph text: not blank, not a heading, break, fence, quote, or an
@@ -559,4 +618,40 @@ fn isHtmlBlock(line: []const u8) bool {
         if (line.len > start + name.len and std.ascii.eqlIgnoreCase(line[start..][0..name.len], name) and std.mem.indexOfScalar(u8, " \t>/", line[start + name.len]) != null) return true;
     }
     return false;
+}
+
+/// One character for each line of `source`: `M` for markup, `H` for a heading, `c` for code, `.` for the rest.
+fn structureOf(a: std.mem.Allocator, source: []const u8) ![]const u8 {
+    const lines = try listSegments(a, source);
+    defer a.free(lines);
+    const kinds = try a.alloc(u8, lines.len);
+    for (lines, kinds) |line, *kind| kind.* = if (line.markup) 'M' else if (line.heading) 'H' else if (line.code) 'c' else '.';
+    return kinds;
+}
+
+test "line structure marks fence lines, table delimiter rows, breaks and underlines as markup and a Setext heading's text as heading" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_]struct { source: []const u8, lines: []const u8 }{
+        // Markup: a fence's two lines, with or without an info string, in either fence kind, and an empty fence's.
+        .{ .source = "Intro.\n\n```zig\nloan.renew()\n```\n", .lines = "..McM" },
+        .{ .source = "~~~\nx\n~~~\n", .lines = "McM" },
+        .{ .source = "```\n```\n", .lines = "MM" },
+        // Markup: a table's delimiter row with and without alignment and outer pipes, not its other rows.
+        .{ .source = "| a | b |\n| :--- | ---: |\n| 1 | 2 |\n", .lines = ".M." },
+        .{ .source = "a | b\n-|-\n1 | 2\n", .lines = ".M." },
+        // Markup and heading: an underline is markup and the paragraph above it is heading text.
+        .{ .source = "Loan renewal\n============\nBody.\n", .lines = "HM." },
+        .{ .source = "Loan\nrenewal\n---\nBody.\n", .lines = "HHM." },
+        // Markup: a thematic break under no paragraph heads nothing.
+        .{ .source = "One.\n\n***\n\nTwo.\n", .lines = "..M.." },
+        // Not markup: code that looks like structure, prose, a list, and a pipe row that is no delimiter.
+        .{ .source = "```\n| --- |\n---\n```\n", .lines = "MccM" },
+        .{ .source = "a - b\nPeriod | 14 days\n", .lines = ".." },
+        .{ .source = "- Item.\n- Item two.\n", .lines = ".." },
+        // Not a heading: the paragraph above an underline that follows a list item is the item's, and the
+        // underline is a thematic break there.
+        .{ .source = "- Item.\n---\n", .lines = ".M" },
+    }) |case| try std.testing.expectEqualStrings(case.lines, try structureOf(a, case.source));
 }

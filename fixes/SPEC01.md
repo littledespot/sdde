@@ -568,33 +568,6 @@ code, do complete end 2 end analysis, do not guess").
 - **Toolchain:** every toolchain failure is `error.InvalidToolchain`; the stage names the
   failing step in the event (`Step` in `prepare_toolchain.zig`), not the rule that failed.
 
-**C6. An admitted `clarification_route` or request descriptor can fail at run time.**
-`validDescriptor` checks that the keys are declared and that the kind and repair role fit
-(`workflow_outcome_association.zig`). At run time the binding tests the evidence key in hard-coded
-branches that end `else => return error.InvalidOutcomeAssociation` (the `clarification_route` branch and
-`requestOperation` of `workflow_outcome_binding.zig`). A `clarification_route` over other evidence than the
-required-authority result or the validated specification unit, or a `request_*`, `observe` or `preserve`
-descriptor of kind request over other evidence than the nine keys `requestOperation` lists, compiles,
-validates and then rejects the first run that takes it. The authorizer's `blocked` table and the
-`diagnostic_admission` branch had the same shape and are fixed: each names a closed reader
-([Z_SPEC01](Z_SPEC01.md) "C6 reader" and "C6 admission reader"). **Owner:** `workflow_outcome_binding.zig`.
-**By reading, not executed:** the runner reports a binding `InvalidOutcomeAssociation` as `operation_failed`
-(`workflow_pipeline_runner.zig:1022`). Both evidence keys of `clarification_route` are registered, and its
-reader needs a non-empty needs record to be reached. A missing branch can't be told from a failed read of the
-owner's data: both end `InvalidOutcomeAssociation`. The item names no defect class and no registered contract
-breaks, so it reports a fact.
-**Decided** 20 November 2026 (user: "update the docs with the above recommendations"); unbuilt, and the
-`clarification_route` part needs its preflight. Its place in the order is under C49.
-- **`clarification_route`: yes.** It names a closed reader of two members, read in an exhaustive switch, as
-  the diagnostic admission does. Its two producers (`clarification_refresh_workflow.zig:19`, `:99`) each read
-  a different owner's result. With it, the authorizer, the diagnostic admission and the clarification route
-  each read a closed table. It amends F0005:660-663 and replaces the branch's key tests. It shrinks C21
-  without closing it, because the tag adds owner names to the generic domain file.
-- **Request descriptors: no; this part is closed.** Their 14 producers are stages of the engine's request
-  kernel (ADR 0030), which a workflow definition can't author. Every model call runs every stage, so every
-  integration scenario and live run reads each evidence key, and a wrong key fails the first test. A tag of
-  nine members would only repeat the keys. `requestOperation` keeps its branches.
-
 **C8. Clarification records (adds to E7).**
 
 - Nothing closes a record. The only status writer sets `open` (`clarification_refresh.zig:124`;
@@ -667,11 +640,13 @@ per-step structure is sized by the total. **D:** 06-pipeline-nodes.md:38; ADR 00
 `workflow_outcome_association.zig` holds `required_authority.zig` and `clarification_refresh.zig`
 result types (the `reclassify` arms `authority_result` and `clarification_result`), and several
 of its 14 descriptor variants (`Descriptor`) are assigned at one to three sites (grep).
-`workflow_outcome_binding.zig` branches on `.required_authority_result` and
-`.validated_specification_unit` (the `clarification_route` branch). A second workflow with its own gate
-or clarification route needs edits to both files. A blockable repair needs a member of `BlockedReader`
-and its arm in `authorizationBlocked`, and a second diagnostic admission a member of `AdmissionReader`
-and its arm in `diagnosticAdmission`; a missing arm does not compile.
+`workflow_outcome_binding.zig` reads its owners' decisions through closed readers. A second workflow with its own
+gate or clarification route needs edits to both files. A blockable repair needs a member of `BlockedReader`
+and its arm in `authorizationBlocked`, a second diagnostic admission a member of `AdmissionReader` and its arm
+in `diagnosticAdmission`, and a second clarification route a member of `RouteReader` and its arm in the
+`clarification_route` branch; a missing arm does not compile. The request descriptors keep their evidence keys
+in `requestOperation`: closed, because every model call runs each of the 14 kernel stages that produce them, so
+a wrong key fails the first test, and a workflow definition can't author them (ADR 0030).
 
 **C22. Change amplification (traced).**
 
@@ -939,68 +914,19 @@ comment containing "plan", "hard" or "reference" fails a test with no boundary c
 
 ### 10.7 Unconfirmed readings
 
-**C49. Four readings, each now shown by a test.** The tests record current behavior at the owner
-(20 November 2026). **Decided** 20 November 2026 (user: "update the docs with the above
-recommendations"): the remedy under each bullet, unbuilt. Each needs its own preflight, and the story and
-records-batch remedies are Q phases that also need phase approval (§2).
-- **Order:** the story, the retry scope, the records batch, C6's `clarification_route`, the clock.
-- **Evidence:** neither development case's source has a fence, table, Setext heading or open question,
-  and the retry fault needs a reconciliation repair, a source-omission merge and another reconciliation
-  repair in one run. A set can therefore show only that nothing regresses ("benefit not demonstrated",
-  §2 rule 6); the offline tests at each owner carry the evidence.
-
-- **A records batch bound to a group that holds an open question: confirmed.** Test "a records batch
-  is bound to a group that holds an open question, and record content over that group is refused"
-  (`specification_generation_test.zig`). `recordCount` and `record` give the question group a batch
-  with `.question` (`specification_source_binding.zig:156-158`, `:203`); record content over it is
-  bound with `.content` (`specification_provenance.zig:626`), which refuses it
-  (`resolveGroups` returns `InvalidSpecificationBinding`). By reading, not executed: the refusal
-  ends the run blocked (`specification_repair.zig:82`). **Class:** successful completion.
-  **Decided: offer only the clarification outcome.** A records batch whose group fails the content rule
-  gets only the clarification variant, through the engine's existing exclusion of result variants per
-  request, so the rule reads structure, not prose. A source asking "Which renewal period applies?" then
-  ends `awaiting_clarification` with a form instead of blocked. Grounds: design invariant 20 (an unresolved
-  authority gap becomes a typed clarification), ADR 0020:197-198 (a positive association can't select an
-  open-question group) and 17-specify.md:516 (no question becomes a content record). Amends
-  17-specify.md:198-199. Not adopted: excluding such groups from the record catalogue, because the
-  question might never be asked and a business claim sharing the group would get no record. **Open for
-  the preflight:** how a group whose question has been answered is authored on the rerun.
-- **The composed story copies fence, table and Setext lines: confirmed.** Test "the story reading
-  of a claim that cites fence, table and Setext lines". The story's text is `source_paragraph.paragraph`
-  (ADR 0047), which drops only ATX heading lines (`markdown_code_spans.zig:200`): a code fence reads
-  ```` ``` loan.renew() ``` ````, a table `| Field | Value | | --- | --- | | Period | 14 days |` and a
-  Setext heading `Loan renewal ============ A loan may be renewed once.` (`source_paragraph.zig:57`).
-  **Class:** rendering artefact in the published story, so a decided fix is a Q phase with this class.
-  **Decided: drop the lines that carry no words.** The paragraph reading drops fence delimiter lines,
-  table separator rows and Setext underlines, and reads a Setext heading as a heading, which ADR 0047
-  Decision 1 already drops ("blank and Markdown heading lines are dropped"; the code knows only ATX
-  headings). Every line with words stays, table rows and code lines included, so a requirement stated
-  in a table keeps its words. The line classifiers of `markdown_code_spans.zig` recognise these lines, so
-  no meaning is judged. Amends ADR 0036 Decision 2, ADR 0047 Decision 1 and 17-specify.md:281-284, the
-  design text landing with the code. It changes the records, entities and scenarios requests, which show
-  the same reading. First in the order: it is the only remedy that changes published text.
-- **Two clocks for one request deadline: confirmed.** Test "the provider operation clock reads boot
-  time while the exchange timer sleeps on awake time" (`provider_operation_clock.zig`). The deadline
-  reads `.boot` (`provider_operation_clock.zig:13`) and the exchange sleeps the remainder on
-  `.awake` (`model_http_exchange.zig:84`), so time the machine is suspended counts toward the
-  deadline and not toward the sleep. A unit test cannot suspend the machine, so it reads the clock
-  and pins the exchange's choice by its source text. **Class:** none. **Decided: the deadline counts
-  suspended time.** The exchange sleeps the remainder on `.boot` (`model_http_exchange.zig:84`), and the
-  test's `.awake` pin flips. ADR 0030's deadline "bounds a stalled exchange", and a connection rarely
-  survives a suspend. The provider operation clock stays as it is. Where the OS can't count suspended time,
-  `.boot` behaves as `.awake` does today. Last in the order: it changes only how long a stalled call waits
-  after a suspend, not the output.
-- **A retry population differs after a source-omission merge: confirmed under an unchanged scope.**
-  Test: the block added to "false conflicts repair a closed relation group with exact preconditions and
-  preserved siblings" (`specification_generation_test.zig`). The ordinary reconciliation permit read
-  from the source and proposal before the merge and after it has the same scope bytes and another
-  `maximum_targets`. By reading, not executed: `workflow_retry.zig:485` refuses a permit whose scope
-  exists with another maximum, which would end a run that made an ordinary repair before the merge.
-  **Class:** successful completion. **Decided: keep the scope, frozen population and counters.** No
-  amendment: identities survive replacement (22-repair.md:741), a population freezes at first
-  authorization (:757), and a new authorization can't erase earlier failures (:768). By reading, the
-  merge overwrites `source.last_repair` (`reference_reconciliation_repair.zig:501`, `:889`), and
-  `retryPermit` carries the frozen maximum only from `last_repair.retry` under the same scope (`:145`).
-  The merge already keeps its own permit in `source.omission_retry` (`:789`), so the fix stops it
-  overwriting the ordinary record; the preflight confirms the owner. Not adopted: a new scope, which
-  would grant a fresh allowance after each merge. Second in the order: today such a run fails.
+**C49. Built 20 November 2026 ([Z_SPEC01](Z_SPEC01.md) "C49"); what stays open.**
+- **Live sets for the story reading and the records batch** (Q phases, rendering artefact and successful
+  completion): not run, and each needs the user's approval (§2 rule 4). Neither development case's source has
+  a fence, table, Setext heading or open question, so a set can show only that nothing regresses ("benefit
+  not demonstrated", §2 rule 6); the offline tests at each owner carry the evidence. The records batch also
+  moves a run that ended blocked to `awaiting_clarification`, so a set that reaches it reports false
+  questions and missed gaps apart (28-testing.md §28.9).
+- **A clarification-only batch's subject:** the subject is `{specification, record_kind, content}` and the
+  model picks `record_kind` (`build_specification_clarification_need.zig:26-29`), so a rerun that picks
+  another kind mints another form. This is true of every records clarification; the batch only reaches it
+  more often. An answered group is authored by E7 (answers are not consumed yet), so until then a rerun asks
+  again.
+- **The request deadline on macOS:** the exchange timer sleeps on `.boot`, which counts suspended time on
+  Linux (`CLOCK_BOOTTIME`). Zig 0.16's threaded `Io` sleeps a relative duration with `nanosleep` on macOS,
+  which takes no clock, so suspended time still doesn't count there. Counting it would need the timer to read
+  the deadline's clock again after a wake, which no decision covers.

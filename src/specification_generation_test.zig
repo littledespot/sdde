@@ -788,18 +788,29 @@ test "the paragraph reading rejects a citation that names another source or runs
     }
 }
 
-// SPEC01 C49: `reading.paragraph` is the text the composed story takes from a claim (ADR 0047). It drops blank and
-// heading lines and removes list markers. This records what it publishes when the claim cites a code fence, a table
-// and a Setext heading. The test records current behaviour; it proposes no change.
-test "the story reading of a claim that cites fence, table and Setext lines" {
+// SPEC01 C49 (decided 20 November 2026): `reading.paragraph` is the text the composed story takes from a claim
+// (ADR 0047). It drops blank, heading and Setext heading lines and the lines that are Markdown structure with no
+// wording (a code fence's opening and closing lines, table delimiter rows, thematic breaks, Setext underlines), and
+// removes list markers; every line with words stays, table rows and code lines included.
+test "the story reading of a claim that cites fence, table and Setext lines keeps the words and drops the structure" {
     const reading = @import("domain/source_paragraph.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    for ([_]struct { source: []const u8, words: []const u8 }{
-        .{ .source = "Renewals are recorded as follows.\n\n```\nloan.renew()\n```\n", .words = "Renewals are recorded as follows. ``` loan.renew() ```" },
-        .{ .source = "| Field | Value |\n| --- | --- |\n| Period | 14 days |\n", .words = "| Field | Value | | --- | --- | | Period | 14 days |" },
-        .{ .source = "Loan renewal\n============\n\nA loan may be renewed once.\n", .words = "Loan renewal ============ A loan may be renewed once." },
+    for ([_]struct { source: []const u8, words: ?[]const u8 }{
+        // Dropped: each structure line, with the words around it kept.
+        .{ .source = "Renewals are recorded as follows.\n\n```\nloan.renew()\n```\n", .words = "Renewals are recorded as follows. loan.renew()" },
+        .{ .source = "Renewals are recorded as follows.\n\n~~~zig\nloan.renew()\n~~~\n", .words = "Renewals are recorded as follows. loan.renew()" },
+        .{ .source = "| Field | Value |\n| :--- | ---: |\n| Period | 14 days |\n", .words = "| Field | Value | | Period | 14 days |" },
+        .{ .source = "Loan renewal\n============\n\nA loan may be renewed once.\n", .words = "A loan may be renewed once." },
+        .{ .source = "Loan\nrenewal\n---\n\nA loan may be renewed once.\n", .words = "A loan may be renewed once." },
+        .{ .source = "A loan may be renewed once.\n\n***\n\nA renewal extends the due date.\n", .words = "A loan may be renewed once. A renewal extends the due date." },
+        // Kept: a code line that looks like structure is code, and a line of prose with a dash is prose.
+        .{ .source = "Example:\n\n```\n---\n| --- |\n```\n", .words = "Example: --- | --- |" },
+        .{ .source = "A loan - once renewed - is closed.\n", .words = "A loan - once renewed - is closed." },
+        // A quote with no words left reads as none, the way a heading alone does.
+        .{ .source = "Loan renewal\n============\n", .words = null },
+        .{ .source = "```\n```\n", .words = null },
     }) |case| {
         var fixture = try Fixture.init(a, case.source);
         defer fixture.deinit();
@@ -807,8 +818,8 @@ test "the story reading of a claim that cites fence, table and Setext lines" {
             if (entry.claim.content == .model) break entry;
         } else return error.MissingTestClaim;
         var structure = try reading.Structure.init(a, fixture.context.inputs);
-        const words = (try reading.paragraph(a, &structure, item)).?;
-        try std.testing.expectEqualStrings(case.words, words);
+        const words = try reading.paragraph(a, &structure, item);
+        if (case.words) |expected| try std.testing.expectEqualStrings(expected, words.?) else try std.testing.expectEqual(@as(?[]const u8, null), words);
     }
 }
 
@@ -1317,16 +1328,22 @@ test "authoring schema reuse keeps positive support separate from open question 
     }
 }
 
-// SPEC01 C49: a records batch is assigned its group with `.question` (`binding.record`, `recordCount`), and every
-// record over a group is validated with `.content` (`validateRecordAssociation`). A group that holds an open question
-// passes the first and not the second. The test records this current behaviour; it proposes no change.
-test "a records batch is bound to a group that holds an open question, and record content over that group is refused" {
+// SPEC01 C49 (decided 20 November 2026): a records batch is assigned its group with `.question` (`binding.record`,
+// `recordCount`) and every record over a group is validated with `.content` (`validateRecordAssociation`), which a
+// group holding an open question fails. The request offers what the validation accepts: a batch over such a group is
+// offered its clarification outcome and no record content (invariant 20; ADR 0020).
+test "a records batch over a group that holds an open question is offered only its clarification outcome" {
     const binding = @import("domain/specification_source_binding.zig");
     const refs = @import("domain/reference_support.zig");
     const extraction_contract = @import("domain/reference_extraction.zig");
+    const sessions = @import("domain/specification_session.zig");
+    const schema = @import("domain/model_result_schema.zig");
+    const json = @import("domain/model_candidate_json.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
     for ([_]struct { behavior: []const u8, question: []const u8 }{
         .{ .behavior = "MOCK Show the startup time.", .question = "MOCK Which timezone applies?" },
         .{ .behavior = "MOCK Renew an eligible loan.", .question = "MOCK Which renewal period applies?" },
@@ -1351,8 +1368,49 @@ test "a records batch is bound to a group that holds an open question, and recor
         // which is the first check of `validateRecordAssociation`.
         _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{business.id}, .content);
         try std.testing.expectError(error.InvalidSpecificationBinding, binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .content));
-        // Question mode resolves it, so the offered batch and its validation read the same group differently.
+        // Question mode resolves it, so a clarification over it stays valid.
         _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .question);
+        // The binding names the rule the offer follows: content binds the business group and not the question group.
+        try std.testing.expect(try binding.bindsContent(records, business.id));
+        try std.testing.expect(!try binding.bindsContent(records, question.id));
+        try std.testing.expectError(error.InvalidSpecificationBinding, binding.bindsContent(records, .{ .ordinal = 999 }));
+        // Each batch's request, at its own group. Both offer the clarification outcome over their own group; only the
+        // business batch offers record content, which the question batch's schema rejects.
+        var current = try sessionAtRecords(a, &fixture, try fixture.proposalAllGroups(case.behavior));
+        for ([_]bool{ false, true }) |question_batch| {
+            const group = if (question_batch) question else business;
+            const packet = try sessions.packet(a, current, fixture.context, &packet_guidance.marked);
+            defer @import("domain/model_input_packet.zig").release(packet);
+            var excludes_records = false;
+            for (packet.excludedVariants()) |entry| if (std.mem.eql(u8, entry.kind, "records")) {
+                excludes_records = true;
+            };
+            try std.testing.expectEqual(question_batch, excludes_records);
+            var names_claims = false;
+            for (packet.integerChoices()) |choice| if (choice.target.path.len == 3 and std.mem.eql(u8, choice.target.path[0].property, "records")) {
+                names_claims = true;
+            };
+            try std.testing.expectEqual(!question_batch, names_claims);
+            const restricted = try schema.restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+            defer restricted.release();
+            var good = try fixture.proposal(case.behavior);
+            good.provenance.claim_ids = group.value.claim_ids;
+            good.source_group_ids = &.{group.id};
+            const requirement: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = good.value } }, .source_group_ids = good.source_group_ids, .provenance = good.provenance };
+            var asked = good;
+            asked.value = .{ .segments = &.{.{ .literal = .{ .value = case.question } }} };
+            const wires = [_]struct { response: g.Response, accepted: bool }{
+                .{ .response = .{ .content = .{ .records = &.{requirement} } }, .accepted = !question_batch },
+                .{ .response = .{ .clarification = .{ .reason = .missing, .question = asked, .record_kind = .functional_requirement } }, .accepted = true },
+            };
+            for (wires) |wire| {
+                const answer = try std.json.parseFromSlice(std.json.Value, a, try json.encode(g.ModelResponse, a, try g.ModelResponse.from(a, fixture.context, wire.response)), .{ .parse_numbers = false });
+                const rejection = @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&answer.value), restricted.selected().root());
+                try std.testing.expectEqual(wire.accepted, rejection == null);
+            }
+            // The business batch is written, which moves the session to the question group's batch.
+            if (!question_batch) current = try sessions.appendBound(a, current, (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{requirement} } } })).valid);
+        }
     }
 }
 
@@ -7381,10 +7439,11 @@ test "false conflicts repair a closed relation group with exact preconditions an
         // must require their rebuilding by the existing coverage-repair owner.
         try std.testing.expect((try references.finish(a, fixed.input, fixed.proposal.global, ctx)) == .invalid);
         // SPEC01 C49: a reconciliation repair's retry permit has a scope, a snapshot of the source's origin and four
-        // collection positions, and a population that `workflow_retry.zig` compares by scope (a permit whose scope
-        // exists with another maximum is refused, by reading, not executed here). This takes one authorization and
-        // reads its permit from the source and proposal before the source-omission merge and after it: the scope is
-        // the same and the population is not. The test records current behaviour; it proposes no change.
+        // collection positions, and a population that `workflow_retry.zig` compares by scope: a permit whose scope
+        // exists with another maximum is refused (22-repair.md:757 freezes it at the first authorization). The
+        // ordinary permit takes the frozen maximum from `source.ordinary_retry`, which only an ordinary merge writes,
+        // so the source-omission merge, which replaces `last_repair`, leaves it. The source here holds an ordinary
+        // permit before the merge; after it the next ordinary permit has the same scope and the same maximum.
         {
             const ordinary = @import("domain/reference_reconciliation_repair.zig");
             const probe: r.Parsed = .{ .input = fixed.input, .proposal = fixed.proposal };
@@ -7397,13 +7456,31 @@ test "false conflicts repair a closed relation group with exact preconditions an
             var before = base;
             before.dependencies.source = parsed.source;
             before.dependencies.proposal = parsed.proposal;
-            var after = base;
-            after.dependencies.source = fixed.source;
-            after.dependencies.proposal = fixed.proposal;
             const permit_before = try ordinary.retryPermit(a, before);
+            // The same omission merge, from a source that holds the ordinary permit.
+            var seeded = parsed;
+            seeded.source.ordinary_retry = permit_before;
+            const seeded_auth = try repair.authorize(a, seeded, ctx, support);
+            const kept = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (ctx).inputs), seeded, ctx, support, seeded_auth, replacement, null);
+            try std.testing.expectEqualDeep(permit_before, kept.source.ordinary_retry.?);
+            // `last_repair` is the omission merge's own record, which its runner transition reads.
+            try std.testing.expect(!std.meta.eql(permit_before.key, kept.source.last_repair.?.retry.?.key));
+            var after = base;
+            after.dependencies.source = kept.source;
+            after.dependencies.proposal = kept.proposal;
             const permit_after = try ordinary.retryPermit(a, after);
             try std.testing.expectEqualSlices(u8, &permit_before.key.scope, &permit_after.key.scope);
-            try std.testing.expect(permit_before.maximum_targets != permit_after.maximum_targets);
+            try std.testing.expectEqual(permit_before.maximum_targets, permit_after.maximum_targets);
+            // Without a held permit, a scope freezes the maximum its own proposal gives, which is another here.
+            var unheld = base;
+            unheld.dependencies.source = fixed.source;
+            unheld.dependencies.proposal = fixed.proposal;
+            const fresh = try ordinary.retryPermit(a, unheld);
+            try std.testing.expect(fresh.maximum_targets != permit_before.maximum_targets);
+            // A held permit of another scope is not carried.
+            var foreign = after;
+            foreign.dependencies.source.ordinary_retry.?.key.scope[0] ^= 1;
+            try std.testing.expectEqual(fresh.maximum_targets, (try ordinary.retryPermit(a, foreign)).maximum_targets);
         }
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (ctx).inputs), fixed, ctx, support, auth, replacement, null));
         changed[0].claim_id = business[2];

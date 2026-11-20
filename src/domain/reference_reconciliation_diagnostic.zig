@@ -8,6 +8,10 @@ pub const FieldOrigin = struct { unit: Unit, field: Field, origin: ?Origin };
 pub const Source = struct {
     revision: u64 = 1,
     last_repair: ?@import("atomic_repair.zig").Merge = null,
+    /// The permit of the last ordinary repair, which only an ordinary merge writes. `last_repair` names the
+    /// last merge of any kind, so a source-omission merge replaces it, while the scope's frozen maximum has to
+    /// outlast that merge (22-repair.md:757).
+    ordinary_retry: ?@import("workflow_retry.zig").Permit = null,
     origin: ?Origin = null,
     fields: []const FieldOrigin = &.{},
     statements: @import("repair_occurrences.zig").Set = .{},

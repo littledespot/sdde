@@ -15,10 +15,12 @@ pub const Adapter = struct {
     }
 };
 
-// SPEC01 C49: a request deadline is derived from this clock, which reads boot time, and the exchange then sleeps the
-// remainder on awake time (`model_http_exchange.zig`); the two clocks differ by the time the machine is suspended.
-// This records the choice in each owner and proposes no change.
-test "the provider operation clock reads boot time while the exchange timer sleeps on awake time" {
+// SPEC01 C49 (decided 20 November 2026): a request deadline is derived from this clock, which reads boot time, and the
+// exchange sleeps the remainder on the same clock (`model_http_exchange.zig`), so the time the machine is suspended
+// counts toward the deadline. The Threaded `Io` sleeps a relative duration with `clock_nanosleep` where the platform has
+// it (Linux, where boot time is `CLOCK_BOOTTIME`), and on macOS with `nanosleep`, which takes no clock; a unit test
+// cannot suspend the machine, so this pins each owner's choice by its source text.
+test "the provider operation clock reads boot time and the exchange timer sleeps on boot time" {
     const io = std.testing.io;
     var adapter: Adapter = .{ .io = io };
     const before = std.Io.Clock.now(.boot, io).toMilliseconds();
@@ -29,6 +31,6 @@ test "the provider operation clock reads boot time while the exchange timer slee
     // pattern is split so that this file counts it once, in `now`.
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, @embedFile("provider_operation_clock.zig"), "now(.boot, " ++ "self.io)"));
     const exchange = @embedFile("../provider/model_http_exchange.zig");
-    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, exchange, ".awake)"));
-    try std.testing.expectEqual(@as(usize, 0), std.mem.count(u8, exchange, ".boot"));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, exchange, ".boot)"));
+    try std.testing.expectEqual(@as(usize, 0), std.mem.count(u8, exchange, ".awake"));
 }

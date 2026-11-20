@@ -153,6 +153,14 @@ fn activeSignal(records: refs.Records, index: usize, mode: Mode) Error!bool {
     };
     return true;
 }
+/// Whether record content may be written over the batch's group: only a group that content mode accepts,
+/// which one holding an open question never is (`spec.permitsPositiveMapping`). A batch over any other
+/// group is offered only its clarification outcome, so the request offers what the validation accepts
+/// (invariant 20; ADR 0020).
+pub fn bindsContent(records: refs.Records, signal: r.SignalId) Error!bool {
+    for (records.signals, 0..) |candidate, index| if (candidate.id.ordinal == signal.ordinal) return activeSignal(records, index, .content);
+    return error.InvalidSpecificationBinding;
+}
 fn recordSignal(records: refs.Records, index: usize) Error!bool {
     if (!try activeSignal(records, index, .question)) return false;
     return !try preservedTokensOnly(records, records.signals[index].value.claim_ids);

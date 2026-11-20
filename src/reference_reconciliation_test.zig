@@ -1126,6 +1126,8 @@ test "authorized content payloads cover every kind across statement and signal i
             try std.testing.expect((try textRejection(a, merged, fixture.context())) == null);
             try std.testing.expect(merged.source.last_repair.?.changed);
             try std.testing.expectEqualDeep(correction, merged.source.last_repair.?.origin.?);
+            // The ordinary merge records the permit its next authorization takes the frozen maximum from.
+            try std.testing.expectEqualDeep(auth.retry, merged.source.ordinary_retry);
             try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context()).inputs), merged, fixture.context(), auth, replacement, correction));
             if (global) {
                 try std.testing.expectEqualDeep(parsed.proposal.global.claim_dispositions, merged.proposal.global.claim_dispositions);

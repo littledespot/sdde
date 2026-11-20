@@ -467,8 +467,12 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     } else false;
     var question_ids: std.ArrayList(i64) = .empty;
     var claim_ids: std.ArrayList(i64) = .empty;
+    // A records batch over a group that holds an open question is offered no record content: only the
+    // clarification outcome, which that group's evidence can state (invariant 20; ADR 0020).
+    var content_batch = true;
     if (selected == .records) {
         const bound = (try binding.record(a, records, context.inputs, cursor)).records;
+        content_batch = try binding.bindsContent(records, bound.signal);
         try question_ids.append(a, bound.signal.ordinal);
         for (bound.selection.claim_ids) |id| try claim_ids.append(a, id.ordinal);
     } else for (questions) |group| {
@@ -489,7 +493,7 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     };
     var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
     try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
-    if (selected == .records) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .unique_subset, .coverage = statement_rule });
+    if (selected == .records and content_batch) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .unique_subset, .coverage = statement_rule });
     if (selected != .records and positive_ids.len != 0) switch (selected) {
         // Each brief field the model writes selects its own groups.
         .brief => inline for (comptime std.meta.fieldNames(@FieldType(g.ModelResponse, "brief"))) |field| {
@@ -504,7 +508,8 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     };
     const narrowed = try packets.withIntegerChoices(allocator, base, choices.items);
     defer packets.release(narrowed);
-    if (selected != .records and (positive_ids.len == 0 or (selected == .entities and basis_ids.items.len == 0))) {
+    const content_excluded = if (selected == .records) !content_batch else positive_ids.len == 0 or (selected == .entities and basis_ids.items.len == 0);
+    if (content_excluded) {
         const excluded = try a.alloc(@import("model_result_schema.zig").ExcludedVariant, base.excludedVariants().len + 1);
         @memcpy(excluded[0..base.excludedVariants().len], base.excludedVariants());
         excluded[excluded.len - 1] = .{ .kind = @tagName(std.meta.activeTag(selected)) };

@@ -41,6 +41,21 @@ pub const AdmissionReader = enum {
     }
 };
 
+/// The native owner whose retained decision a clarification route is read from. The set is closed so the
+/// binding's `switch` over it is exhaustive, and each reader names the one evidence key it reads, which
+/// `validDescriptor` holds the binding's `evidence` to.
+pub const RouteReader = enum {
+    specification_unit,
+    required_authority,
+
+    pub fn evidence(self: RouteReader) pipeline.DataKey {
+        return switch (self) {
+            .specification_unit => .validated_specification_unit,
+            .required_authority => .required_authority_result,
+        };
+    }
+};
+
 pub const Binding = struct {
     kind: Kind,
     subject: pipeline.DataKey,
@@ -50,6 +65,8 @@ pub const Binding = struct {
     blocked_reader: ?BlockedReader = null,
     /// Set exactly on a diagnostic admission.
     admission_reader: ?AdmissionReader = null,
+    /// Set exactly on a clarification route.
+    route_reader: ?RouteReader = null,
 };
 
 /// Engine-owned native associations, never workflow parameters or model facts.
@@ -621,8 +638,8 @@ fn walkAssociations(aliases: []const Association, left: Subject, right: Subject,
 
 /// What registry admission and graph validation both hold a contract's descriptor to. An authorizer
 /// that declares `blocked` names the reader of that decision, a diagnostic admission names the reader
-/// of its evidence, and nothing else names one, so the binding can serve every descriptor that is
-/// admitted.
+/// of its evidence, a clarification route names the reader of its evidence, and nothing else names
+/// one, so the binding can serve every descriptor that is admitted.
 pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKey, optional: []const pipeline.DataKey, produces: []const pipeline.DataKey, replaces: []const pipeline.DataKey, repair_role: retry.Role, outcomes: []const workflow.OutcomeTag) bool {
     const binding = descriptor.binding() orelse return true;
     if (!declared(binding.subject, requires, optional, produces, replaces) or
@@ -636,6 +653,10 @@ pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKe
     if (binding.admission_reader) |reader| {
         if (!admits or binding.evidence != reader.evidence()) return false;
     } else if (admits) return false;
+    const routes = descriptor == .clarification_route;
+    if (binding.route_reader) |reader| {
+        if (!routes or binding.evidence != reader.evidence()) return false;
+    } else if (routes) return false;
     return switch (descriptor) {
         .request_admission, .request_protocol, .request_resend, .request_closure => binding.kind == .request and binding.subject == .prepared_model_request,
         .repair_authorize => (binding.kind == .candidate or binding.kind == .authority) and repair_role == .authorize,
@@ -703,6 +724,27 @@ test "a diagnostic admission names the reader of its own evidence and no other d
     const other = [_]pipeline.DataKey{.parsed_reference_extraction};
     const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .admission_reader = .specification_support_review };
     try std.testing.expect(!validDescriptor(.{ .diagnostic_admission = mismatched }, &other, &.{}, &.{}, &.{}, .none, &outcomes));
+}
+
+test "a clarification route names the reader of its own evidence and no other descriptor names one" {
+    const outcomes = [_]workflow.OutcomeTag{ .ok, .needs_user };
+    inline for (@typeInfo(RouteReader).@"enum".fields) |field| {
+        const reader: RouteReader = @enumFromInt(field.value);
+        const keys = [_]pipeline.DataKey{reader.evidence()};
+        const read: Binding = .{ .kind = .candidate, .subject = reader.evidence(), .evidence = reader.evidence(), .route_reader = reader };
+        var unread = read;
+        unread.route_reader = null;
+        // Accepted: a reader on a clarification route, none on any other descriptor.
+        try std.testing.expect(validDescriptor(.{ .clarification_route = read }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        try std.testing.expect(validDescriptor(.{ .observe = unread }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        // Rejected, each differing from an accepted case in exactly one respect.
+        try std.testing.expect(!validDescriptor(.{ .clarification_route = unread }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        try std.testing.expect(!validDescriptor(.{ .observe = read }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+    }
+    // A reader reads one evidence key: another key is rejected.
+    const other = [_]pipeline.DataKey{.parsed_reference_extraction};
+    const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .route_reader = .specification_unit };
+    try std.testing.expect(!validDescriptor(.{ .clarification_route = mismatched }, &other, &.{}, &.{}, &.{}, .none, &outcomes));
 }
 
 test "sealed blocked repair preserves its exact rejection and cannot relabel other outcome classes" {

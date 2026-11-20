@@ -80,8 +80,12 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             return state.response;
         }
 
+        /// The deadline is read from the provider operation clock on boot time (`provider_operation_clock.zig`), so
+        /// the remainder is slept on the same clock. Where the platform sleeps a relative duration against a clock
+        /// (Linux, as `CLOCK_BOOTTIME`), that counts the time the machine is suspended; macOS sleeps with `nanosleep`,
+        /// which takes no clock.
         fn sleep(io: std.Io, milliseconds: u64) std.Io.Cancelable!void {
-            try io.sleep(.fromNanoseconds(@as(i96, milliseconds) * std.time.ns_per_ms), .awake);
+            try io.sleep(.fromNanoseconds(@as(i96, milliseconds) * std.time.ns_per_ms), .boot);
         }
 
         fn fetch(self: *Self, allocator: std.mem.Allocator, request: transport.Request, state: *Exchange) transport.Error!void {
