@@ -260,8 +260,23 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
   submitted file; canonical answer normalization never changes those file bytes.
 - Pending, stale, or invalid close submissions are not permission to regenerate the form:
   reject/block without overwriting them.
-- Malformed or unrecognized clarification files also block rather than being removed during
-  output replacement.
+- A regular file in `clarify/` whose name is not form-shaped is left alone (approved by the user
+  on 15 November 2026, as ADR 0026 does for log folders): it is never opened, counted, changed or
+  deleted, so a file browser's `.DS_Store` does not fail a run. A name is form-shaped when it is
+  the stage letter `S`, `P` or `T`, two digits and `.md`, matched ignoring ASCII case, so `s01.md`,
+  `S01.MD` and `S00.md` are form-shaped and fail like any other unrecognized form. A directory, a
+  symlink and every other kind of entry still fail whatever its name. The cost: a misnamed answer
+  such as `S1.md` or `S01.md.bak` is ignored, a name that only a Unicode case fold ties to a form's
+  is ignored by the capture and refused by the writer when it would replace that form, and the
+  number of ignored files is not bounded.
+- Malformed or unrecognized form-shaped files also block rather than being removed during
+  output replacement. A form that verifiably holds no submission (`requestedStatus: open`, with an
+  answer region that is empty or does not begin `defer: `; `clarification_form.holding`) is neither
+  malformed nor protected (approved by the user on 20 November 2026). When a record names it, the
+  rerun overwrites it whether or not it matches the registry (ADR 0009), which is how a publication
+  that failed after its forms is replaced. When no record names it, or there is no registry, the
+  rerun leaves it in place and ignores it, and a later close of it stops every run, because no record
+  can take its submission.
 
 - Complete clarification view sets include retained user-closed forms; every unprotected member
   is rendered and completely overwritten on rerun.

@@ -120,7 +120,7 @@ State alone never authorizes a stage.
 - Ambiguous subject correspondence blocks rather than using fuzzy text matching.
 
 - The editable `spec.md` is reparsed and fully validated.
-- The current clarification registry and exact `clarify/` inventory are parsed/validated; only registered current-revision answer regions are imported, and the requested stage's closed-prefix matrix is enforced.
+- The current clarification registry and `clarify/` inventory are parsed/validated (§23.2 names the unmatched open forms a rerun sets aside and the files the inventory leaves alone); only registered current-revision answer regions are imported, and the requested stage's closed-prefix matrix is enforced.
 - When canonical plan state exists, the engine compares current normalized `SpecificationIR` directly with the stored plan-input `SpecificationIR`. A difference invalidates plan/task canonical state and approvals and returns the workflow to `specified`.
 - Canonical reference, the published `PlanInputAuthorityState`, its bound `PlanState`, task-definition, and task-runtime IR are loaded from engine state and revalidated directly.
 - Current repository facts are rebuilt. Each gate-sensitive value is directly compared through `CompareRepositoryFactValueAction`; during implementation, only a `transition_requires_task_binding` fact with a matching approved `FactTransitionBinding`, transition rule, and validated named-task execution evidence may differ from the plan input. An unexplained difference triggers the relevant plan/task reconciliation path.

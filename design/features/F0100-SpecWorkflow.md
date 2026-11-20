@@ -196,8 +196,13 @@ not the complete Specify workflow.
 - It does not create directories or read generated views, unrelated features or
   `workflow.json`.
 - Missing state with no forms represents fresh inputs.
-- Orphan, malformed, unknown, stale, changed or missing protected forms fail without
-  modifying anything.
+- A regular file in `clarify/` whose name is not form-shaped is not read and does not fail the
+  run ([§23.2](../contracts/23-rendering.md)).
+- A form that verifiably holds no submission does not fail the run, whether or not it matches
+  the registry and whether or not a registry exists
+  ([§23.2](../contracts/23-rendering.md)). Any other orphan, malformed, unknown, stale, changed
+  or missing protected form fails without modifying anything, and a record without its form
+  fails.
 - Recorded closures use their original revision binding and must match the response's
   exact saved bytes.
 

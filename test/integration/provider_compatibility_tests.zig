@@ -6,6 +6,7 @@ const contracts = @import("../harness/e2e/contracts.zig");
 const invoke = @import("../harness/e2e/invoke.zig");
 const files = @import("../harness/files.zig");
 const evidence = @import("../harness/evidence.zig");
+const quiet_project = @import("../harness/integration/quiet_project.zig");
 const artifacts = @import("../../src/domain/workflow_artifact_registry.zig");
 const inspection = @import("../harness/compatibility/inspection.zig");
 
@@ -110,7 +111,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     const case_bytes = try std.json.Stringify.valueAlloc(a, selected, .{});
     const captured = try fixture.capture(io, a, .cwd(), selected);
     try @import("../harness/output.zig").write(io, run, "case.json", case_bytes);
-    try fixture.materialize(io, project, captured);
+    try quiet_project.materialize(io, project, captured);
     var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{
         .expected_json = true,
         .cancelled = scenario == .cancelled or scenario == .partial_cancelled,
@@ -528,7 +529,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
     defer project.close(io);
     const selected = try @import("frozen_protocol_fixture.zig").select(a, try contracts.parse(a, try files.read(io, a, .cwd(), case_path)));
     const captured = try fixture.capture(io, a, .cwd(), selected);
-    try fixture.materialize(io, project, captured);
+    try quiet_project.materialize(io, project, captured);
     var gate = try @import("../harness/baseline/dispatch.zig").Gate.init(.{ .maximum_sends = 1, .maximum_actual_tokens = 2_000_000 });
     var log = @import("../harness/e2e/trace.zig").CaptureLog.init(a);
     defer log.deinit();
@@ -623,7 +624,7 @@ fn runKernelExchanges(case_path: []const u8, scenario: KernelExchanges) !void {
     defer project.close(io);
     const selected = try @import("frozen_protocol_fixture.zig").select(a, try contracts.parse(a, try files.read(io, a, .cwd(), case_path)));
     const captured = try fixture.capture(io, a, .cwd(), selected);
-    try fixture.materialize(io, project, captured);
+    try quiet_project.materialize(io, project, captured);
     var gate = try dispatch.Gate.init(switch (scenario) {
         .corrections, .runaway_resend => .{ .maximum_sends = 10, .maximum_actual_tokens = 2_000_000 },
         .send_limit => .{ .maximum_sends = 2, .maximum_actual_tokens = 2_000_000 },
@@ -737,7 +738,7 @@ fn runSequence(
     defer project.close(io);
     const selected = try @import("frozen_protocol_fixture.zig").select(a, try contracts.parse(a, try files.read(io, a, .cwd(), case_path)));
     const captured = try fixture.capture(io, a, .cwd(), selected);
-    try fixture.materialize(io, project, captured);
+    try quiet_project.materialize(io, project, captured);
     const bodies = try a.alloc([]const u8, scenarios.len);
     for (scenarios, bodies) |scenario, *bytes| bytes.* = try body(a, scenario);
     var sequence: Sequence = .{ .bodies = bodies };

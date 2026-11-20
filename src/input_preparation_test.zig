@@ -196,7 +196,8 @@ test "a failure in each internal step names that step and propagates the step's 
     try expectStops(malformed.action(), default_invocation, .parse_clarification_state, error.InvalidClarificationInput);
     var other_feature: Fake = .{ .clarification_state = "other" };
     try expectStops(other_feature.action(), default_invocation, .validate_clarification_state, error.InvalidClarificationInput);
-    // A form with no recorded clarification, with and without a state, fails the forms step.
+    // A form with no recorded clarification that holds a submission or cannot be read as an open form, with and
+    // without a state, fails the forms step.
     var orphan: Fake = .{ .forms = orphan_form };
     try expectStops(orphan.action(), default_invocation, .validate_clarification_forms, error.InvalidClarificationInput);
     var orphan_without_state: Fake = .{ .clarification_state = null, .forms = orphan_form };

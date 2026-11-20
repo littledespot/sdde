@@ -260,6 +260,79 @@ test "fresh inputs contain no fabricated state or submissions and orphan forms f
     try std.testing.expectError(error.InvalidClarificationInput, load(std.testing.allocator, .{ .state = null, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = "requestedStatus: closed" }} }));
 }
 
+test "a directory entry's name is a form's, form-shaped, or another file's" {
+    // Every name the engine writes is a form's.
+    for ([_]c.Stage{ .spec, .plan, .tasks }) |stage| for (1..100) |ordinal| {
+        const id: c.Id = .{ .stage = stage, .ordinal = @intCast(ordinal) };
+        const filename = id.filename();
+        try std.testing.expectEqual(id.index(), c.Id.classifyName(&filename).form.index());
+    };
+    // A name a form could be mistaken for, or whose ordinal no form has, is form-shaped.
+    for ([_][]const u8{ "s01.md", "S01.MD", "p12.Md", "S00.md", "T00.md" }) |name| try std.testing.expect(c.Id.classifyName(name) == .form_shaped);
+    // Any other name is not a form's.
+    for ([_][]const u8{ "notes.txt", ".DS_Store", "S1.md", "S001.md", "S01.md.bak", "S01.txt", "S01.py", "X01.md", "S0a.md", "Sa1.md", "S01md", "" }) |name| try std.testing.expect(c.Id.classifyName(name) == .other);
+}
+
+test "a form holds no submission only when it is verifiably open with no deferral" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const record = fixture.record("S01");
+    const binding: forms.Binding = .{ .state_ordinal = 2, .state_revision = 3, .record_revision = 4, .status = .open };
+    // A draft and an empty answer are unsubmitted whatever binding the form was rendered for.
+    try std.testing.expectEqual(forms.Holding.unsubmitted, forms.holding(try forms.render(allocator, record, binding, .open, "An unsent draft.")));
+    try std.testing.expectEqual(forms.Holding.unsubmitted, forms.holding(try forms.render(allocator, record, binding, .open, "")));
+    // A close, a cancellation and a deferral are submissions, and so is a file that cannot be read as an open form.
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(try forms.render(allocator, record, binding, .closed, "Approved Café theme.")));
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(try forms.render(allocator, record, binding, .cancel, "cancel: not needed")));
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(try forms.render(allocator, record, binding, .open, "defer: ask the owner")));
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding("captured form"));
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding("\xff"));
+    const open_empty = try forms.render(allocator, record, binding, .open, "");
+    const closed_after_open = try std.mem.replaceOwned(u8, allocator, open_empty, "engineStatus: open\n", "engineStatus: open\nrequestedStatus: closed\n");
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(closed_after_open));
+    // The parser reads the answer trimmed, so a deferral after blank lines is still a deferral; a form that is not
+    // read whole as one open form is not unsubmitted.
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(try forms.render(allocator, record, binding, .open, "\n\ndefer: ask the owner")));
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(try std.mem.replaceOwned(u8, allocator, open_empty, "clarification-form/v1", "clarification-form/v2")));
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(try std.mem.replaceOwned(u8, allocator, open_empty, "\n---\n\n# ", "\n\n# ")));
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(try forms.render(allocator, record, binding, .open, forms.answer_start)));
+    try std.testing.expectEqual(forms.Holding.submission, forms.holding(try std.mem.replaceOwned(u8, allocator, open_empty, "\n", "\r\n")));
+}
+
+test "forms a failed publication left are replaced when they hold no submission, and fail otherwise" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const record = fixture.record("S01");
+    const state = try c.validate(.{ .value = fixture.state(&.{record}) }, selected);
+    // The leftover forms belong to a round the registry never recorded: a later state and record revision.
+    const stale: forms.Binding = .{ .state_ordinal = 2, .state_revision = 2, .record_revision = 2, .status = .open };
+    const unsubmitted = try forms.render(allocator, record, stale, .open, "An unsent draft.");
+    const closed = try forms.render(allocator, record, stale, .closed, "Approved Café theme.");
+    const other = fixture.record("P01");
+    const other_unsubmitted = try forms.render(allocator, other, stale, .open, "");
+    const other_closed = try forms.render(allocator, other, stale, .closed, "An answer.");
+    const form_parser = parser.formParser();
+    const first = c.Id.parse("S01").?;
+    const second = c.Id.parse("P01").?;
+    // No registry: only unsubmitted forms are fresh inputs.
+    const no_registry = try c.validate(.{ .value = null }, selected);
+    const orphan = try steps.validateClarificationForms(form_parser, allocator, no_registry, .{ .state = null, .forms = &.{.{ .id = first, .bytes = unsubmitted }} });
+    try std.testing.expect(orphan.state.value == null and orphan.submissions.len == 0 and orphan.protected_forms.len == 0);
+    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, allocator, no_registry, .{ .state = null, .forms = &.{.{ .id = first, .bytes = closed }} }));
+    // A registry the forms are ahead of: the stale unsubmitted form is replaceable, a stale close is not.
+    const replaced = try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = first, .bytes = unsubmitted }} });
+    try std.testing.expect(replaced.submissions.len == 0 and replaced.protected_forms.len == 0);
+    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = first, .bytes = closed }} }));
+    // A form of a record the registry lacks is ignored when unsubmitted, and fails when it holds a submission.
+    const extra = try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{ .{ .id = first, .bytes = unsubmitted }, .{ .id = second, .bytes = other_unsubmitted } } });
+    try std.testing.expect(extra.submissions.len == 0);
+    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{ .{ .id = first, .bytes = unsubmitted }, .{ .id = second, .bytes = other_closed } } }));
+    // A record without its form fails.
+    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = second, .bytes = other_unsubmitted }} }));
+}
+
 test "submitted and recorded closes preserve exact bytes for all clarification stages" {
     for ([_][]const u8{ "S01", "P01", "T01" }) |id| {
         for ([_]bool{ false, true }) |recorded| {

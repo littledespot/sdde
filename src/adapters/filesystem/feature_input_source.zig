@@ -85,9 +85,15 @@ pub const Adapter = struct {
                     defer folder.close(self.io);
                     var iterator = folder.iterate();
                     while (iterator.next(self.io) catch |err| return unavailable(err)) |entry| {
-                        if (entry.kind != .file or forms.items.len == clarification.max_forms or entry.name.len != 6 or
-                            !std.mem.endsWith(u8, entry.name, ".md")) return error.FeatureInputUnavailable;
-                        const id = clarification.Id.parse(entry.name[0..3]) orelse return error.FeatureInputUnavailable;
+                        if (entry.kind != .file) return error.FeatureInputUnavailable;
+                        // A regular file whose name is not form-shaped is not this capture's: it is never opened or
+                        // changed (23-rendering.md §23.2). A form-shaped name that is not a form's still fails.
+                        const id = switch (clarification.Id.classifyName(entry.name)) {
+                            .other => continue,
+                            .form_shaped => return error.FeatureInputUnavailable,
+                            .form => |id| id,
+                        };
+                        if (forms.items.len == clarification.max_forms) return error.FeatureInputUnavailable;
                         const bytes = try readFile(self.io, allocator, folder, entry.name, clarification.max_form_bytes) orelse return error.FeatureInputUnavailable;
                         errdefer allocator.free(bytes);
                         try forms.append(allocator, .{ .id = id, .bytes = bytes });

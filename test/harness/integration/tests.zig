@@ -23,6 +23,8 @@ test {
     _ = @import("../e2e/acceptance_test.zig");
 }
 
+const materializeQuiet = @import("quiet_project.zig").materialize;
+
 test "E2E command selects one live case and rejects mock modes and extra cases" {
     const parse = @import("../e2e/cli.zig").parse;
     try std.testing.expectEqualStrings("case.json", try parse(&.{ "--case", "case.json" }));
@@ -143,7 +145,7 @@ test "shipped workflow conforms to native registrations and rejects contract dri
     for (0..mutations.len + 1) |index| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
+        try materializeQuiet(io, project.dir, captured);
         if (index > 0) {
             const change = mutations[index - 1];
             const changed = try std.mem.replaceOwned(u8, a, workflow_file.bytes, change[0], change[1]);
@@ -226,7 +228,7 @@ test "shared production runtime preserves deferred environment capture and isola
     const captured = try fixture.capture(io, a, .cwd(), choice);
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
-    try fixture.materialize(io, project.dir, captured);
+    try materializeQuiet(io, project.dir, captured);
     const target = try configured(a, captured);
     const variable = @import("../../../src/adapters/system/provider_api_key_source.zig").variable(target.family);
     for ([_]?[]const u8{ null, "", "invalid key", "isolated-credential" }) |raw| {
@@ -290,7 +292,7 @@ test "production E2E binding honors configured models and cannot succeed without
         const captured = try fixture.capture(io, a, .cwd(), choice);
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
+        try materializeQuiet(io, project.dir, captured);
         var model_config = try std.json.parseFromSliceLeaky(std.json.Value, a, captured.config, .{});
         for (model_config.object.get("models").?.object.get("slots").?.object.values()) |*slot| {
             try slot.object.put(a, "provider", .{ .string = provider });
@@ -298,6 +300,7 @@ test "production E2E binding honors configured models and cannot succeed without
             // Omitted effort is valid for every registered model.
             _ = slot.object.swapRemove("reasoningEffort");
         }
+        try model_config.object.getPtr("logs").?.object.put(a, "console", .{ .bool = false });
         try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config, .{}) });
         var report: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
         var evidence_run = std.testing.tmpDir(.{});
@@ -432,7 +435,7 @@ test "fixture copy preserves declared reference bytes and rejects preseeded outp
     try repository.dir.writeFile(io, .{ .sub_path = "source.md", .data = "The library renews a loan.\n" });
     try writeEvaluation(io, repository.dir);
     const captured = try fixture.capture(io, a, repository.dir, selected);
-    try fixture.materialize(io, project.dir, captured);
+    try materializeQuiet(io, project.dir, captured);
     const copy = try project.dir.readFileAlloc(io, "references/first/source.md", a, .limited(1024));
     try std.testing.expectEqualStrings("The library renews a loan.\n", copy);
     try fixture.verifySources(io, a, repository.dir, captured);
@@ -924,7 +927,7 @@ test "unrepairable responses preserve complete production logs and forbid public
         const captured = try fixture.capture(io, a, .cwd(), choice);
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
+        try materializeQuiet(io, project.dir, captured);
         const cf = @import("../../../src/test_fixtures/clarification_inputs.zig");
         var bootstrap: @import("../../../src/composition/root.zig").Runtime = undefined;
         bootstrap.init(io, std.testing.allocator, project.dir, .{});
@@ -1095,7 +1098,7 @@ test "the E2E report reads a kernel request's authorization failure from recorde
     const captured = try fixture.capture(io, a, .cwd(), choice);
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
-    try fixture.materialize(io, project.dir, captured);
+    try materializeQuiet(io, project.dir, captured);
     try installKernelWorkflow(io, project.dir);
     var runtime: Runtime = undefined;
     runtime.init(io, std.testing.allocator, project.dir, .{});
@@ -1186,7 +1189,7 @@ test "the E2E report keeps a diagnostic of the assembled candidate without provi
     const captured = try fixture.capture(io, a, .cwd(), choice);
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
-    try fixture.materialize(io, project.dir, captured);
+    try materializeQuiet(io, project.dir, captured);
     try installKernelWorkflow(io, project.dir);
     var runtime: Runtime = undefined;
     runtime.init(io, std.testing.allocator, project.dir, .{});
@@ -2012,7 +2015,7 @@ test "production workflow enforces one global token budget and fails required st
         }
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
+        try materializeQuiet(io, project.dir, captured);
         var runtime: Runtime = undefined;
         runtime.init(io, std.testing.allocator, project.dir, .{});
         defer runtime.deinit();
@@ -2203,6 +2206,7 @@ fn twoProviderProject(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, cap
         const binding = if (std.mem.eql(u8, name, "spec_generation")) generation else if (std.mem.eql(u8, name, "repair")) repair else bedrock_slot;
         value.* = try std.json.parseFromSliceLeaky(std.json.Value, a, binding, .{});
     }
+    try config.object.getPtr("logs").?.object.put(a, "console", .{ .bool = false });
     try project.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, config, .{}) });
     try project.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = two_provider_catalogue });
 }
@@ -2368,7 +2372,7 @@ test "a whole-workflow run reports every repair merge it made, including the one
     const captured = try fixture.capture(io, a, .cwd(), choice);
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
-    try fixture.materialize(io, project.dir, captured);
+    try materializeQuiet(io, project.dir, captured);
     // Two sources that state nothing about the feature and hold no exact value, so each chunk's answer is a
     // no-feature-claim reason and its classifications are empty.
     try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = "Reading notes.\n" });

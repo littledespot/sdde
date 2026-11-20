@@ -2578,6 +2578,73 @@ runner rejection tags, the feature log, the harness report and its versions are 
   not recording a validated failure, each fail a named test.
 - **Open:** SPEC01 §10 C4.
 
+## Leftover forms of a failed publication are replaced (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "YES as per recommendation", after the scenario showed the rerun rejected). ADR 0009
+governs: it outranks F0100, which is a proposed feature design. Class: successful completion, for a run that writes
+clarification forms. No model request or published specification changes.
+
+- **Defect:** forms are written before the registry, so a failure between them left forms the registry did not describe,
+  and the next run's `validateClarificationForms` rejected them as `InvalidClarificationInput`: the form of a round with no
+  registry, and the form of a round a registry revision ahead of its registry. ADR 0009 overwrites unresolved forms on a
+  rerun, an unsubmitted draft included, and replaces the whole set without recovery.
+- **Change:** `clarification_form.holding` returns a closed `Holding` for a form file, `.unsubmitted` only for a form read
+  whole as open with no deferral and `.submission` for everything else; the rule is §23.2's, and the parser shares the
+  deferral and trim definitions with it (`isDeferral`, `answer_trim`) and `isClosed` its front-matter scan.
+  `validateClarificationForms` pairs each record with its form by ID, no longer needs equal counts, and sets aside an
+  `.unsubmitted` form that fails to parse against a record without a recorded response, one that no record names, and any
+  when there is no registry. It still fails every other such form and a record without its form. The rerun overwrites a
+  set-aside form its record renders; a form no record names stays in place.
+- **Found in review, fixed:** the first wording said a form no record names is replaced, but nothing rewrites it and the
+  writer has no delete; it stays in place and a later user close of it stops every run (§23.2 now says so). The integration
+  scenario passed whether or not the rerun replaced the form, because a skipped form also validates; it now compares the
+  form with the canonical rendering for the published registry. The deferral, the trim and the front-matter scan were
+  copied between `holding`, `isClosed` and the parser; they have one owner.
+- **Proof:** unit tests for `holding` (a draft and an empty answer; a close, a cancellation, a deferral after blank lines, a
+  read that isn't a form, invalid UTF-8, a second status line, a wrong schema, unclosed front matter, a repeated answer
+  marker, CRLF) and for the step (no registry, a stale form, an extra form, a record without its form, each with a closed
+  form that still fails); and the integration scenarios: the registry write fails after the forms with and without a
+  registry published before, the rerun replaces the set, and a form the user closed stops the run with the form and the
+  registry unchanged; a form no record names survives later rounds byte for byte until the user closes it. Skipping every
+  form that fails to parse, ignoring a closed extra form, and reading the answer untrimmed each fail a named test.
+- **Not done:** a form the engine would have rendered is not told from one whose engine-owned region the user edited: both
+  are set aside when open and undeferred, as ADR 0009:91-93 overwrites every engine-owned region. No diagnostic records that
+  a form was set aside. A torn form is not modeled (the writer seam fails before the file is touched).
+
+## A passing run is quiet (partly built 20 November 2026)
+
+**Decided** by user instruction ("then C38", after "preflight C7 then implement"). Test hygiene only: no engine
+behavior, model input or published output changes (SPEC01 §10 C38).
+
+- **Change:** a case's configuration mirrors every feature-log row to the real stderr, and the harness integration
+  tests and the provider-compatibility tests run cases whose rows they read from the feature log. They now materialize the
+  case with `console` off (`quiet_project.zig`), leaving the captured sources, which the tests verify against the
+  repository, as captured; the two tests that rewrite the config set it in their own edit. A test print of retention bytes
+  that asserted nothing is gone.
+- **Proof:** `test-integration` writes 0.46 MB of stderr where it wrote 9.9 MB, and the same 138 tests pass.
+- **Not done:** the scenario cost table, the baseline acquisition rows and the emergency lines of the layout tests still
+  write to stderr, so those steps still print `failed command:` on a pass (SPEC01 §10 C38).
+
+## A regular file in `clarify/` whose name is not form-shaped is left alone (built 20 November 2026)
+
+**Decided** 15 November 2026 (SPEC01 §10 C7: the same exemption the user gave log folders, ADR 0026, with directories,
+symlinks and form-shaped names still failing), built on user instruction ("preflight C7 then implement"). Class:
+successful completion. The capture rejected every entry of `clarify/` that was not a form, so a `.DS_Store` failed a run
+after every model call, and again at the publish step's repeat of the capture.
+
+- **Change:** `Id.classifyName` (`clarification_inputs.zig`) returns a closed `Id.Name`, a form's exact name, a
+  form-shaped name, or another name; `captureClarifications` skips a regular file of another name before opening it, and
+  fails every other entry. §23.2 owns the rule and its costs; the writer's rechecks reuse the capture and the writer has no
+  delete.
+- **Found in review, fixed:** the shape of a form's name was encoded three times in the adapter's checks and a predicate;
+  it has one classifier now. Tests gained the engine-written names, the extension and ordinal rows, a file nobody can
+  read, and an oversized form that still fails.
+- **Proof:** the classifier test; an integration test whose strays survive two runs byte for byte with the run
+  completing; the failure cases that remain (a directory, a link with a name no form has, the case, extension and
+  zero-ordinal aliases, an oversized form); and a stray beside the forms through publication rounds. Skipping a
+  non-regular entry too fails two named cases.
+- **Not done:** an entry whose type the listing doesn't report fails, as ADR 0026 does. The exemption is `clarify/` only.
+
 ## `ToolChainService` deleted (20 November 2026)
 
 **Decided** 20 November 2026 (user approved deleting it, then: "delete ToolChainService from the code"; SPEC01 C27). It

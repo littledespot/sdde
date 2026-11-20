@@ -30,6 +30,19 @@ pub const Id = struct {
         }, .ordinal = ordinal };
     }
 
+    /// What a directory entry's name says it is. `form` is exactly a form's file name. `form_shaped` is a name a form
+    /// could be mistaken for, ignoring ASCII case (`s01.md`, `S01.MD`), or whose ordinal no form has (`S00.md`): the
+    /// capture fails on it. `other` is any other name, which is no form's.
+    pub const Name = union(enum) { form: Id, form_shaped, other };
+
+    pub fn classifyName(name: []const u8) Name {
+        const shaped = name.len == 6 and std.mem.indexOfScalar(u8, "SPTspt", name[0]) != null and
+            std.ascii.isDigit(name[1]) and std.ascii.isDigit(name[2]) and std.ascii.eqlIgnoreCase(name[3..], ".md");
+        if (!shaped) return .other;
+        const id = parse(name[0..3]) orelse return .form_shaped;
+        return if (std.mem.eql(u8, name[3..], ".md")) .{ .form = id } else .form_shaped;
+    }
+
     pub fn index(self: Id) usize {
         return @as(usize, @intFromEnum(self.stage)) * 99 + self.ordinal - 1;
     }

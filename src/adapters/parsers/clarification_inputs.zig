@@ -33,7 +33,7 @@ fn parseForm(allocator: std.mem.Allocator, bytes: []const u8, record: clarificat
     const answer_offset = expected.before_status.len + line_end + expected.before_answer.len;
     const end = bytes.len - expected.after_answer.len;
     if (end < answer_offset) return error.InvalidClarificationInput;
-    const raw_answer = std.mem.trim(u8, bytes[answer_offset..end], " \t\r\n");
+    const raw_answer = std.mem.trim(u8, bytes[answer_offset..end], forms.answer_trim);
     const answer = try normalizeAnswer(allocator, raw_answer, status, record.answer_schema);
     return .{ .requested_status = status, .answer = answer };
 }
@@ -50,8 +50,8 @@ fn normalizeAnswer(allocator: std.mem.Allocator, raw: []const u8, status: clarif
             if (raw.len == 0) return .{ .none = {} };
             // Unsubmitted open drafts are replaceable, not accepted answers.
             // Only the explicit defer syntax submits an open-status event.
-            if (!std.mem.startsWith(u8, raw, "defer: ")) return .{ .none = {} };
-            return .{ .defer_reason = try text(allocator, std.mem.trim(u8, raw["defer: ".len..], " \t"), clarification.max_text_bytes) };
+            if (!forms.isDeferral(raw)) return .{ .none = {} };
+            return .{ .defer_reason = try text(allocator, std.mem.trim(u8, forms.deferralReason(raw), " \t"), clarification.max_text_bytes) };
         },
         .cancel => {
             if (!std.mem.startsWith(u8, raw, "cancel: ")) return error.InvalidClarificationInput;

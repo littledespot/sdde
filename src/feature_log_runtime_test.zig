@@ -1448,6 +1448,122 @@ test "a cancelled console mirror write under the lock is a cancellation, and the
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
 }
 
+/// A sink whose append reaches the file and then, when the append asks for a flush, reports a flush failure on
+/// request, as the real sink does when its sync fails: the row is on disk, and the runner's cached state does not
+/// include it.
+const FlushFailsAfterWrite = struct {
+    real: *filesystem_sink.Adapter,
+    fail: bool = false,
+    fn lockAcquirer(self: *FlushFailsAfterWrite) sink_port.LockAcquirer {
+        return self.real.lockAcquirer();
+    }
+    fn lockReleaser(self: *FlushFailsAfterWrite) sink_port.LockReleaser {
+        return self.real.lockReleaser();
+    }
+    fn streamRecoverer(self: *FlushFailsAfterWrite) sink_port.StreamRecoverer {
+        return self.real.streamRecoverer();
+    }
+    fn segmentCreator(self: *FlushFailsAfterWrite) sink_port.SegmentCreator {
+        return self.real.segmentCreator();
+    }
+    fn segmentRotator(self: *FlushFailsAfterWrite) sink_port.SegmentRotator {
+        return self.real.segmentRotator();
+    }
+    fn streamCloser(self: *FlushFailsAfterWrite) sink_port.StreamCloser {
+        return self.real.streamCloser();
+    }
+    fn recordAppender(self: *FlushFailsAfterWrite) sink_port.RecordAppender {
+        return .{ .context = self, .append_fn = appendThenFail };
+    }
+    fn appendThenFail(context: *anyopaque, binding: *const log_binding.ValidatedFeatureLogBinding, stream: log_stream.Stream, state: log_stream.StreamState, row: []const u8, flush: bool) sink_port.Error!log_stream.PersistedEvidence {
+        const self: *FlushFailsAfterWrite = @ptrCast(@alignCast(context));
+        const evidence = try self.real.recordAppender().append(binding, stream, state, row, flush);
+        if (self.fail and flush) return error.FlushFailure;
+        return evidence;
+    }
+};
+
+// A cancelled persist recovers its stream's state from the bytes (ADR 0032). This records what any other failure after
+// an appended row does today: the stream's state stays behind the file, so the next append and the close fail, and the
+// segment keeps the failed row without a trailer, the crash shape ADR 0026 keeps whole.
+test "after a console or flush failure that followed an appended row, the next append and the close leave the file as it was" {
+    const io = std.testing.io;
+    const Kind = enum { console, flush };
+    for ([_]log_stream.Stream{ .event, .prompt }) |stream| for ([_]Kind{ .console, .flush }) |kind| {
+        var root = std.testing.tmpDir(.{ .iterate = true });
+        defer root.cleanup();
+        var prompt_root = std.testing.tmpDir(.{ .iterate = true });
+        defer prompt_root.cleanup();
+        try root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
+        try prompt_root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
+        var event_directory = try root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
+        defer event_directory.close(io);
+        var prompt_directory = try prompt_root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
+        defer prompt_directory.close(io);
+        const candidate = bindingCandidate();
+        const owner = try log_binding.createValidated(std.testing.allocator, candidate);
+        defer log_binding.deinitOwner(owner);
+        // Every append flushes, so the flush the sink reports as failed is one the real sink would perform.
+        const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = true, .lower_level_flush_records = 1 };
+        const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
+        const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+        const fragment: prompt_log.SanitizedPromptFragment = .{
+            .workflow_shortcode = shortcode,
+            .attempt = 1,
+            .request_id = telemetry.Identifier.validate("REQ-1").?,
+            .route_id = telemetry.Identifier.validate("ROUTE-1").?,
+            .model_profile_id = telemetry.Identifier.validate("PROFILE-1").?,
+            .fragment_id = telemetry.Identifier.validate("FRAG-1").?,
+            .direction = .response,
+            .body_class = .code_body,
+            .content = "sanitized",
+            .retained_bytes = 9,
+            .truncated = false,
+            .redacted = true,
+        };
+        var clock: FakeClock = .{};
+        var outputs: FakeOutputs = .{};
+        var real = filesystem_sink.Adapter.initForTestLayout(io, root.dir, event_directory, candidate);
+        real.prompt_run_directory = prompt_root.dir;
+        real.prompt_directory = prompt_directory;
+        defer real.deinit();
+        var sink: FlushFailsAfterWrite = .{ .real = &real };
+        var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency()) };
+        try std.testing.expect(runner.prepare(shortcode) == .dropped);
+        try std.testing.expect(runner.process(fact) == .persisted);
+        try std.testing.expect(runner.processPrompt(fragment) == .persisted);
+        switch (kind) {
+            .console => outputs.console_failure = true,
+            .flush => sink.fail = true,
+        }
+        // The row reaches the file before the failure, so the file is one row ahead of the runner's state.
+        const failed = switch (stream) {
+            .event => runner.process(fact),
+            .prompt => runner.processPrompt(fragment),
+        };
+        try std.testing.expectEqual(if (kind == .console) log_stream.FailureCode.LOG_SINK_FAILURE else log_stream.FailureCode.LOG_FLUSH_FAILURE, failed.blocked);
+        const directory = if (stream == .event) event_directory else prompt_directory;
+        const before = try directory.readFileAlloc(io, "0001.log", std.testing.allocator, .limited(log_limits.max_segment_bytes));
+        defer std.testing.allocator.free(before);
+        // The sink works again, but the runner's state is one row behind the file: no later row is written at a
+        // wrong offset and no trailer is written over the row.
+        outputs.console_failure = false;
+        sink.fail = false;
+        const next = switch (stream) {
+            .event => runner.process(fact),
+            .prompt => runner.processPrompt(fragment),
+        };
+        try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, next.blocked);
+        try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, runner.close(shortcode).blocked);
+        const after = try directory.readFileAlloc(io, "0001.log", std.testing.allocator, .limited(log_limits.max_segment_bytes));
+        defer std.testing.allocator.free(after);
+        try std.testing.expectEqualStrings(before, after);
+        // The segment keeps the failed row and no trailer: the crash shape ADR 0026 keeps whole.
+        try std.testing.expectEqual(@as(usize, 0), std.mem.count(u8, after, "segment_trailer|"));
+        try std.testing.expect(std.mem.endsWith(u8, after, "\n"));
+    };
+}
+
 test "finalization recovers and closes a stream whose state a cancelled persist dropped, in either stream" {
     const io = std.testing.io;
     var root = std.testing.tmpDir(.{ .iterate = true });

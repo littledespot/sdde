@@ -165,7 +165,6 @@ test "retained information shares payload ownership and duplicate placement allo
         try std.testing.expectEqual(measured.allocated_bytes, measured.freed_bytes);
     }
     try std.testing.expect(live_bytes[1] > live_bytes[0]);
-    std.debug.print("information retention bytes: transient={d}, recorded={d}, incremental={d}; duplicate=0\n", .{ live_bytes[0], live_bytes[1], live_bytes[1] - live_bytes[0] });
 }
 
 fn informationAllocationExercise(allocator: std.mem.Allocator) !void {

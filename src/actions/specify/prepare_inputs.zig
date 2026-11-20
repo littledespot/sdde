@@ -177,18 +177,28 @@ pub const steps = struct {
     }
 
     pub fn validateClarificationForms(parser: parser_port.FormParser, allocator: std.mem.Allocator, validated: clarification.ValidatedState, captured: clarification.Captures) clarification.Error!clarification.Inputs {
+        // A publication that failed after its forms leaves forms the registry does not describe. A form that
+        // verifiably holds no submission is replaced by the rerun (ADR 0009), whether or not it matches; any other form
+        // that does not validate still fails the run.
         const registry = validated.value orelse {
-            if (captured.forms.len != 0) return error.InvalidClarificationInput;
+            for (captured.forms) |capture| if (forms.holding(capture.bytes) == .submission) return error.InvalidClarificationInput;
             return .{ .state = validated, .submissions = &.{}, .protected_forms = &.{} };
         };
-        if (captured.forms.len != registry.records.len) return error.InvalidClarificationInput;
+        for (captured.forms) |capture| {
+            const recorded = for (registry.records) |record| {
+                if (clarification.Id.parse(record.id).?.index() == capture.id.index()) break true;
+            } else false;
+            if (!recorded and forms.holding(capture.bytes) == .submission) return error.InvalidClarificationInput;
+        }
         var submissions: std.ArrayList(clarification.Submission) = .empty;
         errdefer submissions.deinit(allocator);
         var protected: std.ArrayList(clarification.FormCapture) = .empty;
         errdefer protected.deinit(allocator);
-        for (registry.records, captured.forms) |record, capture| {
+        for (registry.records) |record| {
             const id = clarification.Id.parse(record.id).?;
-            if (capture.id.index() != id.index()) return error.InvalidClarificationInput;
+            const capture = for (captured.forms) |form| {
+                if (form.id.index() == id.index()) break form;
+            } else return error.InvalidClarificationInput;
             var binding: forms.Binding = .{ .state_ordinal = registry.state_ordinal, .state_revision = registry.revision, .record_revision = record.revision, .status = record.status };
             if (record.status == .resolved_by_authority) {
                 const expected = try forms.renderAuthorityAudit(allocator, record, registry);
@@ -201,7 +211,10 @@ pub const steps = struct {
                 if (!std.mem.eql(u8, saved.submitted_form_bytes, capture.bytes)) return error.InvalidClarificationInput;
                 binding = .{ .state_ordinal = saved.input_state_ordinal, .state_revision = saved.input_state_revision, .record_revision = saved.input_record_revision, .status = .open };
             }
-            const submitted = try parser.parse(allocator, capture.bytes, record, binding);
+            const submitted = parser.parse(allocator, capture.bytes, record, binding) catch |failure| {
+                if (failure == error.InvalidClarificationInput and response == null and forms.holding(capture.bytes) == .unsubmitted) continue;
+                return failure;
+            };
             if (response) |saved| {
                 if (!sameAnswer(saved.answer, submitted.answer) or
                     (record.status == .resolved_by_user and submitted.requested_status != .closed) or

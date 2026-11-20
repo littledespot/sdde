@@ -95,18 +95,24 @@ the Specify workflow.
   9. `parseState`: parses the feature's prior `specification-state` or incomplete state; a first
      run has none. Rejects `specification_state.Error`, including `InvalidSpecificationState`.
   10. `captureClarifications`: captures the feature's clarification-state bytes and every
-      `clarify/` form through the feature-input port. Rejects the port's typed errors.
+      `clarify/` form through the feature-input port, leaving alone a regular file whose name is
+      not form-shaped ([§23.2](../23-rendering.md)). Rejects the port's typed errors.
   11. `parseClarificationState`: parses the captured state bytes through the state-parser port;
       no bytes give no state. Rejects `InvalidClarificationInput` from the parser.
   12. `validateClarificationState`: checks the schema and feature, then each record: stage IDs in
       order with no gap, revisions within the state's, nonempty bounded question and reason, at
       most 64 distinct authorities, and one record per stage and subject. Rejects
       `InvalidClarificationInput`.
-  13. `validateClarificationForms`: pairs each record with exactly one captured form and parses
-      it against the record's binding. An authority-resolved form must equal its re-rendered
+  13. `validateClarificationForms`: pairs each record with exactly one captured form by ID and
+      parses it against the record's binding. An authority-resolved form must equal its re-rendered
       audit bytes, and a recorded response's form must equal its saved bytes and answer. A
-      `closed` form becomes protected. Rejects `InvalidClarificationInput` for a form-count or ID
-      mismatch, changed audit or saved bytes, or a requested status that contradicts the record.
+      `closed` form becomes protected. A form that verifiably holds no submission
+      (`clarification_form.holding`) is set aside, not rejected, when it does not parse against its
+      record, belongs to no record, or has no registry to match
+      ([§23.2](../23-rendering.md)). Rejects `InvalidClarificationInput` for a record without a
+      form, a form of no record or a non-matching form that holds a submission or cannot be read
+      as an open form, changed audit or saved bytes, or a requested status that contradicts the
+      record.
 
 Feature-log identities ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)): one
 adapter builds the policy ID (`LOGPOL-` and the SHA-256 of the compiled policy), a fresh random

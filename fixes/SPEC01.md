@@ -597,8 +597,8 @@ counts input tokens that a failed Claude stream reported in `message_start`.
 ### T2. Test decoupling
 
 Built 19 November 2026; the unread measurement dumps went and the copies shorter than 25
-characters were swept 20 November 2026 ([Z_SPEC01](Z_SPEC01.md)). Nothing open; the unread test
-outputs that remain are §10 C47.
+characters were swept 20 November 2026 ([Z_SPEC01](Z_SPEC01.md)). Nothing open; the test outputs
+that remain are kept (§10 C47).
 
 ### T3. Coverage gaps (B5, B7)
 
@@ -810,10 +810,9 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
 - **Memory and scale:** growing review sets, retained bytes, allocations, teardown,
   cancellation and OOM. Unmeasured.
 - **Harness acceptance (former H-012, H-013, H-017; git `8ed40ba`):** still open:
-  - publication interruption: every write failure is covered as a failpoint at the writer, but
-    no process kill is tested and no test reruns the workflow over the leftover files. **Not
-    closed:** §10 C2 reads a window (not executed) in which the rerun fails, against ADR
-    0009:144-146;
+  - publication interruption: every write failure is covered as a failpoint at the writer, and a
+    scenario reruns the input stage over the forms a failed registry write leaves
+    ([Z_SPEC01](Z_SPEC01.md) "Leftover forms"), but no process kill is tested;
   - rerun replacement through an unrelated workflow: covered at the shared writer; reopen when
     the first non-Spec publisher lands;
   - live negative cases as separate fixtures: none exist (`test/e2e/` holds the two
@@ -880,31 +879,28 @@ code, do complete end 2 end analysis, do not guess").
 
 ### 10.1 Failures first
 
-**C2. A publication interrupted between a form and its state blocks every rerun** (class: successful
-completion). Forms are written before the state (`clarification_output.zig:17-29`) and truncated in place
-(`file_access.zig:40-42`), and every rerun re-stamps each open form with a new state revision
-(`clarification_refresh.zig:79-82`), so a failure between a form write and the state write fails the next
-`prepare-inputs` (`src/actions/specify/prepare_inputs.zig:180-204`), against ADR 0009:144-146 ("a fresh
-rerun replaces the complete output set without recovery"). Forms are also user input, and the writer never
-overwrites a closed one (`workflow_output.zig:79`). Reach: only when a form is written, which no
-development case does; not executed, and no test reruns after a failure (the failpoint test fails before
-the file is touched). **Decision** on the remedy, since ADR 0009:122-123 rules out rollback and recovery
-stores. **Decided 15 November 2026:** not yet: first an offline scenario that fails the state write and
-reruns (the regression test any remedy needs; no engine change). The likely remedy then is a typed
-exception that stops failing on leftover forms holding no user submission, with closed forms still
-stopping; it comes back to the user with the scenario's result.
-
 **C3. A console or flush failure after a successful append leaves the log unclosable.**
-`feature_log_runner.zig:222-234` appends the row, writes it to the console
-(`catch return error.ConsoleFailure`, `:232`) and only then advances `event_state` (`:233-234`);
-the append writes before it syncs (`feature_log_segment_store.zig:99-100`). After either failure
-the row is on disk and the state isn't advanced, and every later append and the close require
-the file size to equal that stale state (`:96`, `:125-126`). The prompt stream has the same shape
-(`feature_log_runner.zig:328-341`). The segment keeps no trailer, which ADR 0026 ("Crashed runs
-are kept whole") treats as a crashed run. Not executed; the test checks the failing call only
-(`src/feature_log_runtime_test.zig:409-438`). **Class:** successful completion. **Owner:**
-`feature_log_runner.zig` (`persistEvent`, `persistPrompt`). **Next:** a runner test that appends
-again after each failure.
+`persistEvent` (`feature_log_runner.zig:294-310`) appends the row, writes it to the console and only
+then advances `event_state`; the append writes before it syncs (`feature_log_segment_store.zig:99-100`).
+After either failure the row is on disk and the state isn't advanced, so every later append and the
+close fail on the file size (`:96`, `:125-126`). `persistPrompt` (`:405-423`) has the same shape.
+**Result built 20 November 2026** (`src/feature_log_runtime_test.zig`, "after a console or flush
+failure that followed an appended row, the next append and the close leave the file as it was"): in the
+event and the prompt stream, after a console failure and after a failed flush that followed the write,
+the next append and the close both return `LOG_SINK_FAILURE`, and the file is byte-identical to its
+state after the failed row, with no trailer. The test records current behavior. ADR 0026:111-119 keeps
+a last segment without a trailer whole, as a crashed run's shape, and only a cancelled persist
+recovers its stream's state from the bytes (ADR 0032, "Cancellation mapping"). ADR 0018:128-133
+introduces no recovery continuation for the exchange capture it governs, and no text says what a later
+append or close must do after another failure. The first failure already abandons the run
+(F0002:612-617), so the later failures change the log's completeness, not the run's outcome: the
+class "successful completion" doesn't apply.
+**Decision, if wanted:** should a failure that is no cancellation recover its stream like one, so a
+later append and the close work on the real bytes and write the terminal event and the trailer? Yes
+amends ADR 0032's mapping and changes the test's last assertions. By reading, not executed: the
+terminal path appends the terminal event and closes
+after a logging rejection (`feature_logging_runtime.zig:164-183`), so a flush failure's terminal code
+reads `LOG_SINK_FAILURE`, with the flush failure kept as the first cause.
 
 **C4. Most failures report one payload-free name (adds to E5).**
 
@@ -929,11 +925,11 @@ again after each failure.
   `json_composition.zig` (47) return one error each. About 40 of the schema sites and 35 of the
   composition sites are startup compile; the rest are request-time restriction and projection
   (`restrictFieldPolicies`, `narrowChoice`, `projectVariants`), which F0005 §9 does not govern.
-  **Not built; decision needed:** a cause per profile section needs a typed slot through the four
-  compiler-port functions and about nine new rule classes, so it amends F0005 §9 ("a rule names a
-  stage, not a cause"; "never per call site"), 13-01 and ADR 0032, and adds an argument to every
-  test call of the compilers (not counted). Four unrecorded returns in `compileResources`
-  (`:253`, `:256`, `:257`, `:275`) print the step only.
+  **Decided not to build** (user, 20 November 2026, after the preflight): a cause per profile section
+  would need a typed slot through the four compiler-port functions and about nine new rule classes,
+  amending F0005 §9 ("a rule names a stage, not a cause"; "never per call site"), 13-01 and ADR 0032,
+  for a diagnostic that names no published-output defect. Four unrecorded returns in
+  `compileResources` (`:253`, `:256`, `:257`, `:275`) print the step only.
 - **Reference ingestion:** ten typed reasons (`reference_ingestion.zig:42-53`) are discarded;
   each becomes `InvalidReferenceAccounting` (`validateAccounting` in
   `prepare_reference_evidence.zig`), against ADR 0036:198-200 ("fails at ingestion with a typed
@@ -952,13 +948,6 @@ and `diagnosticAdmission`). Giving another authorizer a `blocked` outcome compil
 then rejects the first run that takes it. Not executed. The one way a registered authorizer's
 `blocked` was rejected, a stage that retires its own judged evidence with the decision, is fixed
 ([Z_SPEC01](Z_SPEC01.md) C6). **Owner:** `workflow_outcome_binding.zig`.
-
-**C7. A stray entry in `clarify/` fails the run, even after every model call**
-(`adapters/filesystem/feature_input_source.zig:83-85`; the publish step repeats the capture; class:
-successful completion). **Decided 15 November 2026:** the same exemption the user gave log folders (ADR
-0026): a regular file not named like a form is never opened or changed; directories, symlinks,
-form-shaped names and orphan or missing registered forms still fail. Its own phase: the adapter, the
-`.unknown` test case, and 23-rendering.md:263-264, 24-workflow-state.md:123 and F0100:200-201.
 
 **C8. Clarification records (adds to E7).**
 
@@ -1299,11 +1288,16 @@ switches on closed sets.
 - The 64 MiB value bound is written 8 times in six files (grep; for example
   `passive_literal_workflow.zig:6`).
 
-**C38. A passing `zig build verify` reads as a failure.** A passing run prints 6.2 MB: 4,437
-feature-log rows and two `failed command:` lines, which Zig prints for any step that wrote to
-stderr (`test-integration`, and `test` through `emit_emergency_log_failure_record.zig:22`). The
-default summary mode prints no success line; only `--summary line` shows `N/N steps
-succeeded; M/M tests passed`. **Owner:** the tests that write to the real stderr.
+**C38. A passing `zig build verify` still reads as a failure.** Zig prints a `failed command:` line for
+any step that wrote to stderr, and the default summary mode prints no success line; only `--summary line`
+shows `N/N steps succeeded; M/M tests passed`. Built 20 November 2026 ([Z_SPEC01](Z_SPEC01.md) "A passing
+run is quiet"): `test-integration` fell from 9.9 MB of stderr to 0.46 MB. What still writes to stderr:
+the scenario cost table (`scenario_timing.zig`, deliberate: `test-scenario-timing` tests its format, not
+that it prints); about 300 feature-log rows from the baseline acquisition tests, whose production code
+materializes the frozen case config itself; and 33 `SDDE_LOG_FAILURE` emergency lines in `test` from the
+layout tests, because the composition builds `log_output.Adapter` inline (`feature_logging_runtime.zig:143`).
+**Decision, if wanted:** a quiet pass needs the cost table to print only on request, and an injectable
+emergency sink in the composition.
 
 **C39. Design text the code contradicts (adds to §8 "Design–code conflicts").** F0100:720
 ("Protected operations declare that gate"; C30). 26-security.md:224-225 says
@@ -1362,11 +1356,13 @@ comment containing "plan", "hard" or "reference" fails a test with no boundary c
 - A `*_test.zig` runs only if `tests.zig`, `src/root.zig` or `src/runtime_tests.zig` imports it.
   Nothing checks reachability: `test-build-registration` checks test executables on a synthetic
   graph (traced).
-- Tests still write outputs that no test or build step reads: a step trace for every scenario
+- Tests write outputs that no test or build step reads: a step trace for every scenario
   (`workflow_tests.zig:1353`; Z_SPEC01 uses it as structural-equivalence evidence) and calibration
   reports under `.zig-cache/` (`authoring-comparison`, `authoring-associations`,
-  `representation-admission`, `semantic-simplicity/phase0`; versioned report schemas). Whether
-  they stay is the user's call. Adds to T2.
+  `representation-admission`, `semantic-simplicity/phase0`; versioned report schemas, written and
+  read back inside their own suites). **Kept** (user, 20 November 2026): the trace is the proof that
+  a refactor leaves the executed steps unchanged, and the calibration suites replay retained
+  captures. Adds to T2.
 - `src/test_fixtures/authoring_association_calibration.zig:16` reads a retained run of 11 October
   2026 that is no longer under `zig-out/e2e-spec/`, so part of a unit test returns `.unavailable`
   (`:297`) and is skipped.

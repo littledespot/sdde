@@ -3035,8 +3035,7 @@ test "feature input YAML is read-only for new targets and unrelated workflows" {
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));
     }
     // Unselected invalid content is not read, even though its reader is registered.
-    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
-    try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/unknown.txt", .data = "unrecognized" });
+    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify/unrecognized");
     try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).executionStatus().?);
 }
 
@@ -3105,8 +3104,8 @@ test "feature input failures preserve invalid stale and changed close submission
 
 test "feature input capture rejects unknown entries directories and symlink paths" {
     const io = std.testing.io;
-    for ([_]enum { unknown, nested, collection_file, collection_link, form_link, dangling_form, state_link, state_parent_link, alias_form }{
-        .unknown, .nested, .collection_file, .collection_link, .form_link, .dangling_form, .state_link, .state_parent_link, .alias_form,
+    for ([_]enum { nested, collection_file, collection_link, form_link, dangling_form, state_link, state_parent_link, alias_form, alias_extension, zero_ordinal, stray_link, oversized_form }{
+        .nested, .collection_file, .collection_link, .form_link, .dangling_form, .state_link, .state_parent_link, .alias_form, .alias_extension, .zero_ordinal, .stray_link, .oversized_form,
     }) |failure| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -3126,8 +3125,13 @@ test "feature input capture rejects unknown entries directories and symlink path
             else => {
                 try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
                 switch (failure) {
-                    .unknown => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/notes.txt", .data = "unknown" }),
                     .nested => try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify/nested"),
+                    .alias_extension => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/S01.MD", .data = "alias" }),
+                    .zero_ordinal => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/S00.md", .data = "no such form" }),
+                    // A form is still read, so a form larger than a form may be still fails.
+                    .oversized_form => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/S01.md", .data = "x" ** (20 * 1024) }),
+                    // Only a regular file is left alone: a link with a name no form has still fails.
+                    .stray_link => try project.dir.symLink(io, "../../../../../outside/data", "requirements/current/Chosen/Café/clarify/notes.txt", .{}),
                     .form_link => try project.dir.symLink(io, "../../../../../outside/data", "requirements/current/Chosen/Café/clarify/S01.md", .{}),
                     .dangling_form => try project.dir.symLink(io, "missing.md", "requirements/current/Chosen/Café/clarify/S01.md", .{}),
                     .alias_form => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/s01.md", .data = "alias" }),
@@ -3136,6 +3140,43 @@ test "feature input capture rejects unknown entries directories and symlink path
             },
         }
         try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+    }
+}
+
+test "regular files in clarify/ that no form could be named are never opened or changed, and the run completes" {
+    const form_limit = @import("../../src/domain/clarification_inputs.zig").max_form_bytes;
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
+    // One is larger than a form may be, so opening it would fail the capture.
+    const oversized = try std.testing.allocator.alloc(u8, 2 * form_limit);
+    defer std.testing.allocator.free(oversized);
+    @memset(oversized, 'x');
+    const strays = [_]struct { name: []const u8, bytes: []const u8 }{
+        .{ .name = "notes.txt", .bytes = "unknown" },
+        .{ .name = ".DS_Store", .bytes = "finder" },
+        .{ .name = "S01.md.bak", .bytes = "backup" },
+        .{ .name = "S1.md", .bytes = "short" },
+        .{ .name = "big.log", .bytes = oversized },
+    };
+    for (strays) |stray| {
+        const path = try std.fmt.allocPrint(std.testing.allocator, "requirements/current/Chosen/Café/clarify/{s}", .{stray.name});
+        defer std.testing.allocator.free(path);
+        try project.dir.writeFile(io, .{ .sub_path = path, .data = stray.bytes });
+    }
+    // One nobody can read, so opening it would fail the capture.
+    try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/locked.log", .data = "locked", .flags = .{ .permissions = std.Io.File.Permissions.fromMode(0o000) } });
+    for (0..2) |_| {
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+        for (strays) |stray| {
+            const path = try std.fmt.allocPrint(std.testing.allocator, "requirements/current/Chosen/Café/clarify/{s}", .{stray.name});
+            defer std.testing.allocator.free(path);
+            const kept = try project.dir.readFileAlloc(io, path, std.testing.allocator, .limited(2 * form_limit + 1));
+            defer std.testing.allocator.free(kept);
+            try std.testing.expectEqualSlices(u8, stray.bytes, kept);
+        }
     }
 }
 
@@ -3242,6 +3283,157 @@ test "clarification publication refreshes stable paths and protects concurrent c
             try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, paths.get(.workflow_state).project_relative, .{}));
         }
     }
+}
+
+const ClarificationFiles = struct { form: []const u8, registry: []const u8 };
+
+/// One clarification refresh and publication over the project's current files, as the input and output stages do it:
+/// capture, parse and validate the registry and its forms, refresh one open need, render, publish. The registry is the
+/// last file of the set, so `fail_registry` fails it after the forms were written. `files` names the round's form and
+/// registry once they are known, copied into `keep`.
+fn clarificationRound(io: std.Io, keep: std.mem.Allocator, project: std.Io.Dir, name: []const u8, fail_registry: bool, files: *ClarificationFiles) !void {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    const fixture = @import("../../src/test_fixtures/clarification_inputs.zig");
+    const refresh = @import("../../src/domain/clarification_refresh.zig");
+    const parser = @import("../../src/adapters/parsers/clarification_inputs.zig");
+    const access = @import("../../src/adapters/filesystem/file_access.zig");
+    const Failing = struct {
+        var calls: usize = 0;
+        var fail_at: ?usize = null;
+        fn replace(replace_io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, file: []const u8, expected: access.Expected, bytes: []const u8) access.Error!void {
+            const index = calls;
+            calls += 1;
+            if (fail_at == index) return error.FileUnavailable;
+            return access.replace(replace_io, allocator, parent, file, expected, bytes);
+        }
+    };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var boot = runInProject(io, std.testing.allocator, project);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    const selected = try @import("../../src/domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+    var inspector_adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project };
+    var inspector = inspector_adapter.inspector();
+    inspector.capability = registry.featureDirectoryRead();
+    const observed = try inspector.inspect(a, selected);
+    const paths = try @import("../../src/domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+    var source_adapter: @import("../../src/adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project };
+    var source = source_adapter.capturer();
+    source.capability = registry.featureInputRead();
+    const captured = try source.capture(a, observed, paths);
+    const input_steps = @import("../../src/actions/specify/prepare_inputs.zig").steps;
+    const parsed = try input_steps.parseClarificationState(parser.stateParser(), a, captured);
+    const state = try c.validate(parsed, selected.feature_id);
+    const inputs = try input_steps.validateClarificationForms(parser.formParser(), a, state, captured);
+    const record = fixture.record(name);
+    const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
+    const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need}, .original_sources = &.{} });
+    const views = try @import("../../src/domain/clarification_views.zig").render(a, next, inputs.protected_forms);
+    const prepared = try (@import("../../src/actions/clarification/prepare_clarification_output.zig").Action{}).execute(a, observed, paths, captured, inputs, .{ .ready = next }, views);
+    files.* = .{
+        .form = try std.mem.concat(keep, u8, &.{ selected.project_relative_path, "/clarify/", name, ".md" }),
+        .registry = try keep.dupe(u8, paths.get(.clarification_state).project_relative),
+    };
+    var adapter: @import("../../src/adapters/filesystem/workflow_output.zig").Writer(Failing.replace) = .{ .io = io, .project_root = project };
+    var writer = adapter.port();
+    writer.capability = registry.featureOutputWrite();
+    Failing.calls = 0;
+    Failing.fail_at = if (fail_registry) prepared.files.len - 1 else null;
+    try writer.publish(a, prepared);
+}
+
+// ADR 0009: a fresh rerun replaces the complete output set after a failed write, unresolved forms included, and a form
+// the user closed is never overwritten. The forms a failed registry write leaves are replaced by the rerun unless one
+// holds a submission, which stops it with the file unchanged.
+test "a registry write that fails behind its forms is replaced by the rerun unless a form holds a submission" {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../src/domain/clarification_form.zig");
+    const fixture = @import("../../src/test_fixtures/clarification_inputs.zig");
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // No registry published before the failed round (its form has no registry), and one published before (its form
+    // is a registry revision ahead of the registry); the user closes the leftover form, or does not.
+    for ([_]bool{ false, true }) |published_before| for ([_]bool{ false, true }) |closed_by_user| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+        var files: ClarificationFiles = undefined;
+        var form_before: ?[]const u8 = null;
+        var registry_before: ?[]const u8 = null;
+        if (published_before) {
+            try clarificationRound(io, a, project.dir, "S01", false, &files);
+            form_before = try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes));
+            registry_before = try project.dir.readFileAlloc(io, files.registry, a, .limited(c.max_state_bytes));
+        }
+        try std.testing.expectError(error.OutputWriteFailed, clarificationRound(io, a, project.dir, "S01", true, &files));
+        // The forms precede the registry, so the failed round replaced a form and left the registry as it was.
+        var form_after = try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes));
+        if (form_before) |bytes| try std.testing.expect(!std.mem.eql(u8, bytes, form_after));
+        try expectRegistry(io, a, project.dir, files.registry, registry_before);
+        if (closed_by_user) {
+            form_after = try forms.render(a, fixture.record("S01"), .{ .state_ordinal = 9, .state_revision = 9, .record_revision = 9, .status = .open }, .closed, "An answer.");
+            try project.dir.writeFile(io, .{ .sub_path = files.form, .data = form_after });
+            try std.testing.expectError(error.InvalidClarificationInput, clarificationRound(io, a, project.dir, "S01", false, &files));
+            try std.testing.expectEqualStrings(form_after, try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes)));
+            try expectRegistry(io, a, project.dir, files.registry, registry_before);
+        } else {
+            try clarificationRound(io, a, project.dir, "S01", false, &files);
+            const registry_after = try project.dir.readFileAlloc(io, files.registry, a, .limited(c.max_state_bytes));
+            if (registry_before) |bytes| try std.testing.expect(!std.mem.eql(u8, bytes, registry_after));
+            // The form is the canonical rendering for the registry the rerun published: replaced, not set aside.
+            const published = try @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser().parse(a, registry_after);
+            const canonical = try forms.render(a, published.records[0], fixture.binding(published, published.records[0]), .open, "");
+            try std.testing.expectEqualStrings(canonical, try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes)));
+            try clarificationRound(io, a, project.dir, "S01", false, &files);
+        }
+    };
+}
+
+test "an unsubmitted form of no record is left in place and ignored by later rounds, and a close of it stops them" {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../src/domain/clarification_form.zig");
+    const fixture = @import("../../src/test_fixtures/clarification_inputs.zig");
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+    // A file no form could be named sits beside the forms through every round, which neither reads nor writes it.
+    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
+    try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/.DS_Store", .data = "finder" });
+    // A failed round writes the form of a need that the next rounds do not have.
+    var orphan: ClarificationFiles = undefined;
+    try std.testing.expectError(error.OutputWriteFailed, clarificationRound(io, a, project.dir, "P01", true, &orphan));
+    const orphan_bytes = try project.dir.readFileAlloc(io, orphan.form, a, .limited(c.max_form_bytes));
+    var files: ClarificationFiles = undefined;
+    for (0..2) |_| {
+        try clarificationRound(io, a, project.dir, "S01", false, &files);
+        // No round writes it, since no record names it, and none deletes it.
+        try std.testing.expectEqualStrings(orphan_bytes, try project.dir.readFileAlloc(io, orphan.form, a, .limited(c.max_form_bytes)));
+    }
+    // Once the user closes it, it holds a submission no record can take, and every round stops with it unchanged.
+    const closed = try forms.render(a, fixture.record("P01"), .{ .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .status = .open }, .closed, "An answer.");
+    try project.dir.writeFile(io, .{ .sub_path = orphan.form, .data = closed });
+    try std.testing.expectError(error.InvalidClarificationInput, clarificationRound(io, a, project.dir, "S01", false, &files));
+    try std.testing.expectEqualStrings(closed, try project.dir.readFileAlloc(io, orphan.form, a, .limited(c.max_form_bytes)));
+    try std.testing.expectEqualStrings("finder", try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/.DS_Store", a, .limited(64)));
+}
+
+/// The registry file holds exactly `expected` bytes, or does not exist when `expected` is null.
+fn expectRegistry(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, path: []const u8, expected: ?[]const u8) !void {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    if (expected) |bytes| {
+        try std.testing.expectEqualStrings(bytes, try project.readFileAlloc(io, path, a, .limited(c.max_state_bytes)));
+    } else try std.testing.expectError(error.FileNotFound, project.openFile(io, path, .{}));
 }
 
 test "registered output writer validates the complete set and never writes completion after a failed file" {
