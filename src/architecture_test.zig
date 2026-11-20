@@ -992,7 +992,7 @@ test "the contract-variant mechanism has no operation-specific branch and one ow
 
 test "compiled-step checks have one owner: graph validation, never registry publication" {
     const graph = @embedFile("domain/workflow_graph_validation.zig");
-    try std.testing.expect(std.mem.indexOf(u8, graph, "for (step.request_stages) |stage| try validateStep(graph, stage.step);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, graph, "for (step.request_stages) |stage| validateStep(graph, stage.step) catch return reject(evidence, .step_contract, graph, step.id.bytes);") != null);
     // Publication imports no module whose only use to it would be a step check, and calls none of
     // the step checks the modules it does import also hold.
     const publication = @embedFile("domain/workflow_registry.zig");
@@ -1773,9 +1773,6 @@ test "toolchain safety authority is opaque and path handoff has one adapter cons
     const adapter = @embedFile("adapters/filesystem/toolchain_authority_source.zig");
     try std.testing.expect(std.mem.indexOf(u8, domain, "bindToolchainAuthorityAdapter") != null);
     try std.testing.expectEqual(@as(usize, 3), countOccurrences(adapter, "bindToolchainAuthorityAdapter"));
-    const service = @embedFile("application/toolchain_service.zig");
-    try expectAbsent(service, "RawDocument");
-    try expectAbsent(service, "std.Io");
     const startup = @embedFile("application/startup_routine.zig");
     try expectAbsent(startup, "invokeBootstrapToolchain");
     const stage = @embedFile("actions/toolchain/prepare_toolchain.zig");
@@ -2413,9 +2410,6 @@ test "toolchain setup has no unconditional startup path or second result owner" 
     try std.testing.expect(!@hasField(@import("application/bootstrap_services.zig").BootstrapServices, "toolchain"));
     try expectAbsent(@embedFile("application/startup_routine.zig"), "Toolchain");
     try expectAbsent(@embedFile("application/startup_routine.zig"), "prepare_toolchain");
-    const service = @import("application/toolchain_service.zig").ToolChainService;
-    try std.testing.expect(!@hasField(service, "owner"));
-    try std.testing.expect(!@hasDecl(service, "deinit"));
     const bindings = @embedFile("application/toolchain_workflow_runner.zig");
     try expectAbsent(bindings, "successor");
     try expectAbsent(bindings, "bootstrap_root_registry");

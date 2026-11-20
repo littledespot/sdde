@@ -127,7 +127,7 @@ test "definition capture budget fails before filesystem reads" {
     const result = try runInventoryStages(arena.allocator(), fake.enumerator(), .{ .capability = capability }, .{});
     try std.testing.expectError(
         error.WorkflowDefinitionReadError,
-        startup.steps.captureWorkflows(fake.capturer(), arena.allocator(), .{ .value = result }, .{}),
+        startup.steps.captureWorkflows(fake.capturer(), arena.allocator(), .{ .value = result }, .{}, null),
     );
     try std.testing.expectEqual(@as(usize, 0), fake.capture_calls);
 }

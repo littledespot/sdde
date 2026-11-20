@@ -272,9 +272,9 @@ fn compileYaml(a: std.mem.Allocator, registry: *const Registry, yaml: []const u8
     var parser: parser_adapter.Adapter = .{};
     var result_schema: result_schema_parser.Adapter = .{};
     const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
-    const definitions = try definition_schema.validate(a, raw);
-    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions);
-    return graph_compilation.compile(registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{});
+    const definitions = try definition_schema.validate(a, raw, null);
+    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions, null);
+    return graph_compilation.compile(registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{}, null);
 }
 
 const head =
@@ -342,7 +342,7 @@ test "each of the 29 variants compiles and is the step's one checked contract" {
             try std.testing.expect(registry.stepsMatchVariants(graphs[0].authority.steps));
             // The data-flow check needs the evidence the runner's accounting creates after a model call, which
             // a test invocation cannot provide: those variants are checked by the compile and variant match.
-            if (!requiresRunnerEvidence(variant)) _ = try graph_validation.validate(a, graphs, &registry);
+            if (!requiresRunnerEvidence(variant)) _ = try graph_validation.validate(a, graphs, &registry, null);
             accepted += 1;
         }
     }
@@ -528,7 +528,7 @@ test "a compiled step whose effects belong to another owner's variant is rejecte
         try std.testing.expect(!registry.stepsMatchVariants(steps));
         var changed = graph;
         changed.authority.steps = steps;
-        try std.testing.expect(if (graph_validation.validate(a, &.{changed}, &registry)) |_| false else |_| true);
+        try std.testing.expect(if (graph_validation.validate(a, &.{changed}, &registry, null)) |_| false else |_| true);
     }
 }
 
@@ -601,7 +601,7 @@ test "steps that use one generic operation keep their own retry authority" {
     try std.testing.expect(compilation.matchesContract(unit, left.?));
     try std.testing.expect(compilation.matchesContract(unit, right.?));
     try std.testing.expect(compilation.matchesContract(support, after.?));
-    _ = try graph_validation.validate(a, &.{graph}, &registry);
+    _ = try graph_validation.validate(a, &.{graph}, &registry, null);
 }
 
 // ---- running a step: the owner's binding, selected by `owner` ----

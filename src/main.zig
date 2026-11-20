@@ -42,6 +42,11 @@ pub fn main(init: std.process.Init) !void {
             .invalid, .blocked, .failed, .cancelled => {
                 try writeFailure(init.io, @tagName(execution));
                 if (report.last_operation_rejection) |rejection| try writeFailure(init.io, @tagName(rejection.cause));
+                if (report.provider_failure) |detail| {
+                    var line: std.Io.Writer.Allocating = .init(init.arena.allocator());
+                    try detail.write(&line.writer);
+                    try writeFailure(init.io, line.written());
+                }
                 if (report.candidate_error) |diagnostic| try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), diagnostic, .{}));
                 std.process.exit(1);
             },
@@ -51,6 +56,7 @@ pub fn main(init: std.process.Init) !void {
             var stderr_file_writer: std.Io.File.Writer = .init(.stderr(), init.io, &stderr_buffer);
             const stderr = &stderr_file_writer.interface;
             try stderr.writeAll(failure.text());
+            if (report.bootstrap_detail) |detail| try sdde.definition_rejection.write(detail, stderr);
             try stderr.writeByte('\n');
             try stderr.flush();
             std.process.exit(1);

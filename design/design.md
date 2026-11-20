@@ -228,6 +228,11 @@ engine fixes them:
     against one total-token budget per execution, shared by all inference.
     No call starts at or above it, and budget rejection is fatal
     for every inference purpose. Retries remain explicitly local.
+33. A workflow never modifies or overwrites an existing semantic-principles file.
+    Principles are read-only input to a workflow, and path validation rejects every
+    project operation against their root
+    ([ADR 0015](decisions/0015-specification-principle-review.md),
+    [Section 11](contracts/11-path-validation.md)).
 
 - Runner rejections retain their closed diagnostics through the top-level workflow result rather
   than selecting YAML outcome edges.

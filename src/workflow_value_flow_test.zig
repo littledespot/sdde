@@ -98,7 +98,7 @@ test "compiler rejects missing duplicate and invalid data schemas" {
     try std.testing.expect(!fixture.registry.validate());
     var graph = fixture.graph.*;
     graph.authority.data_schemas = &.{input_schema};
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(fixture.arena.allocator(), &.{graph}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(fixture.arena.allocator(), &.{graph}, &fixture.registry, null));
     fixture.registry.data_schemas = &schemas;
     var entries = operation_entries;
     for (&entries) |*entry| entry.binding.context = &control;
@@ -461,10 +461,10 @@ const Fixture = struct {
         };
         var parser: parser_adapter.Adapter = .{};
         const raw = try startup.steps.parseWorkflows(parser.parser(), arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
-        const definitions = try definition_schema.validate(arena.allocator(), raw);
+        const definitions = try definition_schema.validate(arena.allocator(), raw, null);
         var result_schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-        const graphs = try graph_compilation.compile(&registry, result_schema_parser.compiler(), arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
-        _ = try graph_validation.validate(arena.allocator(), graphs, &registry);
+        const graphs = try graph_compilation.compile(&registry, result_schema_parser.compiler(), arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{}, null);
+        _ = try graph_validation.validate(arena.allocator(), graphs, &registry, null);
         return .{ .arena = arena, .graph = &graphs[0], .registry = registry };
     }
 

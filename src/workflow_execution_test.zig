@@ -564,7 +564,7 @@ test "maximum graph validates executes every operation, rejects cycles and keeps
     var control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var barrier: FakeBarrier = .{};
     var registry = testRegistry(&control);
-    _ = try validate.validate(a, &.{graph}, &registry);
+    _ = try validate.validate(a, &.{graph}, &registry, null);
     var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
@@ -575,11 +575,11 @@ test "maximum graph validates executes every operation, rejects cycles and keeps
     try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
 
     transitions[(maximum - 1) * 2].target = .{ .step = steps[0].id };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate.validate(a, &.{graph}, &registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate.validate(a, &.{graph}, &registry, null));
     transitions[(maximum - 1) * 2].target = .{ .terminal = .ok };
     graph.authority.steps = steps;
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(steps).?;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate.validate(a, &.{graph}, &registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate.validate(a, &.{graph}, &registry, null));
 
     var bounded = test_steps[0];
     bounded.retry_authority = .{

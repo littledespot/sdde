@@ -1,4 +1,4 @@
-# F0003 — ToolChainService
+# F0003 — Toolchain
 
 **Status:** Proposed feature design
 
@@ -27,8 +27,8 @@ as source material in Section 5; it is not promoted to runtime authority.
 
 ## 1. Responsibility
 
-`ToolChainService` has one responsibility: expose the current invocation's
-immutable post-composition safety-valid toolchain object to declared consumers.
+F0003 has one responsibility: publish the current invocation's immutable
+post-composition safety-valid toolchain object (`valid_toolchain`) to declared consumers.
 
 - That object is derived from the complete registry beneath `paths.toolchainPreset` and
   the exact project layer at `<paths.principles>/toolchain.yaml`, which selects exact
@@ -43,16 +43,14 @@ immutable post-composition safety-valid toolchain object to declared consumers.
 - Captured bytes, decoded values, schema-valid layers, registry candidates, and merged
   pre-safety candidates remain function-local values inside the `prepare-toolchain` stage
   action; none is pipeline data.
-- None can construct `ToolChainService`.
 
 - After the safety gate succeeds, the runner's envelope owns the original sealed
   `ValidToolchain` allocation.
-- `ToolChainService` is its non-owning read-only facade.
-- Declared consumers may borrow only `*const ValidToolchain` through one concrete
-  read-only accessor.
-- No service registry, generic or string-key service query, cache, copied projection,
+- Declared consumers borrow only `*const ValidToolchain`, read from the envelope as
+  `valid_toolchain`. No service or facade type stands between them and the value.
+- No service registry, generic or string-key query, cache, copied projection,
   reread, or second authority is introduced.
-- A borrowed service cannot outlive its envelope value; replacement, invalidation,
+- A borrowed value cannot outlive its envelope value; replacement, invalidation,
   rejection, and execution cleanup release native owners through the shared value
   lifecycle.
 
@@ -84,7 +82,7 @@ inheritance, compose, and validate safety. Every step only passes `ok` on and `f
 so the sequence hides no routed choice. Each step keeps the rules below as a separate internal
 function with its own tests; only the safety step can construct `ValidToolchain`. The
 intermediates are function-local values passed only between those functions, private, distinctly
-typed and unable to construct `ToolChainService`. The stage action checks for cancellation
+typed and unable to stand in for `ValidToolchain`. The stage action checks for cancellation
 between internal steps and cleans up what it owns. The nine former operation IDs and their
 intermediate keys no longer exist; `compile-naming-policy` stays a separate operation.
 
@@ -204,20 +202,16 @@ policies: [project.zig@1]
 Only the safety gate constructs `ValidToolchain`. It owns the deterministic
 ordered exact package references and immutable compiled policy descriptors;
 it contains no raw YAML, source path, mutable map, unregistered policy, or
-pre-safety candidate. The runner then constructs `ToolChainService`.
+pre-safety candidate. The runner's envelope then owns it.
 
-The service exposes exactly one accessor:
+Consumers read `valid_toolchain` from the envelope view as a borrowed
+`*const ValidToolchain`. No wrapper, facade or service type returns it.
 
-```zig
-pub fn toolchain(self: *const ToolChainService) *const ValidToolchain
-```
-
-- `toolchain()` performs no filesystem read, parse, merge, validation, or allocation.
-- Repeated calls return the same borrowed immutable value.
-- The runner releases the envelope-owned value once on every terminal branch; the
-  service remains a non-owning facade.
+- Reading it performs no filesystem read, parse, merge, validation, or allocation.
+- Repeated reads return the same borrowed immutable value.
+- The runner releases the envelope-owned value once on every terminal branch.
 - There is no generic `query()`, field lookup, raw-document accessor, or pre-safety
-  service instance.
+  value.
 
 - Every declared inheritance binding names an exact preset package identity and version,
   not a directory, filename guess, version range, implicit `latest`, or untyped map.
@@ -228,15 +222,15 @@ pub fn toolchain(self: *const ToolChainService) *const ValidToolchain
 
 Authority-change routing, environment compilation and downstream invalidation
 belong to their declared workflow operations and policy owners. F0003 does not
-hide these responsibilities behind a service method.
+hide these responsibilities behind an accessor.
 
-- `ToolChainService` publishes no raw YAML, decoded/raw value, schema-valid layer,
+- F0003 publishes no raw YAML, decoded/raw value, schema-valid layer,
   registry candidate, mutable map, source path, preset bytes, partially merged
   candidate, or pre-safety policy.
 - Its sole consumer-visible value is the borrowed immutable `ValidToolchain` constructed
   after post-composition safety validation.
-- There is no service-consumer exception; the stage action's intermediate values are not
-  service authority.
+- There is no consumer exception; the stage action's intermediate values are not
+  authority.
 - Publication of validated authority remains with the complete owning workflow under ADR
   0009, outside this read-only boundary.
 
@@ -271,7 +265,7 @@ hide these responsibilities behind a service method.
 ## 4. Read-only and logging boundary
 
 - F0003 uses F0002 LogService as its only logging mechanism.
-- Because F0002 is not a general logger, the service receives no logger or sink
+- Because F0002 is not a general logger, F0003 receives no logger or sink
   capability; the runner reports F0003 nodes through the selected compiled workflow's
   validated, runner-created `WorkflowLog` binding and the existing registered `action.*`
   lifecycle facts.
@@ -312,7 +306,7 @@ separate approved F0002 contract.
 | Merge behavior is unspecified | The file defines neither per-field precedence nor map, set, array, atomic-command, append, remove, or locked-rule semantics. | Use only contract-declared operators and reject an unsafe effective merge. No generic recursive merge belongs in F0003. |
 | Paths and patterns are ambiguous | Roots and globs lack stable rule IDs, base/target domains, pattern type, case policy, ownership, and portability semantics. Brace globs used by siblings are outside the governing grammar; `pathPolicies` covers only config/style. | Path-pattern and file-kind policy owners compile typed rules after inheritance. F0003 exposes nothing pre-compilation as authority. |
 | Parser/query identity is incomplete | Extension maps point to raw grammar names or project-relative query paths without package/version identity, required captures, containment, compilation, resolver, fallback, or missing-resource behavior. | Preset registry validation must close every declared asset reference before project selection. |
-| Capability absence is ambiguous | Some examples declare E2E locations without commands and cannot distinguish unsupported capability from omitted data. Other package-add commands do not prove manifest mutation. | The closed F0003 contract contains no inferred capability; absence is simply outside this service's authority. |
+| Capability absence is ambiguous | Some examples declare E2E locations without commands and cannot distinguish unsupported capability from omitted data. Other package-add commands do not prove manifest mutation. | The closed F0003 contract contains no inferred capability; absence is simply outside F0003's authority. |
 
 - The current `_structure.yaml` and sibling examples therefore remain non-normative
   source material.
@@ -322,8 +316,8 @@ separate approved F0002 contract.
 
 ## 6. Acceptance criteria
 
-1. `ToolChainService` has exactly one responsibility: expose one immutable
-   `ValidToolchain` through its concrete read-only `toolchain()` accessor. The
+1. F0003 has exactly one responsibility: publish one immutable `ValidToolchain` as
+   `valid_toolchain`, borrowed by declared consumers from the envelope. The
    bounded loading steps remain separate functions of the stage action and expose no consumer
    query.
 2. F0001 remains the only `.sddtoolkit.json` reader, and the path-policy owner
@@ -342,17 +336,16 @@ separate approved F0002 contract.
    - The two JSON Schema files document those same closed YAML shapes but are not
      runtime inputs.
    - Raw and schema-valid results are function-local intermediates of the stage action and
-     cannot construct `ToolChainService`.
+     cannot construct `ValidToolchain`.
 5. Every inherited preset identity/version resolves exactly once; missing,
    duplicate, conflicting-version, ranged/latest, and cyclic closures
    fail closed.
 6. Only deterministic contract-declared merge behavior is used, and the merged
    result cannot reach a consumer before post-composition safety validation.
 7. Only post-composition safety validation can construct the canonical
-   `ValidToolchain` and publish `ToolChainService`. `toolchain()` returns only a
-   borrowed `*const ValidToolchain`; raw bytes, decoded values, source paths,
-   layer/registry states, mutable maps, and partial/pre-safety candidates are
-   not queryable.
+   `ValidToolchain`, and consumers get only a borrowed `*const ValidToolchain`;
+   raw bytes, decoded values, source paths, layer/registry states, mutable maps,
+   and partial/pre-safety candidates are not queryable.
 8. F0003 cannot write source/config/preset/project/state data, execute a
    command, call a model, use the network, mutate shared state, or expose a
    reload/watch/compatibility API.
@@ -364,7 +357,7 @@ separate approved F0002 contract.
     registry and encountered by selected setup, it rejects rather than upgrades it.
 11. Equal complete validated inputs and equal prior authority produce a
     direct-equal `ValidToolchain`; any failure before its safety gate publishes
-    neither a service nor a partial authority.
+    no partial authority.
 12. The packaged executable requires no SDDE source tree, design examples,
     development cache, or Zig toolchain at runtime.
 13. Workflows without toolchain operations do not read toolchain documents,
@@ -382,7 +375,7 @@ Implementation tests cover the owning boundaries:
   malformed YAML, duplicate/unknown/missing/wrong-kind fields, unresolved
   placeholders, `_structure.yaml`, and unrelated representative legacy
   documents; raw/schema-valid candidates pass only between the stage action's internal
-  functions and cannot construct or enter a public service API;
+  functions and cannot construct `ValidToolchain` or enter the pipeline;
 - preset-registry work: accepted packages, unsupported versions,
   unresolved assets, legacy documents, and an invalid unselected package;
 - inheritance: multiple unrelated valid compositions and rejected missing,
@@ -390,17 +383,17 @@ Implementation tests cover the owning boundaries:
   representatives;
 - composition: stable dependency/layer/reference ordering, stable policy-set
   union, and rejection of unregistered policy or attempted compiler-lock weakening;
-- validated accessor: only safety-gate evidence can construct
-  `ValidToolchain`; repeated `toolchain()` calls return the same borrowed value
-  without I/O or allocation, and no generic or pre-safety accessor exists;
+- validated value: only safety-gate evidence can construct `ValidToolchain`;
+  repeated envelope reads return the same borrowed value without I/O or
+  allocation, and no generic or pre-safety accessor exists;
 - read-only ownership: filesystem/process/model/network/state spies proving
   source reads only, one post-composition safety-valid published view, no
-  service on every earlier or failed branch, no reload or mutation path, and
+  published value on every earlier or failed branch, no reload or mutation path, and
   cleanup on every outcome;
 - logging: the selected compiled workflow's registry-validated shortcode on
   existing F0002 action lifecycle events after binding, the typed non-logging
   diagnostic before binding, no
-  service-selected message/path/body or competing logger, and fail-closed
+  F0003-selected message/path/body or competing logger, and fail-closed
   logging error; and
 - packaging: clean native-executable bootstrap with only target-owned runtime
   configuration, project toolchain layer, and installed preset registry.

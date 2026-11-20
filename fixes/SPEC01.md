@@ -206,7 +206,7 @@ exhaustion, never budget, in two modes, each reported with no lever:
 
 **Engine track, in gaps:** E2 stops
 at its three preparation stages (decided 14 November 2026); E3's feature logging waits on its
-preconditions (§5 E3); the evaluator partial-body gap (§5 E5) in any gap; E7 last. E0 is on hold.
+preconditions (§5 E3); E7 last. E0 is on hold.
 **Tests:** T2 and T3 in any gap; T4 with
 E1–E4. **Adjudication:** H1 (the evaluate-e2e skill) for every set.
 **Human:** H2 when required source review is labelled or review returns; H3 when the user
@@ -399,19 +399,22 @@ line means beyond the advisory evaluate-e2e link check.
 
 **Kept 15 November 2026** (record: [Z_SPEC01](Z_SPEC01.md) Q17). Open parts only:
 
-- **Never modified:** holds. Principles are read through a read-only source adapter
-  (`src/adapters/filesystem/principle_source.zig`), the only principle capability is
-  `principle_read` (`workflow_capability.zig:18`), and path validation rejects every project
-  operation against the semantic-principles root (11-path-validation.md:20). Every future step
-  (Plan, Implement, init, repair) keeps it. ADR 0015 records it (0015:36); design.md §3.3
-  doesn't (adding it is a design edit awaiting approval).
+- **Never modified:** holds in code. Principles are read through a read-only source adapter
+  (`src/adapters/filesystem/principle_source.zig`) and the only principle capability is
+  `principle_read` (`workflow_capability.zig:18`), pinned at `architecture_test.zig:3096`.
+  Path validation's rejection of every project operation against the semantic-principles root
+  (11-path-validation.md:20) is the design rule for the Plan and Implement stages; no project-path
+  validator exists in `src/` yet. Every future step (Plan, Implement, repair) keeps it. The reserved
+  `sdde init` may only create a principle from a template, never modify or overwrite an existing
+  one (09-configuration.md:323-326). ADR 0015 records it (0015:40), and design.md §3.3 invariant 33
+  states it (added 20 November 2026; user: "yes to 2 and 5").
 - **Watch:** stack or technology content in a record, and an invented entity from principle text, are
   unsupported additions; none appeared in 9 runs. The benefit is not demonstrated, since no rubric
   criterion scores principle consistency; a criterion would be a rubric change. Each records request
   costs about 5.5k to 6k tokens more, once per group.
 - **Open (Plan gate, ADR 0034):** whether a Spec generated under an older principle registry
   is stale at Plan's gate. A changed registry already invalidates plan and task approvals
-  (09-configuration.md:367); Spec regenerates every run.
+  (09-configuration.md:368); Spec regenerates every run.
 
 ### Q21. Behaviour claims need statements
 
@@ -506,18 +509,15 @@ The policy-transition coordinator's authority is decided on both sides (prior-ru
 Implemented and kept 14 November 2026; record in [Z_SPEC01](Z_SPEC01.md) E5, with DE5 (decided 14
 November 2026, user: "yes", to the E5 preflight's ten recommendations). Open:
 
-- **Evaluator partial bodies disappear** (a separate item; harness only; matters for H3): carry the
-  transport's `ResponseBody` bytes and completeness through `test/harness/provider.zig:27-34`,
-  `bedrock.zig` (`:67-70`), `http.zig` (`:99-101`) and `evaluation_trace.zig`, with redaction and
-  fault tests.
 - **Correction location** (dropped from E5, DE5 7: it changes model-facing correction bytes, has no
   scored defect and has not occurred since D13.1; it needs its own phase if it ever does): a
   SyntaxError correction tells the model the malformed opening (all four in the 18 runs of 31 October
   said `byte_offset 4`, key `"{"`), not the unterminated string: `model_envelope.zig:68` drops the
   re-parse diagnostic and `:75` reports the original, as §22.6 requires (22-repair.md:526-527). Fixing
   it amends §22.6 and changes correction requests.
-- **Workflow-definition rejection detail** (a separate item, DE5 8): F0005 §9.
-- **Further payload-free failures,** by area: §10 C4.
+- **Further payload-free failures,** by area: §10 C4. The workflow-definition and provider areas
+  were built 20 November 2026 ([Z_SPEC01](Z_SPEC01.md) "Workflow-definition rejection detail" and
+  "Provider failure detail").
 - **First cause in the log and CLI:** the feature log's terminal event keeps the terminal code only,
   so a production run's first cause is visible in the harness report, step event and trace and not in
   the log or the CLI; showing it there needs an event field and an F0002 change.
@@ -596,8 +596,9 @@ counts input tokens that a failed Claude stream reported in `message_start`.
 
 ### T2. Test decoupling
 
-Built 19 November 2026 ([Z_SPEC01](Z_SPEC01.md)). **Open:** the unread dump files of §10 C47;
-and copies shorter than 25 characters, which the count of 32 didn't cover.
+Built 19 November 2026; the unread measurement dumps went and the copies shorter than 25
+characters were swept 20 November 2026 ([Z_SPEC01](Z_SPEC01.md)). Nothing open; the unread test
+outputs that remain are §10 C47.
 
 ### T3. Coverage gaps (B5, B7)
 
@@ -907,26 +908,32 @@ again after each failure.
 
 **C4. Most failures report one payload-free name (adds to E5).**
 
-- **Provider and authorization:** the provider result holds a typed cause and a transport
-  diagnostic (`llm_provider_operation.zig:170-180`, `:193-205`), but nothing logs or reports
-  them: outside `domain/` and `adapters/` the cause is only built or compared
-  (`workflow_provider_authorization.zig:80-81`; grep). `model.completed` has no cause field and
-  is emitted with a null reason (`model_completed` in `log_event_registry.zig`;
-  `logModelCompletion` in `workflow_pipeline_runner.zig`). The CLI prints the outcome tag, then
-  an operation error name or a candidate diagnostic if the run recorded one
-  (`src/main.zig:43-45`). A missing key and a malformed one are the same case
-  (`provider_api_key.zig:35-37`), and the response decode diagnostic is dropped
-  (`provider_response_assembly.zig:127`). So a missing key, HTTP 401, 403 or 429 and a DNS or TLS
-  failure should all read `failed`. Not executed.
-- **Workflow definition:** every schema, compile and graph rejection is one of two codes with
-  no step, key or rule (`workflow_graph_compilation.zig`, `workflow_graph_validation.zig` and
-  `workflow_definition_schema.zig` return one `invalid()` error each; the startup routine maps
-  the failing step to its code in `startup_routine.zig` `code`). A key missed from a
+- **Provider and authorization (built 20 November 2026, Z_SPEC01):** the run report and the CLI
+  carry the last call's typed failure (contract 08). Still open: the feature log's
+  `model.completed` has no cause field (an F0002 change); a missing key and a malformed one are
+  the same case (`provider_api_key.zig:35-37`), so both read `authentication_failed`; the
+  response decode diagnostic is still dropped (`provider_response_assembly.zig:127`); and a
+  provider stop (`output_limit`, `context_limit`) and a runner rejection such as retry
+  exhaustion print no provider line.
+- **Workflow definition (built 20 November 2026, Z_SPEC01):** a rejection used to be one of two
+  codes with no step, key or rule. It now prints a rule class, the definition's path and the
+  step or resource after its code; the schema, compile and graph owners still return one error
+  each, and a rule is one per section or stage, so a finer cause (the data key a data-flow
+  rejection names) is not reported. A key missed from a
   hand-written invalidation list (`source_omission.zig:343`, `:345`; `required_authority.zig:124`)
   fails the same way, because the data-flow check rejects producing a key that is still
   available (`workflow_data_flow.zig:87-95`).
-- **Result schemas and compositions:** 86 and 48 `invalid()` lines, one error each
-  (`model_result_schema.zig`, `json_composition.zig`).
+- **Result schemas and compositions:** a rejected resource already prints its file and
+  `resource=<id>` under `compiled_resources` (`workflow_graph_compilation.zig:264`, `:276`); the
+  cause inside it is not reported, because `model_result_schema.zig` (94 `invalid()` sites) and
+  `json_composition.zig` (47) return one error each. About 40 of the schema sites and 35 of the
+  composition sites are startup compile; the rest are request-time restriction and projection
+  (`restrictFieldPolicies`, `narrowChoice`, `projectVariants`), which F0005 §9 does not govern.
+  **Not built; decision needed:** a cause per profile section needs a typed slot through the four
+  compiler-port functions and about nine new rule classes, so it amends F0005 §9 ("a rule names a
+  stage, not a cause"; "never per call site"), 13-01 and ADR 0032, and adds an argument to every
+  test call of the compilers (not counted). Four unrecorded returns in `compileResources`
+  (`:253`, `:256`, `:257`, `:275`) print the step only.
 - **Reference ingestion:** ten typed reasons (`reference_ingestion.zig:42-53`) are discarded;
   each becomes `InvalidReferenceAccounting` (`validateAccounting` in
   `prepare_reference_evidence.zig`), against ADR 0036:198-200 ("fails at ingestion with a typed
@@ -1171,9 +1178,7 @@ definition.
   `checkProseFields` and its helper; `model_result_schema.zig:13` `ChoiceBoundError`.
 - `PipelineEnvelope.place` (`pipeline_envelope.zig:75-84`); `DataKey.feature_log_recovery` and
   `.log_drop_evidence` (`pipeline.zig:133`, `:145`).
-- `ValidToolchain.packages()` (`toolchain_safety.zig:10-12`); `ToolChainService`
-  (`toolchain_service.zig`; two architecture pins and `workflow_tests.zig:508-509` use it), which
-  F0003:206 says the runner constructs. Recommended: delete it with those uses and that claim, as one change with C39.
+- `ValidToolchain.packages()` (`toolchain_safety.zig:10-12`); `workflow_tests.zig:508-509` calls it.
 - `generation.schema.json:481-492` `repair_record_functional_requirement` has no reference in
   the schema or the code. `attributed_value` (`:3-14`) has the same body as `value`
   (`:493-504`); code selects each by name (`switch (kind)` in `specification_repair.zig`).
@@ -1301,7 +1306,7 @@ default summary mode prints no success line; only `--summary line` shows `N/N st
 succeeded; M/M tests passed`. **Owner:** the tests that write to the real stderr.
 
 **C39. Design text the code contradicts (adds to §8 "Design–code conflicts").** F0100:720
-("Protected operations declare that gate"; C30). F0003:206 (C27). 26-security.md:224-225 says
+("Protected operations declare that gate"; C30). 26-security.md:224-225 says
 a log row is encoded before the lock is taken; `feature_log_orchestrator.zig:17-22` takes the
 lock first. 13-05:209 and ADR 0021:24-25 predate the source-preservation projection
 (`Source.acceptsProjection` accepts it).
@@ -1357,9 +1362,11 @@ comment containing "plan", "hard" or "reference" fails a test with no boundary c
 - A `*_test.zig` runs only if `tests.zig`, `src/root.zig` or `src/runtime_tests.zig` imports it.
   Nothing checks reachability: `test-build-registration` checks test executables on a synthetic
   graph (traced).
-- Each integration run writes about 1,000 files that nothing reads: 18 dump prefixes and an
-  unconditional step trace for every scenario (`workflow_tests.zig:1728-1729`; traced).
-  Adds to T2.
+- Tests still write outputs that no test or build step reads: a step trace for every scenario
+  (`workflow_tests.zig:1353`; Z_SPEC01 uses it as structural-equivalence evidence) and calibration
+  reports under `.zig-cache/` (`authoring-comparison`, `authoring-associations`,
+  `representation-admission`, `semantic-simplicity/phase0`; versioned report schemas). Whether
+  they stay is the user's call. Adds to T2.
 - `src/test_fixtures/authoring_association_calibration.zig:16` reads a retained run of 11 October
   2026 that is no longer under `zig-out/e2e-spec/`, so part of a unit test returns `.unavailable`
   (`:297`) and is skipped.

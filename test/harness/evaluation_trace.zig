@@ -37,13 +37,15 @@ pub const Trace = struct {
         try self.store.write(.evaluation, self.calls, .outcome, bytes);
     }
     fn save(self: *Trace, result: provider.Observation) !void {
-        if (result.response_body) |bytes| try self.store.write(.evaluation, self.calls, .response, bytes);
+        if (result.response_body) |body| try self.store.write(.evaluation, self.calls, .response, body.bytes);
         if (result.payload) |bytes| try self.store.write(.evaluation, self.calls, .model_output, bytes);
         const bytes = try std.json.Stringify.valueAlloc(self.store.allocator, .{
             .identity = result.identity,
             .request_id = result.request_id,
             .usage = result.usage,
             .failure = result.failure,
+            // Null when the transport returned no body; false when what arrived is only a prefix.
+            .response_complete = if (result.response_body) |body| body.complete else null,
         }, .{});
         defer self.store.allocator.free(bytes);
         try self.store.write(.evaluation, self.calls, .outcome, bytes);

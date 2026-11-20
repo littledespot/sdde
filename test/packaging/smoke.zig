@@ -138,7 +138,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_unregistered.clearEnvironment();
     denied_unregistered.expectExitCode(1);
     denied_unregistered.expectStdOutEqual("");
-    denied_unregistered.expectStdErrEqual("WORKFLOW_AUTHORITY_INVENTORY_INVALID\n");
+    // The unregistered file is an inventory resource no definition declares, and the rejection names the file.
+    denied_unregistered.expectStdErrEqual("WORKFLOW_AUTHORITY_INVENTORY_INVALID: resource_binding; transactions/unregistered.json\n");
 
     // The request lifecycle is the engine's `request-model` step (ADR 0030): neither an
     // operation of the removed lifecycle nor one of its stages is a selectable operation.
@@ -164,7 +165,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_removed_id.clearEnvironment();
     denied_removed_id.expectExitCode(1);
     denied_removed_id.expectStdOutEqual("");
-    denied_removed_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_removed_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID: step_operation; account.workflow.yaml; step=account\n");
 
     const stage_id_directory = b.addTempFiles();
     const stage_id_executable = stage_id_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
@@ -187,15 +188,17 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_stage_id.clearEnvironment();
     denied_stage_id.expectExitCode(1);
     denied_stage_id.expectStdOutEqual("");
-    denied_stage_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_stage_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID: step_operation; stage.workflow.yaml; step=stage\n");
     denied_removed_id.step.dependOn(&denied_stage_id.step);
 
-    for ([_][2][]const u8{
-        .{ "build-specification-authority-requirements", "ok: end.ok, blocked: end.blocked" },
-        .{ "build-required-authority-ledger", "ok: end.ok, blocked: end.blocked" },
-        .{ "parse-required-authority-observations", "ok: end.ok, blocked: end.blocked" },
-        .{ "reconcile-required-authorities", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked" },
-        .{ "validate-required-authority-reconciliation", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked" },
+    // Each is rejected for what its contract needs: the data it requires that nothing produces, or an outcome it
+    // does not declare.
+    for ([_][3][]const u8{
+        .{ "build-specification-authority-requirements", "ok: end.ok, blocked: end.blocked", ": data_flow; authority.workflow.yaml" },
+        .{ "build-required-authority-ledger", "ok: end.ok, blocked: end.blocked", ": data_flow; authority.workflow.yaml" },
+        .{ "parse-required-authority-observations", "ok: end.ok, blocked: end.blocked", ": data_flow; authority.workflow.yaml" },
+        .{ "reconcile-required-authorities", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked", ": declared_outcomes; authority.workflow.yaml; step=check" },
+        .{ "validate-required-authority-reconciliation", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked", ": declared_outcomes; authority.workflow.yaml; step=check" },
     }) |contract| {
         const project = b.addTempFiles();
         const binary = project.addCopyFile(executable.getEmittedBin(), executable.out_filename);
@@ -211,7 +214,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         denied.clearEnvironment();
         denied.expectExitCode(1);
         denied.expectStdOutEqual("");
-        denied.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+        denied.expectStdErrEqual(b.fmt("WORKFLOW_GRAPH_COMPILE_INVALID{s}\n", .{contract[2]}));
         denied_stage_id.step.dependOn(&denied.step);
     }
 
@@ -323,7 +326,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_progress.clearEnvironment();
     denied_progress.expectExitCode(1);
     denied_progress.expectStdOutEqual("");
-    denied_progress.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_progress.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID: declared_outcomes; hello.workflow.yaml; step=run\n");
     missing_config_command.step.dependOn(&denied_progress.step);
     {
         const directory = b.addTempFiles();
@@ -385,12 +388,13 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.clearEnvironment();
         check.expectExitCode(1);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (variant == .valid) "failed\n" else "LLM_PROVIDER_REGISTRY_INVALID\n");
+        // Without a key the call is never sent: the run says why it failed, after the outcome.
+        check.expectStdErrEqual(if (variant == .valid) "failed\nprovider_failure: authentication_failed; delivery=not_sent; retry=never\n" else "LLM_PROVIDER_REGISTRY_INVALID\n");
         missing_config_command.step.dependOn(&check.step);
     }
-    for ([_][2][]const u8{
-        .{ "invoke: core.empty-invocation", "invoke: core.empty-invocation@1" },
-        .{ "use: core.noop", "use: core.noop@1" },
+    for ([_][3][]const u8{
+        .{ "invoke: core.empty-invocation", "invoke: core.empty-invocation@1", ": definition_header; hello.workflow.yaml" },
+        .{ "use: core.noop", "use: core.noop@1", ": steps; hello.workflow.yaml; step=run" },
     }) |change| {
         const directory = b.addTempFiles();
         const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
@@ -404,7 +408,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         rejected.clearEnvironment();
         rejected.expectExitCode(1);
         rejected.expectStdOutEqual("");
-        rejected.expectStdErrEqual("WORKFLOW_DEFINITION_SCHEMA_INVALID\n");
+        rejected.expectStdErrEqual(b.fmt("WORKFLOW_DEFINITION_SCHEMA_INVALID{s}\n", .{change[2]}));
         missing_config_command.step.dependOn(&rejected.step);
     }
     for ([_]struct { selector: []const u8, rejected: bool }{

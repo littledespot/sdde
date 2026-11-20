@@ -64,9 +64,13 @@ pub const Adapter = struct {
             .deadline_monotonic_ms = deadline,
         });
         var result = try response(a, received);
-        if (received == .received) {
-            result.request_id = received.received.request_id;
-            result.response_body = received.received.body;
+        // Every byte the transport received is evidence, complete or not; only a received response has a request ID.
+        switch (received) {
+            .received => |value| {
+                result.request_id = value.request_id;
+                result.response_body = .{ .bytes = value.body, .complete = true };
+            },
+            .failed => |failure| result.response_body = failure.body,
         }
         // Workflow identity remains the authorized transport target. Provider
         // response metadata is retained in the raw evidence, not used as authority.

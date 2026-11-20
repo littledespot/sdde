@@ -1,15 +1,19 @@
 const std = @import("std");
 const definition = @import("workflow_definition.zig");
 const inventory = @import("workflow_inventory.zig");
+const rejection = @import("definition_rejection.zig");
 
 pub const Error = error{WorkflowAuthorityInventoryInvalid};
 
 /// Binds every definition's declared resource to one inventory resource, and requires every
-/// inventory resource to be declared by some definition.
+/// inventory resource to be declared by some definition. A rejection records the definition and the
+/// resource it names in `evidence`, when one is supplied; an inventory resource no definition declares
+/// names neither.
 pub fn resolve(
     allocator: std.mem.Allocator,
     inventory_value: inventory.Inventory,
     definitions: []const definition.Definition,
+    evidence: ?*rejection.Slot,
 ) Error!inventory.ResourceManifest {
     var binding_count: usize = 0;
     for (definitions) |item| {
@@ -20,9 +24,9 @@ pub fn resolve(
     for (definitions) |item| {
         for (item.resources, 0..) |resource, index| {
             for (item.resources[0..index]) |prior| {
-                if (std.mem.eql(u8, prior.name, resource.name)) return invalid();
+                if (std.mem.eql(u8, prior.name, resource.name)) return unbound(evidence, item.source_ordinal, resource.id.bytes);
             }
-            const ordinal = findResourceOrdinal(inventory_value, resource.name) orelse return invalid();
+            const ordinal = findResourceOrdinal(inventory_value, resource.name) orelse return unbound(evidence, item.source_ordinal, resource.id.bytes);
             bindings[binding_index] = .{
                 .definition_ordinal = item.source_ordinal,
                 .resource_id = resource.id,
@@ -38,7 +42,8 @@ pub fn resolve(
             referenced = true;
             break;
         };
-        if (!referenced) return invalid();
+        // The file is an inventory entry no definition declares, so the entry names it.
+        if (!referenced) return unbound(evidence, ordinal, null);
     }
     return .{
         .bindings = bindings,
@@ -63,6 +68,12 @@ fn bindingLessThan(_: void, left: inventory.ResourceBinding, right: inventory.Re
 
 fn invalid() Error {
     return error.WorkflowAuthorityInventoryInvalid;
+}
+
+/// The family's one error with the binding rule, the definition and the resource recorded.
+fn unbound(evidence: ?*rejection.Slot, ordinal: ?u16, resource: ?[]const u8) Error {
+    rejection.record(evidence, .resource_binding, ordinal, resource);
+    return invalid();
 }
 
 test "all regular resources must be explicitly and uniquely declared" {
@@ -101,10 +112,28 @@ test "all regular resources must be explicitly and uniquely declared" {
         .resources = &declared,
         .steps = &.{},
     };
-    const manifest = try resolve(arena.allocator(), inventory_value, &.{item});
+    const manifest = try resolve(arena.allocator(), inventory_value, &.{item}, null);
     try std.testing.expectEqual(@as(u16, 2), manifest.bindings[0].resource_ordinal);
 
     var missing = item;
     missing.resources = &.{};
-    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, resolve(arena.allocator(), inventory_value, &.{missing}));
+    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, resolve(arena.allocator(), inventory_value, &.{missing}, null));
+
+    // An inventory resource no definition declares is a binding rejection that names that file by its
+    // inventory entry and no step or resource of a definition.
+    var undeclared: rejection.Slot = .{};
+    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, resolve(arena.allocator(), inventory_value, &.{missing}, &undeclared));
+    try std.testing.expectEqual(rejection.Rule.resource_binding, undeclared.evidence.rule.?);
+    try std.testing.expectEqual(@as(u16, 2), undeclared.evidence.ordinal.?);
+    try std.testing.expect(undeclared.evidence.subject == null);
+    // A declared resource the inventory does not hold names the definition and the resource.
+    var absent_declared = declared;
+    absent_declared[0].name = "prompts/other.md";
+    var unbound_item = item;
+    unbound_item.resources = &absent_declared;
+    var not_in_inventory: rejection.Slot = .{};
+    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, resolve(arena.allocator(), inventory_value, &.{unbound_item}, &not_in_inventory));
+    try std.testing.expectEqual(rejection.Rule.resource_binding, not_in_inventory.evidence.rule.?);
+    try std.testing.expectEqual(@as(u16, 1), not_in_inventory.evidence.ordinal.?);
+    try std.testing.expectEqualStrings("prompt", not_in_inventory.evidence.subject.?.text());
 }

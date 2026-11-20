@@ -734,7 +734,7 @@ test "runner rejects tampered accounting permissions and registry rejects hidden
         step.runner_accounting = .none;
     };
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
     var runner = fixture.runner(&tampered, std.testing.allocator);
     defer runner.deinit();
     var harness: Harness = .{ .runner = &runner };
@@ -916,7 +916,7 @@ test "assignment registration and compiled graphs reject hidden authority" {
             if (remove_permission) step.runner_accounting = .none else step.parameters = &.{.{ .id = .{ .bytes = "kind" }, .value = .{ .enumeration = "inference" } }};
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         var harness: Harness = .{ .runner = &runner };
@@ -1074,6 +1074,10 @@ test "authorization failure facts and cancellation stay distinct and follow decl
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(@as(workflow.OutcomeTag, if (plan == .cancelled) .cancelled else .failed), harness.run());
         const result = (try authorizationResult(&runner)).outcome();
+        // A call that is never sent fails in its authorization: that closed cause is the run's, and a cancellation is none.
+        if (plan == .failed) {
+            try std.testing.expectEqualDeep(@import("domain/provider_failure_detail.zig").Detail{ .cause = std.meta.stringToEnum(provider.ProviderFailureCause, @tagName(plan.failed)).?, .retry_class = .never, .delivery = .not_sent }, runner.last_provider_failure.?);
+        } else try std.testing.expect(runner.last_provider_failure == null);
         if (plan == .failed) {
             try std.testing.expectEqual(@as(provider.ProviderFailureCause, if (plan.failed == .authentication_failed) .authentication_failed else .authorization_denied), result.failed.cause);
             try std.testing.expectEqual(.not_sent, result.failed.delivery);
@@ -1342,7 +1346,7 @@ test "authorization compiler and registry reject hidden producers and a forged d
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         var harness: Harness = .{ .runner = &runner };
@@ -1887,7 +1891,7 @@ test "pre-call request closure refuses a forged compiled contract where it runs"
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
@@ -2250,7 +2254,7 @@ test "pre-call termination refuses a forged compiled contract where it runs" {
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "terminate" }).rejected);
@@ -2437,7 +2441,7 @@ test "request lifecycle cancellation allocation faults and compiler tampering fa
         step.parameters = &.{};
     };
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
 }
 
 const FaultyRequestLifecycle = struct {
@@ -2746,7 +2750,7 @@ test "provider invocation accounting permission and exact compiled profile canno
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try prepareInvocable(&runner);
@@ -5451,7 +5455,7 @@ test "request closure refuses a forged compiled contract where it runs" {
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
@@ -5863,7 +5867,7 @@ test "provider completion refuses a forged compiled contract where it runs" {
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "complete-operation" }).rejected);
@@ -6261,7 +6265,7 @@ test "compiled payload validation cannot bypass its candidate or add effects" {
                 }
             };
             tampered.authority.steps = steps;
-            try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
             var runner = fixture.runner(&tampered, std.testing.allocator);
             defer runner.deinit();
             try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).rejected);
@@ -6307,7 +6311,11 @@ test "YAML observation validation preserves every stop and provider failure with
         fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = 8, .output_tokens = 3 } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
+        // A failure an earlier call left is not this run's once a later call's result replaces it.
+        runner.last_provider_failure = .{ .cause = .timeout, .retry_class = .never, .delivery = .not_sent };
         try std.testing.expectEqual(.failed, harness.run());
+        // A call the provider stopped is not a failed call.
+        try std.testing.expect(runner.last_provider_failure == null);
         try std.testing.expectEqual(reason, (try observationResult(&runner)).outcome().validated.result().stopped);
         try std.testing.expectEqual(@as(u128, 11), runner.tokenLedger().committed());
         try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
@@ -6328,11 +6336,31 @@ test "YAML observation validation preserves every stop and provider failure with
         try std.testing.expectEqual(.failed, harness.run());
         const evidence = (try observationResult(&runner)).outcome().validated;
         try std.testing.expectEqualDeep((try invocationResult(&runner)).outcome().?.observation.failed, evidence.result().failed);
+        // The run reports the call's own closed facts, and nothing else of it.
+        try std.testing.expectEqualDeep(@import("domain/provider_failure_detail.zig").Detail{ .cause = .request_rejected, .retry_class = .policy_eligible, .delivery = delivery }, runner.last_provider_failure.?);
         try std.testing.expect(evidence.usage() == null);
         try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
         try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
         try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
         try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+    }
+    // A body the provider returned but the engine rejects is a failure of the validated call, with its content
+    // diagnostic, though the raw invocation result is a completed one.
+    {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try observationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan = .{ .complete = .{ .content = "\xff", .input_tokens = 5, .output_tokens = 2 } };
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.failed, harness.run());
+        const failure = (try observationResult(&runner)).outcome().validated.result().failed;
+        try std.testing.expectEqual(provider.ProviderContentDiagnostic.invalid_content, failure.content.?);
+        try std.testing.expectEqualDeep(@import("domain/provider_failure_detail.zig").Detail{ .cause = .response_invalid, .retry_class = .never, .delivery = .response_received, .content = .invalid_content }, runner.last_provider_failure.?);
     }
 }
 
@@ -6515,7 +6543,7 @@ test "compiled observation validation cannot hide its dependencies or add a capa
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "validate-response" }).rejected);
@@ -7091,7 +7119,7 @@ pub const Fixture = struct {
         var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
         var schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const raw = try @import("application/startup_routine.zig").steps.parseWorkflows(parser.parser(), allocator, &.{.{ .ordinal = 1, .bytes = bytes }});
-        const definitions = try @import("domain/workflow_definition_schema.zig").validate(allocator, raw);
+        const definitions = try @import("domain/workflow_definition_schema.zig").validate(allocator, raw, null);
         const extra = if (composition_bytes != null) "composition.json" else if (include_static_input) "input.txt" else "context.json";
         const extra_body = composition_bytes orelse if (include_static_input) input_bytes else static_context orelse "";
         const paths = [_][]const u8{ "request.workflow.yaml", "prompt.md", "result.json", extra, "context.json" };
@@ -7110,10 +7138,10 @@ pub const Fixture = struct {
             5 => &.{ 2, 3, 4, 5 },
             else => unreachable,
         } };
-        const manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, inv, definitions);
+        const manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, inv, definitions, null);
         const captures = [_]inventory.Capture{ .{ .ordinal = 2, .bytes = prompt_bytes }, .{ .ordinal = 3, .bytes = result_schema }, .{ .ordinal = 4, .bytes = extra_body }, .{ .ordinal = 5, .bytes = static_context orelse "" } };
-        const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&self.registry, schema_parser.compiler(), allocator, definitions, inv, manifest, captures[0 .. count - 1]);
-        _ = try @import("domain/workflow_graph_validation.zig").validate(allocator, graphs, &self.registry);
+        const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&self.registry, schema_parser.compiler(), allocator, definitions, inv, manifest, captures[0 .. count - 1], null);
+        _ = try @import("domain/workflow_graph_validation.zig").validate(allocator, graphs, &self.registry, null);
         if (self.keep_registry) {
             // What the startup builds from the validated graphs; the registry keeps its own copy. Its
             // inventory is sorted by path, which the fixture's declaration order is not, so the same
@@ -7147,7 +7175,7 @@ pub const Fixture = struct {
             self.registry_owner = try @import("domain/workflow_registry.zig").createValidated(std.testing.allocator, .{
                 .inventory = ordered,
                 .definition_captures = &definition_captures,
-                .resource_manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, ordered, definitions),
+                .resource_manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, ordered, definitions, null),
                 .resource_captures = kept[0 .. count - 1],
                 .definitions = definitions,
                 .graphs = graphs,
@@ -9166,11 +9194,11 @@ test "request-model: a recorded ceiling that leaves out the step's allowance is 
     kernelObserver(&fixture);
     const graph = try fixture.compile(kernel_yaml);
     const validation = @import("domain/workflow_graph_validation.zig");
-    _ = try validation.validate(fixture.arena.allocator(), &.{graph.*}, &fixture.registry);
+    _ = try validation.validate(fixture.arena.allocator(), &.{graph.*}, &fixture.registry, null);
     // The ceiling before the allowance was counted was the step count alone.
     var stale = graph.*;
     stale.authority.maximum_step_executions = graph.authority.steps.len;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{stale}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{stale}, &fixture.registry, null));
 }
 
 test "request-model: the compiler admits a retry limit up to the kernel's one maximum and no further" {
@@ -9945,7 +9973,7 @@ test "request-model: a stage set on another operation is rejected at graph valid
     kernelObserver(&fixture);
     const compiled = try fixture.compile(kernel_yaml);
     const validation = @import("domain/workflow_graph_validation.zig");
-    _ = try validation.validate(fixture.arena.allocator(), &.{compiled.*}, &fixture.registry);
+    _ = try validation.validate(fixture.arena.allocator(), &.{compiled.*}, &fixture.registry, null);
     const steps = try fixture.arena.allocator().dupe(compilation.CompiledStep, compiled.authority.steps);
     const request_index = for (steps, 0..) |step, index| {
         if (std.mem.eql(u8, step.id.bytes, "request")) break index;
@@ -9954,7 +9982,7 @@ test "request-model: a stage set on another operation is rejected at graph valid
     steps[request_index].operation_id = .{ .bytes = "invoke-model" };
     var tampered = compiled.*;
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
 }
 
 test "request-model: graph validation checks each stage as the step it is" {
@@ -9978,7 +10006,7 @@ test "request-model: graph validation checks each stage as the step it is" {
     try std.testing.expect(kernel.validProjection(steps[request_index]));
     var tampered = compiled.*;
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(a, &.{tampered}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(a, &.{tampered}, &fixture.registry, null));
 }
 
 test "request-model: a stage whose compiled capabilities are not its registered ones is refused where it runs" {

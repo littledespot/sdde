@@ -301,7 +301,7 @@ Current native types and their governing documentation:
 | Configured path validation | [configured_path_policy.zig](../src/domain/configured_path_policy.zig) | [F0004](features/F0004-BootstrapRootRegistryService.md) |
 | Workflow definitions | [workflow_definition.zig](../src/domain/workflow_definition.zig) | [F0005](features/F0005-WorkflowDefinitionRegistryService.md) |
 | Compiled workflow registry | [workflow_registry.zig](../src/domain/workflow_registry.zig) | [ADR 0003](decisions/0003-generic-workflow-engine.md) |
-| Toolchain policy | [toolchain.zig](../src/domain/toolchain.zig) | [F0003](features/F0003-ToolChainService.md) |
+| Toolchain policy | [toolchain.zig](../src/domain/toolchain.zig) | [F0003](features/F0003-Toolchain.md) |
 | Provider registry and binding | [F0006 source references](features/F0006-LLMProviderInterface.md) | [ADR 0004](decisions/0004-model-provider-bootstrap.md) |
 | Request identity and handoff | [model_request_identity.zig](../src/domain/model_request_identity.zig), [model_request_handoff.zig](../src/domain/model_request_handoff.zig) | [ADR 0012](decisions/0012-workflow-owned-model-request.md) |
 | Feature directory and artifact paths | [feature_directory.zig](../src/domain/feature_directory.zig), [workflow_artifact_registry.zig](../src/domain/workflow_artifact_registry.zig) | [ADR 0010](decisions/0010-explicit-feature-directory.md) |
@@ -1267,7 +1267,7 @@ provider-owned call limits.
 
 See [§9.1](contracts/09-configuration.md#91-required-configuration-shape) for
 configured roots and engine-derived children,
-[F0003](features/F0003-ToolChainService.md) for mechanical project policy,
+[F0003](features/F0003-Toolchain.md) for mechanical project policy,
 and [F0006](features/F0006-LLMProviderInterface.md) for provider catalogue joins.
 Templates remain inert; `init` is outside the initial suite.
 
@@ -1278,7 +1278,7 @@ Templates remain inert; `init` is outside the initial suite.
 ## 15. Preset identity and composition
 
 Samples 15–20 illustrate proposed compiled policy concepts, not the current
-authored preset YAML. [F0003 §3](features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+authored preset YAML. [F0003 §3](features/F0003-Toolchain.md#3-closed-loading-and-publication-contract)
 owns the accepted project/preset document shape, composition and safety gate.
 These examples do not add runtime fields or imply environment/parser/command
 features are implemented.

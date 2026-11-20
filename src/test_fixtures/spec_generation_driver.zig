@@ -45,7 +45,6 @@ pub const Driver = struct {
     admitted_losses: std.EnumArray(std.meta.Tag(@import("../domain/source_omission.zig").Location), usize) = .initFill(0),
     generation_calls: usize = 0,
     carried_summaries: usize = 0,
-    measurement_prefix: ?[]const u8 = null,
     /// Records every executed step for structural-equivalence evidence.
     trace: ?*@import("workflow_step_trace.zig").Trace = null,
     source_gaps: bool = false,
@@ -243,25 +242,6 @@ pub const Driver = struct {
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
             std.testing.expectEqualStrings(if (current_request.id().purpose == .atomic_repair) "repair" else "spec_generation", current_request.prepared().?.binding_id.slot_id.bytes) catch |err| return self.hookFailed(err);
-            if (self.measurement_prefix) |prefix| if (self.source_loss != null or self.brief_text != null or self.global_sequence != null or self.summary_sequence != null or current_request.part() != null or current_request.id().immutable_unit_owner_id == .semantic_review or current_request.id().immutable_unit_owner_id == .specification_unit) {
-                const Part = struct { kind: []const u8, text: []const u8 };
-                const parts = arena.allocator().alloc(Part, current_request.prepared().?.content.len) catch unreachable;
-                for (parts, current_request.prepared().?.content) |*part, content_part| part.* = .{ .kind = @tagName(content_part), .text = content_part.bytes() };
-                const measured = std.json.Stringify.valueAlloc(arena.allocator(), .{
-                    .purpose = @tagName(current_request.id().purpose),
-                    .compiled_steps = self.runner.selected.graph.authority.steps.len,
-                    .content = parts,
-                    .schema = current_request.prepared().?.response_schema.modelBytes(),
-                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, measuredFamily(current_request), .{ .tokens = 16000 }) catch unreachable,
-                    .composition = if (current_request.part()) |part| .{
-                        .part = part.plan.parts()[part.part].id.bytes,
-                        .canonical_schema = part.plan.completeSchema().modelBytes(),
-                        .base_input = part.base.body(),
-                    } else null,
-                }, .{}) catch unreachable;
-                const path = std.fmt.allocPrint(arena.allocator(), "{s}-{d}-{d}.json", .{ prefix, self.calls, attempt }) catch unreachable;
-                std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = path, .data = measured }) catch unreachable;
-            };
             const phase = if (current_request.packet()) |packet| if (packet.resultDefinition()) |definition|
                 (if (definitions.Reconciliation.parse(definition)) |stage_definition| switch (stage_definition) {
                     .dispositions_assignment => "dispositions",

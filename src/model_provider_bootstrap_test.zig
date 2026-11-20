@@ -250,6 +250,7 @@ fn compileOne(
         empty_inventory,
         .{ .bindings = &.{}, .resource_ordinals = &.{} },
         &.{},
+        null,
     );
     return graphs[0];
 }

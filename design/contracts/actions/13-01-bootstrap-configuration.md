@@ -8,7 +8,7 @@ One entry per registered operation or engine-routine step. A registered operatio
 **Writes** and **Side effect** are its `NodeContract`; a routine step states what it takes and
 returns as typed values, and its **Side effect**. Entries marked "Proposed, no code" name a
 responsibility no code registers.
-[F0003](../../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+[F0003](../../features/F0003-Toolchain.md#3-closed-loading-and-publication-contract)
 owns the current toolchain shapes.
 
 > **ADR 0032.** The engine-startup and provider-bootstrap operations are the typed steps of two
@@ -18,7 +18,10 @@ owns the current toolchain shapes.
 > [`model_provider_bootstrap_routine.zig`](../../../src/application/model_provider_bootstrap_routine.zig),
 > reached only through the runner-owned provider-bootstrap binding. Each step's failure maps to
 > its fixed public code (`code(step)`), including allocation failure and deadline exhaustion;
-> explicit cancellation stays distinct. A failed run records the step it stopped at.
+> explicit cancellation stays distinct. A failed run records the step it stopped at. A
+> workflow-definition step also leaves the rejection evidence its owner recorded (rule class,
+> definition ordinal and display path, step or resource ID), which the CLI prints after the code
+> ([F0005](../../features/F0005-WorkflowDefinitionRegistryService.md) §9).
 
 ## Engine configuration
 
@@ -371,7 +374,7 @@ the steps of the provider-bootstrap routine.
 
 ## Toolchain
 
-[F0003](../../features/F0003-ToolChainService.md#workflow-bindings) owns the order and keys.
+[F0003](../../features/F0003-Toolchain.md#workflow-bindings) owns the order and keys.
 [ADR 0031](../../decisions/0031-stage-actions.md) made the nine former operations the internal
 steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays separate.
 

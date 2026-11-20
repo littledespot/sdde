@@ -138,6 +138,12 @@ and produces no `NodeDelta`.
   - Each routine defines a closed enum of its steps, and every failure records the failing
     step. A mapped failure carries it in its diagnostic. A propagated error leaves it in a
     routine-owned diagnostic slot, as ADR 0031 does.
+  - The startup slot also carries a workflow definition's rejection evidence: a closed rule
+    class, the definition's source ordinal and, where scoped, a step or resource ID, recorded by
+    the owner of the check that rejected it, and the display path the routine copies from the
+    inventory by ordinal (approved by the user on 20 November 2026;
+    [F0005](../features/F0005-WorkflowDefinitionRegistryService.md) §9). The public code and its
+    `code(step)` mapping are unchanged, and the evidence is neither a code nor a branch.
 - **Provider bootstrap** still branches only on the typed requirement and gains no
   credential read (ADR 0028). It is no longer capability-free: its locate and read steps
   hold the provider-config port. On `not_required` it makes no provider-config call.

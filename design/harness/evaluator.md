@@ -281,7 +281,9 @@ For scored criteria, the percentage is:
   and exceeded budgets are explicit evaluator errors, never scores.
 - Reports retain returned response/model identity, HTTP request identity when available,
   and validated actual token usage.
-- Error bodies and credentials are not retained.
+- The JSON and Markdown reports retain no response body and no credential. The evidence files
+  under [Reports and origin](#reports-and-origin) retain the body of a failed or interrupted
+  attempt, redacted.
 - Valid usage survives malformed judgment/output data.
 - The report records each attempt's purpose (`judgment` or `correction`)
   and, for an invalid judgment, the judgment validator's typed diagnostic, in JSON
@@ -364,6 +366,17 @@ For scored criteria, the percentage is:
   request, raw provider response, available final text and outcome with known
   credentials redacted. Capture failure aborts evaluation; a score is never reported
   without its required evidence.
+  - **Partial bodies (approved by the user on 20 November 2026).** Every byte the transport
+    received is retained, including the prefix of a response that reset, ended early or
+    hit its deadline, and the body of a non-success status. The attempt's `outcome.json`
+    records whether the retained body is complete (`response_complete`); no body file is
+    written when the transport returned none. A partial body is never a candidate, gives
+    no usage and changes neither the attempt's failure nor its retry. The report is
+    unchanged (`evaluation-report/v8`). Known credentials are removed in full, plain and
+    JSON-escaped; a credential cut by the truncation is not detected (the same limit as
+    [ADR 0018](../decisions/0018-debug-model-exchange-logging.md)). A body is retained
+    whenever the adapter returns an observation; where the provider port returns only an
+    error (a cancelled Bedrock exchange, an allocation failure), none is.
 - Existing files, including specifications and clarifications, are never replaced.
 - Reports are retained until the operator removes them; no pruning, transaction store or
   resume path is created.

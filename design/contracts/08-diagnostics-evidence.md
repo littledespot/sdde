@@ -27,6 +27,20 @@ diagnostic on every surface and so never reduces to `failed`. When a later failu
 replaces an earlier one, the run keeps the earlier rejection beside the terminal one
 ([§27](27-observability.md#complete-execution-evidence)).
 
+The run report and the CLI carry the last model call's typed provider failure as
+presentation data beside the outcome tag (approved by the user on 20 November 2026): the
+closed cause, retry class and delivery, and the transport phase and cause or content
+diagnostic when the failure has one
+([F0006 §8](../features/F0006-LLMProviderInterface.md)). The runner takes it from the call's
+validated result, where a rejected body's content diagnostic is formed, and from the
+authorization result of a call that was never sent, such as one with no key. A call's
+authorization replaces an earlier call's detail, so it names the last call. It adds no tag,
+code or branch and is never a runner rejection; a provider stop and a runner rejection, such
+as retry exhaustion, show none. The CLI prints it after an `invalid`, `blocked`, `failed` or
+`cancelled` outcome as
+`provider_failure: <cause>; delivery=<d>; retry=<r>[; transport=<phase>/<cause>][; content=<c>]`;
+only these enum names are printed, never a key, header, body, URL or provider text.
+
 Diagnostics are sorted deterministically by stage, artifact, location, validator priority, and code. Human-facing messages are rendered from codes and fields; repair logic does not parse prose.
 
 Evidence is separate from diagnostics. It records facts such as a decoded source location, a successfully parsed AST, a passing command, or a successfully published output set. A checklist or task status is derived from evidence and cannot be set by the LLM.

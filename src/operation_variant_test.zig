@@ -438,9 +438,9 @@ fn compileYaml(a: std.mem.Allocator, registry: *const Registry, yaml: []const u8
     var parser: parser_adapter.Adapter = .{};
     var result_schema: result_schema_parser.Adapter = .{};
     const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
-    const definitions = try definition_schema.validate(a, raw);
-    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions);
-    return graph_compilation.compile(registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{});
+    const definitions = try definition_schema.validate(a, raw, null);
+    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions, null);
+    return graph_compilation.compile(registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{}, null);
 }
 
 fn stepNamed(graph: compilation.CompiledWorkflow, call_site_suffix: []const u8) compilation.CompiledStep {
@@ -483,7 +483,7 @@ test "a step whose selector picks a variant compiles against that variant alone"
     try std.testing.expectEqual(@as(u32, 4), fix.retry_authority.?.limit.value);
     try std.testing.expect(compilation.matchesContract(entry.contract.resolve("validating").?, check));
     try std.testing.expect(compilation.matchesContract(entry.contract.resolve("merging").?, fix));
-    _ = try graph_validation.validate(a, &.{graph}, &registry);
+    _ = try graph_validation.validate(a, &.{graph}, &registry, null);
 }
 
 test "a selector forwarded through a subgraph parameter selects the same variant" {
@@ -497,7 +497,7 @@ test "a selector forwarded through a subgraph parameter selects the same variant
     try std.testing.expectEqualStrings("retrying", compilation.selectorValue(entry.contract, step.parameters).?);
     try std.testing.expectEqual(@as(u32, 3), step.retry_authority.?.limit.value);
     try std.testing.expect(compilation.matchesContract(entry.contract.resolve("retrying").?, step));
-    _ = try graph_validation.validate(a, &.{graph}, &registry);
+    _ = try graph_validation.validate(a, &.{graph}, &registry, null);
     // The forwarded value is checked as a declared one is: an unknown mode rejects.
     const unknown = try std.mem.replaceOwned(u8, a, forwarded_workflow, "kind: retrying", "kind: nope");
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, compileYaml(a, &registry, unknown));
@@ -538,7 +538,7 @@ test "compilation rejects every step the selected variant does not allow" {
         // Every change here is well-formed YAML the definition schema accepts: only the compiler,
         // reading the registered contract's variants, rejects it.
         const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
-        _ = try definition_schema.validate(a, raw);
+        _ = try definition_schema.validate(a, raw, null);
         try std.testing.expectError(error.WorkflowGraphCompileInvalid, compileYaml(a, &registry, yaml));
     }
     // The same limit 4 that `retrying` rejects is within `merging`'s maximum: the bound is the variant's.
@@ -552,7 +552,7 @@ test "graph validation and publication recheck each step against its own variant
     const registry = try registryWithVariants(a, &all_shapes);
     const compiled = (try compileYaml(a, &registry, plain_workflow))[0];
     try std.testing.expect(registry.stepsMatchVariants(compiled.authority.steps));
-    _ = try graph_validation.validate(a, &.{compiled}, &registry);
+    _ = try graph_validation.validate(a, &.{compiled}, &registry, null);
 
     const retrying_effects = (try compileYaml(a, &registry, retrying_workflow))[0].authority.steps[0];
     for (0..6) |fault| {
@@ -575,7 +575,7 @@ test "graph validation and publication recheck each step against its own variant
             else => unreachable,
         }
         try std.testing.expect(!registry.stepsMatchVariants(steps));
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(a, &.{tampered}, &registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(a, &.{tampered}, &registry, null));
     }
 }
 

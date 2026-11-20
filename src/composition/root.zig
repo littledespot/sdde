@@ -41,6 +41,8 @@ pub const Runtime = struct {
     identities: @import("../adapters/system/reference_state_identity.zig").Adapter,
     native: @import("native_workflow_operations.zig").Assembly,
     boot: bootstrap_services.Outcome,
+    /// What a failed startup left beside its public code (F0005 §9).
+    boot_diagnostic: startup_routine.Diagnostic = .{},
     providers: model_provider_bootstrap.Assembly,
     clock: @import("../adapters/system/provider_operation_clock.zig").Adapter,
     provider_runtime: @import("model_provider_runtime.zig").Assembly,
@@ -77,7 +79,7 @@ pub const Runtime = struct {
         self.native.init(allocator, self.toolchain_source.projectCapturer(), self.toolchain_source.presetEnumerator(), self.toolchain_source.presetCapturer(), self.toolchain_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, self.reference.inspector(), self.feature.inspector(), self.inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), self.corpus.enumerator(), self.corpus.capturer(), self.markdown.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, self.identities.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         self.native.publish_output.action.writer = self.outputs.port();
         self.native.prepare_inputs.action.state_source = self.inputs.workflowStateCapturer();
-        self.boot = runInProjectWithRegistry(io, allocator, project, control, &self.native.registry);
+        self.boot = runInProjectWithRegistry(io, allocator, project, control, &self.native.registry, &self.boot_diagnostic);
         if (self.boot == .ready) {
             self.logging = .{ .allocator = allocator, .io = io, .project = project, .roots = self.boot.ready.roots.registry(), .logs = &self.boot.ready.logs, .inputs = &self.inputs, .outputs = &self.outputs };
             self.native.activate_feature_logging.activator = self.logging.?.activator();
@@ -128,7 +130,10 @@ pub fn reportInvocation(io: std.Io, allocator: std.mem.Allocator, project_root: 
     var report: run_outcome.Report = .{ .outcome = .invocation_invalid, .arena = .init(allocator) };
     errdefer report.deinit();
     report.outcome = switch (assembly.boot) {
-        .failed => |failure| .{ .bootstrap_failed = failure },
+        .failed => |failure| failed: {
+            report.bootstrap_detail = assembly.boot_diagnostic.detail();
+            break :failed .{ .bootstrap_failed = failure };
+        },
         .cancelled => .{ .execution = .cancelled },
         .ready => execute: {
             var invocation = assembly.invocation(arguments, if (environment) |map| .{ .environment = map } else .{ .snapshots = .initFill(null) });
@@ -139,6 +144,7 @@ pub fn reportInvocation(io: std.Io, allocator: std.mem.Allocator, project_root: 
             };
             if (invocation.pipeline_runner) |*runner| {
                 report.last_operation_rejection = runner.last_operation_rejection;
+                report.provider_failure = runner.last_provider_failure;
                 if (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })) |diagnostic|
                     report.candidate_error = try diagnostic.copy(report.arena.allocator());
             }
@@ -150,12 +156,14 @@ pub fn reportInvocation(io: std.Io, allocator: std.mem.Allocator, project_root: 
 
 /// Build the startup routine's ports and run it with the supplied registered operation contracts.
 /// The routine publishes validated owners; each service is built here, after its complete validation.
+/// A caller that wants a failed startup's detail supplies the diagnostic the routine fills.
 pub fn runInProjectWithRegistry(
     io: std.Io,
     allocator: std.mem.Allocator,
     project_root: std.Io.Dir,
     runtime: pipeline.NodeRuntime,
     operation_registry: *const workflow_operation_registry.Registry,
+    retained: ?*startup_routine.Diagnostic,
 ) bootstrap_services.Outcome {
     var source_adapter = engine_config_source.Adapter.init(io, project_root);
     var root_adapter = bootstrap_root_inspector.Adapter.init(io, project_root);
@@ -166,7 +174,8 @@ pub fn runInProjectWithRegistry(
     const active_path_policy = policy_resolver.resolve(allocator) catch {
         return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
     };
-    var diagnostic: startup_routine.Diagnostic = .{};
+    var local: startup_routine.Diagnostic = .{};
+    const diagnostic = retained orelse &local;
     const outcome = startup_routine.run(
         .{
             .config_locator = source_adapter.locator(),
@@ -178,7 +187,7 @@ pub fn runInProjectWithRegistry(
         },
         allocator,
         runtime,
-        &diagnostic,
+        diagnostic,
         .{ .path_policy = active_path_policy, .operations = operation_registry },
     );
     return switch (outcome) {

@@ -3,6 +3,7 @@ const composition = @import("composition/root.zig");
 
 pub const config = @import("domain/config.zig");
 pub const RunReport = @import("domain/run_outcome.zig").Report;
+pub const definition_rejection = @import("domain/definition_rejection.zig");
 pub const debugRequests = @import("composition/request_debugger.zig").run;
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) !RunReport {

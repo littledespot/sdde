@@ -240,7 +240,7 @@ when:
 Configuration and content authority are separate systems.
 
 The root `.sddtoolkit.json` remains one closed document with no override or fallback
-merge layer. [F0003 §3](../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+merge layer. [F0003 §3](../features/F0003-Toolchain.md#3-closed-loading-and-publication-contract)
 owns the implemented toolchain format: exact package references and stable union of
 registered policy IDs. The broader field-level composition below remains proposed
 policy design; it adds no fields to the implemented configuration or toolchain schemas.

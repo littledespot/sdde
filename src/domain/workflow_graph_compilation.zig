@@ -11,12 +11,14 @@ const provider_identity = @import("llm_provider_identity.zig");
 const workflow_retry = @import("workflow_retry.zig");
 const data = @import("pipeline_data.zig");
 const kernel = @import("model_request_kernel.zig");
+const rejection = @import("definition_rejection.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
 /// Compiles every validated definition into its graph from the registered operation contracts, the
 /// captured resources and the result-schema compiler. The result is a candidate: graph validation
-/// is a distinct step.
+/// is a distinct step. A rejection records the check that failed, the definition's source ordinal and,
+/// for a step's own checks, the step in `evidence`, when one is supplied.
 pub fn compile(
     registry: *const operation_registry.Registry,
     result_schema_compiler: schema_compiler.Compiler,
@@ -25,36 +27,39 @@ pub fn compile(
     inventory_value: inventory.Inventory,
     manifest: inventory.ResourceManifest,
     captures: []const inventory.Capture,
+    evidence: ?*rejection.Slot,
 ) Error![]const compilation.CompiledWorkflow {
     if (!registry.validate()) return invalid();
     const graphs = allocator.alloc(compilation.CompiledWorkflow, definitions.len) catch return invalid();
     for (definitions, graphs) |source, *graph| {
-        const expanded = @import("workflow_subgraphs.zig").expand(allocator, source) catch return invalid();
+        const ordinal = source.source_ordinal;
+        const expanded = @import("workflow_subgraphs.zig").expand(allocator, source) catch return rejected(evidence, .subgraph_expansion, ordinal, null);
         var item = source;
         item.steps = expanded.steps;
         item.start_step_id = expanded.start;
-        const invocation = registry.resolveOperation(item.invocation_operation_id) orelse return invalid();
-        if (invocation.contract.kind != .invocation) return invalid();
-        const policy = registry.resolvePolicy(item.policy_profile_id) orelse return invalid();
-        if (!hasStep(item.steps, item.start_step_id.bytes)) return invalid();
+        const invocation = registry.resolveOperation(item.invocation_operation_id) orelse return rejected(evidence, .invocation, ordinal, null);
+        if (invocation.contract.kind != .invocation) return rejected(evidence, .invocation, ordinal, null);
+        const policy = registry.resolvePolicy(item.policy_profile_id) orelse return rejected(evidence, .policy, ordinal, null);
+        if (!hasStep(item.steps, item.start_step_id.bytes)) return rejected(evidence, .start_step, ordinal, null);
 
-        const resources = try compileResources(allocator, registry, result_schema_compiler, item, inventory_value, manifest, captures);
+        const resources = compileResources(allocator, registry, result_schema_compiler, item, inventory_value, manifest, captures, evidence) catch return rejected(evidence, .compiled_resources, ordinal, null);
         const steps = allocator.alloc(compilation.CompiledStep, item.steps.len) catch return invalid();
         var transition_count: usize = 0;
         for (item.steps, steps) |declared, *compiled| {
-            const entry = registry.resolveOperation(declared.operation_id) orelse return invalid();
-            if (entry.contract.kind != .step) return invalid();
-            if (!@import("workflow_capability.zig").permits(policy.allowed_capabilities, entry.binding.capabilities())) return invalid();
+            const subject = declared.id.bytes;
+            const entry = registry.resolveOperation(declared.operation_id) orelse return rejected(evidence, .step_operation, ordinal, subject);
+            if (entry.contract.kind != .step) return rejected(evidence, .step_operation, ordinal, subject);
+            if (!@import("workflow_capability.zig").permits(policy.allowed_capabilities, entry.binding.capabilities())) return rejected(evidence, .step_capabilities, ordinal, subject);
             // The selector is read and checked first: everything after it, the remaining parameters,
             // the outcomes, the retry authority and the data effects, is checked against the one
             // variant it selects (ADR 0030 "Contract variants").
-            const contract = selectDeclared(entry.contract, declared.parameters) orelse return invalid();
-            const parameters = try compileParameters(allocator, contract, declared.parameters, resources);
-            const retry_authority = try resolveRetryAuthority(item, declared.id, contract, parameters);
+            const contract = selectDeclared(entry.contract, declared.parameters) orelse return rejected(evidence, .step_parameters, ordinal, subject);
+            const parameters = compileParameters(allocator, contract, declared.parameters, resources) catch return rejected(evidence, .step_parameters, ordinal, subject);
+            const retry_authority = resolveRetryAuthority(item, declared.id, contract, parameters) catch return rejected(evidence, .retry_authority, ordinal, subject);
             transition_count = std.math.add(usize, transition_count, declared.outcomes.len) catch return invalid();
-            try validateDeclaredOutcomes(contract.outcomes, declared.outcomes, item.steps, policy.*);
-            compiled.* = try buildStep(allocator, registry, declared.id, declared.source_chain, declared.operation_id, contract, entry.binding.capabilities(), parameters, retry_authority);
-            compiled.request_stages = try compileRequestStages(allocator, registry, item, declared, entry, resources);
+            validateDeclaredOutcomes(contract.outcomes, declared.outcomes, item.steps, policy.*) catch return rejected(evidence, .declared_outcomes, ordinal, subject);
+            compiled.* = buildStep(allocator, registry, declared.id, declared.source_chain, declared.operation_id, contract, entry.binding.capabilities(), parameters, retry_authority) catch return rejected(evidence, .step_operation, ordinal, subject);
+            compiled.request_stages = compileRequestStages(allocator, registry, item, declared, entry, resources) catch return rejected(evidence, .request_stages, ordinal, subject);
         }
 
         const transitions = allocator.alloc(workflow.Transition, transition_count) catch return invalid();
@@ -63,13 +68,13 @@ pub fn compile(
             transitions[transition_index] = .{ .from = step.id, .outcome = outcome.outcome, .target = outcome.target };
             transition_index += 1;
         };
-        const maximum_step_executions = compilation.calculateExecutionLimit(steps) orelse return invalid();
+        const maximum_step_executions = compilation.calculateExecutionLimit(steps) orelse return rejected(evidence, .execution_limit, ordinal, null);
         graph.* = .{
             .source_ordinal = item.source_ordinal,
             .shortcode = item.shortcode,
             .authority = .{
                 .allowed_capabilities = policy.allowed_capabilities,
-                .data_schemas = try compileDataSchemas(allocator, registry.data_schemas, invocation.contract.produces, steps),
+                .data_schemas = compileDataSchemas(allocator, registry.data_schemas, invocation.contract.produces, steps) catch return rejected(evidence, .data_schemas, ordinal, null),
                 .workflow_id = item.workflow_id,
                 .workflow_version = item.workflow_version,
                 .invocation_operation_id = item.invocation_operation_id,
@@ -82,9 +87,15 @@ pub fn compile(
                 .maximum_step_executions = maximum_step_executions,
             },
         };
-        @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
+        @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return rejected(evidence, .outcome_flow, ordinal, null);
     }
     return graphs;
+}
+
+/// The family's one error with the compile check and the definition (and step) recorded.
+fn rejected(evidence: ?*rejection.Slot, rule: rejection.Rule, ordinal: u16, subject: ?[]const u8) Error {
+    rejection.record(evidence, rule, ordinal, subject);
+    return invalid();
 }
 
 /// The contract a declared step runs against: its registered contract, or the variant its selector
@@ -219,6 +230,7 @@ fn compileResources(
     inventory_value: inventory.Inventory,
     manifest: inventory.ResourceManifest,
     captures: []const inventory.Capture,
+    evidence: ?*rejection.Slot,
 ) Error![]const compilation.CompiledResource {
     const resources = allocator.alloc(compilation.CompiledResource, item.resources.len) catch return invalid();
     const kinds = allocator.alloc(?operation.ResourceKind, item.resources.len) catch return invalid();
@@ -226,13 +238,13 @@ fn compileResources(
     const canonical_aliases = allocator.alloc(?workflow.WorkflowResourceId, item.resources.len) catch return invalid();
     @memset(canonical_aliases, null);
     for (item.resources, 0..) |declared, index| {
-        kinds[index] = try deriveResourceKind(registry, item, declared.id);
-        const binding = findResourceBinding(manifest.bindings, item.source_ordinal, declared.id) orelse return invalid();
-        if (binding.resource_ordinal == 0 or binding.resource_ordinal > inventory_value.descriptors.len) return invalid();
+        kinds[index] = try deriveResourceKind(registry, item, declared.id, evidence);
+        const binding = findResourceBinding(manifest.bindings, item.source_ordinal, declared.id) orelse return rejected(evidence, .compiled_resources, item.source_ordinal, declared.id.bytes);
+        if (binding.resource_ordinal == 0 or binding.resource_ordinal > inventory_value.descriptors.len) return rejected(evidence, .compiled_resources, item.source_ordinal, declared.id.bytes);
         const descriptor = inventory_value.descriptors[binding.resource_ordinal - 1];
-        const capture = findCapture(captures, binding.resource_ordinal) orelse return invalid();
+        const capture = findCapture(captures, binding.resource_ordinal) orelse return rejected(evidence, .compiled_resources, item.source_ordinal, declared.id.bytes);
         if (!std.mem.eql(u8, descriptor.path, declared.name) or descriptor.size == null or
-            descriptor.size.? != capture.bytes.len) return invalid();
+            descriptor.size.? != capture.bytes.len) return rejected(evidence, .compiled_resources, item.source_ordinal, declared.id.bytes);
         bytes[index] = capture.bytes;
     }
     // A composition's result alias is a reference to the same workflow-owned
@@ -248,9 +260,9 @@ fn compileResources(
     };
     for (item.resources, resources, kinds, bytes) |declared, *compiled, kind, captured| {
         if (kind == .json_composition) continue;
-        compiled.* = .{ .id = declared.id, .source_path = declared.name, .content = switch (kind orelse return invalid()) {
-            .result_schema => .{ .result_schema = result_schema_compiler.compile(allocator, captured) catch return invalid() },
-            .packet_guidance => .{ .packet_guidance = @import("packet_guidance.zig").compile(allocator, captured) catch return invalid() },
+        compiled.* = .{ .id = declared.id, .source_path = declared.name, .content = switch (kind orelse return rejected(evidence, .compiled_resources, item.source_ordinal, declared.id.bytes)) {
+            .result_schema => .{ .result_schema = result_schema_compiler.compile(allocator, captured) catch return rejected(evidence, .compiled_resources, item.source_ordinal, declared.id.bytes) },
+            .packet_guidance => .{ .packet_guidance = @import("packet_guidance.zig").compile(allocator, captured) catch return rejected(evidence, .compiled_resources, item.source_ordinal, declared.id.bytes) },
             .prompt => .{ .prompt = captured },
             .example => .{ .example = captured },
             .data => .{ .data = captured },
@@ -261,7 +273,7 @@ fn compileResources(
         const canonical_index = for (item.resources, 0..) |resource, at| {
             if (std.mem.eql(u8, resource.id.bytes, canonical_alias.?.bytes)) break at;
         } else return invalid();
-        compiled.* = .{ .id = declared.id, .source_path = declared.name, .content = .{ .json_composition = result_schema_compiler.compileComposition(allocator, captured, resources[canonical_index].content.result_schema) catch return invalid() } };
+        compiled.* = .{ .id = declared.id, .source_path = declared.name, .content = .{ .json_composition = result_schema_compiler.compileComposition(allocator, captured, resources[canonical_index].content.result_schema) catch return rejected(evidence, .compiled_resources, item.source_ordinal, declared.id.bytes) } };
     };
     for (resources, bytes) |compiled, captured| if (!std.mem.eql(u8, compiled.bytes(), captured)) return invalid();
     if (!compilation.validResourceBindings(resources)) return invalid();
@@ -272,18 +284,20 @@ fn deriveResourceKind(
     registry: *const operation_registry.Registry,
     item: definition.Definition,
     id: workflow.WorkflowResourceId,
+    evidence: ?*rejection.Slot,
 ) Error!?operation.ResourceKind {
     var found: ?operation.ResourceKind = null;
     for (item.steps) |step| {
-        const entry = registry.resolveOperation(step.operation_id) orelse return invalid();
+        // The kind is read from every step, so a step that fails here is the step's own fault, not the resource's.
+        const entry = registry.resolveOperation(step.operation_id) orelse return rejected(evidence, .step_operation, item.source_ordinal, step.id.bytes);
         // A resource's kind is read from the descriptors of the variant the step selects.
-        const contract = selectDeclared(entry.contract, step.parameters) orelse return invalid();
+        const contract = selectDeclared(entry.contract, step.parameters) orelse return rejected(evidence, .step_parameters, item.source_ordinal, step.id.bytes);
         for (step.parameters) |parameter| {
             const descriptor = findDescriptor(contract.parameters, parameter.id.bytes) orelse continue;
             if (descriptor.kind != .resource or parameter.value != .string or
                 !std.mem.eql(u8, parameter.value.string, id.bytes)) continue;
-            const kind = descriptor.resource_kind orelse return invalid();
-            if (found != null and found.? != kind) return invalid();
+            const kind = descriptor.resource_kind orelse return rejected(evidence, .compiled_resources, item.source_ordinal, id.bytes);
+            if (found != null and found.? != kind) return rejected(evidence, .compiled_resources, item.source_ordinal, id.bytes);
             found = kind;
         }
     }

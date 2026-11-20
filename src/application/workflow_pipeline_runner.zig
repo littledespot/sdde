@@ -75,6 +75,9 @@ pub const Runner = struct {
     /// The internal step a stage action stopped at during the current step invocation.
     stage_step: pipeline.StageStepSlot = .{},
     last_operation_rejection: ?execution.OperationRejection = null,
+    /// The typed failure of the last model call, or null when that call did not fail. It is set by each
+    /// call's result, so a later call that completes clears it: it names what ended a run, never an earlier fault.
+    last_provider_failure: ?@import("../domain/provider_failure_detail.zig").Detail = null,
     /// The rejection a later one replaced, kept beside the terminal rejection (27-observability.md). The earliest
     /// replacement sets it; a later one never overwrites it, and a lone failure leaves it unset.
     first_cause: ?execution.FirstCause = null,
@@ -640,6 +643,14 @@ pub const Runner = struct {
             if (reconciled.rejection) |reason| return .{ .rejected = self.replacing(reconciled.replaced, reason) };
             if (candidate.outcome != .cancelled) authorization_binding.checkDeadline(self.provider_clock.?, self.runtime, authorization_deadline.?) catch |err| return authorizationRejected(err);
         }
+        if (validates_observation) {
+            const observation_workflow = @import("provider_observation_workflow.zig");
+            const observed = values.read(&.{ .slots = candidate.delta.data_writes }, observation_workflow.schema, observation_workflow.Result) catch return .{ .rejected = .{ .authority = .invocation_result } };
+            // Validation is where a raw result becomes a typed failure, a rejected body's content diagnostic
+            // included, so the call's failure is read from its validated result. The call's authorization,
+            // which precedes it, has already cleared an earlier call's.
+            if (providerFailure(observed)) |failure| self.last_provider_failure = @import("../domain/provider_failure_detail.zig").Detail.from(failure);
+        }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .rejected = .{ .authority = .outcome_undeclared } };
         if (advances_request and !completes_request) {
@@ -650,7 +661,14 @@ pub const Runner = struct {
         }
         const prepared = if (authorization) |bound| prepared: {
             const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .{ .authority = .authorization_evidence } };
-            break :prepared bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
+            const authorized = bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
+            // A call that is never sent, a missing key among them, fails here: its closed cause is the run's, and
+            // an authorization that succeeds clears an earlier call's, which the call's own result then replaces.
+            self.last_provider_failure = switch (result.outcome().*) {
+                .failed => |failure| @import("../domain/provider_failure_detail.zig").Detail.from(failure),
+                .prepared, .cancelled => null,
+            };
+            break :prepared authorized;
         } else false;
         const terminal = if (stage == null) terminalFor(self.selected.graph.authority.transitions, step.id, candidate.outcome) else null;
         const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected, step.iteration, step.outcome_association, terminal);
@@ -684,6 +702,18 @@ pub const Runner = struct {
     }
 
     const ProviderStop = struct { reason: provider.ProviderNonCandidateStopReason, usage: provider.ProviderUsage };
+
+    /// The provider's own failure of one validated call, with its closed cause, retry class and delivery.
+    /// A call that completed, or that the provider stopped, is none.
+    fn providerFailure(result: *const @import("provider_observation_workflow.zig").Result) ?provider.ProviderFailure {
+        return switch (result.outcome()) {
+            .validated => |evidence| switch (evidence.result()) {
+                .failed => |failure| failure,
+                .complete, .stopped => null,
+            },
+            .rejected, .cancelled => null,
+        };
+    }
 
     fn providerStop(result: *const @import("../domain/model_invocation_result.zig").Result) ?ProviderStop {
         const raw = result.outcome() orelse return null;

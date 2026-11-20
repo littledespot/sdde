@@ -185,7 +185,7 @@ test "shipped workflow conforms to native registrations and rejects contract dri
                     if (changed_part) break;
                 }
                 try std.testing.expect(changed_part);
-                try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("../../../src/domain/workflow_graph_validation.zig").validate(a, &.{invalid_graph}, &runtime.native.registry));
+                try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("../../../src/domain/workflow_graph_validation.zig").validate(a, &.{invalid_graph}, &runtime.native.registry, null));
             }
             const protocol = for (captured.files) |file| {
                 if (std.mem.eql(u8, file.mapping.source, "design/workflows/spec/protocol.prompt.md")) break file.bytes;
@@ -1074,6 +1074,17 @@ const kernel_workflow =
 ;
 const kernel_schema = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":20000}},\"required\":[\"answer\"],\"additionalProperties\":false}";
 
+fn installKernelWorkflow(io: std.Io, project: std.Io.Dir) !void {
+    for ([_]struct { path: []const u8, bytes: []const u8 }{
+        .{ .path = ".sddtoolkit/workflows/kernel.workflow.yaml", .bytes = kernel_workflow },
+        .{ .path = ".sddtoolkit/workflows/kernel/prompt.md", .bytes = "Return the requested object." },
+        .{ .path = ".sddtoolkit/workflows/kernel/result.json", .bytes = kernel_schema },
+    }) |file| {
+        try project.createDirPath(io, std.fs.path.dirname(file.path).?);
+        try project.writeFile(io, .{ .sub_path = file.path, .data = file.bytes });
+    }
+}
+
 test "the E2E report reads a kernel request's authorization failure from recorded history, after the step dropped it" {
     const Runtime = @import("../../../src/composition/root.zig").Runtime;
     const io = std.testing.io;
@@ -1085,14 +1096,7 @@ test "the E2E report reads a kernel request's authorization failure from recorde
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
     try fixture.materialize(io, project.dir, captured);
-    for ([_]struct { path: []const u8, bytes: []const u8 }{
-        .{ .path = ".sddtoolkit/workflows/kernel.workflow.yaml", .bytes = kernel_workflow },
-        .{ .path = ".sddtoolkit/workflows/kernel/prompt.md", .bytes = "Return the requested object." },
-        .{ .path = ".sddtoolkit/workflows/kernel/result.json", .bytes = kernel_schema },
-    }) |file| {
-        try project.dir.createDirPath(io, std.fs.path.dirname(file.path).?);
-        try project.dir.writeFile(io, .{ .sub_path = file.path, .data = file.bytes });
-    }
+    try installKernelWorkflow(io, project.dir);
     var runtime: Runtime = undefined;
     runtime.init(io, std.testing.allocator, project.dir, .{});
     defer runtime.deinit();
@@ -1167,6 +1171,66 @@ test "the E2E report reads a kernel request's authorization failure from recorde
     const event_facts = exhausted_event.get("first_cause").?.object.get("exhaustion").?.object;
     try std.testing.expectEqualStrings("advance-attempt", event_facts.get("stage").?.string);
     try std.testing.expectEqual(@as(i64, 2), event_facts.get("completed_executions").?.integer);
+}
+
+test "the E2E report keeps a diagnostic of the assembled candidate without provider evidence, and rejects one that names a call the run has no evidence of" {
+    const Runtime = @import("../../../src/composition/root.zig").Runtime;
+    const values = @import("../../../src/application/pipeline_values.zig");
+    const owned = @import("../../../src/application/specification_values.zig").storage;
+    const session_schema = @import("../../../src/application/specification_workflow.zig").session_schema;
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try fixture.materialize(io, project.dir, captured);
+    try installKernelWorkflow(io, project.dir);
+    var runtime: Runtime = undefined;
+    runtime.init(io, std.testing.allocator, project.dir, .{});
+    defer runtime.deinit();
+    try std.testing.expect(runtime.boot == .ready);
+    var invocation = runtime.invocation(&.{"kernel-request"}, .{ .snapshots = .initFill(null) });
+    defer invocation.deinit();
+    const bindings = invocation.bindings();
+    try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+    try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+    try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+    try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+    // No step has run, so the run made no model call and holds no provider evidence.
+    const runner = &invocation.pipeline_runner.?;
+    try std.testing.expectEqual(@as(usize, 0), runner.tokenLedger().accounted_operations.items.len);
+    try std.testing.expect(runner.model_accounting == null);
+    const slot = &runner.envelope.slots[@intFromEnum(session_schema.key)];
+    try std.testing.expect(slot.* == null);
+    defer slot.* = null;
+    // The two rejections differ only in the call they name: the engine found the first in the assembled
+    // candidate, so it names none, and the second belongs to a response.
+    const without_call: @import("../../../src/domain/specification_source_binding.zig").Rejection = .{ .state_id = .{ .bytes = "state" }, .partition_id = .{ .ordinal = 0 }, .revision = 1, .origin = null, .eligible_signals = &.{} };
+    var named_call = without_call;
+    named_call.origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    for ([_]@TypeOf(without_call){ without_call, named_call }) |rejection| {
+        const value = value: {
+            const owner = try owned.create(std.testing.allocator, .{});
+            errdefer owned.destroy(owner);
+            owner.payload = .{ .binding_rejected = rejection };
+            break :value try values.adopt(std.testing.allocator, session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+        };
+        defer values.destroy(value);
+        slot.* = value;
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed };
+        if (rejection.origin == null) {
+            try @import("../e2e/observation.zig").capture(a, runner, &report);
+            try std.testing.expect(report.candidate_error.?.attribution() == .candidate);
+            try std.testing.expectEqualDeep(without_call, report.candidate_error.?.source_catalogue);
+            try std.testing.expectEqual(@as(usize, 0), report.attempts.len);
+            try std.testing.expect(report.last_model_origin == null);
+        } else {
+            try std.testing.expectError(error.MissingProviderEvidence, @import("../e2e/observation.zig").capture(a, runner, &report));
+        }
+    }
 }
 
 test "the first native rejection is the first cause a later failure replaced, else the terminal rejection" {

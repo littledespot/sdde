@@ -10,7 +10,7 @@ Part of the [proposed design](../design.md#10-development-environment-presets), 
 - [§10.9](#109-legacy-preset-source-material) owns the status of the
   `design/toolchainPresets/` source material; runtime bootstrap never loads it.
 
-**Current authoring boundary:** [F0003 §3](../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+**Current authoring boundary:** [F0003 §3](../features/F0003-Toolchain.md#3-closed-loading-and-publication-contract)
 documents the implemented
 closed package/project shapes and stable union of registered policy IDs. The richer
 policy concepts below are proposed design, not additional currently accepted YAML
@@ -327,7 +327,7 @@ Preset compilation uses one portable matching contract:
 ### 10.9 Legacy preset source material
 
 - `design/toolchainPresets/` and its `_structure.yaml` are historical design/source material
-  reviewed by [F0003 §5](../features/F0003-ToolChainService.md#5-detailed-_structureyaml-review);
+  reviewed by [F0003 §5](../features/F0003-Toolchain.md#5-detailed-_structureyaml-review);
   runtime bootstrap never loads those source locations and has no packaged-example fallback.
 - `_structure.yaml` inventories framework identity, package, build, test, path, quality, and
   AST concerns. It is a seed, not a v1 schema: its “mandatory” rules exist only in comments,

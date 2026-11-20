@@ -356,7 +356,7 @@ step of the token stage:
 | `buildGrammar` (`prepare-reference-tokens`) | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
 | `scan-path-tokens` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
 
-- [F0003 §3.5](F0003-ToolChainService.md#35-registered-lexical-naming-rules) owns the
+- [F0003 §3.5](F0003-Toolchain.md#35-registered-lexical-naming-rules) owns the
   registered rule contract.
 - Grammar construction includes every selected rule and captured reference basename,
   with exact toolchain, feature and reference bindings; omitted, altered or stale inputs

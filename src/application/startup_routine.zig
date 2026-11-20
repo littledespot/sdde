@@ -16,6 +16,7 @@ const resource_binding = @import("../domain/workflow_resource_binding.zig");
 const definition_schema = @import("../domain/workflow_definition_schema.zig");
 const graph_compilation = @import("../domain/workflow_graph_compilation.zig");
 const graph_validation = @import("../domain/workflow_graph_validation.zig");
+const rejection_evidence = @import("../domain/definition_rejection.zig");
 const config_port = @import("../ports/engine_config_source.zig");
 const inspector_port = @import("../ports/bootstrap_root_inspector.zig");
 const source_port = @import("../ports/workflow_authority_source.zig");
@@ -64,7 +65,38 @@ pub const Step = enum {
     validate_workflow_registry,
 };
 
-pub const Diagnostic = struct { step: ?Step = null };
+/// What a failed run leaves beside its public code: the step, and for a workflow definition the rule
+/// class, definition and step or resource the owner recorded (F0005 §9). `descriptors` is the validated
+/// inventory while the routine runs, so the definition's display path is copied before the routine returns.
+pub const Diagnostic = struct {
+    step: ?Step = null,
+    rejection: rejection_evidence.Slot = .{},
+    descriptors: []const inventory.InventoryDescriptor = &.{},
+
+    /// The detail the CLI prints after the public code, for a failure of a workflow-definition step.
+    pub fn detail(self: *const Diagnostic) ?rejection_evidence.Detail {
+        const step = self.step orelse return null;
+        return switch (code(step)) {
+            .WORKFLOW_AUTHORITY_INVENTORY_INVALID,
+            .WORKFLOW_DEFINITION_READ_ERROR,
+            .WORKFLOW_DEFINITION_PARSE_ERROR,
+            .WORKFLOW_DEFINITION_SCHEMA_INVALID,
+            .WORKFLOW_GRAPH_COMPILE_INVALID,
+            .WORKFLOW_REGISTRY_INVALID,
+            => .{ .step = @tagName(step), .evidence = self.rejection.evidence },
+            else => null,
+        };
+    }
+
+    /// Copies the display path of the definition the evidence names, then drops the inventory: it is
+    /// owned by the routine's scratch space.
+    fn resolvePath(self: *Diagnostic) void {
+        defer self.descriptors = &.{};
+        const ordinal = self.rejection.evidence.ordinal orelse return;
+        if (ordinal == 0 or ordinal > self.descriptors.len) return;
+        self.rejection.evidence.path = rejection_evidence.Path.init(self.descriptors[ordinal - 1].path);
+    }
+};
 
 /// The ports the routine's steps reach. No step receives this set; each takes the one port it uses.
 pub const Ports = struct {
@@ -181,22 +213,28 @@ pub fn run(
     if (checkpoint(runtime, diagnostic, .build_workflow_inventory)) |stop| return stop;
     const workflow_inventory = steps.validateWorkflowInventory(inventory_candidate) catch return failed(diagnostic, .validate_workflow_inventory);
     if (checkpoint(runtime, diagnostic, .validate_workflow_inventory)) |stop| return stop;
+    // The display path of a rejected definition comes from the inventory, by ordinal, while it lives.
+    diagnostic.descriptors = workflow_inventory.value.descriptors;
+    defer diagnostic.descriptors = &.{};
 
-    const definition_captures = steps.captureWorkflows(ports.workflow_capturer, arena, workflow_inventory, runtime) catch |failure| return if (failure == error.Cancelled) stopped(diagnostic, .capture_workflows, .cancelled) else failed(diagnostic, .capture_workflows);
+    const definition_captures = steps.captureWorkflows(ports.workflow_capturer, arena, workflow_inventory, runtime, &diagnostic.rejection) catch |failure| return if (failure == error.Cancelled) stopped(diagnostic, .capture_workflows, .cancelled) else failed(diagnostic, .capture_workflows);
     if (checkpoint(runtime, diagnostic, .capture_workflows)) |stop| return stop;
-    const raw_definitions = steps.parseWorkflows(ports.workflow_parser, arena, definition_captures) catch return failed(diagnostic, .parse_workflows);
+    const raw_definitions = steps.parseWorkflows(ports.workflow_parser, arena, definition_captures) catch {
+        rejection_evidence.locate(&diagnostic.rejection, steps.locateParseFailure(ports.workflow_parser, arena, definition_captures), null);
+        return failed(diagnostic, .parse_workflows);
+    };
     if (checkpoint(runtime, diagnostic, .parse_workflows)) |stop| return stop;
-    const definitions = steps.validateWorkflowSchema(arena, raw_definitions) catch return failed(diagnostic, .validate_workflow_schema);
+    const definitions = steps.validateWorkflowSchema(arena, raw_definitions, &diagnostic.rejection) catch return failed(diagnostic, .validate_workflow_schema);
     if (checkpoint(runtime, diagnostic, .validate_workflow_schema)) |stop| return stop;
-    const manifest = steps.resolveWorkflowResources(arena, workflow_inventory, definitions) catch return failed(diagnostic, .resolve_workflow_resources);
+    const manifest = steps.resolveWorkflowResources(arena, workflow_inventory, definitions, &diagnostic.rejection) catch return failed(diagnostic, .resolve_workflow_resources);
     if (checkpoint(runtime, diagnostic, .resolve_workflow_resources)) |stop| return stop;
-    const resource_captures = steps.captureWorkflowResources(ports.workflow_capturer, arena, workflow_inventory, manifest, runtime) catch |failure| return if (failure == error.Cancelled) stopped(diagnostic, .capture_workflow_resources, .cancelled) else failed(diagnostic, .capture_workflow_resources);
+    const resource_captures = steps.captureWorkflowResources(ports.workflow_capturer, arena, workflow_inventory, manifest, runtime, &diagnostic.rejection) catch |failure| return if (failure == error.Cancelled) stopped(diagnostic, .capture_workflow_resources, .cancelled) else failed(diagnostic, .capture_workflow_resources);
     if (checkpoint(runtime, diagnostic, .capture_workflow_resources)) |stop| return stop;
     const operations = steps.validateWorkflowOperations(inputs.operations) catch return failed(diagnostic, .validate_workflow_operations);
     if (checkpoint(runtime, diagnostic, .validate_workflow_operations)) |stop| return stop;
-    const graphs = steps.compileWorkflows(ports.result_schema_compiler, operations, arena, definitions, workflow_inventory, manifest, resource_captures) catch return failed(diagnostic, .compile_workflows);
+    const graphs = steps.compileWorkflows(ports.result_schema_compiler, operations, arena, definitions, workflow_inventory, manifest, resource_captures, &diagnostic.rejection) catch return failed(diagnostic, .compile_workflows);
     if (checkpoint(runtime, diagnostic, .compile_workflows)) |stop| return stop;
-    const validated_graphs = steps.validateWorkflowGraphs(arena, graphs, operations) catch return failed(diagnostic, .validate_workflow_graphs);
+    const validated_graphs = steps.validateWorkflowGraphs(arena, graphs, operations, &diagnostic.rejection) catch return failed(diagnostic, .validate_workflow_graphs);
     if (checkpoint(runtime, diagnostic, .validate_workflow_graphs)) |stop| return stop;
     const workflow_candidate = steps.buildWorkflowRegistry(arena, workflow_inventory, definition_captures, manifest, resource_captures, definitions, validated_graphs, operations) catch return failed(diagnostic, .build_workflow_registry);
     if (checkpoint(runtime, diagnostic, .build_workflow_registry)) |stop| return stop;
@@ -244,6 +282,7 @@ pub fn code(step: Step) bootstrap_error.PublicError {
 
 fn failed(diagnostic: *Diagnostic, step: Step) Outcome {
     diagnostic.step = step;
+    diagnostic.resolvePath();
     return .{ .failed = code(step) };
 }
 
@@ -455,6 +494,7 @@ pub const steps = struct {
         allocator: std.mem.Allocator,
         validated: inventory_building.ValidatedInventory,
         runtime: pipeline.NodeRuntime,
+        evidence: ?*rejection_evidence.Slot,
     ) error{ Cancelled, WorkflowDefinitionReadError }![]const inventory.Capture {
         const inventory_value = validated.value;
         inventory.validateCaptureBudget(inventory_value) catch return error.WorkflowDefinitionReadError;
@@ -466,7 +506,10 @@ pub const steps = struct {
             const bytes = capturer.capture(inventory_value.capability, descriptor, allocator, runtime) catch |failure| {
                 return switch (failure) {
                     error.Cancelled => error.Cancelled,
-                    else => error.WorkflowDefinitionReadError,
+                    else => read: {
+                        rejection_evidence.locate(evidence, ordinal, null);
+                        break :read error.WorkflowDefinitionReadError;
+                    },
                 };
             };
             capture.* = .{ .ordinal = ordinal, .bytes = bytes };
@@ -482,19 +525,36 @@ pub const steps = struct {
         return parser.parse(allocator, captures) catch error.WorkflowDefinitionParseError;
     }
 
+    /// The ordinal of the first capture the parser rejects when it parses alone. The port reports no
+    /// location; this holds because it applies no rule across captures, one definition at a time
+    /// (F0005 §3.4), so a capture that fails alone is the one that failed with the rest. Run only after
+    /// `parseWorkflows` failed.
+    pub fn locateParseFailure(
+        parser: parser_port.Parser,
+        allocator: std.mem.Allocator,
+        captures: []const inventory.Capture,
+    ) ?u16 {
+        for (captures) |capture| {
+            _ = parser.parse(allocator, &.{capture}) catch return capture.ordinal;
+        }
+        return null;
+    }
+
     pub fn validateWorkflowSchema(
         allocator: std.mem.Allocator,
         raw_definitions: []const definition.RawDefinition,
+        evidence: ?*rejection_evidence.Slot,
     ) definition_schema.Error![]const definition.Definition {
-        return definition_schema.validate(allocator, raw_definitions);
+        return definition_schema.validate(allocator, raw_definitions, evidence);
     }
 
     pub fn resolveWorkflowResources(
         allocator: std.mem.Allocator,
         validated: inventory_building.ValidatedInventory,
         definitions: []const definition.Definition,
+        evidence: ?*rejection_evidence.Slot,
     ) resource_binding.Error!inventory.ResourceManifest {
-        return resource_binding.resolve(allocator, validated.value, definitions);
+        return resource_binding.resolve(allocator, validated.value, definitions, evidence);
     }
 
     pub fn captureWorkflowResources(
@@ -503,6 +563,7 @@ pub const steps = struct {
         validated: inventory_building.ValidatedInventory,
         manifest: inventory.ResourceManifest,
         runtime: pipeline.NodeRuntime,
+        evidence: ?*rejection_evidence.Slot,
     ) error{ Cancelled, WorkflowResourceReadError }![]const inventory.Capture {
         const inventory_value = validated.value;
         inventory.validateResourceCaptureBudget(inventory_value, manifest) catch return error.WorkflowResourceReadError;
@@ -512,7 +573,10 @@ pub const steps = struct {
             const bytes = capturer.capture(inventory_value.capability, descriptor, allocator, runtime) catch |failure| {
                 return switch (failure) {
                     error.Cancelled => error.Cancelled,
-                    else => error.WorkflowResourceReadError,
+                    else => read: {
+                        rejection_evidence.locate(evidence, ordinal, null);
+                        break :read error.WorkflowResourceReadError;
+                    },
                 };
             };
             capture.* = .{ .ordinal = ordinal, .bytes = bytes };
@@ -535,16 +599,18 @@ pub const steps = struct {
         validated: inventory_building.ValidatedInventory,
         manifest: inventory.ResourceManifest,
         captures: []const inventory.Capture,
+        evidence: ?*rejection_evidence.Slot,
     ) graph_compilation.Error![]const compilation.CompiledWorkflow {
-        return graph_compilation.compile(operations.registry, result_schema_compiler, allocator, definitions, validated.value, manifest, captures);
+        return graph_compilation.compile(operations.registry, result_schema_compiler, allocator, definitions, validated.value, manifest, captures, evidence);
     }
 
     pub fn validateWorkflowGraphs(
         allocator: std.mem.Allocator,
         graphs: []const compilation.CompiledWorkflow,
         operations: ValidatedOperations,
+        evidence: ?*rejection_evidence.Slot,
     ) graph_validation.Error!compilation.ValidatedGraphs {
-        return graph_validation.validate(allocator, graphs, operations.registry);
+        return graph_validation.validate(allocator, graphs, operations.registry, evidence);
     }
 
     pub fn buildWorkflowRegistry(

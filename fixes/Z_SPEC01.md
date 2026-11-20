@@ -345,8 +345,19 @@ requirements in the same scenarios and calls as the retained `q22-final` (four i
 repair constants swapped, the identity-label guidance branches equal, or an explanation that no longer names
 `exclusive.`, the three assertions that replaced a deleted pin fail, and no other test does. The `contract-reviewer`
 found no blocker and four minor defects, all fixed: three assertions weakened without an owner-derived substitute and
-five copies or pins the sweep missed. **Not done:** the unread dump files (SPEC01 C47); copies under 25 characters; the
-harness-facing reason in `request_debugger_test.zig`, which no model reads. **T5 retaken 19 November 2026** (table under
+five copies or pins the sweep missed. **Not done:** the harness-facing reason in `request_debugger_test.zig`, which no
+model reads. **Leftovers built 20 November 2026:** the 18 measurement dumps are gone: the driver's `measurement_prefix`
+and the writer it fed (`spec_generation_driver.zig`), the 11 assignments in `workflow_tests.zig`, and the matching
+entries of `build/test_run_inputs.zig` (a listed location that no test names is dead weight in the reuse key). Nothing
+read them: no source, script or design file named them, and the request-projection freeze is a different writer. The
+step trace (`workflow-step-trace/v1`) stays: it is the structural-equivalence record the records above name. The copies
+under 25 characters were swept with a scratchpad scan over every string literal of one or two runs in the test sources
+and fixtures, against the corpus the detector uses (the freeze's guidance, protocol prompt and schema strings, and the
+workflow assets). None of what matched is model-facing prose: it is YAML and JSON syntax (`steps:`,
+`use: request-model`, `"const":"business"`), JSON pointers, schema member names (`maxItems`) and arbitrary container
+values (`source meaning`), so nothing changed. The scan is by literal, not by meaning: a short copy split across
+literals is not seen. **Proof:** the integration suite and the freeze run pass without the dumps, and `code-heuristics`
+reproduces the 19 November T5 counts. **T5 retaken 19 November 2026** (table under
 E5): T5.1 `tests_copying_model_text` 19 to 10, all single-word absence literals. The retry notice is now an exact span of
 the freeze's guidance, and T5.6 `model_text_outside_owner` counts 15 in 4 files against 12, two of them the retry
 module's constants: a measurement effect, not new model text.
@@ -1771,7 +1782,10 @@ publishes nothing.
      `InvalidReferenceSelector`). The decision to count the kernel step's retry authority in the ceiling is a
      separate change (SPEC01 E1).
   7. and 8. (the §22.6 correction location; the evaluator partial-body retention and F0005 §9's
-     workflow-definition rejection detail) are separate items, open in SPEC01 E5.
+     workflow-definition rejection detail) are separate items; the evaluator partial-body retention was
+     built 20 November 2026 ("Evaluator partial bodies"), the workflow-definition rejection detail was built
+     20 November 2026 ("Workflow-definition rejection detail"), and the §22.6 correction location is open in
+     SPEC01 E5.
   9. Reasons are emitted as upper-cased names under the current token rule; enumerating the closed
      `diagnostic_code` set (F0002's open item) is separate (SPEC01 §8).
   10. The change edits the ADR 0033, 0030 and 0041 pointers and text, contracts 06, 08, 22 and 27,
@@ -2459,6 +2473,117 @@ byte-identical (6 groups, 142 scenarios, 1,910 calls); none was taken before C40
   longer restate them. Each screen still needs its own live approval. The Q23 screen that "didn't run" can now be
   taken.
 
+## Evaluator partial bodies. The standalone evaluator keeps a failed or interrupted response body (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "yes ammend evaluator.md", then "implement E5"). Harness only; no engine, model
+input or report change, and no published-output defect class: it makes a failed judge call inspectable for the H3
+panels.
+
+- **Defect:** the evaluator's `Observation` held a bare `?[]const u8`, set only after a full read or a `.received`
+  response. A Bedrock call that reset, ended early or hit its deadline came back as `.failed` with a `ResponseBody`
+  prefix the adapter never read, and the OpenAI adapter dropped its buffered bytes when the read failed.
+- **Change:** `Observation.response_body` is the engine transport's own `ResponseBody` (`bytes`, `complete`;
+  `provider.Body`). `bedrock.zig` carries a received body as complete and a `.failed` body as the transport reported
+  it; `http.zig` reads through `drain`, which returns the bytes that arrived and calls them complete only when the
+  read ended and the HTTP framing's terminal state did (a write failure is an allocation failure), and resolves an
+  incomplete body's error from the framing, then the connection, then an end of stream, as the engine's exchange
+  does; `evaluation_trace.zig` writes it as `response.json` and records `response_complete`
+  (true, false, or null for no body) in the attempt's `outcome.json`. `evaluator.md` ("Attempts and failures",
+  "Reports and origin") says so: the reports retain no body, the evidence files retain the redacted body, and
+  `evaluation-report/v8` is unchanged.
+- **Proof:** three tests in `test/harness/tests.zig`. The trace test checks a complete, a partial and a bodyless
+  observation (completeness true, false and null; a credential removed from the prefix; no response file for no
+  body). The Bedrock test runs the production HTTP adapter over the socket fixture with `reset`, `eof` and `deadline`
+  faults and requires the first three body bytes, incomplete, the same failure as before, and no payload or usage.
+  The OpenAI test drains a real content-length reader over a whole input, the same reader over an input shorter than
+  its declared length (the standard reader reports that EOF as an ordinary end, so only the framing state shows a
+  prefix) and a reader that fails after nine bytes. Each of the mappings (Bedrock's `.failed` body, `drain`'s read
+  failure and framing proof, the trace's completeness) fails a named test when broken. 482 to 485 evaluator tests.
+- **Found in review, fixed:** the first `http.zig` wiring unwrapped a null `bodyErr()` (a reset or a deadline-cancelled
+  read leaves it null; the engine falls back to the connection's read error) and called a content-length body cut by
+  EOF complete.
+- **Limits recorded in `evaluator.md`:** a body is retained whenever the adapter returns an observation; where the
+  provider port returns only an error (a cancelled Bedrock exchange, an allocation failure) none is. A credential cut
+  by the truncation isn't detected, the limit of ADR 0018. `http.zig`'s exchange itself still can't be driven offline
+  (the native client is disabled in tests), so `drain` is tested over the standard readers and the error resolution
+  that follows it is not.
+
+## Workflow-definition rejection detail (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "yes", to amending F0005 §9, ADR 0032's diagnostics line and contract 13-01, "and
+then implement"). Diagnosability only: no engine behaviour, model input or published-output defect class changes, and
+public codes, their `code(step)` mapping and the harness report are unchanged.
+
+- **Defect:** F0005 §9 promised "source ordinal and bounded rule evidence", but every definition owner returned one
+  payload-free error and the CLI printed only the family code. A rejected definition did not say which file, section or
+  step.
+- **Change:** the CLI prints `CODE: <rule>[; <path>][; step=<id>]` for the six workflow-definition families, for example
+  `WORKFLOW_GRAPH_COMPILE_INVALID: declared_outcomes; hello.workflow.yaml; step=run`. A closed `Rule`
+  (`src/domain/definition_rejection.zig`), one per section or validation stage, is recorded with the definition's source
+  ordinal and the step or resource by the owner of the check (`workflow_definition_schema.zig`,
+  `workflow_resource_binding.zig`, `workflow_graph_compilation.zig`, `workflow_graph_validation.zig`) into a slot the
+  startup routine owns, through an optional `?*Slot` argument; the first rule recorded stays. The routine copies the
+  display path from the validated inventory by ordinal before the inventory is released, finds the definition a parse
+  failure names by parsing each capture alone, and marks the file of a failed capture. Where an owner has no finer rule
+  the failing startup step stands in. The evidence is fixed-size and omitted rather than cut. `Runtime` keeps the
+  diagnostic and `Report.bootstrap_detail` carries it to `main.zig`.
+- **Proof:** owner tests for each phase (schema sections and the step, resource binding, compile, graph validation), a
+  startup-routine test for the file of a failed capture and parse (the parse case with two definitions, either one
+  malformed), one for no detail outside the workflow authority and on success, a renderer test, and the nine
+  packaged-smoke pins now read the real stderr of the packaged executable. Breaking each of first-rule-wins, the parse
+  location, the display path, the subject, the ordinal and a resource-kind step fault's rule fails a named test.
+- **Found in review, fixed:** a step fault in a definition that declares a resource was reported as
+  `compiled_resources` (the resource kinds are derived from every step first); it now names the step, and a real
+  resource failure names the resource. The compile outcome-flow check is `outcome_flow`, not `declared_outcomes`. An
+  inventory file no definition declares names that file. The parse location is a one-port function inside `steps`
+  (`locateParseFailure`), not a helper beside the routine.
+- **Not done:** a rule is one per section or stage, so a data-flow rejection does not name the data key, a compile
+  rejection names the check and not which parameter, and `graph_shape` groups several shape checks. A step that came from
+  a subgraph is named by its expanded ID. An allocation failure under a stage is reported as that stage's rejection, as
+  the public code is. Only some rules have an owner test of their own (`step_operation`, `compiled_resources`,
+  `step_contract`, `graph_shape`, `unbounded_cycle`, `outcomes`, `definition_header`, `resources`, `resource_binding`).
+  Configuration, root and provider rejections still print their code alone (F0001, F0004 and F0006 make the same
+  promise; each is its own item), and so does the harness report.
+- **Decided** 20 November 2026 (user: "what is the best option, do not induce brittleness or additional complexity"):
+  the evidence argument stays optional (`?*Slot`, `?*Diagnostic`). Production never passes null and about 110 test call
+  sites do. Required would make each of them build a throwaway slot, and what it would guard, a production caller
+  dropping the evidence, is already caught by the startup-routine test and the nine packaged-smoke pins. No
+  architecture pin is added: it would be a per-file text pin (T4).
+
+## Provider failure detail (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "yes, amend and implement", to carrying a failed model step's typed provider
+failure to the run report and the CLI as presentation data beside the rejection, and amending contracts 08 and 27 and
+F0006 §8). Diagnosability only: no engine behaviour, model input or published-output defect class changes, and the
+runner rejection tags, the feature log, the harness report and its versions are unchanged.
+
+- **Defect:** the provider result held a typed cause, retry class, delivery and transport diagnostic, but a failed model
+  call reached the CLI as `failed` alone, so a missing key, HTTP 401, 403 or 429, a DNS failure and a TLS failure read
+  alike.
+- **Change:** `Report.provider_failure` (`provider_failure_detail.zig`) holds the closed cause, retry class and delivery
+  of the last model call, and its transport phase and cause or content diagnostic when it has one. The runner records it
+  from each call's validated result (`provider_observation_workflow`), where a rejected body's content diagnostic is
+  formed, and from the authorization result of a call that was never sent (a missing key); a call's authorization
+  replaces an earlier call's. `main.zig` prints it after an `invalid`, `blocked`, `failed` or `cancelled` outcome, in the
+  form contract 08 defines. Every member is an enum name, so no key, header, body, URL or provider text can reach it.
+  Contracts 08 and 27 and F0006 §8 say so.
+- **Found in review, fixed:** the first build read the raw invocation result, where the content diagnostic does not
+  exist, so a rejected body (`invalid_content`, an invalid UTF-8 body) printed no detail; it is read from the validated
+  result now. A failed authorization is recorded only once its validation passes, and a successful one clears an earlier
+  call's detail.
+- **Proof:** a unit test that every cause, delivery and retry class prints its own name and that the transport and content
+  parts print only when present; runner tests for a failed call, a rejected body with its content diagnostic, a stopped
+  call after a stale detail, a failed authorization plan and a cancelled one (no detail); and the packaged smoke's
+  missing-key pin, which reads the real stderr. Keeping an earlier call's detail through a successful authorization, and
+  not recording a validated failure, each fail a named test.
+- **Open:** SPEC01 §10 C4.
+
+## `ToolChainService` deleted (20 November 2026)
+
+**Decided** 20 November 2026 (user approved deleting it, then: "delete ToolChainService from the code"; SPEC01 C27). It
+wrapped a `*const ValidToolchain` and returned it; no production code constructed it, and consumers read
+`valid_toolchain` from the envelope (F0003). No model request or published output changes.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a
@@ -2493,8 +2618,8 @@ Later that day, user: "update with recommendation", after a read-only check:
 - **The no-value test deletions are intended** (user, in a unit-test review session: "yes delete the
   high-confidence items"): three startup assertions in `workflow_tests.zig` and the unit test in
   `toolchain_service.zig` compared a getter with itself or repeated a compile-time field check, and
-  `architecture_test.zig:2394` keeps the same `!@hasField(BootstrapServices, "toolchain")` pin. Nothing is
-  restored; the service's own fate is SPEC01 C27.
+  `architecture_test.zig:2410` keeps the same `!@hasField(BootstrapServices, "toolchain")` pin. Nothing is
+  restored; the service was deleted 20 November 2026 (above).
 
 ## R-A1. Engine-owned release is not adopted
 

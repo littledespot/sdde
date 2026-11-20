@@ -378,7 +378,7 @@ const guided_registry: operations.Registry = .{
 fn compileGuided(a: std.mem.Allocator, yaml: []const u8, resources: []const Resource) !compilation.CompiledWorkflow {
     var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
     const raw = try @import("application/startup_routine.zig").steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
-    const definitions = try @import("domain/workflow_definition_schema.zig").validate(a, raw);
+    const definitions = try @import("domain/workflow_definition_schema.zig").validate(a, raw, null);
     const descriptors = try a.alloc(inventory.InventoryDescriptor, resources.len + 1);
     const accounts = try a.alloc(inventory.InventoryAccount, resources.len + 1);
     const resource_ordinals = try a.alloc(u16, resources.len);
@@ -393,10 +393,10 @@ fn compileGuided(a: std.mem.Allocator, yaml: []const u8, resources: []const Reso
         captures[index] = .{ .ordinal = ordinal, .bytes = resource.bytes };
     }
     const source: inventory.Inventory = .{ .capability = undefined, .descriptors = descriptors, .accounts = accounts, .definition_ordinals = &.{1}, .resource_ordinals = resource_ordinals };
-    const manifest = try @import("domain/workflow_resource_binding.zig").resolve(a, source, definitions);
+    const manifest = try @import("domain/workflow_resource_binding.zig").resolve(a, source, definitions, null);
     var schemas: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&guided_registry, schemas.compiler(), a, definitions, source, manifest, captures);
-    _ = try @import("domain/workflow_graph_validation.zig").validate(a, graphs, &guided_registry);
+    const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&guided_registry, schemas.compiler(), a, definitions, source, manifest, captures, null);
+    _ = try @import("domain/workflow_graph_validation.zig").validate(a, graphs, &guided_registry, null);
     return graphs[0];
 }
 

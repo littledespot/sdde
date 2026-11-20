@@ -845,6 +845,33 @@ source path operational authority. No failure falls back to another file,
 encoding, definition set, cached registry, hard-coded workflow, or source
 asset.
 
+**Rejection detail (approved by the user on 20 November 2026).** A rejection in
+these six families keeps its public code, and the CLI prints after it, on the same
+line, `: <rule>[; <path>][; step=<id>]`:
+
+- The rule is a closed class, one per definition section or validation stage and
+  never per call site (`Rule` in `src/domain/definition_rejection.zig`). Where an
+  owner has no finer class, the failing startup step stands in for it. The path is
+  the workflow-root-relative path of the inventory entry the failure belongs to, a
+  definition or a resource file; with no path the entry is named `entry <n>`. The
+  identifier is the step, or for a resource the resource (`resource=<id>`), where
+  the rule is scoped to one.
+- The owner of each check records the rule, the entry's inventory ordinal and
+  that identifier in a slot the startup routine owns, then returns its unchanged
+  error ([ADR 0032](../decisions/0032-engine-routines.md)). The routine copies the
+  display path from the validated inventory by ordinal before it releases the
+  inventory, so the path is never authority. The parser port reports no location, so
+  a rejected definition is found by parsing each capture alone (one definition at a
+  time, so a capture that fails alone is the one that failed).
+- The evidence is bounded and never cut: an identifier longer than the identifier
+  grammar allows is omitted, and a path longer than 512 bytes is replaced by its
+  ordinal.
+- A rule names a stage, not a cause: an allocation failure under a stage is reported
+  as that stage's rejection, as the public code already is.
+- Public codes, their `code(step)` mapping and the harness report are unchanged.
+  Configuration, root and provider rejections keep their code alone: their
+  promises of bounded detail are separate items.
+
 - Raw bytes, decoded raw values, schema-valid definitions, compiled candidates, registry
   candidates, handles, and evidence remain distinct owned values.
 - Each is destroyed exactly once on success, deterministic rejection, cancellation,
@@ -940,6 +967,9 @@ Those concerns remain with their accepted owners or later increments.
     policy supplies no budget and no retry count. Every retry-capable operation instance declares its own
     bounded `retry-limit`; missing limits, policy-supplied retry defaults, and
     retry parameters on non-retry contracts fail compilation.
+22. A rejection in a workflow-definition family prints its public code followed by its
+    rule class, the definition's path and, where scoped, the step or resource
+    (§9); the code is unchanged and nothing outside that family prints detail.
 
 ## 12. Verification
 
@@ -1040,11 +1070,23 @@ Implementation tests must cover the owning boundaries:
 - no write, model call, command, or feature lock occurs
 - all owned intermediates are released on every terminal branch.
 
+**Rejection detail**
+
+- each owner records its rule, the definition's ordinal and, where scoped, the step
+  or resource in the slot, and an accepted input records nothing; a rule recorded
+  first stays
+- a failed capture or parse names the definition's file; a failure with no definition
+  at fault names only its step; a failure outside the workflow authority names no
+  detail
+- evidence is copied whole or omitted, never cut.
+
 **Packaging**
 
 - load a valid relocated variable registry and its declared workflow-owned resources
   with the native executable in a clean directory containing only target-owned runtime
-  inputs, never `design/`, source files, build cache, or a Zig toolchain.
+  inputs, never `design/`, source files, build cache, or a Zig toolchain
+- each packaged workflow rejection prints its public code, then its rule class, the
+  definition's path and, where scoped, the step.
 
 ## Implementation status
 

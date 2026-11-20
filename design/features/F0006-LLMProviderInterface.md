@@ -804,7 +804,9 @@ ProviderFailure {
 
 - `transport` is present only for a failure the shared HTTP exchange reports; it records
   where and how that exchange failed. It is diagnostic only and never affects `cause`,
-  `retryClass` or `delivery`; the E2E report records it with the exchange evidence.
+  `retryClass` or `delivery`; the E2E report records it with the exchange evidence, and the
+  run report and the CLI print it with the cause (approved by the user on 20 November 2026;
+  [contract 08](../contracts/08-diagnostics-evidence.md)).
 
 `ProviderInvocationObservation.completed` means the provider operation returned
 a complete recognized terminal response; it does not mean candidate or

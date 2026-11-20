@@ -233,7 +233,7 @@ change, not a Plan-local one:
     raw-fallback switch, and §10's preset fields for them aren't accepted YAML (§4).
   - Under the implemented contract (10-toolchain-presets.md:13-17), package documents define
     no command, path, capability or safety exception, and YAML selects registered policy IDs
-    only (F0003:200-201, :262-263).
+    only (F0003:199-200, :257-258).
   - Without them no planned path can be validated, so the intent's "applicable project
     constraints" (intent.md:35) can't be checked.
   - **Recommended:** extend the registered policy descriptors (§3) with typed file kinds, roots,

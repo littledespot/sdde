@@ -100,7 +100,9 @@ as a first cause (its terminal carries a later logging failure), and one failure
 sink that stays broken, replaced nothing. The
 E2E report (`first_cause`), the step event of the rejected step and the offline step trace
 (`:first=`) carry both; the feature log's terminal event keeps the terminal code only and
-gains no event, column or code.
+gains no event, column or code. A failed model call's provider failure reaches the run
+report and the CLI only ([§8](08-diagnostics-evidence.md)): `model.completed` gains no
+cause field.
 
 Reuse the closed event registry and shared logging lifecycle. The runner owns
 execution/transition facts, validators supply typed diagnostics, and the existing

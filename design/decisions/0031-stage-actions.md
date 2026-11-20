@@ -43,7 +43,7 @@
     - §13: design.md's introduction, which governs every catalogue, and the 13-01
       toolchain entries;
     - §27 and §28;
-  - [F0003](../features/F0003-ToolChainService.md): the nine separate toolchain
+  - [F0003](../features/F0003-Toolchain.md): the nine separate toolchain
     operations, runner-owned intermediates and cancellation, and their acceptance and
     verification;
   - [F0005](../features/F0005-WorkflowDefinitionRegistryService.md): "Nothing is hidden

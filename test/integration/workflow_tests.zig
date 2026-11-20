@@ -96,7 +96,7 @@ fn runInProjectWithRuntime(
     project_root: std.Io.Dir,
     runtime: pipeline.NodeRuntime,
 ) bootstrap_services.Outcome {
-    return runInProjectWithRegistry(io, allocator, project_root, runtime, &core_workflow_operations.registry);
+    return runInProjectWithRegistry(io, allocator, project_root, runtime, &core_workflow_operations.registry, null);
 }
 
 const valid_config =
@@ -489,7 +489,7 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
     operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
     operations.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
-    var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry);
+    var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry, null);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
     operations.bindRoots(boot.ready.roots.registry());
@@ -505,8 +505,6 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     }
     const view = try invocation.pipeline_runner.?.envelope.view(read_contract);
     const valid = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/toolchain_workflow_values.zig").valid, @import("../../src/domain/toolchain_safety.zig").ValidToolchain);
-    const service = @import("../../src/application/toolchain_service.zig").ToolChainService.init(valid);
-    try std.testing.expect(service.toolchain() == valid);
     try std.testing.expectEqual(expected_packages.len, valid.packages().len);
     for (expected_packages, valid.packages()) |expected_package, package| try std.testing.expectEqualStrings(expected_package, package);
     try std.testing.expectEqual(expected_policies, valid.policies().len);
@@ -1092,7 +1090,7 @@ test "native YAML validates citations extraction and reconciliation before conti
             .{ .contract = .{ .id = "test.observe-reconciliation", .kind = .step, .requires = &.{ .accounted_reference_reconciliation, .required_authority_ledger }, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceReconciliationTestProducer, &reconciliation_producer, ReferenceReconciliationTestProducer.observe) },
         };
         native.registry.operations = &entries;
-        var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+        var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry, null);
         defer boot.deinit();
         try std.testing.expect(boot == .ready);
         native.bindRoots(boot.ready.roots.registry());
@@ -1124,7 +1122,7 @@ test "native YAML validates citations extraction and reconciliation before conti
                 const invalid_yaml = try std.mem.replaceOwned(u8, std.testing.allocator, complete_yaml, change[0], change[1]);
                 defer std.testing.allocator.free(invalid_yaml);
                 try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = invalid_yaml });
-                var rejected = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+                var rejected = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry, null);
                 defer rejected.deinit();
                 try std.testing.expect(rejected != .ready);
             }
@@ -1677,7 +1675,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var native: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
         native.init(allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.port(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         cost.enter(.bootstrap);
-        var boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry);
+        var boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry, null);
         cost.enter(.runner);
         defer boot.deinit();
         var feature_outputs: @import("../../src/adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
@@ -1725,31 +1723,21 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             if (selected_fault.stage == .repair and selected_fault.shape == .missing_answer) {
                 driver.repeated_provenance_fault = selected_fault.repetition == .persistent;
                 driver.repair_across_units = selected_fault.repetition == .recover_then_exhaust;
-                driver.measurement_prefix = if (selected_fault.repetition == .persistent) ".zig-cache/provenance-answer-exhaustion" else ".zig-cache/provenance-answer-recovery";
             }
-            if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/alternating-missing-recovery";
         }
         if (applicability) |mode| {
             driver.applicability = mode;
             driver.brief_text = .{ mode.source(other_applicability), mode.source(other_applicability) };
             driver.entities_required = mode == .entities;
-            if (!other_applicability) driver.measurement_prefix = switch (mode) {
-                .no_entities => ".zig-cache/phase4-complete",
-                .unjustified => ".zig-cache/phase4-unjustified",
-                .missing_text => ".zig-cache/phase4-question",
-                else => null,
-            };
         }
         if (scenario == 0) driver.fault = .{ .stage = .support, .shape = .empty, .repetition = .{ .every_request = 1 } };
         if (scenario == 1) {
             driver.support_fault = .foreign_source_single;
         }
-        if (scenario <= 1) driver.measurement_prefix = if (scenario == 0) ".zig-cache/chunk13-compatible-request" else ".zig-cache/chunk13-conflict-request";
         driver.generation_gap = scenario == 12 or scenario == 13;
         driver.candidate_omissions = candidate_omission;
         driver.extraction_omission = extraction_omission;
         driver.source_gaps = source_gaps;
-        if (source_gaps) driver.measurement_prefix = if (scenario == source_gap_start) ".zig-cache/review-decision-greeting" else ".zig-cache/review-decision-loan";
         if (evidence_scenario) driver.evidence_fault = if (scenario == evidence_start + 2) .empty_correction else .recover;
         if (extraction_omission) driver.malformed_once = true;
         driver.missing_classifications = classification_scenario;
@@ -1776,23 +1764,18 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (disposition_scenario) driver.disposition_sequence = if (scenario - disposition_start < 2) .exhaust else .recover;
         if (source_repair_scenario) {
             driver.source_loss = source_repairs[scenario - source_repair_start];
-            if (driver.source_loss == .false_conflict) driver.measurement_prefix = ".zig-cache/false-conflict-recovery";
-            if (driver.source_loss == .false_conflict_questions) driver.measurement_prefix = ".zig-cache/false-conflict-questions";
             if (scenario >= loss_fault_start) driver.fault = loss_faults[scenario - loss_fault_start];
         }
         if (preservation_scenario and scenario != preservation_start) driver.source_loss = .partial;
         if (summary_scenario) {
             driver.summary_sequence = if (scenario - summary_start < 2) .exhaust else .recover;
-            if (scenario == summary_start) driver.measurement_prefix = ".zig-cache/summary-protocol-request";
             driver.malformed_once = true;
         }
         if (global_scenario) {
             driver.global_sequence = if (scenario - global_start < 2) .exhaust else .recover;
-            driver.measurement_prefix = if (scenario == global_start) ".zig-cache/global-protocol-failure" else if (scenario == global_start + 2) ".zig-cache/global-protocol-recovery" else null;
             driver.malformed_once = true;
         }
         if (brief_scenario) {
-            if (scenario == brief_start) driver.measurement_prefix = ".zig-cache/brief-request";
             // Model provenance remains forbidden during correction. Native
             // binding supplies evidence after the semantic fields are admitted.
             const summary_first = (scenario - brief_start) % 2 == 0;
@@ -1818,7 +1801,6 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             // entities own their applicability and records; record batches cannot
             // repair entity membership. Native deletion needs no model response.
             driver.contradict_entities = true;
-            if (scenario < membership_start + 2) driver.measurement_prefix = if (scenario == membership_start) ".zig-cache/membership-extra" else ".zig-cache/membership-missing";
             driver.failed_repair = scenario >= membership_start + 4;
             driver.entities_required = (scenario - membership_start) % 2 == 1;
         }
@@ -2843,7 +2825,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 try project.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, restored, .{}) });
                 // Publication changes previously absent filesystem roots. A new
                 // invocation must bootstrap their current physical authority.
-                var next_boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry);
+                var next_boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry, null);
                 defer next_boot.deinit();
                 try std.testing.expect(next_boot == .ready);
                 native.bindRoots(next_boot.ready.roots.registry());
@@ -3476,7 +3458,7 @@ test "feature preflight uses configured specs roots and preserves selected files
         var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
         native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
-        var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+        var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry, null);
         defer boot.deinit();
         try std.testing.expect(boot == .ready);
         var adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
@@ -3547,7 +3529,7 @@ test "feature inspection rejects missing authority stale roots and forged resolv
     var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
     native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
     native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
-    var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+    var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry, null);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
     const registry = boot.ready.roots.registry();
