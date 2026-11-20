@@ -165,9 +165,9 @@ test "a failure in each reachable evidence step names that step and propagates t
     try expectEvidenceStops(&duplicate, .validate_inventory, error.InvalidReferenceInventory);
     var capture: Fake = .{ .fail = .capture_sources };
     try expectEvidenceStops(&capture, .capture_sources, error.ReferenceUnavailable);
-    // The reader blocks malformed text, which accounting does not accept as a document.
+    // The reader blocks malformed text, which accounting does not accept as a document and reports as its reason.
     var malformed: Fake = .{ .bytes = "\xff" };
-    try expectEvidenceStops(&malformed, .validate_accounting, error.InvalidReferenceAccounting);
+    try expectEvidenceStops(&malformed, .validate_accounting, error.ReferenceMalformedText);
     var identities: Fake = .{ .fail = .assign_identities };
     try expectEvidenceStops(&identities, .assign_identities, error.IdentityUnavailable);
 }

@@ -156,7 +156,57 @@ test "unsupported and malformed content is retained as explicit failure and cann
         const result = try steps.decodeMarkdown(adapter.decoderPort(), arena.allocator(), try captured(arena.allocator(), case.path, case.bytes));
         try std.testing.expectEqual(case.failure, result.entries[0].result.blocked);
         try std.testing.expect(result.entries[0].debit.?.outcome == .released);
-        try std.testing.expectError(error.InvalidReferenceAccounting, steps.validateAccounting(arena.allocator(), result));
+        // The stage fails with the entry's own reason, not with a fault of the corpus's books.
+        try std.testing.expectError(reference.failureError(case.failure), steps.validateAccounting(arena.allocator(), result));
+    }
+}
+
+test "every ingestion failure has its own stage error, and none is the books' fault" {
+    inline for (std.enums.values(reference.Failure)) |failure| {
+        const err = reference.failureError(failure);
+        try std.testing.expect(err != error.InvalidReferenceAccounting and err != error.InvalidReferenceInventory);
+        inline for (std.enums.values(reference.Failure)) |other| {
+            if (failure != other) try std.testing.expect(err != reference.failureError(other));
+        }
+    }
+}
+
+/// `valid`'s one entry as the enumerator observed it and the capturer captured it, whatever the decoder then did.
+fn corpusOf(valid: reference.DecodedCorpus, observation: reference.Observation, source: reference.Capture) reference.DecodedCorpus {
+    var result = valid;
+    var inventory = valid.captured.inventory;
+    var listed = inventory.entries[0];
+    listed.observation = observation;
+    inventory.entries = &.{listed};
+    var captured_corpus = valid.captured;
+    captured_corpus.inventory = inventory;
+    var captured_entry = valid.captured.entries[0];
+    captured_entry.entry = listed;
+    captured_entry.source = source;
+    captured_corpus.entries = &.{captured_entry};
+    result.captured = captured_corpus;
+    var decoded_entry = valid.entries[0];
+    decoded_entry.captured = captured_entry;
+    result.entries = &.{decoded_entry};
+    return result;
+}
+
+test "an entry the capturer blocked fails accounting with its own reason, and a block it never made is a fault of the books" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var adapter: markdown.Adapter = .{ .io = std.testing.io };
+    const valid = try steps.decodeMarkdown(adapter.decoderPort(), arena.allocator(), try captured(arena.allocator(), "source.md", "# Original\n"));
+    const observed_file = valid.captured.inventory.entries[0].observation;
+    // The capturer blocked a file it could not capture, and the entries it observed as no file.
+    try std.testing.expectError(error.ReferenceSourceSize, steps.validateAccounting(arena.allocator(), corpusOf(valid, observed_file, .{ .blocked = .source_size })));
+    for ([_]struct { observation: reference.Observation, failure: reference.Failure }{
+        .{ .observation = .symlink, .failure = .symlink },
+        .{ .observation = .special, .failure = .special },
+        .{ .observation = .unreadable, .failure = .unreadable },
+    }) |case| {
+        try std.testing.expectError(reference.failureError(case.failure), steps.validateAccounting(arena.allocator(), corpusOf(valid, case.observation, .{ .blocked = case.failure })));
+        // An entry observed as no file that the capturer nevertheless captured is not a reason: the books disagree.
+        try std.testing.expectError(error.InvalidReferenceAccounting, steps.validateAccounting(arena.allocator(), corpusOf(valid, case.observation, valid.captured.entries[0].source)));
     }
 }
 

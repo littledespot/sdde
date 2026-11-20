@@ -41,7 +41,7 @@ pub fn Authorize(comptime stage: Stage) type {
             .dispositions => .validated_reference_dispositions,
             .signals => .validated_reference_signals,
             .conflicts => .validated_reference_conflicts,
-        }, .result = .reference_reconciliation_repair } };
+        }, .result = .reference_reconciliation_repair, .blocked_reader = .reference_reconciliation } };
         pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
         /// Each phase's authorizer reads the phase's own rejected validation and invalidates it and
         /// every later phase that depended on it.
@@ -217,6 +217,10 @@ test "a blocked authorization of any phase stays decided though it retires the e
         var prepared = try binding.prepare(&envelope, occurrence, descriptor, &decided);
         defer prepared.deinit();
         try std.testing.expect(prepared.compatible(.blocked));
+        // The same decision through a descriptor that names no reader is refused: the reader is the one difference.
+        var unread = descriptor.repair_authorize;
+        unread.blocked_reader = null;
+        try std.testing.expectError(error.InvalidOutcomeAssociation, binding.prepare(&envelope, occurrence, .{ .repair_authorize = unread }, &decided));
         // A decision made against other evidence than the run holds is still stale.
         const other = try values.create(std.testing.allocator, evidence_schema, u8, 9);
         defer values.destroy(other);

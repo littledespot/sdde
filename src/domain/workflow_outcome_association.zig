@@ -8,11 +8,48 @@ const retry = @import("workflow_retry.zig");
 const provider = @import("llm_provider_operation.zig");
 
 pub const Kind = enum { request, candidate, authority, clarification };
+
+/// The native owner whose retained decision an authorizer's `blocked` outcome is read from. The set is
+/// closed so the binding's `switch` over it is exhaustive, and each reader names the one result key it
+/// reads, which `validDescriptor` holds the binding's `result` to.
+pub const BlockedReader = enum {
+    specification_coverage,
+    reference_reconciliation,
+    specification_unit,
+    specification_support,
+
+    pub fn result(self: BlockedReader) pipeline.DataKey {
+        return switch (self) {
+            .specification_coverage => .specification_coverage_repair,
+            .reference_reconciliation => .reference_reconciliation_repair,
+            .specification_unit => .specification_repair_authorization,
+            .specification_support => .specification_support_repair,
+        };
+    }
+};
+
+/// The native owner whose retained decision a diagnostic admission is read from. The set is closed so
+/// the binding's `switch` over it is exhaustive, and each reader names the one evidence key it reads,
+/// which `validDescriptor` holds the binding's `evidence` to.
+pub const AdmissionReader = enum {
+    specification_support_review,
+
+    pub fn evidence(self: AdmissionReader) pipeline.DataKey {
+        return switch (self) {
+            .specification_support_review => .specification_support_review,
+        };
+    }
+};
+
 pub const Binding = struct {
     kind: Kind,
     subject: pipeline.DataKey,
     evidence: pipeline.DataKey,
     result: ?pipeline.DataKey = null,
+    /// Set exactly on an authorizer whose contract declares `blocked`.
+    blocked_reader: ?BlockedReader = null,
+    /// Set exactly on a diagnostic admission.
+    admission_reader: ?AdmissionReader = null,
 };
 
 /// Engine-owned native associations, never workflow parameters or model facts.
@@ -582,11 +619,23 @@ fn walkAssociations(aliases: []const Association, left: Subject, right: Subject,
     return false;
 }
 
-pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKey, optional: []const pipeline.DataKey, produces: []const pipeline.DataKey, replaces: []const pipeline.DataKey, repair_role: retry.Role) bool {
+/// What registry admission and graph validation both hold a contract's descriptor to. An authorizer
+/// that declares `blocked` names the reader of that decision, a diagnostic admission names the reader
+/// of its evidence, and nothing else names one, so the binding can serve every descriptor that is
+/// admitted.
+pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKey, optional: []const pipeline.DataKey, produces: []const pipeline.DataKey, replaces: []const pipeline.DataKey, repair_role: retry.Role, outcomes: []const workflow.OutcomeTag) bool {
     const binding = descriptor.binding() orelse return true;
     if (!declared(binding.subject, requires, optional, produces, replaces) or
         !declared(binding.evidence, requires, optional, produces, replaces)) return false;
     if (binding.result) |result| if (!contains(produces, result) and !contains(replaces, result)) return false;
+    const blockable = descriptor == .repair_authorize and std.mem.indexOfScalar(workflow.OutcomeTag, outcomes, .blocked) != null;
+    if (binding.blocked_reader) |reader| {
+        if (!blockable or (binding.result orelse return false) != reader.result()) return false;
+    } else if (blockable) return false;
+    const admits = descriptor == .diagnostic_admission;
+    if (binding.admission_reader) |reader| {
+        if (!admits or binding.evidence != reader.evidence()) return false;
+    } else if (admits) return false;
     return switch (descriptor) {
         .request_admission, .request_protocol, .request_resend, .request_closure => binding.kind == .request and binding.subject == .prepared_model_request,
         .repair_authorize => (binding.kind == .candidate or binding.kind == .authority) and repair_role == .authorize,
@@ -605,6 +654,55 @@ fn declared(key: pipeline.DataKey, requires: []const pipeline.DataKey, optional:
 }
 fn contains(keys: []const pipeline.DataKey, key: pipeline.DataKey) bool {
     return std.mem.indexOfScalar(pipeline.DataKey, keys, key) != null;
+}
+
+test "an authorizer names its blocked reader exactly when its contract declares blocked" {
+    const requires = [_]pipeline.DataKey{.parsed_reference_extraction};
+    const blocking = [_]workflow.OutcomeTag{ .ok, .blocked, .failed };
+    const plain = [_]workflow.OutcomeTag{ .ok, .failed };
+    inline for (@typeInfo(BlockedReader).@"enum".fields) |field| {
+        const reader: BlockedReader = @enumFromInt(field.value);
+        const produces = [_]pipeline.DataKey{reader.result()};
+        const read: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .result = reader.result(), .blocked_reader = reader };
+        var unread = read;
+        unread.blocked_reader = null;
+        var resultless = read;
+        resultless.result = null;
+        // Accepted: a reader where `blocked` is declared, none where it is not.
+        try std.testing.expect(validDescriptor(.{ .repair_authorize = read }, &requires, &.{}, &produces, &.{}, .authorize, &blocking));
+        try std.testing.expect(validDescriptor(.{ .repair_authorize = unread }, &requires, &.{}, &produces, &.{}, .authorize, &plain));
+        try std.testing.expect(validDescriptor(.{ .repair_merge = unread }, &requires, &.{}, &produces, &.{}, .merge, &blocking));
+        // Rejected, each differing from an accepted case in exactly one respect.
+        try std.testing.expect(!validDescriptor(.{ .repair_authorize = unread }, &requires, &.{}, &produces, &.{}, .authorize, &blocking));
+        try std.testing.expect(!validDescriptor(.{ .repair_authorize = read }, &requires, &.{}, &produces, &.{}, .authorize, &plain));
+        try std.testing.expect(!validDescriptor(.{ .repair_authorize = resultless }, &requires, &.{}, &produces, &.{}, .authorize, &blocking));
+        try std.testing.expect(!validDescriptor(.{ .repair_merge = read }, &requires, &.{}, &produces, &.{}, .merge, &blocking));
+    }
+    // A reader reads one result key: naming another reader's key is rejected.
+    const foreign = [_]pipeline.DataKey{BlockedReader.reference_reconciliation.result()};
+    const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .result = foreign[0], .blocked_reader = .specification_coverage };
+    try std.testing.expect(!validDescriptor(.{ .repair_authorize = mismatched }, &requires, &.{}, &foreign, &.{}, .authorize, &blocking));
+}
+
+test "a diagnostic admission names the reader of its own evidence and no other descriptor names one" {
+    const outcomes = [_]workflow.OutcomeTag{ .ok, .invalid };
+    inline for (@typeInfo(AdmissionReader).@"enum".fields) |field| {
+        const reader: AdmissionReader = @enumFromInt(field.value);
+        const keys = [_]pipeline.DataKey{reader.evidence()};
+        const read: Binding = .{ .kind = .candidate, .subject = reader.evidence(), .evidence = reader.evidence(), .admission_reader = reader };
+        var unread = read;
+        unread.admission_reader = null;
+        // Accepted: a reader on a diagnostic admission, none on any other descriptor.
+        try std.testing.expect(validDescriptor(.{ .diagnostic_admission = read }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        try std.testing.expect(validDescriptor(.{ .observe = unread }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        // Rejected, each differing from an accepted case in exactly one respect.
+        try std.testing.expect(!validDescriptor(.{ .diagnostic_admission = unread }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        try std.testing.expect(!validDescriptor(.{ .observe = read }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+    }
+    // A reader reads one evidence key: another key is rejected.
+    const other = [_]pipeline.DataKey{.parsed_reference_extraction};
+    const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .admission_reader = .specification_support_review };
+    try std.testing.expect(!validDescriptor(.{ .diagnostic_admission = mismatched }, &other, &.{}, &.{}, &.{}, .none, &outcomes));
 }
 
 test "sealed blocked repair preserves its exact rejection and cannot relabel other outcome classes" {

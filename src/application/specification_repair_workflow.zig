@@ -27,7 +27,7 @@ pub const Authorize = struct {
         .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_generation_session, .parsed_specification_unit, .validated_specification_unit, .packet_guidance },
         .produces = &.{.specification_repair_authorization},
     };
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .specification_repair_authorization } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .specification_repair_authorization, .blocked_reader = .specification_unit } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .blocked, .failed };
     allocator: std.mem.Allocator,

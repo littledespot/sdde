@@ -15,7 +15,21 @@ pub const Limits = struct {
     duration_ms: i64 = 5000,
 };
 pub const limits: Limits = .{};
-pub const Error = std.mem.Allocator.Error || error{ InvalidReferenceInventory, InvalidReferenceAccounting };
+/// `InvalidReferenceAccounting` is an inconsistency of the corpus's own books. An entry that could not be read
+/// or decoded fails with the `Reference...` error of its own `Failure`, so the reason is the stage's error.
+pub const Error = std.mem.Allocator.Error || error{
+    InvalidReferenceInventory,
+    InvalidReferenceAccounting,
+    ReferenceSymlink,
+    ReferenceSpecialFile,
+    ReferenceUnreadable,
+    ReferenceSourceSize,
+    ReferenceSourceBudget,
+    ReferenceSourceCapture,
+    ReferenceUnsupportedMedia,
+    ReferenceMalformedText,
+    ReferenceDecodedBudget,
+};
 pub const SourceId = struct {
     pub const model_scalar = "ordinal";
     ordinal: u32,
@@ -49,8 +63,21 @@ pub const Failure = enum {
     unsupported_media,
     malformed_text,
     decoded_budget,
-    decoder_failure,
 };
+/// The stage error that carries an entry's failure.
+pub fn failureError(failure: Failure) Error {
+    return switch (failure) {
+        .symlink => error.ReferenceSymlink,
+        .special => error.ReferenceSpecialFile,
+        .unreadable => error.ReferenceUnreadable,
+        .source_size => error.ReferenceSourceSize,
+        .source_budget => error.ReferenceSourceBudget,
+        .source_capture => error.ReferenceSourceCapture,
+        .unsupported_media => error.ReferenceUnsupportedMedia,
+        .malformed_text => error.ReferenceMalformedText,
+        .decoded_budget => error.ReferenceDecodedBudget,
+    };
+}
 pub const Debit = struct {
     reserved: usize,
     outcome: union(enum) { committed: usize, released: void },

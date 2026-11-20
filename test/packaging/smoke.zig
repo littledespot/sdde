@@ -422,7 +422,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.clearEnvironment();
         check.expectExitCode(if (case.rejected) 1 else 0);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (case.rejected) "InvalidReferenceAccounting\n" else "");
+        check.expectStdErrEqual(if (case.rejected) "ReferenceUnsupportedMedia\n" else "");
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_]struct { feature: []const u8, rejected: bool }{

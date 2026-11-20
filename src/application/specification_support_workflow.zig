@@ -81,7 +81,7 @@ pub const BuildInput = struct {
     }
 };
 pub const Collect = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .diagnostic_admission = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_review } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .diagnostic_admission = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_review, .admission_reader = .specification_support_review } };
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
     pub const Action = @import("../actions/specification/collect_specification_support.zig").Action;
     allocator: std.mem.Allocator,
@@ -127,7 +127,7 @@ pub const BuildLossInput = struct {
     }
 };
 pub const CollectLoss = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .diagnostic_admission = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_review } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .diagnostic_admission = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_review, .admission_reader = .specification_support_review } };
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
     pub const Action = @import("../actions/specification/collect_specification_support_loss.zig").Action;
     allocator: std.mem.Allocator,

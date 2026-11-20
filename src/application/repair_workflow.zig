@@ -120,7 +120,7 @@ fn variantOf(comptime op: Operation, comptime owner: RepairOwner, comptime T: ty
         const final = list;
         break :blk final;
     };
-    return .{
+    const variant: operation.Variant = .{
         .value = owner.id(),
         .parameters = &parameters,
         .requires = effects.requires,
@@ -137,6 +137,11 @@ fn variantOf(comptime op: Operation, comptime owner: RepairOwner, comptime T: ty
         .retry_limit = if (maximum) |limit| .{ .maximum = limit, .scope = .repair } else null,
         .iteration = null,
     };
+    // Registry admission and graph validation hold the descriptor to this same check, so a variant that
+    // would be refused there, such as a `blocked` outcome with no reader, stops the build instead.
+    comptime if (!variant.validAssociation())
+        @compileError("the " ++ @tagName(owner) ++ " variant of " ++ @tagName(op) ++ " declares an outcome association its own outcomes, data effects and role do not support");
+    return variant;
 }
 
 /// The variants of `op`, one per owner it serves, in the owners' declaration order.

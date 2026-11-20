@@ -339,7 +339,8 @@ test "reader keeps multiline values together and fails over-limit values explici
     try std.testing.expect(available.entries[0].fact.citation.location.end.byte <= resolved.chunk.span.end.byte);
     const near_limit = try inputsFor(allocator, "a" ** 16000 ++ " `" ++ "b" ** 1000 ++ "`");
     try std.testing.expectEqual(@as(usize, 1), (try fixture.candidates(allocator, near_limit)).entries.len);
-    try std.testing.expectError(error.InvalidReferenceAccounting, ingest(allocator, "long.md", "`" ++ "x" ** (@import("domain/reference_ingestion.zig").limits.block_bytes + 1) ++ "`"));
+    // A value over the block limit is a failure of the entry's own decoding, and its reason says so.
+    try std.testing.expectError(@import("domain/reference_ingestion.zig").failureError(.decoded_budget), ingest(allocator, "long.md", "`" ++ "x" ** (@import("domain/reference_ingestion.zig").limits.block_bytes + 1) ++ "`"));
 }
 
 test "exact values of every token kind enter ordinary claim and citation accounting" {

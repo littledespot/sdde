@@ -238,7 +238,14 @@ that every exemption at the wire is a validator delete.
   counts (R8, design/harness/acceptance.md).
 - **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…`): the D12.2
   set's publications and the first six ADR 0047 runs (`evaluations/e2e/<run>/`,
-  `evaluations/adjudications/`). One applied decision is open (SPEC01 §7 H1).
+  `evaluations/adjudications/`). `2026-11-02T09-15-27Z-d2ee…`'s applied decision reads
+  `admission_evidence_invalid`, from a harness bug since fixed, while its record scores `critical_failed`.
+  **It stands** (decided 20 November 2026, user: "update the documentations with the above
+  recommendations"):
+  - the first record under a skill version counts and no later one under that version is applied
+    (design/harness/acceptance.md:88-91);
+  - the run directory is gone, and only the build that made it reads its v14 report (e2e.md:618-620);
+  - the run fails either way, and it is in no reference set.
 - **v15, implemented 7 November 2026** (user: "implement items 1 and 2"): `spec-e2e-report/v15`
   and `baseline-acquisition/v12` carry ADR 0047's source-catalogue reasons and `issue`, the
   publication reason `adjudication_required`, and an admission audit that accepts no story
@@ -2236,6 +2243,51 @@ blocked decision that retires its own evidence is accepted, and a decision made 
 holds is still rejected; it fails with `decidedView` disabled, at the check the real runs hit. `zig build verify`
 147 steps, 2,226 tests; no model request changes.
 
+## C6 reader. An authorizer that declares blocked names the reader of that decision (20 November 2026)
+
+**Decided** 20 November 2026 (user: "yes", then "yes implement", on a preflight that fixed the scope to the
+authorizer's blocked table; the `diagnostic_admission` branch is the next section and `clarification_route` stays
+in SPEC01 C6 and C21). **Defect class:** none; a registration-time contract check, so no published-output claim and no model
+request changes. **Failure:** a descriptor that registry admission and graph validation admitted could be
+refused by the outcome binding at run time. `authorizationBlocked` was a table of four result keys ending in
+`else => InvalidOutcomeAssociation`, so an authorizer that declared `blocked` over another key registered,
+compiled and failed its first run, indistinguishably from an owner that could not read its decision. No
+registered variant took that path. **Change:** `BlockedReader`, a closed enum of the four native owners that
+retain a blocked decision, rides on the `repair_authorize` binding and determines its result key.
+`validDescriptor`, the one check registry admission and graph validation share, now takes the contract's
+outcomes and requires a reader exactly where `blocked` is declared; `variantOf` runs the same check at comptime
+(`Variant.validAssociation`), so a registered variant that fails it stops the build; `authorizationBlocked`
+switches exhaustively on the reader. The four owners declare their reader beside their `outcomes`. Amends
+ADR 0033 (variant facts and acceptance), 13-04 and F0005:660-663. **Tests:** `validDescriptor` over every reader
+(accepted: a reader with `blocked`, none without; rejected: each missing, extra, resultless, on another
+descriptor kind, and of another result); registry admission refuses a registered authorizer variant that loses,
+adds or mismatches its reader and graph validation one that loses it; the reconciliation authorizer's real
+blocked decision is refused through `prepare` when its descriptor names no reader and accepted when it does;
+each reader's result key equals the key its owner stores the decision under; the architecture test pins that
+`variantOf` runs the check. Mutations: removing one owner's reader fails the build; removing the rule fails the
+new tests; passing no outcomes at either call site fails the compile and registry tests.
+
+## C6 admission reader. A diagnostic admission names the reader of its evidence (20 November 2026)
+
+**Decided** 20 November 2026 (user: "update the documentations with the above recommendations", then "preflight C6
+diagnostic_admission then implement"); the `clarification_route` and request descriptors stay in SPEC01 C6 and C21.
+**Defect class:** none; a registration-time contract check, so no published-output claim and no model request
+changes. **Failure:** `diagnosticAdmission` tested the evidence key against the support review and returned
+`InvalidOutcomeAssociation` for any other, so a `diagnostic_admission` over other evidence registered, compiled
+and failed its first run. The two registered ones (`collect-specification-support` and its loss form) read the
+support review. **Change:** `AdmissionReader`, a closed enum with one member, the support review, rides on the
+binding and determines its evidence key. `validDescriptor` requires it on a `diagnostic_admission` and on no
+other descriptor; `diagnosticAdmission` switches exhaustively on it; the two producers declare it. These
+contracts are no variants, so no comptime check exists here: registry admission and graph validation reject at
+startup. Amends F0005:660-663; 13-04 states no association for these operations, so it is unchanged. **Tests:** `validDescriptor` (accepted: a reader on a diagnostic
+admission, none on another descriptor; rejected: each missing, extra, and for other evidence); registry
+admission over the same three cases, which replaces the test that recorded the unreadable case; the real sealed
+support decision is accepted through `prepare` with its reader and refused without it; the reader's evidence key
+equals the key its owner stores the decision under. Mutations: removing the rule fails the two new tests;
+defaulting a missing reader in the binding fails the accepted-path test; a producer without its reader fails the
+production registry test. Graph validation shares the rule and its call site; no test sends the admission rule
+through it.
+
 ## Upstream rework. A form never carries an earlier owner's gap (16 November 2026)
 
 **Decided** 15 November 2026 (the design wins: §14.14 and invariant 22 send an earlier-owner gap to §24.5's rework
@@ -2610,6 +2662,36 @@ clarification forms. No model request or published specification changes.
 - **Not done:** a form the engine would have rendered is not told from one whose engine-owned region the user edited: both
   are set aside when open and undeferred, as ADR 0009:91-93 overwrites every engine-owned region. No diagnostic records that
   a form was set aside. A torn form is not modeled (the writer seam fails before the file is touched).
+
+## Reference ingestion fails with the entry's own reason (built 20 November 2026)
+
+**Decided** by user instruction ("apply recommendations", to the recommendation to build the ingestion reasons).
+Diagnosability only; defect class named: none. No model request or published specification changes, and nothing that
+failed before passes. ADR 0036:292-294 says a source fails at ingestion with a typed reason, and design.md invariant 11
+forbids silently skipping an unsupported or unreadable file.
+
+- **Defect:** `decodeMarkdown` and the capturer record why an entry was blocked (`reference.Failure`), but
+  `validateAccounting` collapsed every reason into `InvalidReferenceAccounting`, so a `.json` file in the reference
+  directory, a malformed text file and an inconsistency of the books all read alike.
+- **Change:** each `Failure` has its own member of `reference.Error` (`ReferenceUnsupportedMedia`, `ReferenceMalformedText`,
+  and so on), mapped by one exhaustive `failureError`. `validateAccounting` returns the capturer's reason for an entry it
+  blocked, and the decoder's reason for an entry it blocked, which it reads before the debits that decode released and
+  before the corpus limits it may have blocked on. `InvalidReferenceAccounting` stays for the books' own faults, an entry
+  observed as no file that the capturer nevertheless captured among them. The names are operation-failure names, so the CLI
+  prints the name that was `InvalidReferenceAccounting` and the event code follows; 13-03 says so. The report's operation
+  codes are a derived enum, which only grows: no member is renamed or removed, so retained reports still decode (SPEC01 §2
+  rule 12).
+- **Found in review, fixed:** `decoder_failure` had no producer (`decodeMarkdown` set it as an initial value that every
+  branch overwrote), so its error was dead closed vocabulary; the member and the sentinel are gone and each entry is built
+  in one expression. The observation arms duplicated the capturer's mapping and a test proved a corpus that is a fault of the
+  books as if it were a reason; the capturer's block is the reason now. The decoder's reason was read after the corpus-limit
+  checks, so an entry the decoder blocked on that limit would have read as the books' fault.
+- **Proof:** every `Failure` maps to its own error and none is the books' fault; a decoder-blocked entry of each decoder
+  reason, a capturer-blocked entry and each observation kind fail with their reason, and the captured counterpart of an
+  observation fails the books; the stage stops at `validate_accounting` with the reason; the integration scenario shows one
+  reason for each of seven failure classes through the production adapters (unsupported, disguised and hidden files, malformed
+  text, a symlink, an oversized file, an unreadable directory); and the packaged smoke pins `ReferenceUnsupportedMedia`.
+- **Not done:** SPEC01 §10 C4 states what is open, the decisions included.
 
 ## A passing run is quiet (partly built 20 November 2026)
 

@@ -27,7 +27,8 @@ pub const Step = enum {
 /// did not start. The binding hands it to the runner (ADR 0031).
 pub const Diagnostic = struct { step: ?Step = null };
 
-/// The failure representation of the eight absorbed actions, unchanged. `Cancelled` means the
+/// The failure representation of the eight absorbed actions, with `validateAccounting` failing an entry that could
+/// not be read or decoded as its own `reference.Failure`. `Cancelled` means the
 /// runtime stopped being active or a port call was cancelled; the runner reports the cancellation.
 pub const Error = corpus_port.Error || reference.Error || evidence.Error || identity_port.Error || error{Cancelled};
 
@@ -104,32 +105,29 @@ pub const steps = struct {
         var total: usize = 0;
         var revision: u32 = 0;
         for (captured.entries, 0..) |item, index| {
-            var entry: reference.DecodedEntry = .{ .captured = item, .result = .{ .blocked = .decoder_failure }, .debit = null };
-            switch (item.source) {
-                .directory => entry.result = .{ .directory = {} },
-                .blocked => |failure| entry.result = .{ .blocked = failure },
+            entries[index] = switch (item.source) {
+                .directory => .{ .captured = item, .result = .{ .directory = {} }, .debit = null },
+                .blocked => |failure| .{ .captured = item, .result = .{ .blocked = failure }, .debit = null },
                 .bytes => |bytes| decode: {
-                    if (bytes.len > reference.limits.decoded_corpus_bytes - total) {
-                        entry.result = .{ .blocked = .decoded_budget };
-                        break :decode;
-                    }
+                    if (bytes.len > reference.limits.decoded_corpus_bytes - total)
+                        break :decode .{ .captured = item, .result = .{ .blocked = .decoded_budget }, .debit = null };
                     revision += 1;
-                    entry.debit = .{ .reserved = bytes.len, .outcome = .{ .released = {} } };
-                    const decoded = decoder.decode(allocator, item.entry.path, bytes, bytes.len) catch |err| {
-                        entry.result = .{ .blocked = switch (err) {
-                            error.OutOfMemory => return error.OutOfMemory,
-                            error.UnsupportedMedia => .unsupported_media,
-                            error.MalformedText => .malformed_text,
-                            error.DecodeLimitExceeded => .decoded_budget,
-                        } };
-                        break :decode;
-                    };
-                    entry.result = if (bytes.len == 0) .{ .empty = decoded } else .{ .decoded = decoded };
-                    entry.debit = .{ .reserved = bytes.len, .outcome = .{ .committed = bytes.len } };
+                    // A decoder that blocks the entry leaves this debit released.
+                    const released: reference.Debit = .{ .reserved = bytes.len, .outcome = .{ .released = {} } };
+                    const decoded = decoder.decode(allocator, item.entry.path, bytes, bytes.len) catch |err| break :decode .{ .captured = item, .result = .{ .blocked = switch (err) {
+                        error.OutOfMemory => return error.OutOfMemory,
+                        error.UnsupportedMedia => .unsupported_media,
+                        error.MalformedText => .malformed_text,
+                        error.DecodeLimitExceeded => .decoded_budget,
+                    } }, .debit = released };
                     total += bytes.len;
+                    break :decode .{
+                        .captured = item,
+                        .result = if (bytes.len == 0) .{ .empty = decoded } else .{ .decoded = decoded },
+                        .debit = .{ .reserved = bytes.len, .outcome = .{ .committed = bytes.len } },
+                    };
                 },
-            }
-            entries[index] = entry;
+            };
         }
         return .{ .captured = captured, .entries = entries, .decoded_bytes = total, .budget_revision = revision };
     }
@@ -151,10 +149,15 @@ pub const steps = struct {
                     continue;
                 },
                 .file => {},
-                .symlink, .special, .unreadable => return error.InvalidReferenceAccounting,
+                // The capturer blocks an entry it observed as no file, with its reason: one it did not block is a fault of the books.
+                .symlink, .special, .unreadable => if (captured.source != .blocked) return error.InvalidReferenceAccounting,
             }
+            if (captured.source == .blocked) return reference.failureError(captured.source.blocked);
             if (captured.source != .bytes or decoded.captured.source != .bytes) return error.InvalidReferenceAccounting;
             const bytes = captured.source.bytes;
+            // A decoder that blocked the entry released its debit, and may have blocked it on a corpus limit the
+            // checks below apply too, so its reason is read before the books are.
+            if (decoded.result == .blocked) return reference.failureError(decoded.result.blocked);
             if (!std.mem.eql(u8, bytes, decoded.captured.source.bytes) or bytes.len != entry.observation.file.size or
                 bytes.len > reference.limits.source_file_bytes or bytes.len > reference.limits.source_corpus_bytes - source_total or
                 bytes.len > reference.limits.decoded_corpus_bytes - decoded_total) return error.InvalidReferenceAccounting;

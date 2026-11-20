@@ -71,7 +71,7 @@ fn validateStep(graph: compilation.CompiledWorkflow, step: compilation.CompiledS
     if (!@import("workflow_iteration.zig").validProjection(step)) return invalid();
     if (single_operation and !@import("workflow_operation.zig").validRepair(step.repair_role, if (step.retry_authority) |value| value.scope else null, step.runner_accounting, step.side_effect)) return invalid();
     if (step.repair_role != .none and step.capabilities.len != 0) return invalid();
-    if (!@import("workflow_outcome_association.zig").validDescriptor(step.outcome_association, step.requires, step.optional, step.produces, step.replaces, step.repair_role)) return invalid();
+    if (!@import("workflow_outcome_association.zig").validDescriptor(step.outcome_association, step.requires, step.optional, step.produces, step.replaces, step.repair_role, step.outcomes)) return invalid();
     if (workflow.WorkflowStepId.parse(step.id.bytes) == null or workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
     if (single_operation and !@import("workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
     if (!@import("workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();

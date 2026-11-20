@@ -323,6 +323,14 @@ Rejects with the owner's own errors.
 | `specification-support` | `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` | `specification_support_repair` | `ok`, `more`, `blocked`, `failed` | candidate; `specification_support_review`; `specification_support_review` |
 | `specification-coverage` | `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `specification_coverage` | `specification_coverage_repair` | `blocked`, `failed` only | candidate; `specification_generation_session`; `specification_coverage` |
 
+The association also names its result, the key in "Writes". An authorizer that declares
+`blocked` additionally names the closed reader of that decision, which determines that
+result: `reference-summary`, `-dispositions`, `-signals` and `-conflicts` the
+reference-reconciliation reader, and `specification-unit`, `specification-support` and
+`specification-coverage` their own. An authorizer without `blocked` names none, and
+registry admission, graph validation and variant construction reject either mismatch
+([ADR 0033](../../decisions/0033-generic-repair-operations.md)).
+
 ### `build-repair-input`
 
 Builds the repair packet for the authorization. Writes `model_input_packet`; outcomes `ok` and

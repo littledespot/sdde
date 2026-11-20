@@ -767,7 +767,16 @@ test "reference failures are not skipped and cannot change closed clarification 
             directory.setPermissions(io, .fromMode(0o700)) catch @panic("restore test directory permissions");
             directory.close(io);
         };
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+        const rejected = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" });
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, rejected.executionStatus().?);
+        // The stage's error names why the source failed: one reason for each class of failure.
+        try std.testing.expectEqualStrings(switch (failure) {
+            .unsupported, .disguised, .hidden => "ReferenceUnsupportedMedia",
+            .malformed => "ReferenceMalformedText",
+            .symlink => "ReferenceSymlink",
+            .oversized => "ReferenceSourceSize",
+            .unreadable => "ReferenceUnreadable",
+        }, @errorName(rejected.execution_rejected.operation_failed));
         try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).executionStatus().?);
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", allocator, .limited(16384));
         try std.testing.expectEqualSlices(u8, clarifications.forms[0].bytes, retained);

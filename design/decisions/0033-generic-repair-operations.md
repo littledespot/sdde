@@ -39,7 +39,10 @@
 - **Amended by:** [ADR 0046](0046-complete-dispositions-at-admission.md) (31 October
   2026): the `reference-dispositions` authorizer no longer selects an insert or a
   delete (an omitted or repeated disposition is corrected at admission); its
-  replacement path is unchanged. E4's freeze is taken after that change.
+  replacement path is unchanged. E4's freeze is taken after that change. Also the user's
+  decision of 20 November 2026 ("yes implement", SPEC01 C6): an authorizer that declares
+  `blocked` names the closed reader of that decision in its descriptor ("Today's
+  differences become variant facts").
 
   The overall design remains **Proposed design**.
 
@@ -189,6 +192,13 @@ Today's differences become variant facts:
   route, each with its own counter (see "Retry identity"). Each phase keeps its own
   explicit YAML step (ADR 0022).
 - **Coverage** declares only `blocked` and `failed`, so it gains no unreachable outcome.
+- **Blocked authorizers.** An authorizer that declares `blocked` names, in its
+  descriptor, the closed reader of that decision, and one that does not declare it names
+  none. The reader is one of the four native owners that retain a blocked decision:
+  specification coverage, reference reconciliation, specification unit or specification
+  support. It determines the one result key the descriptor names. The execution binding
+  selects the retained decision through one exhaustive `switch` over the reader, so a
+  `blocked` with no reader cannot be registered, compiled or built.
 - **Merge retries.** The text and extraction merges forbid a `retry-limit`. The other
   merges require one, within their variant's maximum, which is the YAML value of the
   conversion: 128 for `reference-reconciliation`, 1 for each of the two source-omission
@@ -348,6 +358,9 @@ All offline:
   - rejected: a missing `retry-limit` where required, a `retry-limit` where forbidden, and
     one above the variant's maximum;
   - rejected at registry admission: a variant whose role and association don't fit;
+  - rejected at registry admission, graph validation and variant construction: an
+    authorizer that declares `blocked` without its reader, names a reader without
+    declaring `blocked`, or names the reader of another result;
   - rejected: an execution delta outside the step's variant.
 - **Unit tests per owner rule,** with the removed per-owner operations' accepted and
   rejected cases preserved.

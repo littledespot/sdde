@@ -2923,6 +2923,9 @@ test "the generic repair operations select owner rules through one exhaustive sw
     // Its imports are exactly the contract types and the seven owner bindings.
     try std.testing.expectEqual(@as(usize, 7), countOccurrences(generic, "_workflow.zig\")"));
     try std.testing.expectEqual(@as(usize, 13), countOccurrences(generic, "@import(\""));
+    // Each variant is held to the descriptor check registry admission and graph validation apply, so a
+    // `blocked` outcome with no reader stops the build (ADR 0033 "Blocked authorizers").
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(generic, "variant.validAssociation()"));
     // An owner function has one definition: each owner binding's `invoke` is declared once in its own file,
     // so the generic operation holds it once and no second path to it exists.
     inline for (.{

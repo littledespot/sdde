@@ -44,7 +44,14 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
      (`unsupported_media`, `malformed_text`, `decoded_budget`), and the step still succeeds.
   5. `validateAccounting`: requires the decoded and captured entries to match the inventory one for
      one within the entry limit, then totals source and decoded bytes into the accepted
-     documents. Rejects `InvalidReferenceAccounting`.
+     documents. An entry that was observed as a symlink, a special file or an unreadable one, or
+     that the capturer or the decoder blocked, fails with the error of its own `Failure`
+     (`ReferenceSymlink`, `ReferenceSpecialFile`, `ReferenceUnreadable`, `ReferenceSourceSize`,
+     `ReferenceSourceBudget`, `ReferenceSourceCapture`, `ReferenceUnsupportedMedia`,
+     `ReferenceMalformedText`, `ReferenceDecodedBudget`), so the source fails at ingestion with a
+     typed reason (ADR 0036). The capturer blocks an entry it observed as no file, so an entry
+     observed as a symlink, a special file or an unreadable one that was captured anyway, and any
+     other mismatch of the books, rejects `InvalidReferenceAccounting`.
   6. `assignIdentities`: numbers sources in document order and maps each provisional source and
      block to its canonical ID under a fresh reference-state ID. It is the only step that draws
      system entropy, through its own port. Rejects errors of `reference_evidence.Error` and

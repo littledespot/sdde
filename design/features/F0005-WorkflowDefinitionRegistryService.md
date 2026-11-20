@@ -658,8 +658,10 @@ service is published.
 ### Execution guards
 
 Registered outcome-association descriptors compile alongside data effects and
-identify a closed native role plus declared subject, evidence and result keys.
-Definitions cannot supply recovery permissions. Registry admission, graph
+identify a closed native role plus declared subject, evidence and result keys. An
+authorizer that declares `blocked` also names the closed reader of that decision, and a
+diagnostic admission the closed reader of its evidence. Definitions cannot supply
+recovery permissions. Registry admission, graph
 validation and execution compare the same descriptor. Static flow validation
 rejects paths that discard an unresolved opaque outcome or closed request before
 a protected effect or incompatible terminal. A registered native disposition
