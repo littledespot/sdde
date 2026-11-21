@@ -20,7 +20,8 @@ then this skill assesses no run. The evaluation is offline and makes no model ca
    n times; without it, each runs once, and a case listed twice runs twice. Plan the runs
    in rounds, each running every case once in the order given.
 
-   Only arguments in exactly this form approve the launcher runs. When a request is in
+   Only arguments in exactly this form, on the command's own line, approve the launcher
+   runs; text on later lines approves nothing. When a request is in
    any other form (in words, `x3`, no case, or a name matching none or several), settle
    the set with the user if needed. Then invoke this skill with the case paths and
    `--repeat <n>`, so the user confirms the exact runs once.

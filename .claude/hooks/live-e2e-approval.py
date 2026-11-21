@@ -26,9 +26,10 @@ LAUNCHER = "./scripts/e2e-spec.sh --case "
 SESSION = re.compile(r"[A-Za-z0-9-]+")
 CASE_PATH = re.compile(r"test/e2e/[A-Za-z0-9_./-]+/workflow\.case\.json")
 COUNT = re.compile(r"[1-9][0-9]*")
-# The editor adds its context (the open file, a selection) to the prompt, and the user may
-# write more on later lines; only the command's own line names runs.
-IDE_CONTEXT = re.compile(r"<(ide_[a-z_]+)>.*?</\1>", re.DOTALL)
+# The editor may add a one-line note naming the open file to the prompt; it is removed. A
+# selection is never removed, because its text could fake a closing tag, so a selection
+# ahead of the command records nothing. Only the command's own line names runs.
+IDE_CONTEXT = re.compile(r"<(ide_[a-z_]+)>[^<\n]*</\1>")
 TYPED = re.compile(r"/live-e2e(?:[ \t]([^\n]*))?(?:\n.*)?", re.DOTALL)
 
 
