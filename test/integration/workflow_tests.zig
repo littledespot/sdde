@@ -1858,7 +1858,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (link_scenario) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            const refusal = "- **EXPECTED OUTCOME** " ++ @import("../../src/test_fixtures/spec_generation_responses.zig").refusal;
+            const refusal = "- **THEN** " ++ @import("../../src/test_fixtures/spec_generation_responses.zig").refusal;
             switch (driver.edge_cases.?) {
                 // The run stops before any request, and the typed gap names the edge case's group.
                 .unlinked => {
@@ -1878,12 +1878,17 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     try std.testing.expect(!chosen or groups > 1);
                     try std.testing.expect(view.contains(.published_workflow_output));
                     const rendered = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_rendering_workflow.zig").rendered_schema, .rendered);
-                    // The printed outcome is the linked criterion's Then: the one the model named for
-                    // that edge case. The answers alternate between the last and the first criterion
-                    // offered, so the refusal prints for the first, third, ... edge case only.
+                    // The printed scenario is the linked criterion's own Given, When and Then: the one the
+                    // model named for that edge case. The answers alternate between the last and the
+                    // first criterion offered, so the refusal prints for the first, third, ... edge
+                    // case only.
                     const refusals: usize = if (chosen) (groups + 1) / 2 else 0;
                     try std.testing.expectEqual(refusals, std.mem.count(u8, rendered, refusal));
-                    try std.testing.expectEqual(if (chosen) groups else 1, std.mem.count(u8, rendered, "- **EXPECTED OUTCOME** "));
+                    const edge_cases: usize = if (chosen) groups else 1;
+                    try std.testing.expectEqual(edge_cases, std.mem.count(u8, rendered, "- **GIVEN** "));
+                    try std.testing.expectEqual(edge_cases, std.mem.count(u8, rendered, "- **WHEN** "));
+                    try std.testing.expectEqual(edge_cases, std.mem.count(u8, rendered, "- **THEN** "));
+                    try std.testing.expect(std.mem.indexOf(u8, rendered, "CONDITION") == null and std.mem.indexOf(u8, rendered, "EXPECTED OUTCOME") == null);
                     const content = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").content_schema, .content);
                     var linked: usize = 0;
                     for (content.records) |record| {
@@ -3009,8 +3014,8 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v26", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v26", "specification-state/v25");
+    try std.testing.expectEqualStrings("specification-state/v27", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v27", "specification-state/v26");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
     try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
     const principles = @import("../../src/domain/principle_registry.zig");

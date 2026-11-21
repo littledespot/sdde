@@ -1681,7 +1681,7 @@ test "reference-grounded projections round trip all record families and reject c
             .source_group_ids = value.source_group_ids,
             .provenance = value.provenance,
         });
-        // The edge case prints the Then of the criterion of its batch that shares its claims.
+        // The edge case prints the scenario of the criterion of its batch that shares its claims.
         const outcomes = [_]identifiers.Outcome{.{ .edge_case = @intFromEnum(spec.Kind.edge_case), .criterion = @intFromEnum(spec.Kind.acceptance_criterion) }};
         const content = (try identifiers.assign(a, .{ .display_name = fixture_display_name, .primary_user_story = value, .records = records.items, .entities = .{ .disposition = .required, .basis = value } }, .{}, &outcomes)).content;
         const document = try projection.project(a, fixture.context, test_directory, content);
@@ -3721,7 +3721,7 @@ test "record repair removes only an evidence-equivalent duplicate and preserves 
         const with_sibling: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ record, record, bad_sibling } } } };
         const value_field: @import("domain/specification_candidate.zig").ValueField = switch (kind) {
             .acceptance_criterion => .given,
-            .edge_case => .condition,
+            .edge_case => .given,
             else => .text,
         };
         const stable = try with_sibling.origins.stableTarget(.{ .value = .{ .subject = .{ .record = 2 }, .field = value_field } }, 3);
@@ -9721,7 +9721,7 @@ test "records name the claims they support from their group, requirements own th
     const renew = good.value;
     const refuse = (try fixture.proposalAllGroups("MOCK Refuse renewal of an overdue loan.")).value;
     const fr: spec.Content(spec.BusinessValue) = .{ .functional_requirement = .{ .text = renew } };
-    const ec: spec.Content(spec.BusinessValue) = .{ .edge_case = .{ .condition = refuse } };
+    const ec: spec.Content(spec.BusinessValue) = .{ .edge_case = .{ .given = refuse } };
     const ac: spec.Content(spec.BusinessValue) = .{ .acceptance_criterion = .{ .given = refuse, .when = refuse, .then = refuse } };
     // Parsing keeps the named subset in the group's order, never the model's.
     const refusing: spec.Content(spec.BusinessValue) = .{ .functional_requirement = .{ .text = refuse } };
@@ -9774,7 +9774,7 @@ test "records name the claims they support from their group, requirements own th
     defer restricted.release();
     try std.testing.expectEqual(@as(usize, 1), restricted.selected().coverageChoices().len);
     const item = "{{\"content\":{{\"kind\":\"{s}\",\"text\":\"MOCK x\"}},\"claim_ids\":{s}}}";
-    const scenario = "{{\"content\":{{\"kind\":\"edge_case\",\"condition\":\"MOCK c\"}},\"claim_ids\":{s}}}";
+    const scenario = "{{\"content\":{{\"kind\":\"edge_case\",\"given\":\"MOCK c\"}},\"claim_ids\":{s}}}";
     const one = try std.fmt.allocPrint(a, "[{d}]", .{group[0].ordinal});
     const both = try std.fmt.allocPrint(a, "[{d},{d}]", .{ group[0].ordinal, group[1].ordinal });
     const second = try std.fmt.allocPrint(a, "[{d}]", .{group[1].ordinal});
@@ -9823,6 +9823,20 @@ test "records name the claims they support from their group, requirements own th
             try std.testing.expectEqual(expected, result.?.reason);
             if (case.path.len != 0) try std.testing.expectEqualStrings(case.path, (try result.?.describe(a)).path);
         } else try std.testing.expect(result == null);
+    }
+    // An edge case's one authored field is its `given` (ADR 0038 Decision 7): the superseded
+    // `condition` and any `when` or `then` of the criterion it narrows are refused.
+    for ([_]struct { field: []const u8, rejection: ?check.Rejection }{
+        .{ .field = "\"given\":\"MOCK c\"", .rejection = null },
+        .{ .field = "\"condition\":\"MOCK c\"", .rejection = .unknown_property },
+        .{ .field = "\"given\":\"MOCK c\",\"condition\":\"MOCK c\"", .rejection = .unknown_property },
+        .{ .field = "\"given\":\"MOCK c\",\"when\":\"MOCK w\"", .rejection = .unknown_property },
+        .{ .field = "\"given\":\"MOCK c\",\"then\":\"MOCK t\"", .rejection = .unknown_property },
+    }) |case| {
+        const bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ ",{{\"content\":{{\"kind\":\"edge_case\",{s}}},\"claim_ids\":{s}}}]}}", .{ "functional_requirement", both, case.field, both });
+        const document = try std.json.parseFromSlice(std.json.Value, a, bytes, .{ .parse_numbers = false });
+        const result = check.validateValue(@import("domain/model_envelope.zig").value(&document.value), restricted.selected().root());
+        if (case.rejection) |expected| try std.testing.expectEqual(expected, result.?.reason) else try std.testing.expect(result == null);
     }
     // A claim that does not exist is corrected with the claims that do (22-repair.md §22.6): the real
     // correction names the claim given and the claims the records schema lists, and a response
@@ -10222,7 +10236,7 @@ test "claim-bound scenarios: a group's request offers its numbered slots with on
     const first = try fixture.proposalGroup(alpha, 0);
     const second = try fixture.proposalGroup(beta, 1);
     const edge = try fixture.proposalGroup(zeta, 0);
-    const first_batch = [_]spec.Model.RecordProposal{ authoredRecord(.{ .functional_requirement = .{ .text = first.value } }, first), authoredRecord(.{ .edge_case = .{ .condition = edge.value } }, edge) };
+    const first_batch = [_]spec.Model.RecordProposal{ authoredRecord(.{ .functional_requirement = .{ .text = first.value } }, first), authoredRecord(.{ .edge_case = .{ .given = edge.value } }, edge) };
     const second_batch = [_]spec.Model.RecordProposal{authoredRecord(.{ .functional_requirement = .{ .text = second.value } }, second)};
     var current = try sessionInScenariosWith(a, &fixture, try fixture.proposalAllGroups(delta), try fixture.proposalAllGroups(gamma), try fixture.proposalAllGroups(epsilon), &.{ &first_batch, &second_batch });
     const absent = [_][]const u8{ alpha, beta, gamma, delta, epsilon, zeta };
@@ -10291,8 +10305,8 @@ test "coverage counts only the claims each record names" {
     }.of;
     const text_value = narrative.value;
     const requirement = record(.functional_requirement, 1, .{ .functional_requirement = .{ .text = text_value } }, try attributed(a, behaviours.id, &.{extend}));
-    const scenario = record(.edge_case, 1, .{ .edge_case = .{ .condition = text_value } }, try attributed(a, behaviours.id, &.{extend}));
-    const refusal = record(.edge_case, 2, .{ .edge_case = .{ .condition = text_value } }, try attributed(a, behaviours.id, &.{refuse}));
+    const scenario = record(.edge_case, 1, .{ .edge_case = .{ .given = text_value } }, try attributed(a, behaviours.id, &.{extend}));
+    const refusal = record(.edge_case, 2, .{ .edge_case = .{ .given = text_value } }, try attributed(a, behaviours.id, &.{refuse}));
     const content = struct {
         fn of(story: spec.AttributedValue, value: spec.AttributedValue, authored: []const spec.IdentifiedRecord) spec.IdentifiedContent {
             return .{ .display_name = fixture_display_name, .primary_user_story = story, .records = authored, .entities = .{ .disposition = .not_applicable, .basis = value } };
@@ -10374,12 +10388,12 @@ test "ADR 0038 Decision 7 an edge case's link is native, one closed choice among
         authoredRecord(.{ .functional_requirement = .{ .text = kept.value } }, renewed),
         authoredRecord(.{ .acceptance_criterion = .{ .given = renewed.value, .when = renewed.value, .then = renewed.value } }, renewed),
         authoredRecord(.{ .acceptance_criterion = .{ .given = renewed.value, .when = renewed.value, .then = kept.value } }, renewed),
-        authoredRecord(.{ .edge_case = .{ .condition = renewed.value } }, renewed),
+        authoredRecord(.{ .edge_case = .{ .given = renewed.value } }, renewed),
     };
     const second_batch = [_]spec.Model.RecordProposal{
         authoredRecord(.{ .functional_requirement = .{ .text = refused.value } }, refused),
         authoredRecord(.{ .acceptance_criterion = .{ .given = refused.value, .when = refused.value, .then = refused.value } }, refused),
-        authoredRecord(.{ .edge_case = .{ .condition = refused.value } }, refused),
+        authoredRecord(.{ .edge_case = .{ .given = refused.value } }, refused),
     };
     const current = try sessionWithBatches(a, &fixture, &.{ &first_batch, &second_batch });
     const plan = try request.planFor(a, current);
@@ -10477,19 +10491,25 @@ test "ADR 0038 Decision 7 an edge case's link is native, one closed choice among
     }
     try std.testing.expectEqual(@as(usize, 2), edge_cases);
 
-    // The printed outcome is the linked criterion's Then, a derived display. A rendering whose
-    // outcome line was edited still parses, yet it is not the render of the content's projection,
-    // which is what publication compares.
+    // The printed scenario is the linked criterion's own Given, When and Then, a derived display.
+    // A rendering whose copied Then was edited no longer reads back, unless it is another criterion's
+    // own Then: that still parses, yet it is not the render of the content's projection, which is
+    // what publication compares.
     const projection = @import("domain/specification_projection.zig");
     const codec = @import("domain/specification_markdown.zig");
     const document = try projection.project(a, fixture.context, test_directory, assigned.content);
     const rendered = try codec.render(a, document);
-    const printed = "- **EXPECTED OUTCOME** The loan keeps its due date.";
+    const printed = "- **THEN** The loan keeps its due date.";
     try std.testing.expect(std.mem.indexOf(u8, rendered, printed) != null);
-    try std.testing.expect(std.mem.indexOf(u8, rendered, "- **EXPECTED OUTCOME** The renewal is refused.") != null);
-    const forged = try std.mem.replaceOwned(u8, a, rendered, printed, "- **EXPECTED OUTCOME** The loan is renewed.");
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "- **THEN** The renewal is refused.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "CONDITION") == null and std.mem.indexOf(u8, rendered, "EXPECTED OUTCOME") == null);
+    const forged = try std.mem.replaceOwned(u8, a, rendered, printed, "- **THEN** The loan is extended.");
     try std.testing.expect(!std.mem.eql(u8, forged, rendered));
-    try std.testing.expectEqualStrings(forged, try codec.render(a, try codec.parse(a, forged)));
+    try std.testing.expectError(error.InvalidSpecification, codec.parse(a, forged));
+    const swapped = try std.mem.replaceOwned(u8, a, rendered, printed, "- **THEN** The loan is renewed.");
+    try std.testing.expectEqualStrings(swapped, try codec.render(a, try codec.parse(a, swapped)));
+    try std.testing.expect(!std.mem.eql(u8, swapped, rendered));
+    try std.testing.expectEqualStrings(rendered, try codec.render(a, try codec.parse(a, rendered)));
     try std.testing.expectEqualStrings(rendered, try codec.render(a, try projection.project(a, fixture.context, test_directory, assigned.content)));
     // An operational failure at any allocation is an error, never a partial request or a leak.
     try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(linkAllocationCase, .{ current, fixture.context });
@@ -10525,7 +10545,7 @@ test "an edge case no criterion of its batch can serve blocks with a typed gap a
     };
     const second_batch = [_]spec.Model.RecordProposal{
         authoredRecord(.{ .functional_requirement = .{ .text = refused.value } }, refused),
-        authoredRecord(.{ .edge_case = .{ .condition = refused.value } }, refused),
+        authoredRecord(.{ .edge_case = .{ .given = refused.value } }, refused),
     };
     const current = try sessionWithBatches(a, &fixture, &.{ &first_batch, &second_batch });
     const plan = try request.planFor(a, current);
@@ -10554,7 +10574,7 @@ test "an edge case no criterion of its batch can serve blocks with a typed gap a
     }
 }
 
-test "an edge case among three criteria of an unrelated domain prints the Then of the one the model names" {
+test "an edge case among three criteria of an unrelated domain prints the scenario of the one the model names" {
     const sessions = @import("domain/specification_session.zig");
     const links = @import("domain/scenario_link.zig");
     const request = @import("domain/scenario_link_request.zig");
@@ -10573,7 +10593,7 @@ test "an edge case among three criteria of an unrelated domain prints the Then o
         authoredRecord(.{ .acceptance_criterion = .{ .given = booked.value, .when = booked.value, .then = booked.value } }, booked),
         authoredRecord(.{ .acceptance_criterion = .{ .given = booked.value, .when = booked.value, .then = waitlisted.value } }, booked),
         authoredRecord(.{ .acceptance_criterion = .{ .given = booked.value, .when = booked.value, .then = refused.value } }, booked),
-        authoredRecord(.{ .edge_case = .{ .condition = booked.value } }, booked),
+        authoredRecord(.{ .edge_case = .{ .given = booked.value } }, booked),
     };
     const current = try sessionWithBatches(a, &fixture, &.{&batch});
     const plan = try request.planFor(a, current);
@@ -10591,8 +10611,8 @@ test "an edge case among three criteria of an unrelated domain prints the Then o
     const assigned = try sessions.assemble(a, text.validator, fixture.context, current, try links.resolve(a, plan, &.{choice}));
     const projection = @import("domain/specification_projection.zig");
     const rendered = try @import("domain/specification_markdown.zig").render(a, try projection.project(a, fixture.context, test_directory, assigned.content));
-    try std.testing.expect(std.mem.indexOf(u8, rendered, "- **EXPECTED OUTCOME** The booking is declined.") != null);
-    try std.testing.expect(std.mem.indexOf(u8, rendered, "- **EXPECTED OUTCOME** The guest joins the waiting list.") == null);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "- **THEN** The booking is declined.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "- **THEN** The guest joins the waiting list.") == null);
 }
 
 test "claim-bound scenarios: the session plans a group's slots from the batch its native deletes left" {
@@ -10702,7 +10722,7 @@ test "claim-bound scenarios: a merged batch lacking a slot's criterion is a cove
     // A requirement naming two claims makes two slots; an edge case naming the second is no cover for it.
     const batch = [_]spec.Model.RecordProposal{
         try room.record(a, .{ .functional_requirement = .{ .text = room.wording } }, room.group[0..2]),
-        try room.record(a, .{ .edge_case = .{ .condition = room.wording } }, room.group[1..2]),
+        try room.record(a, .{ .edge_case = .{ .given = room.wording } }, room.group[1..2]),
     };
     const current = try sessionInScenarios(a, &room.fixture, try room.fixture.proposalAllGroups("MOCK Book a meeting room."), &.{&batch});
     const group_plan = try sessions.scenarioPlan(a, current);

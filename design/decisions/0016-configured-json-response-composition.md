@@ -138,10 +138,12 @@ projection owner.
 SPEC01 D13.1, 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
 Decision 5, 8 November 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)
 Decisions 6 and 7, which removed the entity meaning and relationship entries and the entity
-repair tail, and then the edge case's outcome entry, and 11 November 2026 by
+repair tail, and then the edge case's outcome entry, 11 November 2026 by
 [ADR 0048](0048-engine-derived-specification-title.md), which removed the `display_name`
-purpose):** workflow resources own the semantic
-guidance that native packet builders present. One closed `packet-guidance/v6` resource holds exactly one text for each
+purpose, and 13 November 2026 by ADR 0038 Decision 7, implemented 21 November 2026, which
+removed the `condition` entry: an edge case's one authored field is its `given`, which shares
+the acceptance criterion's `given` entry):** workflow resources own the semantic
+guidance that native packet builders present. One closed `packet-guidance/v7` resource holds exactly one text for each
 registered key: feature and record purposes, source-review scopes, the reconciliation
 summary purpose, support-evidence guidance and the semantic tails of native repair
 requirements. The removed post-generation review's scopes and the engine-derived

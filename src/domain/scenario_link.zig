@@ -1,5 +1,5 @@
-//! Edge-case outcome links (ADR 0038 Decision 7). An edge case prints the Then of an acceptance
-//! criterion of its own records batch that names at least one of the same claims. Native code
+//! Edge-case scenario links (ADR 0038 Decision 7). An edge case prints the Given, When and Then of
+//! an acceptance criterion of its own records batch that names at least one of the same claims. Native code
 //! computes the candidates: a sole candidate is the link, and a choice among two or more comes
 //! from one closed model request per edge case. Positions index the records of the completed
 //! records unit in authoring order; the model never picks a record by position.
@@ -109,7 +109,7 @@ fn freeRecords(records: []const spec.RecordProposal) void {
 
 test "an edge case links natively to its only candidate and asks a choice among several" {
     const ac: spec.Content(spec.BusinessValue) = .{ .acceptance_criterion = .{ .given = text_value, .when = text_value, .then = text_value } };
-    const ec: spec.Content(spec.BusinessValue) = .{ .edge_case = .{ .condition = text_value } };
+    const ec: spec.Content(spec.BusinessValue) = .{ .edge_case = .{ .given = text_value } };
     const records = [_]spec.RecordProposal{
         try testRecord(ac, 1, &.{ 1, 2 }),
         try testRecord(ac, 1, &.{2}),
@@ -139,7 +139,7 @@ test "an edge case links natively to its only candidate and asks a choice among 
 
 test "an edge case with no criterion in its batch sharing a claim cannot be linked" {
     const ac: spec.Content(spec.BusinessValue) = .{ .acceptance_criterion = .{ .given = text_value, .when = text_value, .then = text_value } };
-    const ec: spec.Content(spec.BusinessValue) = .{ .edge_case = .{ .condition = text_value } };
+    const ec: spec.Content(spec.BusinessValue) = .{ .edge_case = .{ .given = text_value } };
     // The criterion of another batch names the claim, which a batch's edge case cannot use.
     const records = [_]spec.RecordProposal{
         try testRecord(ac, 2, &.{1}),
@@ -167,7 +167,7 @@ test "records without an edge case need no link" {
 
 test "stored content must link an edge case to a criterion it may link to and no other record to anything" {
     const ac: spec.Content(spec.BusinessValue) = .{ .acceptance_criterion = .{ .given = text_value, .when = text_value, .then = text_value } };
-    const ec: spec.Content(spec.BusinessValue) = .{ .edge_case = .{ .condition = text_value } };
+    const ec: spec.Content(spec.BusinessValue) = .{ .edge_case = .{ .given = text_value } };
     const criterion = try testRecord(ac, 1, &.{1});
     const other = try testRecord(ac, 1, &.{2});
     const edge = try testRecord(ec, 1, &.{1});

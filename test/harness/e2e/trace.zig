@@ -616,7 +616,7 @@ pub const Trace = struct {
         const accounted = runner.tokenLedger().accounted_operations.items;
         if (accounted.len <= self.attempts_observed + 1) return;
         for (accounted[self.attempts_observed .. accounted.len - 1]) |attempt| {
-            var earlier: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed };
+            var earlier: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .workflow_failed };
             try @import("observation.zig").attemptRejection(a, runner, attempt.id, &earlier);
             if (earlier.provider_diagnostic == null and earlier.model_diagnostic == null) continue;
             const origin = earlier.last_model_origin orelse continue;
@@ -624,7 +624,7 @@ pub const Trace = struct {
                 if (std.meta.eql(record.origin, origin)) break ordinal;
             } else continue;
             try self.last_rejection.observe(self.store.allocator, call, earlier);
-            var projected: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed };
+            var projected: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .workflow_failed };
             try self.last_rejection.project(a, call, &projected);
             if (self.capture) |log| try log.observeRejections(projected);
         }
@@ -635,7 +635,7 @@ pub const Trace = struct {
         var arena: std.heap.ArenaAllocator = .init(self.store.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
         try @import("observation.zig").capture(a, runner, &report);
         // The report's repairs are this step's retained merges; the log keeps the ones a later step replaces.
         try self.repairs.observe(report.repairs);
@@ -1078,7 +1078,7 @@ test "native receipt failure proofs preserve intermediate upstream rejections af
     var log: CaptureLog = .init(std.testing.allocator);
     defer log.deinit();
     for (1..4) |call| try appendReceiptFixture(&log, call);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .workflow_failed };
     report.last_protocol_rejection = .{ .call = 1, .origin = log.records.items[0].origin, .reason = "MOCK initial schema rejection", .json_error = null, .schema_error = .{ .reason = .missing_required_property, .path = "/claims" } };
     try log.observeRejections(report);
     report.last_protocol_rejection = null;
@@ -1104,7 +1104,7 @@ fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
     var log: CaptureLog = .init(a);
     defer log.deinit();
     try appendReceiptFixture(&log, 1);
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v22", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
         .call = 1,
         .origin = log.records.items[0].origin,
         .reason = "MOCK malformed JSON",

@@ -236,7 +236,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v20` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v21` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 
@@ -380,7 +380,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   preparation paths, protocol corrections and diagnostic source capture retain
   that exact selection. It adds no caching behavior or schema authority.
 - Semantic guidance that native packet builders present is workflow-owned: one closed
-  `packet-guidance/v6` resource, published as run data by one `capture-packet-guidance`
+  `packet-guidance/v7` resource, published as run data by one `capture-packet-guidance`
   step and received explicitly by each consuming operation that declares
   `.packet_guidance`, never as the resource. The
   [ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance

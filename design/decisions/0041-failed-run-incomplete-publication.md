@@ -10,8 +10,9 @@
   ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7, 8 November 2026) took v24,
   and the engine-derived title ([ADR 0048](0048-engine-derived-specification-title.md),
   11 November 2026) took v25, and the engine-owned model request
-  ([ADR 0030](0030-engine-owned-model-request.md), 13 November 2026) took v26, so when this ADR
-  resumes it takes v27. Since
+  ([ADR 0030](0030-engine-owned-model-request.md), 13 November 2026) took v26, and the edge
+  case's own given ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7,
+  implemented 21 November 2026) took v27, so when this ADR resumes it takes v28. Since
   post-generation review was removed (SPEC01 D13.1, 1 November 2026), "review" leaves the
   checks a failed view lists as not completed.
 - **Date:** 2026-10-26
@@ -44,7 +45,7 @@
     fatal to model work, but publishes this projection;
   - §3.3 (invariant on failed publication), §12.8.1 (the terminal-error rows), §17,
     §22.6 (uncorrectable JSON/schema rejection), §23.2 and §25 (the published set),
-    §24 (`specification-state/v27`), §27 and F0002 (the `run.incomplete_published`
+    §24 (`specification-state/v28`), §27 and F0002 (the `run.incomplete_published`
     event), §31.15, F0100 §5.5, the [E2E harness](../harness/e2e.md) and the §32 index;
   - §23.2 ("blocked … executions publish no new specification") and the §12.8.1
     administrative-block row, for blocked runs;
@@ -234,7 +235,7 @@ incomplete specification when a run pauses for clarification.
 
 ## Consequences
 
-- **Persistence.** `specification-state` advances to v27 for the new variant. Earlier
+- **Persistence.** `specification-state` advances to v28 for the new variant. Earlier
   states reject without migration. Workflow definitions advance to `workflow/v2`; a
   project holding a copied `workflow/v1` definition must replace it.
 - **Risks.**

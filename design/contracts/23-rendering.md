@@ -159,15 +159,23 @@ Renderers own:
   derived from the groups the entity selected and is no model text. Like the source line
   it is a display, never provenance: readback compares it with the line the projection
   derives. An entity that shares a group with no such statement shows none.
-- Each edge case also shows one engine-rendered outcome line, `- **EXPECTED OUTCOME** <text>`,
-  after its condition: the `then` of the acceptance criterion it links to, as that
-  criterion's own display, exact-value spans included
-  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7). The
-  link is the criterion's ID, held in the stored record (§24), and a candidate only when the
-  criterion is of the edge case's records batch and shares a claim with it. The line is no
-  model text and, like the source line, a display, never provenance: readback compares it
-  with the line the projection derives, so an edited outcome re-renders differently and
-  publication's byte comparison rejects it. Every edge case shows one.
+- Each edge case is printed as the Given/When/Then scenario of the acceptance criterion it
+  links to, in three lines labelled `- **GIVEN**`, `- **WHEN**` and `- **THEN**` and no other
+  label ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7).
+  `GIVEN` is the criterion's Given, the separator above (derived from the criterion's Given,
+  applied between the two texts), then the edge case's own given, so no text's bytes change;
+  `WHEN` and `THEN` are the criterion's When and Then. The copied parts are the criterion's
+  own display, exact-value spans included. The link is the criterion's ID, held in the stored
+  record (§24), and a candidate only when the criterion is of the edge case's records batch
+  and shares a claim with it. Like the source line, the copied parts are a display, never
+  provenance, and the edge case's own given is its only content. Readback takes the own
+  given as the text after the copied Given and the separator, and the first earlier criterion
+  whose When and Then equal the lines and whose Given and separator begin the `GIVEN` line is
+  the copy; a `GIVEN` line that begins with no criterion's Given, an edited When or Then that
+  is no criterion's, and a `CONDITION` or `EXPECTED OUTCOME` line reject. A copy edited into
+  another criterion's own text still reads back, yet it re-renders differently from the
+  projection, so publication's byte comparison rejects it. Every edge case shows its three
+  lines.
 - On reparse, the engine joins the persisted `SpecificationProvenanceState` only when the
   fixed/allocated record key and `BusinessContentIdentity` still equal the entry: ordered
   literal segment bytes plus self-contained passive `(ID, kind, bytes)` identities for

@@ -168,29 +168,6 @@
           ]
         },
         {
-          "field": "edge_condition",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "edge_case"
-            },
-            {
-              "property": "condition"
-            }
-          ]
-        },
-        {
           "field": "functional_requirement",
           "path": [
             {
@@ -509,29 +486,6 @@
             },
             {
               "property": "text"
-            }
-          ]
-        },
-        {
-          "field": "edge_condition",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "edge_case"
-            },
-            {
-              "property": "condition"
             }
           ]
         },

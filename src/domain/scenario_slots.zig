@@ -86,7 +86,7 @@ const outcome: Content = .{ .user_visible_outcome = .{ .text = text_value } };
 const prohibition: Content = .{ .prohibited_behavior = .{ .text = text_value } };
 const assumption: Content = .{ .assumption = .{ .text = text_value } };
 const non_goal: Content = .{ .non_goal = .{ .text = text_value } };
-const edge_case: Content = .{ .edge_case = .{ .condition = text_value } };
+const edge_case: Content = .{ .edge_case = .{ .given = text_value } };
 const criterion: Content = .{ .acceptance_criterion = .{ .given = text_value, .when = text_value, .then = text_value } };
 const entity: Content = .{ .entity = .{ .name = text_value } };
 

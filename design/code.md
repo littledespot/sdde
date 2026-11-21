@@ -494,7 +494,7 @@ ClarificationOwnershipRegistry {
 
 ## 7. Specification IR
 
-This illustrative sample describes canonical `specification/v6` under
+This illustrative sample describes canonical `specification/v7` under
 [ADR 0020](decisions/0020-derived-exact-reference-lineage.md). The display name is native
 text, the sources' level-1 heading ([ADR 0048](decisions/0048-engine-derived-specification-title.md)). Initial narrative
 responses select current whole groups through `signal_ids`; non-entity record
@@ -511,7 +511,8 @@ association and return content only. Earlier shapes have no reader.
 Implemented in [specification.zig](../src/domain/specification.zig) as `Provenance`,
 `AttributedValue`, `RecordProposal`, `ContentProposal`, the `Content` record union,
 `IdentifiedRecord` (whose `outcome_of` links an edge case to the criterion whose
-Then it prints, ADR 0038 Decision 7) and `IdentifiedContent`; the initial-response
+Given, When and Then it prints around its own given, ADR 0038 Decision 7) and
+`IdentifiedContent`; the initial-response
 forms are `AuthoringValue` (`signal_ids`), `AuthoringRecord` (`claim_ids`, non-entity
 records) and `AuthoringEntity` in
 [specification_generation.zig](../src/domain/specification_generation.zig). The

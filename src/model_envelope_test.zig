@@ -556,7 +556,7 @@ const aggregate_bindings: []const @import("domain/model_text_field.zig").Binding
     .{ .field = .entity_name, .path = &.{.{ .property = "identity" }} },
     .{ .field = .spec_goal, .path = &.{.{ .property = "a/b~c" }} },
     // An absent selected union branch is not a returned leaf.
-    .{ .field = .edge_condition, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "edge_case" }, .{ .property = "condition" } } },
+    .{ .field = .edge_given, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "edge_case" }, .{ .property = "given" } } },
 };
 const aggregate_questions: []const @import("domain/model_text_wire.zig").ProseField = &.{
     .{ .field = .clarification_question, .path = &.{ .{ .property = "questions" }, .items } },

@@ -935,7 +935,7 @@ validators:
   step that makes its request, with that step's own parameters), reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v26`). Neither variant holds review evidence.
+  registry identity (`specification-state/v27`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton
@@ -1058,7 +1058,7 @@ then applicable sections in this exact relative order:
 | Primary User Story | `primary_user_story` | The source's business claims, quoted in source order and joined natively ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). |
 | Acceptance Criteria | `acceptance_criterion` / `AC-*` | Testable initial state, action, and expected outcome. |
 | User-Visible Outcomes | `user_visible_outcome` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
-| Edge Cases | `edge_case` / `EC-*` | Boundary/error condition, with the expected business response the engine prints from the acceptance criterion it links to ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7). |
+| Edge Cases | `edge_case` / `EC-*` | Boundary/error situation as one added circumstance, printed as a Given/When/Then scenario of the acceptance criterion it links to ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7). |
 | Functional Requirements | `functional_requirement` / `FR-*` | Required system or user capability in business terms. |
 | Business Rules | `business_rule` / `BR-*` | Constraint, validation rule, or policy controlling behavior. |
 | Assumptions | `assumption` / `AS-*` | Supported assumption that keeps the feature bounded. |
@@ -1170,9 +1170,10 @@ Native shapes and ID syntax are owned by [specification.zig](../../src/domain/sp
 mechanical codec is [specification_markdown.zig](../../src/domain/specification_markdown.zig).
 
 - Simple records use `- **FR-001**: <text>` with the applicable prefix.
-- Edge cases use `**EC-001**`, then `- **CONDITION** <text>` and
-  `- **EXPECTED OUTCOME** <text>`: the outcome is the `then` of the acceptance criterion the
-  edge case links to, derived by the engine (§23), never model text.
+- Edge cases use `**EC-001**`, then `- **GIVEN** <text>`, `- **WHEN** <text>` and
+  `- **THEN** <text>`, and no other label: the engine copies the Given, When and Then of the
+  acceptance criterion the edge case links to (§23), and the model writes only the edge
+  case's own given, which follows the copied Given on the `GIVEN` line.
 - Entities use `**EN-001**`, then `- **NAME** <text>` and, when any statement shares one
   of the entity's source groups, `- **RELATED STATEMENTS** <IDs>`: those statements' IDs
   joined with `, ` in document order, derived by the engine (§23), never model text.

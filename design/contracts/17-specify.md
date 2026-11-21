@@ -396,19 +396,21 @@ For each feature-brief or specification unit other than the engine-composed stor
   defect (`scenario_coverage`) that takes no repair. No criterion is inserted for an edge
   case.
 
-- **Edge-case outcome links** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
-  Decision 7): an edge case's response names its condition and claims, and no outcome. When
+- **Edge-case scenario links** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+  Decision 7): an edge case's response names its own `given` and claims, and no `when`, `then`
+  or outcome. When
   the scenarios step completes, the `link-scenarios` step finds each edge case's candidates
   natively: the acceptance criteria of its own batch that name one of its claims. One
   candidate is the link; two or more make one request per edge case that offers the
   criteria, numbered, with their given, when and then, and returns one offered id (a result
   schema that admits those ids and no text; the prompt is `links.prompt.md`); none blocks
   with the typed rejection `edge_case_without_criterion`, which names the edge case's group
-  and claims and is never repaired or retried. The engine prints the linked criterion's Then
-  as the edge case's outcome (§23.1) and stores the link as the criterion's ID, which
-  readback checks against the same candidate rule. The step takes one native iteration
-  population, the edge cases that need a choice; the model never selects a record, writes
-  an outcome or sees another batch's criteria.
+  and claims and is never repaired or retried. The engine prints the edge case as the linked
+  criterion's scenario with the edge case's own given added to its Given (§23.1) and stores
+  the link as the criterion's ID, which readback checks against the same candidate rule. The
+  step takes one native iteration population, the edge cases that need a choice; the model
+  never selects a record, writes a `when`, a `then` or an outcome, or sees another batch's
+  criteria.
 
 - **Draft-first sequencing:** complete validated references with a nonempty selectable retained group catalogue admit
   execution-local section generation without a

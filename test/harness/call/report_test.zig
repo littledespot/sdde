@@ -77,7 +77,7 @@ test "call reports record each trial's response structure, never its prose, in a
     defer arena.deinit();
     const a = arena.allocator();
     const trial_module = @import("trial.zig");
-    var records: trial_module.Trial = .{ .ordinal = 1, .request_id = "c" ** 32, .outcome = .completed, .validation = .{ .model_text = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\",\"condition\":\"functional_requirement\"}},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"x\"}}]}" } };
+    var records: trial_module.Trial = .{ .ordinal = 1, .request_id = "c" ** 32, .outcome = .completed, .validation = .{ .model_text = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\",\"given\":\"functional_requirement\"}},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"x\"}}]}" } };
     try trial_module.measure(a, &records);
     // A response the envelope parser can't read has no structure; neither has a trial
     // without a response.

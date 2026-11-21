@@ -444,7 +444,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                                 if (kind == .edge_case) {
                                     // `chosen` writes one edge case for the group, which names every claim it holds.
                                     const written = options.edge_cases != .chosen or item.claim.id.ordinal == assigned.records.selection.claim_ids[0].ordinal;
-                                    if (written and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .edge_case = .{ .condition = selected.value } }, .provenance = selected.provenance });
+                                    if (written and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .edge_case = .{ .given = selected.value } }, .provenance = selected.provenance });
                                     continue;
                                 }
                                 if (item.claim.content != .model) continue;

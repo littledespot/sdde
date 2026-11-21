@@ -44,7 +44,7 @@ scorer judgment moves one by about ±3.6, and keep decisions use the accuracy co
 `22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`), Q24's set (`2026-11-18T06-5*`) and two
 hello-world runs that failed at the first extraction call (`2026-11-17T07-1*`). Earlier runs are removed;
 their evaluations and measures stay under `evaluations/`.
-The current build decodes only `spec-e2e-report/v22` (`test/harness/e2e/contracts.zig:223`); every run above is v21 or earlier, so its report is `unavailable` to `e2e-measures` and `adjudicate-spec` rejects it. Each needs the build that made it.
+The current build decodes only `spec-e2e-report/v23` (`test/harness/e2e/contracts.zig:223`); every run above is v22 or earlier, so its report is `unavailable` to `e2e-measures` and `adjudicate-spec` rejects it. Each needs the build that made it.
 
 ## 2. Rules for measured phases
 
@@ -224,8 +224,21 @@ line means beyond the advisory evaluate-e2e link check.
 **Kept 15 November 2026** (record: [Z_SPEC01](Z_SPEC01.md) Q14 b4). Open parts only:
 
 - **Restated edge cases** from the records call recur (loan-renewal EC-001 and EC-002 repeat AC-005) and
-  cost `organization` only; they wait for the 13 November edge-case amendment (ADR 0038 Decision 7,
-  unbuilt), then re-measure.
+  cost `organization` only. The 13 November edge-case amendment (ADR 0038 Decision 7) is built
+  (21 November 2026; `specification/v7`, `specification-state/v27`, `packet-guidance/v7`,
+  `model-request-debug/v21`, `spec-e2e-report/v23`); its re-measure is open. The six runs of the
+  20 November set before it (build `0de58c78…`, modified) wrote no edge case, so a set may show only
+  "benefit not demonstrated" (§2 rule 6). Open: the evaluator ruling on an engine-printed copy of
+  a criterion's scenario (`restatement` or not), which `evaluate-e2e` SKILL.md states for a repeat
+  of a criterion; Q26 must define the `GIVEN` line for a criterion that has no Given.
+  **Set record** (§2 rule 6, before the set): three runs of each development case, extended to at
+  most eight per case; one build, both cases. Target: `restatement` by an edge case (scored against
+  `organization`), counted per run as the edge cases that repeat a criterion's scenario, read
+  under the open evaluator ruling above, so the count is reported both ways. Guards: lost source
+  requirement, and the publication rate per case. Watch: `unsupported_addition` in an edge
+  case's `given`, a `GIVEN` line whose own given repeats or contradicts the copied Given, and
+  `edge_case_without_criterion` blocks. Evidence floor: fewer than about ten edge cases across
+  the set is "not enough evidence"; none written is "benefit not demonstrated".
 - **Late block, shown once** (`2026-11-15T07-50-08Z-f971…`, a Q17 run): the records call put claim 4
   ("A loan may be renewed only once.") only in an edge case, so no behaviour statement names it, it gets
   no slot and no criterion, and linking stops with `edge_case_without_criterion` (ADR 0038 Decisions 3
@@ -291,8 +304,10 @@ optional Given removes the choice is inferred.
 **Change:**
 - `given` is optional in the scenarios response and in the acceptance-criterion content, with its content
   and state versions advanced. Its field guidance (`packet-guidance.json:21`) says it is omitted when the
-  sources state no starting situation. The criterion is the only record with a Given; an edge case has a
-  condition.
+  sources state no starting situation. An edge case's own given (ADR 0038 Decision 7, built 21
+  November 2026) shares that guidance entry and stays required, so this change must give the entry a
+  text that suits both or key the two apart, and must define the edge case's `GIVEN` line (the
+  criterion's Given, the separator, then the own given) for a criterion that has no Given.
 - The prompt's presupposition sentence (`scenarios.prompt.md:3-5`) goes. Not adopted: restating the
   Given's meaning in the prompt, which the request already carries from the field guidance (one owner).
 - A criterion without a Given renders "**When** … **Then** …".
@@ -865,7 +880,7 @@ selected member, `foreign_source_single`.
 
 **C45. Versions, layouts and lists repeated by hand.**
 
-- `spec-e2e-report/v22` is spelled on every test line that builds a report, in 16 test files (and
+- `spec-e2e-report/v23` is spelled on every test line that builds a report, in 16 test files (and
   its predecessor on the lines of the rejection tests), because the schema field has no default
   (`test/harness/e2e/contracts.zig:223`). `baseline-acquisition/v15`, `e2e-step-event/v6`,
   `baseline-score/v7` and `provider-compatibility-report/v4` add 14 more. §2 rule 12 makes each

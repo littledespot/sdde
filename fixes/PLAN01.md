@@ -130,7 +130,7 @@ change, not a Plan-local one:
   invocation (`src/actions/specify/prepare_inputs.zig:126`, `:159-166`);
 - the state parser, which accepts two Spec stages (`specification_state.zig:52`); PD6's
   recommendation leaves it unchanged;
-- packet guidance, one closed `packet-guidance/v6` whose keys are native enums, today Spec's
+- packet guidance, one closed `packet-guidance/v7` whose keys are native enums, today Spec's
   (ADR 0016:144-149);
 - the E2E harness (§8).
 
@@ -432,7 +432,7 @@ ask the LLM to answer it" (design.md:266). Applied to §18 with the mechanisms t
 - **The harness is Spec-only:**
   - case `spec-e2e-case/v3`, which requires Spec's four artifacts
     (`test/harness/e2e/contracts.zig:6`, `:25-28`);
-  - report `spec-e2e-report/v22` (`:223`): changing a closed member needs a new version
+  - report `spec-e2e-report/v23` (`:223`): changing a closed member needs a new version
     (SPEC01 §2 rule 12), and earlier runs need their own build (SPEC01 §1, Retained runs). **Recommended:** a Plan
     report of its own, which leaves Spec's decoder unchanged;
   - adjudication `spec-adjudication-record/v1` (`test/harness/adjudication.zig:13`, `:69`);

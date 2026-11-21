@@ -9,10 +9,12 @@ pub const Error = std.mem.Allocator.Error || error{InvalidRequiredAuthority};
 /// 7 November 2026). 3: an entity's only authored field is its name (ADR 0038, amended
 /// 8 November 2026), so a record slot has no member index. 4: an edge case's outcome is the
 /// Then of its linked acceptance criterion, so it has no slot (ADR 0038 Decision 7). 5: the
-/// engine takes the display name from the sources, so it has no slot (ADR 0048).
-pub const version: u32 = 5;
+/// engine takes the display name from the sources, so it has no slot (ADR 0048). 6: an edge
+/// case's one authored field is its `given`, so the `condition` slot is gone (ADR 0038 Decision 7,
+/// amended 13 November 2026).
+pub const version: u32 = 6;
 pub const Kind = enum { feature_intent, reference_meaning, entity_applicability, preservation, design_decision, executable_decomposition, policy_predicate };
-pub const Slot = enum { description, primary_goal, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, condition, name, entities, disposition, value, decision, compliance };
+pub const Slot = enum { description, primary_goal, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, name, entities, disposition, value, decision, compliance };
 pub const Unit = union(enum) {
     feature: enum { singleton },
     record: @import("specification.zig").Id,

@@ -35,14 +35,14 @@ if matches '\.env\.e2e([^.[:alnum:]_-]|$)'; then
 fi
 
 # The live-e2e approval records hold the user's word; only the hooks write
-# them. One command that can't write a file (no redirect, chain, substitution
-# or second line) may still read them; find's writing and executing actions
-# stay with the settings ask rules.
+# them. One reading command may still look at them: no quoting, redirect,
+# chain, substitution, grouping or control character, and no find action that
+# writes, deletes or runs a program, wherever it appears.
 if matches 'live-e2e-approvals'; then
     store_read=no
     case $command in
-        *[\;\&\|\<\>\`\$]* | *'
-'*) ;;
+        *[\;\&\|\<\>\`\$\'\"\\\(\)\{\}]* | *[![:print:]]*) ;;
+        'find '*-delete* | 'find '*-rm* | 'find '*-exec* | 'find '*-ok* | 'find '*-fprint* | 'find '*-fls*) ;;
         'find '* | 'ls '* | 'cat '* | 'head '* | 'tail '* | 'wc '* | 'grep '* | 'jq '* | 'diff '*)
             store_read=yes
             ;;

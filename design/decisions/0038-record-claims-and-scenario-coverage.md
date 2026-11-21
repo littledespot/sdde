@@ -39,8 +39,8 @@
   WHEN, THEN, never anything else", one `GIVEN` holding both conditions, then "yes, amendment
   to ADR 0038, do not make any code changes"): an edge case is printed as a Given/When/Then
   scenario of the criterion it links to, and the model writes only its own given
-  (Decision 7). Not yet implemented: the code, the workflow assets and the sections this
-  amendment names still state the 8 November rule. Amended on 14 November 2026 (SPEC01 Q14
+  (Decision 7). Implemented on 21 November 2026 (user: "preflight and implement Q14: build
+  the edge-case amendment"). Amended on 14 November 2026 (SPEC01 Q14
   b4, D14.2; user: "update the documentation with the recommendation"): items of one
   scenarios response with equal content take the request's protocol correction, naming every
   item's number, in place of the `competing_records` block (Decision 3). Implemented on 15
@@ -111,7 +111,16 @@
     holds `given` in place of `condition`. In the implementing change the canonical content,
     the state and the packet guidance advance from the versions then current, and so do the
     required-authority contract, reports and request descriptions wherever the rename removes
-    or renames one of their closed members; earlier versions reject.
+    or renames one of their closed members; earlier versions reject. Implemented 21 November
+    2026: `specification/v7`, `specification-state/v27`, `packet-guidance/v7`, the
+    required-authority contract 6, `model-request-debug/v21` and `spec-e2e-report/v23` (the
+    report's admission audit names the text field, `edge_given` in place of `edge_condition`).
+    The stored link keeps its name, `outcome_of`, and the link vocabulary stays "outcome
+    link": it still names the criterion the edge case prints, now as a whole scenario, and a
+    rename would take another state version. The retained calibration captures that bound
+    `edge_condition` drop that binding, as
+    [ADR 0048](0048-engine-derived-specification-title.md) retired the title's; their raw bytes
+    and hashes are unchanged.
   - The equal-criteria amendment of 14 November 2026, Decision 3: §12.2 (the admission
     constraints that stay native), §17.3 (the scenarios response's admission), §22.6 (the
     corrections that name extra fields), [ADR 0019](0019-single-request-debugger.md) (the
@@ -388,11 +397,16 @@ only block.
       contradicting given prints as a `GIVEN` whose two parts disagree, which the human who
       reviews `spec.md` judges. Where the criterion's Given doesn't carry the condition that
       governs its Then, an outcome the source doesn't support still prints.
-    - The guidance text for the edge case's `given` is not decided here. Packet guidance
-      holds exactly one text for each registered key (ADR 0016), and the `given` text
-      describes a criterion's whole starting situation, where the edge case's own given is
-      one added circumstance. The implementing change decides the key and its text on
-      repeated runs; how the model phrases a given is unmeasured.
+    - The guidance text for the edge case's `given` is the registered `given` entry,
+      unchanged. Packet guidance holds exactly one text for each registered key (ADR 0016),
+      and a key follows a field's name across record families
+      (`src/domain/packet_guidance.zig`), so the edge case's `given` shares the criterion's
+      text, which describes a whole starting situation, where the edge case's own given is
+      one added circumstance; the edge-case family's own text ("A boundary or exceptional
+      condition.") sits beside it in the same request. A separate text would need a key by
+      family and field, a native registry change no decision authorizes. How the model
+      phrases a given is unmeasured, and the text is kept or changed on scored repeated runs
+      of both development cases.
     - An edge case repeats its criterion's Given and When, so it can't carry a second flow of
       a claim (a cost of Decision 3's slot criteria, below), and a defect in a criterion's
       Given or When repeats in each edge case linked to it. The 9 November ruling that files
@@ -408,7 +422,7 @@ only block.
       retained runs. Its benefit is not demonstrated, and it is kept or reverted on scored
       repeated runs of both development cases (AGENTS.md "Model output, prompts and
       evidence").
-  - **Two edge cases with one condition** and different claims are no longer told apart by
+  - **Two edge cases with one given** and different claims are no longer told apart by
     their outcomes: like any single-field record they block as `competing_records`.
   - A lead-in condition is split from the items it governs. "Unless the borrower is
     staff:" followed by two items becomes three claims, and each item claim reads as
@@ -477,8 +491,9 @@ only block.
   members `spec-e2e-report/v17`. The scenario-slot amendment changes no record shape or
   content version. The equal-criteria amendment took `model-request-debug/v19`, which records
   its `distinct` rule, and `spec-e2e-report/v20`. The
-  edge-case scenario amendment renames the edge case's one field, and the amendment list
-  says which versions advance.
+  edge-case scenario amendment renamed the edge case's one field to `given` and took
+  `specification/v7`, `specification-state/v27`, `packet-guidance/v7`, the required-authority
+  contract 6, `model-request-debug/v21` and `spec-e2e-report/v23`.
 - **Tests.**
   - The result-schema rule: admitted (a value only an exclusive item names, ungoverned
     kinds, empty), kept by clones, and invalid configurations rejected; admission
@@ -605,7 +620,7 @@ only block.
       the persisted links read back; and block with the typed rejection when a batch has an
       edge case and no criterion. Each request is projected as a closed choice with its own
       prompt, and offered ids differ from unit positions in the domain cases.
-    - an edge case as a scenario (13 November 2026, not yet implemented):
+    - an edge case as a scenario (13 November 2026, implemented 21 November 2026):
       - the rendering shows exactly the `GIVEN`, `WHEN` and `THEN` lines: the `GIVEN` is the
         linked criterion's Given, the separator and the edge case's own given, and the `WHEN`
         and `THEN` are the criterion's own, for a native link, for a chosen one and in an
@@ -617,8 +632,10 @@ only block.
         covers the edge case's `given`;
       - readback recovers the own given from the text after the copied Given, also when the
         own given equals or begins with the copied Given, and in an unrelated domain; it
-        rejects an edited copy of the Given, When or Then, a `GIVEN` line that doesn't begin
-        with the copied Given, and a `CONDITION` or `EXPECTED OUTCOME` line;
+        rejects a When or Then that is no criterion's own, a `GIVEN` line that doesn't begin
+        with a criterion's Given, and a `CONDITION` or `EXPECTED OUTCOME` line. A copy edited
+        into another criterion's own text reads back, yet it differs from the render of the
+        content's projection, which publication compares;
       - the content, state and packet guidance round-trip at their new versions and reject
         the previous ones;
       - a scripted run publishes an edge case as its criterion's scenario, for a native link

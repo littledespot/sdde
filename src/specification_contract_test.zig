@@ -74,7 +74,7 @@ test "shape validation checks all record families without asserting their meanin
     var records = [_]spec.CapturedRecord{
         .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = value, .when = value, .then = value } } },
         .{ .id = .{ .kind = .user_visible_outcome, .ordinal = 1 }, .content = .{ .user_visible_outcome = .{ .text = value } } },
-        .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .condition = value } }, .outcome = value },
+        .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .given = value } }, .scenario = .{ .given = value, .when = value, .then = value } },
         .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .content = .{ .functional_requirement = .{ .text = value } } },
         .{ .id = .{ .kind = .business_rule, .ordinal = 1 }, .content = .{ .business_rule = .{ .text = value } } },
         .{ .id = .{ .kind = .assumption, .ordinal = 1 }, .content = .{ .assumption = .{ .text = value } } },
@@ -95,6 +95,25 @@ test "shape validation checks all record families without asserting their meanin
     try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
     records[0].id = .{ .kind = .functional_requirement, .ordinal = 1 };
     try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+    // An edge case always shows its linked scenario, no other family shows one, and each shown
+    // part is a valid value.
+    records[0].id = .{ .kind = .acceptance_criterion, .ordinal = 1 };
+    try spec.validateDocument(document, true);
+    const shown = records[2].scenario;
+    records[2].scenario = null;
+    try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+    records[2].scenario = shown;
+    records[3].scenario = shown;
+    try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+    records[3].scenario = null;
+    inline for (.{ "given", "when", "then" }) |part| {
+        var blank = shown.?;
+        @field(blank, part).bytes = " ";
+        records[2].scenario = blank;
+        try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+    }
+    records[2].scenario = shown;
+    try spec.validateDocument(document, true);
 }
 
 test "closed specification parsing cleans up every allocation failure" {
@@ -117,7 +136,7 @@ fn roundTrip(allocator: std.mem.Allocator) !void {
         const Body = @FieldType(spec.Content(spec.Scalar), @tagName(kind));
         var body: Body = undefined;
         inline for (@typeInfo(Body).@"struct".fields) |f| @field(body, f.name) = plain;
-        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1001 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .outcome = if (kind.showsOutcome()) plain else null };
+        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1001 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .scenario = if (kind.showsScenario()) .{ .given = plain, .when = plain, .then = plain } else null };
     }
     records[3].content.functional_requirement.text = exact;
     records[8].related = &.{ .{ .kind = .user_visible_outcome, .ordinal = 1001 }, .{ .kind = .functional_requirement, .ordinal = 1001 }, .{ .kind = .prohibited_behavior, .ordinal = 1001 } };
@@ -130,6 +149,56 @@ fn roundTrip(allocator: std.mem.Allocator) !void {
     const parsed = try markdown.parse(a, rendered);
     try testing.expectEqualDeep(document, parsed);
     try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
+}
+
+test "an edge case prints its criterion's scenario after its own given and reads back only that" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const prose = "The system displays ";
+    const exact = "Renewal refused.";
+    const refused: spec.Scalar = .{ .bytes = prose ++ exact, .code_spans = &.{.{ .start = prose.len, .end = prose.len + exact.len }} };
+    const when: spec.Scalar = .{ .bytes = "The borrower asks" };
+    const sentence: spec.Scalar = .{ .bytes = "The loan is active." };
+    const clause: spec.Scalar = .{ .bytes = "the loan is active" };
+    const overdue: spec.Scalar = .{ .bytes = "it is past its due date" };
+    // The separator is the criterion's own rule: a space after terminal punctuation, ", " otherwise;
+    // an own given that equals or begins with the copied Given is still the text after the separator.
+    const cases = [_]struct { copied: spec.Scalar, own: spec.Scalar, line: []const u8 }{
+        .{ .copied = sentence, .own = overdue, .line = "- **GIVEN** The loan is active. it is past its due date\n" },
+        .{ .copied = clause, .own = overdue, .line = "- **GIVEN** the loan is active, it is past its due date\n" },
+        .{ .copied = sentence, .own = sentence, .line = "- **GIVEN** The loan is active. The loan is active.\n" },
+        .{ .copied = clause, .own = .{ .bytes = "the loan is active and overdue" }, .line = "- **GIVEN** the loan is active, the loan is active and overdue\n" },
+    };
+    var first: []const u8 = "";
+    for (cases) |case| {
+        const document: spec.CapturedDocument = .{ .display_name = clause, .primary_user_story = clause, .entity_section = .omitted, .records = &.{
+            .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = case.copied, .when = when, .then = refused } } },
+            .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .given = case.own } }, .scenario = .{ .given = case.copied, .when = when, .then = refused } },
+            .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .content = .{ .functional_requirement = .{ .text = clause } } },
+        } };
+        const rendered = try markdown.render(a, document);
+        try testing.expect(std.mem.indexOf(u8, rendered, try std.mem.concat(a, u8, &.{ "**EC-001**\n", case.line, "- **WHEN** The borrower asks\n- **THEN** The system displays `Renewal refused.`\n" })) != null);
+        try testing.expect(std.mem.indexOf(u8, rendered, "CONDITION") == null and std.mem.indexOf(u8, rendered, "EXPECTED OUTCOME") == null);
+        const parsed = try markdown.parse(a, rendered);
+        try testing.expectEqualDeep(document, parsed);
+        try testing.expectEqualStrings(case.own.bytes, parsed.records[1].content.edge_case.given.bytes);
+        try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
+        if (first.len == 0) first = rendered;
+    }
+    // An edited copy of the When or Then, a GIVEN line that does not begin with the copied Given and
+    // the superseded condition and outcome lines never read back.
+    const forgeries = [_][2][]const u8{
+        .{ "- **THEN** The system displays `Renewal refused.`\n", "- **THEN** The loan is renewed.\n" },
+        .{ "- **WHEN** The borrower asks\n- **THEN**", "- **WHEN** The borrower waits\n- **THEN**" },
+        .{ "- **GIVEN** The loan is active. it", "- **GIVEN** The loan is inactive. it" },
+        .{ "- **GIVEN** The loan is active. it is past its due date\n- **WHEN** The borrower asks\n- **THEN** The system displays `Renewal refused.`\n", "- **CONDITION** it is past its due date\n- **EXPECTED OUTCOME** The system displays `Renewal refused.`\n" },
+        .{ "- **GIVEN** The loan is active. it is past its due date\n", "- **GIVEN** The loan is active.\n" },
+    };
+    for (forgeries) |forgery| {
+        try testing.expect(std.mem.indexOf(u8, first, forgery[0]) != null);
+        try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.replaceOwned(u8, a, first, forgery[0], forgery[1])));
+    }
 }
 
 test "source lines follow criteria requirements and entities and accept only the renderer's grammar" {
@@ -348,7 +417,7 @@ test "every optional-section combination round trips without empty headings" {
             if (include) {
                 var body: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
                 inline for (@typeInfo(@TypeOf(body)).@"struct".fields) |field| @field(body, field.name) = value;
-                try records.append(a, .{ .id = .{ .kind = kind, .ordinal = 1 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .outcome = if (kind.showsOutcome()) value else null });
+                try records.append(a, .{ .id = .{ .kind = kind, .ordinal = 1 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .scenario = if (kind.showsScenario()) .{ .given = value, .when = value, .then = value } else null });
             }
         }
         const document: spec.CapturedDocument = .{ .display_name = value, .primary_user_story = value, .records = records.items, .entity_section = if (mask & 64 != 0) .present else .omitted };

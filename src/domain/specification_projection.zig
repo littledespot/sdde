@@ -92,15 +92,17 @@ pub fn relatedStatements(allocator: std.mem.Allocator, records: []const spec.Ide
     return ids.toOwnedSlice(allocator);
 }
 
-/// An edge case's outcome (§23): the Then of the acceptance criterion it links to, as that
-/// criterion's own display. Criteria precede edge cases in document order, so `done` holds it.
-fn linkedOutcome(done: []const spec.CapturedRecord, link: ?spec.Id) Error!spec.Scalar {
+/// An edge case's scenario (§23): the Given, When and Then of the acceptance criterion it links
+/// to, as that criterion's own display. Criteria precede edge cases in document order, so `done`
+/// holds it.
+fn linkedScenario(done: []const spec.CapturedRecord, link: ?spec.Id) Error!spec.Scenario {
     const id = link orelse return error.InvalidSpecification;
     for (done) |other| {
         const other_id = other.id orelse continue;
         if (!std.meta.eql(other_id, id)) continue;
         if (other.content != .acceptance_criterion) return error.InvalidSpecification;
-        return other.content.acceptance_criterion.then;
+        const criterion = other.content.acceptance_criterion;
+        return .{ .given = criterion.given, .when = criterion.when, .then = criterion.then };
     }
     return error.InvalidSpecification;
 }
@@ -222,7 +224,7 @@ pub fn project(allocator: std.mem.Allocator, context: provenance.Context, direct
         const family: spec.Kind = record.proposal.content;
         captured.sources = if (family.showsSources()) try sourceLines(allocator, directory, context.inputs, trace.occurrences) else &.{};
         captured.related = if (family == .entity) try relatedStatements(allocator, content.records, record.proposal) else &.{};
-        captured.outcome = if (family.showsOutcome()) try linkedOutcome(records[0..index], record.outcome_of) else null;
+        captured.scenario = if (family.showsScenario()) try linkedScenario(records[0..index], record.outcome_of) else null;
         const scopes = try provenance.scopesForRecord(allocator, context, record.proposal);
         switch (record.proposal.content) {
             inline else => |fields, kind| {

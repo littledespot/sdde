@@ -229,13 +229,13 @@
         "kind": {
           "const": "edge_case"
         },
-        "condition": {
+        "given": {
           "$ref": "#/$defs/business_value"
         }
       },
       "required": [
         "kind",
-        "condition"
+        "given"
       ],
       "additionalProperties": false
     },

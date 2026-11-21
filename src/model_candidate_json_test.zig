@@ -185,7 +185,7 @@ const response_wire = struct {
     const records = .{
         .{ "acceptance_criterion", "{\"kind\":\"acceptance_criterion\",\"given\":" ++ normalized ++ ",\"when\":" ++ normalized ++ ",\"then\":" ++ plain ++ "}" },
         .{ "user_visible_outcome", "{\"kind\":\"user_visible_outcome\",\"text\":" ++ normalized ++ "}" },
-        .{ "edge_case", "{\"kind\":\"edge_case\",\"condition\":" ++ normalized ++ "}" },
+        .{ "edge_case", "{\"kind\":\"edge_case\",\"given\":" ++ normalized ++ "}" },
         .{ "functional_requirement", "{\"kind\":\"functional_requirement\",\"text\":" ++ normalized ++ "}" },
         .{ "business_rule", "{\"kind\":\"business_rule\",\"text\":" ++ plain ++ "}" },
         .{ "assumption", "{\"kind\":\"assumption\",\"text\":" ++ normalized ++ "}" },
@@ -462,11 +462,17 @@ test "focused review evidence shapes follow native minima without excluding sour
     }
 }
 
-test "an edge case authors its condition only and its outcome link is one closed criterion id" {
-    // ADR 0038 Decision 7: the records response carries no expected outcome; the engine prints
-    // the linked criterion's Then, so a response that supplies one is not this contract.
-    try candidateCase("generation", "records", "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\",\"condition\":" ++ response_wire.normalized ++ ",\"expected_outcome\":" ++ response_wire.normalized ++ "},\"claim_ids\":[" ++ response_wire.id ++ "]}]}", .unknown_property, "/records/0/content/expected_outcome");
-    try candidateCase("generation", "records", "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\"},\"claim_ids\":[" ++ response_wire.id ++ "]}]}", .missing_required_property, "/records/0/content/condition");
+test "an edge case authors its given only and its link is one closed criterion id" {
+    // ADR 0038 Decision 7: the records response carries the edge case's own given and no condition,
+    // when, then or outcome; the engine prints the linked criterion's scenario around it.
+    const edge = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\"";
+    const claims = "},\"claim_ids\":[" ++ response_wire.id ++ "]}]}";
+    try candidateCase("generation", "records", edge ++ ",\"given\":" ++ response_wire.normalized ++ ",\"expected_outcome\":" ++ response_wire.normalized ++ claims, .unknown_property, "/records/0/content/expected_outcome");
+    inline for (.{ "condition", "when", "then" }) |extra| {
+        try candidateCase("generation", "records", edge ++ ",\"given\":" ++ response_wire.normalized ++ ",\"" ++ extra ++ "\":" ++ response_wire.normalized ++ claims, .unknown_property, "/records/0/content/" ++ extra);
+    }
+    try candidateCase("generation", "records", edge ++ ",\"condition\":" ++ response_wire.normalized ++ claims, .unknown_property, "/records/0/content/condition");
+    try candidateCase("generation", "records", edge ++ claims, .missing_required_property, "/records/0/content/given");
     // The link is a request of its own: an id, never text, and no other property.
     try checkCandidate("links", "scenario_link", "{\"criterion\":2}");
     try candidateCase("links", "scenario_link", "{\"criterion\":2,\"outcome\":\"The renewal is refused.\"}", .unknown_property, "/outcome");
