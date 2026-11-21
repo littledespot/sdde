@@ -27,18 +27,24 @@ gate is re-run on the build after E1–E4 land, as one closing set after the out
 (records request unchanged). The gate stays the user's to declare.
 
 **Reference** for quality phases (§2 rule 7): Q23's set (`2026-11-17T23-4*` to `23-58-08Z` and
-`2026-11-18T05-3*`, 6 runs per case, `anthropic` `claude-haiku-5-5`, build `26982bb`, source `0a61828b…`, skill
-`3fe52a92…`), the last kept state ([Z_SPEC01](Z_SPEC01.md) "Q23"). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
-as one evaluator, and `43c04100…` keeps `3fe52a92…`'s accuracy counts ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
+`2026-11-18T05-3*`, 6 runs per case, `anthropic` `claude-haiku-5-5`, build `26982bb`, source `0a61828b…`), the
+last kept state ([Z_SPEC01](Z_SPEC01.md) "Q23"), re-scored on `evaluate-e2e` `69c55877…` (21 November 2026, §2
+rule 5; the counts of the older revisions are replaced). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
 | --- | --- | --- | --- | --- |
-| Hello-world | 5 of 6 | 5 of 6 | 0 / 0 / 3 / 0 | 93.6 (85.7–96.4) |
-| Loan-renewal | 5 of 6 | 5 of 6 | 0 / 0 / 0 / 0 | 95.0 (92.9–96.4) |
+| Hello-world | 5 of 6 | 5 of 6 | 0 / 0 / 0 / 0 | 96.4 (92.9–100.0) |
+| Loan-renewal | 5 of 6 | 5 of 6 | 0 / 0 / 0 / 0 | 98.6 (96.4–100.0) |
 
-Advisory scores are scored against the case rubrics (`evaluations/e2e/<run>/evaluation.json`);
-scorer judgment moves one by about ±3.6, and keep decisions use the accuracy counts (§2 rule 6).
+Link-derived `unsupported_addition`, counted apart ([Z_SPEC01](Z_SPEC01.md) T7): 1 in hello-world (1 false link in
+29 records) and none in loan-renewal (1 `partial` link in 55). Advisory scores are scored against the case rubrics
+(`evaluations/e2e/<run>/evaluation.json`); scorer judgment moves one by about ±3.6, and keep decisions use the
+accuracy counts (§2 rule 6). **Ruling needed** (the user's): this revision doesn't count a generic Given such as
+"installed and available to run" or "with a known existing due date" as an unsupported addition, and the revision
+before it did (3 in the hello-world reference). It decides a score in 3 of the 5 publications of Q14's set
+(hello-world run 1 and both loan-renewal runs) without changing a pass. Q26's accuracy-defect count below
+rests on the earlier reading.
 
 **Retained runs:** `zig-out/e2e-spec/` holds the Haiku set (`2026-11-17T08-4*`), D8.4's set (`21-5*` and
 `22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`), Q24's set (`2026-11-18T06-5*`) and two
@@ -230,22 +236,13 @@ line means beyond the advisory evaluate-e2e link check.
 **Kept 15 November 2026** (record: [Z_SPEC01](Z_SPEC01.md) Q14 b4). Open parts only:
 
 - **Restated edge cases** from the records call recur (loan-renewal EC-001 and EC-002 repeat AC-005) and
-  cost `organization` only. The 13 November edge-case amendment (ADR 0038 Decision 7) is built; its
-  re-measure is open. The six runs of the
-  20 November set before it (build `0de58c78…`, modified) wrote no edge case, so a set may show only
-  "benefit not demonstrated" (§2 rule 6). **Ruled** 21 November 2026 (user: "update the documentation
-  with rhe recommendations"): the engine-printed first part of an edge case's `GIVEN` line, the copied
-  criterion Given, isn't `restatement`; `evaluate-e2e` SKILL.md states it. The skill's revision changed,
-  so the reference is re-scored on it first (§2 rule 5). Q26 must define the `GIVEN` line for a
-  criterion that has no Given.
-  **Set record** (§2 rule 6, before the set): three runs of each development case, extended to at
-  most eight per case; one build, both cases. Target: `restatement` by an edge case (scored against
-  `organization`), counted per run as the edge cases whose own content repeats a criterion's
-  scenario, under the ruling above. Guards: lost source
-  requirement, and the publication rate per case. Watch: `unsupported_addition` in an edge
-  case's `given`, a `GIVEN` line whose own given repeats or contradicts the copied Given, and
-  `edge_case_without_criterion` blocks. Evidence floor: fewer than about ten edge cases across
-  the set is "not enough evidence"; none written is "benefit not demonstrated".
+  cost `organization` only. The 13 November edge-case amendment (ADR 0038 Decision 7) is built and **kept**
+  (user, 21 November 2026), its benefit not demonstrated: no edge case was written in the six runs of the 20
+  November set before it or in the six of Q14's re-measure set (21 November 2026, build `c22fa1f`, modified), so a
+  later set can show a benefit only if the records call writes edge cases (§2 rule 6; evidence floor about ten).
+  **Ruled** 21 November 2026 (user: "update the documentation with rhe recommendations"): the engine-printed
+  first part of an edge case's `GIVEN` line, the copied criterion Given, isn't `restatement`; `evaluate-e2e`
+  SKILL.md states it. Q26 must define the `GIVEN` line for a criterion that has no Given.
 - **Late block, shown once** (`2026-11-15T07-50-08Z-f971…`, a Q17 run): the records call put claim 4
   ("A loan may be renewed only once.") only in an edge case, so no behaviour statement names it, it gets
   no slot and no criterion, and linking stops with `edge_case_without_criterion` (ADR 0038 Decisions 3
@@ -393,15 +390,16 @@ T5.3 `repeated_instructions`, T5.5 `model_or_case_branches`, T5.6 `model_text_ou
 T5.4 isn't in it. Each change set that a phase reports on
 retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>` with the
 freeze §2.10 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a `slot: repair`
-step whose prompt no non-repair step binds). Last taken 19 November 2026 on the working tree after
-T2 (a modified build; 145 scenarios, 1,969 calls, a freeze not retained). Its counts, beside the ones
-taken 14 November 2026 after E5 (freeze `evaluations/request-projection/e5-final`) and 2 November 2026
+step whose prompt no non-repair step binds). Last taken 21 November 2026 on the build of Q14's re-measure
+set (`c22fa1f`, modified; freeze `evaluations/request-projection/q14-remeasure`, byte-identical to
+`coupling-final`): T5.1 10, T5.2 0 (tests 69), T5.3 8 at 17 sites, T5.4 7, T5.5 0 and T5.6 15 in 4 files.
+Each equals the 19 November count, so the 21 November engine batch moved none of them. Those counts, beside the
+ones taken 14 November 2026 after E5 (freeze `evaluations/request-projection/e5-final`) and 2 November 2026
 on the `b38628c` tree (freeze `evaluations/request-projection/b38628c`, 130 scenarios, 1,714 calls), are
-in [Z_SPEC01](Z_SPEC01.md) T5. No retake lies between them, so each difference is the net of every
-change between the two dates, not one change's share. **Due:** with the next change set that a phase
-reports on. T5.4 is now 7, the sites under "Repair requests without step guidance". That list named
-six until this count; `repair` in `generate-scenarios` (`spec.workflow.yaml:772`) is the seventh, and
-when it joined isn't recorded.
+in [Z_SPEC01](Z_SPEC01.md) T5. No retake lies between 14 and 19 November, so each difference there is the
+net of every change between the two dates, not one change's share. **Due:** with the next change set that a
+phase reports on. T5.4's seven sites are the ones under "Repair requests without step guidance"; `repair` in
+`generate-scenarios` (`spec.workflow.yaml:745`) is the seventh, and when it joined isn't recorded.
 
 ## 8. Backlog
 
@@ -735,21 +733,8 @@ ordinals follow from it, and deriving the limit needs the compiled step's id, a 
 ### 10.7 Unconfirmed readings
 
 **C49. Built 20 November 2026 ([Z_SPEC01](Z_SPEC01.md) "C49"); what stays open.**
-- **Live sets for the story reading and the records batch** (Q phases, rendering artefact and successful
-  completion): not run, and each needs the user's approval (§2 rule 4). Neither development case's source has
-  a fence, table, Setext heading or open question, so a set can show only that nothing regresses ("benefit
-  not demonstrated", §2 rule 6); the offline tests at each owner carry the evidence. The records batch also
-  moves a run that ended blocked to `awaiting_clarification`, so a set that reaches it reports false
-  questions and missed gaps apart (28-testing.md §28.9).
 - **A clarification-only batch's subject:** the subject is `{specification, record_kind, content}` and the
   model picks `record_kind` (`build_specification_clarification_need.zig:26-29`), so a rerun that picks
   another kind mints another form. This is true of every records clarification; the batch only reaches it
   more often. An answered group is authored by E7 (answers are not consumed yet), so until then a rerun asks
   again.
-
-**C50. A workflow definition can route past the configured preservation review** (by reading, not executed).
-`check-source-preservation-policy` routes `ok` to `preservation-requirements` and `more` to `generate`
-(`spec.workflow.yaml:99-100`), and its operation (`SourcePreservationPolicy`, `required_authority_workflow.zig:22-44`)
-declares no outcome association, so a definition that routes `ok` to `generate` compiles and skips a configured
-review. The gate C30 dropped never covered this step, and one on retire wouldn't either. **Next:** a test at the owner that compiles such a definition, then a decision on the owner
-(an outcome association on the policy step, or a compile-time rule).

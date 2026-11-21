@@ -142,6 +142,8 @@ test "shipped workflow conforms to native registrations and rejects contract dri
         // scenario and link steps unreachable. That assembly needs the criteria and the links is
         // proven by every scripted run, whose steps see only the data their contracts declare.
         .{ "  generate:\n    call: generate-specification\n    on:\n      ok: scenarios", "  generate:\n    call: generate-specification\n    on:\n      ok: assemble" },
+        // Routing both of the preservation policy's outcomes to generation leaves its requirements step unreachable.
+        .{ "ok: preservation-requirements, more: generate, invalid: end.invalid", "ok: generate, more: generate, invalid: end.invalid" },
     };
     for (0..mutations.len + 1) |index| {
         var project = std.testing.tmpDir(.{});
