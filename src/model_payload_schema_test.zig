@@ -146,15 +146,15 @@ test "loss protocol correction preserves the complete selected contract in both 
     }
 }
 
-test "child requirements stay inside selected definitions parts and repair schemas in both modes" {
+test "child requirements stay inside the whole schema, its parts and repair schemas in both modes" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const canonical = try parser.compiler().compile(a, try std.fmt.allocPrint(a, "{{\"$defs\":{{\"record\":{s}}},\"type\":\"object\",\"properties\":{{}},\"required\":[],\"additionalProperties\":false}}", .{child_objects}));
-    const selected = canonical.select(.{ .bytes = "record" }).?;
+    const canonical = try parser.compiler().compile(a, child_objects);
+    const selected = canonical;
     const plan = try parser.compiler().compileComposition(a,
-        \\{"schema":"json-composition/v1","result":"result","definition":"record","parts":{"selected":{"paths":["/optional"]},"siblings":{"paths":["/empty","/loose","/items","/choice"]}}}
+        \\{"schema":"json-composition/v1","result":"result","parts":{"selected":{"paths":["/optional"]},"siblings":{"paths":["/empty","/loose","/items","/choice"]}}}
     , canonical);
     const generation = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .limited(1_048_576)));
     const repair_schema = generation.select(.{ .bytes = "value" }).?;

@@ -37,6 +37,16 @@ pub const Fixture = struct {
     now_ms: std.atomic.Value(u64) = .init(1000),
     reached: std.Io.Event = .unset,
     never: std.Io.Event = .unset,
+    /// The adapter's timer slice, and the time left to the request's deadline as the clock reads it. Every sleep
+    /// must be the smaller of the two.
+    slice_ms: u64 = http.default_slice_ms,
+    remaining_ms: std.atomic.Value(u64) = .init(100),
+    /// Each sleep returns at once with the clock advanced by its duration, once the network fault is reached.
+    advance_slices: bool = false,
+    /// The sleep (counted from one) after which the fixture reports the run interrupted.
+    interrupt_at_sleep: ?usize = null,
+    interrupted: std.atomic.Value(bool) = .init(false),
+    sleeps: std.atomic.Value(usize) = .init(0),
 
     pub fn init(self: *Fixture, response: []const u8) void {
         self.* = .{
@@ -74,7 +84,17 @@ pub const Fixture = struct {
     }
 
     pub fn adapter(self: *Fixture) Adapter {
-        return .{ .io = self.io(), .clock = .{ .context = @ptrCast(self), .now_fn = now }, .runtime = .{} };
+        return .{ .io = self.io(), .clock = .{ .context = @ptrCast(self), .now_fn = now }, .runtime = .{}, .slice_ms = self.slice_ms };
+    }
+
+    /// The run's status as an operator interrupt would report it: cancelled once the fixture says so.
+    pub fn interruptedRuntime(self: *Fixture) @import("domain/pipeline.zig").NodeRuntime {
+        return .{ .context = self, .status_fn = status };
+    }
+
+    fn status(context: ?*anyopaque) @import("domain/pipeline.zig").RuntimeStatus {
+        const self: *Fixture = @ptrCast(@alignCast(context.?));
+        return if (self.interrupted.load(.acquire)) .cancelled else .active;
     }
 
     pub fn request(self: *const Fixture) transport.Request {
@@ -189,10 +209,20 @@ pub const Fixture = struct {
         const self = cast(context);
         _ = self.active_timers.fetchAdd(1, .acq_rel);
         defer _ = self.active_timers.fetchSub(1, .release);
-        std.debug.assert(timeout.duration.raw.toNanoseconds() == 100 * std.time.ns_per_ms);
+        const slept_ms = @min(self.slice_ms, self.remaining_ms.load(.acquire));
+        std.debug.assert(timeout.duration.raw.toNanoseconds() == @as(i96, slept_ms) * std.time.ns_per_ms);
+        const number = self.sleeps.fetchAdd(1, .acq_rel) + 1;
         if (self.fault == .deadline) {
             try self.reached.wait(self.io());
             self.now_ms.store(1100, .release);
+            return;
+        }
+        if (self.advance_slices) {
+            // The first slice ends once the network is held, so the timer cannot win a race with the connect.
+            if (number == 1 and self.fault != .none) try self.reached.wait(self.io());
+            _ = self.now_ms.fetchAdd(slept_ms, .acq_rel);
+            _ = self.remaining_ms.fetchSub(slept_ms, .acq_rel);
+            if (self.interrupt_at_sleep == number) self.interrupted.store(true, .release);
             return;
         }
         self.never.wait(self.io()) catch |err| {

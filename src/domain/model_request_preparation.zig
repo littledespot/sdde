@@ -139,7 +139,7 @@ pub fn validateRequest(source: Source, request: *const provider.IdentifiedProvid
         if (expected.source_id.ordinal != actual.source_id.ordinal or !std.mem.eql(u8, expected.bytes, actual.bytes)) return error.ModelRequestAssociationInvalid;
     }
     const schema = try source.resultSchema();
-    const complete = if (source.composition) |part| part.plan.completeSchema() else source.result_resource.content.result_schema;
+    const complete = if (source.composition) |part| part.plan.resultSchema() else source.result_resource.content.result_schema;
     if (!@import("model_text_wire.zig").validProseSchema(source.prose_fields, complete.root())) return error.InvalidModelRequestSource;
     if (!@import("model_text_wire.zig").sameProseFields(source.prose_fields, request.prose_fields)) return error.ModelRequestAssociationInvalid;
     if (!@import("model_text_field.zig").same(source.field_policies, request.field_policies)) return error.ModelRequestAssociationInvalid;

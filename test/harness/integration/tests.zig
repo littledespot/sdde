@@ -128,7 +128,8 @@ test "shipped workflow conforms to native registrations and rejects contract dri
         .{ "use: collect-specification-support", "use: unregistered-support-reader" },
         .{ "use: collect-specification-support", "use: apply-specification-support" },
         .{ "retry-limit: 1", "retry-limit: -1" },
-        .{ "selection: input", "selection: missing-definition" },
+        // The selection is derived from the input packet: a definition declaring it is an unknown parameter.
+        .{ "result-schema: extraction-schema, retry-limit: 1", "result-schema: extraction-schema, result-selection: input, retry-limit: 1" },
         .{ "composition-part: content", "composition-part: classifications" },
         // A registered operation in a part's retention position: the composition flow rejects it, not the registry.
         .{ "use: retain-json-part", "use: release-model-request" },
@@ -1497,7 +1498,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         const rejected = (try references.validate_dispositions.execute(scratch, .{ .input = global, .proposal = .{ .global = bad }, .source = .{ .origin = origin } })).invalid;
         retained[0] = try (Diagnostic{ .reconciliation = rejected }).copy(a);
         const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
-        const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry, .current = input.context().current };
+        const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry };
         const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted);
         var omission_inputs = review_inputs;
         omission_inputs.review_origin = origin;
@@ -1518,7 +1519,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .brief = .{ .description = unsupported, .primary_goal = unsupported } } } })).invalid;
         retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
         const extraction_action = @import("../../../src/actions/reference/validate_reference_extraction_text.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
-        const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;
+        const lexical = (try extraction_action.execute(scratch, context.registry, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;
         retained[2] = try (Diagnostic{ .extraction_text = lexical }).copy(a);
         var partial = context;
         partial.references.records.signals = &.{};
@@ -1779,7 +1780,7 @@ test "native correction links retain first observation invalidation rebuild and 
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, obsolete));
     const old_version = try std.mem.replaceOwned(u8, a, renamed, @tagName(c.report_schema), "spec-e2e-report/v2");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, old_version));
-    const previous_version = try std.mem.replaceOwned(u8, a, renamed, @tagName(c.report_schema), "spec-e2e-report/v23");
+    const previous_version = try std.mem.replaceOwned(u8, a, renamed, @tagName(c.report_schema), "spec-e2e-report/v24");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, previous_version));
     // Every member is required: the previous version's shape, which has no first cause, is not readable
     // under the current name either.

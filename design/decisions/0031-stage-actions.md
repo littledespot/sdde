@@ -230,13 +230,12 @@ engine-startup graph, the feature-logging pipeline or the invocation operation.
   `domain/pipeline.zig`) and checks its status between steps. A cancelled stage stops
   before its next internal step and cleans up what it owns.
   - The runner supplies the runtime in the step input, and a non-model operation that fails
-    after the runtime stopped reports that stop (cancelled or deadline exhausted), not an
+    after the runtime stopped reports that stop (cancelled), not an
     operation failure, as the checks before and after the invocation do. An allocation
     failure stays itself, and a model call keeps its own reconciled status.
   - A non-model operation that fails with `Cancelled` while the runtime still reports active
     (a cancelled filesystem or random-source call) also ends the run `cancelled`. The runtime
-    status no longer decides that alone. A runtime that stopped for its deadline still reports
-    the deadline. An adapter maps the standard library's cancellation to `Cancelled`; any other
+    status no longer decides that alone. An adapter maps the standard library's cancellation to `Cancelled`; any other
     failure of the same call stays the port's own error.
 
 ### Runner, compiler and registry

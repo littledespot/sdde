@@ -13,14 +13,12 @@ pub const Kind = enum { request, candidate, authority, clarification };
 /// closed so the binding's `switch` over it is exhaustive, and each reader names the one result key it
 /// reads, which `validDescriptor` holds the binding's `result` to.
 pub const BlockedReader = enum {
-    specification_coverage,
     reference_reconciliation,
     specification_unit,
     specification_support,
 
     pub fn result(self: BlockedReader) pipeline.DataKey {
         return switch (self) {
-            .specification_coverage => .specification_coverage_repair,
             .reference_reconciliation => .reference_reconciliation_repair,
             .specification_unit => .specification_repair_authorization,
             .specification_support => .specification_support_repair,
@@ -712,7 +710,7 @@ test "an authorizer names its blocked reader exactly when its contract declares 
     }
     // A reader reads one result key: naming another reader's key is rejected.
     const foreign = [_]pipeline.DataKey{BlockedReader.reference_reconciliation.result()};
-    const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .result = foreign[0], .blocked_reader = .specification_coverage };
+    const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .result = foreign[0], .blocked_reader = .specification_unit };
     try std.testing.expect(!validDescriptor(.{ .repair_authorize = mismatched }, &requires, &.{}, &foreign, &.{}, .authorize, &blocking));
 }
 
@@ -834,8 +832,8 @@ test "ordinary success and unrelated native resolution retain opaque failures" {
 test "only exact validated repair resolution removes its associated failure" {
     var state = State.init(std.testing.allocator);
     defer state.deinit();
-    const binding: Binding = .{ .kind = .candidate, .subject = .raw_engine_config, .evidence = .engine_config };
-    const subject: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 1, .occurrence = 1 } };
+    const binding: Binding = .{ .kind = .candidate, .subject = .workflow_operation_registry, .evidence = .workflow_definition_registry };
+    const subject: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 1, .occurrence = 1 } };
     const key: retry.Key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) };
     const permit: retry.Permit = .{ .key = key, .authorization = @splat(4), .revision = 1, .maximum_targets = 2 };
     var observed = try state.prepare(.{ .observe = binding }, .invalid, &.{.{ .observe = .{ .subject = subject, .outcome = .invalid } }});
@@ -845,8 +843,8 @@ test "only exact validated repair resolution removes its associated failure" {
     var authorized = try state.prepare(.{ .repair_authorize = binding }, .ok, &.{.{ .authorize = .{ .subject = subject, .transition = .{ .authorized = permit } } }});
     defer authorized.deinit();
     try state.commit(&authorized);
-    const captured: Subject = .{ .native = .{ .kind = .candidate, .key = .engine_config, .generation = 2, .occurrence = 2 } };
-    const replacement: Subject = .{ .native = .{ .kind = .candidate, .key = .engine_config, .generation = 3, .occurrence = 3 } };
+    const captured: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_definition_registry, .generation = 2, .occurrence = 2 } };
+    const replacement: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_definition_registry, .generation = 3, .occurrence = 3 } };
     var retained = try state.prepare(.{ .preserve = binding }, .ok, &.{
         .{ .associate = .{ .source = subject, .target = captured } },
         .{ .associate = .{ .source = captured, .target = replacement } },
@@ -877,9 +875,9 @@ test "only exact validated repair resolution removes its associated failure" {
 test "native generations and exact permit keys separate parent and child failures" {
     var state = State.init(std.testing.allocator);
     defer state.deinit();
-    const binding: Binding = .{ .kind = .candidate, .subject = .raw_engine_config, .evidence = .engine_config };
-    const parent: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 1, .occurrence = 1 } };
-    const child: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 2, .occurrence = 2 } };
+    const binding: Binding = .{ .kind = .candidate, .subject = .workflow_operation_registry, .evidence = .workflow_definition_registry };
+    const parent: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 1, .occurrence = 1 } };
+    const child: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 2, .occurrence = 2 } };
     const parent_permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 2 };
     const child_permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(5), .family = @splat(6) }, .authorization = @splat(7), .revision = 2, .maximum_targets = 2 };
     var observed = try state.prepare(.{ .observe = binding }, .invalid, &.{
@@ -923,10 +921,10 @@ test "joined native carriers retain parent and foreign repair obligations" {
     defer state.deinit();
     var native = retry.State.init(std.testing.allocator);
     defer native.deinit();
-    const binding: Binding = .{ .kind = .candidate, .subject = .raw_engine_config, .evidence = .engine_config };
-    const parent: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 1, .occurrence = 1 } };
-    const child: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 2, .occurrence = 2 } };
-    const foreign: Subject = .{ .native = .{ .kind = .candidate, .key = .engine_config, .generation = 3, .occurrence = 3 } };
+    const binding: Binding = .{ .kind = .candidate, .subject = .workflow_operation_registry, .evidence = .workflow_definition_registry };
+    const parent: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 1, .occurrence = 1 } };
+    const child: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 2, .occurrence = 2 } };
+    const foreign: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_definition_registry, .generation = 3, .occurrence = 3 } };
     const parent_permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 3 };
     const child_permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(5), .family = @splat(6) }, .authorization = @splat(7), .revision = 2, .maximum_targets = 3 };
     const foreign_permit: retry.Permit = .{ .key = .{ .scope = @splat(8), .target = @splat(9), .family = @splat(10) }, .authorization = @splat(11), .revision = 1, .maximum_targets = 1 };
@@ -1031,7 +1029,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
             try std.testing.expect(!blocked_state.compatible(.ok));
         }
     }
-    var authority = try state.prepare(.{ .authority_reconcile = .{ .kind = .authority, .subject = .raw_engine_config, .evidence = .engine_config } }, .ok, &.{.{ .resolve = .{ .authority_reconciled = .{ .native = .{ .kind = .authority, .key = .raw_engine_config, .generation = 2, .occurrence = 2 } } } }});
+    var authority = try state.prepare(.{ .authority_reconcile = .{ .kind = .authority, .subject = .workflow_operation_registry, .evidence = .workflow_definition_registry } }, .ok, &.{.{ .resolve = .{ .authority_reconciled = .{ .native = .{ .kind = .authority, .key = .workflow_operation_registry, .generation = 2, .occurrence = 2 } } } }});
     defer authority.deinit();
     try std.testing.expectEqual(@as(usize, 2), authority.entries.items.len);
     var foreign_failure = try state.prepare(.{ .observe = binding }, .invalid, &.{.{ .observe = .{ .subject = foreign, .outcome = .invalid } }});
@@ -1045,7 +1043,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
     try state.commit(&fan_in);
     try std.testing.expect(!state.permitsRequest(request.model_request_id, null, dependent, &.{child.native}));
     try std.testing.expect(!state.permitsRequest(review_request.model_request_id, null, dependent, &.{child.native}));
-    const successor: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 4, .occurrence = 4 } };
+    const successor: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 4, .occurrence = 4 } };
     var recurring = try state.prepare(.{ .repair_validate = binding }, .invalid, &.{
         .{ .associate = .{ .source = child, .target = successor } },
         .{ .observe = .{ .subject = successor, .outcome = .invalid, .repair_progress = .{ .validated = .{ .permit = child_permit, .revision = 3, .result = .recurring } } } },

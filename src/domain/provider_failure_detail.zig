@@ -12,6 +12,8 @@ pub const Detail = struct {
     /// Where and how the shared HTTP exchange failed, when it did.
     transport: ?provider.TransportDiagnostic = null,
     content: ?provider.ProviderContentDiagnostic = null,
+    credential: ?provider.ProviderCredentialDiagnostic = null,
+    decode: ?provider.ProviderDecodeDiagnostic = null,
 
     pub fn from(failure: provider.ProviderFailure) Detail {
         return .{
@@ -20,14 +22,18 @@ pub const Detail = struct {
             .delivery = failure.delivery,
             .transport = failure.transport,
             .content = failure.content,
+            .credential = failure.credential,
+            .decode = failure.decode,
         };
     }
 
-    /// `provider_failure: <cause>; delivery=<d>; retry=<r>[; transport=<phase>/<cause>][; content=<c>]`.
+    /// `provider_failure: <cause>; delivery=<d>; retry=<r>[; transport=<phase>/<cause>][; content=<c>][; credential=<c>][; decode=<d>]`.
     pub fn write(self: Detail, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try writer.print("provider_failure: {s}; delivery={s}; retry={s}", .{ @tagName(self.cause), @tagName(self.delivery), @tagName(self.retry_class) });
         if (self.transport) |transport| try writer.print("; transport={s}/{s}", .{ @tagName(transport.phase), @tagName(transport.cause) });
         if (self.content) |content| try writer.print("; content={s}", .{@tagName(content)});
+        if (self.credential) |credential| try writer.print("; credential={s}", .{@tagName(credential)});
+        if (self.decode) |decode| try writer.print("; decode={s}", .{@tagName(decode)});
     }
 };
 
@@ -42,6 +48,20 @@ test "each cause, delivery and retry class prints its own name, so no two failur
                 try std.testing.expectEqualStrings(expected, writer.buffered());
             }
         }
+    }
+}
+
+test "a credential reason and a decode reason print their own names, and only when the failure carries one" {
+    var buffer: [200]u8 = undefined;
+    inline for (std.enums.values(provider.ProviderCredentialDiagnostic)) |credential| {
+        var writer: std.Io.Writer = .fixed(&buffer);
+        try (Detail{ .cause = .authentication_failed, .retry_class = .never, .delivery = .not_sent, .credential = credential }).write(&writer);
+        try std.testing.expectEqualStrings("provider_failure: authentication_failed; delivery=not_sent; retry=never; credential=" ++ @tagName(credential), writer.buffered());
+    }
+    inline for (std.enums.values(provider.ProviderDecodeDiagnostic)) |decode| {
+        var writer: std.Io.Writer = .fixed(&buffer);
+        try (Detail{ .cause = .response_invalid, .retry_class = .never, .delivery = .response_received, .decode = decode }).write(&writer);
+        try std.testing.expectEqualStrings("provider_failure: response_invalid; delivery=response_received; retry=never; decode=" ++ @tagName(decode), writer.buffered());
     }
 }
 

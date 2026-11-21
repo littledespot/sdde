@@ -96,19 +96,19 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
         for (ledger.accounted_operations.items) |accounted| {
             const id = accounted.id;
             const record = accounting.current_operations.record(id) orelse return error.MissingProviderEvidence;
-            const entry = services.registry().resolveId(record.binding_id.registry_entry_id) orelse return error.MissingProviderEvidence;
-            const slot = record.binding_id.slot_id.bytes;
+            const entry = services.registry().resolveId(record.assignment.binding_id.registry_entry_id) orelse return error.MissingProviderEvidence;
+            const slot = record.assignment.binding_id.slot_id.bytes;
             const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
             const origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, id) orelse return error.MissingProviderEvidence;
             const usage = if (accounted.reconciliation == .exact_usage) accounted.reconciliation.exact_usage else null;
             try attempts.append(allocator, .{
                 .origin = origin,
-                .step = try allocator.dupe(u8, record.binding_id.operation_id.workflow_step_id.bytes),
+                .step = try allocator.dupe(u8, record.assignment.binding_id.operation_id.workflow_step_id.bytes),
                 // A composed request's identity carries its base packet's purpose and owner.
                 .purpose = std.meta.activeTag(id.model_request_id.purpose),
                 .owner_kind = std.meta.activeTag(id.model_request_id.immutable_unit_owner_id),
                 // A re-send directly follows the runaway attempt it repeats.
-                .resends = if (record.sampling == .runaway_resend) id.model_attempt_ordinal.value - 1 else null,
+                .resends = if (record.assignment.sampling == .runaway_resend) id.model_attempt_ordinal.value - 1 else null,
                 .accounting = accounted.reconciliation,
                 .usage = usage,
             });

@@ -5,7 +5,6 @@ pub const ValidationOutcome = enum { valid, invalid };
 
 pub const Target = struct {
     identity: feature_log_bindings.RuntimeIdentity,
-    mode: log_stream.FinalizationMode,
 };
 
 pub const ChildBindings = struct {
@@ -15,7 +14,6 @@ pub const ChildBindings = struct {
     pub const VTable = struct {
         target: *const fn (*anyopaque) Target,
         validate: *const fn (*anyopaque) ValidationOutcome,
-        prepare: *const fn (*anyopaque) log_stream.Outcome,
         close: *const fn (*anyopaque) log_stream.Outcome,
     };
 
@@ -25,10 +23,6 @@ pub const ChildBindings = struct {
 
     pub fn invokeValidate(self: ChildBindings) ValidationOutcome {
         return self.vtable.validate(self.context);
-    }
-
-    pub fn invokePrepare(self: ChildBindings) log_stream.Outcome {
-        return self.vtable.prepare(self.context);
     }
 
     pub fn invokeClose(self: ChildBindings) log_stream.Outcome {

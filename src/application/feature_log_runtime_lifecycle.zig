@@ -1,7 +1,5 @@
 const feature_log_bindings = @import("feature_log_child_bindings.zig");
 const feature_log_orchestrator = @import("feature_log_orchestrator.zig");
-const policy_transition = @import("feature_log_policy_transition_coordinator.zig");
-const policy_transition_bindings = @import("feature_log_policy_transition_child_bindings.zig");
 const finalization = @import("feature_log_finalization_coordinator.zig");
 const finalization_bindings = @import("feature_log_finalization_child_bindings.zig");
 const retention = @import("feature_log_retention_coordinator.zig");
@@ -10,9 +8,11 @@ const telemetry = @import("../domain/telemetry.zig");
 const log_stream = @import("../domain/feature_log_stream.zig");
 const barrier_port = @import("../ports/telemetry_barrier.zig");
 
+pub const Activation = union(enum) { ok, blocked: log_stream.FailureCode, cancelled, invalid };
+
 /// Owns the one active logging-runner binding used by the common pipeline.
-/// Artifact activation constructs runners; this coordinator only installs,
-/// transitions, and uses that already-validated binding.
+/// Artifact activation constructs runners; this coordinator only installs and
+/// uses that already-validated binding.
 pub const Lifecycle = struct {
     active: ?feature_log_bindings.ChildBindings = null,
 
@@ -24,7 +24,7 @@ pub const Lifecycle = struct {
         self: *Lifecycle,
         next: feature_log_bindings.ChildBindings,
         shortcode: telemetry.WorkflowShortcode,
-    ) policy_transition.Outcome {
+    ) Activation {
         if (self.active != null or next.retired()) return .invalid;
         return switch (next.invokePrepare(shortcode)) {
             .dropped, .persisted => blk: {
@@ -36,37 +36,16 @@ pub const Lifecycle = struct {
         };
     }
 
-    pub fn transition(
-        self: *Lifecycle,
-        children: policy_transition_bindings.ChildBindings,
-    ) policy_transition.Outcome {
-        const current = self.active orelse return .invalid;
-        const participants = children.participants();
-        if (participants.current_identity != current.identity()) return .invalid;
-        const outcome = policy_transition.run(children);
-        self.active = if (outcome == .ok) participants.next else if (outcome == .invalid) current else null;
-        return outcome;
-    }
-
     pub fn finalizeActive(
         self: *Lifecycle,
         children: finalization_bindings.ChildBindings,
     ) finalization.Outcome {
         const current = self.active orelse return .invalid;
         const target = children.target();
-        if (target.mode != .active or target.identity != current.identity()) return .invalid;
+        if (target.identity != current.identity()) return .invalid;
         const outcome = finalization.run(children);
         if (outcome != .invalid) self.active = null;
         return outcome;
-    }
-
-    pub fn finalizeHistorical(
-        self: *Lifecycle,
-        children: finalization_bindings.ChildBindings,
-    ) finalization.Outcome {
-        if (self.active != null) return .invalid;
-        if (children.target().mode != .historical) return .invalid;
-        return finalization.run(children);
     }
 
     pub fn retainHistorical(

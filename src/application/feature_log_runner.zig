@@ -533,7 +533,7 @@ fn renderRow(
 /// a prompt fragment is a debug-level `model.prompt_fragment`.
 fn flushKeyOf(row: Row) struct { level: telemetry.CanonicalLogLevel, event_type: telemetry.EventType } {
     return switch (row) {
-        .event => |event| .{ .level = event.definition.level, .event_type = event.attributed.fact.event_type },
+        .event => |event| .{ .level = event.definition.level, .event_type = telemetry.eventOf(event.attributed.fact) },
         .prompt => .{ .level = .debug, .event_type = .model_prompt_fragment },
     };
 }

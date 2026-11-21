@@ -288,7 +288,7 @@ explicit in the selected YAML:
 | Operation | Contract |
 | --- | --- |
 | `parse-reference-extraction-results` | Engine-scoped raw observations → closed parsed candidates. |
-| `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates whose claim wording is quoted from their cited lines (§3.7, ADR 0036). |
+| `validate-reference-extraction-text` | Parsed candidates, citable inputs and source-backed literal registry → text-validated candidates whose claim wording is quoted from their cited lines (§3.7, ADR 0036). |
 | `validate-reference-claims` | Citable inputs and prepared claims → validated canonical citations; an invalid selection is a failure. Exact-token citations retain §3.4 validation. |
 | `assign-reference-claim-identities` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
 | `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes; binds preserved tokens to their assigned citation IDs. |
@@ -335,7 +335,7 @@ explicit in the selected YAML:
   chunk/claim/citation order; response arrival order cannot change them.
 - No ID counters or ledgers are persisted.
 
-- These candidates require the later reconciliation and required-authority gates; the
+- These candidates require the later reconciliation and required-authority validation; the
   extraction validator alone does not establish semantic support.
 - Markdown inline-code, fenced-body and inline-link-destination candidates are implemented; other format extractors remain future
   work.
@@ -496,8 +496,8 @@ No call site declares a deadline: the body's authorization step takes no paramet
 each model's catalogue entry carries `requestTimeoutMs`
 ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
 
-Extraction parts derive from one complete extraction schema; reconciliation summaries
-use one composition part of the reconciliation schema. Under
+Extraction parts derive from one complete extraction schema; a reconciliation summary
+is a plain request over the reconciliation schema's `summary` definition. Under
 [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md) each global phase is a
 separate request, a conflicts phase with no group excepted; dependent phases receive natively validated phase facts, not JSON
 prerequisites (§3.9). Part schemas validate before retention. Complete assembly undergoes relationship, signal, conflict and coverage validation.
@@ -716,18 +716,19 @@ closed requiredness/ownership policies, current support checks and outcomes.
 - `build-required-authority-clarification-needs` converts validated gaps to the
   existing clarification lifecycle, retaining structural subjects and earliest owners.
 
-- The registered `required-authority@1` gate binds its sole issuer to the current input,
-  observation and result generations.
+- `validate-required-authority-reconciliation` rebuilds the result from the current input,
+  observation and result generations and writes `required_authority_gate`; no other
+  operation writes that key.
 - The existing runner also checks source lineage, so refreshing a reference, candidate
   or support source requires explicit projection/reconciliation/validation again.
-- Protected operations declare that gate in their native contract; YAML cannot bypass it
-  or supply an alternative issuer.
+- The outcome ledger holds a rejected authority result pending: no path routed onward by YAML
+  ends `ok`, and a definition that skips validation leaves its step unreachable.
 - There is no persisted authority ledger, new prompt, fingerprint or recovery mechanism.
 
 `zig build test-required-authority` covers scripted outcomes, unrelated kinds, all
 Specify record families, missing/foreign/duplicate/stale support, permitted and
-prohibited dispositions, scoped exceptions, source preservation and YAML gate
-bypasses.
+prohibited dispositions, scoped exceptions, source preservation and YAML routing
+of a rejected result.
 
 ### Support findings and scoped correction
 
@@ -1349,8 +1350,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Native dependency capture is independent of request serialization.
 - `typed_text` owns the complete text-policy/source projection, the reconciliation
   context owns flattened summary lineage, and specification provenance supplies the
-  shared read facts consumed by generation and coverage repair.
-- Current toolchain identity is checked before capture; capabilities are not serialized.
+  shared read facts consumed by generation and specification repair.
+- Capabilities are not serialized.
 - Grammar-name or history changes reject an old authorization before dispatch/merge,
   even when the model packet would look unchanged.
 - Extraction classification guidance retains the frozen chunk outcome and permitted
@@ -1524,7 +1525,7 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
 
 - Implemented through ordinary YAML: §§3.1–3.13, including feature-log activation,
   model-connected extraction and reconciliation, generation/validation/repair, the
-  shared required-authority gate, the native content schema and Markdown codec, and
+  shared required-authority validation, the native content schema and Markdown codec, and
   registered publication of either completed output or the ADR 0017 incomplete
   specification with its clarification forms and pending state.
 - Not implemented: authenticated answer application (ADR 0025, SPEC01 E7), additional

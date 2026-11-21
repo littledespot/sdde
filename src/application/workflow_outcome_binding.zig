@@ -450,7 +450,6 @@ fn diagnosticAdmission(view: *const data.View, reader: association.AdmissionRead
 /// neither reconstructs eligibility nor treats an operation tag as evidence.
 fn authorizationBlocked(view: *const data.View, reader: association.BlockedReader) Error!bool {
     const blocked = switch (reader) {
-        .specification_coverage => @import("specification_coverage_repair_workflow.zig").authorizationBlocked(view),
         .reference_reconciliation => @import("reference_reconciliation_repair_workflow.zig").authorizationBlocked(view),
         .specification_unit => @import("specification_repair_workflow.zig").authorizationBlocked(view),
         .specification_support => @import("specification_support_repair_workflow.zig").authorizationBlocked(view),
@@ -460,7 +459,7 @@ fn authorizationBlocked(view: *const data.View, reader: association.BlockedReade
 
 const subject_schema = values.schema(.parsed_reference_extraction, u8, 1, 16).captured();
 const evidence_schema = values.schema(.text_validated_reference_extraction, u8, 1, 16).captured();
-const unrelated_schema = values.schema(.canonical_log_level, u8, 1, 16);
+const unrelated_schema = values.schema(.principle_registry, u8, 1, 16);
 const subject_contract: pipeline.NodeContract = .{ .id = "test.native-subject", .kind = .action, .requires = &.{}, .produces = &.{subject_schema.key}, .side_effect = .none };
 const observe_subject: association.Descriptor = .{ .observe = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key } };
 
@@ -553,7 +552,7 @@ test "transitive native carriers require current generations rather than histori
     for ([_]bool{ false, true }) |captured| {
         var source_schema = values.schema(.parsed_reference_extraction, u8, 1, 16);
         var carrier_schema = values.schema(.text_validated_reference_extraction, u8, 1, 16);
-        var result_schema = values.schema(.canonical_log_level, u8, 1, 16);
+        var result_schema = values.schema(.principle_registry, u8, 1, 16);
         const foreign_schema = values.schema(.logging_policy, u8, 1, 16);
         if (captured) {
             source_schema = source_schema.captured();
@@ -616,7 +615,7 @@ test "transitive native carriers require current generations rather than histori
 
 test "native merges carry only the exact authorized repair reference through captured replacement" {
     for ([_]bool{ false, true }) |combined_validation| for ([_]bool{ false, true }) |same_target| {
-        const authorization_schema = values.schema(.canonical_log_level, u8, 1, 16).captured();
+        const authorization_schema = values.schema(.principle_registry, u8, 1, 16).captured();
         const foreign_schema = values.schema(.logging_policy, u8, 1, 16).captured();
         var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ subject_schema, evidence_schema, authorization_schema, foreign_schema });
         defer envelope.deinit();
@@ -823,7 +822,7 @@ test "dependent regeneration requires native merged authority and current packet
     defer arena.deinit();
     const allocator = arena.allocator();
     const schema_bytes = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":10}},\"required\":[\"value\"],\"additionalProperties\":false}";
-    const plan_bytes = "{\"schema\":\"json-composition/v1\",\"result\":\"result\",\"parts\":{\"value\":{\"paths\":[\"/value\"],\"input-context\":\"value\"}}}";
+    const plan_bytes = "{\"schema\":\"json-composition/v1\",\"result\":\"result\",\"parts\":{\"value\":{\"paths\":[\"/value\"]}}}";
     const raw_schema = try std.json.parseFromSlice(std.json.Value, allocator, schema_bytes, .{});
     const raw_plan = try std.json.parseFromSlice(std.json.Value, allocator, plan_bytes, .{});
     const canonical = try @import("../domain/model_result_schema.zig").compile(allocator, raw_schema.value, schema_bytes);
@@ -897,8 +896,6 @@ test "dependent regeneration requires native merged authority and current packet
         const part = try state.select(allocator, 0);
         const projected = try state.packet(std.testing.allocator, part);
         defer packets.release(projected);
-        try std.testing.expect(projected != fresh);
-        try std.testing.expect(!permitsPacket(&envelope, assignment.model_request_id, null, projected, null, &native_retry));
         try std.testing.expectEqual(validation == .dependent_review, permitsPacket(&envelope, assignment.model_request_id, null, projected, part, &native_retry));
         var foreign_part = part;
         foreign_part.base = original;
@@ -934,10 +931,10 @@ test "registration admits an authorizer's blocked outcome only with the reader o
             return error.InvocationFailureUnrecorded;
         }
     };
-    const result_schema = values.schema(.specification_coverage_repair, u8, 1, 16).captured();
+    const result_schema = values.schema(.specification_support_repair, u8, 1, 16).captured();
     const unread: association.Binding = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key, .result = result_schema.key };
     var read = unread;
-    read.blocked_reader = .specification_coverage;
+    read.blocked_reader = .specification_support;
     var foreign = unread;
     foreign.blocked_reader = .reference_reconciliation;
     // Each differs from the admitted case in one respect: no reader, or another result's reader.
@@ -960,7 +957,6 @@ test "each blocked reader names the result key its owner stores its decision und
     inline for (@typeInfo(association.BlockedReader).@"enum".fields) |field| {
         const reader: association.BlockedReader = @enumFromInt(field.value);
         const stored = switch (reader) {
-            .specification_coverage => @import("specification_coverage_repair_workflow.zig").schema.key,
             .reference_reconciliation => @import("reference_reconciliation_repair_workflow.zig").state_schema.key,
             .specification_unit => @import("specification_repair_workflow.zig").authorization_schema.key,
             .specification_support => @import("specification_support_repair_workflow.zig").schema.key,

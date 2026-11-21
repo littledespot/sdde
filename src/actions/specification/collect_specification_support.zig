@@ -3,7 +3,7 @@ const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "collect-specification-support", .kind = .action, .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .model_request_identity_ledger, .prepared_model_request, .model_input_packet, .model_payload_schema_result, .packet_guidance }, .produces = &.{}, .replaces = &.{.specification_support_review}, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "collect-specification-support", .kind = .action, .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .model_request_identity_ledger, .prepared_model_request, .model_input_packet, .model_payload_schema_result, .packet_guidance }, .produces = &.{}, .replaces = &.{.specification_support_review}, .side_effect = .none };
     pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: @import("../../domain/required_authority.zig").Inputs, context: @import("../../domain/specification_provenance.zig").Context, guidance: *const @import("../../domain/packet_guidance.zig").Guidance, prior: ?support.Source.Collection, packet: *const @import("../../domain/model_input_packet.zig").Packet, body: []const u8, origin: ?@import("../../domain/model_candidate_origin.zig").Origin) support.Source.Error!support.Source.Collection {
         return support.Source.collectFocused(allocator, inputs, context, guidance, prior, packet, body, origin);
     }

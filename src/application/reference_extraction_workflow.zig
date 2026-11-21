@@ -42,17 +42,16 @@ pub const ValidateText = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
-        const current = values.read(&input.step.data, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch |operation_error| return operation_error;
         const registry = values.read(&input.step.data, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
         const prior = try read(&input.step.data, parsed_schema, .parsed);
         const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const result = self.action.execute(owner.arena.allocator(), registry.*, current, source.*, prior.payload().parsed) catch |operation_error| return operation_error;
+        const result = self.action.execute(owner.arena.allocator(), registry.*, source.*, prior.payload().parsed) catch |operation_error| return operation_error;
         owner.payload = switch (result) {
             .valid => |value| .{ .text_validated = value },
             .invalid => |rejection| .{ .text_rejected = rejection },
         };
-        const progress = @import("../domain/reference_extraction_text_repair.zig").progress(owner.arena.allocator(), self.action.validator, registry.*, current, source.*, prior.payload().parsed) catch |operation_error| return operation_error;
+        const progress = @import("../domain/reference_extraction_text_repair.zig").progress(owner.arena.allocator(), self.action.validator, registry.*, source.*, prior.payload().parsed) catch |operation_error| return operation_error;
         var published = try publish(self.allocator, text_schema, owner, if (result == .valid) .ok else .invalid);
         published.delta.repair_transition = progress;
         return published;

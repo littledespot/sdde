@@ -78,10 +78,10 @@ const Fixture = struct {
         errdefer self.arena.deinit();
         const entry = @import("composition/native_workflow_operations.zig").entry;
         const entries = core.entries ++ [_]operations.Entry{
-            entry(native.Build, &self.build),                                                                                                                                                                                        entry(native.BuildObservations, &self.observe),                                                                                                                                                                                entry(native.Reconcile, &self.reconcile), entry(native.Validate, &self.validate),
-            .{ .contract = .{ .id = "test.authority-inputs", .kind = .step, .produces = &.{.required_authority_inputs}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.inputs) }, .{ .contract = .{ .id = "test.authority-protected", .kind = .step, .gates = &.{native.gate_contract.id.bytes}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.protected) },
+            entry(native.Build, &self.build),                                                                                                                                                                                        entry(native.BuildObservations, &self.observe),                                                                                                                                    entry(native.Reconcile, &self.reconcile), entry(native.Validate, &self.validate),
+            .{ .contract = .{ .id = "test.authority-inputs", .kind = .step, .produces = &.{.required_authority_inputs}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.inputs) }, .{ .contract = .{ .id = "test.authority-protected", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.protected) },
         };
-        self.registry = .{ .operations = try self.arena.allocator().dupe(operations.Entry, &entries), .data_schemas = &native.schemas, .gates = &.{native.gate_contract}, .policies = &core.profiles };
+        self.registry = .{ .operations = try self.arena.allocator().dupe(operations.Entry, &entries), .data_schemas = &native.schemas, .gates = &.{}, .policies = &core.profiles };
         try std.testing.expect(self.registry.validate());
     }
     fn compile(self: *Fixture, bytes: []const u8) !*const compilation.CompiledWorkflow {
@@ -210,46 +210,28 @@ test "native reconciliation observes changed disposition before validated author
     }
 }
 
-test "YAML cannot skip validation or route a rejected authority gate into protected work" {
+test "a rejected authority result routed onward by YAML cannot end the run ok" {
+    // The outcome ledger keeps a rejection from becoming success: a definition may route validation's
+    // rejections to later work, and no path ends `ok` with the rejection still pending. Graph validation
+    // still refuses a definition that skips validation, which leaves its step unreachable.
+    const rerouted_validation = "ok: protected, invalid: protected, needs-user: protected, blocked: protected";
+    for ([_]Fault{ .missing_support, .conflict, .stale }) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, .feature_intent, fault);
+        defer fixture.arena.deinit();
+        const rerouted = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "ok: protected, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked", rerouted_validation);
+        try std.testing.expect(!std.mem.eql(u8, rerouted, yaml));
+        const graph = try fixture.compile(rerouted);
+        var runner = fixture.runner(graph);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner, .graph = graph };
+        try std.testing.expectEqual(.failed, harness.run());
+    }
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .feature_intent, .missing_support);
     defer fixture.arena.deinit();
-    const bypass = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "ok: protected, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked", "ok: protected, invalid: end.invalid, needs-user: protected, blocked: protected");
-    const graph = try fixture.compile(bypass);
-    var runner = fixture.runner(graph);
-    defer runner.deinit();
-    var harness: Harness = .{ .runner = &runner, .graph = graph };
-    try std.testing.expectEqual(.blocked, harness.run());
-    try std.testing.expectEqual(@as(usize, 0), fixture.script.calls);
-    const skipped = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "ok: validate, invalid: validate, needs-user: validate, blocked: validate", "ok: protected, invalid: end.invalid, needs-user: protected, blocked: protected");
+    const skipped = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "ok: validate, invalid: validate, needs-user: validate, blocked: validate", rerouted_validation);
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(skipped));
-}
-
-test "authority gate tracks every current input generation and cannot be issued by another operation" {
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator, .feature_intent, .none);
-    defer fixture.arena.deinit();
-    const graph = try fixture.compile(yaml);
-    var runner = fixture.runner(graph);
-    defer runner.deinit();
-    var harness: Harness = .{ .runner = &runner, .graph = graph };
-    try std.testing.expectEqual(.ok, harness.run());
-    const key = native.inputs_schema.key;
-    const prior = runner.envelope.slots[@intFromEnum(key)].?;
-    const owner = try owned.create(std.testing.allocator, .{ .slots = runner.envelope.slots });
-    owner.payload = owned.payload(try values.read(&.{ .slots = runner.envelope.slots }, native.inputs_schema, owned.Value)).*;
-    var changed = try owned.publish(std.testing.allocator, native.inputs_schema, owner, .ok);
-    defer runner.envelope.discard(&changed.delta);
-    changed.delta.data_replacements[@intFromEnum(key)] = changed.delta.data_writes[@intFromEnum(key)];
-    changed.delta.data_writes[@intFromEnum(key)] = null;
-    try runner.envelope.apply(.{ .id = "test.refresh", .kind = .action, .requires = &.{key}, .produces = &.{}, .replaces = &.{key}, .side_effect = .none }, &changed.delta, .ok);
-    try std.testing.expect(prior != runner.envelope.slots[@intFromEnum(key)].?);
-    try std.testing.expectEqual(.stale_authority, runner.bindings().invokeStep(.{ .bytes = "protected" }).rejected.gate);
-    try std.testing.expectEqual(@as(usize, 1), fixture.script.calls);
-    const entries = try fixture.arena.allocator().dupe(operations.Entry, fixture.registry.operations);
-    entries[0].contract.produces = &.{.required_authority_gate};
-    fixture.registry.operations = entries;
-    try std.testing.expect(!fixture.registry.validate());
 }
 
 test "native authority bindings release inputs and partial results at every allocation failure" {
@@ -283,7 +265,7 @@ test "malformed authority result cannot downgrade contract rejection to a clarif
     const step = for (graph.authority.steps) |*step| {
         if (std.mem.eql(u8, step.id.bytes, "validate")) break step;
     } else return error.ExpectedValidationStep;
-    var rejected = try native.Validate.invoke(&fixture.validate, .{ .step = .{ .data = view, .step = step, .resources = &.{}, .model_binding = null, .log = .init(graph.shortcode) } });
+    var rejected = try native.Validate.invoke(&fixture.validate, .{ .step = .{ .data = view, .step = step, .resources = &.{}, .model_binding = null } });
     defer runner.envelope.discard(&rejected.delta);
     try std.testing.expectEqual(.blocked, rejected.outcome);
     const decision = try values.read(&.{ .slots = rejected.delta.data_writes }, native.gate_schema, @import("domain/workflow_gate.zig").Decision);

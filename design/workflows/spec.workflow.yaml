@@ -14,7 +14,6 @@ resources:
   extraction-composition: spec/extraction.composition.json
   reconciliation-prompt: spec/reconciliation.prompt.md
   reconciliation-schema: spec/reconciliation.schema.json
-  reconciliation-summary: spec/reconciliation-summary.composition.json
   dispositions-prompt: spec/reconciliation-dispositions.prompt.md
   signals-prompt: spec/reconciliation-signals.prompt.md
   conflicts-prompt: spec/reconciliation-conflicts.prompt.md
@@ -277,7 +276,7 @@ subgraphs:
         on: {ok: text-repair, failed: end.failed}
       text-repair:
         use: request-model
-        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, result-selection: input, retry-limit: 1}
+        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, retry-limit: 1}
         on: {ok: parse-text-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-text-repair:
         use: parse-repair
@@ -318,7 +317,7 @@ subgraphs:
         on: {ok: request, failed: end.failed}
       request:
         use: request-model
-        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, result-selection: input, retry-limit: 1}
+        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, retry-limit: 1}
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-repair:
         use: parse-repair
@@ -371,7 +370,7 @@ subgraphs:
         on: {ok: select-composition, failed: end.failed}
       reconciliation-packet:
         use: build-reference-reconciliation-model-input
-        on: {ok: initialize-summary, failed: end.failed}
+        on: {ok: summary, failed: end.failed}
       select-composition:
         use: check-reference-reconciliation-purpose
         on: {ok: initialize-global, more: check-summary-reuse, failed: end.failed}
@@ -381,28 +380,21 @@ subgraphs:
       reuse-summary:
         use: reuse-reference-reconciliation-summary
         on: {ok: validate-summary, failed: end.failed}
-      initialize-summary:
-        use: initialize-json-composition
-        with: {composition: reconciliation-summary}
-        on: {ok: summary, failed: end.failed}
       summary:
         use: request-model
         with:
           slot: spec_generation
           protocol-prompt: protocol-prompt
           prompt: reconciliation-prompt
-          composition-part: summary
+          result-schema: reconciliation-schema
           retry-limit: 2
-        on: {ok: retain-summary, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      retain-summary:
-        use: retain-json-part
-        on: {ok: assemble-summary, failed: end.failed}
+        on: {ok: collect-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       initialize-global:
         use: build-reference-dispositions-assignment
         on: {ok: dispositions, failed: end.failed}
       dispositions:
         use: request-model
-        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: dispositions-prompt, result-schema: reconciliation-schema, result-selection: input, retry-limit: 2}
+        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: dispositions-prompt, result-schema: reconciliation-schema, retry-limit: 2}
         on: {ok: collect-dispositions, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-dispositions:
         use: collect-reference-dispositions-candidate
@@ -410,9 +402,6 @@ subgraphs:
       release-dispositions:
         call: release-request
         on: {ok: end.ok, failed: end.failed}
-      assemble-summary:
-        call: assemble-response
-        on: {ok: collect-reconciliation, failed: end.failed}
       collect-reconciliation:
         use: collect-reference-reconciliation-result
         on: {ok: rc-release, failed: end.failed}
@@ -457,7 +446,7 @@ subgraphs:
         on: {ok: request-signals, failed: end.failed}
       request-signals:
         use: request-model
-        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: signals-prompt, result-schema: reconciliation-schema, result-selection: input, retry-limit: 2}
+        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: signals-prompt, result-schema: reconciliation-schema, retry-limit: 2}
         on: {ok: collect-signals, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-signals:
         use: collect-reference-signals-candidate
@@ -477,7 +466,7 @@ subgraphs:
         on: {ok: request-conflicts, failed: end.failed}
       request-conflicts:
         use: request-model
-        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: conflicts-prompt, result-schema: reconciliation-schema, result-selection: input, retry-limit: 2}
+        with: {slot: spec_generation, protocol-prompt: protocol-prompt, prompt: conflicts-prompt, result-schema: reconciliation-schema, retry-limit: 2}
         on: {ok: collect-conflicts, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-conflicts:
         use: collect-reference-conflicts-candidate
@@ -524,7 +513,6 @@ subgraphs:
           protocol-prompt: protocol-prompt
           prompt: repair-prompt
           result-schema: reconciliation-schema
-          result-selection: input
           retry-limit: 1
         on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse:
@@ -558,7 +546,6 @@ subgraphs:
           protocol-prompt: protocol-prompt
           prompt: loss-prompt
           result-schema: support-schema
-          result-selection: input
           retry-limit: 1
         on: {ok: loss-collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       loss-collect:
@@ -580,7 +567,6 @@ subgraphs:
           protocol-prompt: protocol-prompt
           prompt: {param: prompt}
           result-schema: support-schema
-          result-selection: input
           retry-limit: {param: retry-limit}
         on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect:
@@ -607,7 +593,6 @@ subgraphs:
           protocol-prompt: protocol-prompt
           prompt: {param: prompt}
           result-schema: support-schema
-          result-selection: input
           retry-limit: 1
         on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse:
@@ -658,7 +643,6 @@ subgraphs:
           context: generation-context
           prompt: {param: prompt}
           result-schema: generation-schema
-          result-selection: input
           retry-limit: 2
         on: {ok: collect-specification, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-specification:
@@ -692,7 +676,6 @@ subgraphs:
           context: generation-context
           prompt: repair-prompt
           result-schema: generation-schema
-          result-selection: input
           retry-limit: 1
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-repair:
@@ -731,7 +714,6 @@ subgraphs:
           context: scenarios-context
           prompt: scenarios-prompt
           result-schema: generation-schema
-          result-selection: input
           retry-limit: 2
         on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect:
@@ -765,7 +747,6 @@ subgraphs:
           context: generation-context
           prompt: repair-prompt
           result-schema: generation-schema
-          result-selection: input
           retry-limit: 1
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-repair:
@@ -800,7 +781,6 @@ subgraphs:
           protocol-prompt: protocol-prompt
           prompt: links-prompt
           result-schema: links-schema
-          result-selection: input
           retry-limit: 2
         on: {ok: admit, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       admit:
@@ -817,11 +797,7 @@ subgraphs:
         on: {ok: validate-coverage, failed: end.failed}
       validate-coverage:
         use: validate-specification-coverage
-        on: {ok: end.ok, invalid: authorize-coverage-repair, failed: end.failed}
-      authorize-coverage-repair:
-        use: authorize-repair
-        with: {owner: specification-coverage}
-        on: {blocked: end.blocked, failed: end.failed}
+        on: {ok: end.ok, blocked: end.blocked, failed: end.failed}
   publish-specification:
     start: project-document
     steps:
@@ -873,7 +849,7 @@ subgraphs:
         on: {ok: request, failed: end.failed}
       request:
         use: request-model
-        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, result-selection: input, retry-limit: 1}
+        with: {slot: repair, protocol-prompt: protocol-prompt, context: extraction-context, prompt: repair-prompt, result-schema: extraction-schema, retry-limit: 1}
         on: {ok: result, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       result:
         call: source-repair-result
@@ -892,7 +868,6 @@ subgraphs:
           protocol-prompt: protocol-prompt
           prompt: repair-prompt
           result-schema: {param: schema}
-          result-selection: input
           retry-limit: 1
         on: {ok: result, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       result:

@@ -344,7 +344,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     }
     // A catalogue entry captured before ADR 0030 records no deadline and is
     // rejected before any request, like an invalid deployment.
-    for ([_]enum { valid, invalid_region, missing_deadline }{ .valid, .invalid_region, .missing_deadline }) |variant| {
+    for ([_]enum { valid, malformed_credential, invalid_region, missing_deadline }{ .valid, .malformed_credential, .invalid_region, .missing_deadline }) |variant| {
         const directory = b.addTempFiles();
         const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
         const slots = std.mem.replaceOwned(u8, b.allocator, configuration, "\"slots\": {}", "\"slots\": {\"spec_generation\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"}}") catch @panic("allocate provider smoke config");
@@ -356,11 +356,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         const provider_bytes = std.mem.replaceOwned(u8, b.allocator, shipped_bytes, "\"requestTimeoutMs\": 180000", "\"requestTimeoutMs\": 60000") catch @panic("allocate fixture deadline");
         if (std.mem.eql(u8, provider_bytes, shipped_bytes)) @panic("provider smoke catalogue lacks the fixture deadline");
         const catalogue = switch (variant) {
-            .valid => provider_bytes,
+            .valid, .malformed_credential => provider_bytes,
             .invalid_region => std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "xx-invalid-1") catch @panic("allocate invalid deployment"),
             .missing_deadline => std.mem.replaceOwned(u8, b.allocator, provider_bytes, ",\n            \"requestTimeoutMs\": 60000", "") catch @panic("allocate pre-deadline catalogue"),
         };
-        if (variant != .valid and std.mem.eql(u8, catalogue, provider_bytes)) @panic("provider smoke variant left the catalogue unchanged");
+        if (variant != .valid and variant != .malformed_credential and std.mem.eql(u8, catalogue, provider_bytes)) @panic("provider smoke variant left the catalogue unchanged");
         _ = directory.add("config/.sddproviders.json", catalogue);
         _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("fixtures/provider-request/provider-request.workflow.yaml"));
         _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("fixtures/provider-request/provider-request.prompt.md"));
@@ -371,10 +371,16 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.addArg("provider-request");
         check.setCwd(directory.getDirectory());
         check.clearEnvironment();
+        // A key with a space is rejected without being sent, and the line says so without echoing it.
+        if (variant == .malformed_credential) check.setEnvironmentVariable("AWS_BEARER_TOKEN_BEDROCK", "not a key");
         check.expectExitCode(1);
         check.expectStdOutEqual("");
-        // Without a key the call is never sent: the run says why it failed, after the outcome.
-        check.expectStdErrEqual(if (variant == .valid) "failed\nprovider_failure: authentication_failed; delivery=not_sent; retry=never\n" else "LLM_PROVIDER_REGISTRY_INVALID\n");
+        // Without a usable key the call is never sent: the run says why it failed, after the outcome.
+        check.expectStdErrEqual(switch (variant) {
+            .valid => "failed\nprovider_failure: authentication_failed; delivery=not_sent; retry=never; credential=missing\n",
+            .malformed_credential => "failed\nprovider_failure: authentication_failed; delivery=not_sent; retry=never; credential=malformed\n",
+            .invalid_region, .missing_deadline => "LLM_PROVIDER_REGISTRY_INVALID\n",
+        });
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_][3][]const u8{

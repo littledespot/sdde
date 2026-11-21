@@ -64,11 +64,15 @@ pub fn withCitationChoices(allocator: std.mem.Allocator, packet: *const packets.
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope, summary_purpose: ?[]const u8) ReconciliationError!*packets.Packet {
     return reconciliationPacketFor(allocator, input, inputs, registry, .{ .shared = guidance_scope }, summary_purpose);
 }
-pub fn reconciliationCompositionPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, summary_purpose: []const u8) ReconciliationError!*packets.Packet {
+/// The summary request's packet: the shared base with the summary assignment context selected, as the phase
+/// packets select theirs.
+pub fn reconciliationSummaryPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, summary_purpose: []const u8) ReconciliationError!*packets.Packet {
     if (input.purpose != .summary) return error.InvalidReferenceReconciliation;
     const ids = try @import("reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
     defer allocator.free(ids);
-    return reconciliationPacketFor(allocator, input, inputs, registry, .{ .composed = .{ .assignment = .summary, .claim_ids = ids } }, summary_purpose);
+    const base = try reconciliationPacketFor(allocator, input, inputs, registry, .{ .composed = .{ .assignment = .summary, .claim_ids = ids } }, summary_purpose);
+    defer packets.release(base);
+    return packets.withAssignmentContext(allocator, base, packets.AssignmentContextId.parse("summary").?);
 }
 pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("reference_reconciliation_stage.zig").Prior, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
     const current = @import("reference_reconciliation_stage.zig").input(prior);

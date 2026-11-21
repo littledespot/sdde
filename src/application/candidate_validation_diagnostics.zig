@@ -39,13 +39,6 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
         if (value.* == .unit_rejected) return .{ .specification = value.unit_rejected };
     }
     const storage = @import("specification_values.zig").storage;
-    const repair_schema = @import("specification_coverage_repair_workflow.zig").schema;
-    if (view.contains(repair_schema.key)) {
-        const value = storage.payload(try values.read(view, repair_schema, storage.Value));
-        if (value.* == .coverage_repair) return .{ .coverage = switch (value.coverage_repair) {
-            .blocked => |blocked| blocked,
-        } };
-    }
     if (view.contains(spec.coverage_schema.key)) {
         const value = storage.payload(try values.read(view, spec.coverage_schema, storage.Value));
         if (value.* == .coverage_rejected) return .{ .coverage = value.coverage_rejected };

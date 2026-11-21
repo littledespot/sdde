@@ -1,8 +1,0 @@
-{
-  "schema": "json-composition/v1",
-  "result": "reconciliation-schema",
-  "definition": "summary",
-  "parts": {
-    "summary": {"paths": ["/statements"], "input-context": "summary"}
-  }
-}

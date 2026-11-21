@@ -199,7 +199,7 @@ pub const Omission = struct {
             .outcome => .{ .outcome = .{ .claim = try json.decode(extraction.Proposal, a, bytes) } },
         };
     }
-    pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
+    pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
         try loss.requireRepairPhase(facts.support.repair_phase);
         if (!canonical.matchesInputs(facts.extraction.inputs)) return error.InvalidAtomicRepair;
         const replacement = try Atomic.copyReplacement(a, proposed);
@@ -222,7 +222,7 @@ pub const Omission = struct {
                 changed.classification_origins = origins;
             } else {
                 const claim = if (replacement == .claim) replacement.claim else if (replacement.outcome == .claim) replacement.outcome.claim else return error.InvalidAtomicRepair;
-                const checked = try @import("reference_extraction_text.zig").validate(validator, a, literals, current, facts.extraction.inputs, .{ .entries = &.{.{ .scope = scope, .origin = origin, .token_classifications = &.{}, .outcome = .{ .claims = &.{claim} } }} });
+                const checked = try @import("reference_extraction_text.zig").validate(validator, a, literals, facts.extraction.inputs, .{ .entries = &.{.{ .scope = scope, .origin = origin, .token_classifications = &.{}, .outcome = .{ .claims = &.{claim} } }} });
                 if (checked != .valid) return error.InvalidAtomicRepair;
                 var claims: std.ArrayList(extraction.TextValidatedProposal) = .empty;
                 if (entry.outcome == .claims) try claims.appendSlice(a, entry.outcome.claims);

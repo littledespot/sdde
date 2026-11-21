@@ -16,7 +16,6 @@ const sink_port = @import("ports/feature_log_sink.zig");
 const build_retention = @import("actions/log/build_feature_log_retention_authorization.zig");
 const retention_coordinator = @import("application/feature_log_retention_coordinator.zig");
 const retention_runner = @import("application/feature_log_retention_runner.zig");
-const transition_runner = @import("application/feature_log_policy_transition_runner.zig");
 const finalization_runner = @import("application/feature_log_finalization_runner.zig");
 const runtime_lifecycle = @import("application/feature_log_runtime_lifecycle.zig");
 const action_set = @import("application/feature_log_actions.zig");
@@ -75,10 +74,7 @@ test "runner barrier persists recovers and sequences feature events" {
     };
     const attributed: telemetry.WorkflowTelemetryFact = .{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"),
-        .fact = .{
-            .event_type = .task_started,
-            .fields = .{ .task_id = telemetry.Identifier.validate("TASK-1").? },
-        },
+        .fact = .{ .task_started = .{ .task_id = telemetry.Identifier.validate("TASK-1").? } },
     };
     const first = runner.barrier().process(attributed);
     try std.testing.expect(first == .persisted);
@@ -110,7 +106,7 @@ test "restart recovery truncates only an incomplete final row" {
     var outputs: FakeOutputs = .{};
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
     var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency()) };
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .run_started = .{} } };
     try std.testing.expect(first_runner.process(fact) == .persisted);
     var file = try directory.dir.openFile(io, "0001.log", .{ .mode = .read_write });
     const size = (try file.stat(io)).size;
@@ -137,7 +133,7 @@ test "restart recovery resumes after a durably closed tail" {
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .run_started = .{} } };
 
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
     var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency()) };
@@ -168,7 +164,7 @@ test "restart rejects an insecure segment permission instead of trusting its byt
     var outputs: FakeOutputs = .{};
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
     var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency()) };
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .run_started = .{} } };
     try std.testing.expect(first_runner.process(fact) == .persisted);
     var file = try directory.dir.openFile(io, "0001.log", .{ .mode = .read_write });
     try file.setPermissions(io, std.Io.File.Permissions.fromMode(0o644));
@@ -180,11 +176,10 @@ test "restart rejects an insecure segment permission instead of trusting its byt
 
 test "restart recovery leaves regular files the engine never names alone and rejects other entries" {
     const io = std.testing.io;
-    const Case = enum { strays_only, symlinked_entry, nested_directory, misplaced_segment, symlinked_run_entry, symlinked_sibling_entry, nested_sibling_directory };
+    const Case = enum { strays_only, symlinked_entry, nested_directory };
     for (std.enums.values(Case)) |case| {
         var root = std.testing.tmpDir(.{ .iterate = true });
         defer root.cleanup();
-        try root.dir.createDir(io, "LOGBIND-0", std.Io.File.Permissions.fromMode(0o700));
         try root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
         var binding_directory = try root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
         defer binding_directory.close(io);
@@ -195,7 +190,7 @@ test "restart recovery leaves regular files the engine never names alone and rej
         var clock: FakeClock = .{};
         var outputs: FakeOutputs = .{};
         const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
-        const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+        const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .run_started = .{} } };
 
         var first_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, binding_directory, candidate);
         defer first_sink.deinit();
@@ -203,18 +198,14 @@ test "restart recovery leaves regular files the engine never names alone and rej
         try std.testing.expect(first_runner.process(fact) == .persisted);
         try std.testing.expect(first_runner.close(shortcode) == .dropped);
 
-        // Stray files in the run directory, this binding and a sibling binding.
-        for ([_][]const u8{ ".DS_Store", "LOGBIND-1/Thumbs.db", "LOGBIND-0/._0001.log" }) |path| {
+        // Stray files in the run directory and this binding.
+        for ([_][]const u8{ ".DS_Store", "LOGBIND-1/Thumbs.db" }) |path| {
             try root.dir.writeFile(io, .{ .sub_path = path, .data = "stray" });
         }
         switch (case) {
             .strays_only => {},
             .symlinked_entry => try root.dir.symLink(io, "0001.log", "LOGBIND-1/desktop.ini", .{}),
             .nested_directory => try root.dir.createDir(io, "LOGBIND-1/nested", .default_dir),
-            .misplaced_segment => try root.dir.copyFile("LOGBIND-1/0001.log", root.dir, "0001.log", io, .{}),
-            .symlinked_run_entry => try root.dir.symLink(io, "LOGBIND-1/0001.log", "desktop.ini", .{}),
-            .symlinked_sibling_entry => try root.dir.symLink(io, "../LOGBIND-1/0001.log", "LOGBIND-0/desktop.ini", .{}),
-            .nested_sibling_directory => try root.dir.createDir(io, "LOGBIND-0/nested", .default_dir),
         }
 
         var second_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, binding_directory, candidate);
@@ -248,7 +239,7 @@ test "stream lock acquisition rejects a symbolic link" {
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink_adapter, clock.port(), outputs.console(), outputs.emergency()) };
-    const outcome = runner.process(.{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_started } });
+    const outcome = runner.process(.{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .run_started = .{} } });
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
     const target = try directory.dir.readFileAlloc(io, "lock-target", std.testing.allocator, .limited(32));
     defer std.testing.allocator.free(target);
@@ -274,7 +265,7 @@ test "threshold drop performs no clock sink or identity work" {
     };
     const result = runner.process(.{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
-        .fact = .{ .event_type = .run_started },
+        .fact = .{ .run_started = .{} },
     });
     try std.testing.expect(result == .dropped);
     try std.testing.expectEqual(@as(usize, 0), clock.calls);
@@ -414,7 +405,7 @@ test "fault barriers distinguish lock recovery flush console rotation and retent
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = true };
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_completed, .fields = .{ .outcome = .completed } } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .run_completed = .{ .outcome = .completed } } };
 
     inline for (.{ Fault.lock, Fault.recovery, Fault.flush, Fault.console, Fault.rotation }) |fault| {
         var sink: FaultSink = .{ .fault = fault };
@@ -494,7 +485,7 @@ fn persistOneRow(runner: *runner_module.Runner, comptime stream: log_stream.Stre
     return switch (stream) {
         .event => runner.process(.{
             .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
-            .fact = .{ .event_type = .run_completed, .fields = .{ .outcome = .completed } },
+            .fact = .{ .run_completed = .{ .outcome = .completed } },
         }),
         .prompt => runner.processPrompt(.{
             .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
@@ -572,35 +563,21 @@ test "a full segment rotates before its row, a spent segment budget writes nothi
     }
 }
 
-test "same-run policy transition closes the old binding and continues sequence and total budget" {
+test "the active binding activates once, persists, retains history and finalizes" {
     const io = std.testing.io;
     var root = std.testing.tmpDir(.{ .iterate = true });
     defer root.cleanup();
     var prompt_root = std.testing.tmpDir(.{ .iterate = true });
     defer prompt_root.cleanup();
     try root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
-    try root.dir.createDir(io, "LOGBIND-2", std.Io.File.Permissions.fromMode(0o700));
     try prompt_root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
-    try prompt_root.dir.createDir(io, "LOGBIND-2", std.Io.File.Permissions.fromMode(0o700));
     var old_directory = try root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
     defer old_directory.close(io);
-    var next_directory = try root.dir.openDir(io, "LOGBIND-2", .{ .iterate = true });
-    defer next_directory.close(io);
     var old_prompt_directory = try prompt_root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
     defer old_prompt_directory.close(io);
-    var next_prompt_directory = try prompt_root.dir.openDir(io, "LOGBIND-2", .{ .iterate = true });
-    defer next_prompt_directory.close(io);
     const old_candidate = bindingCandidate();
-    const next_candidate: log_binding.BindingCandidate = .{
-        .log_policy_id = telemetry.Identifier.validate("LOGPOL-2").?,
-        .binding_id = telemetry.Identifier.validate("LOGBIND-2").?,
-        .run_id = old_candidate.run_id,
-        .feature_id = old_candidate.feature_id,
-    };
     const old_owner = try log_binding.createValidated(std.testing.allocator, old_candidate);
     defer log_binding.deinitOwner(old_owner);
-    const next_owner = try log_binding.createValidated(std.testing.allocator, next_candidate);
-    defer log_binding.deinitOwner(next_owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
@@ -609,36 +586,20 @@ test "same-run policy transition closes the old binding and continues sequence a
     old_sink.prompt_directory = old_prompt_directory;
     defer old_sink.deinit();
     var old_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(old_owner), .actions = childrenFor(&old_sink, clock.port(), outputs.console(), outputs.emergency()) };
-    var next_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, next_directory, next_candidate);
-    next_sink.prompt_run_directory = prompt_root.dir;
-    next_sink.prompt_directory = next_prompt_directory;
-    defer next_sink.deinit();
-    var next_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(next_owner), .actions = childrenFor(&next_sink, clock.port(), outputs.console(), outputs.emergency()) };
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .run_started = .{} } };
     var lifecycle: runtime_lifecycle.Lifecycle = .{};
     try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
     try std.testing.expect(lifecycle.activate(old_runner.childBindings(), fact.workflow_shortcode) == .ok);
     try std.testing.expect(old_runner.prompt_state != null);
-    try std.testing.expect(lifecycle.activate(next_runner.childBindings(), fact.workflow_shortcode) == .invalid);
+    try std.testing.expect(lifecycle.activate(old_runner.childBindings(), fact.workflow_shortcode) == .invalid);
     try std.testing.expect(lifecycle.barrier().process(fact) == .persisted);
     try std.testing.expectEqual(@as(u64, 2), old_runner.event_state.?.next_sequence);
-    var transition_execution: transition_runner.Runner = .{
-        .current = &old_runner,
-        .next = &next_runner,
-        .shortcode = fact.workflow_shortcode,
-    };
-    try std.testing.expect(lifecycle.transition(transition_execution.childBindings()) == .ok);
-    try std.testing.expect(next_runner.prompt_state != null);
-    const outcome = lifecycle.barrier().process(fact);
-    try std.testing.expect(outcome == .persisted);
-    try std.testing.expectEqual(@as(u64, 3), next_runner.event_state.?.next_sequence);
-    try std.testing.expectEqual(@as(u8, 2), next_runner.event_state.?.total_segment_count);
 
     const historical_candidate: log_binding.BindingCandidate = .{
         .log_policy_id = telemetry.Identifier.validate("LOGPOL-HIST").?,
         .binding_id = telemetry.Identifier.validate("LOGBIND-HIST").?,
         .run_id = telemetry.Identifier.validate("RUN-HIST").?,
-        .feature_id = next_candidate.feature_id,
+        .feature_id = old_candidate.feature_id,
     };
     const historical_owner = try log_binding.createValidated(std.testing.allocator, historical_candidate);
     defer log_binding.deinitOwner(historical_owner);
@@ -647,7 +608,7 @@ test "same-run policy transition closes the old binding and continues sequence a
     var retention_execution: retention_runner.Runner = .{
         .allocator = std.testing.allocator,
         .policy = &policy,
-        .current = log_binding.binding(next_owner),
+        .current = log_binding.binding(old_owner),
         .historical = log_binding.binding(historical_owner),
         .target_stream = .event,
         .authorize_action = .{ .clock = retention_clock.port() },
@@ -660,12 +621,11 @@ test "same-run policy transition closes the old binding and continues sequence a
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, retention.blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
     var finalization_execution: finalization_runner.Runner = .{
-        .target = &next_runner,
-        .mode = .active,
+        .target = &old_runner,
         .shortcode = fact.workflow_shortcode,
     };
     try std.testing.expect(lifecycle.finalizeActive(finalization_execution.childBindings()) == .ok);
-    try std.testing.expect(next_runner.retired);
+    try std.testing.expect(old_runner.retired);
     try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
 }
 
@@ -721,114 +681,6 @@ test "retention authorization derives its single-use cutoff from trusted policy 
     );
 }
 
-test "historical finalization recovers and durably closes one active tail" {
-    const io = std.testing.io;
-    var directory = std.testing.tmpDir(.{ .iterate = true });
-    defer directory.cleanup();
-    var prompt_directory = std.testing.tmpDir(.{ .iterate = true });
-    defer prompt_directory.cleanup();
-    const candidate = bindingCandidate();
-    const owner = try log_binding.createValidated(std.testing.allocator, candidate);
-    defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{
-        .level = .{ .threshold = .debug, .alias_evidence = .none },
-        .console = false,
-    };
-    var clock: FakeClock = .{};
-    var outputs: FakeOutputs = .{};
-    var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    first_sink.prompt_run_directory = prompt_directory.dir;
-    first_sink.prompt_directory = prompt_directory.dir;
-    var first_runner: runner_module.Runner = .{
-        .allocator = std.testing.allocator,
-        .policy = &policy,
-        .binding = log_binding.binding(owner),
-        .actions = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency()),
-    };
-    const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
-    try std.testing.expect(first_runner.process(.{
-        .workflow_shortcode = shortcode,
-        .fact = .{ .event_type = .run_started },
-    }) == .persisted);
-
-    var recovered_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    recovered_sink.prompt_run_directory = prompt_directory.dir;
-    recovered_sink.prompt_directory = prompt_directory.dir;
-    var recovered_runner: runner_module.Runner = .{
-        .allocator = std.testing.allocator,
-        .policy = &policy,
-        .binding = log_binding.binding(owner),
-        .actions = childrenFor(&recovered_sink, clock.port(), outputs.console(), outputs.emergency()),
-    };
-    var lifecycle: runtime_lifecycle.Lifecycle = .{};
-    var finalization_execution: finalization_runner.Runner = .{
-        .target = &recovered_runner,
-        .mode = .historical,
-        .shortcode = shortcode,
-    };
-    try std.testing.expect(lifecycle.finalizeHistorical(finalization_execution.childBindings()) == .ok);
-    try std.testing.expect(recovered_runner.retired);
-    const bytes = try directory.dir.readFileAlloc(
-        io,
-        "0001.log",
-        std.testing.allocator,
-        .limited(log_limits.max_segment_bytes),
-    );
-    defer std.testing.allocator.free(bytes);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "segment_trailer|") != null);
-}
-
-test "failed successor preparation removes the active observer" {
-    const old_candidate = bindingCandidate();
-    const next_candidate: log_binding.BindingCandidate = .{
-        .log_policy_id = telemetry.Identifier.validate("LOGPOL-2").?,
-        .binding_id = telemetry.Identifier.validate("LOGBIND-2").?,
-        .run_id = old_candidate.run_id,
-        .feature_id = old_candidate.feature_id,
-    };
-    const old_owner = try log_binding.createValidated(std.testing.allocator, old_candidate);
-    defer log_binding.deinitOwner(old_owner);
-    const next_owner = try log_binding.createValidated(std.testing.allocator, next_candidate);
-    defer log_binding.deinitOwner(next_owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{
-        .level = .{ .threshold = .debug, .alias_evidence = .none },
-        .console = false,
-    };
-    var old_sink: FaultSink = .{ .fault = .none };
-    var next_sink: FaultSink = .{ .fault = .recovery };
-    var clock: FakeClock = .{};
-    var outputs: FakeOutputs = .{};
-    var old_runner: runner_module.Runner = .{
-        .allocator = std.testing.allocator,
-        .policy = &policy,
-        .binding = log_binding.binding(old_owner),
-        .actions = childrenFor(&old_sink, clock.port(), outputs.console(), outputs.emergency()),
-    };
-    var next_runner: runner_module.Runner = .{
-        .allocator = std.testing.allocator,
-        .policy = &policy,
-        .binding = log_binding.binding(next_owner),
-        .actions = childrenFor(&next_sink, clock.port(), outputs.console(), outputs.emergency()),
-    };
-    const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
-    const fact: telemetry.WorkflowTelemetryFact = .{
-        .workflow_shortcode = shortcode,
-        .fact = .{ .event_type = .run_started },
-    };
-    var lifecycle: runtime_lifecycle.Lifecycle = .{};
-    try std.testing.expect(lifecycle.activate(old_runner.childBindings(), shortcode) == .ok);
-    var transition_execution: transition_runner.Runner = .{
-        .current = &old_runner,
-        .next = &next_runner,
-        .shortcode = shortcode,
-    };
-    try std.testing.expect(lifecycle.transition(transition_execution.childBindings()) == .blocked);
-    try std.testing.expect(old_runner.retired);
-    try std.testing.expect(!next_sink.held);
-    try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
-    try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
-}
-
 test "failed active finalization releases the lock and removes the observer" {
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
@@ -849,13 +701,12 @@ test "failed active finalization releases the lock and removes the observer" {
     const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
     const fact: telemetry.WorkflowTelemetryFact = .{
         .workflow_shortcode = shortcode,
-        .fact = .{ .event_type = .run_started },
+        .fact = .{ .run_started = .{} },
     };
     var lifecycle: runtime_lifecycle.Lifecycle = .{};
     try std.testing.expect(lifecycle.activate(runner.childBindings(), shortcode) == .ok);
     var finalization_execution: finalization_runner.Runner = .{
         .target = &runner,
-        .mode = .active,
         .shortcode = shortcode,
     };
     const outcome = lifecycle.finalizeActive(finalization_execution.childBindings());
@@ -884,7 +735,7 @@ test "sink acquisition failure reports once and blocks" {
     };
     const outcome = runner.process(.{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
-        .fact = .{ .event_type = .run_started },
+        .fact = .{ .run_started = .{} },
     });
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
@@ -911,7 +762,7 @@ test "emergency failure preserves the original logging failure without retry" {
     };
     const outcome = runner.process(.{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
-        .fact = .{ .event_type = .run_started },
+        .fact = .{ .run_started = .{} },
     });
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_calls);
@@ -1130,11 +981,12 @@ test "production event projection uses closed facts and propagates every barrier
             const self: *@This() = @ptrCast(@alignCast(context));
             _ = log_event_registry.validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             if (self.expect_capture) {
-                const code = fact.fact.fields.diagnostic_code orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+                const code = telemetry.fieldOf(fact.fact, .diagnostic_code) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
                 if (!std.mem.eql(u8, code.bytes, "MODEL_CAPTURE_LINEAGE_FAILURE_MISSING_SOURCE")) return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
-                if (fact.fact.event_type == .run_blocked) {
-                    const correlation = fact.fact.correlation_id orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
-                    if (!std.mem.eql(u8, correlation.bytes, "request-7-inference-1") or fact.fact.attempt != 1) return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+                if (telemetry.eventOf(fact.fact) == .run_blocked) {
+                    const common = telemetry.commonOf(fact.fact);
+                    const correlation = common.correlation_id orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+                    if (!std.mem.eql(u8, correlation.bytes, "request-7-inference-1") or common.attempt != 1) return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
                 }
             }
             self.count += 1;
@@ -1147,7 +999,7 @@ test "production event projection uses closed facts and propagates every barrier
     for ([_]bool{ false, true }) |blocked| {
         spy.blocked = blocked;
         const expected: ?log_stream.Stop = if (blocked) .{ .blocked = .LOG_FLUSH_FAILURE } else null;
-        try std.testing.expectEqual(expected, events.emit(.{ .event_type = .run_started }));
+        try std.testing.expectEqual(expected, events.emit(.{ .run_started = .{} }));
         try std.testing.expectEqual(expected, events.action(node, null, null, null));
         for (std.enums.values(@import("domain/workflow.zig").OutcomeTag)) |status| {
             try std.testing.expectEqual(expected, events.action(node, .{ .outcome = status }, null, null));
@@ -1157,12 +1009,12 @@ test "production event projection uses closed facts and propagates every barrier
         try std.testing.expectEqual(log_stream.Stop{ .blocked = .LOG_SERIALIZATION_FAILURE }, events.terminal(.{ .execution = .more }).?);
         try std.testing.expectEqual(expected, events.validation(node, .ok, null, null));
         try std.testing.expectEqual(expected, events.validation(node, .invalid, "WRONG_SHAPE", null));
-        try std.testing.expectEqual(expected, events.repair(node, .repair_requested, .ok, null));
-        try std.testing.expectEqual(expected, events.repair(node, .repair_applied, .ok, null));
-        try std.testing.expectEqual(expected, events.repair(node, .repair_rejected, .invalid, "REPAIR_RECURRING"));
+        try std.testing.expectEqual(expected, events.repair(node, .requested));
+        try std.testing.expectEqual(expected, events.repair(node, .{ .applied = .ok }));
+        try std.testing.expectEqual(expected, events.repair(node, .{ .rejected = .{ .status = .invalid, .reason = "REPAIR_RECURRING" } }));
         try std.testing.expectEqual(expected, events.retryAttempt(node, 2, false));
         try std.testing.expectEqual(expected, events.retryAttempt(node, 3, true));
-        try std.testing.expectEqual(expected, events.emit(.{ .event_type = .publication_prepared, .fields = .{ .outcome = .needs_user } }));
+        try std.testing.expectEqual(expected, events.emit(.{ .publication_prepared = .{ .outcome = .needs_user } }));
         spy.expect_capture = true;
         const rejected: @import("domain/workflow_execution.zig").Rejection = .{ .model_capture = .{ .code = .LOG_SERIALIZATION_FAILURE, .stage = .lineage, .cause = .{ .lineage = .missing_source }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .direction = .request } };
         try std.testing.expectEqual(expected, events.action(node, .{ .rejected = rejected }, null, null));
@@ -1268,7 +1120,7 @@ test "cancellation under the feature log lock is a cancellation: no emergency li
     const owner = try log_binding.createValidated(std.testing.allocator, bindingCandidate());
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .run_started = .{} } };
     // The lock, recovery, rotation and append are four sink operations; none of them reports a logging failure.
     inline for (.{ Fault.cancel_lock, Fault.cancel_recovery, Fault.cancel_rotation, Fault.cancel_append }) |fault| {
         var sink: FaultSink = .{ .fault = fault };
@@ -1298,7 +1150,7 @@ test "a lock that cannot be released after a cancelled step is a logging failure
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .run_started = .{} } };
     inline for (.{ Fault.cancel_append_release_fails, Fault.cancel_close_release_fails }) |fault| {
         var sink: FaultSink = .{ .fault = fault };
         var clock: FakeClock = .{};
@@ -1341,18 +1193,10 @@ test "cancellation while a stream is prepared or closed is a cancellation, never
     }
 }
 
-test "cancelled activation, finalization and transition end as cancellation and release the lock" {
+test "cancelled activation and finalization end as cancellation and release the lock" {
     const old_candidate = bindingCandidate();
-    const next_candidate: log_binding.BindingCandidate = .{
-        .log_policy_id = telemetry.Identifier.validate("LOGPOL-2").?,
-        .binding_id = telemetry.Identifier.validate("LOGBIND-2").?,
-        .run_id = old_candidate.run_id,
-        .feature_id = old_candidate.feature_id,
-    };
     const old_owner = try log_binding.createValidated(std.testing.allocator, old_candidate);
     defer log_binding.deinitOwner(old_owner);
-    const next_owner = try log_binding.createValidated(std.testing.allocator, next_candidate);
-    defer log_binding.deinitOwner(next_owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
 
@@ -1376,26 +1220,10 @@ test "cancelled activation, finalization and transition end as cancellation and 
         var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(old_owner), .actions = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency()) };
         var lifecycle: runtime_lifecycle.Lifecycle = .{};
         try std.testing.expect(lifecycle.activate(runner.childBindings(), shortcode) == .ok);
-        var finalization_execution: finalization_runner.Runner = .{ .target = &runner, .mode = .active, .shortcode = shortcode };
+        var finalization_execution: finalization_runner.Runner = .{ .target = &runner, .shortcode = shortcode };
         try std.testing.expect(lifecycle.finalizeActive(finalization_execution.childBindings()) == .cancelled);
         try std.testing.expect(lifecycle.active == null);
         try std.testing.expect(!sink.held);
-        try std.testing.expectEqual(@as(usize, 0), outputs.emergency_calls);
-    }
-    // A policy transition closes the current stream before it prepares the next.
-    {
-        var old_sink: FaultSink = .{ .fault = .cancel_close };
-        var next_sink: FaultSink = .{ .fault = .none };
-        var clock: FakeClock = .{};
-        var outputs: FakeOutputs = .{};
-        var old_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(old_owner), .actions = childrenFor(&old_sink, clock.port(), outputs.console(), outputs.emergency()) };
-        var next_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(next_owner), .actions = childrenFor(&next_sink, clock.port(), outputs.console(), outputs.emergency()) };
-        var lifecycle: runtime_lifecycle.Lifecycle = .{};
-        try std.testing.expect(lifecycle.activate(old_runner.childBindings(), shortcode) == .ok);
-        var transition_execution: transition_runner.Runner = .{ .current = &old_runner, .next = &next_runner, .shortcode = shortcode };
-        try std.testing.expect(lifecycle.transition(transition_execution.childBindings()) == .cancelled);
-        try std.testing.expect(!old_sink.held);
-        try std.testing.expect(!next_runner.prepared);
         try std.testing.expectEqual(@as(usize, 0), outputs.emergency_calls);
     }
 }
@@ -1437,7 +1265,7 @@ test "a filesystem cancellation at any sink operation is a cancellation, with th
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .run_started = .{} } };
     // Each case names the nth call of one filesystem operation, in the order a persist makes them: the lock file
     // is opened, created, inspected and locked; recovery lists the directory and reads or truncates a segment; a
     // new segment is created, its heading and header written and synced; the row is appended.
@@ -1495,42 +1323,6 @@ test "a filesystem cancellation at any sink operation is a cancellation, with th
     try std.testing.expect(runner.process(fact) == .persisted);
 }
 
-test "a cancellation while recovery scans the run's other bindings is a cancellation, never a corrupt stream" {
-    const io = std.testing.io;
-    const candidate = bindingCandidate();
-    const owner = try log_binding.createValidated(std.testing.allocator, candidate);
-    defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .event_type = .run_started } };
-    // The run directory holds this binding and a sibling; recovery lists both, and the nth directory read is cancelled.
-    var cancelled_reads: usize = 0;
-    for (0..6) |pass| {
-        var root = std.testing.tmpDir(.{ .iterate = true });
-        defer root.cleanup();
-        try root.dir.createDir(io, "LOGBIND-0", std.Io.File.Permissions.fromMode(0o700));
-        try root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
-        var binding_directory = try root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
-        defer binding_directory.close(io);
-        var clock: FakeClock = .{};
-        var outputs: FakeOutputs = .{};
-        var cancel: cancelling.CancellingIo = undefined;
-        cancel.init(.dir_read, pass);
-        defer cancel.deinit();
-        var sink = filesystem_sink.Adapter.initForTestLayout(cancel.io(), root.dir, binding_directory, candidate);
-        defer sink.deinit();
-        var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency()) };
-        const outcome = runner.process(fact);
-        // A read the persist never reaches leaves the run unaffected; every read it does reach reports a cancellation.
-        if (cancel.fired) {
-            cancelled_reads += 1;
-            try std.testing.expect(outcome == .cancelled);
-            try std.testing.expectEqual(@as(usize, 0), outputs.emergency_calls);
-        } else try std.testing.expect(outcome == .persisted);
-    }
-    // More than the binding's own listing was reached: the scan of the run's other bindings reads too.
-    try std.testing.expect(cancelled_reads >= 2);
-}
-
 test "a cancelled console mirror write under the lock is a cancellation, and the row it followed is recovered" {
     const io = std.testing.io;
     var directory = std.testing.tmpDir(.{ .iterate = true });
@@ -1539,7 +1331,7 @@ test "a cancelled console mirror write under the lock is a cancellation, and the
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = true };
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .run_started = .{} } };
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     var sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
@@ -1623,7 +1415,7 @@ test "after a console failure the next append and the close continue the file, a
         // Every append flushes, so the flush the sink reports as failed is one the real sink would perform.
         const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = true, .lower_level_flush_records = 1 };
         const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
-        const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+        const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .run_started = .{} } };
         const fragment: prompt_log.SanitizedPromptFragment = .{
             .workflow_shortcode = shortcode,
             .attempt = 1,
@@ -1711,7 +1503,7 @@ test "finalization recovers and closes a stream whose state a cancelled persist 
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = true };
     const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .run_started = .{} } };
     const fragment: prompt_log.SanitizedPromptFragment = .{
         .workflow_shortcode = shortcode,
         .attempt = 1,
@@ -1765,7 +1557,7 @@ test "a cancelled close is closed again from the bytes, writing exactly one trai
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .run_started = .{} } };
     // The nth call of one operation is cancelled. A cancelled flush follows the trailer's bytes; a cancelled
     // stat or write precedes them, so the first close writes none and only the second can.
     var reached = [_]usize{0} ** 3;
@@ -1898,7 +1690,7 @@ test "a filesystem cancellation while retention prunes closed segments is a canc
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
-    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+    const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .run_started = .{} } };
     for ([_]cancelling.Op{ .dir_read, .open_file, .stat, .read_positional, .delete_file }) |op| {
         var directory = std.testing.tmpDir(.{ .iterate = true });
         defer directory.cleanup();
@@ -1939,7 +1731,7 @@ test "production event projection reports a log cancellation as a cancellation" 
     const events: capture.Capture = .{ .barrier = .{ .context = &context, .process_fn = Spy.process }, .shortcode = try telemetry.WorkflowShortcode.parse("OTHR") };
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "check" };
     const cancelled: ?log_stream.Stop = .cancelled;
-    try std.testing.expectEqual(cancelled, events.emit(.{ .event_type = .run_started }));
+    try std.testing.expectEqual(cancelled, events.emit(.{ .run_started = .{} }));
     try std.testing.expectEqual(cancelled, events.action(node, null, null, null));
     try std.testing.expectEqual(cancelled, events.terminal(.{ .execution = .cancelled }));
     try std.testing.expectEqual(cancelled, events.retryAttempt(node, 2, false));

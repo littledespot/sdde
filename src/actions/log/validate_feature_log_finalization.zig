@@ -12,22 +12,19 @@ pub const Action = struct {
         .side_effect = .none,
     };
 
-    pub fn execute(_: Action, mode: stream.FinalizationMode, status: stream.RuntimeStatus) Error!void {
-        if (status == .retired or (mode == .active and status != .prepared)) {
-            return error.InvalidFeatureLogFinalization;
-        }
+    pub fn execute(_: Action, status: stream.RuntimeStatus) Error!void {
+        if (status != .prepared) return error.InvalidFeatureLogFinalization;
     }
 };
 
-test "active finalization requires a prepared live binding" {
-    try (Action{}).execute(.active, .prepared);
-    try (Action{}).execute(.historical, .unprepared);
+test "finalization requires a prepared live binding" {
+    try (Action{}).execute(.prepared);
     try @import("std").testing.expectError(
         error.InvalidFeatureLogFinalization,
-        (Action{}).execute(.active, .unprepared),
+        (Action{}).execute(.unprepared),
     );
     try @import("std").testing.expectError(
         error.InvalidFeatureLogFinalization,
-        (Action{}).execute(.historical, .retired),
+        (Action{}).execute(.retired),
     );
 }

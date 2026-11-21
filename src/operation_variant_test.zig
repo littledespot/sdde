@@ -30,8 +30,8 @@ const runner_module = @import("application/workflow_pipeline_runner.zig");
 const Registry = operation_registry.Registry;
 const Entry = operation_registry.Entry;
 
-const raw_schema = values.schema(.raw_engine_config, u32, 1, 64);
-const engine_schema = values.schema(.engine_config, u32, 1, 64);
+const raw_schema = values.schema(.workflow_operation_registry, u32, 1, 64);
+const engine_schema = values.schema(.workflow_definition_registry, u32, 1, 64);
 const evidence_schema = values.schema(.workflow_operation_registry_evidence, gate.Decision, 1, 32);
 const schemas = [_]data.Schema{ raw_schema, engine_schema, evidence_schema };
 const policies = [_]operation.PolicyProfile{.{ .id = "variant.policy@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{ .ok, .failed, .invalid } }};
@@ -55,9 +55,9 @@ fn variantFor(a: std.mem.Allocator, shape: Shape, values_in_use: []const []const
         .plain => .{
             .value = "plain",
             .parameters = try a.dupe(operation.ParameterDescriptor, &.{mode}),
-            .requires = &.{.raw_engine_config},
+            .requires = &.{.workflow_operation_registry},
             .optional = &.{},
-            .produces = &.{.engine_config},
+            .produces = &.{.workflow_definition_registry},
             .replaces = &.{},
             .invalidates = &.{},
             .outcomes = &.{.ok},
@@ -73,9 +73,9 @@ fn variantFor(a: std.mem.Allocator, shape: Shape, values_in_use: []const []const
         .retrying => .{
             .value = "retrying",
             .parameters = try a.dupe(operation.ParameterDescriptor, &.{ mode, limit.descriptor(3) }),
-            .requires = &.{.raw_engine_config},
+            .requires = &.{.workflow_operation_registry},
             .optional = &.{},
-            .produces = &.{.engine_config},
+            .produces = &.{.workflow_definition_registry},
             .replaces = &.{},
             .invalidates = &.{},
             .outcomes = &.{ .ok, .failed },
@@ -91,7 +91,7 @@ fn variantFor(a: std.mem.Allocator, shape: Shape, values_in_use: []const []const
         .validating => .{
             .value = "validating",
             .parameters = try a.dupe(operation.ParameterDescriptor, &.{mode}),
-            .requires = &.{ .raw_engine_config, .engine_config },
+            .requires = &.{ .workflow_operation_registry, .workflow_definition_registry },
             .optional = &.{},
             .produces = &.{},
             .replaces = &.{},
@@ -109,10 +109,10 @@ fn variantFor(a: std.mem.Allocator, shape: Shape, values_in_use: []const []const
         .merging => .{
             .value = "merging",
             .parameters = try a.dupe(operation.ParameterDescriptor, &.{ mode, limit.descriptor(5) }),
-            .requires = &.{ .raw_engine_config, .engine_config },
+            .requires = &.{ .workflow_operation_registry, .workflow_definition_registry },
             .optional = &.{},
             .produces = &.{},
-            .replaces = &.{.engine_config},
+            .replaces = &.{.workflow_definition_registry},
             .invalidates = &.{},
             .outcomes = &.{ .ok, .invalid, .failed },
             .side_effect = .none,
@@ -142,7 +142,7 @@ fn shell(variants: []const operation.Variant) operation.Contract {
 }
 
 const input_entry: Entry = .{
-    .contract = .{ .id = "variant.input", .kind = .invocation, .produces = &.{.raw_engine_config}, .outcomes = &.{.ok}, .side_effect = .none },
+    .contract = .{ .id = "variant.input", .kind = .invocation, .produces = &.{.workflow_operation_registry}, .outcomes = &.{.ok}, .side_effect = .none },
     .binding = bindings.bind(void, null, unused),
 };
 
@@ -179,7 +179,7 @@ test "a variant resolves to its own flat contract and never to a union" {
     const merging = contract.resolve("merging").?;
     try std.testing.expectEqual(@import("domain/workflow_retry.zig").Scope.repair, merging.retry_limit.?.scope);
     try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.merge, merging.repair_role);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.engine_config}, merging.replaces);
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.workflow_definition_registry}, merging.replaces);
     try std.testing.expect(contract.resolve("plain").?.retry_limit == null);
     // No selector, or a selector no variant has, resolves nothing: no variant is selected by absence.
     try std.testing.expect(contract.resolve(null) == null);
@@ -265,7 +265,7 @@ test "registry admission rejects an ambiguous, unselectable or shapeless contrac
             // Variants without a selector.
             6 => contract.selector = null,
             // The contract states a shape of its own beside its variants.
-            7 => contract.requires = &.{.raw_engine_config},
+            7 => contract.requires = &.{.workflow_operation_registry},
             // A contract with a selector and no variant to select.
             8 => {
                 contract.variants = &.{};
@@ -308,7 +308,7 @@ const gate_contract: gate.Contract = .{
 };
 
 const issuer_entry: Entry = .{
-    .contract = .{ .id = "variant.issuer", .kind = .step, .requires = &.{.raw_engine_config}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{.ok}, .side_effect = .none },
+    .contract = .{ .id = "variant.issuer", .kind = .step, .requires = &.{.workflow_operation_registry}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{.ok}, .side_effect = .none },
     .binding = bindings.bind(void, null, unused),
 };
 
@@ -567,7 +567,7 @@ test "graph validation and publication recheck each step against its own variant
             // The repair role of another variant.
             2 => steps[0].repair_role = .validate,
             // A data effect of another variant.
-            3 => steps[0].replaces = &.{.engine_config},
+            3 => steps[0].replaces = &.{.workflow_definition_registry},
             // The selector switched to another variant while the effects stay.
             4 => steps[0].parameters = retrying_effects.parameters,
             // The selector removed.
@@ -653,7 +653,7 @@ test "the runner checks every delta, outcome and retry authority against the com
         .{ .graph = &plain[0], .outcome = .failed, .write = true, .replace = false, .expected = undeclared },
         // An outcome no variant declares for it.
         .{ .graph = &retrying[0], .outcome = .invalid, .write = true, .replace = false, .expected = undeclared },
-        // A delta that fits another variant (`merging` replaces `engine_config`) but not the compiled one.
+        // A delta that fits another variant (`merging` replaces `workflow_definition_registry`) but not the compiled one.
         .{ .graph = &plain[0], .outcome = .ok, .write = false, .replace = true, .expected = rejected },
         .{ .graph = &retrying[0], .outcome = .ok, .write = true, .replace = true, .expected = rejected },
     };

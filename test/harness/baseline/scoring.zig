@@ -78,7 +78,7 @@ pub const AssessmentInputs = struct {
     trials: []const AssessorPacket,
 };
 pub const Report = struct {
-    schema: enum { @"baseline-score/v8" } = .@"baseline-score/v8",
+    schema: enum { @"baseline-score/v9" } = .@"baseline-score/v9",
     build: build.Identity,
     toolchain: frozen_inputs.Toolchain,
     freeze_sha256: []const u8,

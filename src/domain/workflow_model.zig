@@ -68,7 +68,7 @@ pub fn validResultSelection(values: []const compilation.CompiledParameter) bool 
     if ((result == null) == (part == null)) return false;
     if (result) |resource| return resource == .resource and @import("workflow.zig").WorkflowResourceId.parse(resource.resource.bytes) != null;
     return part.? == .string and @import("workflow.zig").WorkflowResourceId.parse(part.?.string) != null and
-        find(values, "result-selection") == null and find(values, "input") == null;
+        find(values, "input") == null;
 }
 
 pub fn resolve(

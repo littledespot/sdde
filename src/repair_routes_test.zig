@@ -39,7 +39,7 @@ fn call(comptime G: type, comptime op: Operation, comptime owner: RepairOwner, c
     var storage = [1]compilation.CompiledParameter{.{ .id = .{ .bytes = generic.selector }, .value = .{ .enumeration = owner.id() } }};
     const effects = generic.OwnerBinding(op, owner).effects;
     const step: compilation.CompiledStep = .{ .id = .{ .bytes = "repair" }, .operation_id = .{ .bytes = op.id() }, .parameters = &storage, .requires = effects.requires, .optional = effects.optional, .produces = effects.produces, .replaces = effects.replaces, .invalidates = effects.invalidates, .outcomes = &.{ .ok, .more, .invalid, .blocked, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
-    return G.invoke(context, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+    return G.invoke(context, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } });
 }
 
 fn contains(list: []const Key, key: Key) bool {
@@ -73,7 +73,7 @@ const Request = struct {
         const a = fixture.arena.allocator();
         const base = try model_tests.protocolRetryYaml(fixture);
         const source = try std.mem.replaceOwned(u8, a, base, ", input: input.txt", "");
-        const definition = try std.mem.replaceOwned(u8, a, source, ", input: input }", ", result-selection: input }");
+        const definition = try std.mem.replaceOwned(u8, a, source, ", input: input }", " }");
         const schema_source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, schema_file, a, .unlimited);
         const graph = try fixture.compileWithAssets(definition, schema_source, false);
         self.runner = fixture.runner(graph, std.testing.allocator);
@@ -120,7 +120,7 @@ const TextWorld = struct {
     rejection: ?extraction.TextRejection,
     tokens: @import("domain/structured_tokens.zig").Candidates,
     view: data.View = .{},
-    held: [6]?*data.Value = [_]?*data.Value{null} ** 6,
+    held: [5]?*data.Value = [_]?*data.Value{null} ** 5,
 
     fn init(a: std.mem.Allocator, rejected: bool) !TextWorld {
         var ids: evidence_test.IdSource = .{};
@@ -132,19 +132,17 @@ const TextWorld = struct {
         const entries = try a.alloc(extraction.ParsedResult, 1);
         entries[0] = .{ .scope = scope, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = reason } };
         const candidate: extraction.Parsed = .{ .entries = entries };
-        const checked = try text_fixture.validate_text.execute(a, prepared.registry, text_fixture.safety.value(prepared.owner), inputs, candidate);
+        const checked = try text_fixture.validate_text.execute(a, prepared.registry, inputs, candidate);
         var world: TextWorld = .{ .inputs = inputs, .prepared = prepared, .candidate = candidate, .rejection = if (rejected) checked.invalid else null, .tokens = try token_fixture.candidates(a, inputs) };
         errdefer world.deinit();
-        const toolchain = @import("application/toolchain_workflow_values.zig").valid;
-        world.hold(0, try values.adopt(std.testing.allocator, toolchain, text_fixture.safety.ValidToolchain, text_fixture.safety.Owner, prepared.owner, text_fixture.safety.value, text_fixture.safety.deinitOwner, text_fixture.safety.retainedBytes(prepared.owner)), toolchain.key);
         const source_schema = @import("application/reference_evidence_workflow.zig").inputs_schema;
-        world.hold(1, try values.create(std.testing.allocator, source_schema, evidence.Inputs, inputs), source_schema.key);
+        world.hold(0, try values.create(std.testing.allocator, source_schema, evidence.Inputs, inputs), source_schema.key);
         const registry_schema = @import("application/passive_literal_workflow.zig").registry_schema;
-        world.hold(2, try values.create(std.testing.allocator, registry_schema, @import("domain/passive_literals.zig").Registry, prepared.registry), registry_schema.key);
+        world.hold(1, try values.create(std.testing.allocator, registry_schema, @import("domain/passive_literals.zig").Registry, prepared.registry), registry_schema.key);
         const tokens_schema = @import("application/structured_token_workflow.zig").candidates_schema;
-        world.hold(3, try values.create(std.testing.allocator, tokens_schema, @import("domain/structured_tokens.zig").Candidates, world.tokens), tokens_schema.key);
-        world.hold(4, try publishPayload(native.parsed_schema, .{ .parsed = candidate }), native.parsed_schema.key);
-        world.hold(5, try publishPayload(native.text_schema, if (rejected) .{ .text_rejected = checked.invalid } else .{ .text_validated = checked.valid }), native.text_schema.key);
+        world.hold(2, try values.create(std.testing.allocator, tokens_schema, @import("domain/structured_tokens.zig").Candidates, world.tokens), tokens_schema.key);
+        world.hold(3, try publishPayload(native.parsed_schema, .{ .parsed = candidate }), native.parsed_schema.key);
+        world.hold(4, try publishPayload(native.text_schema, if (rejected) .{ .text_rejected = checked.invalid } else .{ .text_validated = checked.valid }), native.text_schema.key);
         return world;
     }
 
@@ -155,10 +153,11 @@ const TextWorld = struct {
 
     fn deinit(self: *TextWorld) void {
         for (self.held) |slot| if (slot) |value| values.destroy(value);
+        self.prepared.deinit();
     }
 
-    fn facts(self: *const TextWorld) !text_domain.Facts {
-        return contexts.textFacts(self.inputs, self.prepared.registry, text_fixture.safety.value(self.prepared.owner), self.candidate);
+    fn facts(self: *const TextWorld) text_domain.Facts {
+        return contexts.textFacts(self.inputs, self.prepared.registry, self.candidate);
     }
 };
 
@@ -178,7 +177,7 @@ test "the reference-text route runs authorize, input, parse and merge through th
     var world = try TextWorld.init(a, true);
     defer world.deinit();
     var view = world.view;
-    const facts = try world.facts();
+    const facts = world.facts();
     const expected_authorization = try text_domain.authorize(a, facts, world.rejection.?);
 
     // Authorize: a model replacement is authorized, with its permit, and writes only the authorization.
@@ -200,7 +199,7 @@ test "the reference-text route runs authorize, input, parse and merge through th
     try expectDelta(built.delta, &.{.model_input_packet}, &.{}, &.{});
     const packet_value = built.delta.data_writes[@intFromEnum(requests.packet_schema.key)].?;
     const built_packet = try values.read(&.{ .slots = built.delta.data_writes }, requests.packet_schema, packets.Packet);
-    const expected_packet = try text_domain.packet(std.testing.allocator, facts, world.prepared.registry, text_fixture.safety.value(world.prepared.owner), world.tokens, expected_authorization);
+    const expected_packet = try text_domain.packet(std.testing.allocator, facts, world.prepared.registry, world.tokens, expected_authorization);
     defer packets.release(expected_packet);
     try std.testing.expectEqualStrings(expected_packet.body(), built_packet.body());
 
@@ -244,7 +243,7 @@ test "the reference-text route runs authorize, input, parse and merge through th
     const merged_parsed = (try native.read(&.{ .slots = merged.delta.data_replacements }, native.parsed_schema, .parsed)).payload().parsed;
     try std.testing.expectEqualDeep(expected, merged_parsed);
     // And the repair did its work: the repaired candidate passes the text validator that rejected it.
-    const valid = (try text_fixture.validate_text.execute(a, world.prepared.registry, text_fixture.safety.value(world.prepared.owner), world.inputs, merged_parsed)).valid;
+    const valid = (try text_fixture.validate_text.execute(a, world.prepared.registry, world.inputs, merged_parsed)).valid;
     try std.testing.expect(valid.entries[0].outcome == .no_feature_claim);
 }
 
@@ -303,7 +302,7 @@ const SupportWorld = struct {
     inputs: authority.Inputs,
     rejected: Rejected,
     view: data.View = .{},
-    held: [7]?*data.Value = [_]?*data.Value{null} ** 7,
+    held: [6]?*data.Value = [_]?*data.Value{null} ** 6,
 
     fn init(a: std.mem.Allocator, shape: SupportShape) !SupportWorld {
         const fixture = switch (shape) {
@@ -328,18 +327,16 @@ const SupportWorld = struct {
             },
         };
         var world: SupportWorld = .{ .fixture = fixture, .inputs = inputs, .rejected = rejected };
-        // The toolchain takes the fixture's owner, so it is released with the world.
-        world.hold(0, try values.adopt(std.testing.allocator, @import("application/toolchain_workflow_values.zig").valid, text_fixture.safety.ValidToolchain, text_fixture.safety.Owner, fixture.passive.owner, text_fixture.safety.value, text_fixture.safety.deinitOwner, text_fixture.safety.retainedBytes(fixture.passive.owner)), @import("application/toolchain_workflow_values.zig").valid.key);
         errdefer world.deinit();
         const sources = @import("application/reference_evidence_workflow.zig").inputs_schema;
-        world.hold(1, try values.create(std.testing.allocator, sources, evidence.Inputs, fixture.context.inputs), sources.key);
+        world.hold(0, try values.create(std.testing.allocator, sources, evidence.Inputs, fixture.context.inputs), sources.key);
         const registry = @import("application/passive_literal_workflow.zig").registry_schema;
-        world.hold(2, try values.create(std.testing.allocator, registry, @import("domain/passive_literals.zig").Registry, fixture.context.registry), registry.key);
+        world.hold(1, try values.create(std.testing.allocator, registry, @import("domain/passive_literals.zig").Registry, fixture.context.registry), registry.key);
         const accounted = @import("application/reference_reconciliation_workflow.zig").accounted_schema;
-        world.hold(3, try publishPayload(accounted, .{ .reconciliation_accounted = fixture.context.references }), accounted.key);
-        world.hold(4, try values.create(std.testing.allocator, guidance_workflow.schema, @import("domain/packet_guidance.zig").Guidance, guidance.*), guidance_workflow.schema.key);
-        world.hold(5, try world.authorityValue(authority_workflow.inputs_schema, .{ .inputs = inputs }), authority_workflow.inputs_schema.key);
-        world.hold(6, try world.authorityValue(support_workflow.schema, .{ .support = .{ .rejected = rejected } }), support_workflow.schema.key);
+        world.hold(2, try publishPayload(accounted, .{ .reconciliation_accounted = fixture.context.references }), accounted.key);
+        world.hold(3, try values.create(std.testing.allocator, guidance_workflow.schema, @import("domain/packet_guidance.zig").Guidance, guidance.*), guidance_workflow.schema.key);
+        world.hold(4, try world.authorityValue(authority_workflow.inputs_schema, .{ .inputs = inputs }), authority_workflow.inputs_schema.key);
+        world.hold(5, try world.authorityValue(support_workflow.schema, .{ .support = .{ .rejected = rejected } }), support_workflow.schema.key);
         return world;
     }
 
@@ -350,6 +347,7 @@ const SupportWorld = struct {
 
     fn deinit(self: *SupportWorld) void {
         for (self.held) |slot| if (slot) |value| values.destroy(value);
+        self.fixture.deinit();
     }
 
     /// A required-authority value created from what the world holds so far, as the engine retains it.

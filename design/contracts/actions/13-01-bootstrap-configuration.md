@@ -17,8 +17,8 @@ owns the current toolchain shapes.
 > reached only from the composition root, and
 > [`model_provider_bootstrap_routine.zig`](../../../src/application/model_provider_bootstrap_routine.zig),
 > reached only through the runner-owned provider-bootstrap binding. Each step's failure maps to
-> its fixed public code (`code(step)`), including allocation failure and deadline exhaustion;
-> explicit cancellation stays distinct. A failed run records the step it stopped at. A
+> its fixed public code (`code(step)`), including allocation failure and, for a step whose
+> adapter owns a clock, deadline exhaustion; explicit cancellation stays distinct. A failed run records the step it stopped at. A
 > workflow-definition step also leaves the rejection evidence its owner recorded (rule class,
 > definition ordinal and display path, step or resource ID), which the CLI prints after the code
 > ([F0005](../../features/F0005-WorkflowDefinitionRegistryService.md) §9).
@@ -132,16 +132,15 @@ the steps of the provider-bootstrap routine.
 - **Takes:** the provider-config locator port and the root registry's provider-document path capability · **Returns:** the exact provider-config file · **Side effect:** `filesystem_read`
 - **Does:** Opens only the configured no-follow regular `.sddproviders.json`; reads no bytes and
   searches for no other file.
-- **Rejects:** `LLMProviderConfigReadError` (`LLM_PROVIDER_CONFIG_READ_ERROR`), which also covers
-  deadline exhaustion; `Cancelled`; reports step `locate_config`.
+- **Rejects:** `LLMProviderConfigReadError` (`LLM_PROVIDER_CONFIG_READ_ERROR`); `Cancelled`;
+  reports step `locate_config`.
 
 ## `readConfig` (provider routine step `read_config`)
 
 - **Owner:** [`src/application/model_provider_bootstrap_routine.zig`](../../../src/application/model_provider_bootstrap_routine.zig)
 - **Takes:** the exact provider-config file · **Returns:** the raw provider-config bytes · **Side effect:** `filesystem_read`
 - **Does:** Captures the opened file once under F0008's 1,048,576-byte limit.
-- **Rejects:** `LLMProviderConfigReadError`, which also covers deadline exhaustion; `Cancelled`;
-  reports step `read_config`.
+- **Rejects:** `LLMProviderConfigReadError`; `Cancelled`; reports step `read_config`.
 
 ## `decodeConfig` (provider routine step `decode_config`)
 
@@ -190,8 +189,7 @@ the steps of the provider-bootstrap routine.
 - **Takes:** the validated root registry · **Returns:** the workflow authority layout · **Side effect:** `none`
 - **Does:** Derives the `paths.workflows` inventory scope and the reserved `features/` child,
   whose root entry is accounted while its descendants are excluded; reads nothing.
-- **Rejects:** none; only a deadline stop after it reports step `build_workflow_layout`
-  (`WORKFLOW_AUTHORITY_INVENTORY_INVALID`).
+- **Rejects:** none; only a cancellation stop after it reports step `build_workflow_layout`.
 
 ## `enumerateWorkflowResources` (startup step `enumerate_workflow_resources`)
 
@@ -411,8 +409,8 @@ steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays sep
   7. `resolveInheritance`: resolves the project layer's complete preset inheritance closure from
      `paths.toolchainPreset`. Rejects `InvalidToolchain` for a missing, conflicting, duplicate or
      cyclic reference.
-  8. `compose`: keeps the inherited packages in resolved order and forms the stable union of their
-     policies, then the project layer's, without duplicates. Rejects `InvalidToolchain`.
+  8. `compose`: forms the stable union of the resolved packages' policies, in resolved order,
+     then the project layer's, without duplicates. Rejects `InvalidToolchain`.
   9. `validateSafety`: proves the merged policy keeps every locked rule; the only constructor of
      `ValidToolchain`. Rejects `InvalidToolchain`.
 
@@ -422,7 +420,8 @@ steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays sep
 - **Reads:** `valid_toolchain` · **Writes:** `compiled_naming_policy` · **Side effect:** `none`
 - **Does:** Normalizes the toolchain's explicit naming rules for the shared lexical detector;
   infers no rule from package names or examples.
-- **Rejects:** `InvalidNamingPolicy`, `StaleNamingPolicy`.
+- **Rejects:** `InvalidNamingPolicy`. `StaleNamingPolicy` belongs to the binding check of
+  `prepare-reference-tokens`, not to this action.
 
 ## Principles
 

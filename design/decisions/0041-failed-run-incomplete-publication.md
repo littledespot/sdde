@@ -95,8 +95,8 @@ incomplete specification when a run pauses for clarification.
    - logging and model-capture failures (`logging`, `model_capture`), because the
      publication couldn't be recorded;
    - configuration, bootstrap, allocation and invariant failures (`operation_failed`);
-   - the run deadline (`deadline_exhausted`); a single request's timeout is a YAML
-     `failed` and publishes;
+   - an expired authorization lease (`deadline_exhausted`); a single request's timeout is a
+     YAML `failed` and publishes;
    - a failure before the reference snapshot validated, because nothing validated
      exists to publish.
 2. **What is published.** Only content that passed every check that applies to it on
@@ -182,7 +182,7 @@ incomplete specification when a run pauses for clarification.
    5. **Eligible operations.** The registered operation contract carries a typed
       failure-output eligibility flag, which the compiler checks for every failure-output
       step; no step may hold a model capability.
-   6. **Cancellation and deadline.** The runner's checks still apply in failure-output
+   6. **Cancellation and lease deadline.** The runner's checks still apply in failure-output
       mode; the engine returns the original failure, and ADR 0009's rule covers files
       already written.
    7. **Tests.** The publishing list's "authority block" is a YAML administrative block;
@@ -256,7 +256,7 @@ incomplete specification when a run pauses for clarification.
     `RunawayRepeated`, protocol exhaustion, `RepairNoProgress`, the token budget, a
     coverage block, an authority block, and a unit invalid with no repair left.
   - Each excluded class publishes nothing: cancellation, logging, authority, gate,
-    `operation_failed`, the run deadline, and any failure before the snapshot.
+    `operation_failed`, an expired lease, and any failure before the snapshot.
   - Only validated units appear, without final requirement IDs: a unit mid-correction,
     mid-repair, rejected or with an unresolved candidate outcome is absent; sections the
     run didn't produce are marked not generated.

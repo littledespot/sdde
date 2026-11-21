@@ -34,7 +34,7 @@ test "authoring evidence resolves typed meaning without exposing citation or ext
         const original = item;
         const scope: r.evidence.Scope = .{ .state_id = fixture.inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
         const literal = fixture.text.registry.records[0];
-        const validation_context: r.text.Context = .{ .registry = fixture.text.registry, .current = text.safety.value(fixture.text.owner), .inputs = fixture.inputs, .scope = scope, .field = .extraction_business };
+        const validation_context: r.text.Context = .{ .registry = fixture.text.registry, .inputs = fixture.inputs, .scope = scope, .field = .extraction_business };
         item.claim.content = .{ .model = .{ .business = try text.validator.business(a, validation_context, .{ .segments = &.{
             .{ .literal = .{ .value = "MOCK Display " } },
             .{ .passive = .{ .passive_literal_id = literal.id } },
@@ -139,9 +139,7 @@ test "summary purpose and union claim coverage apply across every summary level"
             if (current.purpose == .global) break;
             levels.insert(current.partition.group.level);
             for (current.summaries) |summary| carried_child_in_packet = carried_child_in_packet or summary.projection.carried_from != null;
-            const packet = try input.reconciliationCompositionPacket(std.testing.allocator, current, fixture.inputs, fixture.text.registry, purpose);
-            defer packets.release(packet);
-            const selected = try packets.withAssignmentContext(std.testing.allocator, packet, .{ .bytes = "summary" });
+            const selected = try input.reconciliationSummaryPacket(std.testing.allocator, current, fixture.inputs, fixture.text.registry, purpose);
             defer packets.release(selected);
             const body = (try std.json.parseFromSlice(std.json.Value, a, selected.body(), .{})).value.object;
             try std.testing.expectEqualStrings(purpose, body.get("summary_purpose").?.string);
@@ -174,8 +172,8 @@ test "summary purpose and union claim coverage apply across every summary level"
             try std.testing.expect(std.mem.indexOf(u8, shared_rules, "unique_nonzero") != null);
             try std.testing.expect(std.mem.indexOf(u8, shared_rules, summary_selection_rule) == null);
 
-            const selection = @import("actions/reference/check_reference_summary_reuse.zig").Action{ .validator = text.validator };
-            const reuse = @import("actions/reference/reuse_reference_reconciliation_summary.zig").Action{ .validator = text.validator };
+            const selection = @import("actions/reference/check_reference_summary_reuse.zig").Action{};
+            const reuse = @import("actions/reference/reuse_reference_reconciliation_summary.zig").Action{};
             const candidate: r.Parsed = if (try selection.execute(a, current, fixture.context()) == .reusable)
                 try reuse.execute(a, current, fixture.context())
             else
@@ -230,14 +228,12 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
     const initial = try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2);
     const summary = try reconciliation.build_input.execute(a, initial);
     const purpose = guidance.marked.summary_purpose;
-    const summary_packet = try input.reconciliationCompositionPacket(allocator, summary, fixture.inputs, fixture.text.registry, purpose);
-    defer packets.release(summary_packet);
-    try std.testing.expect(summary_packet.assignmentContext(.{ .bytes = "summary" }) != null);
-    const selected_summary = try packets.withAssignmentContext(allocator, summary_packet, .{ .bytes = "summary" });
+    const selected_summary = try input.reconciliationSummaryPacket(allocator, summary, fixture.inputs, fixture.text.registry, purpose);
     defer packets.release(selected_summary);
+    try std.testing.expect(selected_summary.assignmentContext(.{ .bytes = "summary" }) != null);
     try checkSemanticAssignment(a, selected_summary, summary.items, null);
     const global = try reconciliation.summaries(a, initial, fixture.context());
-    try std.testing.expectError(error.InvalidReferenceReconciliation, input.reconciliationCompositionPacket(allocator, global, fixture.inputs, fixture.text.registry, purpose));
+    try std.testing.expectError(error.InvalidReferenceReconciliation, input.reconciliationSummaryPacket(allocator, global, fixture.inputs, fixture.text.registry, purpose));
     try std.testing.expectError(error.InvalidReferenceReconciliation, input.reconciliationPacket(allocator, global, fixture.inputs, fixture.text.registry, .all, purpose));
     const stage = @import("domain/reference_reconciliation_stage.zig");
     const candidate: reconciliation.r.Parsed = .{ .phase = .dispositions, .input = global, .proposal = .{ .global = try reconciliation.global(a, global) } };
@@ -360,9 +356,7 @@ test "token-only semantic assignments are empty while native construction preser
         };
         const extracted = try extraction.finish(a, fixture.inputs, results);
         const summary = try reconciliation.build_input.execute(a, try reconciliation.initialize(a, fixture.inputs, extracted, 2));
-        const packet = try input.reconciliationCompositionPacket(std.testing.allocator, summary, fixture.inputs, fixture.text.registry, guidance.marked.summary_purpose);
-        defer packets.release(packet);
-        const selected = try packets.withAssignmentContext(std.testing.allocator, packet, .{ .bytes = "summary" });
+        const selected = try input.reconciliationSummaryPacket(std.testing.allocator, summary, fixture.inputs, fixture.text.registry, guidance.marked.summary_purpose);
         defer packets.release(selected);
         try checkSemanticAssignment(a, selected, summary.items, null);
         const parsed = try std.json.parseFromSlice(std.json.Value, a, selected.body(), .{});
@@ -586,7 +580,7 @@ test "summary and signal schemas restrict semantic claim choices while retaining
         defer fixture.deinit();
         const initial = try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2);
         const summary = try reconciliation.build_input.execute(a, initial);
-        const summary_packet = try input.reconciliationCompositionPacket(std.testing.allocator, summary, fixture.inputs, fixture.text.registry, guidance.marked.summary_purpose);
+        const summary_packet = try input.reconciliationSummaryPacket(std.testing.allocator, summary, fixture.inputs, fixture.text.registry, guidance.marked.summary_purpose);
         defer packets.release(summary_packet);
         const global = try reconciliation.summaries(a, initial, fixture.context());
         const candidate: r.Parsed = .{ .phase = .dispositions, .input = global, .proposal = .{ .global = try reconciliation.global(a, global) } };
@@ -653,7 +647,6 @@ test "semantic category projection follows native claim kinds and retains cross-
     const entries = try a.dupe(r.Item, items.entries);
     entries[1].claim.content = .{ .model = .{ .technical = try text.validator.reference(a, .{
         .registry = fixture.text.registry,
-        .current = text.safety.value(fixture.text.owner),
         .inputs = fixture.inputs,
         .scope = .{ .state_id = fixture.inputs.corpus.state_id, .chunk_id = entries[1].claim.chunk_id },
         .field = .extraction_technical,
@@ -776,7 +769,7 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
     try std.testing.expectEqualDeep(content, raw.entries[0].origin.?);
     try std.testing.expectEqualDeep(producers, raw.entries[0].producers.?);
     const extracted = try extraction.finish(a, inputs, raw.entries);
-    const context: reconciliation.Context = .{ .inputs = inputs, .registry = passive.registry, .current = text.safety.value(passive.owner) };
+    const context: reconciliation.Context = .{ .inputs = inputs, .registry = passive.registry };
     const initial = try reconciliation.initialize(a, inputs, extracted, 2);
     const global = try reconciliation.summaries(a, initial, context);
     const packet = try input.reconciliationPacket(allocator, global, inputs, passive.registry, .all, null);

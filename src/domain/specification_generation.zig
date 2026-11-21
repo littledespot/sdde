@@ -253,7 +253,7 @@ pub fn revalidate(allocator: std.mem.Allocator, validator: @import("typed_text.z
 }
 
 fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: Responses(boundary).Response) Error!Validation {
-    try provenance.bind(allocator, validator, context);
+    try provenance.bind(allocator, context);
     var inspection: provenance.Inspection = .{};
     const result: CanonicalResponse = switch (proposed) {
         .inconclusive => |failure| return .{ .invalid = .{ .unit = unit, .field = .interpretation, .rule = .interpretation, .observed = null, .blocked = .inconclusive_review, .detail = failure.detail } },

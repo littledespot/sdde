@@ -26,7 +26,9 @@ pub const StepInput = struct {
     resources: []const compilation.CompiledResource,
     model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
     repair_permit: ?workflow_retry.Permit = null,
-    log: pipeline.WorkflowLog,
+    /// The selected workflow's shortcode, which the feature-logging activation step binds to the run's log. Absent
+    /// outside the runner.
+    workflow_shortcode: ?@import("../domain/telemetry.zig").WorkflowShortcode = null,
     /// The runner's capability-free status handle, which a stage action checks between its
     /// internal steps (ADR 0031). A caller that invokes a binding outside the runner has none to
     /// supply, so it stays always active.

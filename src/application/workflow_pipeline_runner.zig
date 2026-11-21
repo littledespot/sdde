@@ -592,7 +592,7 @@ pub const Runner = struct {
                 .description = @import("../domain/model_request_description.zig").Description.from(invoked.request, invoked.provider_binding, invoked.operation_id.kind),
                 .source_context = .{ .graph = self.selected.graph, .request = retained_request.? },
             });
-            if (self.eventsActive()) if (self.events().model(id, .{ .origin = origin, .binding = invoked.provider_binding.* }, .model_requested, null, null, null)) |stop| {
+            if (self.eventsActive()) if (self.events().model(id, .{ .origin = origin, .binding = invoked.provider_binding.* }, .requested)) |stop| {
                 self.model_capture.end();
                 return .{ .rejected = execution.Rejection.logStop(stop) };
             };
@@ -616,7 +616,7 @@ pub const Runner = struct {
             .authority = &self.selected.graph.authority,
             .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
             .repair_permit = self.repair_retry.currentPermit(),
-            .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
+            .workflow_shortcode = self.selected.graph.shortcode,
             .runtime = self.runtime,
             .stage_step = &self.stage_step,
             .model_attempt = attempt_input,
@@ -698,7 +698,7 @@ pub const Runner = struct {
         for (self.tokenLedger().accounted_operations.items) |accounted| {
             if (accounted.id.eql(call.operation_id) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
         }
-        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_completed, status, null, usage);
+        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .{ .completed = .{ .status = status, .usage = usage } });
     }
 
     /// ADR 0039: logged after the runaway's stop and before its one re-send is
@@ -710,7 +710,7 @@ pub const Runner = struct {
         for (self.tokenLedger().accounted_operations.items) |accounted| {
             if (accounted.id.eql(runaway) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
         }
-        return self.events().model(id, .{ .origin = origin, .binding = request.binding().* }, .model_runaway_resent, null, @tagName(provider.ProviderNonCandidateStopReason.output_limit), usage);
+        return self.events().model(id, .{ .origin = origin, .binding = request.binding().* }, .{ .runaway_resent = .{ .reason = @tagName(provider.ProviderNonCandidateStopReason.output_limit), .usage = usage } });
     }
 
     const ProviderStop = struct { reason: provider.ProviderNonCandidateStopReason, usage: provider.ProviderUsage };
@@ -746,7 +746,7 @@ pub const Runner = struct {
     fn logProviderStop(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag, stop: ProviderStop) ?@import("../domain/feature_log_stream.zig").Stop {
         if (!self.eventsActive()) return null;
         const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
-        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_provider_stopped, status, @tagName(stop.reason), stop.usage);
+        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .{ .provider_stopped = .{ .status = status, .reason = @tagName(stop.reason), .usage = stop.usage } });
     }
 
     fn captureRejection(self: *const Runner) ?execution.Rejection {
@@ -785,7 +785,7 @@ pub const Runner = struct {
             const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), source.operationId()) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             const info: event_capture.Model = .{ .origin = origin, .binding = request.binding().* };
             var reason: ?[]const u8 = null;
-            var event: @import("../domain/telemetry.zig").EventType = .model_protocol_failed;
+            var schema_rejected = false;
             if (produces_decode) switch (evidence.outcome()) {
                 .protocol_rejected => |rejected| reason = rejected.diagnostic.label(),
                 .not_decoded => |stopped| if (candidate.outcome == .invalid) {
@@ -798,17 +798,20 @@ pub const Runner = struct {
                     reason = "MISSING_FINAL_TEXT";
                 } else return null,
                 .decoded => |value| if (value.normalization() != .none) {
-                    if (self.events().model(step.id, info, .model_response_normalized, null, @tagName(value.normalization()), null)) |failure| return failure;
+                    if (self.events().model(step.id, info, .{ .response_normalized = @tagName(value.normalization()) })) |failure| return failure;
                 },
             };
             if (produces_schema and reason == null) {
                 const checked = values.read(&view, schema_check.schema, schema_check.Result) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
                 if (checked.outcome() == .schema_rejected) {
                     reason = @tagName(checked.outcome().schema_rejected.reason);
-                    event = .model_schema_failed;
+                    schema_rejected = true;
                 }
             }
-            if (reason) |value| if (self.events().model(step.id, info, event, candidate.outcome, value, null)) |failure| return failure;
+            if (reason) |value| {
+                const rejected: event_capture.Rejection = .{ .status = candidate.outcome, .reason = value };
+                if (self.events().model(step.id, info, if (schema_rejected) .{ .schema_failed = rejected } else .{ .protocol_failed = rejected })) |failure| return failure;
+            }
             if (self.events().validation(step.id, candidate.outcome, reason, origin)) |failure| return failure;
         }
         // Project only this operation's newly published evidence. Reading the
@@ -820,20 +823,20 @@ pub const Runner = struct {
         const diagnostic = @import("candidate_validation_diagnostics.zig").read(&produced) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         if (diagnostic) |value| {
             if (value == .support_findings and value.support_findings.repair_rejection == null) {
-                if (self.events().emit(.{ .event_type = .review_rejected, .node_id = .{ .bytes = step.id.bytes }, .fields = .{ .outcome = event_capture.outcome(candidate.outcome) } })) |failure| return failure;
+                if (self.events().emit(.{ .review_rejected = .{ .node_id = .{ .bytes = step.id.bytes }, .outcome = event_capture.outcome(candidate.outcome) } })) |failure| return failure;
             }
             const reason = value.code();
             if (self.events().validation(step.id, candidate.outcome, reason, value.origin())) |failure| return failure;
         }
         if (candidate.delta.repair_transition) |transition| {
             if (transition == .validated) return self.events().validation(step.id, candidate.outcome, if (transition.validated.result == .recurring) "REPAIR_RECURRING" else null, null);
-            const event: @import("../domain/telemetry.zig").EventType = switch (transition) {
-                .authorized => .repair_requested,
-                .merged => .repair_applied,
+            const event: event_capture.RepairEvent = switch (transition) {
+                .authorized => .requested,
+                .merged => .{ .applied = candidate.outcome },
                 .validated => unreachable,
-                .merged_validated => |value| if (value.result == .resolved) .repair_applied else .repair_rejected,
+                .merged_validated => |value| if (value.result == .resolved) .{ .applied = candidate.outcome } else .{ .rejected = .{ .status = candidate.outcome, .reason = "REPAIR_RECURRING" } },
             };
-            if (self.events().repair(step.id, event, candidate.outcome, if (event == .repair_rejected) "REPAIR_RECURRING" else null)) |failure| return failure;
+            if (self.events().repair(step.id, event)) |failure| return failure;
         }
         return null;
     }
@@ -1067,9 +1070,6 @@ pub const Runner = struct {
             self.model_accounting.?.commit(applied);
             pending = null;
         }
-        for (candidate.delta.addedTelemetryFacts()) |fact| {
-            if (self.barrier.process(fact).stop()) |stop| return .{ .rejected = execution.Rejection.logStop(stop) };
-        }
         // Workflow edges may inspect an operation outcome only after its delta
         // and runner transitions have been accepted and applied.
         return .{ .outcome = candidate.outcome };
@@ -1227,6 +1227,5 @@ fn runtimeTerminal(runtime: pipeline.NodeRuntime) ?execution.Rejection {
     return switch (runtime.status()) {
         .active => null,
         .cancelled => .cancelled,
-        .deadline_exhausted => .deadline_exhausted,
     };
 }

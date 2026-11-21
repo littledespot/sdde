@@ -102,9 +102,8 @@ variant only for the operations it uses today:
 | `source-omission-reconciliation` | — | — | — | yes (1) |
 | `specification-unit` | yes | yes | yes | yes (64) |
 | `specification-support` | yes | yes | yes | yes, `merge_validate` (2) |
-| `specification-coverage` | yes, `blocked`/`failed` only | — | — | — |
 
-That is 13 owners and 29 variants, one per removed per-owner operation. A step that names an owner
+That is 12 owners and 28 variants, one per removed per-owner operation that survives. A step that names an owner
 with no variant for its operation rejects at compilation.
 
 The model call stays a separate `request-model` step (ADR 0030). Release and every
@@ -191,12 +190,13 @@ Today's differences become variant facts:
   `merge-repair` steps with the `reference-reconciliation` owner, one per reconciliation
   route, each with its own counter (see "Retry identity"). Each phase keeps its own
   explicit YAML step (ADR 0022).
-- **Coverage** declares only `blocked` and `failed`, so it gains no unreachable outcome.
+- **Coverage** is no owner (user decision, 21 November 2026). A mechanical coverage defect has no
+  independently supported repair target, so `validate-specification-coverage` returns `blocked`
+  itself.
 - **Blocked authorizers.** An authorizer that declares `blocked` names, in its
   descriptor, the closed reader of that decision, and one that does not declare it names
-  none. The reader is one of the four native owners that retain a blocked decision:
-  specification coverage, reference reconciliation, specification unit or specification
-  support. It determines the one result key the descriptor names. The execution binding
+  none. The reader is one of the three native owners that retain a blocked decision:
+  reference reconciliation, specification unit or specification support. It determines the one result key the descriptor names. The execution binding
   selects the retained decision through one exhaustive `switch` over the reader, so a
   `blocked` with no reader cannot be registered, compiled or built.
 - **Merge retries.** The text and extraction merges forbid a `retry-limit`. The other
@@ -294,7 +294,7 @@ from the user's words. The user confirmed choice 1 on 23 October 2026 and choice
    complete per-owner variants, validated independently. The alternative was distinct
    contracts for owners whose shapes differ. **Confirmed on 23 October 2026,** through
    ADR 0030's shared contract-variant mechanism, which the E4 change built first.
-2. **The owner list.** The 13 owners above, including the split of source omission's
+2. **The owner list.** The 12 owners above, including the split of source omission's
    merges into two owners.
 3. **`owner` is checked against native facts,** and a mismatch is terminal. It selects no
    policy, scope or defect identity.
@@ -325,7 +325,7 @@ Costs:
 
 - **A compiler, registry and runner extension.** The compiler, registry and runner gained
   contract variants (ADR 0030 "Contract variants"), which the E4 change built first, with
-  that ADR's acceptance cases as their tests; this ADR then added its 13 owners' variants
+  that ADR's acceptance cases as their tests; this ADR then added its 12 owners' variants
   to that mechanism.
 - **The largest refactor of the four.** It touches every repair route, and repair is
   safety-critical. The freeze-and-reproduce evidence and the sequencing bound the risk.
@@ -345,14 +345,13 @@ All offline:
     summary, signals and conflicts);
   - source omission's `more` to its reconciliation branch and both of its merges;
   - the four reconciliation authorizers feeding the three reconciliation merges;
-  - coverage `blocked`;
   - specification support's `merge_validate`.
 - **`owner` checks.** A YAML `owner` that disagrees with the native owner is a terminal
   runner rejection, or a compile error where provable. `owner` cannot widen scope, reset
   a count or change a defect key.
 - **Retry isolation.** Two steps using the same generic operation keep separate counters.
 - **Compiler and registry cases:**
-  - accepted: each of the 29 variants;
+  - accepted: each of the 28 variants;
   - rejected: an unknown owner, or an owner with no variant for the operation;
   - rejected: an outcome the variant doesn't declare, and an unmapped declared outcome;
   - rejected: a missing `retry-limit` where required, a `retry-limit` where forbidden, and

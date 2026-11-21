@@ -58,9 +58,9 @@ pub const Action = struct {
         try checkpoint(diagnostic, runtime, .resolve_inheritance);
         const resolved = steps.resolveInheritance(scratch, project, registry) catch |err| return stopped(diagnostic, .resolve_inheritance, err);
         try checkpoint(diagnostic, runtime, .compose);
-        const composed = steps.compose(scratch, project, resolved) catch |err| return stopped(diagnostic, .compose, err);
+        const selected = steps.compose(scratch, project, resolved) catch |err| return stopped(diagnostic, .compose, err);
         try checkpoint(diagnostic, runtime, .validate_safety);
-        return steps.validateSafety(retained, composed, self.policies) catch |err| return stopped(diagnostic, .validate_safety, err);
+        return steps.validateSafety(retained, selected, self.policies) catch |err| return stopped(diagnostic, .validate_safety, err);
     }
 };
 
@@ -132,12 +132,12 @@ pub const steps = struct {
         return inheritance.resolve(allocator, project, registry);
     }
 
-    pub fn compose(allocator: std.mem.Allocator, project: toolchain.Project, resolved: toolchain.Resolved) toolchain.Error!toolchain.Composed {
+    pub fn compose(allocator: std.mem.Allocator, project: toolchain.Project, resolved: toolchain.Resolved) toolchain.Error![]const []const u8 {
         return composition.compose(allocator, project, resolved);
     }
 
     /// Only this step constructs the safety-valid owner.
-    pub fn validateSafety(allocator: std.mem.Allocator, composed: toolchain.Composed, policies: toolchain.PolicyRegistry) toolchain.Error!*safety.Owner {
-        return safety.validate(allocator, composed, policies);
+    pub fn validateSafety(allocator: std.mem.Allocator, selected: []const []const u8, policies: toolchain.PolicyRegistry) toolchain.Error!*safety.Owner {
+        return safety.validate(allocator, selected, policies);
     }
 };

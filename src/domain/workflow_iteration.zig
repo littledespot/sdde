@@ -98,7 +98,7 @@ pub const State = struct {
     }
 };
 
-const test_initialize: Descriptor = .{ .kind = .initialize, .scope = .raw_engine_config, .progress = .engine_config };
+const test_initialize: Descriptor = .{ .kind = .initialize, .scope = .workflow_operation_registry, .progress = .workflow_definition_registry };
 const test_advance: Descriptor = .{ .kind = .advance, .scope = test_initialize.scope, .progress = test_initialize.progress };
 
 test "native iteration freezes its actual population and advances once per accepted generation" {

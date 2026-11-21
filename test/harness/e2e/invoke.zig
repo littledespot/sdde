@@ -26,8 +26,10 @@ pub const Options = struct {
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, generation_keys: @import("../environment.zig").GenerationKeys, store: @import("../evidence.zig").Store, report: *c.Report, options: Options) !?[]const u8 {
     if (!@import("builtin").is_test and (options.transport != null or options.runner_view != null)) return error.TestTransportForbidden;
+    var interrupt = root.Interrupt.install();
+    defer interrupt.restore();
     var runtime: root.Runtime = undefined;
-    runtime.init(io, allocator, project, .{});
+    runtime.init(io, allocator, project, interrupt.runtime());
     defer runtime.deinit();
     switch (runtime.boot) {
         .ready => {},

@@ -75,7 +75,7 @@ pub const Assembly = struct {
         self.inputs.active_feature = directory;
         self.outputs.active_feature = directory;
         const events: @import("../application/workflow_event_capture.zig").Capture = .{ .barrier = self.logs.barrier(), .shortcode = shortcode };
-        if (events.emit(.{ .event_type = .run_started })) |stop| return switch (stop) {
+        if (events.emit(.{ .run_started = .{} })) |stop| return switch (stop) {
             .blocked => |failure| self.fail(failure),
             .cancelled => .cancelled,
         };
@@ -167,12 +167,11 @@ pub const Assembly = struct {
                 const events: @import("../application/workflow_event_capture.zig").Capture = .{ .barrier = self.logs.barrier(), .shortcode = self.shortcode.? };
                 const event_failure = switch (reason) {
                     .terminal => events.terminal(outcome),
-                    .publication => |prepared| events.emit(.{ .event_type = .publication_prepared, .fields = .{ .outcome = if (prepared == .needs_user) .needs_user else .completed } }),
+                    .publication => |prepared| events.emit(.{ .publication_prepared = .{ .outcome = if (prepared == .needs_user) .needs_user else .completed } }),
                 };
                 if (event_failure) |stop| self.stopped(stop);
                 var finalization: @import("../application/feature_log_finalization_runner.zig").Runner = .{
                     .target = runtime.runner(self.runtime_owner.?),
-                    .mode = .active,
                     .shortcode = self.shortcode.?,
                 };
                 switch (self.logs.finalizeActive(finalization.childBindings())) {

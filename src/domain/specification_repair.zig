@@ -220,7 +220,7 @@ pub fn retryValidation(a: std.mem.Allocator, validator: @import("typed_text.zig"
     if (candidate.response != .content or std.meta.activeTag(try session.unit(current.completed)) != std.meta.activeTag(candidate.response.content.unit())) return error.InvalidSpecificationRepair;
     const merged = candidate.last_repair orelse return error.InvalidSpecificationRepair;
     if (candidate.revision != merged.revision_after or !std.meta.eql(merged.retry orelse return error.InvalidSpecificationRepair, pending.permit)) return error.InvalidSpecificationRepair;
-    try p.bind(a, validator, context);
+    try p.bind(a, context);
     const target = try candidate.origins.currentTarget(pending.target, recordCount(candidate.response));
     const accepted = if (target) |selected| try targetValid(a, validator, context, current, candidate, selected) else merged.operation == .delete;
     return .{ .validated = .{ .permit = pending.permit, .revision = candidate.revision, .result = if (accepted) .resolved else .recurring } };

@@ -40,7 +40,6 @@ pub fn snapshot(a: std.mem.Allocator, context: Context, caller: []const u8, cred
         try append(a, &resources, graph, .composition, resource.id.bytes, credentials);
         const part = binding.plan.parts()[binding.part];
         selection.part = part.id.bytes;
-        if (binding.plan.definition()) |definition| selection.definition = definition.bytes;
         const paths = try a.alloc([]const []const u8, part.paths.len);
         for (paths, part.paths) |*destination, path| destination.* = path.segments;
         selection.paths = paths;

@@ -75,7 +75,7 @@ authority (intent.md:3-9).
 | Multi-workflow selection, compiler, runner | Generic | `workflow_tests.zig:336-361`; no `spec-generation` literal outside tests (one inline test, `src/domain/llm_provider_identity.zig:81`) |
 | One `request-model` step per model request (E1) | Generic | Later workflow files copy no request subgraph (ADR 0030:390-391) |
 | Integer-choice and exact-member restrictions | Generic; Spec and reference users | 12-model-boundary.md:100, :132 (ADR 0046); `src/domain/model_result_schema.zig` |
-| Generic repair operations and contract variants (E4) | Generic; 13 Specify owners, 29 variants | A new owner adds its binding, one `RepairOwner` arm, one arm per generic operation it joins, one `frozen` row and its YAML steps (Z_SPEC01 E4); `src/domain/repair_owner.zig:72`; `src/domain/atomic_repair.zig:81` |
+| Generic repair operations and contract variants (E4) | Generic; 12 Specify owners, 28 variants | A new owner adds its binding, one `RepairOwner` arm, one arm per generic operation it joins, one `frozen` row and its YAML steps (Z_SPEC01 E4); `src/domain/repair_owner.zig:72`; `src/domain/atomic_repair.zig:81` |
 | Stage actions (E2) | Generic; four Spec stage actions | ADR 0031 |
 | Required-authority ledger, reconcile, routing, gate | Generic; Plan kinds declared; no Plan seed producer | `required_authority.zig:14`, `:57-59`, `:357-361`; seeds only `specification_authority.zig`, `source_preservation.zig` |
 | Clarification registry, `PNN` IDs, forms, refresh | Generic for S/P/T; answers rejected for every stage; progress ignores the stage (§4) | `clarification_inputs.zig:16`; `clarification_refresh.zig:54-59`, `:64-66`, `:105-113` |
@@ -432,7 +432,7 @@ ask the LLM to answer it" (design.md:266). Applied to §18 with the mechanisms t
 - **The harness is Spec-only:**
   - case `spec-e2e-case/v3`, which requires Spec's four artifacts
     (`test/harness/e2e/contracts.zig:6`, `:25-28`);
-  - report `spec-e2e-report/v23` (`:223`): changing a closed member needs a new version
+  - report `spec-e2e-report/v25` (`:224`): changing a closed member needs a new version
     (SPEC01 §2 rule 12), and earlier runs need their own build (SPEC01 §1, Retained runs). **Recommended:** a Plan
     report of its own, which leaves Spec's decoder unchanged;
   - adjudication `spec-adjudication-record/v1` (`test/harness/adjudication.zig:13`, `:69`);

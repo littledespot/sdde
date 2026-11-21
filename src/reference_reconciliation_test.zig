@@ -131,7 +131,7 @@ const Fixture = struct {
         self.text.deinit();
     }
     pub fn context(self: Fixture) f.Context {
-        return .{ .inputs = self.inputs, .registry = self.text.registry, .current = text.safety.value(self.text.owner) };
+        return .{ .inputs = self.inputs, .registry = self.text.registry };
     }
 };
 
@@ -594,7 +594,7 @@ test "summary signal and conflict repair packets retain precise shared text issu
                 const repair_input = body.value.object.get("input").?.object;
                 try std.testing.expect(std.mem.indexOf(u8, packet.body(), summary_selection_rule) == null);
                 if (stage == 0) {
-                    const initial_packet = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, input, fixture.inputs, fixture.text.registry, packet_guidance.marked.summary_purpose);
+                    const initial_packet = try @import("domain/reference_model_input.zig").reconciliationSummaryPacket(std.testing.allocator, input, fixture.inputs, fixture.text.registry, packet_guidance.marked.summary_purpose);
                     defer packets.release(initial_packet);
                     const initial_body = (try std.json.parseFromSlice(std.json.Value, a, initial_packet.body(), .{})).value.object;
                     const purpose = initial_body.get("summary_purpose").?.string;
@@ -1027,7 +1027,7 @@ test "scoped reconciliation text validates explicit references across multiple s
     _ = try text.validator.referenceIn(a, context, allowed);
     try std.testing.expectError(error.InvalidTypedText, text.validator.referenceIn(a, context, .{ .nodes = &.{.{ .source = .{ .source_id = .{ .ordinal = 3 } } }} }));
     _ = try text.validator.referenceIn(a, context, .{ .nodes = &.{.{ .literal = .{ .value = "Read src/main.zig." } }} });
-    try std.testing.expectError(error.InvalidTypedText, text.validator.reference(a, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scope = context.scopes[0], .field = .reconciliation_technical }, allowed));
+    try std.testing.expectError(error.InvalidTypedText, text.validator.reference(a, .{ .registry = context.registry, .inputs = context.inputs, .scope = context.scopes[0], .field = .reconciliation_technical }, allowed));
 }
 
 test "empty fully accounted references reconcile without fabricated membership" {
@@ -1311,11 +1311,10 @@ test "the reconciliation partition binding needs the group size its step declare
     view.slots[@intFromEnum(workflow.items_schema.key)] = items;
     var step: compilation.CompiledStep = .{ .id = .{ .bytes = "partition" }, .operation_id = .{ .bytes = "partition-reference-reconciliation-items" }, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
     var partition: workflow.Partition = .{ .allocator = std.testing.allocator };
-    const log: @import("domain/pipeline.zig").WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN"));
     // No size declared, or one of another kind, is no size to partition by.
-    try std.testing.expectError(error.ReconciliationSizeMissing, workflow.Partition.invoke(&partition, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = log } }));
+    try std.testing.expectError(error.ReconciliationSizeMissing, workflow.Partition.invoke(&partition, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } }));
     step.parameters = &.{.{ .id = .{ .bytes = "group-size" }, .value = .{ .string = "two" } }};
-    try std.testing.expectError(error.ReconciliationSizeMissing, workflow.Partition.invoke(&partition, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = log } }));
+    try std.testing.expectError(error.ReconciliationSizeMissing, workflow.Partition.invoke(&partition, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } }));
 }
 
 test "overlapping conflicts conserve every declared conflict relationship" {
@@ -1451,8 +1450,8 @@ fn crossSourceSummaryInput(a: std.mem.Allocator, fixture: Fixture) !r.Input {
     }
 }
 
-const reuse_summary = @import("actions/reference/reuse_reference_reconciliation_summary.zig").Action{ .validator = f.validate_summary.validator };
-const check_summary_reuse = @import("actions/reference/check_reference_summary_reuse.zig").Action{ .validator = f.validate_summary.validator };
+const reuse_summary = @import("actions/reference/reuse_reference_reconciliation_summary.zig").Action{};
+const check_summary_reuse = @import("actions/reference/check_reference_summary_reuse.zig").Action{};
 
 test "native summaries preserve normalized child content tokens and original producer lineage" {
     try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(nativeSummaryCase, .{});
@@ -1596,12 +1595,7 @@ test "summary reuse rejects changed source claim citation and passive evidence e
     }
     var stale_policy = fixture.context();
     stale_policy.registry.grammar.policy.rules = &.{};
-    try std.testing.expectError(error.InvalidNamingPolicy, reuse_summary.execute(a, input, stale_policy));
-    const other_text = try text.prepare(a, fixture.inputs);
-    defer other_text.deinit();
-    var stale_toolchain = fixture.context();
-    stale_toolchain.current = text.safety.value(other_text.owner);
-    try std.testing.expectError(error.StaleNamingPolicy, reuse_summary.execute(a, input, stale_toolchain));
+    try std.testing.expectError(error.InvalidReferenceReconciliation, reuse_summary.execute(a, input, stale_policy));
 }
 
 test "native summary proposals are revalidated and corrupted native content cannot enter model repair" {
@@ -1670,11 +1664,7 @@ test "reconciliation input nodes place the summary purpose from captured run gui
     defer arena.deinit();
     const a = arena.allocator();
     const fixture = try prepare(a, &.{"MOCK Record the inspection.\n"});
-    var transferred = false;
-    defer if (!transferred) fixture.deinit();
-    const current = try values.adopt(std.testing.allocator, @import("application/toolchain_workflow_values.zig").valid, text.safety.ValidToolchain, text.safety.Owner, fixture.text.owner, text.safety.value, text.safety.deinitOwner, text.safety.retainedBytes(fixture.text.owner));
-    transferred = true;
-    defer values.destroy(current);
+    defer fixture.deinit();
     const inputs = try values.create(std.testing.allocator, @import("application/reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs, fixture.inputs);
     defer values.destroy(inputs);
     const registry = try values.create(std.testing.allocator, @import("application/passive_literal_workflow.zig").registry_schema, text.literals.Registry, fixture.text.registry);
@@ -1685,11 +1675,9 @@ test "reconciliation input nodes place the summary purpose from captured run gui
     defer values.destroy(captured);
     const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8));
     try std.testing.expectEqual(.summary, input.purpose);
-    const log: @import("domain/pipeline.zig").WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN"));
     var view: @import("domain/pipeline_data.zig").View = .{};
     view.slots[@intFromEnum(@import("application/reference_evidence_workflow.zig").inputs_schema.key)] = inputs;
     view.slots[@intFromEnum(@import("application/passive_literal_workflow.zig").registry_schema.key)] = registry;
-    view.slots[@intFromEnum(@import("application/toolchain_workflow_values.zig").valid.key)] = current;
     view.slots[@intFromEnum(@import("application/packet_guidance_workflow.zig").schema.key)] = captured;
 
     const input_value = input: {
@@ -1703,7 +1691,7 @@ test "reconciliation input nodes place the summary purpose from captured run gui
     const build_contract = model.BuildReconciliationInput.Action.contract;
     const build_step: compilation.CompiledStep = .{ .id = .{ .bytes = "summary-input" }, .operation_id = .{ .bytes = build_contract.id }, .parameters = &.{}, .requires = build_contract.requires, .produces = build_contract.produces, .replaces = build_contract.replaces, .invalidates = build_contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
     var build: model.BuildReconciliationInput = .{ .allocator = std.testing.allocator };
-    const built = try model.BuildReconciliationInput.invoke(&build, .{ .step = .{ .data = view, .step = &build_step, .resources = &.{}, .model_binding = null, .log = log } });
+    const built = try model.BuildReconciliationInput.invoke(&build, .{ .step = .{ .data = view, .step = &build_step, .resources = &.{}, .model_binding = null } });
     const initial_value = built.delta.data_writes[@intFromEnum(requests.packet_schema.key)].?;
     defer values.destroy(initial_value);
     const initial = try values.read(&.{ .slots = built.delta.data_writes }, requests.packet_schema, Packet);
@@ -1735,7 +1723,7 @@ test "reconciliation input nodes place the summary purpose from captured run gui
     const authorize_effects = repairs.Authorize(.summary).effects;
     const authorize_step: compilation.CompiledStep = .{ .id = .{ .bytes = "authorize-summary" }, .operation_id = .{ .bytes = "authorize-repair" }, .parameters = &.{}, .requires = authorize_effects.requires, .produces = authorize_effects.produces, .replaces = authorize_effects.replaces, .invalidates = authorize_effects.invalidates, .outcomes = &.{ .ok, .more, .blocked, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
     var authorize: repairs.Authorize(.summary) = .{ .allocator = std.testing.allocator };
-    const authorized = try repairs.Authorize(.summary).invoke(&authorize, .{ .step = .{ .data = view, .step = &authorize_step, .resources = &.{}, .model_binding = null, .log = log } });
+    const authorized = try repairs.Authorize(.summary).invoke(&authorize, .{ .step = .{ .data = view, .step = &authorize_step, .resources = &.{}, .model_binding = null } });
     try std.testing.expectEqual(.ok, authorized.outcome);
     const state = authorized.delta.data_writes[@intFromEnum(repairs.state_schema.key)].?;
     defer values.destroy(state);
@@ -1743,7 +1731,7 @@ test "reconciliation input nodes place the summary purpose from captured run gui
     const repair_effects = repairs.BuildInput.effects;
     const repair_step: compilation.CompiledStep = .{ .id = .{ .bytes = "summary-repair-input" }, .operation_id = .{ .bytes = "build-repair-input" }, .parameters = &.{}, .requires = repair_effects.requires, .produces = repair_effects.produces, .replaces = repair_effects.replaces, .invalidates = repair_effects.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
     var build_repair: repairs.BuildInput = .{ .allocator = std.testing.allocator };
-    const repaired = try repairs.BuildInput.invoke(&build_repair, .{ .step = .{ .data = view, .step = &repair_step, .resources = &.{}, .model_binding = null, .log = log } });
+    const repaired = try repairs.BuildInput.invoke(&build_repair, .{ .step = .{ .data = view, .step = &repair_step, .resources = &.{}, .model_binding = null } });
     const repair_value = repaired.delta.data_writes[@intFromEnum(requests.packet_schema.key)].?;
     defer values.destroy(repair_value);
     const repair_packet = try values.read(&.{ .slots = repaired.delta.data_writes }, requests.packet_schema, Packet);
@@ -1769,11 +1757,7 @@ test "a generic authorize-repair step runs only the owner whose native facts the
     defer arena.deinit();
     const a = arena.allocator();
     const fixture = try prepare(a, &.{"MOCK Record the inspection.\n"});
-    var transferred = false;
-    defer if (!transferred) fixture.deinit();
-    const current = try values.adopt(std.testing.allocator, @import("application/toolchain_workflow_values.zig").valid, text.safety.ValidToolchain, text.safety.Owner, fixture.text.owner, text.safety.value, text.safety.deinitOwner, text.safety.retainedBytes(fixture.text.owner));
-    transferred = true;
-    defer values.destroy(current);
+    defer fixture.deinit();
     const inputs = try values.create(std.testing.allocator, @import("application/reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs, fixture.inputs);
     defer values.destroy(inputs);
     const registry = try values.create(std.testing.allocator, @import("application/passive_literal_workflow.zig").registry_schema, text.literals.Registry, fixture.text.registry);
@@ -1781,7 +1765,6 @@ test "a generic authorize-repair step runs only the owner whose native facts the
     var view: @import("domain/pipeline_data.zig").View = .{};
     view.slots[@intFromEnum(@import("application/reference_evidence_workflow.zig").inputs_schema.key)] = inputs;
     view.slots[@intFromEnum(@import("application/passive_literal_workflow.zig").registry_schema.key)] = registry;
-    view.slots[@intFromEnum(@import("application/toolchain_workflow_values.zig").valid.key)] = current;
     const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8));
     const good = try f.summary(a, input);
     const statements = try a.dupe(r.StatementProposal, good.statements);
@@ -1842,7 +1825,7 @@ test "a generic authorize-repair step runs only the owner whose native facts the
         const parameters = [_]compilation.CompiledParameter{.{ .id = .{ .bytes = generic.selector }, .value = .{ .enumeration = owner.id() } }};
         const effects = repairs.Authorize(.summary).effects;
         const step: compilation.CompiledStep = .{ .id = .{ .bytes = "authorize" }, .operation_id = .{ .bytes = "authorize-repair" }, .parameters = &parameters, .requires = effects.requires, .produces = effects.produces, .replaces = effects.replaces, .invalidates = effects.invalidates, .outcomes = &.{ .ok, .more, .blocked, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
-        const input_value: @import("ports/workflow_operation_registry.zig").Input = .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } };
+        const input_value: @import("ports/workflow_operation_registry.zig").Input = .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } };
         if (generic.AuthorizeRepair.invoke(&context, input_value)) |authorized| {
             // Only the summary owner finds its native facts in this data.
             try std.testing.expectEqual(repair_owner.RepairOwner.reference_summary, owner);
@@ -1855,7 +1838,7 @@ test "a generic authorize-repair step runs only the owner whose native facts the
             const merge_effects = repairs.Merge.effects;
             const merge_step: compilation.CompiledStep = .{ .id = .{ .bytes = "merge" }, .operation_id = .{ .bytes = "merge-repair" }, .parameters = &.{}, .requires = merge_effects.requires, .produces = merge_effects.produces, .replaces = merge_effects.replaces, .invalidates = merge_effects.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
             var merge: repairs.Merge = .{ .allocator = std.testing.allocator, .normalizer = text.normalizer };
-            try std.testing.expectError(error.RepairStateMismatch, repairs.Merge.invoke(&merge, .{ .step = .{ .data = merge_view, .step = &merge_step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } }));
+            try std.testing.expectError(error.RepairStateMismatch, repairs.Merge.invoke(&merge, .{ .step = .{ .data = merge_view, .step = &merge_step, .resources = &.{}, .model_binding = null } }));
             values.destroy(state);
             try std.testing.expect(authorized.delta.repair_transition != null and authorized.delta.repair_transition.? == .authorized);
             found += 1;
@@ -1874,12 +1857,11 @@ test "a generic authorize-repair step runs only the owner whose native facts the
     const phases = @import("application/reference_reconciliation_stage_workflow.zig");
     var check: phases.Check = .{};
     var phase_step: compilation.CompiledStep = .{ .id = .{ .bytes = "phase" }, .operation_id = .{ .bytes = "check-reference-reconciliation-phase" }, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .more, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
-    const phase_log: @import("domain/pipeline.zig").WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN"));
-    try std.testing.expectError(error.ReconciliationPhaseInvalid, phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null, .log = phase_log } }));
+    try std.testing.expectError(error.ReconciliationPhaseInvalid, phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null } }));
     phase_step.parameters = &.{.{ .id = .{ .bytes = "phase" }, .value = .{ .enumeration = "no-such-phase" } }};
-    try std.testing.expectError(error.ReconciliationPhaseInvalid, phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null, .log = phase_log } }));
+    try std.testing.expectError(error.ReconciliationPhaseInvalid, phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null } }));
     phase_step.parameters = &.{.{ .id = .{ .bytes = "phase" }, .value = .{ .enumeration = "dispositions" } }};
-    _ = try phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null, .log = phase_log } });
+    _ = try phases.Check.invoke(&check, .{ .step = .{ .data = view, .step = &phase_step, .resources = &.{}, .model_binding = null } });
 }
 
 test "native reuse binding retains its child after the preceding pipeline value is released" {
@@ -1889,15 +1871,10 @@ test "native reuse binding retains its child after the preceding pipeline value 
     const values = @import("application/pipeline_values.zig");
     const inputs_schema = @import("application/reference_evidence_workflow.zig").inputs_schema;
     const registry_schema = @import("application/passive_literal_workflow.zig").registry_schema;
-    const toolchain_schema = @import("application/toolchain_workflow_values.zig").valid;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const fixture = try prepare(arena.allocator(), &.{"MOCK Complete the inspection.\n"});
-    var transferred = false;
-    defer if (!transferred) fixture.deinit();
-    const current = try values.adopt(std.testing.allocator, toolchain_schema, text.safety.ValidToolchain, text.safety.Owner, fixture.text.owner, text.safety.value, text.safety.deinitOwner, text.safety.retainedBytes(fixture.text.owner));
-    transferred = true;
-    defer values.destroy(current);
+    defer fixture.deinit();
     const inputs = try values.create(std.testing.allocator, inputs_schema, r.evidence.Inputs, fixture.inputs);
     defer values.destroy(inputs);
     const registry = try values.create(std.testing.allocator, registry_schema, text.literals.Registry, fixture.text.registry);
@@ -1915,11 +1892,10 @@ test "native reuse binding retains its child after the preceding pipeline value 
         view.slots[@intFromEnum(workflow.input_schema.key)] = prior;
         view.slots[@intFromEnum(inputs_schema.key)] = inputs;
         view.slots[@intFromEnum(registry_schema.key)] = registry;
-        view.slots[@intFromEnum(toolchain_schema.key)] = current;
         const contract = workflow.ReuseSummary.Action.contract;
         const step: @import("domain/workflow_compilation.zig").CompiledStep = .{ .id = .{ .bytes = "reuse-summary" }, .operation_id = .{ .bytes = contract.id }, .parameters = &.{}, .requires = contract.requires, .produces = contract.produces, .replaces = contract.replaces, .invalidates = contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
         var binding: workflow.ReuseSummary = .{ .allocator = std.testing.allocator, .action = reuse_summary };
-        break :carry try workflow.ReuseSummary.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+        break :carry try workflow.ReuseSummary.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } });
     };
     try std.testing.expectEqual(.ok, carried.outcome);
     const retained = carried.delta.data_writes[@intFromEnum(workflow.parsed_schema.key)].?;
@@ -2172,7 +2148,7 @@ test "partition validation binds native iteration to the actual non-final popula
         const contract = workflow.ValidatePartitions.Action.contract;
         const step: @import("domain/workflow_compilation.zig").CompiledStep = .{ .id = .{ .bytes = "validate-partitions" }, .operation_id = .{ .bytes = contract.id }, .parameters = &.{}, .requires = contract.requires, .produces = contract.produces, .replaces = contract.replaces, .invalidates = contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
         var binding: workflow.ValidatePartitions = .{ .allocator = std.testing.allocator };
-        const initialized = try workflow.ValidatePartitions.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+        const initialized = try workflow.ValidatePartitions.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } });
         const progress_value = initialized.delta.data_writes[@intFromEnum(workflow.progress_schema.key)].?;
         defer values.destroy(progress_value);
         view.slots[@intFromEnum(workflow.progress_schema.key)] = progress_value;
@@ -2238,7 +2214,7 @@ test "summary binding requires current progress and retains normalization eviden
             };
             defer values.destroy(progress_value);
             view.slots[@intFromEnum(workflow.progress_schema.key)] = progress_value;
-            const invoked = workflow.BuildSummary.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+            const invoked = workflow.BuildSummary.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } });
             if (scenario == 3) break :build try invoked;
             try std.testing.expectError(error.InvalidReferenceReconciliation, invoked);
         }
@@ -3357,7 +3333,7 @@ test "checked phase facts retire resolved receipts and preserve repairs owned by
         view.slots[@intFromEnum(workflow.parsed_schema.key)] = raw_value;
         const step: @import("domain/workflow_compilation.zig").CompiledStep = .{ .id = .{ .bytes = "check-dispositions" }, .operation_id = .{ .bytes = workflow.ValidateDispositions.Action.contract.id }, .parameters = &.{}, .requires = workflow.ValidateDispositions.Action.contract.requires, .produces = workflow.ValidateDispositions.Action.contract.produces, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .invalid, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
         var binding: workflow.ValidateDispositions = .{ .allocator = std.testing.allocator, .action = .{} };
-        const checked = try workflow.ValidateDispositions.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+        const checked = try workflow.ValidateDispositions.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } });
         const checked_value = checked.delta.data_writes[@intFromEnum(workflow.dispositions_schema.key)].?;
         defer values.destroy(checked_value);
         try std.testing.expectEqual(.ok, checked.outcome);

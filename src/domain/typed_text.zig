@@ -115,10 +115,10 @@ fn equivalentNodes(comptime Node: type, left: []const Node, right: []const Node)
     }
     return true;
 }
-pub const Context = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scope: evidence.Scope, field: field_policy.Field };
-pub const ScopeSetContext = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scopes: []const evidence.Scope, exact_copies: []const ExactCopy = &.{}, field: field_policy.Field };
-/// Native read dependencies, independent of model packet presentation. Runtime
-/// toolchain identity is checked before capture; no capability enters a snapshot.
+pub const Context = struct { registry: literals.Registry, inputs: evidence.Inputs, scope: evidence.Scope, field: field_policy.Field };
+pub const ScopeSetContext = struct { registry: literals.Registry, inputs: evidence.Inputs, scopes: []const evidence.Scope, exact_copies: []const ExactCopy = &.{}, field: field_policy.Field };
+/// Native read dependencies, independent of model packet presentation. The registry's grammar was
+/// built against the toolchain upstream; no capability enters a snapshot.
 pub const Dependencies = struct {
     inputs: evidence.Inputs,
     grammar_contract: @FieldType(@import("path_token_grammar.zig").Grammar, "contract"),
@@ -131,8 +131,7 @@ pub const Dependencies = struct {
     records: []const literals.Record,
     occurrences: []const literals.Occurrence,
 };
-pub fn dependencies(inputs: evidence.Inputs, registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain) naming.Error!Dependencies {
-    if (!registry.grammar.policy.toolchain_identity.eql(current.identity())) return error.StaleNamingPolicy;
+pub fn dependencies(inputs: evidence.Inputs, registry: literals.Registry) Dependencies {
     const grammar = registry.grammar;
     return .{ .inputs = inputs, .grammar_contract = grammar.contract, .policy_contract = grammar.policy.contract, .policy_ids = grammar.policy.policy_ids, .rules = grammar.policy.rules, .reference_state_id = grammar.reference_state_id, .feature_id = grammar.feature_id, .reference_names = grammar.reference_names, .records = registry.records, .occurrences = registry.occurrences };
 }
@@ -179,10 +178,10 @@ pub const Validator = struct {
     folder: unicode.CaseFolder,
 
     pub fn business(self: Validator, allocator: std.mem.Allocator, context: Context, candidate: BusinessText) Error!ValidatedBusinessText {
-        return self.businessIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = &.{context.scope}, .field = context.field }, candidate);
+        return self.businessIn(allocator, .{ .registry = context.registry, .inputs = context.inputs, .scopes = &.{context.scope}, .field = context.field }, candidate);
     }
     pub fn reference(self: Validator, allocator: std.mem.Allocator, context: Context, candidate: ReferenceSemanticText) Error!ValidatedReferenceSemanticText {
-        return self.referenceIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = &.{context.scope}, .field = context.field }, candidate);
+        return self.referenceIn(allocator, .{ .registry = context.registry, .inputs = context.inputs, .scopes = &.{context.scope}, .field = context.field }, candidate);
     }
     pub fn businessIn(self: Validator, allocator: std.mem.Allocator, context: ScopeSetContext, candidate: BusinessText) Error!ValidatedBusinessText {
         return switch (try self.checkBusinessIn(allocator, context, candidate)) {
@@ -208,7 +207,7 @@ pub const Validator = struct {
     }
     fn nodes(self: Validator, comptime Node: type, allocator: std.mem.Allocator, context: ScopeSetContext, candidates: []const Node, issue: *?Issue) Error![]const Node {
         comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode);
-        try @import("path_token_grammar.zig").validateBinding(allocator, context.registry.grammar, context.current, context.inputs, self.normalizer, self.folder);
+        try @import("path_token_grammar.zig").validateInputs(context.registry.grammar, context.inputs);
         if (context.scopes.len == 0) return error.InvalidTypedText;
         for (context.scopes) |scope| _ = try evidence.resolve(context.inputs, scope);
         if (candidates.len == 0) return reject(issue, .empty, 0, 0);

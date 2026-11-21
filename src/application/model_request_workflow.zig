@@ -24,7 +24,7 @@ pub const schemas = [_]data.Schema{ ledger_schema, assigned_schema, validated_sc
 /// The parameters a model request step declares, in the order its descriptor table lists them. The table is
 /// built from this enum and each lookup below names a member, so a lookup of a parameter the table doesn't
 /// declare fails to compile instead of reading as an absent optional one.
-const Parameter = enum { slot, prompt, context, @"protocol-prompt", @"result-schema", @"composition-part", @"result-selection", input };
+const Parameter = enum { slot, prompt, context, @"protocol-prompt", @"result-schema", @"composition-part", input };
 
 fn describe(comptime parameter: Parameter) operation.ParameterDescriptor {
     const id = @tagName(parameter);
@@ -34,7 +34,6 @@ fn describe(comptime parameter: Parameter) operation.ParameterDescriptor {
         .context, .@"protocol-prompt" => .{ .id = id, .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
         .@"result-schema" => .{ .id = id, .kind = .resource, .resource_kind = .result_schema, .required = false, .workflow_definition_safe = true },
         .@"composition-part" => .{ .id = id, .kind = .string, .required = false, .workflow_definition_safe = true },
-        .@"result-selection" => .{ .id = id, .kind = .enumeration, .required = false, .allowed_values = &.{ "resource", "input" }, .workflow_definition_safe = true },
         .input => .{ .id = id, .kind = .resource, .resource_kind = .data, .required = false, .workflow_definition_safe = true },
     };
 }
@@ -104,11 +103,6 @@ fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: o
     const selected = step.model_binding orelse return error.RequestModelBindingMissing;
     const static_input = declaredResource(step, .input);
     if (packet != null and static_input != null) return error.RequestDeclarationInvalid;
-    var selection: handoff.ResultSelection = .resource;
-    for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, @tagName(Parameter.@"result-selection"))) {
-        if (parameter.value != .enumeration) return error.RequestDeclarationInvalid;
-        selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.RequestDeclarationInvalid;
-    };
     var result: handoff.Selection = .{
         .binding = selected.*,
         .prompt = declaredResource(step, .prompt) orelse return error.RequestResourceMissing,
@@ -116,7 +110,6 @@ fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: o
         .result = undefined,
         .input = if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null,
         .protocol_prompt = declaredResource(step, .@"protocol-prompt"),
-        .result_selection = selection,
     };
     const part_id = declaredString(step, .@"composition-part");
     if (part_id) |id| {

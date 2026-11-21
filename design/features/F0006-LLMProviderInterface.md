@@ -798,9 +798,16 @@ ProviderFailure {
   retryClass: ProviderRetryClass,
   delivery: ProviderDeliveryDisposition,
   transport?: TransportDiagnostic,
-  content?: invalid_content | missing_final_text
+  content?: invalid_content | missing_final_text,
+  credential?: missing | malformed,
+  decode?: body_not_json | body_refused | content_not_utf8 | error_unrecognized
 }
 ```
+
+- `credential` is present only on an `authentication_failed` raised by the key authorization
+  before any send; `decode` only on a `response_invalid` that carries no `transport` or
+  `content`. Both are diagnostic only and never affect `cause`, `retryClass` or `delivery`.
+  Neither carries a key byte, a length, a JSON path or provider text.
 
 - `transport` is present only for a failure the shared HTTP exchange reports; it records
   where and how that exchange failed. It is diagnostic only and never affects `cause`,

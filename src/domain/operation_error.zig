@@ -57,7 +57,7 @@ pub const Error = @import("pipeline_data.zig").ValueError ||
     @import("workflow_outcome_association.zig").Error ||
     @import("pipeline_data.zig").EnvelopeError ||
     @import("reference_reconciliation.zig").Error ||
-    @import("specification_coverage_repair.zig").Error ||
+    @import("specification_coverage.zig").Error ||
     @import("scenario_link.zig").Error ||
     @import("specification_repair.zig").Error ||
     @import("source_omission.zig").Error ||

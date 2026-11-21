@@ -444,7 +444,7 @@ provider bootstrap and feature logging, become typed engine routines under
 - <a id="147-clarificationlifecycleorchestrator"></a>[14.7 `ClarificationLifecycleOrchestrator`](contracts/14-orchestration.md#147-clarificationlifecycleorchestrator)
 - <a id="148-execution-abandonment"></a>[14.8 Execution abandonment](contracts/14-orchestration.md#148-execution-abandonment)
 - <a id="149-featureloggingfailureorchestrator"></a>[14.9 `FeatureLoggingFailureOrchestrator`](contracts/14-orchestration.md#149-featureloggingfailureorchestrator)
-- <a id="1410-featurelogpolicytransitionorchestrator"></a>[14.10 `FeatureLogPolicyTransitionOrchestrator`](contracts/14-orchestration.md#1410-featurelogpolicytransitionorchestrator)
+- <a id="1410-logging-policy-per-run-and-restart"></a>[14.10 Logging policy per run and restart](contracts/14-orchestration.md#1410-logging-policy-per-run-and-restart)
 - <a id="1411-implementation-workflow-composition"></a>[14.11 Implementation workflow composition](contracts/14-orchestration.md#1411-implementation-workflow-composition)
 - <a id="1412-per-task-implementation-composition"></a>[14.12 Per-task implementation composition](contracts/14-orchestration.md#1412-per-task-implementation-composition)
 - <a id="1413-task-execution-lifetime"></a>[14.13 Task execution lifetime](contracts/14-orchestration.md#1413-task-execution-lifetime)
@@ -795,8 +795,8 @@ The new engine is ready for production evaluation when all of the following are 
     - Bound-graph change classification compares stable semantic authority rather than source
       ordinal, registry identity, or validation evidence.
     - Each execution has a fresh [envelope information stack](contracts/06-pipeline-nodes.md#execution-local-information-stack).
-      Repeated placement of one immutable occurrence has no additional effect;
-      conflicting or foreign placement rejects, and history cannot restore current authority.
+      A second recording of one occurrence and key rejects, and so does a foreign one;
+      history cannot restore current authority.
 
 2. **Configuration and provider authority.**
     - Bootstrap treats the invocation working directory as project root and accepts only its
@@ -1145,7 +1145,7 @@ gives its title and status.
 | [0030](decisions/0030-engine-owned-model-request.md) | One engine-owned step per model request | Accepted amendment, amended 23 October 2026; implemented: provider token counting is removed, each catalogue entry requires `requestTimeoutMs`, the `request-model` step runs every model request of the Spec workflow, and the contract-variant mechanism (one registered contract of closed variants selected by a required enumeration parameter) serves ADR 0033's four generic repair operations |
 | [0031](decisions/0031-stage-actions.md) | One action per deterministic stage | Accepted amendment; partly implemented: `prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions; every other stage is not yet converted |
 | [0032](decisions/0032-engine-routines.md) | Typed engine routines for fixed engine sequences | Accepted amendment; startup and provider bootstrap implemented, feature logging not yet |
-| [0033](decisions/0033-generic-repair-operations.md) | Generic repair operations with owner-supplied rules | Accepted amendment; implemented: the four generic repair operations select one of 13 owners' contract variants through the shared variant mechanism, and the 29 per-owner operations are deleted |
+| [0033](decisions/0033-generic-repair-operations.md) | Generic repair operations with owner-supplied rules | Accepted amendment; implemented: the four generic repair operations select one of 12 owners' contract variants through the shared variant mechanism, and the per-owner operations are deleted |
 | [0034](decisions/0034-spec-quality-gate.md) | Specify quality gate before Plan | Accepted |
 | [0035](decisions/0035-cross-kind-restatement.md) | Cross-kind and story restatement in the duplicate rule | Accepted |
 | [0036](decisions/0036-source-quoted-claims.md) | Source-quoted extraction claims | Accepted |

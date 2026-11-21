@@ -73,7 +73,6 @@ pub const Runner = struct {
     fn check(self: *Runner, deadline: u64) lease.Error!void {
         switch (self.runtime.status()) {
             .cancelled => return error.Cancelled,
-            .deadline_exhausted => return error.AuthorizationExpired,
             .active => {},
         }
         if (deadline == 0 or try self.clock.now() >= deadline) return error.AuthorizationExpired;

@@ -137,7 +137,7 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 ## `ValidateReferenceExtractionTextAction` (`validate-reference-extraction-text`)
 
 - **Owner:** [`src/actions/reference/validate_reference_extraction_text.zig`](../../../src/actions/reference/validate_reference_extraction_text.zig)
-- **Reads:** `parsed_reference_extraction`, `reference_passive_literals`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `text_validated_reference_extraction` · **Side effect:** `none`
+- **Reads:** `parsed_reference_extraction`, `reference_passive_literals`, `citable_reference_inputs` · **Writes:** `text_validated_reference_extraction` · **Side effect:** `none`
 - **Does:** Validates each parsed claim's text against the toolchain, the passive-literal registry and the captured inputs.
 - **Rejects:** errors of `reference_extraction.Error`
 
@@ -244,7 +244,7 @@ merges) are variants of the generic repair operations, specified once in
 
 - **Owner:** [`src/actions/reference/build_reference_reconciliation_model_input.zig`](../../../src/actions/reference/build_reference_reconciliation_model_input.zig)
 - **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Does:** Builds the reconciliation request packet, adding the workflow's summary purpose.
+- **Does:** Builds the summary request packet, adding the workflow's summary purpose and selecting the `summary` assignment context.
 - **Rejects:** errors of `reference_model_input.ReconciliationError`
 
 ## `CheckReferenceReconciliationPurposeAction` (`check-reference-reconciliation-purpose`)
@@ -257,14 +257,14 @@ merges) are variants of the generic repair operations, specified once in
 ## `CheckReferenceSummaryReuseAction` (`check-reference-summary-reuse`)
 
 - **Owner:** [`src/actions/reference/check_reference_summary_reuse.zig`](../../../src/actions/reference/check_reference_summary_reuse.zig)
-- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** nothing · **Side effect:** `none`
+- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** nothing · **Side effect:** `none`
 - **Does:** Prove that a non-final, nonempty partition contains exactly one current validated child with unchanged membership and dependencies under §16.4.
 - **Rejects:** errors of `reference_reconciliation.Error`
 
 ## `ReuseReferenceReconciliationSummaryAction` (`reuse-reference-reconciliation-summary`)
 
 - **Owner:** [`src/actions/reference/reuse_reference_reconciliation_summary.zig`](../../../src/actions/reference/reuse_reference_reconciliation_summary.zig)
-- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `parsed_reference_reconciliation` · **Side effect:** `none`
+- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `parsed_reference_reconciliation` · **Side effect:** `none`
 - **Does:** Recheck reuse eligibility and carry the child's ordered content into the existing summary validation path.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
@@ -278,8 +278,8 @@ merges) are variants of the generic repair operations, specified once in
 ## `CollectReferenceReconciliationResultAction` (`collect-reference-reconciliation-result`)
 
 - **Owner:** [`src/actions/reference/collect_reference_reconciliation_result.zig`](../../../src/actions/reference/collect_reference_reconciliation_result.zig)
-- **Reads:** `reference_reconciliation_input`, `assembled_json`, `validated_assembled_json` · **Writes:** `raw_reference_reconciliation`; invalidates `assembled_json`, `validated_assembled_json` · **Side effect:** `none`
-- **Does:** Takes a summary partition's initial-generation response, checking that it belongs to the current reference state.
+- **Reads:** `reference_reconciliation_input`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** `raw_reference_reconciliation` · **Side effect:** `none`
+- **Does:** Takes a summary partition's admitted initial-generation response, checking that it belongs to the current reference state; the whole body carries that response's origin.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
 ## `ParseReferenceReconciliationResultAction` (`parse-reference-reconciliation-result`)
@@ -320,7 +320,7 @@ merges) are variants of the generic repair operations, specified once in
 ## `ValidateReferenceReconciliationSummaryAction` (`validate-reference-reconciliation-summary`)
 
 - **Owner:** [`src/actions/reference/validate_reference_reconciliation_summary.zig`](../../../src/actions/reference/validate_reference_reconciliation_summary.zig)
-- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_summary` · **Side effect:** `none`
+- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `validated_reference_summary` · **Side effect:** `none`
 - **Does:** Checks the summary; an invalid result records the defect's relations and dependency snapshot for the repair authorizer.
 - **Rejects:** errors of `reference_reconciliation.Error`
 
@@ -363,7 +363,7 @@ merges) are variants of the generic repair operations, specified once in
 ## `ValidateReferenceSignalProposalsAction` (`validate-reference-signal-proposals`)
 
 - **Owner:** [`src/actions/reference/validate_reference_signal_proposals.zig`](../../../src/actions/reference/validate_reference_signal_proposals.zig)
-- **Reads:** `validated_reference_dispositions`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_signals` · **Side effect:** `none`
+- **Reads:** `validated_reference_dispositions`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `validated_reference_signals` · **Side effect:** `none`
 - **Does:** Checks the signals; an invalid result records the defect's relations and dependency snapshot.
 - **Rejects:** errors of `reference_reconciliation.Error`
 
@@ -377,7 +377,7 @@ merges) are variants of the generic repair operations, specified once in
 ## `ValidateReferenceConflictProposalsAction` (`validate-reference-conflict-proposals`)
 
 - **Owner:** [`src/actions/reference/validate_reference_conflict_proposals.zig`](../../../src/actions/reference/validate_reference_conflict_proposals.zig)
-- **Reads:** `validated_reference_signals`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_conflicts` · **Side effect:** `none`
+- **Reads:** `validated_reference_signals`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `validated_reference_conflicts` · **Side effect:** `none`
 - **Does:** Requires a complete prior phase, checks the conflicts, and records relations and dependencies for an invalid result.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 

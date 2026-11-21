@@ -35,7 +35,7 @@ The common contract makes data dependencies explicit:
   compiler; an orchestrator cannot hide a child's capability or claim a narrower effect.
 - Its internal child-only keys are not exposed outside the composition boundary.
 
-Keys are tags of the engine's one closed, unversioned `DataKey` enum, for example `engine_config`, `reference_snapshot`, `validated_specification_unit` and `specification_publication_state`; never ad hoc strings inside actions. The value schema the operation registry registers for a key carries its type and version.
+Keys are tags of the engine's one closed, unversioned `DataKey` enum, for example `workflow_definition_registry`, `reference_snapshot`, `validated_specification_unit` and `specification_publication_state`; never ad hoc strings inside actions. The value schema the operation registry registers for a key carries its type and version.
 
 `PipelineEnvelope` is immutable and identical for all nodes:
 
@@ -70,15 +70,13 @@ Keys are tags of the engine's one closed, unversioned `DataKey` enum, for exampl
 - For an orchestrator, runner-owned bindings track child deltas and expose the composite delta;
   the orchestrator does not merge registries itself.
 
-- `NodeDelta.telemetryFactsAdded` contains `WorkflowTelemetryFact` values.
+- A `NodeDelta` carries no telemetry. The runner emits `WorkflowTelemetryFact` values itself,
+  for lifecycle and branch events, so orchestrators and actions perform no logging work.
 - Each value pairs one validated four-character `WorkflowShortcode` from the active compiled
-  workflow's runner-created `WorkflowLog` binding with one closed `TelemetryFact` union of IDs,
-  enums, counts, timings, and outcomes.
+  workflow with one closed `TelemetryFact` union of IDs, enums, counts, timings, and outcomes.
 - It contains no log level, message, arbitrary map, environment value, or raw
   model/reference/code body.
-- Actions may call that narrow binding to add facts; orchestrator lifecycle/branch facts are
-  derived by the runner using the same binding, so orchestrators still perform no logging work.
-- After contract/delta validation, the runner's `PipelineTelemetryObserver` starts a separate
+- The runner's `PipelineTelemetryObserver` starts a separate
   logging-internal `PipelineEnvelope` and passes those attributed facts plus trusted run/node
   context through `FeatureLoggingOrchestrator`. Under
   [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), feature logging
@@ -93,8 +91,7 @@ Keys are tags of the engine's one closed, unversioned `DataKey` enum, for exampl
   terminal logging branch.
 - Thus sanitized prompt records may pass between discrete logging actions without bypassing the
   common ABI, persisting in workflow state, or becoming model context.
-- `WorkflowLog.log` performs only delta construction; `NodeRuntime` continues to expose no sink,
-  filesystem, or direct logger capability.
+- `NodeRuntime` exposes no sink, filesystem, or direct logger capability.
 
 - An `invalid` outcome is not an operational error.
 - It is the normal input to an atomic repair orchestrator.
@@ -167,7 +164,7 @@ as blocked, without clearing that subject or its repair key. Neither disposition
 allows an unrelated, failed, cancelled or needs-user outcome to be relabelled.
 Incomplete publication requires current native clarification evidence carried into
 the exact prepared output; matching `needs_user` tags do not grant writer access.
-The runner rechecks cancellation/deadline immediately before invoking the binding,
+The runner rechecks cancellation immediately before invoking the binding,
 including after potentially blocking publication log finalization.
 Native repair authorization binds each unresolved subject to its exact repair
 key. A joined carrier or completed child repair cannot discharge a parent or
@@ -235,13 +232,12 @@ starts empty, including after `needs_user` (ADR 0009).
 - The runner assigns a native occurrence before invoking a producer. A recorded
   entry binds that execution scope, occurrence and typed key to one sealed immutable
   value owner and its exact origin/dependencies. Retention shares that owner.
-- Placing the same canonical value and origin again returns its existing reference
-  without another entry, generation or effect. Conflicting value identity or
-  provenance rejects. Independently allocated values are not inferred equivalent
+- A second recording of one occurrence and key rejects, and so does a foreign or
+  schema-mismatched one. Independently allocated values are not inferred equivalent
   from matching text; a new invocation/repair remains distinct.
-- A placement receipt proves recording only. Existing duplicate-delta, lifecycle,
+- A recording proves recording only. Existing duplicate-delta, lifecycle,
   token reconciliation, retry, telemetry and publication checks remain authoritative.
-- Retained history never becomes current through placement. Current slots and
+- Retained history never becomes current through recording. Current slots and
   gates retain their freshness rules; ordinary nodes still receive only declared
   immutable inputs. Read-only report projections may select a registered historical
   key. The stack is never added wholesale to model context.

@@ -42,9 +42,8 @@
   supplying its content. Before finalization is built, confirm that the identity suffices for
   every historical-policy value finalization needs (the runner reads the policy to select the
   prompt stream), or state what a mismatch with the current policy does. Finalization stays
-  unimplemented, and its order relative to the current activation stays undecided. The
-  same-run policy transition is separate: its authority is decided in
-  [ADR 0032](0032-engine-routines.md) (14 November 2026).
+  unimplemented, and its order relative to the current activation stays undecided. A run
+  keeps one logging binding and policy ([ADR 0032](0032-engine-routines.md)).
 - **Amended 19 November 2026** (user: "yes, and implement E6"): this amendment reaches the
   "Cancellation" decision below, which no longer reports a cancellation under the lock or
   during a segment read as a logging failure. It is decided and built in

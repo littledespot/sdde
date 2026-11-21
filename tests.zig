@@ -10,7 +10,6 @@ test {
     _ = @import("build/test_run_inputs.zig");
     _ = @import("code_heuristics.zig");
     _ = @import("src/workflow_repair_retry_test.zig");
-    _ = @import("src/test_fixtures/scenario_timing.zig");
     _ = @import("src/test_fixtures/untraced_allocator.zig");
     _ = @import("src/test_fixtures/workflow_step_trace.zig");
     _ = @import("src/adapters/provider/native_model_http.zig");

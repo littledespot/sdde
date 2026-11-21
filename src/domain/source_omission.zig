@@ -336,7 +336,7 @@ pub const Repair = struct {
 };
 
 /// The compiler sees the exact invalidation set for each registered binding.
-const merge_context = [_]@import("pipeline.zig").DataKey{ .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair };
+const merge_context = [_]@import("pipeline.zig").DataKey{ .citable_reference_inputs, .reference_passive_literals, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair };
 pub const extraction_requires = merge_context ++ [_]@import("pipeline.zig").DataKey{ .structured_token_candidates, .text_validated_reference_extraction };
 // Summary parsing consumes raw_reference_reconciliation before review. It is
 // already retired here, so the dependent set contains only surviving facts.

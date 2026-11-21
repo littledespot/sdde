@@ -380,7 +380,7 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
         result.* = .{ .scope = .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = try codec.encode(@import("../domain/reference_extraction_parser.zig").Response, a, .{ .claims = .{ .claims = claims.items, .token_classifications = try tokens.classifications(a, available, chunk) } }) } };
     }
     const extracted = try extraction.finish(a, sources, raw);
-    const context: refs.Context = .{ .inputs = sources, .registry = passive.registry, .current = text.safety.value(passive.owner) };
+    const context: refs.Context = .{ .inputs = sources, .registry = passive.registry };
     const global = try refs.summaries(a, try refs.initialize(a, sources, extracted, 2), context);
     var proposed = try refs.global(a, global);
     var groups: std.ArrayList(r.SignalProposal) = .empty;
@@ -413,7 +413,7 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     for (proposed.signals) |signal| if (signal.content == .preserved_token) try groups.append(a, signal);
     proposed.signals = groups.items;
     const finished = (try refs.finish(a, global, proposed, context)).valid;
-    const provenance_context: @import("../domain/specification_provenance.zig").Context = .{ .inputs = sources, .references = finished, .registry = context.registry, .current = context.current };
+    const provenance_context: @import("../domain/specification_provenance.zig").Context = .{ .inputs = sources, .references = finished, .registry = context.registry };
     const records = @import("../domain/reference_support.zig").records(finished);
     const ids_selected = try a.alloc(r.SignalId, example.source_group_ids.len);
     for (example.source_group_ids, ids_selected) |id, *selected| selected.* = .{ .ordinal = id };

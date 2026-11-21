@@ -148,7 +148,7 @@ and qualification. No real grader is currently qualified by these pending record
   Bedrock family, and explicit grader/acceptance evidence with an always-unresolved
   decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v24` (v18, with the admission audit's field member `edge_given` in place of
+- `spec-e2e-report/v25` (v18, with the admission audit's field member `edge_given` in place of
   `edge_condition` ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
   Decision 7), plus the closed `reason` of an `authority` terminal rejection,
   which includes the repair-key and request-assignment population bounds, the

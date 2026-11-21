@@ -15,7 +15,6 @@ pub const result_schema = values.schema(.required_authority_result, owned.Value,
 pub const content_schema = values.schema(.identified_specification_content, owned.Value, 1, null);
 pub const gate_schema = values.schema(.required_authority_gate, gate.Decision, 1, @sizeOf(gate.Decision));
 pub const schemas = [_]data.Schema{ inputs_schema, ledger_schema, observations_schema, result_schema, content_schema, gate_schema };
-pub const gate_contract: gate.Contract = .{ .id = .{ .bytes = "required-authority@1" }, .issuer = .{ .bytes = "validate-required-authority-reconciliation" }, .evidence = .required_authority_gate, .authority = &.{ .required_authority_inputs, .required_authority_observations, .required_authority_result } };
 const operation_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .needs_user, .blocked };
 const structural_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked };
 

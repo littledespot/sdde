@@ -642,8 +642,7 @@ service is published.
 
 - The same envelope implements [§6's execution-local information stack](../contracts/06-pipeline-nodes.md#execution-local-information-stack).
   Native schemas declare retained history; producer occurrences are runner-assigned.
-  Identical placement of a canonical record is idempotent, while conflicting or
-  foreign placement rejects. Current authority and retained observations stay distinct.
+  A second recording of one occurrence and key rejects, and so does a foreign one. Current authority and retained observations stay distinct.
   This requires no YAML fields, model-visible metadata or additional workflow steps.
 - Retry reports project operation, immutable-request-assignment and native-defect
   counts from the existing runner owner, retaining compiled scope and each independent key.

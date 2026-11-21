@@ -245,8 +245,7 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
 pub fn textContext(view: *const data.View) operations.Error!validation.TextContext {
     const inputs = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch |operation_error| return operation_error;
     const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
-    const current = values.read(view, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch |operation_error| return operation_error;
-    return .{ .inputs = inputs.*, .registry = registry.*, .current = current };
+    return .{ .inputs = inputs.*, .registry = registry.* };
 }
 
 /// A scripted or future provider producer attaches bytes to the exact engine

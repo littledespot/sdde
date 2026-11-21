@@ -2,7 +2,9 @@ const std = @import("std");
 const naming = @import("naming_rule.zig");
 const safety = @import("toolchain_safety.zig");
 const unicode = @import("../ports/unicode_normalizer.zig");
-pub const Error = std.mem.Allocator.Error || error{ InvalidNamingPolicy, StaleNamingPolicy };
+pub const Error = std.mem.Allocator.Error || error{InvalidNamingPolicy};
+/// Only the binding check compares the compiled policy's toolchain with the current one.
+pub const BindingError = Error || error{StaleNamingPolicy};
 pub const BoundRule = struct { policy_id: []const u8, rule: naming.Rule };
 pub const Compiled = struct {
     contract: enum { naming_policy_v1 },
@@ -30,7 +32,7 @@ pub fn compile(allocator: std.mem.Allocator, current: *const safety.ValidToolcha
     return .{ .contract = .naming_policy_v1, .toolchain_identity = current.identity(), .policy_ids = ids, .rules = try rules.toOwnedSlice(allocator) };
 }
 
-pub fn validateBinding(allocator: std.mem.Allocator, compiled: Compiled, current: *const safety.ValidToolchain, normalizer: unicode.Normalizer, folder: unicode.CaseFolder) Error!void {
+pub fn validateBinding(allocator: std.mem.Allocator, compiled: Compiled, current: *const safety.ValidToolchain, normalizer: unicode.Normalizer, folder: unicode.CaseFolder) BindingError!void {
     if (!compiled.toolchain_identity.eql(current.identity())) return error.StaleNamingPolicy;
     const policies = current.policies();
     if (compiled.policy_ids.len != policies.len) return error.InvalidNamingPolicy;

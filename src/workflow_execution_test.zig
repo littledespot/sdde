@@ -197,7 +197,7 @@ test "runner rejects undeclared native progress and bounds nonadvancing executio
 }
 
 test "native iteration rejects unchanged scope whose source authority became stale" {
-    const source_schema = iteration_values.schema(.raw_engine_config, usize, 1, 32);
+    const source_schema = iteration_values.schema(.workflow_operation_registry, usize, 1, 32);
     var batch: NativeBatch = .{ .population = 1 };
     var entries: [4]operations.Entry = undefined;
     var registry = batch.registry(&entries);
@@ -231,7 +231,7 @@ const NativeBatch = struct {
     undeclared: bool = false,
     const Fault = enum { none, missing, repeated, skipped, enlarged, wrong_schema, missing_replacement, wrong_outcome };
     const scope_schema = iteration_values.schema(.workflow_invocation, usize, 1, 32);
-    const progress_schema = iteration_values.schema(.canonical_log_level, usize, 1, 32);
+    const progress_schema = iteration_values.schema(.principle_registry, usize, 1, 32);
     const initialize: iteration.Descriptor = .{ .kind = .initialize, .scope = scope_schema.key, .progress = progress_schema.key };
     const advance: iteration.Descriptor = .{ .kind = .advance, .scope = scope_schema.key, .progress = progress_schema.key };
     const steps = blk: {
@@ -336,7 +336,7 @@ test "generic engine preserves every YAML-compiled terminal outcome" {
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
         try std.testing.expectEqual(expected, engine.run(children.bindings()).executionStatus().?);
-        try std.testing.expectEqual(@as(usize, 1), barrier.calls);
+        try std.testing.expectEqual(@as(usize, 1), control.state.calls);
     }
 }
 
@@ -427,7 +427,7 @@ test "publication effects finalize logging before the shared runner invokes any 
     };
     for ([_]pipeline.SideEffect{ .workflow_publication, .filesystem_write, .none }) |effect| {
         for ([_]bool{ false, true }) |fail| {
-            for ([_]pipeline.RuntimeStatus{ .active, .cancelled, .deadline_exhausted }) |after_finalization| {
+            for ([_]pipeline.RuntimeStatus{ .active, .cancelled }) |after_finalization| {
                 var control: OperationControl = .{ .state = .{ .outcome = .ok } };
                 var barrier: FakeBarrier = .{};
                 var graph = try testGraph();
@@ -458,11 +458,9 @@ test "publication effects finalize logging before the shared runner invokes any 
                 if (publication and fail) {
                     try std.testing.expectEqualDeep(@as(execution.Rejection, .{ .logging = .LOG_FLUSH_FAILURE }), result.rejected);
                     try std.testing.expectEqual(@as(usize, 0), control.state.calls);
-                    try std.testing.expectEqual(@as(usize, 0), barrier.calls);
                 } else if (publication and after_finalization != .active) {
-                    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = if (after_finalization == .cancelled) .cancelled else .deadline_exhausted }), result);
+                    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = .cancelled }), result);
                     try std.testing.expectEqual(@as(usize, 0), control.state.calls);
-                    try std.testing.expectEqual(@as(usize, 0), barrier.calls);
                 } else {
                     try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), result);
                     try std.testing.expectEqual(@as(usize, 1), control.state.calls);
@@ -525,7 +523,6 @@ test "pending independent prohibiting outcome prevents publication finalization 
             try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } }), result);
             try std.testing.expectEqual(@as(usize, 0), finalizer.calls);
             try std.testing.expectEqual(@as(usize, 0), control.state.calls);
-            try std.testing.expectEqual(@as(usize, 0), barrier.calls);
             try std.testing.expectEqual(generation, runner.envelope.generation);
             try std.testing.expectEqualDeep(original, runner.envelope.outcomes.firstUnresolved().?);
             try std.testing.expect(!runner.events_closed);
@@ -570,7 +567,6 @@ test "maximum graph validates executes every operation, rejects cycles and keeps
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).executionStatus().?);
     try std.testing.expectEqual(maximum, control.state.calls);
-    try std.testing.expectEqual(maximum, barrier.calls);
     try std.testing.expectEqual(maximum, runner.retry_execution_counts.len);
     try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
 
@@ -637,18 +633,6 @@ test "rerunning an abandoned workflow executes every step again from compiled st
     }
 }
 
-test "runner applies an operation delta before the telemetry barrier" {
-    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
-    var barrier: FakeBarrier = .{ .block = true };
-    var graph = try testGraph();
-    var registry = testRegistry(&control);
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
-    defer runner.deinit();
-    var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-    try std.testing.expectEqual(workflow.OutcomeTag.blocked, engine.run(children.bindings()).executionStatus().?);
-    try std.testing.expectEqual(@as(usize, 1), barrier.calls);
-}
-
 test "runner follows a compiled bounded cycle and enforces its limit" {
     const retry_outcome: workflow.OutcomeTag = .more;
     const loop_steps = [_]compilation.CompiledStep{.{
@@ -692,7 +676,6 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     var complete_children: TestEngineBindings = .{ .graph = &complete_graph, .runner = &complete_runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(complete_children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 2), completes.state.calls);
-    try std.testing.expectEqual(@as(usize, 2), complete_barrier.calls);
     try std.testing.expectEqual(@as(u64, 2), complete_runner.retry_execution_counts[0]);
 
     var exhausts: OperationControl = .{ .state = .{ .outcome = retry_outcome } };
@@ -713,7 +696,6 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     try std.testing.expectEqual(@as(u32, 2), diagnostic.limit.value);
     try std.testing.expectEqual(@as(u64, 3), diagnostic.completed_executions);
     try std.testing.expectEqual(@as(usize, 3), exhausts.state.calls);
-    try std.testing.expectEqual(@as(usize, 3), exhausted_barrier.calls);
     try std.testing.expectEqual(@as(u64, 3), exhausted_runner.retry_execution_counts[0]);
 
     var zero_steps = loop_steps;
@@ -787,7 +769,6 @@ test "runner rejects an operation binding that differs from compiled authority" 
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 0), control.state.calls);
-    try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
 
 test "unexpected binding failure never follows a declared transition to clarification" {
@@ -813,7 +794,6 @@ test "unexpected binding failure never follows a declared transition to clarific
     try std.testing.expectEqualDeep(@as(execution.Rejection, .{ .operation_failed = error.InvocationFailureUnrecorded }), result.execution_rejected);
     try std.testing.expectEqual(.failed, result.executionStatus().?);
     try std.testing.expectEqual(@as(usize, 1), control.state.calls);
-    try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
 
 test "runner contract rejections cannot enter invalid or failed recovery leading to clarification" {
@@ -849,7 +829,6 @@ test "runner contract rejections cannot enter invalid or failed recovery leading
         };
         try std.testing.expectEqual(execution.Rejection{ .authority = reason }, result.execution_rejected);
         try std.testing.expectEqual(@as(usize, 1), control.state.calls);
-        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
         try std.testing.expect(runner.envelope.slots[@intFromEnum(test_value_schema.key)] == null);
         try std.testing.expect(!runner.envelope.latestInformation(test_value_schema.key).contains(test_value_schema.key));
         try std.testing.expect(runner.last_effects == null and runner.last_operation_rejection == null);
@@ -919,7 +898,6 @@ test "runner rejects incomplete dependency renewal without committing repair pro
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
         const result = engine.run(children.bindings());
         try std.testing.expectEqual(@as(usize, 1), merge.calls);
-        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
         try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
         if (complete) {
             try std.testing.expectEqual(.ok, result.executionStatus().?);
@@ -1014,7 +992,6 @@ test "unchanged repairs exhaust before delta application and cannot follow recov
         const result = engine.run(children.bindings());
         try std.testing.expectEqual(.failed, result.executionStatus().?);
         try std.testing.expectEqual(@as(usize, 1), merge.calls);
-        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
         try std.testing.expectEqual(history_count, runner.envelope.records.items.len);
         try std.testing.expect(runner.envelope.slots[@intFromEnum(candidate.key)] == original);
         try std.testing.expect(runner.envelope.slots[@intFromEnum(dependent.key)] != null);
@@ -1257,18 +1234,13 @@ const OperationState = struct {
     delta_fault: ?DeltaFault = null,
 };
 const DeltaFault = enum { missing_write, wrong_schema, undeclared_invalidation, undeclared_outcome };
-const test_value_schema = @import("application/pipeline_values.zig").schema(.canonical_log_level, u32, 1, 32).recorded();
+const test_value_schema = @import("application/pipeline_values.zig").schema(.principle_registry, u32, 1, 32).recorded();
 const FakeBarrier = struct {
-    calls: usize = 0,
-    block: bool = false,
     fn port(self: *FakeBarrier) barrier_port.Barrier {
         return .{ .context = self, .process_fn = process };
     }
-    fn process(context: *anyopaque, _: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
-        const self: *FakeBarrier = @ptrCast(@alignCast(context));
-        self.calls += 1;
-        if (self.block) return .{ .blocked = .LOG_SINK_FAILURE };
-        return .{ .persisted = .{ .segment_ordinal = 1, .sequence = self.calls, .bytes_written = 1, .flushed = true } };
+    fn process(_: *anyopaque, _: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+        return .dropped;
     }
 };
 
@@ -1330,7 +1302,7 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
                 return switch (control.failure) {
                     .generic => error.InvocationFailureUnrecorded,
                     .reconciliation => error.InvalidReferenceReconciliation,
-                    .omission => error.InvalidSpecificationCoverageRepair,
+                    .omission => error.InvalidSpecificationCoverage,
                     .allocation => error.OutOfMemory,
                     .cancelled => error.Cancelled,
                 };
@@ -1346,7 +1318,6 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
                 if (fault == .undeclared_invalidation and control.calls == 1) delta.data_invalidations.insert(.workflow_invocation);
                 if (fault == .undeclared_outcome and control.calls == 1) break :step .{ .outcome = .more, .delta = delta };
             }
-            step_input.log.log(&delta, .{ .event_type = .action_completed }) catch return error.InvocationFailureUnrecorded;
             break :step .{ .outcome = outcome, .delta = delta, .diagnostic = switch (control.diagnostic) {
                 .none => null,
                 .unsafe => error.UnsafeSpecificationRepair,
@@ -1378,7 +1349,7 @@ fn testGraph() !compilation.CompiledWorkflow {
 const test_outcomes: []const workflow.OutcomeTag = &.{ .ok, .needs_user, .invalid, .blocked, .failed, .cancelled };
 
 test "an operation that fails after the runtime stopped reports the stop, not an operation failure" {
-    for ([_]?pipeline.RuntimeStatus{ null, .cancelled, .deadline_exhausted }) |stop| {
+    for ([_]?pipeline.RuntimeStatus{ null, .cancelled }) |stop| {
         var runtime: PublicationRuntime = .{};
         var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1, .stops = if (stop != null) &runtime else null, .stops_to = stop orelse .cancelled } };
         var barrier: FakeBarrier = .{};
@@ -1387,10 +1358,7 @@ test "an operation that fails after the runtime stopped reports the stop, not an
         var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{ .context = &runtime, .status_fn = PublicationRuntime.status }, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
-        const expected: execution.Rejection = if (stop) |status|
-            (if (status == .cancelled) .cancelled else .deadline_exhausted)
-        else
-            .{ .operation_failed = error.InvocationFailureUnrecorded };
+        const expected: execution.Rejection = if (stop != null) .cancelled else .{ .operation_failed = error.InvocationFailureUnrecorded };
         try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = expected }), runner.bindings().invokeStep(test_steps[0].id));
         // The operation received the runner's own runtime handle, not the always-active default.
         try std.testing.expectEqual(@intFromPtr(&runtime), control.state.runtime_context);
@@ -1399,7 +1367,7 @@ test "an operation that fails after the runtime stopped reports the stop, not an
 
 test "an operation that reports a cancellation ends the step cancelled, whatever the runtime reports" {
     // The runtime stays active in the first case: a cancelled filesystem call is no runtime stop.
-    for ([_]?pipeline.RuntimeStatus{ null, .cancelled, .deadline_exhausted }) |stop| {
+    for ([_]?pipeline.RuntimeStatus{ null, .cancelled }) |stop| {
         var runtime: PublicationRuntime = .{};
         var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1, .failure = .cancelled, .stops = if (stop != null) &runtime else null, .stops_to = stop orelse .cancelled } };
         var barrier: FakeBarrier = .{};
@@ -1408,9 +1376,7 @@ test "an operation that reports a cancellation ends the step cancelled, whatever
         var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{ .context = &runtime, .status_fn = PublicationRuntime.status }, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
-        // A deadline that ran out first is still the deadline; any other state of the runtime ends the run cancelled.
-        const expected: execution.Rejection = if (stop == .deadline_exhausted) .deadline_exhausted else .cancelled;
-        try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = expected }), runner.bindings().invokeStep(test_steps[0].id));
+        try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = .cancelled }), runner.bindings().invokeStep(test_steps[0].id));
     }
 }
 
@@ -1458,7 +1424,7 @@ const test_transitions = [_]workflow.Transition{
 };
 
 test "operation failures retain unrelated native causes without applying a failed delta" {
-    for ([_]operations.Error{ error.InvalidReferenceReconciliation, error.InvalidSpecificationCoverageRepair, error.OutOfMemory }, [_]@FieldType(OperationState, "failure"){ .reconciliation, .omission, .allocation }) |cause, failure| {
+    for ([_]operations.Error{ error.InvalidReferenceReconciliation, error.InvalidSpecificationCoverage, error.OutOfMemory }, [_]@FieldType(OperationState, "failure"){ .reconciliation, .omission, .allocation }) |cause, failure| {
         var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1, .failure = failure } };
         var barrier: FakeBarrier = .{};
         var graph = try testGraph();
@@ -1471,7 +1437,6 @@ test "operation failures retain unrelated native causes without applying a faile
         try std.testing.expectEqualStrings(@errorName(cause), result.execution_rejected.diagnostic());
         try std.testing.expect(runner.last_effects == null);
         try std.testing.expect(runner.last_operation_rejection == null);
-        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
         for (runner.envelope.slots) |slot| try std.testing.expect(slot == null);
     }
 }

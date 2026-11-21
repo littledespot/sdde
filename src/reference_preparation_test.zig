@@ -319,7 +319,7 @@ const Prepared = struct {
 fn prepareTokens(allocator: std.mem.Allocator) !Prepared {
     var ids: id_fixture.IdSource = .{};
     const inputs = try id_fixture.prepare(allocator, &ids, try @import("reference_ingestion_test.zig").read(allocator, "source.md", source_text));
-    const owner = safety.validate(allocator, .{ .packages = &.{}, .policies = &.{"project.zig@1"} }, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
+    const owner = safety.validate(allocator, &.{"project.zig@1"}, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
     errdefer safety.deinitOwner(owner);
     const policy = try (@import("actions/toolchain/compile_naming_policy.zig").Action{ .normalizer = fixture.normalizer, .folder = fixture.folder }).execute(allocator, safety.value(owner));
     return .{ .owner = owner, .policy = policy, .inputs = inputs };
@@ -348,7 +348,7 @@ test "a naming policy compiled for another toolchain fails the grammar step" {
     defer arena.deinit();
     const prepared = try prepareTokens(arena.allocator());
     defer prepared.deinit();
-    const successor = safety.validate(arena.allocator(), .{ .packages = &.{}, .policies = &.{"project.zig@1"} }, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
+    const successor = safety.validate(arena.allocator(), &.{"project.zig@1"}, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
     defer safety.deinitOwner(successor);
     var diagnostic: token_stage.Diagnostic = .{};
     try std.testing.expectError(error.StaleNamingPolicy, tokenAction().execute(arena.allocator(), .{}, &diagnostic, prepared.policy, safety.value(successor), prepared.inputs));
@@ -423,7 +423,6 @@ fn invokeBinding(comptime Runner: type, comptime contract: pipeline.NodeContract
         .step = &step,
         .resources = &.{},
         .model_binding = null,
-        .log = pipeline.WorkflowLog.init(.{ .bytes = "TEST".* }),
         .runtime = runtime,
         .stage_step = slot,
     } });
@@ -512,7 +511,7 @@ const token_read: pipeline.NodeContract = .{ .id = "read", .kind = .action, .req
 
 /// Seeds the envelope with the token stage's three inputs; the envelope takes the toolchain owner.
 fn seedTokenInputs(arena: std.mem.Allocator, envelope: *Envelope) !void {
-    const owner = safety.validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"project.zig@1"} }, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
+    const owner = safety.validate(std.testing.allocator, &.{"project.zig@1"}, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
     var ids: id_fixture.IdSource = .{};
     const inputs = try id_fixture.prepare(arena, &ids, try @import("reference_ingestion_test.zig").read(arena, "source.md", source_text));
     const policy = try (@import("actions/toolchain/compile_naming_policy.zig").Action{ .normalizer = fixture.normalizer, .folder = fixture.folder }).execute(arena, safety.value(owner));

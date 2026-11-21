@@ -32,7 +32,6 @@ test "preparation emits only a typed opaque reference through NodeDelta" {
     };
     try std.testing.expectEqual(@as(usize, 1), writes);
     try std.testing.expect(delta.runner_accounting_transition == null);
-    try std.testing.expectEqual(@as(usize, 0), delta.telemetry_fact_count);
     const view: data.View = .{ .slots = delta.data_writes };
     const ref = try values.read(&view, preparation.value_schema, operation.ValidatedProviderAuthorizationLeaseRef);
     const canonical = try fixture.operations().authorization_leases.canonicalReference(ref.*);
@@ -95,8 +94,8 @@ test "assigned operation cannot consume a lease using a manufactured invoked val
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
 }
 
-test "provider model binding input and deadline mismatches finalize without an effect" {
-    for (0..5) |variant| {
+test "provider model binding input, sampling and deadline mismatches finalize without an effect" {
+    for (0..6) |variant| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -117,6 +116,8 @@ test "provider model binding input and deadline mismatches finalize without an e
                 entry.model = .{ .bytes = "different-model" };
                 binding.registry_entry = &entry;
             },
+            // The lease was prepared for the configured temperature (ADR 0039), not a runaway re-send's.
+            5 => request.sampling = .runaway_resend,
             else => unreachable,
         }
         try std.testing.expectError(error.AuthorizationDenied, fixture.leasePort().consume(authorized.reference, &binding, &request, if (variant == 3) &invoked else authorized.invoked));
@@ -211,15 +212,16 @@ test "preparation rejects unassigned duplicate and terminal operations" {
 }
 
 test "preparation failure and cancellation have no successful reference" {
-    for (0..3) |variant| {
+    for (0..4) |variant| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         try fixture.assignInference();
         fixture.preloader.plan = switch (variant) {
-            0 => .{ .failed = .authentication_failed },
+            0 => .{ .failed = .{ .authentication_failed = .missing } },
             1 => .{ .failed = .authorization_denied },
             2 => .cancelled,
+            3 => .{ .failed = .{ .authentication_failed = .malformed } },
             else => unreachable,
         };
         var runner = fixture.preparationRunner();
@@ -227,6 +229,14 @@ test "preparation failure and cancellation have no successful reference" {
         if (variant == 2) try std.testing.expect(outcome == .cancelled) else {
             try std.testing.expect(outcome == .failed);
             try std.testing.expectEqual(operation.ProviderDeliveryDisposition.not_sent, outcome.failed.delivery);
+            // The credential reason is presentation only: the cause, retry class and delivery are the same either way.
+            try std.testing.expectEqual(if (variant == 1) operation.ProviderFailureCause.authorization_denied else .authentication_failed, outcome.failed.cause);
+            try std.testing.expectEqual(operation.ProviderRetryClass.never, outcome.failed.retry_class);
+            try std.testing.expectEqual(@as(?operation.ProviderCredentialDiagnostic, switch (variant) {
+                0 => .missing,
+                3 => .malformed,
+                else => null,
+            }), outcome.failed.credential);
         }
         try std.testing.expectEqual(@as(usize, 0), fixture.preloader.prepared_count);
         try std.testing.expect((try runner.prepare(fixture.facts(.inference))) == .failed);

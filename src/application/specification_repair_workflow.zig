@@ -24,7 +24,7 @@ pub fn authorizationBlocked(view: *const data.View) values.Error!bool {
 
 pub const Authorize = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_generation_session, .parsed_specification_unit, .validated_specification_unit, .packet_guidance },
+        .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_generation_session, .parsed_specification_unit, .validated_specification_unit, .packet_guidance },
         .produces = &.{.specification_repair_authorization},
     };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .specification_repair_authorization, .blocked_reader = .specification_unit } };
@@ -47,7 +47,7 @@ pub const Authorize = struct {
 };
 pub const BuildInput = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .specification_generation_session, .specification_repair_authorization, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .packet_guidance },
+        .requires = &.{ .specification_generation_session, .specification_repair_authorization, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .packet_guidance },
         .produces = &.{.model_input_packet},
     };
     allocator: std.mem.Allocator,
@@ -80,7 +80,7 @@ pub const Parse = struct {
 };
 pub const Merge = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_generation_session, .parsed_specification_unit, .specification_repair_authorization },
+        .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_generation_session, .parsed_specification_unit, .specification_repair_authorization },
         .replaces = &.{.parsed_specification_unit},
         .invalidates = &.{ .validated_specification_unit, .specification_repair_authorization },
     };

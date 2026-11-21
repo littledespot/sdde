@@ -343,7 +343,7 @@ test "a graph rejection records its stage, the graph's ordinal and, for a step's
         .{ .from = steps[0].id, .outcome = .failed, .target = .{ .terminal = .failed } },
     };
     var invalid_steps = steps;
-    invalid_steps[0].iteration.?.scope = .engine_config;
+    invalid_steps[0].iteration.?.scope = .workflow_definition_registry;
     var contract: rejection.Slot = .{};
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{iterationTestGraph(&invalid_steps, &transitions)}, &no_operations, &contract));
     try std.testing.expectEqual(rejection.Rule.step_contract, contract.evidence.rule.?);
@@ -424,19 +424,19 @@ fn testGraph(steps: []const compilation.CompiledStep, transitions: []const workf
 
 fn iterationTestStep(id: []const u8, kind: @FieldType(@import("workflow_iteration.zig").Descriptor, "kind")) compilation.CompiledStep {
     var step = testStep(id, null);
-    step.iteration = .{ .kind = kind, .scope = .raw_engine_config, .progress = .engine_config };
-    step.requires = if (kind == .initialize) &.{.raw_engine_config} else &.{ .raw_engine_config, .engine_config };
-    step.produces = if (kind == .initialize) &.{.engine_config} else &.{};
-    step.replaces = if (kind == .advance) &.{.engine_config} else &.{};
+    step.iteration = .{ .kind = kind, .scope = .workflow_operation_registry, .progress = .workflow_definition_registry };
+    step.requires = if (kind == .initialize) &.{.workflow_operation_registry} else &.{ .workflow_operation_registry, .workflow_definition_registry };
+    step.produces = if (kind == .initialize) &.{.workflow_definition_registry} else &.{};
+    step.replaces = if (kind == .advance) &.{.workflow_definition_registry} else &.{};
     return step;
 }
 
 fn iterationTestGraph(steps: []const compilation.CompiledStep, transitions: []const workflow.Transition) compilation.CompiledWorkflow {
     var graph = testGraph(steps, transitions);
-    graph.authority.invocation_outputs = &.{.raw_engine_config};
+    graph.authority.invocation_outputs = &.{.workflow_operation_registry};
     graph.authority.data_schemas = &.{
-        .{ .key = .raw_engine_config, .version = 1, .type_name = "finite-scope", .maximum_bytes = null },
-        .{ .key = .engine_config, .version = 1, .type_name = "finite-progress", .maximum_bytes = null },
+        .{ .key = .workflow_operation_registry, .version = 1, .type_name = "finite-scope", .maximum_bytes = null },
+        .{ .key = .workflow_definition_registry, .version = 1, .type_name = "finite-progress", .maximum_bytes = null },
     };
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(steps).?;
     return graph;
@@ -466,9 +466,9 @@ test "native iteration initialization cannot replenish a cycle without an indepe
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var reset = testStep("regenerate", 2);
-    reset.requires = &.{.raw_engine_config};
-    reset.replaces = &.{.raw_engine_config};
-    reset.invalidates = &.{.engine_config};
+    reset.requires = &.{.workflow_operation_registry};
+    reset.replaces = &.{.workflow_operation_registry};
+    reset.invalidates = &.{.workflow_definition_registry};
     const steps = [_]compilation.CompiledStep{ iterationTestStep("initialize", .initialize), iterationTestStep("advance", .advance), reset };
     const transitions = [_]workflow.Transition{
         .{ .from = steps[0].id, .outcome = .ok, .target = .{ .step = steps[1].id } },
@@ -499,8 +499,8 @@ test "compiled native iteration rejects undeclared authority and effects" {
     for (0..6) |fault| {
         var invalid_steps = steps;
         switch (fault) {
-            0 => invalid_steps[0].iteration.?.scope = .engine_config,
-            1 => invalid_steps[0].iteration.?.progress = .raw_engine_config,
+            0 => invalid_steps[0].iteration.?.scope = .workflow_definition_registry,
+            1 => invalid_steps[0].iteration.?.progress = .workflow_operation_registry,
             2 => invalid_steps[0].iteration.?.outcome = .more,
             3 => invalid_steps[0].iteration.?.kind = .advance,
             4 => invalid_steps[0].side_effect = .model_call,

@@ -386,7 +386,7 @@ test "a retained run measures its configured threshold and one feature log, and 
     var root = std.testing.tmpDir(.{});
     defer root.cleanup();
     // A missing report, or one of a known older version, leaves the report unavailable.
-    for ([_]?[]const u8{ null, "{\"schema\":\"spec-e2e-report/v9\",\"retired\":true}", "{\"schema\":\"spec-e2e-report/v23\",\"attempts\":[]}" }, [_][]const u8{ "missing", "older", "previous" }) |report, name| {
+    for ([_]?[]const u8{ null, "{\"schema\":\"spec-e2e-report/v9\",\"retired\":true}", "{\"schema\":\"spec-e2e-report/v24\",\"attempts\":[]}" }, [_][]const u8{ "missing", "older", "previous" }) |report, name| {
         try putTestRun(io, a, root.dir, name, report);
         const run = try measure(io, a, root.dir, name);
         try std.testing.expectEqualStrings(name, run.run);

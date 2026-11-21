@@ -7,7 +7,7 @@ const provenance = @import("../../domain/specification_provenance.zig");
 const packets = @import("../../domain/model_input_packet.zig");
 
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "admit-scenario-link-choice", .kind = .action, .requires = &.{ .specification_generation_session, .scenario_link_progress, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .model_request_identity_ledger, .prepared_model_request, .model_input_packet, .model_payload_schema_result }, .produces = &.{}, .replaces = &.{.scenario_link_progress}, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "admit-scenario-link-choice", .kind = .action, .requires = &.{ .specification_generation_session, .scenario_link_progress, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .model_request_identity_ledger, .prepared_model_request, .model_input_packet, .model_payload_schema_result }, .produces = &.{}, .replaces = &.{.scenario_link_progress}, .side_effect = .none };
 
     /// The choices so far followed by the one the model's answer makes. The answer must be
     /// one of the criteria offered for the edge case that is next in the plan.

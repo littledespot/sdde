@@ -330,8 +330,9 @@ response admission binds each group claim once, so an incomplete answer takes th
 repair request's protocol correction ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)).
 Reusing existing mutation owners preserves unrelated records and their provenance.
 The existing runner invalidates and rebuilds dependent signals, conflicts,
-identities, coverage and support before publication; missing signals use ordinary
-coverage repair. No new model call type, continuation policy or retry budget applies.
+identities, coverage and support before publication; missing signals use the
+`reference-signals` repair owner ([ADR 0033](../decisions/0033-generic-repair-operations.md)).
+No new model call type, continuation policy or retry budget applies.
 
 ADR 0022 retires signals that depend on changed dispositions, retaining unrelated
 accepted groups, and retires dependent authored associations after signal

@@ -26,11 +26,11 @@ test "finite native iteration compiles registered progress without a YAML retry 
     var result_schema: result_schema_parser.Adapter = .{};
     const registry: operation_registry.Registry = .{
         .operations = &.{
-            .{ .contract = .{ .id = "finite.input", .kind = .invocation, .produces = &.{.raw_engine_config}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = operation_bindings.bind(void, null, unusedOperation) },
-            .{ .contract = .{ .id = "finite.initialize", .kind = .step, .requires = &.{.raw_engine_config}, .produces = &.{.engine_config}, .outcomes = &.{.ok}, .side_effect = .none, .iteration = .{ .kind = .initialize, .scope = .raw_engine_config, .progress = .engine_config } }, .binding = operation_bindings.bind(void, null, unusedOperation) },
-            .{ .contract = .{ .id = "finite.advance", .kind = .step, .requires = &.{ .raw_engine_config, .engine_config }, .replaces = &.{.engine_config}, .outcomes = &.{ .ok, .more }, .side_effect = .none, .iteration = .{ .kind = .advance, .scope = .raw_engine_config, .progress = .engine_config, .outcome = .more } }, .binding = operation_bindings.bind(void, null, unusedOperation) },
+            .{ .contract = .{ .id = "finite.input", .kind = .invocation, .produces = &.{.workflow_operation_registry}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = operation_bindings.bind(void, null, unusedOperation) },
+            .{ .contract = .{ .id = "finite.initialize", .kind = .step, .requires = &.{.workflow_operation_registry}, .produces = &.{.workflow_definition_registry}, .outcomes = &.{.ok}, .side_effect = .none, .iteration = .{ .kind = .initialize, .scope = .workflow_operation_registry, .progress = .workflow_definition_registry } }, .binding = operation_bindings.bind(void, null, unusedOperation) },
+            .{ .contract = .{ .id = "finite.advance", .kind = .step, .requires = &.{ .workflow_operation_registry, .workflow_definition_registry }, .replaces = &.{.workflow_definition_registry}, .outcomes = &.{ .ok, .more }, .side_effect = .none, .iteration = .{ .kind = .advance, .scope = .workflow_operation_registry, .progress = .workflow_definition_registry, .outcome = .more } }, .binding = operation_bindings.bind(void, null, unusedOperation) },
         },
-        .data_schemas = &.{ values.schema(.raw_engine_config, u32, 1, null), values.schema(.engine_config, u32, 1, null) },
+        .data_schemas = &.{ values.schema(.workflow_operation_registry, u32, 1, null), values.schema(.workflow_definition_registry, u32, 1, null) },
         .policies = &.{.{ .id = "finite.policy@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok} }},
         .gates = &.{},
     };

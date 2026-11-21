@@ -22,7 +22,8 @@ pub const Adapter = struct {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const family = key.Family.of(facts.provider_binding.registry_entry.config) orelse return .{ .failed = .authorization_denied };
         const snapshot = switch (self.materials.get(family).*) {
-            .unavailable => return .{ .failed = .authentication_failed },
+            .unavailable => return .{ .failed = .{ .authentication_failed = .missing } },
+            .malformed => return .{ .failed = .{ .authentication_failed = .malformed } },
             .allocation_failed => return error.OutOfMemory,
             .ready => |*value| value,
         };

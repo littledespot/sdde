@@ -1,5 +1,4 @@
 pub const Stream = enum { event, prompt };
-pub const FinalizationMode = enum { active, historical };
 pub const RuntimeStatus = enum { unprepared, prepared, retired };
 
 pub const FailureCode = enum {

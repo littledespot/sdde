@@ -159,7 +159,7 @@ test "atomic execution exposes no transaction logging or stabilization capabilit
     inline for (.{ "transaction_prepared", "transaction_applying", "transaction_committed", "transaction_rolled_back", "transaction_recovered" }) |name| {
         try std.testing.expect(std.meta.stringToEnum(telemetry.EventType, name) == null);
     }
-    try std.testing.expect(!@hasField(telemetry.TelemetryFields, "transaction_id"));
+    try std.testing.expect(!@hasField(telemetry.Field, "transaction_id"));
     try std.testing.expect(!@hasField(@import("application/feature_log_actions.zig").Set, "stabilize_failure"));
     try expectAbsent(@embedFile("composition/active_feature_log_runtime.zig"), "stabilizer");
     try expectAbsent(@embedFile("application/feature_log_runner.zig"), "stabiliz");
@@ -892,6 +892,18 @@ test "model-binding requirement is immutable data not a provider-call capability
     try std.testing.expect(!@hasField(operation.Contract, "model_capacity"));
     try std.testing.expect(@FieldType(registry.StepInput, "model_binding") == ?*const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
     try std.testing.expect(!@hasField(registry.StepInput, "provider"));
+    // The runner is the only producer of log facts: no action channel carries one in a node delta, and a step knows
+    // only its workflow's shortcode.
+    try std.testing.expect(!@hasField(registry.StepInput, "log"));
+    try std.testing.expect(!@hasDecl(@import("domain/pipeline.zig"), "WorkflowLog"));
+    try std.testing.expect(!@hasField(@import("domain/pipeline.zig").NodeDelta, "telemetry_facts"));
+    // One cancellation source: the status is active or cancelled, and no run-level deadline status exists. Request
+    // deadlines are the lease's and the exchange timer's.
+    try std.testing.expectEqual(@as(usize, 2), @typeInfo(@import("domain/pipeline.zig").RuntimeStatus).@"enum".fields.len);
+    // The composition entry installs the operator interrupt around the run, and restores the prior action after it.
+    const root_source = @embedFile("composition/root.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(root_source, "Interrupt.install()"));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(root_source, "interrupt.restore()"));
     const derive = @embedFile("domain/provider_requirement_derivation.zig");
     try std.testing.expect(std.mem.indexOf(u8, derive, "step.model != null") != null);
     try expectAbsent(derive, "step.parameters");
@@ -1004,7 +1016,7 @@ test "the contract-variant mechanism has no operation-specific branch and one ow
         "application/workflow_pipeline_runner.zig",
     };
     // The selector is data: a contract names its parameter, and nothing in the mechanism names a
-    // selector value, an owner or an operation (ADR 0030, ADR 0033's 13 owners).
+    // selector value, an owner or an operation (ADR 0030, ADR 0033's 12 owners).
     const names = [_][]const u8{
         "\"owner\"",
         "\"reference-text\"",
@@ -1019,7 +1031,6 @@ test "the contract-variant mechanism has no operation-specific branch and one ow
         "\"source-omission-reconciliation\"",
         "\"specification-unit\"",
         "\"specification-support\"",
-        "\"specification-coverage\"",
         // The kernel operation: the ceiling and the runner key on the stage marker, never on the name.
         "\"request-model\"",
         "authorize-repair",
@@ -2167,6 +2178,75 @@ test "the reference preparation stage actions obey ADR 0031's stage rules" {
     try std.testing.expectEqualSlices(key, &.{ .path_token_grammar, .reference_passive_literals, .structured_token_candidates }, tokens.produces);
 }
 
+fn namesDataKey(keys: []const @import("domain/pipeline.zig").DataKey, wanted: @import("domain/pipeline.zig").DataKey) bool {
+    for (keys) |key| if (key == wanted) return true;
+    return false;
+}
+
+test "the valid toolchain has one producer and is required only by the two stages that read the toolchain" {
+    const wanted: @import("domain/pipeline.zig").DataKey = .valid_toolchain;
+    // The toolchain stage produces it and neither requires, replaces nor invalidates it.
+    const producer = @import("actions/toolchain/prepare_toolchain.zig").Action.contract;
+    try std.testing.expect(namesDataKey(producer.produces, wanted));
+    try std.testing.expect(!namesDataKey(producer.requires, wanted) and !namesDataKey(producer.optional, wanted) and !namesDataKey(producer.replaces, wanted) and !namesDataKey(producer.invalidates, wanted));
+    // The naming-policy compiler and the reference token stage require it and write nothing to it. No downstream
+    // stage re-checks the toolchain: nothing replaces or invalidates it, so nothing downstream can find it stale.
+    inline for (.{ @import("actions/toolchain/compile_naming_policy.zig").Action.contract, @import("actions/reference/prepare_reference_tokens.zig").Action.contract }) |reader| {
+        try std.testing.expect(namesDataKey(reader.requires, wanted));
+        try std.testing.expect(!namesDataKey(reader.optional, wanted) and !namesDataKey(reader.produces, wanted) and !namesDataKey(reader.replaces, wanted) and !namesDataKey(reader.invalidates, wanted));
+    }
+    // No variant of the four generic repair operations names it.
+    const generic = @import("application/repair_workflow.zig");
+    inline for (.{ generic.AuthorizeRepair, generic.BuildRepairInput, generic.ParseRepair, generic.MergeRepair }) |G| {
+        for (G.contract.variants) |variant| {
+            try std.testing.expect(!namesDataKey(variant.requires, wanted) and !namesDataKey(variant.optional, wanted) and !namesDataKey(variant.produces, wanted));
+            try std.testing.expect(!namesDataKey(variant.replaces, wanted) and !namesDataKey(variant.invalidates, wanted));
+        }
+    }
+    // No other production file names the key: those four are every file that does, so no other contract,
+    // repair owner effect or binding can require, optionally read, produce, replace or invalidate it.
+    const named = [_][]const u8{
+        "actions/toolchain/prepare_toolchain.zig",
+        "actions/toolchain/compile_naming_policy.zig",
+        "actions/reference/prepare_reference_tokens.zig",
+        "application/toolchain_workflow_values.zig",
+    };
+    // The schema alias `valid` of `toolchain_workflow_values.zig` names the key too, so a contract could
+    // reach it without the literal: exactly these files import that module.
+    const importers = [_][]const u8{
+        "application/path_token_workflow.zig",
+        "application/reference_token_preparation_workflow.zig",
+        "application/toolchain_workflow_runner.zig",
+        "composition/native_workflow_operations.zig",
+    };
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    var reached: usize = 0;
+    var importing: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        if (std.mem.indexOf(u8, entry.basename, "_test") != null or std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        const expected: usize = for (named) |path| {
+            if (std.mem.eql(u8, entry.path, path)) break 1;
+        } else 0;
+        try std.testing.expectEqual(expected, countOccurrences(source, ".valid_toolchain"));
+        reached += expected;
+        const imports: usize = for (importers) |path| {
+            if (std.mem.eql(u8, entry.path, path)) break 1;
+        } else 0;
+        try std.testing.expectEqual(imports, countOccurrences(source, "toolchain_workflow_values.zig"));
+        importing += imports;
+    }
+    try std.testing.expectEqual(named.len, reached);
+    try std.testing.expectEqual(importers.len, importing);
+}
+
 test "the reference preparation steps that validate hand the next step a distinct validated type" {
     const evidence_steps = @import("actions/reference/prepare_reference_evidence.zig").steps;
     const token_steps = @import("actions/reference/prepare_reference_tokens.zig").steps;
@@ -2360,8 +2440,6 @@ test "feature logging policy execution and filesystem operations have focused ow
     try expectAbsent(orchestrator, "/actions/");
     try expectAbsent(orchestrator, "/adapters/");
     try expectAbsent(orchestrator, "/ports/");
-    const transition = @embedFile("application/feature_log_policy_transition_coordinator.zig");
-    try expectAbsent(transition, "feature_log_runner.zig");
     const finalization = @embedFile("application/feature_log_finalization_coordinator.zig");
     try expectAbsent(finalization, "feature_log_runner.zig");
     const retention = @embedFile("application/feature_log_retention_coordinator.zig");
@@ -2998,10 +3076,9 @@ test "candidate repairs share authority and expose only native scoped operations
     const spec = @import("application/specification_repair_workflow.zig");
     const lexical = @import("application/reference_text_repair_workflow.zig");
     const reconciliation = @import("application/reference_reconciliation_repair_workflow.zig");
-    const coverage = @import("application/specification_coverage_repair_workflow.zig");
     const support = @import("application/specification_support_repair_workflow.zig");
     const source_omission = @import("application/source_omission_repair_workflow.zig");
-    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, coverage.Authorize, support.Authorize, support.BuildInput, support.Parse, support.Merge, source_omission.Authorize, source_omission.BuildInput, source_omission.Parse, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
+    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, support.Authorize, support.BuildInput, support.Parse, support.Merge, source_omission.Authorize, source_omission.BuildInput, source_omission.Parse, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         // An owner's step is capability-free and carries its data effects once, in its own binding.
         try std.testing.expect(@TypeOf(T.effects) == @import("domain/repair_owner.zig").Effects);
@@ -3015,9 +3092,6 @@ test "candidate repairs share authority and expose only native scoped operations
     inline for (.{ source_omission.Authorize, source_omission.BuildInput, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
         try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &@import("domain/specification_generation_phase.zig").optional, T.effects.optional);
     }
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.effects.replaces);
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.effects.invalidates);
-    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .blocked, .failed }, &coverage.Authorize.outcomes);
     inline for (.{ @embedFile("domain/reference_extraction_repair.zig"), @embedFile("domain/specification_repair.zig"), @embedFile("domain/reference_extraction_text_repair.zig"), @embedFile("domain/reference_reconciliation_repair.zig"), @embedFile("domain/specification_support_repair.zig") }) |source| {
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic_repair.zig"));
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic.checkMerge("));
@@ -3028,7 +3102,7 @@ test "candidate repairs share authority and expose only native scoped operations
     const specification_facts = @embedFile("domain/specification_candidate_context.zig");
     try expectAbsent(specification_facts, "session.packet");
     try expectAbsent(specification_facts, "input: []const u8");
-    inline for (.{ specification_facts, @embedFile("domain/specification_coverage_repair.zig"), @embedFile("domain/reference_extraction_context.zig"), @embedFile("domain/reference_reconciliation_context.zig") }) |source| {
+    inline for (.{ specification_facts, @embedFile("domain/reference_extraction_context.zig"), @embedFile("domain/reference_reconciliation_context.zig") }) |source| {
         try expectAbsent(source, "policy_ids:");
         try expectAbsent(source, "passive_records:");
     }
@@ -3081,10 +3155,10 @@ test "the generic repair operations select owner rules through one exhaustive sw
         try std.testing.expectEqualStrings(tag, field);
         arms += 1;
     }
-    try std.testing.expectEqual(@as(usize, 29), arms);
-    // Its imports are exactly the contract types and the seven owner bindings.
-    try std.testing.expectEqual(@as(usize, 7), countOccurrences(generic, "_workflow.zig\")"));
-    try std.testing.expectEqual(@as(usize, 13), countOccurrences(generic, "@import(\""));
+    try std.testing.expectEqual(@as(usize, 28), arms);
+    // Its imports are exactly the contract types and the six owner bindings.
+    try std.testing.expectEqual(@as(usize, 6), countOccurrences(generic, "_workflow.zig\")"));
+    try std.testing.expectEqual(@as(usize, 12), countOccurrences(generic, "@import(\""));
     // Each variant is held to the descriptor check registry admission and graph validation apply, so a
     // `blocked` outcome with no reader stops the build (ADR 0033 "Blocked authorizers").
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(generic, "variant.validAssociation()"));
@@ -3097,7 +3171,6 @@ test "the generic repair operations select owner rules through one exhaustive sw
         .{ @embedFile("application/source_omission_repair_workflow.zig"), 4 },
         .{ @embedFile("application/specification_repair_workflow.zig"), 4 },
         .{ @embedFile("application/specification_support_repair_workflow.zig"), 4 },
-        .{ @embedFile("application/specification_coverage_repair_workflow.zig"), 1 },
     }) |pair| try std.testing.expectEqual(@as(usize, pair[1]), countOccurrences(pair[0], "pub fn invoke("));
     // The owner enum's rules are exhaustive switches too: only `id` may use an inline-else prong.
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(owners, "else =>"));
@@ -3113,7 +3186,7 @@ test "no per-owner repair operation remains: the four generic operations are the
     // The registry registers the four generic operations and no per-owner one (ADR 0033).
     const composition = @embedFile("composition/native_workflow_operations.zig");
     try std.testing.expectEqual(@as(usize, 4), countOccurrences(composition, "variantEntry(generic_repair."));
-    for ([_][]const u8{ "entry(text_repair.", "entry(extraction_repair.", "entry(reconciliation_repair.", "entry(source_omission.", "entry(specification_repair.", "entry(support_repair.", "entry(coverage_repair." }) |forbidden| {
+    for ([_][]const u8{ "entry(text_repair.", "entry(extraction_repair.", "entry(reconciliation_repair.", "entry(source_omission.", "entry(specification_repair.", "entry(support_repair." }) |forbidden| {
         try expectAbsent(composition, forbidden);
     }
     // Each owner's binding is an owner module: it declares its data effects and rules, imports no action
@@ -3125,7 +3198,6 @@ test "no per-owner repair operation remains: the four generic operations are the
         @embedFile("application/source_omission_repair_workflow.zig"),
         @embedFile("application/specification_repair_workflow.zig"),
         @embedFile("application/specification_support_repair_workflow.zig"),
-        @embedFile("application/specification_coverage_repair_workflow.zig"),
     }) |source| {
         try expectAbsent(source, "@import(\"../actions/");
         try expectAbsent(source, "Action.contract");

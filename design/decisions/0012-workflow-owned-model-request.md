@@ -61,11 +61,12 @@
 
 ### Schema and binding selection
 
-- [ADR 0013](0013-workflow-input-reuse.md) adds the optional originating parameter
-  `result-selection: input` (default `resource`).
-- It resolves the native packet's typed result-definition ID within the explicitly bound
-  schema resource once.
-- Missing packets, selectors or complete result definitions fail before invocation.
+- A `result-schema` step given a native packet resolves the packet's typed result-definition ID
+  within the explicitly bound schema resource once ([ADR 0013](0013-workflow-input-reuse.md);
+  user decision, 21 November 2026).
+  A static or absent `input` sends the whole resource.
+- A packet that names no definition, or one that is not a complete result definition, fails
+  before invocation.
 - The selector is internal; consumers retain the selected compiled schema through
   validation, retries and completion.
 - No model-owned field selects its schema.

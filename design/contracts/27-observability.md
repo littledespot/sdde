@@ -3,11 +3,10 @@
 Part of the [proposed design](../design.md#27-observability), as amended by the
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
-- The runner constructs one pure `WorkflowLog` binding from the selected compiled workflow's
-  registry-validated four-character shortcode.
-- Actions call `workflowLog.log(&delta, fact)` to append attributed telemetry without performing
-  I/O; runner lifecycle facts use the same active binding.
-- The resulting `NodeDelta.telemetryFactsAdded` values pass through the discrete logging actions
+- The runner is the only producer of telemetry: it attributes each fact to the selected compiled
+  workflow's registry-validated four-character shortcode and emits runner lifecycle facts without
+  performing I/O. No action and no `NodeDelta` carries a fact.
+- The emitted `WorkflowTelemetryFact` values pass through the discrete logging actions
   described in Section 13.9. Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet
   implemented), those actions become the steps of a feature-logging engine routine, once its
   logging preconditions hold.

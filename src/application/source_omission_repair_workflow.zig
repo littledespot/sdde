@@ -46,7 +46,7 @@ fn parsed(view: *const data.View) operations.Error!@import("../domain/reference_
 const phase_optional = &@import("../domain/specification_generation_phase.zig").optional;
 pub const Authorize = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .parsed_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review },
+        .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .parsed_reference_reconciliation, .reference_passive_literals, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review },
         .optional = phase_optional,
         .produces = &.{.source_omission_repair},
     };
@@ -76,7 +76,7 @@ pub const Authorize = struct {
 };
 pub const BuildInput = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .parsed_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair, .packet_guidance },
+        .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .parsed_reference_reconciliation, .reference_passive_literals, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair, .packet_guidance },
         .optional = phase_optional,
         .produces = &.{.model_input_packet},
     };

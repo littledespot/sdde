@@ -253,7 +253,7 @@ ports for:
 
 - step order and every branch;
 - failure propagation with the exact public code;
-- cancellation and deadline between each pair of steps;
+- cancellation between each pair of steps;
 - cleanup on every path;
 - for logging, lock release on every path, one emergency line and idempotent finalization.
 

@@ -13,6 +13,15 @@ pub const Assignment = struct {
     model_visible_input_id: provider.ModelVisibleInputId,
     /// Which configured temperature this operation sends (ADR 0039).
     sampling: @import("model_controls.zig").Sampling,
+
+    /// The triple a request carries; every record, lease and invocation check compares it whole.
+    pub fn of(request: *const provider.IdentifiedProviderNeutralModelRequest) Assignment {
+        return .{ .binding_id = request.binding_id, .model_visible_input_id = request.model_visible_input_id, .sampling = request.sampling };
+    }
+
+    pub fn eql(self: Assignment, other: Assignment) bool {
+        return self.binding_id.eql(other.binding_id) and self.model_visible_input_id.eql(other.model_visible_input_id) and self.sampling == other.sampling;
+    }
 };
 pub const Invocation = struct {
     deadline_monotonic_ms: u64,
@@ -58,9 +67,7 @@ pub const State = union(Status) {
 };
 pub const Record = struct {
     id: provider.ProviderOperationId,
-    binding_id: binding.ProviderModelBindingId,
-    model_visible_input_id: provider.ModelVisibleInputId,
-    sampling: @import("model_controls.zig").Sampling,
+    assignment: Assignment,
     revision: Revision,
     state: State,
 };
@@ -247,8 +254,8 @@ pub fn apply(current: *const Ledger, authority: Authority, transition: Transitio
     const node = try allocator.create(Node);
     var owned = next;
     if (transition.command == .assign_inference) {
-        owned.binding_id = try cloneBinding(allocator, next.binding_id);
-        owned.model_visible_input_id.bytes = try allocator.dupe(u8, next.model_visible_input_id.bytes);
+        owned.assignment.binding_id = try cloneBinding(allocator, next.assignment.binding_id);
+        owned.assignment.model_visible_input_id.bytes = try allocator.dupe(u8, next.assignment.model_visible_input_id.bytes);
     }
     node.* = .{ .previous = source.latest, .record = owned };
     snapshot.* = .{ .owner = source.owner, .epoch = source.epoch, .revision = .{ .value = next_revision }, .latest = node };
@@ -298,7 +305,7 @@ fn nextRecord(current: *const Ledger, authority: Authority, transition: Transiti
 }
 
 fn assignedRecord(id: provider.ProviderOperationId, facts: Assignment) Record {
-    return .{ .id = id, .binding_id = facts.binding_id, .model_visible_input_id = facts.model_visible_input_id, .sampling = facts.sampling, .revision = .{ .value = 1 }, .state = .assigned };
+    return .{ .id = id, .assignment = facts, .revision = .{ .value = 1 }, .state = .assigned };
 }
 
 fn terminalFact(record: Record, terminal: Terminal) ValidationError!TerminalFact {

@@ -28,7 +28,7 @@ pub const Assign = struct {
         const prepared = request.prepared().?;
         const attempt = accounting.readAttempt(&input.step.data) catch |operation_error| return operation_error;
         const facts = input.step.provider_operation orelse return error.ProviderOperationFactsMissing;
-        const assignment: lifecycle.Assignment = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id, .sampling = prepared.sampling };
+        const assignment: lifecycle.Assignment = .of(prepared);
         const delta = self.action.execute(facts.ledger, facts.authority, facts.ledger.revision(), .{
             .model_request_id = request.id(),
             .model_attempt_ordinal = attempt.ordinal(),

@@ -28,8 +28,8 @@ const schema_compiler_port = @import("../ports/model_result_schema_compiler.zig"
 // engine configuration, validates the logging policy and the configured roots, builds the root
 // registry, captures and validates the workflow authority, and builds the workflow registry. It is
 // not a pipeline node and no workflow can select it. Public error codes are unchanged: every
-// failure of a step, including allocation failure and deadline exhaustion, maps to that step's
-// fixed code, and explicit cancellation stays distinct. It acquires no feature transaction lock.
+// failure of a step, including allocation failure and, for a step whose adapter owns a clock,
+// deadline exhaustion, maps to that step's fixed code, and explicit cancellation stays distinct. It acquires no feature transaction lock.
 
 /// The closed set of steps, in execution order. A failure or a stop at a checkpoint records the
 /// step it belongs to in the caller's `Diagnostic`.
@@ -286,13 +286,11 @@ fn failed(diagnostic: *Diagnostic, step: Step) Outcome {
     return .{ .failed = code(step) };
 }
 
-/// Stops on cancellation, and on deadline exhaustion with `step`'s code: the step the checkpoint
-/// follows, or the first step for the opening checkpoint.
+/// Stops on cancellation: the step the checkpoint follows, or the first step for the opening checkpoint.
 fn checkpoint(runtime: pipeline.NodeRuntime, diagnostic: *Diagnostic, step: Step) ?Outcome {
     return switch (runtime.status()) {
         .active => null,
         .cancelled => stopped(diagnostic, step, .cancelled),
-        .deadline_exhausted => stopped(diagnostic, step, .{ .failed = code(step) }),
     };
 }
 

@@ -105,8 +105,6 @@ Every activated run writes beneath the spec being run, never into the editable s
 - These collection roots are fixed entries in the exact `WorkflowArtifactRegistry`; the engine
   renders the binding tuple to one registered portable path token, so no user/model/config path
   chooses a child.
-- The binding layer prevents a same-run policy transition's ordinal-one successor segment from
-  colliding with the historical binding.
 - They use a separate append-only workflow access class and are excluded from `spec.md`,
   generated views, workflow output-set membership, repository/reference discovery, model
   context, unexpected-project-change detection, and default artifact export.
@@ -228,10 +226,8 @@ Every activated run writes beneath the spec being run, never into the editable s
   row before accepting an event/prompt row.
 - Before overflow the adapter fsyncs/closes the current segment with its `segment_trailer` row
   and creates the next zero-padded binding-local ordinal only while the total number of segments
-  across **all** bindings for `(featureId, runId, stream)` remains within
-  `rotation.maxSegments`.
-- Thus a policy transition cannot reset the lifetime cap; retention cannot make room and
-  identities/ordinals are never reused within a binding.
+  for `(featureId, runId, stream)` remains within `rotation.maxSegments`.
+- Thus retention cannot make room and identities/ordinals are never reused within a binding.
 - If the active segment cannot fit the record at the cap, `EvaluateFeatureLogRotationNeedAction`
   returns `LOG_SEGMENT_LIMIT_EXHAUSTED`; no segment identity or rotation authorization is
   created, and the sink follows the ordinary fail-closed logging-failure flow before any next

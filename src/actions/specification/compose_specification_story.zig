@@ -5,7 +5,7 @@ const session = @import("../../domain/specification_session.zig");
 const story = @import("../../domain/specification_story.zig");
 const binding = @import("../../domain/specification_source_binding.zig");
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "compose-specification-story", .kind = .action, .requires = &.{ .specification_generation_session, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain }, .produces = &.{}, .replaces = &.{.specification_generation_session}, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "compose-specification-story", .kind = .action, .requires = &.{ .specification_generation_session, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals }, .produces = &.{}, .replaces = &.{.specification_generation_session}, .side_effect = .none };
     validator: @import("../../domain/typed_text.zig").Validator,
     /// ADR 0047: compose the story, validate it as any unit, then admit and append it.
     /// A story that fails unit validation blocks with its issue; it is never repaired.

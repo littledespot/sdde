@@ -20,8 +20,14 @@ const model_provider_bootstrap = @import("model_provider_bootstrap.zig");
 const engine_invocation = @import("engine_invocation.zig");
 const workflow_operation_registry = @import("../ports/workflow_operation_registry.zig");
 
+/// The operator's interrupt as the run's cancellation source. The CLI and the E2E harness install it around a run
+/// and pass its status handle as the runtime control.
+pub const Interrupt = @import("../adapters/system/interrupt_source.zig").Interrupt;
+
 pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) !run_outcome.Report {
-    return reportInvocation(io, allocator, .cwd(), arguments, .{}, environment);
+    var interrupt = Interrupt.install();
+    defer interrupt.restore();
+    return reportInvocation(io, allocator, .cwd(), arguments, interrupt.runtime(), environment);
 }
 
 /// Owns production adapters, their bindings and bootstrap lifetimes. Initialize

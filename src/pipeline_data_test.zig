@@ -6,10 +6,10 @@ const envelope_module = @import("application/pipeline_envelope.zig");
 
 const Context = struct { text: []const u8, attempts: u32 };
 const context_schema = values.schema(.workflow_invocation, Context, 1, 256);
-const count_schema = values.schema(.canonical_log_level, u32, 1, 32);
+const count_schema = values.schema(.principle_registry, u32, 1, 32);
 const schemas = [_]data.Schema{ context_schema, count_schema };
 const context_index = @intFromEnum(pipeline.DataKey.workflow_invocation);
-const count_index = @intFromEnum(pipeline.DataKey.canonical_log_level);
+const count_index = @intFromEnum(pipeline.DataKey.principle_registry);
 const produce: pipeline.NodeContract = .{
     .id = "test.context",
     .kind = .action,
@@ -25,7 +25,7 @@ const consume: pipeline.NodeContract = .{
     .side_effect = .none,
 };
 
-test "workflow information placement is idempotent isolated and cannot revive historical authority" {
+test "workflow information is isolated, recorded once per occurrence and cannot revive historical authority" {
     const recorded = context_schema.recorded();
     var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{recorded});
     defer envelope.deinit();
@@ -41,42 +41,34 @@ test "workflow information placement is idempotent isolated and cannot revive hi
     try envelope.applyOccurrence(occurrence, produce, &delta, .ok);
     const original = envelope.records.items[0];
     const generation = envelope.generation;
-    for (0..3) |_| {
-        const placed = try envelope.place(occurrence, original.value, original.origin);
-        try std.testing.expect(placed.already_present == original);
-    }
-    try std.testing.expectEqual(@as(usize, 1), envelope.records.items.len);
-    try std.testing.expectEqual(generation, envelope.generation);
-    try std.testing.expectError(error.InvalidInformationOccurrence, other.place(occurrence, original.value, original.origin));
-    try std.testing.expectEqual(@as(usize, 0), other.records.items.len);
-    var wrong_origin = original.origin;
-    wrong_origin.outcome = .failed;
-    try std.testing.expectError(error.InformationConflict, envelope.place(occurrence, original.value, wrong_origin));
-    wrong_origin = original.origin;
-    wrong_origin.lineage[context_index] = 99;
-    try std.testing.expectError(error.InformationConflict, envelope.place(occurrence, original.value, wrong_origin));
-    const conflicting = try values.create(std.testing.allocator, recorded, Context, .{ .text = "different", .attempts = 1 });
-    defer values.destroy(conflicting);
-    try std.testing.expectError(error.InformationConflict, envelope.place(occurrence, conflicting, original.origin));
-    const wrong_schema = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "source meaning", .attempts = 1 });
-    defer values.destroy(wrong_schema);
-    try std.testing.expectError(error.DataSchemaMismatch, envelope.place(occurrence, wrong_schema, original.origin));
-
     var replace = produce;
     replace.produces = &.{};
     replace.replaces = &.{recorded.key};
+    // Another envelope's scope records nothing.
+    var foreign_delta: pipeline.NodeDelta = .{};
+    defer other.discard(&foreign_delta);
+    foreign_delta.data_writes[context_index] = try values.create(std.testing.allocator, recorded, Context, .{ .text = "source meaning", .attempts = 1 });
+    try std.testing.expectError(error.InvalidInformationOccurrence, other.applyOccurrence(occurrence, produce, &foreign_delta, .ok));
+    try std.testing.expectEqual(@as(usize, 0), other.records.items.len);
+    // A second recording of one occurrence and key conflicts, whatever its value, and changes nothing.
+    delta.data_replacements[context_index] = try values.create(std.testing.allocator, recorded, Context, .{ .text = "different", .attempts = 1 });
+    try std.testing.expectError(error.InformationConflict, envelope.applyOccurrence(occurrence, replace, &delta, .ok));
+    try std.testing.expectEqual(@as(usize, 1), envelope.records.items.len);
+    try std.testing.expectEqual(generation, envelope.generation);
+    envelope.discard(&delta);
+    // A value of another schema is not the key's recorded schema.
+    delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "source meaning", .attempts = 1 });
+    try std.testing.expectError(error.DataSchemaMismatch, envelope.applyOccurrence(occurrence, replace, &delta, .ok));
+    envelope.discard(&delta);
+
     delta.data_replacements[context_index] = try values.create(std.testing.allocator, recorded, Context, .{ .text = "source meaning", .attempts = 1 });
     try envelope.apply(replace, &delta, .ok);
     try std.testing.expectEqual(generation + 1, envelope.generation);
     try std.testing.expectEqual(@as(usize, 2), envelope.records.items.len);
-    const current = envelope.slots[context_index];
-    _ = try envelope.place(occurrence, original.value, original.origin);
-    try std.testing.expect(envelope.slots[context_index] == current);
     const restricted = try envelope.view(.{ .id = "unrelated", .kind = .action, .requires = &.{}, .produces = &.{}, .side_effect = .none });
     try std.testing.expect(!restricted.contains(recorded.key));
     var invalidate: pipeline.NodeDelta = .{ .data_invalidations = .initOne(recorded.key) };
     try envelope.apply(.{ .id = "retire", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{recorded.key}, .side_effect = .none }, &invalidate, .ok);
-    _ = try envelope.place(occurrence, original.value, original.origin);
     try std.testing.expectError(error.MissingRequiredData, envelope.view(consume));
     delta.data_writes[context_index] = original.value;
     try std.testing.expectError(error.AliasedDataValue, envelope.apply(produce, &delta, .ok));
@@ -94,7 +86,7 @@ test "one application shares origin metadata across outputs and releases it afte
     defer envelope.deinit();
     var delta: pipeline.NodeDelta = .{};
     defer envelope.discard(&delta);
-    const both: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .workflow_invocation, .canonical_log_level }, .side_effect = .none };
+    const both: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .workflow_invocation, .principle_registry }, .side_effect = .none };
     delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "first", .attempts = 1 });
     delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 7);
     try envelope.apply(both, &delta, .ok);
@@ -107,7 +99,7 @@ test "one application shares origin metadata across outputs and releases it afte
     try std.testing.expect(envelope.origins[count_index].? == shared);
     try std.testing.expectEqual(@as(u64, 1), envelope.origins[count_index].?.generation);
 
-    const replace: pipeline.NodeContract = .{ .id = "test.replace", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .replaces = &.{.canonical_log_level}, .side_effect = .none };
+    const replace: pipeline.NodeContract = .{ .id = "test.replace", .kind = .action, .requires = &.{.principle_registry}, .produces = &.{}, .replaces = &.{.principle_registry}, .side_effect = .none };
     delta.data_replacements[count_index] = try values.create(std.testing.allocator, count_schema, u32, 8);
     try envelope.apply(replace, &delta, .ok);
     try std.testing.expectEqual(@as(u64, 3), envelope.origins[count_index].?.generation);
@@ -128,7 +120,7 @@ test "multi-output application allocates one origin and abandons every failed pr
     try std.testing.expectEqual(before + 1, measured.alloc_index);
 }
 
-const multi_output: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .workflow_invocation, .canonical_log_level }, .side_effect = .none };
+const multi_output: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .workflow_invocation, .principle_registry }, .side_effect = .none };
 
 fn multiOutputAllocationCase(allocator: std.mem.Allocator) !void {
     var envelope = envelope_module.PipelineEnvelope.init(allocator, &schemas);
@@ -141,7 +133,7 @@ fn multiOutputAllocationCase(allocator: std.mem.Allocator) !void {
     try envelope.applyOccurrence(occurrence, multi_output, &delta, .ok);
 }
 
-test "retained information shares payload ownership and duplicate placement allocates nothing" {
+test "retained information shares payload ownership" {
     var live_bytes: [2]usize = undefined;
     for ([_]data.Schema{ context_schema, context_schema.recorded() }, 0..) |schema, index| {
         var measured = std.testing.FailingAllocator.init(std.testing.allocator, .{});
@@ -156,10 +148,6 @@ test "retained information shares payload ownership and duplicate placement allo
             if (schema.history == .execution) {
                 const record = envelope.records.items[0];
                 try std.testing.expect(record.value == envelope.slots[context_index]);
-                const allocated = measured.allocated_bytes;
-                measured.fail_index = measured.alloc_index;
-                _ = try envelope.place(record.occurrence, record.value, record.origin);
-                try std.testing.expectEqual(allocated, measured.allocated_bytes);
             }
         }
         try std.testing.expectEqual(measured.allocated_bytes, measured.freed_bytes);
@@ -180,8 +168,6 @@ fn informationAllocationExercise(allocator: std.mem.Allocator) !void {
         try std.testing.expect(envelope.slots[context_index] == null);
         return err;
     };
-    const first = envelope.records.items[0];
-    try std.testing.expect((try envelope.place(first.occurrence, first.value, first.origin)).already_present == first);
 }
 
 test "shared gate checks source lineage and renewal after source and projection replacements" {
@@ -448,7 +434,7 @@ test "rejected replacements and schema mismatches preserve the complete old enve
         .id = "test.replace",
         .kind = .action,
         .requires = &.{.workflow_invocation},
-        .produces = &.{.canonical_log_level},
+        .produces = &.{.principle_registry},
         .replaces = &.{.workflow_invocation},
         .side_effect = .none,
     };
@@ -461,7 +447,7 @@ test "rejected replacements and schema mismatches preserve the complete old enve
     try std.testing.expectError(error.DataSchemaMismatch, envelope.apply(replace_and_write, &delta, .ok));
     const old = try envelope.view(consume);
     try std.testing.expectEqualStrings("old", (try values.read(&old, context_schema, Context)).text);
-    const require_count: pipeline.NodeContract = .{ .id = "test.count", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .side_effect = .none };
+    const require_count: pipeline.NodeContract = .{ .id = "test.count", .kind = .action, .requires = &.{.principle_registry}, .produces = &.{}, .side_effect = .none };
     try std.testing.expectError(error.MissingRequiredData, envelope.view(require_count));
     envelope.discard(&delta);
     delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "new", .attempts = 2 });
@@ -488,7 +474,7 @@ test "missing extra wrong-key and aliased values cannot satisfy a data contract"
     delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
     try std.testing.expectError(error.UndeclaredWrite, envelope.apply(produce, &delta, .ok));
     delta.data_writes[context_index] = delta.data_writes[count_index];
-    const both: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .canonical_log_level, .workflow_invocation }, .side_effect = .none };
+    const both: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .principle_registry, .workflow_invocation }, .side_effect = .none };
     try std.testing.expectError(error.AliasedDataValue, envelope.apply(both, &delta, .ok));
     envelope.discard(&delta); // Duplicate handle is destroyed once.
     delta.data_writes[context_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
@@ -514,7 +500,7 @@ test "value construction enforces native type version and allocation bounds" {
     try std.testing.expectError(error.DataValueLimitExceeded, values.create(std.testing.allocator, small, Context, .{ .text = "oversized", .attempts = 1 }));
 }
 
-test "unregistered schemas invalid telemetry and conflicting effects leave values unchanged" {
+test "unregistered schemas and conflicting effects leave values unchanged" {
     var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{});
     defer envelope.deinit();
     var delta: pipeline.NodeDelta = .{};
@@ -522,10 +508,6 @@ test "unregistered schemas invalid telemetry and conflicting effects leave value
     delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "retained", .attempts = 1 });
     try std.testing.expectError(error.UnregisteredDataSchema, envelope.apply(produce, &delta, .ok));
     envelope.schemas = &schemas;
-    delta.telemetry_fact_count = 255;
-    try std.testing.expectError(error.InvalidTelemetryCount, envelope.apply(produce, &delta, .ok));
-    try std.testing.expectError(error.MissingRequiredData, envelope.view(consume));
-    delta.telemetry_fact_count = 0;
     try envelope.apply(produce, &delta, .ok);
     delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "rejected", .attempts = 2 });
     delta.data_invalidations.insert(.workflow_invocation);

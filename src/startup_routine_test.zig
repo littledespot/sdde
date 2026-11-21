@@ -391,7 +391,7 @@ test "explicit cancellation from a port stays distinct from failure" {
     }
 }
 
-test "cancellation or deadline between any two steps stops with that step's report" {
+test "cancellation between any two steps stops with that step's report" {
     // The routine checks the runtime before the first step and after each step, so one more check
     // than there are steps; check k follows step k - 1, and check 0 belongs to the first step.
     for (0..step_count + 1) |check| {
@@ -403,15 +403,6 @@ test "cancellation or deadline between any two steps stops with that step's repo
             var outcome = world.run(std.testing.allocator, gate.runtime(), &diagnostic);
             defer outcome.deinit();
             try std.testing.expect(outcome == .cancelled);
-            try std.testing.expectEqual(@as(?startup.Step, expected), diagnostic.step);
-        }
-        {
-            var world: World = .{};
-            var gate: Gate = .{ .remaining = check, .stop = .deadline_exhausted };
-            var diagnostic: startup.Diagnostic = .{};
-            var outcome = world.run(std.testing.allocator, gate.runtime(), &diagnostic);
-            defer outcome.deinit();
-            try std.testing.expectEqual(startup.code(expected), outcome.failed);
             try std.testing.expectEqual(@as(?startup.Step, expected), diagnostic.step);
         }
     }

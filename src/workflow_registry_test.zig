@@ -452,7 +452,6 @@ const FakeSource = struct {
         const self: *FakeSource = @ptrCast(@alignCast(context));
         return switch (runtime.status()) {
             .cancelled => error.Cancelled,
-            .deadline_exhausted => error.DeadlineExhausted,
             .active => allocator.dupe(inventory.InventoryDescriptor, self.descriptors) catch error.InventoryInvalid,
         };
     }
@@ -467,7 +466,6 @@ const FakeSource = struct {
         self.capture_calls += 1;
         return switch (runtime.status()) {
             .cancelled => error.Cancelled,
-            .deadline_exhausted => error.DeadlineExhausted,
             .active => blk: {
                 const bytes = allocator.alloc(u8, @intCast(descriptor_value.size orelse return error.DefinitionReadError)) catch return error.DefinitionReadError;
                 @memset(bytes, 0);

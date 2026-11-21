@@ -96,7 +96,7 @@ and produces no `NodeDelta`.
   error. Zig catches misordering only where adjacent types differ, so this rule is what
   makes it hold.
 - **The entry function** calls steps in order and calls no port itself. It checks
-  cancellation and deadline between steps through the capability-free `NodeRuntime`. It
+  cancellation between steps through the capability-free `NodeRuntime`. It
   owns cleanup through `defer` and `errdefer` on every path.
 - **Branches.** A routine may branch on a typed fact its own steps produce, such as
   whether a provider is required, or whether a log event is dropped. It has no retry,
@@ -159,7 +159,7 @@ and produces no `NodeDelta`.
 
    This first conversion is measured before the next.
 2. **Feature logging, second.** That covers `feature_log_orchestrator.zig` and its
-   finalization, retention and policy-transition coordinators. It writes, locks and
+   finalization and retention coordinators. It writes, locks and
    prunes, so it converts only after its own preconditions are met:
    - **Baseline tests first.** Tests for cancellation under a lock, and for the number of
      emergency lines, exist and pass before conversion.
@@ -171,7 +171,10 @@ and produces no `NodeDelta`.
      (ADR 0018).
    - **Retention** keeps its five-step order, and pruning stays its only deletion path
      (ADR 0026).
-   - **Cancellation mapping.** The feature-log sink port carries `Cancelled`, and a log
+   - **Cancellation mapping** (user decision, 21 November 2026). The run's cancellation source is the operator's interrupt
+     (SIGINT), installed at the composition root and read through `NodeRuntime` at the run's
+     own boundaries and at each timer slice of a model request, never inside a sink call.
+     The feature-log sink port carries `Cancelled`, and a log
      outcome is `cancelled` beside `dropped`, `persisted` and `blocked`. A cancellation
      during a directory check, a segment read, creation, rotation, append, close, prune or
      any step under the lock stops the run as `cancelled`, never as a logging failure. It has
@@ -194,20 +197,19 @@ and produces no `NodeDelta`.
        between creating a segment and writing its header leaves a torn segment, which
        current-run recovery refuses, so that run's finalization fails and it ends `blocked`. It
        is the crash shape ADR 0026 names. Recovery does not rewrite a torn last segment of the
-       current run: no production code supplies a cancellation (SPEC01 §10 C28), and the repair
+       current run: the cancellation source is read only at boundaries and timer slices, never
+       inside a sink call, so a user interrupt does not produce the shape, and the repair
        would extend what recovery may do to a retained log file.
-   - **The policy-transition coordinator.** Prior-run crash finalization's authority is
-     [ADR 0026](0026-header-identity-log-retention.md)'s (amended 14 November 2026). The
-     same-run transition's authority is decided (user, 14 November 2026, approving the
-     recommendation): its successor is execution-local, as §9.4 keeps every changed candidate,
-     so no committed bootstrap authority, durable lineage or pointer commit precedes the
-     switch ([ADR 0009](0009-atomic-workflow-execution.md)). The validator's checks (same
-     feature and run, new binding and policy IDs, a transition-compatible policy) are the
-     whole authority for it. No production code switches policy mid-run today, and no text
-     says which event would produce a changed logging candidate during a run.
-   - **Logging-internal pipeline data.** The logging envelope and its compiler-locked
-     `DataKey`s (§6) are replaced by function-local values only in the logging change
-     itself.
+   - **No mid-run policy transition.** The run's feature log keeps one binding and policy from
+     activation to finalization. A policy change during a run has no producer: §9.4 keeps every
+     changed candidate for the next run, so no committed bootstrap authority, durable lineage
+     or pointer commit precedes a switch ([ADR 0009](0009-atomic-workflow-execution.md)). The
+     policy-transition coordinator, its child bindings, its validator and the finalization of a
+     historical stream were deleted with the action channel that no production code used.
+     Prior-run crash finalization's authority is [ADR 0026](0026-header-identity-log-retention.md)'s.
+   - **Logging-internal pipeline data.** The logging envelope's `DataKey`s (§6) are replaced
+     by function-local values only in the logging change itself. A key with no producer,
+     consumer or schema, left by a removed operation, is deleted when found, not with that change.
 
 Out of scope:
 
@@ -314,7 +316,7 @@ All offline, for each conversion:
   - step order;
   - every branch;
   - failure propagation with the exact public code;
-  - cancellation and deadline between each pair of steps;
+  - cancellation between each pair of steps;
   - cleanup on every path.
   For logging, also lock release on every path, exactly one emergency line, and
   finalization idempotence.

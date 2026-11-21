@@ -30,7 +30,7 @@ as complete. Checked phase facts retire resolved repair receipts in the same
 runner-applied delta; receipts owned by a later validator remain pending.
 The generic JSON composer remains structural; it receives no domain
 validation policy or hidden scheduler. Named definitions in one response schema
-own the phase shapes. Summary composition continues using that schema.
+own the phase shapes, and the summary request selects its `summary` definition natively.
 
 Signal selections reuse the existing execution-local repair occurrence IDs. They
 are distinct from final canonical signal IDs and stay with surviving groups after

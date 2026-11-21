@@ -786,11 +786,49 @@ const test_control: log_format.ControlRecord = .{
     .feature_id = .{ .bytes = "feature" },
 };
 
+/// A fixed sample of one field type of an event row.
+fn sample(comptime T: type) T {
+    return switch (T) {
+        telemetry.EventOutcome => .failed,
+        telemetry.Identifier => .{ .bytes = "test" },
+        telemetry.DiagnosticCode => .{ .bytes = "CODE" },
+        telemetry.RepairUnitKind => .authorized_unit,
+        u64 => 1,
+        i32 => 0,
+        else => @compileError("no sample for " ++ @typeName(T)),
+    };
+}
+
+/// The diagnostic code of a sample fact: the one given, else a fixed sample when the row requires one.
+fn sampleCode(comptime T: type, code: ?[]const u8) T {
+    const given: ?telemetry.DiagnosticCode = if (code) |text| telemetry.DiagnosticCode.validate(text).? else null;
+    return if (T == ?telemetry.DiagnosticCode) given else given orelse sample(telemetry.DiagnosticCode);
+}
+
+/// A fact of the event with every field its row requires set to a fixed sample, and the given
+/// diagnostic code when its row carries one.
+fn sampleFact(event_type: telemetry.EventType, code: ?[]const u8) telemetry.TelemetryFact {
+    @setEvalBranchQuota(100_000);
+    switch (event_type) {
+        inline else => |event| {
+            const Payload = telemetry.Payload(event);
+            var payload: Payload = undefined;
+            inline for (@typeInfo(Payload).@"struct".fields) |named| {
+                @field(payload, named.name) = if (comptime std.mem.eql(u8, named.name, "diagnostic_code"))
+                    sampleCode(named.type, code)
+                else if (named.defaultValue()) |unset|
+                    unset
+                else
+                    sample(named.type);
+            }
+            return @unionInit(telemetry.TelemetryFact, @tagName(event), payload);
+        },
+    }
+}
+
 /// One event row as the feature log writer serializes it, with the fields its event
 /// type requires.
 fn eventRow(a: std.mem.Allocator, sequence: u64, record: Logged) ![]const u8 {
-    const required = @import("../../../src/domain/log_event_registry.zig").eventDefinition(record.event_type).required;
-    const id: telemetry.Identifier = .{ .bytes = "test" };
     var event_id: [32]u8 = undefined;
     return log_format.serializeEvent(a, .{
         .log_policy_id = test_control.log_policy_id,
@@ -803,13 +841,7 @@ fn eventRow(a: std.mem.Allocator, sequence: u64, record: Logged) ![]const u8 {
         .monotonic_offset = record.offset,
         .run_id = test_control.run_id,
         .feature_id = test_control.feature_id,
-        .fact = .{ .event_type = record.event_type, .fields = .{
-            .outcome = if (required.contains(.outcome)) .failed else null,
-            .diagnostic_code = if (record.code) |code| telemetry.DiagnosticCode.validate(code).? else null,
-            .validator_id = if (required.contains(.validator_id)) id else null,
-            .model_route_id = if (required.contains(.model_route_id)) id else null,
-            .model_profile_id = if (required.contains(.model_profile_id)) id else null,
-        } },
+        .fact = sampleFact(record.event_type, record.code),
     });
 }
 

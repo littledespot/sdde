@@ -121,11 +121,6 @@ adapter builds the policy ID (`LOGPOL-` and the SHA-256 of the compiled policy),
 registered action builds them, and nothing recomputes the policy ID. Feature-log operations are
 in [13.9](13-09-logging.md).
 
-## `ActivateFeatureLogPolicyTransitionAction`
-
-Proposed, no code: swap the run-local logging observer to the validated successor sink once
-every enabled stream is safe ([§14.10](../14-orchestration.md#1410-featurelogpolicytransitionorchestrator)).
-
 ## `BuildHistoricalFeatureLogStreamFinalizationEvidenceAction`
 
 Proposed, no code (deferred by [ADR 0009](../../decisions/0009-atomic-workflow-execution.md)):

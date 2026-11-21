@@ -13,6 +13,8 @@ pub fn variable(family: key.Family) []const u8 {
 // provider preparation. No fallback variables, default credential chain, or
 // environment mutation.
 pub fn read(allocator: std.mem.Allocator, environment: *const std.process.Environ.Map, family: key.Family) key.Material {
-    const snapshot = key.Snapshot.capture(allocator, environment.get(variable(family))) catch return .allocation_failed;
-    return if (snapshot) |value| .{ .ready = value } else .unavailable;
+    const raw = environment.get(variable(family));
+    const snapshot = key.Snapshot.capture(allocator, raw) catch return .allocation_failed;
+    if (snapshot) |value| return .{ .ready = value };
+    return if (key.defect(raw).? == .malformed) .malformed else .unavailable;
 }

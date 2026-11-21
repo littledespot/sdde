@@ -278,8 +278,7 @@ test "capture publishes its bound compiled guidance as owned run data and reject
     const contract = flow.Capture.Action.contract;
     var step: compilation.CompiledStep = .{ .id = .{ .bytes = "guidance" }, .operation_id = .{ .bytes = contract.id }, .parameters = &.{.{ .id = .{ .bytes = "guidance" }, .value = .{ .resource = .{ .bytes = "packet-guidance" } } }}, .requires = contract.requires, .produces = contract.produces, .replaces = contract.replaces, .invalidates = contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
     var node: flow.Capture = .{ .allocator = std.testing.allocator };
-    const log: pipeline.WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("GUID"));
-    const captured = try flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } });
+    const captured = try flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null } });
     try std.testing.expectEqual(.ok, captured.outcome);
     const value = captured.delta.data_writes[@intFromEnum(flow.schema.key)].?;
     defer values.destroy(value);
@@ -287,9 +286,9 @@ test "capture publishes its bound compiled guidance as owned run data and reject
     try std.testing.expectEqualDeep(compiled.guidance, published.*);
     try std.testing.expect(published.summary_purpose.ptr != compiled.guidance.summary_purpose.ptr);
     step.parameters = &.{.{ .id = .{ .bytes = "guidance" }, .value = .{ .resource = .{ .bytes = "prompt" } } }};
-    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } }));
+    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null } }));
     step.parameters = &.{};
-    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } }));
+    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null } }));
 }
 
 test "the compiler binds packet guidance only through its capture step and checked resource" {

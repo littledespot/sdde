@@ -2,8 +2,6 @@ const log_policy = @import("../domain/log_policy.zig");
 const feature_log_bindings = @import("feature_log_child_bindings.zig");
 const finalization = @import("feature_log_finalization_coordinator.zig");
 const lifecycle_module = @import("feature_log_runtime_lifecycle.zig");
-const transition_coordinator = @import("feature_log_policy_transition_coordinator.zig");
-const transition_bindings = @import("feature_log_policy_transition_child_bindings.zig");
 const retention = @import("feature_log_retention_coordinator.zig");
 const retention_bindings = @import("feature_log_retention_child_bindings.zig");
 const finalization_bindings = @import("feature_log_finalization_child_bindings.zig");
@@ -49,15 +47,8 @@ pub const LogService = struct {
         self: *LogService,
         active: feature_log_bindings.ChildBindings,
         shortcode: telemetry.WorkflowShortcode,
-    ) transition_coordinator.Outcome {
+    ) lifecycle_module.Activation {
         return self.lifecycle.activate(active, shortcode);
-    }
-
-    pub fn transition(
-        self: *LogService,
-        children: transition_bindings.ChildBindings,
-    ) transition_coordinator.Outcome {
-        return self.lifecycle.transition(children);
     }
 
     pub fn finalizeActive(
@@ -65,13 +56,6 @@ pub const LogService = struct {
         children: finalization_bindings.ChildBindings,
     ) finalization.Outcome {
         return self.lifecycle.finalizeActive(children);
-    }
-
-    pub fn finalizeHistorical(
-        self: *LogService,
-        children: finalization_bindings.ChildBindings,
-    ) finalization.Outcome {
-        return self.lifecycle.finalizeHistorical(children);
     }
 
     pub fn retainHistorical(

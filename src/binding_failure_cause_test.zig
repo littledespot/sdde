@@ -36,7 +36,7 @@ const bare_step: compilation.CompiledStep = .{
 };
 
 fn stepInput(step: *const compilation.CompiledStep, view: data.View, resources: []const compilation.CompiledResource) operations.Input {
-    return .{ .step = .{ .data = view, .step = step, .resources = resources, .model_binding = null, .log = .init(.{ .bytes = "TEST".* }) } };
+    return .{ .step = .{ .data = view, .step = step, .resources = resources, .model_binding = null } };
 }
 
 const Row = struct { cause: []const u8, run: *const fn () anyerror!void };

@@ -58,7 +58,6 @@ pub const Port = struct {
         const now: Error!u64 = switch (self.runtime.status()) {
             .active => self.clock.now(),
             .cancelled => error.Cancelled,
-            .deadline_exhausted => error.AuthorizationExpired,
         };
         return self.consume_fn(self.context, reference, provider_binding, request, invoked, now);
     }

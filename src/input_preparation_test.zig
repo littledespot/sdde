@@ -343,7 +343,6 @@ fn invokeBinding(runner: *runners.PrepareInputs, data: View, runtime: pipeline.N
         .step = &step,
         .resources = &.{},
         .model_binding = null,
-        .log = pipeline.WorkflowLog.init(.{ .bytes = "TEST".* }),
         .runtime = runtime,
         .stage_step = slot,
     } });

@@ -331,7 +331,7 @@ test "loads exact preset inheritance and publishes the safety-valid toolchain" {
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: [app@1.0.0]\npolicies: []\n" });
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/presets/base.toolchain-preset.yaml", .data = "schema: toolchain-preset/v1\npackage: base@1.0.0\nlayer: language\nextends: []\npolicies: [project.zig@1]\n" });
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/presets/app.toolchain-preset.yaml", .data = "schema: toolchain-preset/v1\npackage: app@1.0.0\nlayer: framework\nextends: [base@1.0.0]\npolicies: []\n" });
-    try expectToolchainRun(io, project_root.dir, .ok, &.{ "base@1.0.0", "app@1.0.0" }, 2);
+    try expectToolchainRun(io, project_root.dir, .ok, 2);
 }
 
 test "unrelated workflows do not load toolchain documents even with a toolchain workflow installed" {
@@ -393,7 +393,7 @@ test "one invalid unselected preset blocks complete toolchain publication" {
         .sub_path = ".sdd/presets/invalid.toolchain-preset.yaml",
         .data = "schema: toolchain-preset/v1\npackage: unused@1.0.0\nlayer: runtime\nextends: []\npolicies: []\nunknown: rejected\n",
     });
-    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
+    try expectToolchainRun(io, project_root.dir, .failed, 0);
 }
 
 test "one unselected preset with an unresolved dependency blocks the complete registry" {
@@ -407,7 +407,7 @@ test "one unselected preset with an unresolved dependency blocks the complete re
         .sub_path = ".sdd/presets/unused.toolchain-preset.yaml",
         .data = "schema: toolchain-preset/v1\npackage: unused@1.0.0\nlayer: runtime\nextends: [missing@1.0.0]\npolicies: []\n",
     });
-    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
+    try expectToolchainRun(io, project_root.dir, .failed, 0);
 }
 
 test "toolchain loading rejects alternate project filenames and unsupported preset siblings" {
@@ -434,7 +434,7 @@ test "toolchain loading rejects alternate project filenames and unsupported pres
                 .data = "schema: project-toolchain/v1\npresets: []\npolicies: []\n",
             });
         }
-        try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
+        try expectToolchainRun(io, project_root.dir, .failed, 0);
     }
 }
 
@@ -456,7 +456,7 @@ test "toolchain loading rejects a linked exact project document" {
         ".sdd/principles/toolchain.yaml",
         .{},
     );
-    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
+    try expectToolchainRun(io, project_root.dir, .failed, 0);
 }
 
 const valid_workflow =
@@ -473,11 +473,11 @@ const valid_workflow =
     \\    on: { ok: end.ok }
 ;
 
-fn expectToolchainRun(io: std.Io, project_root: std.Io.Dir, expected: workflow.OutcomeTag, expected_packages: []const []const u8, expected_policies: usize) !void {
-    try std.testing.expectEqual(expected, try inspectToolchainRun(io, project_root, .{}, expected_packages, expected_policies));
+fn expectToolchainRun(io: std.Io, project_root: std.Io.Dir, expected: workflow.OutcomeTag, expected_policies: usize) !void {
+    try std.testing.expectEqual(expected, try inspectToolchainRun(io, project_root, .{}, expected_policies));
 }
 
-fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.NodeRuntime, expected_packages: []const []const u8, expected_policies: usize) !workflow.OutcomeTag {
+fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.NodeRuntime, expected_policies: usize) !workflow.OutcomeTag {
     try project_root.writeFile(io, .{ .sub_path = ".sdd/workflows/toolchain.workflow.yaml", .data = @embedFile("../../src/test_fixtures/toolchain.workflow.yaml") });
     var source = toolchain_authority_source.Adapter.init(io, project_root);
     var parser: toolchain_documents.Adapter = .{};
@@ -506,8 +506,6 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     }
     const view = try invocation.pipeline_runner.?.envelope.view(read_contract);
     const valid = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/toolchain_workflow_values.zig").valid, @import("../../src/domain/toolchain_safety.zig").ValidToolchain);
-    try std.testing.expectEqual(expected_packages.len, valid.packages().len);
-    for (expected_packages, valid.packages()) |expected_package, package| try std.testing.expectEqualStrings(expected_package, package);
     try std.testing.expectEqual(expected_policies, valid.policies().len);
     try std.testing.expectEqualStrings("core.safety@1", valid.policies()[0].id);
     return result;
@@ -522,7 +520,7 @@ test "selected toolchain cancellation stops at every runtime boundary without pu
     try writeValidToolchain(io, project.dir);
     for (0..256) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
-        const result = try inspectToolchainRun(io, project.dir, control.runtime(), &.{}, 1);
+        const result = try inspectToolchainRun(io, project.dir, control.runtime(), 1);
         if (result == .ok) {
             try std.testing.expect(checks > 9);
             return;
@@ -1459,7 +1457,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     const brief_start = global_start + 4;
     const applicability_start = brief_start + 4;
     const applicability_cases = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").Applicability);
-    const timing = @import("../../src/test_fixtures/scenario_timing.zig");
+    // The step of a scenario a failing assertion names.
+    const Phase = enum { fixture, bootstrap, runner, execution, assertions, cleanup };
     const membership_start = applicability_start + applicability_cases.len * 2;
     const preservation_start = membership_start + 8;
     // ADR 0038 Decision 7: an edge case's outcome link is native, a model's closed choice, or a
@@ -1495,7 +1494,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     // A no-feature-claim answer whose reason the text validation rejects takes the reference-text repair
     // route of `extract-references`, and its repaired answer validates. It follows the restatement runs.
     const text_repair_index = story_restatement_start + story_restatement_kinds.len;
-    var costs: [text_repair_index + 1]?timing.Sample = @splat(null);
+    const scenario_count = text_repair_index + 1;
     const case_range_begin: usize = switch (workflow_cases) {
         .existing => 0,
         .source_preservation => preservation_start,
@@ -1510,16 +1509,14 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .reuse_regeneration => preservation_start + 2,
         .scenario_links => scenario_repair_start,
         .scenario_repair => scenario_stop_start,
-        .scenario_stops => costs.len,
+        .scenario_stops => scenario_count,
     };
-    defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
     // Scripted corrections of a value outside an integer enumeration that the driver checked.
     var choice_corrections: usize = 0;
     for (case_range_begin..case_range_end) |scenario| {
-        var cost = timing.Timer.start(io, &costs[scenario]);
-        defer cost.finish();
+        var phase: Phase = .fixture;
         var assertion_context: []const u8 = "setup";
-        errdefer |err| std.debug.print("specification-generation scenario {d} failed in {s}/{s}: {s}\n", .{ scenario, @tagName(cost.phase), assertion_context, @errorName(err) });
+        errdefer |err| std.debug.print("specification-generation scenario {d} failed in {s}/{s}: {s}\n", .{ scenario, @tagName(phase), assertion_context, @errorName(err) });
         const applicability = if (scenario >= applicability_start and scenario < membership_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
         const membership_scenario = scenario >= membership_start and scenario < preservation_start;
@@ -1663,9 +1660,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var reference_ids: @import("../../src/reference_evidence_test.zig").IdSource = .{};
         var native: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
         native.init(allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.port(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-        cost.enter(.bootstrap);
+        phase = .bootstrap;
         var boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry, null);
-        cost.enter(.runner);
+        phase = .runner;
         defer boot.deinit();
         var feature_outputs: @import("../../src/adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
         native.publish_output.action.writer = feature_outputs.port();
@@ -1692,7 +1689,6 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var services = try @import("../../src/model_request_workflow_test.zig").providerServices(allocator, null, &.{ "spec_generation", "repair" }, false);
         defer services.deinit();
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
-        if (scenario == 0) try verifyAuthoringDiagnosticParent(io, allocator, project.dir, graph, boot.ready.roots.registry().llmProviderConfig());
         var runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services, boot.ready.config.config().workflowTokenBudget);
         defer runner.deinit();
         runner.publication_finalizer = logging.finalizer();
@@ -1771,7 +1767,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             if (summary_first) driver.summary_sequence = .recover else driver.support_fault = .foreign_source_single;
             driver.brief_text = if (summary_first) .{ "Display the greeting and current UTC date and time on startup.", "Show the current UTC date and time." } else .{ "Confirm loan renewal and display the return deadline.", "Show the new return deadline." };
         }
-        cost.enter(.execution);
+        phase = .execution;
         if (link_scenario) driver.edge_cases = switch (scenario - link_start) {
             0 => .native,
             1 => .chosen,
@@ -1797,7 +1793,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         defer trace.deinit();
         driver.trace = &trace;
         const result = try driver.run();
-        cost.enter(.assertions);
+        phase = .assertions;
         assertion_context = "request-projection";
         try std.testing.expectEqual(fake.invocation_call_count, recorder.recorded);
         assertion_context = "step-trace";
@@ -2317,7 +2313,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (scenario == 7) {
             const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?;
             try std.testing.expect(diagnostic == .coverage);
-            try std.testing.expectEqual(.no_independent_supported_target, diagnostic.coverage.blocked.?);
+            try std.testing.expectEqual(.no_independent_supported_target, diagnostic.coverage.blocked);
         }
         if (reconciliation_scenario) {
             const diagnostic = try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
@@ -2862,63 +2858,10 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             }
         } else if (expected != .needs_user) try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
         choice_corrections += driver.choice_corrections;
-        cost.passed();
+        phase = .cleanup;
     }
     // The main matrix scripts such corrections, so the driver's check of each one was not vacuous.
     if (workflow_cases == .existing) try std.testing.expect(choice_corrections > 0);
-}
-
-// Offline authorization preflight for the Phase 5 diagnostic launcher. Resolve
-// the authentic extraction-parent preparation through the current compiled
-// graph and production provider bootstrap; no request is dispatched.
-fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, graph: *const workflow_compilation.CompiledWorkflow, provider_path: *const bootstrap_root_registry.LLMProviderConfigCapability) !void {
-    var arena: std.heap.ArenaAllocator = .init(allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const repository = std.Io.Dir.cwd();
-    const config_bytes = try repository.readFileAlloc(io, "test/e2e/wf-001-hello-world/.sddtoolkit.json", a, .limited(1_048_576));
-    var configuration = try @import("../../src/domain/engine_config_decode.zig").decode(a, config_bytes);
-    defer configuration.deinit();
-    const provider_bytes = try repository.readFileAlloc(io, "test/e2e/config/.sddproviders.json", a, .limited(1_048_576));
-    // This integration fixture explicitly configures this provider path; the
-    // production bootstrap below still opens it through the validated capability.
-    try project.writeFile(io, .{ .sub_path = ".sddproviders.json", .data = provider_bytes });
-    var assembly = model_provider_bootstrap.Assembly.init(io, a, project, .{}, &@import("../../src/composition/provider_model_contracts.zig").registry);
-    const selected: workflow_execution.SelectedWorkflow = .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph };
-    var outcome = assembly.bind().invoke(&selected, &configuration.config.models, configuration.config.temperatures(), provider_path);
-    defer outcome.deinit();
-    try std.testing.expect(outcome == .ready);
-    const step = for (graph.authority.steps) |*current| {
-        if (std.mem.eql(u8, current.id.bytes, "g7-extract-content")) break current;
-    } else return error.MissingDiagnosticParentStep;
-    try std.testing.expectEqualStrings("request-model", step.operation_id.bytes);
-    try std.testing.expectEqualStrings("spec_generation", step.model.?.slot.bytes);
-    const binding = try (@import("../../src/actions/provider/resolve_provider_model_binding.zig").Action{}).execute(graph, step.id, outcome.ready.registry(), outcome.ready.allowlist());
-    const configured = configuration.config.models.slots.map.get(binding.slot_id.bytes).?;
-    try std.testing.expectEqualStrings(configured.provider, binding.registry_entry.provider.bytes);
-    try std.testing.expectEqualStrings(configured.model, binding.registry_entry.model.bytes);
-    try std.testing.expect(@import("../../src/domain/request_debugger.zig").sameOptional(configured.reasoningEffort, binding.reasoning_effort));
-    try std.testing.expectEqualDeep(binding.registry_entry.capabilities.inferenceControls(configuration.config.temperatures()), binding.controls);
-    var digest: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(graph.source.?.content, &digest, .{});
-    const observed = .{
-        .version = "authoring-diagnostic-parent-preflight/v1",
-        .workflow = graph.authority.workflow_id.bytes,
-        .workflow_version = graph.authority.workflow_version,
-        .workflow_sha256 = std.fmt.bytesToHex(digest, .lower),
-        .request_step = step.id.bytes,
-        .operation = step.operation_id.bytes,
-        .slot = binding.slot_id.bytes,
-        .provider = binding.registry_entry.provider.bytes,
-        .model = binding.registry_entry.model.bytes,
-        .provider_config = binding.registry_entry.config,
-        .reasoning_effort = binding.reasoning_effort,
-        .response_mode = binding.registry_entry.responseMode(),
-        .controls = binding.controls,
-        .dispatched_calls = @as(u32, 0),
-    };
-    try repository.createDirPath(io, ".zig-cache/authoring-associations");
-    try repository.writeFile(io, .{ .sub_path = ".zig-cache/authoring-associations/parent-preflight.json", .data = try std.json.Stringify.valueAlloc(a, observed, .{ .whitespace = .indent_2 }) });
 }
 
 /// ADR 0038 Decision 3: each group with a scenario slot holds one acceptance criterion for each
@@ -4014,13 +3957,12 @@ test "feature log storage opens only an activated layout from present artifact a
     ) == .ok);
     const persisted = boot.ready.logs.barrier().process(.{
         .workflow_shortcode = shortcode,
-        .fact = .{ .event_type = .run_started },
+        .fact = .{ .run_started = .{} },
     });
     try std.testing.expect(persisted == .persisted);
     try project_root.dir.access(io, "specs/F0002/logs/events/RUN-1/LOGBIND-1/0001.log", .{});
     var finalization_execution: feature_log_finalization_runner.Runner = .{
         .target = active_feature_log_runtime.runner(active_runtime),
-        .mode = .active,
         .shortcode = shortcode,
     };
     try std.testing.expect(boot.ready.logs.finalizeActive(finalization_execution.childBindings()) == .ok);
@@ -4118,34 +4060,6 @@ test "one unsupported workflow sibling blocks the complete registry" {
     defer outcome.deinit();
     try std.testing.expectEqual(
         @import("../../src/domain/bootstrap_error.zig").PublicError.WORKFLOW_AUTHORITY_INVENTORY_INVALID,
-        outcome.failed,
-    );
-}
-
-test "deadline exhaustion during root validation fails without publishing services" {
-    const io = std.testing.io;
-    var project_root = std.testing.tmpDir(.{});
-    defer project_root.cleanup();
-    try project_root.dir.writeFile(io, .{
-        .sub_path = ".sddtoolkit.json",
-        .data = valid_config,
-    });
-    try project_root.dir.createDirPath(io, ".sdd/workflows");
-
-    var control: RuntimeAfterObservations = .{
-        .active_observations_remaining = 10,
-        .terminal = .deadline_exhausted,
-    };
-    var outcome = runInProjectWithRuntime(
-        io,
-        std.testing.allocator,
-        project_root.dir,
-        control.runtime(),
-    );
-    defer outcome.deinit();
-
-    try std.testing.expectEqual(
-        @import("../../src/domain/bootstrap_error.zig").PublicError.BOOTSTRAP_ROOT_RESOLUTION_ERROR,
         outcome.failed,
     );
 }

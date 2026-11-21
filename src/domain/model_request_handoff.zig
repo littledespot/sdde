@@ -8,7 +8,6 @@ const packets = @import("model_input_packet.zig");
 const composition = @import("json_composition_runtime.zig");
 const retry = @import("model_protocol_retry.zig");
 pub const Input = union(enum) { resource: compilation.CompiledResource, packet: *const packets.Packet };
-pub const ResultSelection = enum { resource, input };
 pub const ContentBuffer = [3]provider.ModelVisibleContent;
 
 /// One immutable association, carried by typed pipeline keys. Canonical IDs are
@@ -190,7 +189,6 @@ pub const Selection = struct {
     result: compilation.CompiledResource,
     input: ?Input,
     protocol_prompt: ?compilation.CompiledResource,
-    result_selection: ResultSelection,
     composition: ?composition.Binding = null,
 
     pub fn unit(self: Selection) identity.ImmutableUnitOwnerId {
@@ -242,8 +240,10 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
     const result = selected.result;
     const input = selected.input;
     const protocol_prompt = selected.protocol_prompt;
-    const selection = selected.result_selection;
     const part_binding = selected.composition;
+    // The result the packet names is the one the request asks for. A static or absent input sends the whole
+    // resource, and a composition part carries its own schema.
+    const selects_definition = part_binding == null and input != null and input.? == .packet;
     if (selected.context) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (protocol_prompt) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (prompt.content != .prompt or result.content != .result_schema or
@@ -256,15 +256,15 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
     };
     var bound_result = result;
     if (part_binding) |part| {
-        if (selection != .resource or !part.valid() or result.content.result_schema != part.plan.resultSchema() or
+        if (!part.valid() or result.content.result_schema != part.plan.resultSchema() or
             !std.mem.eql(u8, result.id.bytes, part.plan.resultAlias().bytes) or
             !part.epoch.eql(identity.ledger(ledger_owner).stageRunEpochId())) return error.ModelRequestAssociationInvalid;
         const current = identity.ledger(ledger_owner);
         _ = identity.validateBinding(current, current.revision(), id, part.base.unit(), selected.binding.operation_id, part.base.purpose()) catch return error.ModelRequestAssociationInvalid;
     }
-    if (selection == .input) {
-        const packet = input orelse return error.ModelRequestAssociationInvalid;
-        if (packet != .packet or result.content != .result_schema) return error.ModelRequestAssociationInvalid;
+    if (selects_definition) {
+        const packet = input.?;
+        if (result.content != .result_schema) return error.ModelRequestAssociationInvalid;
         const definition_id = packet.packet.resultDefinition() orelse return error.ModelRequestAssociationInvalid;
         bound_result.content = .{ .result_schema = result.content.result_schema.select(definition_id) orelse return error.ModelRequestAssociationInvalid };
     }
@@ -293,7 +293,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .context = selected.context,
         .protocol_prompt = protocol_prompt,
         .result = bound_result,
-        .result_definition = if (selection == .input) input.?.packet.resultDefinition() else null,
+        .result_definition = if (selects_definition) input.?.packet.resultDefinition() else null,
         .input = input,
         .presented_input = presented,
         .composition = part_binding,

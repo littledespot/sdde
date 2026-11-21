@@ -23,7 +23,6 @@ pub const Action = struct {
     pub fn execute(self: Action, facts: preparation.Facts, slot: preparation.AllocatedSlot, runtime: pipeline.NodeRuntime) std.mem.Allocator.Error!Outcome {
         switch (runtime.status()) {
             .cancelled => return .cancelled,
-            .deadline_exhausted => return failure(facts.operation_id, .timeout),
             .active => {},
         }
         const observation = self.authorization.prepare(facts, slot.deposit) catch |err| switch (err) {
@@ -39,10 +38,10 @@ pub const Action = struct {
                 error.AuthorizationExpired => failure(facts.operation_id, .timeout),
                 error.AuthorizationDenied, error.ClockUnavailable => failure(facts.operation_id, .authorization_denied),
             },
-            .failed => |cause| failure(facts.operation_id, switch (cause) {
-                .authentication_failed => .authentication_failed,
-                .authorization_denied => .authorization_denied,
-            }),
+            .failed => |reason| switch (reason) {
+                .authentication_failed => |credential| credentialFailure(facts.operation_id, credential),
+                .authorization_denied => failure(facts.operation_id, .authorization_denied),
+            },
         };
     }
 };
@@ -55,4 +54,8 @@ fn prepared(slot: preparation.AllocatedSlot) preparation.Error!Outcome {
 
 fn failure(id: operation.ProviderOperationId, cause: operation.ProviderFailureCause) Outcome {
     return .{ .failed = .{ .operation_id = id, .cause = cause, .retry_class = .never, .delivery = .not_sent } };
+}
+
+fn credentialFailure(id: operation.ProviderOperationId, credential: operation.ProviderCredentialDiagnostic) Outcome {
+    return .{ .failed = .{ .operation_id = id, .cause = .authentication_failed, .retry_class = .never, .delivery = .not_sent, .credential = credential } };
 }

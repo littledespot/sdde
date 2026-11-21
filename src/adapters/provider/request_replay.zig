@@ -89,7 +89,7 @@ pub const Adapter = struct {
         defer material.deinit();
         const credential = switch (material) {
             .ready => |snapshot| snapshot.bytes,
-            .unavailable => return error.ReplayUnauthorized,
+            .unavailable, .malformed => return error.ReplayUnauthorized,
             .allocation_failed => return error.OutOfMemory,
         };
         // The captured catalogue entry owns the deadline (ADR 0030); replay

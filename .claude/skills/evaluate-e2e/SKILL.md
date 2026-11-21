@@ -73,7 +73,10 @@ the engine, its prompts or its deterministic code.
        (ADR 0038 Decisions 2, 3 and 5). A second record naming the claim, or an edge case or
        entity meaning repeating it, is `restatement`. For example, loan-renewal's display
        requirement in the story, a user-visible outcome and its criterion costs nothing; an
-       edge case repeating that criterion costs `organization`.
+       edge case repeating that criterion costs `organization`. The engine-printed first part of an
+       edge case's `GIVEN` line, the Given copied from its acceptance criterion before the edge
+       case's own given, isn't `restatement`: the engine prints it, not the model (ADR 0038
+       Decision 7). Only the edge case's own content is scored for repetition.
      - A required ability restated as permission ("must be able to renew" as "may renew")
        is `weakened_obligation`.
      - An edge case that applies the source's stated conditions to a boundary or a

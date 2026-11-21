@@ -6,7 +6,6 @@ const feature_log_runner = @import("feature_log_runner.zig");
 
 pub const Runner = struct {
     target: *feature_log_runner.Runner,
-    mode: log_stream.FinalizationMode,
     shortcode: telemetry.WorkflowShortcode,
     validate_action: validate_finalization.Action = .{},
 
@@ -16,7 +15,7 @@ pub const Runner = struct {
 
     fn targetBinding(context: *anyopaque) bindings.Target {
         const self = cast(context);
-        return .{ .identity = self.target.childBindings().identity(), .mode = self.mode };
+        return .{ .identity = self.target.childBindings().identity() };
     }
 
     fn invokeValidate(context: *anyopaque) bindings.ValidationOutcome {
@@ -27,13 +26,8 @@ pub const Runner = struct {
             .prepared
         else
             .unprepared;
-        self.validate_action.execute(self.mode, status) catch return .invalid;
+        self.validate_action.execute(status) catch return .invalid;
         return .valid;
-    }
-
-    fn invokePrepare(context: *anyopaque) log_stream.Outcome {
-        const self = cast(context);
-        return self.target.prepare(self.shortcode);
     }
 
     fn invokeClose(context: *anyopaque) log_stream.Outcome {
@@ -49,6 +43,5 @@ pub const Runner = struct {
 const vtable: bindings.ChildBindings.VTable = .{
     .target = Runner.targetBinding,
     .validate = Runner.invokeValidate,
-    .prepare = Runner.invokePrepare,
     .close = Runner.invokeClose,
 };

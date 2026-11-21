@@ -36,8 +36,8 @@ pub const Diagnostic = union(enum) {
         };
     }
 
-    /// Coverage checks the assembled candidate before authorization selects a
-    /// replacement and its producer, as does a classification rejection whose
+    /// Coverage checks the assembled candidate and blocks with no replacement or
+    /// producer, as does a classification rejection whose
     /// validator rule assigns no producer; an origin there contradicts the rule.
     /// Other live rejections belong to a response.
     pub fn attribution(self: Diagnostic) Attribution {

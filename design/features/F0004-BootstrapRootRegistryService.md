@@ -218,7 +218,7 @@ or creates an alternative control branch.
   logging, and lock acquisition.
 - Candidate paths and handles are released exactly once on success, rejection,
   cancellation, timeout, and operational error.
-- Before workflow selection there is no `WorkflowLog` binding; bootstrap therefore uses
+- Before workflow selection there is no workflow shortcode to attribute a log to; bootstrap therefore uses
   only its typed non-logging diagnostic path.
 - An explicit runner/user cancellation instead propagates terminal `cancelled`
   unchanged; it is never relabelled `failed`.

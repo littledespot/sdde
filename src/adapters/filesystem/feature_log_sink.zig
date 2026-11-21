@@ -21,7 +21,6 @@ pub const Adapter = struct {
     expected_binding: log_binding.BindingCandidate,
     lock_file: ?Io.File = null,
     owns_directories: bool,
-    scans_run_history: bool,
 
     pub const InitError = error{ InvalidArtifactRegistry, ArtifactStorageUnavailable, InsecurePermissions, Cancelled };
 
@@ -60,7 +59,6 @@ pub const Adapter = struct {
             .prompt_directory = prompt_binding,
             .expected_binding = authority.expected_binding,
             .owns_directories = true,
-            .scans_run_history = true,
         };
     }
 
@@ -74,7 +72,6 @@ pub const Adapter = struct {
             .prompt_directory = test_directory,
             .expected_binding = expected_binding,
             .owns_directories = false,
-            .scans_run_history = false,
         };
     }
 
@@ -93,7 +90,6 @@ pub const Adapter = struct {
             .prompt_directory = binding_directory,
             .expected_binding = expected_binding,
             .owns_directories = false,
-            .scans_run_history = true,
         };
     }
 
@@ -233,9 +229,6 @@ pub const Adapter = struct {
         return .{
             .io = self.io,
             .directory = self.directory(stream),
-            .run_directory = self.runDirectory(stream),
-            .expected_binding = self.expected_binding,
-            .scans_run_history = self.scans_run_history,
         };
     }
 };

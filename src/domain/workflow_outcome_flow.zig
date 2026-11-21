@@ -140,7 +140,7 @@ fn testAuthority(steps: []const compilation.CompiledStep, transitions: []const w
 test "opaque negative outcomes survive unrelated transformations and cleanup transitively" {
     for ([_]workflow.OutcomeTag{ .invalid, .failed, .blocked, .needs_user, .cancelled }) |outcome| {
         var steps = [_]compilation.CompiledStep{ testStep("source", &.{outcome}), testStep("transform", &.{.ok}), testStep("cleanup", &.{.ok}) };
-        steps[1].produces = &.{.raw_engine_config};
+        steps[1].produces = &.{.workflow_operation_registry};
         const edges = [_]workflow.Transition{
             .{ .from = steps[0].id, .outcome = outcome, .target = .{ .step = steps[1].id } },
             .{ .from = steps[1].id, .outcome = .ok, .target = .{ .step = steps[2].id } },

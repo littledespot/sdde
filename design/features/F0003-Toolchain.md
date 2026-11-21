@@ -28,7 +28,8 @@ as source material in Section 5; it is not promoted to runtime authority.
 ## 1. Responsibility
 
 F0003 has one responsibility: publish the current invocation's immutable
-post-composition safety-valid toolchain object (`valid_toolchain`) to declared consumers.
+post-composition safety-valid toolchain object (`valid_toolchain`) to its two declared
+consumers, `compile-naming-policy` and `prepare-reference-tokens`.
 
 - That object is derived from the complete registry beneath `paths.toolchainPreset` and
   the exact project layer at `<paths.principles>/toolchain.yaml`, which selects exact
@@ -46,7 +47,7 @@ post-composition safety-valid toolchain object (`valid_toolchain`) to declared c
 
 - After the safety gate succeeds, the runner's envelope owns the original sealed
   `ValidToolchain` allocation.
-- Declared consumers borrow only `*const ValidToolchain`, read from the envelope as
+- The two declared consumers borrow only `*const ValidToolchain`, read from the envelope as
   `valid_toolchain`. No service or facade type stands between them and the value.
 - No service registry, generic or string-key query, cache, copied projection,
   reread, or second authority is introduced.
@@ -199,12 +200,11 @@ policies: [project.zig@1]
 - Package documents cannot define a command, path, capability, executable
   implementation, or safety exception.
 
-Only the safety gate constructs `ValidToolchain`. It owns the deterministic
-ordered exact package references and immutable compiled policy descriptors;
-it contains no raw YAML, source path, mutable map, unregistered policy, or
-pre-safety candidate. The runner's envelope then owns it.
+Only the safety gate constructs `ValidToolchain`. It owns the immutable compiled
+policy descriptors; it contains no raw YAML, source path, mutable map,
+unregistered policy, or pre-safety candidate. The runner's envelope then owns it.
 
-Consumers read `valid_toolchain` from the envelope view as a borrowed
+The two declared consumers read `valid_toolchain` from the envelope view as a borrowed
 `*const ValidToolchain`. No wrapper, facade or service type returns it.
 
 - Reading it performs no filesystem read, parse, merge, validation, or allocation.
@@ -252,7 +252,9 @@ hide these responsibilities behind an accessor.
 - The compiler preserves complete selected-policy/rule order and provenance, including
   explicitly empty policies, and binds the result to the exact execution-local
   `ValidToolchain` identity.
-- Consumers reject stale, omitted, additional or altered rules.
+- The reference token stage alone rejects stale, omitted, additional or altered rules.
+  No later stage re-checks the policy against the toolchain, because nothing replaces
+  or invalidates `valid_toolchain` after it is produced.
 
 - The project/preset YAML documents select registered policy IDs; they never supply raw
   rules.
@@ -267,8 +269,7 @@ hide these responsibilities behind an accessor.
 - F0003 uses F0002 LogService as its only logging mechanism.
 - Because F0002 is not a general logger, F0003 receives no logger or sink
   capability; the runner reports F0003 nodes through the selected compiled workflow's
-  validated, runner-created `WorkflowLog` binding and the existing registered `action.*`
-  lifecycle facts.
+  validated shortcode and the existing registered `action.*` lifecycle facts.
 
 - Read-only means F0003 has no create, update, rename, delete, install, migrate,
   process, command, model, network, transaction, state-transition, or project write
@@ -317,7 +318,7 @@ separate approved F0002 contract.
 ## 6. Acceptance criteria
 
 1. F0003 has exactly one responsibility: publish one immutable `ValidToolchain` as
-   `valid_toolchain`, borrowed by declared consumers from the envelope. The
+   `valid_toolchain`, borrowed by its two declared consumers from the envelope. The
    bounded loading steps remain separate functions of the stage action and expose no consumer
    query.
 2. F0001 remains the only `.sddtoolkit.json` reader, and the path-policy owner
@@ -349,7 +350,7 @@ separate approved F0002 contract.
 8. F0003 cannot write source/config/preset/project/state data, execute a
    command, call a model, use the network, mutate shared state, or expose a
    reload/watch/compatibility API.
-9. Every F0003 log uses F0002's active `WorkflowLog`/feature binding and
+9. Every F0003 log uses F0002's active feature binding and
    existing action lifecycle facts; it cannot select log content or a sink,
    and pre-binding work uses no competing logger.
 10. Source examples are never searched or used as runtime authority or

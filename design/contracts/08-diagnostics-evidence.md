@@ -38,8 +38,14 @@ authorization replaces an earlier call's detail, so it names the last call. It a
 code or branch and is never a runner rejection; a provider stop and a runner rejection, such
 as retry exhaustion, show none. The CLI prints it after an `invalid`, `blocked`, `failed` or
 `cancelled` outcome as
-`provider_failure: <cause>; delivery=<d>; retry=<r>[; transport=<phase>/<cause>][; content=<c>]`;
-only these enum names are printed, never a key, header, body, URL or provider text.
+`provider_failure: <cause>; delivery=<d>; retry=<r>[; transport=<phase>/<cause>][; content=<c>][; credential=<c>][; decode=<d>]`;
+only these enum names are printed, never a key, a key's length, a header, body, URL, JSON path or provider text.
+`credential` is `missing` (an unset or empty key) or `malformed` (a space, control or non-ASCII byte, such
+as a CR from CRLF line endings) on an `authentication_failed` that never left the engine. `decode` names
+the stage that refused a response that arrived without a transport or content diagnostic: `body_not_json`,
+`body_refused` (the decoder refused the envelope), `content_not_utf8`, or `error_unrecognized` (an error
+body the provider's error table does not know). Only the CLI line carries `credential` and `decode`; the run
+report records neither.
 
 The run report and the CLI also carry the display path of the reference entry whose own
 reason ended the run, as presentation data beside the error name (approved by the user on

@@ -35,7 +35,7 @@ const registry: toolchain.PolicyRegistry = .{ .contracts = &.{
     .{ .id = "empty@1", .project_selectable = true, .locked_required = false, .naming = &.{} },
 } };
 fn authority(allocator: std.mem.Allocator) !*safety.Owner {
-    return safety.validate(allocator, .{ .packages = &.{"arbitrary@1.0.0"}, .policies = &.{ "language@1", "empty@1" } }, registry);
+    return safety.validate(allocator, &.{ "language@1", "empty@1" }, registry);
 }
 
 test "closed registered naming rules reject malformed and ambiguous declarations" {
@@ -53,12 +53,12 @@ test "closed registered naming rules reject malformed and ambiguous declarations
     }) |bad| {
         try std.testing.expectError(error.InvalidNamingRule, rules.validate(&.{bad}));
         const bad_registry: toolchain.PolicyRegistry = .{ .contracts = &.{.{ .id = "unused@1", .project_selectable = true, .locked_required = false, .naming = &.{bad} }} };
-        try std.testing.expectError(error.InvalidToolchain, safety.validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{} }, bad_registry));
+        try std.testing.expectError(error.InvalidToolchain, safety.validate(std.testing.allocator, &.{}, bad_registry));
     }
     const repeated = registry.contracts[0].naming[0];
     try std.testing.expectError(error.InvalidNamingRule, rules.validate(&.{ repeated, repeated }));
     const overlap: toolchain.PolicyRegistry = .{ .contracts = &.{ registry.contracts[0], .{ .id = "different@1", .project_selectable = true, .locked_required = false, .naming = &.{repeated} } } };
-    try std.testing.expectError(error.InvalidToolchain, safety.validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{} }, overlap));
+    try std.testing.expectError(error.InvalidToolchain, safety.validate(std.testing.allocator, &.{}, overlap));
 }
 
 test "naming compilation includes all selected policies and exact rule provenance" {
@@ -105,7 +105,7 @@ test "naming compilation includes all selected policies and exact rule provenanc
 test "safety owns naming descriptor bytes independently of the input registry" {
     var original = "Ownedfile".*;
     const mutable: toolchain.PolicyRegistry = .{ .contracts = &.{.{ .id = "mutable@1", .project_selectable = true, .locked_required = false, .naming = &.{.{ .id = .{ .bytes = "mutable.exact" }, .kind = .exact, .value = &original, .case_sensitive = true }} }} };
-    const owner = try safety.validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"mutable@1"} }, mutable);
+    const owner = try safety.validate(std.testing.allocator, &.{"mutable@1"}, mutable);
     defer safety.deinitOwner(owner);
     @memset(&original, 'x');
     try std.testing.expectEqualStrings("Ownedfile", safety.value(owner).policies()[0].naming[0].value);
@@ -192,7 +192,7 @@ test "multi-token filenames share exact policy matching and retain Unicode raw s
         .{ .id = .{ .bytes = "names.manifest" }, .kind = .manifest, .value = "Build Notes", .case_sensitive = false },
         .{ .id = .{ .bytes = "names.exact" }, .kind = .exact, .value = "(Guide).cfg", .case_sensitive = true },
     } }} };
-    const owner = try safety.validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"names@1"} }, policies);
+    const owner = try safety.validate(std.testing.allocator, &.{"names@1"}, policies);
     defer safety.deinitOwner(owner);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

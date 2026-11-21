@@ -105,7 +105,6 @@ fn currentTime(clock: lease.Clock, runtime: pipeline.NodeRuntime) lease.Error!u6
     return switch (runtime.status()) {
         .active => clock.now(),
         .cancelled => error.Cancelled,
-        .deadline_exhausted => error.AuthorizationExpired,
     };
 }
 

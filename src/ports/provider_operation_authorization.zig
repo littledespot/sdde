@@ -47,7 +47,11 @@ pub const AllocatedSlot = struct {
 
 pub const Observation = union(enum) {
     prepared,
-    failed: enum { authentication_failed, authorization_denied },
+    failed: union(enum) {
+        /// No usable key; the payload says whether it was absent or malformed.
+        authentication_failed: operation.ProviderCredentialDiagnostic,
+        authorization_denied,
+    },
 };
 
 /// Preparation uses only already-loaded material. No I/O or refresh dependency

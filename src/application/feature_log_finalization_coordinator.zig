@@ -6,11 +6,6 @@ pub const Outcome = union(enum) { ok, blocked: log_stream.FailureCode, cancelled
 /// Finalizes one runner-selected binding using runner-owned child bindings.
 pub fn run(children: bindings.ChildBindings) Outcome {
     if (children.invokeValidate() == .invalid) return .invalid;
-    if (children.target().mode == .historical) switch (children.invokePrepare()) {
-        .dropped, .persisted => {},
-        .blocked => |failure| return .{ .blocked = failure },
-        .cancelled => return .cancelled,
-    };
     return switch (children.invokeClose()) {
         .dropped, .persisted => .ok,
         .blocked => |failure| .{ .blocked = failure },

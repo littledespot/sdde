@@ -11,7 +11,6 @@ pub const Context = struct {
     inputs: evidence.Inputs,
     references: r.Accounted,
     registry: @import("passive_literals.zig").Registry,
-    current: *const @import("toolchain_safety.zig").ValidToolchain,
 };
 
 /// Shared native evidence read set for generation and deterministic coverage.
@@ -25,7 +24,7 @@ pub const Dependencies = struct {
 };
 pub fn dependencies(a: std.mem.Allocator, context: Context) Error!Dependencies {
     const prior = context.references.global();
-    return .{ .text = try text.dependencies(context.inputs, context.registry, context.current), .lineage = try @import("reference_reconciliation_context.zig").lineage(a, prior.input.progress), .dispositions = prior.dispositions, .signals = context.references.records.signals, .conflicts = context.references.records.conflicts, .outcome = context.references.outcome };
+    return .{ .text = text.dependencies(context.inputs, context.registry), .lineage = try @import("reference_reconciliation_context.zig").lineage(a, prior.input.progress), .dispositions = prior.dispositions, .signals = context.references.records.signals, .conflicts = context.references.records.conflicts, .outcome = context.references.outcome };
 }
 
 pub fn items(context: Context) Error!r.Items {
@@ -45,12 +44,12 @@ pub fn generationReady(references: r.Accounted) bool {
 }
 
 /// Check trusted evidence and text authority before classifying candidate errors.
-pub fn bind(allocator: std.mem.Allocator, validator: text.Validator, context: Context) Error!void {
+pub fn bind(allocator: std.mem.Allocator, context: Context) Error!void {
     const all = try items(context);
     if (context.references.outcome != .complete) return error.InvalidSpecification;
     const reconciliation = @import("reference_reconciliation_validation.zig");
     try reconciliation.history(allocator, context.references.global().input.progress);
-    try reconciliation.bind(allocator, all, .{ .inputs = context.inputs, .registry = context.registry, .current = context.current }, validator);
+    try reconciliation.bind(all, .{ .inputs = context.inputs, .registry = context.registry });
 }
 
 /// Initial reference-grounded generation. Applicable user-response support is
@@ -534,7 +533,6 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
     inspection.value_choices = try resolvedChoices(allocator, context, resolved);
     const accepted: spec.BusinessValue = .{ .segments = switch (try validator.checkBusinessIn(allocator, .{
         .registry = context.registry,
-        .current = context.current,
         .inputs = context.inputs,
         .scopes = resolved.scopes,
         .exact_copies = inspection.value_choices.?.exact_copy,

@@ -258,7 +258,7 @@ pub fn serializeEvent(
     var number_buffer: [32]u8 = undefined;
     var template_buffer: [96]u8 = undefined;
     const template_id = definition.templateId(&template_buffer) catch return error.InvalidFeatureLogRecord;
-    const fields = record.fact.fields;
+    const common = telemetry.commonOf(record.fact);
 
     try appendCell(allocator, &row, &first, "event");
     try appendCell(allocator, &row, &first, log_limits.schema_version);
@@ -273,31 +273,31 @@ pub fn serializeEvent(
     try appendCell(allocator, &row, &first, record.occurred_at_utc);
     try appendUnsigned(allocator, &row, &first, record.monotonic_offset, &number_buffer);
     try appendCell(allocator, &row, &first, definition.level.text());
-    try appendCell(allocator, &row, &first, record.fact.event_type.text());
+    try appendCell(allocator, &row, &first, telemetry.eventOf(record.fact).text());
     try appendCell(allocator, &row, &first, template_id);
     try appendCell(allocator, &row, &first, record.run_id.bytes);
     try appendCell(allocator, &row, &first, record.feature_id.bytes);
-    try appendOptional(allocator, &row, &first, if (record.fact.stage) |value| stageText(value) else null);
-    try appendOptionalId(allocator, &row, &first, record.fact.node_id);
-    try appendOptionalId(allocator, &row, &first, record.fact.parent_event_id);
-    try appendOptionalId(allocator, &row, &first, record.fact.correlation_id);
-    try appendOptionalUnsigned(allocator, &row, &first, record.fact.attempt, &number_buffer);
-    try appendOptionalId(allocator, &row, &first, fields.task_id);
-    try appendOptionalUnsigned(allocator, &row, &first, fields.duration_ms, &number_buffer);
-    try appendOptional(allocator, &row, &first, if (fields.diagnostic_code) |value| value.bytes else null);
-    try appendOptionalId(allocator, &row, &first, fields.validator_id);
-    try appendOptionalId(allocator, &row, &first, fields.rule_id);
-    try appendOptionalId(allocator, &row, &first, fields.step_id);
-    try appendOptionalId(allocator, &row, &first, fields.model_route_id);
-    try appendOptionalId(allocator, &row, &first, fields.model_profile_id);
-    try appendOptionalUnsigned(allocator, &row, &first, fields.input_tokens, &number_buffer);
-    try appendOptionalUnsigned(allocator, &row, &first, fields.output_tokens, &number_buffer);
-    try appendOptional(allocator, &row, &first, if (fields.repair_unit_kind) |value| @tagName(value) else null);
-    try appendOptionalId(allocator, &row, &first, fields.command_id);
-    try appendOptionalSigned(allocator, &row, &first, fields.exit_code, &number_buffer);
-    try appendOptional(allocator, &row, &first, if (fields.evidence_status) |value| @tagName(value) else null);
-    try appendOptional(allocator, &row, &first, if (fields.outcome) |value| @tagName(value) else null);
-    try appendOptionalUnsigned(allocator, &row, &first, fields.count, &number_buffer);
+    try appendOptional(allocator, &row, &first, if (common.stage) |value| stageText(value) else null);
+    try appendOptionalId(allocator, &row, &first, common.node_id);
+    try appendOptionalId(allocator, &row, &first, common.parent_event_id);
+    try appendOptionalId(allocator, &row, &first, common.correlation_id);
+    try appendOptionalUnsigned(allocator, &row, &first, common.attempt, &number_buffer);
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .task_id));
+    try appendOptionalUnsigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .duration_ms), &number_buffer);
+    try appendOptional(allocator, &row, &first, if (telemetry.fieldOf(record.fact, .diagnostic_code)) |value| value.bytes else null);
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .validator_id));
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .rule_id));
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .step_id));
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .model_route_id));
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .model_profile_id));
+    try appendOptionalUnsigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .input_tokens), &number_buffer);
+    try appendOptionalUnsigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .output_tokens), &number_buffer);
+    try appendOptional(allocator, &row, &first, if (telemetry.fieldOf(record.fact, .repair_unit_kind)) |value| @tagName(value) else null);
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .command_id));
+    try appendOptionalSigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .exit_code), &number_buffer);
+    try appendOptional(allocator, &row, &first, if (common.evidence_status) |value| @tagName(value) else null);
+    try appendOptional(allocator, &row, &first, if (telemetry.fieldOf(record.fact, .outcome)) |value| @tagName(value) else null);
+    try appendOptionalUnsigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .count), &number_buffer);
     row.append(allocator, '\n') catch return error.OutOfMemory;
     if (row.items.len > log_limits.max_record_bytes) return error.InvalidFeatureLogRecord;
     return row.toOwnedSlice(allocator) catch return error.OutOfMemory;
@@ -586,10 +586,7 @@ test "event rows use fixed columns escaping and reserved nulls" {
         .monotonic_offset = 42,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
         .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
-        .fact = .{
-            .event_type = .task_started,
-            .fields = .{ .task_id = telemetry.Identifier.validate("TASK-1").? },
-        },
+        .fact = .{ .task_started = .{ .task_id = telemetry.Identifier.validate("TASK-1").? } },
     });
     defer allocator.free(row);
     try validateEncodedRow(allocator, row, event_column_count);
@@ -597,7 +594,7 @@ test "event rows use fixed columns escaping and reserved nulls" {
     try std.testing.expect(std.mem.indexOf(u8, row, "|info|task.started|task.started/v1|") != null);
 }
 
-test "a failed action's row carries its stage step in the step_id column and no other row does" {
+test "a failed action's row carries its stage step in the step_id column and a row without one leaves it null" {
     const allocator = std.testing.allocator;
     const base: EventRecord = .{
         .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
@@ -610,14 +607,11 @@ test "a failed action's row carries its stage step in the step_id column and no 
         .monotonic_offset = 42,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
         .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
-        .fact = .{
-            .event_type = .action_failed,
-            .fields = .{
-                .diagnostic_code = telemetry.DiagnosticCode.validate("INVALIDTOOLCHAIN").?,
-                .outcome = .failed,
-                .step_id = telemetry.Identifier.validate("validate_registry").?,
-            },
-        },
+        .fact = .{ .action_failed = .{
+            .diagnostic_code = telemetry.DiagnosticCode.validate("INVALIDTOOLCHAIN").?,
+            .outcome = .failed,
+            .step_id = telemetry.Identifier.validate("validate_registry").?,
+        } },
     };
     const row = try serializeEvent(allocator, base);
     defer allocator.free(row);
@@ -626,10 +620,16 @@ test "a failed action's row carries its stage step in the step_id column and no 
     var cells = std.mem.splitScalar(u8, std.mem.trimEnd(u8, event_heading, "\n"), '|');
     while (cells.next()) |name| : (column += 1) if (std.mem.eql(u8, name, "step_id")) break;
     try std.testing.expectEqualStrings("validate_registry", cellAt(row, column).?);
-    // Only a failed action names a step: the same field on a completed action is not a registered row.
-    var completed = base;
-    completed.fact.event_type = .action_completed;
-    try std.testing.expectError(error.InvalidFeatureLogRecord, serializeEvent(allocator, completed));
+    // A completed action that names no step, and a row that has no step field at all, leave the column null.
+    var unnamed = base;
+    unnamed.fact = .{ .action_completed = .{ .outcome = .completed } };
+    const unnamed_row = try serializeEvent(allocator, unnamed);
+    defer allocator.free(unnamed_row);
+    try std.testing.expectEqualStrings("\\N", cellAt(unnamed_row, column).?);
+    unnamed.fact = .{ .task_started = .{ .task_id = telemetry.Identifier.validate("TASK-1").? } };
+    const task_row = try serializeEvent(allocator, unnamed);
+    defer allocator.free(task_row);
+    try std.testing.expectEqualStrings("\\N", cellAt(task_row, column).?);
 }
 
 test "dialect rejects unknown dangling escapes and wrong width" {

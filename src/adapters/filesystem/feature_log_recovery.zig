@@ -11,9 +11,6 @@ const Io = std.Io;
 pub const Source = struct {
     io: Io,
     directory: Io.Dir,
-    run_directory: Io.Dir,
-    expected_binding: log_binding.BindingCandidate,
-    scans_run_history: bool,
 };
 
 pub fn recover(
@@ -31,14 +28,11 @@ pub fn recover(
         .ignored => {},
         .invalid => return error.CorruptStream,
     };
-    const others = scanOtherBindings(source, stream, heading, allocator) catch |err| return if (err == error.Canceled) error.Cancelled else error.CorruptStream;
-    const run_segments = std.math.add(usize, ordinals.items.len, others.segments) catch return error.CorruptStream;
-    if (run_segments > log_limits.max_segments) return error.CorruptStream;
-    const total_segments: u8 = @intCast(run_segments);
-    const history_next_sequence = others.next_sequence;
+    if (ordinals.items.len > log_limits.max_segments) return error.CorruptStream;
+    const total_segments: u8 = @intCast(ordinals.items.len);
     if (ordinals.items.len == 0) return .{ .empty = .{
         .next_segment_ordinal = 1,
-        .next_sequence = history_next_sequence,
+        .next_sequence = 1,
         .total_segment_count = total_segments,
     } };
     std.mem.sort(u16, ordinals.items, {}, std.sort.asc(u16));
@@ -46,7 +40,7 @@ pub fn recover(
         if (ordinal != index + 1) return error.CorruptStream;
     }
     var active: ?log_stream.StreamState = null;
-    var prior_sequence: u64 = history_next_sequence - 1;
+    var prior_sequence: u64 = 0;
     for (ordinals.items, 0..) |ordinal, index| {
         const inspection = inspectSegment(
             source.io,
@@ -305,69 +299,4 @@ fn validRow(allocator: std.mem.Allocator, line: []const u8, columns: usize) Insp
         error.OutOfMemory => error.OutOfMemory,
         else => error.InvalidSegment,
     };
-}
-
-/// The run's other bindings of this stream: their segments, which count toward
-/// the run-wide cap, and the sequence after their highest trailer. A sink
-/// without run history has no other bindings.
-const OtherBindings = struct { segments: usize = 0, next_sequence: u64 = 1 };
-
-fn scanOtherBindings(
-    source: Source,
-    stream: log_stream.Stream,
-    heading: []const u8,
-    allocator: std.mem.Allocator,
-) !OtherBindings {
-    if (!source.scans_run_history) return .{};
-    var segment_count: usize = 0;
-    var maximum: u64 = 0;
-    var iterator = source.run_directory.iterate();
-    while (try iterator.next(source.io)) |entry| {
-        switch (feature_log_file.classifyContainerEntry(entry)) {
-            .directory => {},
-            .ignored => continue,
-            .invalid => return error.CorruptStream,
-        }
-        if (std.mem.eql(u8, entry.name, source.expected_binding.binding_id.bytes)) continue;
-        var historical = try source.run_directory.openDir(source.io, entry.name, .{
-            .iterate = true,
-            .follow_symlinks = false,
-        });
-        defer historical.close(source.io);
-        var segments = historical.iterate();
-        while (try segments.next(source.io)) |historical_entry| {
-            const ordinal = switch (feature_log_file.classifyBindingEntry(historical_entry)) {
-                .segment => |ordinal| ordinal,
-                .ignored => continue,
-                .invalid => return error.CorruptStream,
-            };
-            segment_count += 1;
-            const segment = feature_log_file.openSegment(source.io, historical, historical_entry.name, .read_only) catch |err| {
-                return if (err == error.SegmentRejected) error.CorruptStream else err;
-            };
-            defer segment.close(source.io);
-            const bytes = feature_log_file.readSegment(source.io, allocator, segment) catch |err| return switch (err) {
-                error.SizeDrift => error.CorruptStream,
-                else => |other| other,
-            };
-            if (!std.mem.startsWith(u8, bytes, heading) or bytes.len == 0 or bytes[bytes.len - 1] != '\n') {
-                return error.CorruptStream;
-            }
-            const without_lf = bytes[0 .. bytes.len - 1];
-            const trailer_start = (std.mem.lastIndexOfScalar(u8, without_lf, '\n') orelse return error.CorruptStream) + 1;
-            const trailer = without_lf[trailer_start..];
-            if (!std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("record_kind")) orelse return error.CorruptStream, "segment_trailer") or
-                !std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("stream")) orelse return error.CorruptStream, @tagName(stream)) or
-                !std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("feature_log_binding_id")) orelse return error.CorruptStream, entry.name) or
-                try std.fmt.parseInt(u16, format.cellAt(trailer, format.sharedColumn("segment_ordinal")) orelse return error.CorruptStream, 10) != ordinal or
-                !std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("run_id")) orelse return error.CorruptStream, source.expected_binding.run_id.bytes) or
-                !std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("feature_id")) orelse return error.CorruptStream, source.expected_binding.feature_id.bytes))
-            {
-                return error.CorruptStream;
-            }
-            const sequence = try std.fmt.parseInt(u64, format.cellAt(trailer, format.sharedColumn("sequence")) orelse return error.CorruptStream, 10);
-            maximum = @max(maximum, sequence);
-        }
-    }
-    return .{ .segments = segment_count, .next_sequence = std.math.add(u64, maximum, 1) catch return error.CorruptStream };
 }

@@ -18,7 +18,7 @@ const stages = @import("../baseline/stages.zig");
 const admission = @import("../baseline/admission.zig");
 const repair_log = @import("repair_log.zig");
 /// The step event's version, advanced with the report's when a closed member of either changes.
-pub const step_event_schema = "e2e-step-event/v7";
+pub const step_event_schema = "e2e-step-event/v8";
 
 pub const MechanicalRejection = union(enum) {
     protocol: c.ProtocolRejection,

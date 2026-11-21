@@ -113,13 +113,12 @@ pub const CollectReconciliation = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, reconciliation.input_schema, .reconciliation_input);
+        const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
+        const accepted = (try @import("model_candidate_handoff.zig").readAccepted(&input.step.data)).candidate;
         const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const candidate = try @import("json_composition_workflow.zig").readValidated(&input.step.data);
-        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, candidate) catch |operation_error| return operation_error };
-        var result = try extraction.publish(self.allocator, reconciliation.raw_schema, owner, .ok);
-        for (Action.contract.invalidates) |key| result.delta.data_invalidations.insert(key);
-        return result;
+        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, packet, accepted.body, accepted.origin) catch |operation_error| return operation_error };
+        return extraction.publish(self.allocator, reconciliation.raw_schema, owner, .ok);
     }
 };
 fn readInputs(view: *const data.View) operations.Error!*const source.Inputs {

@@ -71,8 +71,7 @@ into clarification needs is `build-required-authority-clarification-needs`
 - **Reads:** `required_authority_inputs`, `required_authority_observations`,
   `required_authority_result` · **Writes:** `required_authority_gate` · **Side effect:** `none`
 - **Does:** Rebuild the result from current native inputs and compare it, so no earlier ledger
-  or result certifies a newer revision; it is the sole issuer of the `required-authority@1`
-  gate.
+  or result certifies a newer revision; it is the sole writer of `required_authority_gate`.
 - **Rejects:** outcome `invalid` for a candidate defect, `needs-user` for clarification gaps,
   `blocked` for upstream rework, an administrative block or `InvalidRequiredAuthority`.
 

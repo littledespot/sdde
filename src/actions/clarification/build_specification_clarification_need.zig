@@ -7,7 +7,7 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "build-specification-clarification-need",
         .kind = .action,
-        .requires = &.{ .validated_specification_unit, .relative_feature_directory, .accounted_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain },
+        .requires = &.{ .validated_specification_unit, .relative_feature_directory, .accounted_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals },
         .produces = &.{.clarification_needs},
         .side_effect = .none,
     };

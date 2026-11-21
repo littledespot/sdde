@@ -930,17 +930,14 @@ user-directed decomposition contract: configured shapes and partitions, derived
 part schemas, explicit independent request bindings, deterministic prompt-free
 assembly and complete validation, and sets the 1,024-step workflow ceiling. The closed `json-composition/v1` resource is compiled through the existing
 resource boundary and selects parts through ordinary request preparation.
-The optional composition `definition` selects an existing named definition in its
-`result` resource; otherwise the resource root is selected. Compilation rejects
-unresolved selections. Projections, requests and complete validation retain this
-same binding, and registry transfer rebinds to its destination schema owner.
+The composition's `result` resource root is its complete schema. Projections, requests
+and complete validation retain this same binding, and registry transfer rebinds to its
+destination schema owner.
 
-A part's optional `input-context` selects a native immutable assignment context
-into `assignment` through the shared request preparation owner. The complete
-evidence packet and declared prerequisites remain available; missing contexts
-reject before inference. Corrections retain the selected presentation. Contexts
-carry applicable guidance, not independent validation, repair or gap policy
-(ADR 0016).
+A native packet's owner selects an assignment context into `assignment`; a composition
+part selects none. The complete evidence packet and declared prerequisites remain
+available, and corrections retain the selected presentation. Contexts carry applicable
+guidance, not independent validation, repair or gap policy (ADR 0016).
 
 The mechanism is shared across supported JSON shapes. Domain owners contribute
 facts and semantic validators; they do not gain separate assembly, retry, storage

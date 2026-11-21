@@ -549,7 +549,7 @@ test "external budget evidence reads only a report of the current version" {
         .attempts = &attempts,
     };
     const current = try std.json.Stringify.valueAlloc(a, report, .{});
-    const previous = try std.mem.replaceOwned(u8, a, current, @tagName(native.report_schema), "spec-e2e-report/v23");
+    const previous = try std.mem.replaceOwned(u8, a, current, @tagName(native.report_schema), "spec-e2e-report/v24");
     try std.testing.expect(!std.mem.eql(u8, current, previous));
     var temporary = std.testing.tmpDir(.{});
     defer temporary.cleanup();

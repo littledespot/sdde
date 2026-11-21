@@ -172,7 +172,7 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
             return error.InvalidCurrentAdmissionFixture;
         },
     };
-    const context: p.Context = .{ .inputs = reference.inputs, .references = accounted, .registry = reference.text.registry, .current = text.safety.value(reference.text.owner) };
+    const context: p.Context = .{ .inputs = reference.inputs, .references = accounted, .registry = reference.text.registry };
     var current = switch (try sessions.initialize(a, context.inputs.corpus.feature_id, context)) {
         .ready => |ready| ready,
         .blocked => |failure| {

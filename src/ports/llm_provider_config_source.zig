@@ -4,7 +4,7 @@ const filesystem_identity = @import("../domain/filesystem_identity.zig");
 const llm_provider_config = @import("../domain/llm_provider_config.zig");
 const pipeline = @import("../domain/pipeline.zig");
 
-pub const Error = error{ LLMProviderConfigReadFailure, Cancelled, DeadlineExhausted };
+pub const Error = error{ LLMProviderConfigReadFailure, Cancelled };
 
 pub const ExactFile = struct {
     identity: filesystem_identity.FileIdentity,

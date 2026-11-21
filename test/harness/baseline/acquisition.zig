@@ -38,7 +38,7 @@ pub fn nativeInvocationObserved(facts: Facts) bool {
 pub const PublishedFile = struct { path: []const u8, bytes: []const u8, sha256: []const u8 };
 pub const Record = struct { sha256: []const u8, facts: Facts };
 pub const Report = struct {
-    schema: enum { @"baseline-acquisition/v16" } = .@"baseline-acquisition/v16",
+    schema: enum { @"baseline-acquisition/v17" } = .@"baseline-acquisition/v17",
     freeze_sha256: []const u8,
     build: @import("../../../build/provenance.zig").Identity,
     toolchain: frozen_inputs.Toolchain,

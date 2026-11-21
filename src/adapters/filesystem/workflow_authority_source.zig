@@ -146,7 +146,6 @@ fn checkRuntime(runtime: pipeline.NodeRuntime) source_port.Error!void {
     return switch (runtime.status()) {
         .active => {},
         .cancelled => error.Cancelled,
-        .deadline_exhausted => error.DeadlineExhausted,
     };
 }
 fn classify(kind: Io.File.Kind) inventory.EntryKind {

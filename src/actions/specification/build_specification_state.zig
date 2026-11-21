@@ -8,7 +8,7 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "build-specification-state",
         .kind = .action,
-        .requires = &.{ .prior_specification_state, .reference_snapshot, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_generation_session, .identified_specification_content, .specification_id_ledger, .specification_coverage, .principle_registry, .refreshed_clarification_state, .validated_specification_rendering },
+        .requires = &.{ .prior_specification_state, .reference_snapshot, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_generation_session, .identified_specification_content, .specification_id_ledger, .specification_coverage, .principle_registry, .refreshed_clarification_state, .validated_specification_rendering },
         .produces = &.{.specification_publication_state},
         .side_effect = .none,
     };

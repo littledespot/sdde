@@ -256,39 +256,14 @@ This instrumentation-internal orchestrator is entered once for a feature-sink fa
 
 Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), the feature-logging orchestrators in §§14.9–14.10 become typed engine routines in its second conversion. They convert only once its logging preconditions hold. The emergency diagnostic stays exactly once, non-recursive and unobserved, and every lock is released on every path.
 
-### 14.10 `FeatureLogPolicyTransitionOrchestrator`
+### 14.10 Logging policy per run and restart
 
-- This instrumentation-only orchestrator switches an existing run to a changed logging policy
-  after a route adopts the changed candidate ([§9.4](09-configuration.md)), when the validated
-  change plan sets `transitionFeatureLogging: true`, including mixed specification/planning
-  changes.
-- The successor is execution-local ([ADR 0032](../decisions/0032-engine-routines.md), decided
-  14 November 2026, with [ADR 0009](../decisions/0009-atomic-workflow-execution.md)): no
-  bootstrap authority is committed for it, no pointer advances and no durable lineage is
-  written. The run's current policy and binding are the ones its activation built in memory.
-  `ValidateFeatureLogPolicyTransitionAction`
-  ([13-09](actions/13-09-logging.md)) is its whole authority.
-- Ordinary feature events continue under the current binding while the successor candidate is
-  evaluated.
-
-- After the route adopts the changed candidate, the runner pauses new workflow nodes and buffers only
-  bounded typed `WorkflowTelemetryFact` values, preserving each active compiled workflow's
-  registry-validated shortcode.
-- In the same live run, the orchestrator builds/validates both policies/bindings, then visits
-  each enabled stream in fixed `event`, then `prompt` order.
-- It acquires the physical lock from the historical binding and converts that single token into
-  the validated dual-binding transition capability.
-- Under it, actions recover the historical active tail or validate an already-closed tail,
-  durably close when needed through `FeatureLogPort.closeForPolicyTransition`, initialize or
-  recover the successor-binding segment namespace, and validate the old/new boundary.
-- After all per-stream locks are released, the mixed-state assembler builds/validates one
-  complete successor sink; only then does `ActivateFeatureLogPolicyTransitionAction` swap the
-  run-local observer and flush buffered facts through the new definitions/policy.
-- No normal event/model/node occurs between the route's adoption of the changed candidate and
-  this switch.
-- Any failure emits the one fixed emergency record and enters `block_new_work`; the engine never
-  continues on an obsolete or partially switched policy. A cancellation is no failure: it emits no
-  record and ends the run `cancelled`.
+- A run keeps the one logging binding and policy its activation built in memory
+  ([ADR 0032](../decisions/0032-engine-routines.md)). A changed logging candidate
+  ([§9.4](09-configuration.md)) takes effect on the next run: no route switches policy mid-run, so
+  there is no policy-transition orchestrator, successor sink or buffered-fact handoff, and no
+  bootstrap authority, pointer or durable lineage is written for one
+  ([ADR 0009](../decisions/0009-atomic-workflow-execution.md)).
 
 - A process restart deliberately creates a fresh `runId`; it never pretends to resume or
   activate the crashed run's in-memory transition.

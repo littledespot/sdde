@@ -23,7 +23,8 @@ pub const Activate = struct {
         const self = context.?;
         const prior = values.read(&input.step.data, @import("feature_directory_workflow.zig").directory, feature.Directory) catch |operation_error| return operation_error;
         const activator = self.activator orelse return error.FeatureLoggingActivatorUnbound;
-        return switch (activator.activate(prior.*, input.step.log.workflow_shortcode)) {
+        const shortcode = input.step.workflow_shortcode orelse return error.FeatureLoggingActivatorUnbound;
+        return switch (activator.activate(prior.*, shortcode)) {
             .ready => |current| ready: {
                 var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
                 delta.data_writes[@intFromEnum(directory.key)] = values.create(self.allocator, directory, feature.Directory, current) catch |operation_error| return operation_error;
@@ -80,7 +81,7 @@ fn testInput(prior: *@import("../domain/pipeline_data.zig").Value) operations.In
         .step = &test_step,
         .resources = &.{},
         .model_binding = null,
-        .log = .init(.{ .bytes = "SPEC".* }),
+        .workflow_shortcode = .{ .bytes = "SPEC".* },
     } };
     input.step.data.slots[@intFromEnum(@import("feature_directory_workflow.zig").directory.key)] = prior;
     return input;
@@ -104,9 +105,8 @@ test "cancelled and blocked feature logging activation preserve their outcomes w
         try std.testing.expectEqual(@as(usize, 0), effects.data_invalidations.len);
         try std.testing.expect(candidate.delta.runner_accounting_transition == null);
         try std.testing.expect(candidate.delta.repair_transition == null);
-        try std.testing.expectEqual(@as(usize, 0), candidate.delta.addedTelemetryFacts().len);
         try std.testing.expectEqualDeep(test_prior, spy.received.?);
-        try std.testing.expectEqualDeep(input.step.log.workflow_shortcode, spy.shortcode.?);
+        try std.testing.expectEqualDeep(input.step.workflow_shortcode.?, spy.shortcode.?);
         try std.testing.expectEqualDeep(test_prior, (try values.read(&input.step.data, prior_schema, feature.Directory)).*);
     }
 }

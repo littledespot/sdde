@@ -45,7 +45,7 @@ pub fn mergeExtraction(a: std.mem.Allocator, validator: r.text.Validator, facts:
     defer canonical.deinit(a);
     const response = repair.response orelse return error.InvalidAtomicRepair;
     if (repair.authorization != .extraction or response.value != .extraction) return error.InvalidAtomicRepair;
-    return ex.merge(a, canonical, validator, ctx.registry, ctx.current, facts, repair.authorization.extraction, response.value.extraction, response.origin);
+    return ex.merge(a, canonical, validator, ctx.registry, facts, repair.authorization.extraction, response.value.extraction, response.origin);
 }
 
 pub fn mergeReconciliation(a: std.mem.Allocator, normalizer: @import("../ports/unicode_normalizer.zig").Normalizer, parsed: r.Parsed, ctx: Context, support: loss.Support, repair: loss.Repair) rec.Error!r.Parsed {

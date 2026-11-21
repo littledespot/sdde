@@ -354,7 +354,7 @@ test "a cancellation after bytes were written still ends the run cancelled, neve
             try std.testing.expectEqual(.ready, std.meta.activeTag(started));
             const events: Capture = .{ .barrier = run.logs.barrier(), .shortcode = try @import("domain/telemetry.zig").WorkflowShortcode.parse("TEST") };
             // Terminal stage events are always flushed.
-            for (0..3) |_| if (events.emit(.{ .event_type = .stage_completed, .fields = .{ .outcome = .completed } })) |stop| {
+            for (0..3) |_| if (events.emit(.{ .stage_completed = .{ .outcome = .completed } })) |stop| {
                 try std.testing.expect(stop == .cancelled);
                 outcome = .{ .execution_rejected = .cancelled };
                 break;

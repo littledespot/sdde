@@ -16,10 +16,10 @@ const Entry = struct {
     reference: operation.ValidatedProviderAuthorizationLeaseRef,
     operation_id: operation.ProviderOperationId,
     registry_entry: *const registry.Entry,
-    binding_id: binding.ProviderModelBindingId,
+    /// The operation's binding, input and sampling, compared whole at consumption.
+    assignment: lifecycle.Assignment,
     response_mode: @import("../domain/model_controls.zig").ResponseGuidanceMode,
     controls: @import("../domain/model_controls.zig").InferenceControls,
-    input_id: operation.ModelVisibleInputId,
     deadline: u64,
     state: State = .allocated,
     capability: ?lease.Capability = null,
@@ -76,10 +76,9 @@ pub const Table = struct {
             .reference = .{ .identity = identity },
             .operation_id = facts.operation_id,
             .registry_entry = facts.provider_binding.registry_entry,
-            .binding_id = record.binding_id,
+            .assignment = record.assignment,
             .response_mode = facts.provider_binding.registry_entry.responseMode(),
             .controls = facts.provider_binding.controls,
-            .input_id = record.model_visible_input_id,
             .deadline = facts.deadline_monotonic_ms,
         };
         self.first = entry;
@@ -146,8 +145,7 @@ pub const Table = struct {
             facts.operation_id.model_request_id != facts.request.model_request_id or
             !facts.request.matchesBinding(facts.provider_binding.*)) return error.AuthorizationDenied;
         const record = self.operations.record(facts.operation_id) orelse return error.AuthorizationDenied;
-        if (record.state != .assigned or !record.binding_id.eql(facts.request.binding_id) or
-            !record.model_visible_input_id.eql(facts.request.model_visible_input_id) or record.sampling != facts.request.sampling) return error.AuthorizationDenied;
+        if (record.state != .assigned or !record.assignment.eql(.of(facts.request))) return error.AuthorizationDenied;
     }
 
     fn findSlot(self: *Table, slot: preparation.Slot) ?*Entry {
@@ -212,8 +210,8 @@ fn matches(entry: *const Entry, provider_binding: *const binding.ValidatedProvid
         entry.response_mode == provider_binding.registry_entry.responseMode() and
         std.meta.eql(entry.controls, provider_binding.controls) and
         request.matchesBinding(provider_binding.*) and
-        entry.binding_id.eql(provider_binding.bindingId()) and entry.binding_id.eql(request.binding_id) and
-        entry.input_id.eql(request.model_visible_input_id) and entry.deadline == deadline;
+        entry.assignment.binding_id.eql(provider_binding.bindingId()) and entry.assignment.eql(.of(request)) and
+        entry.deadline == deadline;
 }
 
 fn finalize(entry: *Entry) void {

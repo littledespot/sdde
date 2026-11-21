@@ -17,7 +17,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `BuildSpecificationClarificationNeedAction` (`build-specification-clarification-need`)
 
 - **Owner:** [`src/actions/clarification/build_specification_clarification_need.zig`](../../../src/actions/clarification/build_specification_clarification_need.zig)
-- **Reads:** `validated_specification_unit`, `relative_feature_directory`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `clarification_needs` · **Side effect:** `none`
+- **Reads:** `validated_specification_unit`, `relative_feature_directory`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `clarification_needs` · **Side effect:** `none`
 - **Does:** Turn a generation unit's clarification response into one `spec`-stage need: the
   model's question prepared under [§12.7](../12-model-boundary.md#127-workflow-defined-model-operations),
   a fixed reason for `missing`, `ambiguous` or `conflicting`, the reference authority and a
@@ -85,7 +85,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `InitializeSpecificationGenerationAction` (`initialize-specification-generation`)
 
 - **Owner:** [`src/actions/specification/initialize_specification_generation.zig`](../../../src/actions/specification/initialize_specification_generation.zig)
-- **Reads:** `relative_feature_directory`, `prior_specification_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` (optional: `specification_support_review`, `required_authority_inputs`, `required_authority_ledger`, `required_authority_observations`, `required_authority_result`, `required_authority_gate`) · **Writes:** `specification_generation_session` · **Side effect:** `none`
+- **Reads:** `relative_feature_directory`, `prior_specification_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` (optional: `specification_support_review`, `required_authority_inputs`, `required_authority_ledger`, `required_authority_observations`, `required_authority_result`, `required_authority_gate`) · **Writes:** `specification_generation_session` · **Side effect:** `none`
 - **Does:** Start the generation session from the reconciled references and carry the prior ID
   ledger.
 - **Rejects:** `blocked` with a typed rejection when no claim group supports a record.
@@ -93,7 +93,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `BuildSpecificationModelInputAction` (`build-specification-model-input`)
 
 - **Owner:** [`src/actions/specification/build_specification_model_input.zig`](../../../src/actions/specification/build_specification_model_input.zig)
-- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance`, `principle_registry` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `packet_guidance`, `principle_registry` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Does:** Build the request of the unit in flight: the brief, entities or records packet or, while
   scenarios are written ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md)
   Decision 3), the next group's requirements, numbered from one, each with its claim's meaning and
@@ -113,7 +113,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `ParseSpecificationUnitAction` (`parse-specification-unit`)
 
 - **Owner:** [`src/actions/specification/parse_specification_unit.zig`](../../../src/actions/specification/parse_specification_unit.zig)
-- **Reads:** `raw_specification_unit`, `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `parsed_specification_unit` · **Side effect:** `none`
+- **Reads:** `raw_specification_unit`, `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `parsed_specification_unit` · **Side effect:** `none`
 - **Does:** Parse the unit's response. While scenarios are written, the answer's numbered scenarios
   become the acceptance criteria of the group's batch, each bound to its slot's claim.
 - **Rejects:** an unparsable body (`invalid`); `scenario_request.Error` (`specification_session.Error`,
@@ -122,7 +122,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `ValidateSpecificationUnitAction` (`validate-specification-unit`)
 
 - **Owner:** [`src/actions/specification/validate_specification_unit.zig`](../../../src/actions/specification/validate_specification_unit.zig)
-- **Reads:** `specification_generation_session`, `parsed_specification_unit`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_specification_unit` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `parsed_specification_unit`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `validated_specification_unit` · **Side effect:** `none`
 - **Does:** Validate the unit's fields and composition and its consistency with the units already
   admitted, then admit it. An invalid unit carries its issue, field origin and owner for repair.
 - **Rejects:** `InvalidSpecificationUnit` for a stale reference state or revision 0; `invalid`
@@ -131,7 +131,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `ComposeSpecificationStoryAction` (`compose-specification-story`)
 
 - **Owner:** [`src/actions/specification/compose_specification_story.zig`](../../../src/actions/specification/compose_specification_story.zig)
-- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** replaces `specification_generation_session` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** replaces `specification_generation_session` · **Side effect:** `none`
 - **Does:** Compose the primary story natively, validate it as any unit and append it
   ([ADR 0047](../../decisions/0047-engine-composed-primary-story.md)).
 - **Rejects:** `blocked` with `no_story_requirements` or `story_not_admissible`; never repaired.
@@ -186,7 +186,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `PlanScenarioLinksAction` (`plan-scenario-links`)
 
 - **Owner:** [`src/actions/specification/plan_scenario_links.zig`](../../../src/actions/specification/plan_scenario_links.zig)
-- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `scenario_link_progress` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `scenario_link_progress` · **Side effect:** `none`
 - **Does:** Plan each edge case's outcome link
   ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7): one
   candidate criterion links natively, several wait for a model choice.
@@ -203,14 +203,14 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `BuildScenarioLinkInputAction` (`build-scenario-link-input`)
 
 - **Owner:** [`src/actions/specification/build_scenario_link_input.zig`](../../../src/actions/specification/build_scenario_link_input.zig)
-- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Does:** Build the closed choice request for the first pending edge case.
 - **Rejects:** `scenario_link_request.Error`.
 
 ## `AdmitScenarioLinkChoiceAction` (`admit-scenario-link-choice`)
 
 - **Owner:** [`src/actions/specification/admit_scenario_link_choice.zig`](../../../src/actions/specification/admit_scenario_link_choice.zig)
-- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `scenario_link_progress` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `scenario_link_progress` · **Side effect:** `none`
 - **Does:** Admit the model's choice only when it names a criterion offered for the edge case next
   in the plan, and append it.
 - **Rejects:** `scenario_link_request.Error`, including `InvalidScenarioLink`.
@@ -218,7 +218,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `AssembleSpecificationContentAction` (`assemble-specification-content`)
 
 - **Owner:** [`src/actions/specification/assemble_specification_content.zig`](../../../src/actions/specification/assemble_specification_content.zig)
-- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `identified_specification_content`, `specification_id_ledger` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `identified_specification_content`, `specification_id_ledger` · **Side effect:** `none`
 - **Does:** Assemble the admitted units and their edge-case links into identified content,
   allocating record IDs from the prior ledger.
 - **Rejects:** `specification_session.Error`.
@@ -226,14 +226,15 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `ValidateSpecificationCoverageAction` (`validate-specification-coverage`)
 
 - **Owner:** [`src/actions/specification/validate_specification_coverage.zig`](../../../src/actions/specification/validate_specification_coverage.zig)
-- **Reads:** `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `specification_coverage` · **Side effect:** `none`
-- **Does:** Check the content's coverage of every reconciled claim; an invalid result carries the
-  revision and repair dependencies.
-- **Rejects:** `invalid` with the coverage issue; `InvalidSpecificationCoverage`.
+- **Reads:** `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `specification_coverage` · **Side effect:** `none`
+- **Does:** Check the content's coverage of every reconciled claim. A coverage defect has no
+  independently supported repair target, so the step returns `blocked` itself, with the coverage
+  issue and `no_independent_supported_target`.
+- **Rejects:** `blocked` with the coverage issue; `InvalidSpecificationCoverage`.
 
 ## Specification repair ([§22](../22-repair.md))
 
-The specification unit, specification support and specification coverage repair operations are
+The specification unit and specification support repair operations are
 variants of the generic repair operations, specified once in
 [13-04](13-04-model.md#generic-repair-operations).
 
@@ -250,13 +251,13 @@ variants of the generic repair operations, specified once in
 ## `BuildSpecificationSupportInputAction` (`build-specification-support-input`)
 
 - **Owner:** [`src/actions/specification/build_specification_support_input.zig`](../../../src/actions/specification/build_specification_support_input.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Rejects:** `specification_support` errors.
 
 ## `CollectSpecificationSupportAction` (`collect-specification-support`)
 
 - **Owner:** [`src/actions/specification/collect_specification_support.zig`](../../../src/actions/specification/collect_specification_support.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
+- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
 - **Rejects:** `specification_support` errors; outcome `invalid`.
 
 ## `CheckSpecificationSupportLocalizationAction` (`check-specification-support-localization`)
@@ -270,13 +271,13 @@ variants of the generic repair operations, specified once in
 ## `BuildSpecificationSupportLossInputAction` (`build-specification-support-loss-input`)
 
 - **Owner:** [`src/actions/specification/build_specification_support_loss_input.zig`](../../../src/actions/specification/build_specification_support_loss_input.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Rejects:** `InvalidRequiredAuthority` for a rejected review.
 
 ## `CollectSpecificationSupportLossAction` (`collect-specification-support-loss`)
 
 - **Owner:** [`src/actions/specification/collect_specification_support_loss.zig`](../../../src/actions/specification/collect_specification_support_loss.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
+- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
 - **Rejects:** `specification_support` errors; outcome `invalid`.
 
 ## `ApplySpecificationSupportAction` (`apply-specification-support`)
@@ -291,7 +292,7 @@ variants of the generic repair operations, specified once in
 ## `ProjectSpecificationDocumentAction` (`project-specification-document`)
 
 - **Owner:** [`src/actions/specification/project_specification_document.zig`](../../../src/actions/specification/project_specification_document.zig)
-- **Reads:** `identified_specification_content`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `specification_coverage`, `reference_directory` · **Writes:** `specification_document` · **Side effect:** `none`
+- **Reads:** `identified_specification_content`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `specification_coverage`, `reference_directory` · **Writes:** `specification_document` · **Side effect:** `none`
 - **Does:** Project the identified content into the `spec.md` document, resolving exact copies,
   passive literals and `Source:` lines only from bound authorities.
 - **Rejects:** `specification_projection.Error`.
@@ -314,7 +315,7 @@ variants of the generic repair operations, specified once in
 ## `BuildSpecificationStateAction` (`build-specification-state`)
 
 - **Owner:** [`src/actions/specification/build_specification_state.zig`](../../../src/actions/specification/build_specification_state.zig)
-- **Reads:** `prior_specification_state`, `reference_snapshot`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `identified_specification_content`, `specification_id_ledger`, `specification_coverage`, `principle_registry`, `refreshed_clarification_state`, `validated_specification_rendering` · **Writes:** `specification_publication_state` · **Side effect:** `none`
+- **Reads:** `prior_specification_state`, `reference_snapshot`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `specification_generation_session`, `identified_specification_content`, `specification_id_ledger`, `specification_coverage`, `principle_registry`, `refreshed_clarification_state`, `validated_specification_rendering` · **Writes:** `specification_publication_state` · **Side effect:** `none`
 - **Does:** Build and validate the next `specification-state` revision once the rendering has
   validated (the `validated_specification_rendering` key orders this step after that validation, and
   carries no value), after checking resolved clarifications, the same reference state, and
@@ -324,7 +325,7 @@ variants of the generic repair operations, specified once in
 ## `PrepareSpecificationOutputAction` (`prepare-specification-output`)
 
 - **Owner:** [`src/actions/specification/prepare_specification_output.zig`](../../../src/actions/specification/prepare_specification_output.zig)
-- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `specification_publication_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `rendered_specification`, `validated_specification_rendering`, `rendered_reference_context` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `specification_publication_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `rendered_specification`, `validated_specification_rendering`, `rendered_reference_context` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
 - **Does:** Revalidate the state, clarifications and revision, require `spec.md` and
   `reference-context.md` to re-render byte-identically, and assemble them with the clarification
   files and workflow state as one output set.

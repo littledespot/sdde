@@ -7,8 +7,8 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 One entry per registered operation; reads and writes are its `NodeContract` data keys.
 [F0002](../../features/F0002-LogService.md) owns the logging contract (events, record format,
 segments, locks and the emergency record) and [§26.5](../26-security.md) the levels and emission
-rule. The runner-owned logging observer submits trusted lifecycle events and applied
-`WorkflowTelemetryFact`s to these operations; their IDs are not observed recursively, and the
+rule. The runner-owned logging observer submits trusted lifecycle events and the
+`WorkflowTelemetryFact`s the runner emits to these operations; their IDs are not observed recursively, and the
 logging orchestrator has no clock, filesystem, redaction, serializer or sink port.
 [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md#production-activation-and-finalization)
 owns activation and finalization: one owner finalizes logging before a registered
@@ -23,18 +23,11 @@ The `canonicalize_log_level` and `validate_logging_policy` steps of the startup 
 configured-level canonicalization and logging-policy compilation; both reject
 `LoggingPolicyInvalid`.
 
-## `ValidateFeatureLogPolicyTransitionAction` (`validate-feature-log-policy-transition`)
-
-- **Owner:** [`src/actions/log/validate_feature_log_policy_transition.zig`](../../../src/actions/log/validate_feature_log_policy_transition.zig)
-- **Reads:** `feature_log_binding`, `logging_policy` · **Writes:** `feature_log_policy_transition_authority` · **Side effect:** `none`
-- **Does:** Admits a switch to a new binding and policy in the same feature and run, with a new binding ID and policy ID and a transition-compatible policy.
-- **Rejects:** `InvalidFeatureLogPolicyTransition`.
-
 ## `ValidateFeatureLogFinalizationAction` (`validate-feature-log-finalization`)
 
 - **Owner:** [`src/actions/log/validate_feature_log_finalization.zig`](../../../src/actions/log/validate_feature_log_finalization.zig)
 - **Reads:** `feature_log_runtime_status` · **Writes:** `feature_log_finalization_authority` · **Side effect:** `none`
-- **Does:** Admits finalization: an active binding must be prepared, and a retired one is never finalized.
+- **Does:** Admits finalization: the binding must be prepared; an unprepared or retired one is never finalized.
 - **Rejects:** `InvalidFeatureLogFinalization`.
 
 ## Records

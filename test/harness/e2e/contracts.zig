@@ -221,8 +221,8 @@ pub const ExchangeEvidence = struct {
 };
 /// The one current report version, which a report builds with by default. A closed-member change advances
 /// it here alone (SPEC01 §2 rule 12); decoding still requires the member in every document.
-pub const report_schema: ReportSchema = .@"spec-e2e-report/v24";
-const ReportSchema = enum { @"spec-e2e-report/v24" };
+pub const report_schema: ReportSchema = .@"spec-e2e-report/v25";
+const ReportSchema = enum { @"spec-e2e-report/v25" };
 pub const Report = struct {
     schema: ReportSchema = report_schema,
     origin: enum { live } = .live,

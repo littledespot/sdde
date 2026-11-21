@@ -5,12 +5,8 @@ pub const DataKey = enum {
     principle_registry,
     prior_principle_registry,
     packet_guidance,
-    invocation_working_directory,
-    raw_engine_config,
-    engine_config,
     llm_provider_registry,
     repository_model_allowlist,
-    canonical_log_level,
     logging_policy,
     workflow_definition_registry,
     workflow_operation_registry,
@@ -97,7 +93,6 @@ pub const DataKey = enum {
     validated_specification_unit,
     specification_id_ledger,
     specification_coverage,
-    specification_coverage_repair,
     specification_support_review,
     specification_support_repair,
     source_omission_repair,
@@ -124,10 +119,8 @@ pub const DataKey = enum {
     log_emit_decision,
     trusted_log_clock,
     feature_log_stream_lock,
-    feature_log_recovery,
     feature_log_stream_state,
     feature_log_retention_authorization,
-    feature_log_policy_transition_authority,
     feature_log_runtime_status,
     feature_log_finalization_authority,
     identified_log_event,
@@ -136,7 +129,6 @@ pub const DataKey = enum {
     serialized_log_control_record,
     log_rotation_decision,
     log_flush_decision,
-    log_drop_evidence,
     feature_log_append_evidence,
 };
 
@@ -176,7 +168,6 @@ pub const NodeContract = struct {
 pub const RuntimeStatus = enum {
     active,
     cancelled,
-    deadline_exhausted,
 };
 
 pub const NodeRuntime = struct {
@@ -204,14 +195,8 @@ pub const NodeDelta = struct {
     data_writes: data.Slots = data.empty_slots,
     data_replacements: data.Slots = data.empty_slots,
     data_invalidations: std.enums.EnumSet(DataKey) = .initEmpty(),
-    telemetry_facts: [telemetry.max_facts_per_delta]telemetry.WorkflowTelemetryFact = undefined,
-    telemetry_fact_count: u8 = 0,
     runner_accounting_transition: ?runner_accounting.Transition = null,
     repair_transition: ?@import("workflow_retry.zig").Transition = null,
-
-    pub fn addedTelemetryFacts(self: *const NodeDelta) []const telemetry.WorkflowTelemetryFact {
-        return self.telemetry_facts[0..self.telemetry_fact_count];
-    }
 
     pub fn effects(self: *const NodeDelta, keys: *EffectKeys) DataEffects {
         var writes: usize = 0;
@@ -268,31 +253,6 @@ pub const DataEffects = struct {
     }
 };
 
-pub const WorkflowLog = struct {
-    workflow_shortcode: telemetry.WorkflowShortcode,
-
-    pub const Error = error{TelemetryFactLimitExceeded};
-
-    pub fn init(shortcode: telemetry.WorkflowShortcode) WorkflowLog {
-        return .{ .workflow_shortcode = shortcode };
-    }
-
-    pub fn log(
-        self: WorkflowLog,
-        delta: *NodeDelta,
-        fact: telemetry.TelemetryFact,
-    ) Error!void {
-        if (delta.telemetry_fact_count >= telemetry.max_facts_per_delta) {
-            return error.TelemetryFactLimitExceeded;
-        }
-        delta.telemetry_facts[delta.telemetry_fact_count] = .{
-            .workflow_shortcode = self.workflow_shortcode,
-            .fact = fact,
-        };
-        delta.telemetry_fact_count += 1;
-    }
-};
-
 pub const DeltaError = error{
     MissingRequiredData,
     DataAlreadyPresent,
@@ -311,7 +271,6 @@ pub const DeltaError = error{
     MissingRunnerAccountingTransition,
     UndeclaredRepairTransition,
     ConflictingDataEffects,
-    InvalidTelemetryCount,
 };
 
 /// Dependency/effect validation only; actual workflow data lives in the runner-owned envelope.
@@ -323,7 +282,6 @@ pub const DataShape = struct {
     }
 
     pub fn applyDelta(self: DataShape, contract: NodeContract, delta: *const NodeDelta) DeltaError!DataShape {
-        if (delta.telemetry_fact_count > telemetry.max_facts_per_delta) return error.InvalidTelemetryCount;
         var keys: EffectKeys = .{};
         return self.apply(contract, delta.effects(&keys));
     }
@@ -503,54 +461,43 @@ fn alwaysActive(_: ?*anyopaque) RuntimeStatus {
     return .active;
 }
 
-test "workflow log adds attributed facts to a candidate delta without I/O" {
-    const shortcode = try telemetry.WorkflowShortcode.parse("TEST");
-    var delta: NodeDelta = .{};
-    try WorkflowLog.init(shortcode).log(&delta, .{ .event_type = .run_started });
-    try std.testing.expectEqual(@as(usize, 1), delta.addedTelemetryFacts().len);
-    try std.testing.expectEqualStrings(
-        "TEST",
-        delta.addedTelemetryFacts()[0].workflow_shortcode.slice(),
-    );
-}
-
 test "data shape applies only the exact declared effects" {
     const contract: NodeContract = .{
         .id = "test",
         .kind = .action,
-        .requires = &.{.engine_config},
-        .produces = &.{.canonical_log_level},
+        .requires = &.{.workflow_definition_registry},
+        .produces = &.{.principle_registry},
         .side_effect = .none,
     };
-    const initial = DataShape.init(&.{.engine_config});
+    const initial = DataShape.init(&.{.workflow_definition_registry});
     const next = try initial.apply(contract, DataEffects.fromContract(contract));
-    try std.testing.expect(next.contains(.canonical_log_level));
-    try std.testing.expect(!initial.contains(.canonical_log_level));
+    try std.testing.expect(next.contains(.principle_registry));
+    try std.testing.expect(!initial.contains(.principle_registry));
 }
 
 test "data shape rejects missing undeclared and duplicate writes" {
     const contract: NodeContract = .{
         .id = "test",
         .kind = .action,
-        .requires = &.{.engine_config},
-        .produces = &.{.canonical_log_level},
+        .requires = &.{.workflow_definition_registry},
+        .produces = &.{.principle_registry},
         .side_effect = .none,
     };
-    const envelope = DataShape.init(&.{.engine_config});
+    const envelope = DataShape.init(&.{.workflow_definition_registry});
     try std.testing.expectError(
         error.MissingDeclaredWrite,
         envelope.apply(contract, .{}),
     );
     try std.testing.expectError(
         error.UndeclaredWrite,
-        envelope.apply(contract, .{ .data_writes = &.{.raw_engine_config} }),
+        envelope.apply(contract, .{ .data_writes = &.{.workflow_operation_registry} }),
     );
     try std.testing.expectError(
         error.DuplicateWrite,
         envelope.apply(contract, .{
             .data_writes = &.{
-                .canonical_log_level,
-                .canonical_log_level,
+                .principle_registry,
+                .principle_registry,
             },
         }),
     );
@@ -561,4 +508,3 @@ test "data shape rejects missing undeclared and duplicate writes" {
     );
 }
 const std = @import("std");
-const telemetry = @import("telemetry.zig");

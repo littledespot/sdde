@@ -133,8 +133,8 @@ AppliedChildOutcome {
 ## 2. Capability-free node runtime
 
 Implemented as `NodeRuntime` in [pipeline.zig](../src/domain/pipeline.zig): one
-`status()` reporting `active`, `cancelled` or `deadline_exhausted`, which carries
-the sample's cancellation token and deadline. Kept here, flagged: the native type
+`status()` reporting `active` or `cancelled`, which carries the sample's
+cancellation token. Kept here, flagged: the native type
 has no `correlationContext` or `traceContext`.
 
 - The runtime carries no operation capabilities.
@@ -270,8 +270,8 @@ Native owners:
   [F0002 §6.2](features/F0002-LogService.md#62-levels-and-content-safety) registry,
   whose payload is exactly that row's fields; F0002 §4 owns the fact shape and what
   a fact may not contain. `model.prompt_fragment` is not a fact. The native
-  `TelemetryFact` in [telemetry.zig](../src/domain/telemetry.zig) doesn't meet that
-  shape yet (SPEC01 "F0002 event registry").
+  `TelemetryFact` in [telemetry.zig](../src/domain/telemetry.zig) has that shape: its
+  `row` names each event's fields and the registry rejects a prompt-fragment variant.
 
 Kept here, flagged, because the native types lack them:
 

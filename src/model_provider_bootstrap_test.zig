@@ -125,39 +125,24 @@ test "routine maps provider document location and read failures to the read code
 /// The checkpoints of a full run, in order: before the first step, then after each of the seven.
 const checkpoint_steps = [_]routine.Step{ .derive_requirement, .derive_requirement, .locate_config, .read_config, .decode_config, .build_registry, .validate_registry, .validate_allowlist };
 
-test "routine checks cancellation and deadline between every pair of steps and keeps today's codes" {
+test "routine checks cancellation between every pair of steps" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const graph = try compileOne(arena.allocator(), &operation_registry, "test.model");
     for (checkpoint_steps, 1..) |step, checkpoint| {
-        for ([_]pipeline.RuntimeStatus{ .cancelled, .deadline_exhausted }) |stop| {
-            var countdown: Countdown = .{ .stop_at = checkpoint, .stop = stop };
-            var world: World = .{ .bytes = provider_document };
-            try world.init(&graph, model_config);
-            defer world.deinit();
-            var outcome = world.run(countdown.runtime());
-            defer outcome.deinit();
-            switch (stop) {
-                .cancelled => try std.testing.expect(outcome == .cancelled),
-                .deadline_exhausted => try std.testing.expectEqual(codeOf(step), outcome.failed),
-                .active => unreachable,
-            }
-            try std.testing.expectEqual(@as(?routine.Step, step), world.diagnostic.step);
-            try std.testing.expectEqual(checkpoint, countdown.checks);
-            // The port steps that finished before the stop ran once each and none after it.
-            try std.testing.expectEqual(@as(usize, if (checkpoint >= 3) 1 else 0), world.source.locate_calls);
-            try std.testing.expectEqual(@as(usize, if (checkpoint >= 4) 1 else 0), world.source.read_calls);
-        }
+        var countdown: Countdown = .{ .stop_at = checkpoint, .stop = .cancelled };
+        var world: World = .{ .bytes = provider_document };
+        try world.init(&graph, model_config);
+        defer world.deinit();
+        var outcome = world.run(countdown.runtime());
+        defer outcome.deinit();
+        try std.testing.expect(outcome == .cancelled);
+        try std.testing.expectEqual(@as(?routine.Step, step), world.diagnostic.step);
+        try std.testing.expectEqual(checkpoint, countdown.checks);
+        // The port steps that finished before the stop ran once each and none after it.
+        try std.testing.expectEqual(@as(usize, if (checkpoint >= 3) 1 else 0), world.source.locate_calls);
+        try std.testing.expectEqual(@as(usize, if (checkpoint >= 4) 1 else 0), world.source.read_calls);
     }
-}
-
-fn codeOf(step: routine.Step) bootstrap_error.PublicError {
-    return switch (step) {
-        .derive_requirement, .build_registry, .validate_registry => .LLM_PROVIDER_REGISTRY_INVALID,
-        .locate_config, .read_config => .LLM_PROVIDER_CONFIG_READ_ERROR,
-        .decode_config => .LLM_PROVIDER_CONFIG_PARSE_ERROR,
-        .validate_allowlist => .LLM_PROVIDER_MODEL_BINDING_INVALID,
-    };
 }
 
 test "an explicit cancellation of the port steps stays cancellation and any other port failure is the read code" {
@@ -172,12 +157,12 @@ test "an explicit cancellation of the port steps stays cancellation and any othe
     try std.testing.expect(cancelled_outcome == .cancelled);
     try std.testing.expectEqual(@as(?routine.Step, .locate_config), cancelled.diagnostic.step);
 
-    var late: World = .{ .bytes = provider_document, .locate_error = error.DeadlineExhausted };
-    try late.init(&graph, model_config);
-    defer late.deinit();
-    var late_outcome = late.run(.{});
-    defer late_outcome.deinit();
-    try std.testing.expectEqual(bootstrap_error.PublicError.LLM_PROVIDER_CONFIG_READ_ERROR, late_outcome.failed);
+    var unreadable: World = .{ .bytes = provider_document, .locate_error = error.LLMProviderConfigReadFailure };
+    try unreadable.init(&graph, model_config);
+    defer unreadable.deinit();
+    var unreadable_outcome = unreadable.run(.{});
+    defer unreadable_outcome.deinit();
+    try std.testing.expectEqual(bootstrap_error.PublicError.LLM_PROVIDER_CONFIG_READ_ERROR, unreadable_outcome.failed);
 }
 
 test "every allocation failure in a full run yields a failure that names a step, or the ready authority, and leaks nothing" {

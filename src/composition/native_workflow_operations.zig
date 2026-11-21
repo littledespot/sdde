@@ -34,7 +34,6 @@ const path_tokens = @import("../application/path_token_workflow.zig");
 const passive_literals = @import("../application/passive_literal_workflow.zig");
 const text_repair = @import("../application/reference_text_repair_workflow.zig");
 const generic_repair = @import("../application/repair_workflow.zig");
-const coverage_repair = @import("../application/specification_coverage_repair_workflow.zig");
 const reconciliation_repair = @import("../application/reference_reconciliation_repair_workflow.zig");
 const extraction_repair = @import("../application/reference_extraction_repair_workflow.zig");
 const structured_tokens = @import("../application/structured_token_workflow.zig");
@@ -209,8 +208,8 @@ pub const Assembly = struct {
             .assign_reconciliation_partitions = .{ .allocator = allocator },
             .validate_reconciliation_partitions = .{ .allocator = allocator },
             .build_reconciliation_input = .{ .allocator = allocator },
-            .check_summary_reuse = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
-            .reuse_reconciliation_summary = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
+            .check_summary_reuse = .{ .allocator = allocator, .action = .{} },
+            .reuse_reconciliation_summary = .{ .allocator = allocator, .action = .{} },
             .parse_reconciliation = .{ .allocator = allocator },
             .validate_reconciliation_summary = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
             .assign_reconciliation_summary = .{ .allocator = allocator },
@@ -255,7 +254,7 @@ pub const Assembly = struct {
             .prepare_specification_output = .{ .allocator = allocator },
             .render_specification = .{ .allocator = allocator },
             .validate_specification_rendering = .{ .allocator = allocator },
-            .validate_specification_coverage = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
+            .validate_specification_coverage = .{ .allocator = allocator, .action = .{} },
             .build_specification_support = .{ .allocator = allocator },
             .collect_specification_support = .{ .allocator = allocator },
             .check_specification_support_localization = .{},
@@ -290,7 +289,6 @@ pub const Assembly = struct {
                 .source_omission = .{ .allocator = allocator },
                 .specification_unit = .{ .allocator = allocator },
                 .specification_support = .{ .allocator = allocator },
-                .specification_coverage = .{ .allocator = allocator },
             },
             .build_repair_input = .{
                 .reference_text = .{ .allocator = allocator },
@@ -431,7 +429,7 @@ pub const Assembly = struct {
             entry(publication.RenderReference, &self.render_reference_context),
             entry(publication.Prepare, &self.prepare_specification_output),
         };
-        self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{authority.gate_contract} };
+        self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
     }
 
     pub fn bindPrinciples(self: *Assembly, root: *const roots.ConfiguredBaseRootCapability, reader: @import("../ports/principle_source.zig").Reader) void {
@@ -465,7 +463,7 @@ pub const Assembly = struct {
     }
 };
 
-pub const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_generation.schemas ++ scenario_link.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
+pub const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_generation.schemas ++ scenario_link.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging },

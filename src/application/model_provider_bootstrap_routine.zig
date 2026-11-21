@@ -19,8 +19,8 @@ const config_port = @import("../ports/llm_provider_config_source.zig");
 // ADR 0032: provider bootstrap after workflow selection as one engine routine. It derives the
 // requirement from the selected workflow and, only when the workflow needs a provider, captures
 // the provider document once, decodes it, builds and validates the registry and the allowlist.
-// Public error codes are unchanged: every failure of a step, including allocation failure and
-// deadline exhaustion, maps to that step's fixed code, and explicit cancellation stays distinct.
+// Public error codes are unchanged: every failure of a step, including allocation failure, maps to
+// that step's fixed code, and explicit cancellation stays distinct.
 
 /// The closed set of steps, in execution order. A failure or a stop at a checkpoint records the
 /// step it belongs to in the caller's `Diagnostic`.
@@ -137,17 +137,15 @@ fn configFailure(diagnostic: *Diagnostic, step: Step, failure: config_port.Error
     diagnostic.step = step;
     return switch (failure) {
         error.Cancelled => .cancelled,
-        error.DeadlineExhausted, error.LLMProviderConfigReadFailure => .{ .failed = code(step) },
+        error.LLMProviderConfigReadFailure => .{ .failed = code(step) },
     };
 }
 
-/// Stops on cancellation, and on deadline exhaustion with `step`'s code: the step the checkpoint
-/// follows, or the first step for the opening checkpoint.
+/// Stops on cancellation: the step the checkpoint follows, or the first step for the opening checkpoint.
 fn checkpoint(runtime: pipeline.NodeRuntime, diagnostic: *Diagnostic, step: Step) ?Outcome {
     return switch (runtime.status()) {
         .active => null,
         .cancelled => stopped(diagnostic, step, .cancelled),
-        .deadline_exhausted => stopped(diagnostic, step, .{ .failed = code(step) }),
     };
 }
 

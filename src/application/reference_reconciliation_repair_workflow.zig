@@ -47,10 +47,10 @@ pub fn Authorize(comptime stage: Stage) type {
         /// every later phase that depended on it.
         pub const effects: repair_owner.Effects = .{
             .requires = switch (stage) {
-                .summary => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_summary },
-                .dispositions => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_dispositions },
-                .signals => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_signals },
-                .conflicts => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_conflicts },
+                .summary => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_summary },
+                .dispositions => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_dispositions },
+                .signals => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_signals },
+                .conflicts => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_conflicts },
             },
             .produces = &.{.reference_reconciliation_repair},
             .invalidates = switch (stage) {
@@ -98,7 +98,7 @@ pub fn Authorize(comptime stage: Stage) type {
 }
 pub const BuildInput = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .packet_guidance },
+        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .packet_guidance },
         .produces = &.{.model_input_packet},
     };
     allocator: std.mem.Allocator,
@@ -134,7 +134,7 @@ pub const Parse = struct {
 };
 pub const Merge = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain },
+        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals },
         .replaces = &.{.parsed_reference_reconciliation},
         .invalidates = &.{.reference_reconciliation_repair},
     };

@@ -595,7 +595,7 @@ fn define(b: *std.Build) Graph {
         .optimize = optimize,
         .imports = &.{ .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }, .{ .name = "unicode_normalization", .module = unicode_module } },
     }) });
-    b.step("test-required-authority", "Test shared required authority, ownership routing and YAML gates").dependOn(&b.addRunArtifact(authority_tests).step);
+    b.step("test-required-authority", "Test shared required authority, ownership routing and YAML routing of rejected results").dependOn(&b.addRunArtifact(authority_tests).step);
 
     const request_preparation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/model_request_preparation_test.zig"),
@@ -707,13 +707,6 @@ fn define(b: *std.Build) Graph {
     reuse_tests.addArtifactArg(test_run_key_tool);
     b.step("test-build-reuse", "Prove test runs are fresh by default and opt-in reuse reruns on any input change and never in verify").dependOn(&reuse_tests.step);
     test_step.dependOn(&reuse_tests.step);
-
-    const timing_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/test_fixtures/scenario_timing.zig"),
-        .target = target,
-        .optimize = optimize,
-    }) }));
-    b.step("test-scenario-timing", "Test scenario cost reporting and incomplete-run accounting").dependOn(&timing_tests.step);
 
     const untraced_allocator_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/test_fixtures/untraced_allocator.zig"),

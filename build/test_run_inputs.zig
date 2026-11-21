@@ -10,7 +10,6 @@ const std = @import("std");
 /// parent directory whose name starts with its last component, recursively.
 /// Locations that tests also write are included, at the cost of fewer reuses.
 pub const ignored = [_][]const u8{
-    ".zig-cache/authoring-associations",
     ".zig-cache/authoring-comparison",
     ".zig-cache/exact-value-production-admission",
     ".zig-cache/representation-admission",
@@ -104,7 +103,7 @@ test "every ignored path that test sources name is keyed or a live output root" 
 }
 
 test "ignored-path coverage accepts listed locations and rejects new ones" {
-    try std.testing.expect(covered(".zig-cache/authoring-associations/v14-text", false));
+    try std.testing.expect(covered(".zig-cache/authoring-comparison/v14-text", false));
     try std.testing.expect(covered(".zig-cache/workflow-step-trace", true));
     try std.testing.expect(covered("zig-out/e2e-spec", false));
     try std.testing.expect(!covered("zig-out/e2e-spec", true));
