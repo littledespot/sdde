@@ -12,12 +12,12 @@ pub const raw_schema = values.schema(.raw_reference_extraction, owned.Value, 1, 
 pub const parsed_schema = values.schema(.parsed_reference_extraction, owned.Value, 1, null).captured();
 // Repair retains this immutable candidate; source/policy lineage stays current.
 pub const text_schema = values.schema(.text_validated_reference_extraction, owned.Value, 1, null).captured();
-pub const selections_schema = values.schema(.validated_reference_selections, owned.Value, 1, null).captured();
+pub const classifications_schema = values.schema(.validated_token_classifications, owned.Value, 1, null).captured();
 pub const validated_schema = values.schema(.validated_reference_claims, owned.Value, 1, null);
 pub const assigned_schema = values.schema(.reference_claim_identities, owned.Value, 1, null);
 pub const ledger_schema = values.schema(.reference_extraction_ledger, owned.Value, 1, null);
 pub const accounted_schema = values.schema(.accounted_reference_extraction, owned.Value, 1, null);
-pub const schemas = [_]data.Schema{ raw_schema, parsed_schema, text_schema, selections_schema, validated_schema, assigned_schema, ledger_schema, accounted_schema };
+pub const schemas = [_]data.Schema{ raw_schema, parsed_schema, text_schema, classifications_schema, validated_schema, assigned_schema, ledger_schema, accounted_schema };
 
 pub const Parse = struct {
     pub const Action = @import("../actions/reference/parse_reference_extraction_results.zig").Action;
@@ -58,11 +58,11 @@ pub const ValidateText = struct {
         return published;
     }
 };
-pub const ValidateSelections = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_reference_selections, .result = .validated_reference_selections } };
+pub const ValidateTokenClassifications = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_token_classifications, .result = .validated_token_classifications } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
-    pub const Action = @import("../actions/reference/validate_reference_selections.zig").Action;
+    pub const Action = @import("../actions/reference/validate_token_classifications.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -74,11 +74,11 @@ pub const ValidateSelections = struct {
         errdefer owned.destroy(owner);
         const result = self.action.execute(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch |operation_error| return operation_error;
         owner.payload = switch (result) {
-            .valid => |accepted| .{ .selections_validated = accepted },
+            .valid => |accepted| .{ .classifications_validated = accepted },
             .invalid => |diagnostic| .{ .token_classification_rejected = diagnostic },
         };
         const progress = @import("../domain/reference_extraction_repair.zig").progress(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch |operation_error| return operation_error;
-        var published = try publish(self.allocator, selections_schema, owner, if (result == .valid) .ok else .invalid);
+        var published = try publish(self.allocator, classifications_schema, owner, if (result == .valid) .ok else .invalid);
         published.delta.repair_transition = progress;
         return published;
     }

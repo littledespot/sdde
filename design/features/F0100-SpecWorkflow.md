@@ -247,15 +247,13 @@ work; this initial reader does not claim support for arbitrary reference bytes.
 
 ### 3.4 Citable reference inputs
 
-The evidence stage's last three steps extend that boundary, and one registered operation
-validates citations:
+The evidence stage's last three steps extend that boundary:
 
 | Step or operation | Contract |
 | --- | --- |
 | `assignIdentities` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
 | `buildChunks` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
 | `validateChunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
-| `validate-source-citations` | Citable inputs and engine-scoped typed proposals → validated source citations. |
 
 - The [reference identity owner](../../src/domain/reference_identity.zig) supplies the
   same state/chunk types used by model-request owners.
@@ -352,14 +350,13 @@ contracts follow Design §7.1. Source discovery uses §11's `SupersetPathTokenGr
 compiled from resolved naming/extension rules, reserved/manifest names and reference
 basenames. It does not classify ordinary prose as an operational reference.
 
-The initial native boundary is implemented through two pure registered operations and one
-step of the token stage:
+The initial native boundary is implemented through one pure registered operation and one
+step of the token stage; the passive-literal extraction scans each source block with the grammar:
 
 | Operation or step | Required inputs → output |
 | --- | --- |
 | `compile-naming-policy` | `valid_toolchain` → `compiled_naming_policy` |
 | `buildGrammar` (`prepare-reference-tokens`) | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
-| `scan-path-tokens` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
 
 - [F0003 §3.5](F0003-Toolchain.md#35-registered-lexical-naming-rules) owns the
   registered rule contract.
@@ -451,7 +448,7 @@ file/network access, output write, clarification change or completion transition
 | --- | --- |
 | `extractFacts` (`prepare-reference-tokens`) | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
 | `assignCandidates` (`prepare-reference-tokens`) | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
-| `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
+| `validate-token-classifications` | Current candidates and text-validated responses → complete chunk-local token classifications, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
 | `assign-preserved-token-identities` | Validated decisions → state-local token ordinals in source order; irrelevant/blocked candidates allocate none. |
 | `build-preserved-token-claims` | Token assignments → prepared deterministic claims alongside unchanged model claims, before common citation validation, claim-ID assignment and ledger construction. |
 
@@ -694,7 +691,7 @@ closed requiredness/ownership policies, current support checks and outcomes.
 | `build-specification-authority-requirements` | Project native reference facts into the shared source-readiness requirements. |
 | `apply-specification-support` | Project an admitted review into shared authority inputs after collection/repair. |
 | `build-required-authority-ledger` | Validate and canonically order registered requirements/current inputs. |
-| `build-required-authority-observations` | Derive each requirement's observation (inspected authorities and evidence IDs) from the ledger; the registered `parse-required-authority-observations` instead parses a supplied observation document with the shared strict JSON decoder. |
+| `build-required-authority-observations` | Derive each requirement's observation (inspected authorities and evidence IDs) from the ledger. |
 | `reconcile-required-authorities` | Account for every supplied evidence member and derive one resolution or gap per requirement. |
 | `validate-required-authority-reconciliation` | Rebuild against current inputs and issue accepted/rejected gate evidence. |
 | `retire-required-authority-projection` | Invalidate the source-review projection keys before generation (`retire-source-review`). |

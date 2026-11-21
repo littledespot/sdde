@@ -13,7 +13,14 @@ const fold: @import("ports/unicode_normalizer.zig").CaseFolder = .{ .fold_fn = u
 const classifier: @import("ports/unicode_normalizer.zig").LexicalClassifier = .{ .boundary_fn = unicode.lexicalBoundary };
 const compile_action = @import("actions/toolchain/compile_naming_policy.zig").Action{ .normalizer = normalize, .folder = fold };
 const steps = @import("actions/reference/prepare_reference_tokens.zig").steps;
-const scan_action = @import("actions/reference/scan_path_tokens.zig").Action{ .normalizer = normalize, .folder = fold, .classifier = classifier };
+
+/// Scanning as the passive-literal extraction does it: the grammar's binding is validated before the scan.
+fn scanBound(allocator: std.mem.Allocator, compiled: grammar.Grammar, current: *const safety.ValidToolchain, inputs: @import("domain/reference_evidence.zig").Inputs, text: []const u8) scanning.Error!*scanning.Owner {
+    var scratch: std.heap.ArenaAllocator = .init(allocator);
+    defer scratch.deinit();
+    try grammar.validateBinding(scratch.allocator(), compiled, current, inputs, normalize, fold);
+    return scanning.scan(allocator, compiled, text, normalize, fold, classifier);
+}
 
 const registry: toolchain.PolicyRegistry = .{ .contracts = &.{
     .{ .id = "core@1", .project_selectable = false, .locked_required = true, .naming = &.{.{ .id = .{ .bytes = "core.reserved" }, .kind = .reserved, .value = "engine.config", .case_sensitive = true }} },
@@ -114,7 +121,7 @@ test "one detector recognizes policy reference path and URI tokens with original
     const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "Café.md", "source\n"));
     const compiled = try steps.buildGrammar(normalize, fold, allocator, try compile_action.execute(allocator, safety.value(owner)), safety.value(owner), inputs);
     const text = "Plain words, (engine.config), app.TEST.WIDGET; Dockerfile .env Build2αTail STRASSE «Cafe\u{301}.md» src/main.go C:\\temp\\file \\\\server\\share / mailto:a@example.test https://example.test/a?q=1 file%252Fname. Secretfile dockerfile unknown.ext 1.25";
-    const result = try scan_action.execute(std.testing.allocator, compiled, safety.value(owner), inputs, text);
+    const result = try scanBound(std.testing.allocator, compiled, safety.value(owner), inputs, text);
     defer scanning.destroy(result);
     const expected = [_][]const u8{ "engine.config", "app.TEST.WIDGET", "Dockerfile", ".env", "Build2αTail", "STRASSE", "Cafe\u{301}.md", "src/main.go", "C:\\temp\\file", "\\\\server\\share", "/", "mailto:a@example.test", "https://example.test/a?q=1", "file%252Fname" };
     try std.testing.expectEqual(expected.len, result.matches.len);
@@ -125,24 +132,24 @@ test "one detector recognizes policy reference path and URI tokens with original
     }
     var changed = inputs;
     changed.corpus.state_id.bytes = "different";
-    try std.testing.expectError(error.InvalidPathTokenGrammar, scan_action.execute(std.testing.allocator, compiled, safety.value(owner), changed, text));
+    try std.testing.expectError(error.InvalidPathTokenGrammar, scanBound(std.testing.allocator, compiled, safety.value(owner), changed, text));
     var missing = compiled;
     missing.reference_names = &.{};
-    try std.testing.expectError(error.InvalidPathTokenGrammar, scan_action.execute(std.testing.allocator, missing, safety.value(owner), inputs, text));
+    try std.testing.expectError(error.InvalidPathTokenGrammar, scanBound(std.testing.allocator, missing, safety.value(owner), inputs, text));
     var wrong_feature = compiled;
     wrong_feature.feature_id.bytes = "unrelated-feature";
-    try std.testing.expectError(error.InvalidPathTokenGrammar, scan_action.execute(std.testing.allocator, wrong_feature, safety.value(owner), inputs, text));
+    try std.testing.expectError(error.InvalidPathTokenGrammar, scanBound(std.testing.allocator, wrong_feature, safety.value(owner), inputs, text));
     var wrong_source = compiled;
     var names = [_]grammar.ReferenceName{compiled.reference_names[0]};
     names[0].source_id.ordinal += 1;
     wrong_source.reference_names = &names;
-    try std.testing.expectError(error.InvalidPathTokenGrammar, scan_action.execute(std.testing.allocator, wrong_source, safety.value(owner), inputs, text));
+    try std.testing.expectError(error.InvalidPathTokenGrammar, scanBound(std.testing.allocator, wrong_source, safety.value(owner), inputs, text));
     names[0] = compiled.reference_names[0];
     names[0].basename = "other.md";
-    try std.testing.expectError(error.InvalidPathTokenGrammar, scan_action.execute(std.testing.allocator, wrong_source, safety.value(owner), inputs, text));
-    try std.testing.expectError(error.InvalidPathTokenText, scan_action.execute(std.testing.allocator, compiled, safety.value(owner), inputs, "\xff"));
-    try std.testing.expectError(error.InvalidPathTokenText, scan_action.execute(std.testing.allocator, compiled, safety.value(owner), inputs, "source\x00.md"));
-    const punctuation = try scan_action.execute(std.testing.allocator, compiled, safety.value(owner), inputs, "Dockerfile? ‘Dockerfile’\u{2003}.env: https://example.test/a?q=1&b=2#part");
+    try std.testing.expectError(error.InvalidPathTokenGrammar, scanBound(std.testing.allocator, wrong_source, safety.value(owner), inputs, text));
+    try std.testing.expectError(error.InvalidPathTokenText, scanBound(std.testing.allocator, compiled, safety.value(owner), inputs, "\xff"));
+    try std.testing.expectError(error.InvalidPathTokenText, scanBound(std.testing.allocator, compiled, safety.value(owner), inputs, "source\x00.md"));
+    const punctuation = try scanBound(std.testing.allocator, compiled, safety.value(owner), inputs, "Dockerfile? ‘Dockerfile’\u{2003}.env: https://example.test/a?q=1&b=2#part");
     defer scanning.destroy(punctuation);
     const lexemes = [_][]const u8{ "Dockerfile", "Dockerfile", ".env", "https://example.test/a?q=1&b=2#part" };
     try std.testing.expectEqual(lexemes.len, punctuation.matches.len);
@@ -173,40 +180,6 @@ test "runner-owned grammar retains rules reference names and exact identity afte
     try std.testing.expectError(error.StaleNamingPolicy, naming.validateBinding(std.testing.allocator, compiled.policy, safety.value(successor), normalize, fold));
 }
 
-test "the path-token scan binding needs the data resource its step names" {
-    const values = @import("application/pipeline_values.zig");
-    const path_token = @import("application/path_token_workflow.zig");
-    const compilation = @import("domain/workflow_compilation.zig");
-    const owner = try authority(std.testing.allocator);
-    const current = try values.adopt(std.testing.allocator, @import("application/toolchain_workflow_values.zig").valid, safety.ValidToolchain, safety.Owner, owner, safety.value, safety.deinitOwner, safety.retainedBytes(owner));
-    defer values.destroy(current);
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    var ids: fixture.IdSource = .{};
-    const inputs = try fixture.prepare(arena.allocator(), &ids, try ingest(arena.allocator(), "notes.md", "source\n"));
-    const compiled = try steps.buildGrammar(normalize, fold, arena.allocator(), try compile_action.execute(arena.allocator(), safety.value(owner)), safety.value(owner), inputs);
-    const grammar_value = try values.create(std.testing.allocator, path_token.grammar_schema, grammar.Grammar, compiled);
-    defer values.destroy(grammar_value);
-    const inputs_value = try values.create(std.testing.allocator, @import("application/reference_evidence_workflow.zig").inputs_schema, @import("domain/reference_evidence.zig").Inputs, inputs);
-    defer values.destroy(inputs_value);
-    var view: @import("domain/pipeline_data.zig").View = .{};
-    view.slots[@intFromEnum(@import("application/toolchain_workflow_values.zig").valid.key)] = current;
-    view.slots[@intFromEnum(path_token.grammar_schema.key)] = grammar_value;
-    view.slots[@intFromEnum(@import("application/reference_evidence_workflow.zig").inputs_schema.key)] = inputs_value;
-    const parameters = [_]compilation.CompiledParameter{.{ .id = .{ .bytes = "text" }, .value = .{ .resource = .{ .bytes = "text" } } }};
-    const step: compilation.CompiledStep = .{ .id = .{ .bytes = "scan" }, .operation_id = .{ .bytes = "scan-path-tokens" }, .parameters = &parameters, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{.ok}, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
-    var scan: path_token.Scan = .{ .allocator = std.testing.allocator, .action = scan_action };
-    const log: @import("domain/pipeline.zig").WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("PATH"));
-    // The text is the step's data resource: none bound, or a resource of another kind, is no text to scan.
-    const prompt = [_]compilation.CompiledResource{.{ .id = .{ .bytes = "text" }, .content = .{ .prompt = "a prompt is no data resource" } }};
-    for ([_][]const compilation.CompiledResource{ &.{}, &prompt }) |resources| {
-        try std.testing.expectError(error.PathTokenTextMissing, path_token.Scan.invoke(&scan, .{ .step = .{ .data = view, .step = &step, .resources = resources, .model_binding = null, .log = log } }));
-    }
-    const data_resource = [_]compilation.CompiledResource{.{ .id = .{ .bytes = "text" }, .content = .{ .data = "Dockerfile" } }};
-    const scanned = try path_token.Scan.invoke(&scan, .{ .step = .{ .data = view, .step = &step, .resources = &data_resource, .model_binding = null, .log = log } });
-    values.destroy(scanned.delta.data_writes[@intFromEnum(path_token.scan_schema.key)].?);
-}
-
 test "basename glob matching is whole-token Unicode-aware and has no regex fallback" {
     const rule: rules.Rule = .{ .id = .{ .bytes = "r" }, .kind = .glob, .value = "file[0-9]?*", .case_sensitive = true };
     try rules.validate(&.{rule});
@@ -226,7 +199,7 @@ test "multi-token filenames share exact policy matching and retain Unicode raw s
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(arena.allocator(), &ids, try ingest(arena.allocator(), "Café Notes.md", "source\n"));
     const compiled = try steps.buildGrammar(normalize, fold, arena.allocator(), try compile_action.execute(arena.allocator(), safety.value(owner)), safety.value(owner), inputs);
-    const result = try scan_action.execute(std.testing.allocator, compiled, safety.value(owner), inputs, "Read BUILD NOTES, (Guide).cfg and «Cafe\u{301} Notes.md». NotBuild NotesExtra.");
+    const result = try scanBound(std.testing.allocator, compiled, safety.value(owner), inputs, "Read BUILD NOTES, (Guide).cfg and «Cafe\u{301} Notes.md». NotBuild NotesExtra.");
     defer scanning.destroy(result);
     const expected = [_][]const u8{ "BUILD NOTES", "(Guide).cfg", "Cafe\u{301} Notes.md" };
     try std.testing.expectEqual(expected.len, result.matches.len);
@@ -246,7 +219,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     const inputs = try fixture.prepare(arena.allocator(), &ids, try ingest(arena.allocator(), "source.md", "source\n"));
     const policy = try compile_action.execute(arena.allocator(), safety.value(owner));
     const compiled = try steps.buildGrammar(normalize, fold, arena.allocator(), policy, safety.value(owner), inputs);
-    const result = try scan_action.execute(allocator, compiled, safety.value(owner), inputs, "source.md Dockerfile src/main.go");
+    const result = try scanBound(allocator, compiled, safety.value(owner), inputs, "source.md Dockerfile src/main.go");
     defer scanning.destroy(result);
     try std.testing.expectEqual(@as(usize, 3), result.matches.len);
 }

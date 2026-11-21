@@ -323,14 +323,14 @@ test "test.integration.baseline source-only native acquisition retains exact fir
         const claim: experiment.Claim = .{ .schema = .@"baseline-experiment-claim/v1", .experiment_sha256 = try frozen_inputs.experimentHash(a, frozen), .freeze_sha256 = freeze_sha256, .execution_id = "offline-partial-panel", .limits = gate.snapshot().limits, .phases = &.{.baseline} };
         try experiment.consume(std.testing.io, a, parent.dir, claim);
         try experiment.verify(std.testing.io, a, parent.dir, claim);
-        const report: acquisition.Report = .{ .schema = .@"baseline-acquisition/v15", .freeze_sha256 = freeze_sha256, .build = frozen.build, .toolchain = frozen.toolchain, .execution_id = "offline-partial-panel", .experiment_claim = claim, .budget = gate.snapshot(), .allowance = try experiment.remaining(a, claim.phases, gate.snapshot()), .records = records, .complete = false };
-        const unversioned = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "\"schema\":\"baseline-acquisition/v15\",", "");
+        const report: acquisition.Report = .{ .freeze_sha256 = freeze_sha256, .build = frozen.build, .toolchain = frozen.toolchain, .execution_id = "offline-partial-panel", .experiment_claim = claim, .budget = gate.snapshot(), .allowance = try experiment.remaining(a, claim.phases, gate.snapshot()), .records = records, .complete = false };
+        const unversioned = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), try std.fmt.allocPrint(a, "\"schema\":\"{s}\",", .{@tagName(report.schema)}), "");
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, unversioned, frozen, freeze_sha256));
-        const old_version = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "baseline-acquisition/v15", "baseline-acquisition/v14");
+        const old_version = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), @tagName(report.schema), "baseline-acquisition/v15");
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, old_version, frozen, freeze_sha256));
         // The native report it embeds is versioned too: a retained run's previous report no longer decodes.
-        const stale_report = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "spec-e2e-report/v23", "spec-e2e-report/v22");
-        try std.testing.expect(std.mem.indexOf(u8, stale_report, "spec-e2e-report/v22") != null);
+        const stale_report = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), @tagName(@import("../harness/e2e/contracts.zig").report_schema), "spec-e2e-report/v23");
+        try std.testing.expect(std.mem.indexOf(u8, stale_report, "spec-e2e-report/v23") != null);
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, stale_report, frozen, freeze_sha256));
         _ = try acquisition.decode(a, try std.json.Stringify.valueAlloc(a, report, .{}), frozen, freeze_sha256);
         // Rehashing a changed receipt cannot make it match native evidence.

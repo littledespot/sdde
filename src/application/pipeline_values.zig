@@ -25,6 +25,9 @@ const RetainedReference = struct {
     next: ?*RetainedReference,
 };
 
+/// The bound a workflow step's published value of unbounded source size carries: 64 MiB.
+pub const max_value_bytes: u32 = 64 * 1024 * 1024;
+
 pub fn schema(comptime key: pipeline.DataKey, comptime T: type, version: u32, maximum_bytes: ?u32) data.Schema {
     return .{ .key = key, .version = version, .maximum_bytes = maximum_bytes, .type_name = @typeName(T) };
 }

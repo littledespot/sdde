@@ -25,13 +25,12 @@ const yaml =
     \\steps:
     \\  inputs: { use: test.authority-inputs, on: { ok: build } }
     \\  build: { use: build-required-authority-ledger, on: { ok: observe, blocked: end.blocked } }
-    \\  observe: { use: test.authority-observation, on: { ok: parse } }
-    \\  parse: { use: parse-required-authority-observations, on: { ok: reconcile, blocked: end.blocked } }
+    \\  observe: { use: build-required-authority-observations, on: { ok: reconcile, failed: end.failed } }
     \\  reconcile: { use: reconcile-required-authorities, on: { ok: validate, invalid: validate, needs-user: validate, blocked: validate } }
     \\  validate: { use: validate-required-authority-reconciliation, on: { ok: protected, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked } }
     \\  protected: { use: test.authority-protected, on: { ok: end.ok } }
 ;
-const Fault = enum { none, missing_support, conflict, stale, unknown, malformed };
+const Fault = enum { none, missing_support, conflict, stale, unknown };
 const Script = struct {
     allocator: std.mem.Allocator,
     kind: a.Kind = .feature_intent,
@@ -43,7 +42,7 @@ const Script = struct {
         errdefer owned.destroy(owner);
         var source = test_data.fixture(owner.arena.allocator(), self.kind) catch return error.InvocationFailureUnrecorded;
         switch (self.fault) {
-            .none, .malformed => {},
+            .none => {},
             .missing_support => source.evidence = &.{},
             .conflict => {
                 source.forced_gaps = owner.arena.allocator().dupe(a.ForcedGap, &.{.{ .requirement = source.seeds[0].id, .reason = .conflicting }}) catch return error.InvocationFailureUnrecorded;
@@ -60,15 +59,6 @@ const Script = struct {
         owner.payload = .{ .inputs = source };
         return owned.publish(self.allocator, native.inputs_schema, owner, .ok) catch return error.InvocationFailureUnrecorded;
     }
-    fn observation(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.InvocationFailureUnrecorded;
-        errdefer owned.destroy(owner);
-        const source = owned.read(&input.step.data, native.inputs_schema, .inputs) catch return error.InvocationFailureUnrecorded;
-        const observations = test_data.observe(owner.arena.allocator(), source) catch return error.InvocationFailureUnrecorded;
-        owner.payload = .{ .raw = if (self.fault == .malformed) "{\"score\":100,\"passed\":true}" else std.json.Stringify.valueAlloc(owner.arena.allocator(), observations, .{}) catch return error.InvocationFailureUnrecorded };
-        return owned.publish(self.allocator, native.raw_schema, owner, .ok) catch return error.InvocationFailureUnrecorded;
-    }
     fn protected(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
         context.?.calls += 1;
         return .{ .outcome = .ok, .delta = .{} };
@@ -79,17 +69,17 @@ const Fixture = struct {
     arena: std.heap.ArenaAllocator,
     script: Script,
     build: native.Build,
-    parse: native.Parse,
+    observe: native.BuildObservations,
     reconcile: native.Reconcile,
     validate: native.Validate,
     registry: operations.Registry,
     fn init(self: *Fixture, allocator: std.mem.Allocator, kind: a.Kind, fault: Fault) !void {
-        self.* = .{ .arena = .init(allocator), .script = .{ .allocator = allocator, .kind = kind, .fault = fault }, .build = .{ .allocator = allocator }, .parse = .{ .allocator = allocator }, .reconcile = .{ .allocator = allocator }, .validate = .{ .allocator = allocator }, .registry = undefined };
+        self.* = .{ .arena = .init(allocator), .script = .{ .allocator = allocator, .kind = kind, .fault = fault }, .build = .{ .allocator = allocator }, .observe = .{ .allocator = allocator }, .reconcile = .{ .allocator = allocator }, .validate = .{ .allocator = allocator }, .registry = undefined };
         errdefer self.arena.deinit();
         const entry = @import("composition/native_workflow_operations.zig").entry;
         const entries = core.entries ++ [_]operations.Entry{
-            entry(native.Build, &self.build),                                                                                                                                                                                        entry(native.Parse, &self.parse),                                                                                                                                                                                                                                                                                                                                                                                                                                                        entry(native.Reconcile, &self.reconcile),                                                                                                                                                                                      entry(native.Validate, &self.validate),
-            .{ .contract = .{ .id = "test.authority-inputs", .kind = .step, .produces = &.{.required_authority_inputs}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.inputs) }, .{ .contract = .{ .id = "test.authority-observation", .kind = .step, .requires = &.{.required_authority_inputs}, .produces = &.{.raw_required_authority_observations}, .outcomes = &.{.ok}, .side_effect = .none, .outcome_association = .{ .preserve = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_inputs, .result = .raw_required_authority_observations } } }, .binding = binding.bind(Script, &self.script, Script.observation) }, .{ .contract = .{ .id = "test.authority-protected", .kind = .step, .gates = &.{native.gate_contract.id.bytes}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.protected) },
+            entry(native.Build, &self.build),                                                                                                                                                                                        entry(native.BuildObservations, &self.observe),                                                                                                                                                                                entry(native.Reconcile, &self.reconcile), entry(native.Validate, &self.validate),
+            .{ .contract = .{ .id = "test.authority-inputs", .kind = .step, .produces = &.{.required_authority_inputs}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.inputs) }, .{ .contract = .{ .id = "test.authority-protected", .kind = .step, .gates = &.{native.gate_contract.id.bytes}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.protected) },
         };
         self.registry = .{ .operations = try self.arena.allocator().dupe(operations.Entry, &entries), .data_schemas = &native.schemas, .gates = &.{native.gate_contract}, .policies = &core.profiles };
         try std.testing.expect(self.registry.validate());
@@ -151,7 +141,7 @@ test "unrelated compiled YAML workflows use native authority operations and pres
         var harness: Harness = .{ .runner = &runner, .graph = graph };
         const expected: workflow.OutcomeTag = switch (fault) {
             .none => .ok,
-            .unknown, .malformed => .blocked,
+            .unknown => .blocked,
             .missing_support, .conflict, .stale => .needs_user,
         };
         try std.testing.expectEqual(expected, harness.run());
@@ -300,7 +290,7 @@ fn allocationRun(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const 
     fixture.script.allocator = allocator;
     fixture.script.calls = 0;
     fixture.build.allocator = allocator;
-    fixture.parse.allocator = allocator;
+    fixture.observe.allocator = allocator;
     fixture.reconcile.allocator = allocator;
     fixture.validate.allocator = allocator;
     var runner = fixture.runner(graph);

@@ -13,6 +13,36 @@ pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|l
 
 pub const prompt_column_count = std.mem.countScalar(u8, prompt_heading, '|') + 1;
 
+/// Evaluated at compile time only (`eventColumn`, `promptColumn`, `sharedColumn`).
+fn columnIn(comptime heading: []const u8, comptime name: []const u8) usize {
+    @setEvalBranchQuota(100_000);
+    var index: usize = 0;
+    var names = std.mem.splitScalar(u8, std.mem.trimEnd(u8, heading, "\n"), '|');
+    while (names.next()) |candidate| : (index += 1) if (std.mem.eql(u8, candidate, name)) return index;
+    @compileError("the heading has no column " ++ name);
+}
+
+/// A column's index in the event heading, resolved at compile time: a misspelt or removed column fails to
+/// compile instead of reading another column.
+pub fn eventColumn(comptime name: []const u8) usize {
+    return comptime columnIn(event_heading, name);
+}
+
+/// A column's index in the prompt heading, resolved at compile time.
+pub fn promptColumn(comptime name: []const u8) usize {
+    return comptime columnIn(prompt_heading, name);
+}
+
+/// A column both headings hold at one index, such as the control columns every row begins with. A heading that
+/// moves it in only one stream fails to compile.
+pub fn sharedColumn(comptime name: []const u8) usize {
+    return comptime shared: {
+        const index = columnIn(event_heading, name);
+        if (index != columnIn(prompt_heading, name)) @compileError("the headings place the column " ++ name ++ " differently");
+        break :shared index;
+    };
+}
+
 pub const Error = error{ InvalidFeatureLogRecord, OutOfMemory };
 
 pub const EventRecord = struct {
@@ -142,10 +172,10 @@ fn encodeControl(encoder: *ControlEncoder, stream: log_stream.Stream, record: Co
     try encoder.optional(null);
     try encoder.unsigned(record.final_sequence);
     try encoder.cell(record.occurred_at_utc);
-    for (0..4) |_| try encoder.optional(null);
+    for (0..sharedColumn("run_id") - sharedColumn("occurred_at_utc") - 1) |_| try encoder.optional(null);
     try encoder.cell(record.run_id.bytes);
     try encoder.cell(record.feature_id.bytes);
-    for (0..controlColumnCount(stream) - 17) |_| try encoder.optional(null);
+    for (0..controlColumnCount(stream) - (sharedColumn("feature_id") + 1)) |_| try encoder.optional(null);
     try encoder.finish();
 }
 
@@ -303,14 +333,14 @@ pub fn validatePersistedIdentityRow(
     ordinal: u16,
     stream: log_stream.Stream,
 ) Error!void {
-    if (!std.mem.eql(u8, cellAt(line, 1) orelse return error.InvalidFeatureLogRecord, log_limits.schema_version) or
-        !std.mem.eql(u8, cellAt(line, 2) orelse return error.InvalidFeatureLogRecord, @tagName(stream)) or
-        !std.mem.eql(u8, cellAt(line, 3) orelse return error.InvalidFeatureLogRecord, if (stream == .event) log_limits.event_column_schema_id else log_limits.prompt_column_schema_id) or
+    if (!std.mem.eql(u8, cellAt(line, sharedColumn("schema_version")) orelse return error.InvalidFeatureLogRecord, log_limits.schema_version) or
+        !std.mem.eql(u8, cellAt(line, sharedColumn("stream")) orelse return error.InvalidFeatureLogRecord, @tagName(stream)) or
+        !std.mem.eql(u8, cellAt(line, sharedColumn("column_schema_id")) orelse return error.InvalidFeatureLogRecord, if (stream == .event) log_limits.event_column_schema_id else log_limits.prompt_column_schema_id) or
         !std.mem.eql(u8, logPolicyCell(line) orelse return error.InvalidFeatureLogRecord, binding.logPolicyId().bytes) or
-        !std.mem.eql(u8, cellAt(line, 5) orelse return error.InvalidFeatureLogRecord, binding.bindingId().bytes) or
-        (std.fmt.parseInt(u16, cellAt(line, 6) orelse return error.InvalidFeatureLogRecord, 10) catch return error.InvalidFeatureLogRecord) != ordinal or
-        !std.mem.eql(u8, cellAt(line, 15) orelse return error.InvalidFeatureLogRecord, binding.runId().bytes) or
-        !std.mem.eql(u8, cellAt(line, 16) orelse return error.InvalidFeatureLogRecord, binding.featureId().bytes))
+        !std.mem.eql(u8, cellAt(line, sharedColumn("feature_log_binding_id")) orelse return error.InvalidFeatureLogRecord, binding.bindingId().bytes) or
+        (std.fmt.parseInt(u16, cellAt(line, sharedColumn("segment_ordinal")) orelse return error.InvalidFeatureLogRecord, 10) catch return error.InvalidFeatureLogRecord) != ordinal or
+        !std.mem.eql(u8, cellAt(line, sharedColumn("run_id")) orelse return error.InvalidFeatureLogRecord, binding.runId().bytes) or
+        !std.mem.eql(u8, cellAt(line, sharedColumn("feature_id")) orelse return error.InvalidFeatureLogRecord, binding.featureId().bytes))
     {
         return error.InvalidFeatureLogRecord;
     }
@@ -322,17 +352,15 @@ pub fn validatePersistedControlRow(
     stream: log_stream.Stream,
     final_sequence: ?u64,
 ) Error!void {
-    if (!std.mem.eql(u8, cellAt(line, 0) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or
-        parseUtcMs(cellAt(line, 10) orelse return error.InvalidFeatureLogRecord) == null) return error.InvalidFeatureLogRecord;
-    const event_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37 };
-    const prompt_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
-    const null_columns: []const usize = if (stream == .event) &event_nulls else &prompt_nulls;
+    if (!std.mem.eql(u8, cellAt(line, sharedColumn("record_kind")) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or
+        parseUtcMs(cellAt(line, sharedColumn("occurred_at_utc")) orelse return error.InvalidFeatureLogRecord) == null) return error.InvalidFeatureLogRecord;
+    const null_columns: []const usize = if (stream == .event) event_control_nulls else prompt_control_nulls;
     for (null_columns) |column| {
         if (!std.mem.eql(u8, cellAt(line, column) orelse return error.InvalidFeatureLogRecord, "\\N")) {
             return error.InvalidFeatureLogRecord;
         }
     }
-    const sequence = cellAt(line, 9) orelse return error.InvalidFeatureLogRecord;
+    const sequence = cellAt(line, sharedColumn("sequence")) orelse return error.InvalidFeatureLogRecord;
     if (final_sequence) |expected| {
         const actual = std.fmt.parseInt(u64, sequence, 10) catch return error.InvalidFeatureLogRecord;
         if (actual != expected) return error.InvalidFeatureLogRecord;
@@ -361,7 +389,40 @@ pub fn cellAt(line: []const u8, expected: usize) ?[]const u8 {
 
 /// The log policy ID cell of a persisted identity row.
 pub fn logPolicyCell(row: []const u8) ?[]const u8 {
-    return cellAt(row, 4);
+    return cellAt(row, sharedColumn("log_policy_id"));
+}
+
+const event_control_nulls = controlNulls(event_column_count);
+const prompt_control_nulls = controlNulls(prompt_column_count);
+
+/// The columns a control row (a segment header or trailer) leaves null: every column but its identity, its
+/// sequence and its time. Evaluated at compile time, for the two constants above.
+fn controlNulls(comptime count: usize) []const usize {
+    comptime {
+        @setEvalBranchQuota(100_000);
+        const held = [_]usize{
+            sharedColumn("record_kind"),
+            sharedColumn("schema_version"),
+            sharedColumn("stream"),
+            sharedColumn("column_schema_id"),
+            sharedColumn("log_policy_id"),
+            sharedColumn("feature_log_binding_id"),
+            sharedColumn("segment_ordinal"),
+            sharedColumn("sequence"),
+            sharedColumn("occurred_at_utc"),
+            sharedColumn("run_id"),
+            sharedColumn("feature_id"),
+        };
+        var result: [count - held.len]usize = undefined;
+        var next: usize = 0;
+        for (0..count) |column| {
+            if (std.mem.indexOfScalar(usize, &held, column) != null) continue;
+            result[next] = column;
+            next += 1;
+        }
+        const final = result;
+        return &final;
+    }
 }
 
 pub fn trailerUnixMs(bytes: []const u8) ?u64 {
@@ -369,8 +430,8 @@ pub fn trailerUnixMs(bytes: []const u8) ?u64 {
     const without_lf = bytes[0 .. bytes.len - 1];
     const start = (std.mem.lastIndexOfScalar(u8, without_lf, '\n') orelse return null) + 1;
     const line = without_lf[start..];
-    if (!std.mem.eql(u8, cellAt(line, 0) orelse return null, "segment_trailer")) return null;
-    return parseUtcMs(cellAt(line, 10) orelse return null);
+    if (!std.mem.eql(u8, cellAt(line, sharedColumn("record_kind")) orelse return null, "segment_trailer")) return null;
+    return parseUtcMs(cellAt(line, sharedColumn("occurred_at_utc")) orelse return null);
 }
 
 fn appendCell(

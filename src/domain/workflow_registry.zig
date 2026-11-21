@@ -295,7 +295,7 @@ fn cloneParameters(allocator: std.mem.Allocator, source: []const compilation.Com
             .registered_ref => |*value| value.bytes = try allocator.dupe(u8, value.bytes),
             .resource => |*value| value.bytes = try allocator.dupe(u8, value.bytes),
             .model_slot => |*value| value.bytes = try allocator.dupe(u8, value.bytes),
-            else => {},
+            .boolean, .integer => {},
         }
     }
     return values;

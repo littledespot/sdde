@@ -222,13 +222,6 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     return .{ .inputs = inputs, .requirements = requirements };
 }
 
-pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!Observations {
-    return @import("strict_json.zig").decode(Observations, allocator, bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => error.InvalidRequiredAuthority,
-    };
-}
-
 pub fn buildObservations(allocator: std.mem.Allocator, ledger: Ledger) Error!Observations {
     const entries = try allocator.alloc(Observation, ledger.requirements.len);
     for (ledger.requirements, entries) |requirement, *entry| {
@@ -358,8 +351,25 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
 
 pub fn route(stage: DetectionStage, owner: Stage, reason: GapReason) Outcome {
     if (reason == .unregistered_ownership_or_policy) return .{ .administrative_block = .unregistered_ownership_or_policy };
-    if (stage == .recovery or @intFromEnum(stage) > @intFromEnum(owner)) return .{ .upstream_rework_required = .{ .owner = owner, .detected_at = stage, .reason = reason } };
+    if (detectedAfter(stage, owner)) return .{ .upstream_rework_required = .{ .owner = owner, .detected_at = stage, .reason = reason } };
     return .{ .clarification_required = .{ .owner = owner, .reason = reason } };
+}
+
+/// Whether the gap was found in a stage after the one that owns it, or in recovery, so that the owner's
+/// work must be redone rather than clarified.
+fn detectedAfter(stage: DetectionStage, owner: Stage) bool {
+    return switch (stage) {
+        .spec => false,
+        .plan => switch (owner) {
+            .spec => true,
+            .plan, .tasks => false,
+        },
+        .tasks => switch (owner) {
+            .spec, .plan => true,
+            .tasks => false,
+        },
+        .implement, .recovery => true,
+    };
 }
 
 /// Rebuild from current native inputs; a prior ledger/result cannot certify a

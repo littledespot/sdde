@@ -427,38 +427,10 @@ steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays sep
 ## Principles
 
 [§9.4](../09-configuration.md#94-project-principle-resolution) owns principle capture. The
-shipped Spec workflow runs the consolidated `capture-principle-registry`; the other four are
-its detailed steps through the same source port. Capture reads no alternate root, excludes
-`toolchain.yaml`, and is bounded to 1,024 entries, depth 16, five seconds, 1 MiB per source and
-8 MiB in total; deterministic UTF-8 chunks cover every byte.
-
-## `InventoryPrincipleSourcesAction` (`inventory-principle-sources`)
-
-- **Owner:** [`src/actions/principle/inventory_principle_sources.zig`](../../../src/actions/principle/inventory_principle_sources.zig)
-- **Reads:** none · **Writes:** `raw_principle_inventory` · **Side effect:** `filesystem_read`
-- **Rejects:** `PrincipleSourceUnavailable`, `Cancelled`.
-
-## `ValidatePrincipleInventoryAction` (`validate-principle-inventory`)
-
-- **Owner:** [`src/actions/principle/validate_principle_inventory.zig`](../../../src/actions/principle/validate_principle_inventory.zig)
-- **Reads:** `raw_principle_inventory` · **Writes:** `principle_inventory` · **Side effect:** `none`
-- **Does:** Normalizes paths, rejects collisions and classifies semantic sources.
-- **Rejects:** `InvalidPrincipleRegistry`.
-
-## `CapturePrincipleSourcesAction` (`capture-principle-sources`)
-
-- **Owner:** [`src/actions/principle/capture_principle_sources.zig`](../../../src/actions/principle/capture_principle_sources.zig)
-- **Reads:** `principle_inventory` · **Writes:** `captured_principles` · **Side effect:** `filesystem_read`
-- **Does:** Captures each semantic source once, within the bounds above.
-- **Rejects:** `PrincipleSourceUnavailable`, `Cancelled`.
-
-## `BuildPrincipleRegistryAction` (`build-principle-registry`)
-
-- **Owner:** [`src/actions/principle/build_principle_registry.zig`](../../../src/actions/principle/build_principle_registry.zig)
-- **Reads:** `captured_principles` (optional: `prior_principle_registry`) · **Writes:** `principle_registry` · **Side effect:** `none`
-- **Does:** Assigns source and chunk identities, keeping a prior source's ID when its root,
-  path, file observation and bytes are equal, and allocating the next ordinal otherwise.
-- **Rejects:** `InvalidPrincipleRegistry`.
+Spec workflow runs the one registered operation, `capture-principle-registry`, through the
+principle source port. Capture reads no alternate root, excludes `toolchain.yaml`, and is
+bounded to 1,024 entries, depth 16, five seconds, 1 MiB per source and 8 MiB in total;
+deterministic UTF-8 chunks cover every byte.
 
 ## `CapturePrincipleRegistryAction` (`capture-principle-registry`)
 

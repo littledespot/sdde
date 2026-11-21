@@ -101,26 +101,6 @@ fn prosePath(node: *const schema.Node, path: []const schema.ChoiceStep) enum { a
     };
 }
 
-/// Select only explicit native prose fields. Missing variant properties and
-/// malformed shapes remain the ordinary payload validator's responsibility.
-pub fn checkProseFields(a: std.mem.Allocator, value: std.json.Value, fields: []const ProseField, sources: []const SourceText) std.mem.Allocator.Error!?Issue {
-    for (fields) |field| if (try checkSelected(a, value, field.path, sources)) |issue| return issue;
-    return null;
-}
-
-fn checkSelected(a: std.mem.Allocator, value: std.json.Value, path: []const schema.ChoiceStep, sources: []const SourceText) std.mem.Allocator.Error!?Issue {
-    if (path.len == 0) return if (value == .string) checkProse(a, value.string, sources) else null;
-    switch (path[0]) {
-        .property => |name| if (value == .object) {
-            if (value.object.get(name)) |child| return checkSelected(a, child, path[1..], sources);
-        },
-        .items => if (value == .array) {
-            for (value.array.items) |child| if (try checkSelected(a, child, path[1..], sources)) |issue| return issue;
-        },
-    }
-    return null;
-}
-
 pub fn validSources(sources: []const SourceText) bool {
     for (sources, 0..) |source, index| {
         if (source.source_id.ordinal == 0 or !std.unicode.utf8ValidateSlice(source.bytes)) return false;

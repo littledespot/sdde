@@ -55,14 +55,6 @@ into clarification needs is `build-required-authority-clarification-needs`
   bound evidence.
 - **Rejects:** none beyond allocation failure.
 
-## `ParseRequiredAuthorityObservationsAction` (`parse-required-authority-observations`)
-
-- **Owner:** [`src/actions/authority/parse_required_authority_observations.zig`](../../../src/actions/authority/parse_required_authority_observations.zig)
-- **Reads:** `raw_required_authority_observations` · **Writes:** `required_authority_observations` · **Side effect:** `none`
-- **Does:** Strictly decode an observation document; observations may reference evidence IDs
-  but never create the evidence registry. The Spec workflow doesn't use it.
-- **Rejects:** `InvalidRequiredAuthority` for any document that isn't the closed shape.
-
 ## `ReconcileRequiredAuthoritiesAction` (`reconcile-required-authorities`)
 
 - **Owner:** [`src/actions/authority/reconcile_required_authorities.zig`](../../../src/actions/authority/reconcile_required_authorities.zig)

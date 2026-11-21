@@ -127,10 +127,11 @@ pub fn admit(a: std.mem.Allocator, retained: Assignment, current: Assignment, so
             if (!authority.contains(r.extraction.identity.SourceId, current.finding.source_ids, offered.source_id)) return error.InvalidPreservationComparison;
             const resolved = try r.evidence.resolve(sources, .{ .state_id = sources.corpus.state_id, .chunk_id = span.chunk_id });
             if (!std.meta.eql(resolved.source.id, offered.source_id)) return error.InvalidPreservationComparison;
-            switch (try selections.validate(a, sources, .{ .state_id = sources.corpus.state_id, .chunk_id = span.chunk_id }, &.{span.lines})) {
-                .invalid => return error.InvalidPreservationComparison,
-                .valid => |valid| a.free(valid.entries),
-            }
+            const valid = selections.validate(a, sources, .{ .state_id = sources.corpus.state_id, .chunk_id = span.chunk_id }, &.{span.lines}) catch |err| return switch (err) {
+                error.InvalidSelection => error.InvalidPreservationComparison,
+                else => |other| other,
+            };
+            a.free(valid.entries);
         }
     }
     if (current.comparisons.len == 0 or current.boundaries.len == 0) return .unresolved;

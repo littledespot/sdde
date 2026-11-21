@@ -21,15 +21,29 @@ pub const validated_schema = values.schema(.validated_model_request, handoff.Req
 pub const prepared_schema = values.schema(.prepared_model_request, handoff.Request, 1, null).captured();
 pub const schemas = [_]data.Schema{ ledger_schema, assigned_schema, validated_schema, prepared_schema, packet_schema };
 
-pub const preparation_parameters = [_]operation.ParameterDescriptor{
-    .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
-    .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
-    .{ .id = "context", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
-    .{ .id = "protocol-prompt", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
-    .{ .id = "result-schema", .kind = .resource, .resource_kind = .result_schema, .required = false, .workflow_definition_safe = true },
-    .{ .id = "composition-part", .kind = .string, .required = false, .workflow_definition_safe = true },
-    .{ .id = "result-selection", .kind = .enumeration, .required = false, .allowed_values = &.{ "resource", "input" }, .workflow_definition_safe = true },
-    .{ .id = "input", .kind = .resource, .resource_kind = .data, .required = false, .workflow_definition_safe = true },
+/// The parameters a model request step declares, in the order its descriptor table lists them. The table is
+/// built from this enum and each lookup below names a member, so a lookup of a parameter the table doesn't
+/// declare fails to compile instead of reading as an absent optional one.
+const Parameter = enum { slot, prompt, context, @"protocol-prompt", @"result-schema", @"composition-part", @"result-selection", input };
+
+fn describe(comptime parameter: Parameter) operation.ParameterDescriptor {
+    const id = @tagName(parameter);
+    return switch (parameter) {
+        .slot => .{ .id = id, .kind = .model_slot, .required = true, .workflow_definition_safe = true },
+        .prompt => .{ .id = id, .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
+        .context, .@"protocol-prompt" => .{ .id = id, .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
+        .@"result-schema" => .{ .id = id, .kind = .resource, .resource_kind = .result_schema, .required = false, .workflow_definition_safe = true },
+        .@"composition-part" => .{ .id = id, .kind = .string, .required = false, .workflow_definition_safe = true },
+        .@"result-selection" => .{ .id = id, .kind = .enumeration, .required = false, .allowed_values = &.{ "resource", "input" }, .workflow_definition_safe = true },
+        .input => .{ .id = id, .kind = .resource, .resource_kind = .data, .required = false, .workflow_definition_safe = true },
+    };
+}
+
+pub const preparation_parameters = table: {
+    const members = @typeInfo(Parameter).@"enum".fields;
+    var result: [members.len]operation.ParameterDescriptor = undefined;
+    for (&result, members) |*descriptor_entry, member| descriptor_entry.* = describe(@field(Parameter, member.name));
+    break :table result;
 };
 
 pub const Initialize = struct {
@@ -88,23 +102,23 @@ fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: op
 fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: operations.StepInput, packet: ?*const packets.Packet) operations.Error!Selection {
     if (!@import("../domain/workflow_model.zig").validResultSelection(step.step.parameters)) return error.RequestDeclarationInvalid;
     const selected = step.model_binding orelse return error.RequestModelBindingMissing;
-    const static_input = resource(step, "input");
+    const static_input = declaredResource(step, .input);
     if (packet != null and static_input != null) return error.RequestDeclarationInvalid;
     var selection: handoff.ResultSelection = .resource;
-    for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, "result-selection")) {
+    for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, @tagName(Parameter.@"result-selection"))) {
         if (parameter.value != .enumeration) return error.RequestDeclarationInvalid;
         selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.RequestDeclarationInvalid;
     };
     var result: handoff.Selection = .{
         .binding = selected.*,
-        .prompt = resource(step, "prompt") orelse return error.RequestResourceMissing,
-        .context = resource(step, "context"),
+        .prompt = declaredResource(step, .prompt) orelse return error.RequestResourceMissing,
+        .context = declaredResource(step, .context),
         .result = undefined,
         .input = if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null,
-        .protocol_prompt = resource(step, "protocol-prompt"),
+        .protocol_prompt = declaredResource(step, .@"protocol-prompt"),
         .result_selection = selection,
     };
-    const part_id = parameterString(step, "composition-part");
+    const part_id = declaredString(step, .@"composition-part");
     if (part_id) |id| {
         const state = try compositions.readState(&step.data);
         if (state.base != packet) return error.RequestCompositionConflict;
@@ -117,14 +131,19 @@ fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: o
         return .{ .value = result, .owned_packet = derived };
     } else {
         if (step.data.contains(.json_composition)) return error.RequestCompositionConflict;
-        result.result = resource(step, "result-schema") orelse return error.RequestResourceMissing;
+        result.result = declaredResource(step, .@"result-schema") orelse return error.RequestResourceMissing;
     }
     return .{ .value = result };
 }
 
-fn parameterString(step: operations.StepInput, id: []const u8) ?[]const u8 {
-    for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, id) and parameter.value == .string) return parameter.value.string;
+fn declaredString(step: operations.StepInput, comptime parameter: Parameter) ?[]const u8 {
+    for (step.step.parameters) |declared| if (std.mem.eql(u8, declared.id.bytes, @tagName(parameter)) and declared.value == .string) return declared.value.string;
     return null;
+}
+
+/// A declared resource parameter's resource. Only a parameter of the descriptor table can be named.
+fn declaredResource(step: operations.StepInput, comptime parameter: Parameter) ?compilation.CompiledResource {
+    return resource(step, @tagName(parameter));
 }
 
 /// Consumes each request; the ledger owner is borrowed. Partial allocation never

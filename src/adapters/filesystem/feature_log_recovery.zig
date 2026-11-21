@@ -279,7 +279,7 @@ fn inspectSegment(
     const columns = if (stream == .event) format.event_column_count else format.prompt_column_count;
     var lines = std.mem.splitScalar(u8, bytes[heading.len..], '\n');
     const header = lines.next() orelse return error.InvalidSegment;
-    if (header.len == 0 or !std.mem.eql(u8, format.cellAt(header, 0) orelse return error.InvalidSegment, "segment_header")) {
+    if (header.len == 0 or !std.mem.eql(u8, format.cellAt(header, format.sharedColumn("record_kind")) orelse return error.InvalidSegment, "segment_header")) {
         return error.InvalidSegment;
     }
     try validRow(allocator, header, columns);
@@ -290,18 +290,18 @@ fn inspectSegment(
     while (lines.next()) |line| {
         if (line.len == 0) continue;
         try validRow(allocator, line, columns);
-        const kind = format.cellAt(line, 0) orelse return error.InvalidSegment;
+        const kind = format.cellAt(line, format.sharedColumn("record_kind")) orelse return error.InvalidSegment;
         if (std.mem.eql(u8, kind, @tagName(stream))) {
             if (closed) return error.InvalidSegment;
             format.validatePersistedIdentityRow(line, binding, ordinal, stream) catch return error.InvalidSegment;
-            const sequence = std.fmt.parseInt(u64, format.cellAt(line, 9) orelse return error.InvalidSegment, 10) catch return error.InvalidSegment;
+            const sequence = std.fmt.parseInt(u64, format.cellAt(line, format.sharedColumn("sequence")) orelse return error.InvalidSegment, 10) catch return error.InvalidSegment;
             if (last_sequence) |prior| if (sequence != (std.math.add(u64, prior, 1) catch return error.InvalidSegment)) return error.InvalidSegment;
             last_sequence = sequence;
         } else if (std.mem.eql(u8, kind, "segment_trailer")) {
             if (closed) return error.InvalidSegment;
             format.validatePersistedIdentityRow(line, binding, ordinal, stream) catch return error.InvalidSegment;
             // A segment with no record states its own final sequence.
-            const final = last_sequence orelse std.fmt.parseInt(u64, format.cellAt(line, 9) orelse return error.InvalidSegment, 10) catch return error.InvalidSegment;
+            const final = last_sequence orelse std.fmt.parseInt(u64, format.cellAt(line, format.sharedColumn("sequence")) orelse return error.InvalidSegment, 10) catch return error.InvalidSegment;
             format.validatePersistedControlRow(line, .segment_trailer, stream, final) catch return error.InvalidSegment;
             last_sequence = final;
             closed = true;
@@ -373,16 +373,16 @@ fn scanOtherBindings(
             const without_lf = bytes[0 .. bytes.len - 1];
             const trailer_start = (std.mem.lastIndexOfScalar(u8, without_lf, '\n') orelse return error.CorruptStream) + 1;
             const trailer = without_lf[trailer_start..];
-            if (!std.mem.eql(u8, format.cellAt(trailer, 0) orelse return error.CorruptStream, "segment_trailer") or
-                !std.mem.eql(u8, format.cellAt(trailer, 2) orelse return error.CorruptStream, @tagName(stream)) or
-                !std.mem.eql(u8, format.cellAt(trailer, 5) orelse return error.CorruptStream, entry.name) or
-                try std.fmt.parseInt(u16, format.cellAt(trailer, 6) orelse return error.CorruptStream, 10) != ordinal or
-                !std.mem.eql(u8, format.cellAt(trailer, 15) orelse return error.CorruptStream, source.expected_binding.run_id.bytes) or
-                !std.mem.eql(u8, format.cellAt(trailer, 16) orelse return error.CorruptStream, source.expected_binding.feature_id.bytes))
+            if (!std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("record_kind")) orelse return error.CorruptStream, "segment_trailer") or
+                !std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("stream")) orelse return error.CorruptStream, @tagName(stream)) or
+                !std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("feature_log_binding_id")) orelse return error.CorruptStream, entry.name) or
+                try std.fmt.parseInt(u16, format.cellAt(trailer, format.sharedColumn("segment_ordinal")) orelse return error.CorruptStream, 10) != ordinal or
+                !std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("run_id")) orelse return error.CorruptStream, source.expected_binding.run_id.bytes) or
+                !std.mem.eql(u8, format.cellAt(trailer, format.sharedColumn("feature_id")) orelse return error.CorruptStream, source.expected_binding.feature_id.bytes))
             {
                 return error.CorruptStream;
             }
-            const sequence = try std.fmt.parseInt(u64, format.cellAt(trailer, 9) orelse return error.CorruptStream, 10);
+            const sequence = try std.fmt.parseInt(u64, format.cellAt(trailer, format.sharedColumn("sequence")) orelse return error.CorruptStream, 10);
             maximum = @max(maximum, sequence);
         }
     }

@@ -157,7 +157,7 @@ test "child requirements stay inside selected definitions parts and repair schem
         \\{"schema":"json-composition/v1","result":"result","definition":"record","parts":{"selected":{"paths":["/optional"]},"siblings":{"paths":["/empty","/loose","/items","/choice"]}}}
     , canonical);
     const generation = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .limited(1_048_576)));
-    const repair_schema = generation.select(.{ .bytes = "attributed_value" }).?;
+    const repair_schema = generation.select(.{ .bytes = "value" }).?;
     for ([_]*const @import("domain/model_result_schema.zig").Schema{ selected, try plan.selectSchema(0, &.{}), repair_schema }) |schema| {
         var fixture: Fixture = undefined;
         if (schema == repair_schema) {

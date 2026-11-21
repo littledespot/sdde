@@ -74,21 +74,21 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .model_requested => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id }, &.{}),
         .model_completed => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id, .outcome }, &.{ .input_tokens, .output_tokens, .duration_ms }),
         // ADR 0014 and section 22.6: every normalization is logged.
-        .model_response_normalized => adrRequired(definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{})),
+        .model_response_normalized => adrRequired(definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{})),
         // Provider-applied stops carry their exact closed reason, never only usage.
-        .model_provider_stopped => adrRequired(definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code, .outcome }, &.{ .input_tokens, .output_tokens })),
+        .model_provider_stopped => adrRequired(definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id, .diagnostic_code, .outcome }, &.{ .input_tokens, .output_tokens })),
         // ADR 0039: every re-send of a runaway names the attempt it repeats.
-        .model_runaway_resent => adrRequired(definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{ .input_tokens, .output_tokens })),
+        .model_runaway_resent => adrRequired(definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{ .input_tokens, .output_tokens })),
         .validation_completed => definition(event_type, level(event_type), &.{ .validator_id, .outcome }, &.{ .count, .duration_ms }),
         .validation_failed => definition(event_type, level(event_type), &.{ .validator_id, .diagnostic_code, .outcome }, &.{.count}),
         .repair_requested => definition(event_type, level(event_type), &.{.repair_unit_kind}, &.{}),
-        .retry_admitted => definition(event_type, .debug, &.{.count}, &.{}),
-        .retry_exhausted => definition(event_type, .error_level, &.{ .count, .diagnostic_code, .outcome }, &.{}),
+        .retry_admitted => definition(event_type, level(event_type), &.{.count}, &.{}),
+        .retry_exhausted => definition(event_type, level(event_type), &.{ .count, .diagnostic_code, .outcome }, &.{}),
         .command_started => definition(event_type, level(event_type), &.{.command_id}, &.{}),
         .command_completed => definition(event_type, level(event_type), &.{ .command_id, .outcome }, &.{ .exit_code, .duration_ms }),
         .command_failed => definition(event_type, level(event_type), &.{ .command_id, .diagnostic_code, .outcome }, &.{ .exit_code, .duration_ms }),
         .task_started => definition(event_type, level(event_type), &.{.task_id}, &.{}),
-        .model_prompt_fragment => .{ .event_type = event_type, .level = .debug, .required = none, .optional = none },
+        .model_prompt_fragment => .{ .event_type = event_type, .level = level(event_type), .required = none, .optional = none },
     };
 }
 
@@ -136,10 +136,10 @@ fn definition(
 
 fn level(event_type: telemetry.EventType) telemetry.CanonicalLogLevel {
     return switch (event_type) {
-        .run_blocked, .run_failed, .stage_blocked, .stage_failed, .action_failed, .repair_exhausted, .command_failed, .task_failed => .error_level,
-        .action_invalid, .model_protocol_failed, .model_schema_failed, .validation_failed, .repair_rejected, .review_rejected, .task_blocked, .security_denied => .warning,
-        .action_started, .action_completed, .model_requested, .model_completed, .validation_completed, .repair_requested, .command_started, .command_completed, .model_prompt_fragment => .debug,
-        else => .info,
+        .run_blocked, .run_failed, .stage_blocked, .stage_failed, .action_failed, .repair_exhausted, .retry_exhausted, .command_failed, .task_failed => .error_level,
+        .action_invalid, .model_protocol_failed, .model_schema_failed, .model_provider_stopped, .model_runaway_resent, .model_response_normalized, .validation_failed, .repair_rejected, .review_rejected, .task_blocked, .security_denied => .warning,
+        .action_started, .action_completed, .model_requested, .model_completed, .validation_completed, .repair_requested, .retry_admitted, .command_started, .command_completed, .model_prompt_fragment => .debug,
+        .publication_prepared, .run_started, .run_completed, .run_cancelled, .stage_started, .stage_completed, .stage_clarification_pending, .repair_applied, .review_requested, .review_approved, .task_started, .task_completed => .info,
     };
 }
 
@@ -164,6 +164,25 @@ test "closed event registry validates required and unexpected fields" {
             .command_id = telemetry.Identifier.validate("CMD-1"),
         },
     }));
+}
+
+test "every event has the level its class states, and its definition carries that level" {
+    const Level = telemetry.CanonicalLogLevel;
+    var listed: usize = 0;
+    for ([_]struct { Level, []const telemetry.EventType }{
+        .{ .error_level, &.{ .run_blocked, .run_failed, .stage_blocked, .stage_failed, .action_failed, .repair_exhausted, .retry_exhausted, .command_failed, .task_failed } },
+        .{ .warning, &.{ .action_invalid, .model_protocol_failed, .model_schema_failed, .model_provider_stopped, .model_runaway_resent, .model_response_normalized, .validation_failed, .repair_rejected, .review_rejected, .task_blocked, .security_denied } },
+        .{ .debug, &.{ .action_started, .action_completed, .model_requested, .model_completed, .validation_completed, .repair_requested, .retry_admitted, .command_started, .command_completed, .model_prompt_fragment } },
+        .{ .info, &.{ .publication_prepared, .run_started, .run_completed, .run_cancelled, .stage_started, .stage_completed, .stage_clarification_pending, .repair_applied, .review_requested, .review_approved, .task_started, .task_completed } },
+    }) |class| {
+        for (class[1]) |event_type| {
+            try std.testing.expectEqual(class[0], level(event_type));
+            try std.testing.expectEqual(class[0], eventDefinition(event_type).level);
+            listed += 1;
+        }
+    }
+    // The four classes list every event once.
+    try std.testing.expectEqual(std.enums.values(telemetry.EventType).len, listed);
 }
 
 test "exactly the events an ADR requires are always emitted" {

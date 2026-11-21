@@ -44,10 +44,9 @@ pub const Build = struct {
         const brief = (try @import("specification_generation_facts.zig").read(view)).brief() orelse return error.SpecificationBriefMissing;
         const principles = values.read(view, @import("principle_workflow.zig").registry_schema, @import("../domain/principle_registry.zig").Registry) catch |operation_error| return operation_error;
         const clarifications = values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch |operation_error| return operation_error;
-        const valid = values.read(view, rendering.validated_schema, bool) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .publication_state = self.action.execute(owner.arena.allocator(), prior, snapshot, try @import("specification_workflow.zig").readContext(view), brief, content, ledger.*, coverage, principles.*, clarifications.*, valid.*) catch |cause| return cause };
+        owner.payload = .{ .publication_state = self.action.execute(owner.arena.allocator(), prior, snapshot, try @import("specification_workflow.zig").readContext(view), brief, content, ledger.*, coverage, principles.*, clarifications.*) catch |cause| return cause };
         return owned.publish(self.allocator, state_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
@@ -97,12 +96,11 @@ pub const Prepare = struct {
         const prior = owned.read(view, prior_schema, .prior_state) catch |operation_error| return operation_error;
         const current = owned.read(view, state_schema, .publication_state) catch |operation_error| return operation_error;
         const spec = owned.read(view, rendering.rendered_schema, .rendered) catch |operation_error| return operation_error;
-        const valid = values.read(view, rendering.validated_schema, bool) catch |operation_error| return operation_error;
         const reference = owned.read(view, reference_schema, .reference_context) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
         const current_feature = values.read(view, @import("feature_logging_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch |operation_error| return operation_error;
-        const prepared = self.action.execute(arena.allocator(), current_feature.*, paths.*, captured.*, inputs.*, clarifications.*, forms.*, prior, current, try @import("specification_workflow.zig").readContext(view), spec, valid.*, reference) catch |cause| return cause;
+        const prepared = self.action.execute(arena.allocator(), current_feature.*, paths.*, captured.*, inputs.*, clarifications.*, forms.*, prior, current, try @import("specification_workflow.zig").readContext(view), spec, reference) catch |cause| return cause;
         return @import("workflow_candidate.zig").publish(self.allocator, @import("workflow_output_binding.zig").prepared_schema, @import("../domain/workflow_output.zig").Prepared, prepared);
     }
 };

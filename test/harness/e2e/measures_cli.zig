@@ -6,6 +6,7 @@ const measures = @import("measures.zig");
 const c = @import("contracts.zig");
 const harness = @import("../contracts.zig");
 const files = @import("../files.zig");
+const evidence = @import("../evidence.zig");
 const output = @import("../output.zig");
 const directories = @import("../../../src/adapters/filesystem/directory_access.zig");
 const relative = @import("../../../src/domain/relative_directory_path.zig");
@@ -181,7 +182,7 @@ const report_schema = struct {
     }
 };
 
-const calls = "evidence/generation";
+const calls = evidence.phaseDirectory(.generation);
 
 fn responses(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) ![]const measures.Response {
     var names: std.ArrayList([]const u8) = .empty;
@@ -193,14 +194,14 @@ fn responses(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) ![]const measure
         defer dir.close(io);
         var iterator = dir.iterate();
         while (try iterator.next(io)) |entry| {
-            if (entry.kind == .directory and std.mem.startsWith(u8, entry.name, "call-")) try names.append(a, try a.dupe(u8, entry.name));
+            if (entry.kind == .directory and std.mem.startsWith(u8, entry.name, evidence.call_prefix)) try names.append(a, try a.dupe(u8, entry.name));
         }
     }
     std.mem.sort([]const u8, names.items, {}, lessThan);
     var result: std.ArrayList(measures.Response) = .empty;
     for (names.items) |name| {
-        const context = try CallContext.decode(a, try files.read(io, a, run, try std.fmt.allocPrint(a, "{s}/{s}/context.json", .{ calls, name })));
-        const text = files.read(io, a, run, try std.fmt.allocPrint(a, "{s}/{s}/model_output.txt", .{ calls, name })) catch |err| switch (err) {
+        const context = try CallContext.decode(a, try files.read(io, a, run, try std.fmt.allocPrint(a, "{s}/{s}/{s}", .{ calls, name, evidence.artifactFile(.context) })));
+        const text = files.read(io, a, run, try std.fmt.allocPrint(a, "{s}/{s}/{s}", .{ calls, name, evidence.artifactFile(.model_output) })) catch |err| switch (err) {
             error.InputUnavailable => null,
             else => return err,
         };
@@ -337,9 +338,9 @@ fn putTestCall(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, run: []const 
         .response_schema = "{\"type\":\"object\"}",
         .response_mode = .prompt_only,
     };
-    const directory = try std.fmt.allocPrint(a, "{s}/{s}/call-{d:0>4}", .{ run, calls, call });
-    try putTestFile(io, root, try std.fs.path.join(a, &.{ directory, "context.json" }), try std.json.Stringify.valueAlloc(a, context, .{}));
-    if (model_output) |bytes| try putTestFile(io, root, try std.fs.path.join(a, &.{ directory, "model_output.txt" }), bytes);
+    // The layout is the store's: a moved evidence path moves the tests' files with it.
+    try putTestFile(io, root, try std.fs.path.join(a, &.{ run, try evidence.Store.path(a, .generation, call, .context) }), try std.json.Stringify.valueAlloc(a, context, .{}));
+    if (model_output) |bytes| try putTestFile(io, root, try std.fs.path.join(a, &.{ run, try evidence.Store.path(a, .generation, call, .model_output) }), bytes);
 }
 
 test "call evidence gives every call's structure and keeps calls without a readable response" {
@@ -385,7 +386,7 @@ test "a retained run measures its configured threshold and one feature log, and 
     var root = std.testing.tmpDir(.{});
     defer root.cleanup();
     // A missing report, or one of a known older version, leaves the report unavailable.
-    for ([_]?[]const u8{ null, "{\"schema\":\"spec-e2e-report/v9\",\"retired\":true}", "{\"schema\":\"spec-e2e-report/v22\",\"attempts\":[]}" }, [_][]const u8{ "missing", "older", "previous" }) |report, name| {
+    for ([_]?[]const u8{ null, "{\"schema\":\"spec-e2e-report/v9\",\"retired\":true}", "{\"schema\":\"spec-e2e-report/v23\",\"attempts\":[]}" }, [_][]const u8{ "missing", "older", "previous" }) |report, name| {
         try putTestRun(io, a, root.dir, name, report);
         const run = try measure(io, a, root.dir, name);
         try std.testing.expectEqualStrings(name, run.run);
@@ -405,8 +406,8 @@ test "a retained run measures its configured threshold and one feature log, and 
     // A report of the current version that doesn't decode, or of an unknown version,
     // makes the run unmeasurable rather than its report unavailable.
     for ([_][]const u8{
-        "{\"schema\":\"spec-e2e-report/v23\"}",
-        "{\"schema\":\"spec-e2e-report/v23\"}",
+        "{\"schema\":\"" ++ @tagName(c.report_schema) ++ "\"}",
+        "{\"schema\":\"" ++ @tagName(c.report_schema) ++ "\"}",
         "{\"schema\":\"spec-e2e-report/v09\"}",
         "{\"status\":\"generated\"}",
         "not json",
@@ -417,7 +418,7 @@ test "a retained run measures its configured threshold and one feature log, and 
     }
     // Call evidence of another version is untrusted.
     try putTestRun(io, a, root.dir, "context", null);
-    try putTestFile(io, root.dir, "context/evidence/generation/call-0001/context.json", "{\"schema\":\"model-call-evidence/v2\"}");
+    try putTestFile(io, root.dir, try std.fs.path.join(a, &.{ "context", try evidence.Store.path(a, .generation, 1, .context) }), "{\"schema\":\"model-call-evidence/v2\"}");
     try std.testing.expectEqual(.call_evidence, try reason(io, a, root.dir, "context"));
     // Event logs of two workflow runs are ambiguous.
     try putTestRun(io, a, root.dir, "ambiguous", null);
@@ -454,7 +455,7 @@ fn currentReport(a: std.mem.Allocator) ![]const u8 {
         .accounting = .exact_usage,
         .usage = .{ .input_tokens = 4, .output_tokens = 3, .total_tokens = 7 },
     }};
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .model_calls = 1, .total_tokens = 7, .attempts = &attempts };
+    const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .model_calls = 1, .total_tokens = 7, .attempts = &attempts };
     return std.json.Stringify.valueAlloc(a, report, .{});
 }
 

@@ -10,7 +10,6 @@ pub const max_properties = 256;
 pub const max_choices = 1024;
 /// ADR 0006's bound on one native integer choice, including an assignment's
 /// exact member set. A larger choice rejects before invocation and is never split.
-pub const ChoiceBoundError = error{ChoiceBoundExceeded};
 pub fn withinChoiceBound(count: usize) bool {
     return count <= max_choices;
 }
@@ -957,7 +956,7 @@ fn cloneNode(allocator: std.mem.Allocator, source: Node) std.mem.Allocator.Error
         },
         .constant => |value| .{ .constant = switch (value) {
             .string => |text| .{ .string = try allocator.dupe(u8, text) },
-            else => value,
+            .integer, .boolean, .null_value => value,
         } },
         .enumeration => |choices| blk: {
             const copy = try allocator.alloc([]const u8, choices.len);
@@ -971,7 +970,8 @@ fn cloneNode(allocator: std.mem.Allocator, source: Node) std.mem.Allocator.Error
             for (copy, choices) |*destination, choice| destination.* = try cloneChild(allocator, choice);
             break :blk .{ .one_of = copy };
         },
-        else => source,
+        // These own no storage, so a copy shares nothing.
+        .string, .integer, .boolean, .null_value => source,
     };
 }
 

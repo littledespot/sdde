@@ -155,17 +155,17 @@ merges) are variants of the generic repair operations, specified once in
 - **Does:** Appends one chunk's response to the extraction progress, rejecting a packet whose unit isn't a reference chunk or whose purpose isn't initial generation.
 - **Rejects:** `InvalidReferenceExtraction` and the rest of `reference_extraction.Error`
 
-## `ValidateReferenceSelectionsAction` (`validate-reference-selections`)
+## `ValidateTokenClassificationsAction` (`validate-token-classifications`)
 
-- **Owner:** [`src/actions/reference/validate_reference_selections.zig`](../../../src/actions/reference/validate_reference_selections.zig)
-- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction` · **Writes:** `validated_reference_selections` · **Side effect:** `none`
+- **Owner:** [`src/actions/reference/validate_token_classifications.zig`](../../../src/actions/reference/validate_token_classifications.zig)
+- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction` · **Writes:** `validated_token_classifications` · **Side effect:** `none`
 - **Does:** Validates the token classifications against the structured token candidates.
 - **Rejects:** errors of `reference_extraction.Error`
 
 ## `AssignPreservedTokenIdentitiesAction` (`assign-preserved-token-identities`)
 
 - **Owner:** [`src/actions/reference/assign_preserved_token_identities.zig`](../../../src/actions/reference/assign_preserved_token_identities.zig)
-- **Reads:** `validated_reference_selections` · **Writes:** `preserved_token_identities` · **Side effect:** `none`
+- **Reads:** `validated_token_classifications` · **Writes:** `preserved_token_identities` · **Side effect:** `none`
 - **Does:** Numbers each `preserve` selection in order; `irrelevant` and `blocked` selections get no ID.
 - **Rejects:** `InvalidStructuredTokens` and the rest of `reference_extraction.Error`
 
@@ -295,21 +295,6 @@ merges) are variants of the generic repair operations, specified once in
 - **Reads:** `specification_publication_state` · **Writes:** `rendered_reference_context` · **Side effect:** `none`
 - **Does:** Render the sidecar using snapshot-owned source labels/locations and inert registered display literals only.
 - **Rejects:** errors of `reference_context.Error`, `specification_projection.Error`
-
-## `ScanPathTokensAction` (`scan-path-tokens`)
-
-- **Owner:** [`src/actions/reference/scan_path_tokens.zig`](../../../src/actions/reference/scan_path_tokens.zig)
-- **Parameters:** required `text` ([`path_token_workflow.zig`](../../../src/application/path_token_workflow.zig)).
-- **Reads:** `path_token_grammar`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `path_token_scan` · **Side effect:** `none`
-- **Does:** Checks the grammar is still bound to the current policy and toolchain, then lexes path tokens over the raw bytes, never NFC offsets.
-- **Rejects:** errors of `path_token_scan.Error`
-
-## `ValidateSourceCitationsAction` (`validate-source-citations`)
-
-- **Owner:** [`src/actions/reference/validate_source_citations.zig`](../../../src/actions/reference/validate_source_citations.zig)
-- **Reads:** `citable_reference_inputs`, `reference_citation_proposals` · **Writes:** `validated_source_citations` · **Side effect:** `none`
-- **Does:** Checks each proposed citation against the captured sources: structural support only, not semantic proof.
-- **Rejects:** errors of `reference_evidence.Error`
 
 ## `ValidateReferenceReconciliationCompletenessAction` (`validate-reference-reconciliation-completeness`)
 

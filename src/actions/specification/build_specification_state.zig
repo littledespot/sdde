@@ -12,8 +12,8 @@ pub const Action = struct {
         .produces = &.{.specification_publication_state},
         .side_effect = .none,
     };
-    pub fn execute(self: Action, allocator: std.mem.Allocator, prior: state.Prior, reference: snapshot.Snapshot, context: @import("../../domain/specification_provenance.zig").Context, brief: @import("../../domain/specification.zig").Brief, content: @import("../../domain/specification.zig").IdentifiedContent, ledger: @import("../../domain/specification_identity.zig").Ledger, accounted: coverage.Coverage, principles: @import("../../domain/principle_registry.zig").Registry, clarifications: @import("../../domain/clarification_refresh.zig").Result, rendering_valid: bool) !state.State {
-        if (!rendering_valid or clarifications != .ready or !reference.inputs.corpus.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationState;
+    pub fn execute(self: Action, allocator: std.mem.Allocator, prior: state.Prior, reference: snapshot.Snapshot, context: @import("../../domain/specification_provenance.zig").Context, brief: @import("../../domain/specification.zig").Brief, content: @import("../../domain/specification.zig").IdentifiedContent, ledger: @import("../../domain/specification_identity.zig").Ledger, accounted: coverage.Coverage, principles: @import("../../domain/principle_registry.zig").Registry, clarifications: @import("../../domain/clarification_refresh.zig").Result) !state.State {
+        if (clarifications != .ready or !reference.inputs.corpus.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationState;
         const clarification = try state.checkClarifications(try clarifications.ready.validateFor(allocator, context.inputs));
         const expected = try coverage.validate(allocator, context.references, brief, content);
         const canonical = @import("../../domain/canonical_json.zig");

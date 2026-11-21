@@ -425,24 +425,14 @@ fn count(a: std.mem.Allocator, counts: *std.ArrayList(ReasonCount), reason: []co
 }
 /// The feature log format owns the column order.
 const columns = struct {
-    const record_kind = column("record_kind");
-    const schema_version = column("schema_version");
-    const stream = column("stream");
-    const column_schema_id = column("column_schema_id");
-    const sequence = column("sequence");
-    const monotonic_offset = column("monotonic_offset");
-    const event_type = column("event_type");
-    const diagnostic_code = column("diagnostic_code");
-
-    fn column(comptime name: []const u8) usize {
-        @setEvalBranchQuota(20_000);
-        var cells = std.mem.splitScalar(u8, std.mem.trimEnd(u8, log_format.event_heading, "\n"), '|');
-        var index: usize = 0;
-        while (cells.next()) |cell| : (index += 1) {
-            if (std.mem.eql(u8, cell, name)) return index;
-        }
-        unreachable;
-    }
+    const record_kind = log_format.eventColumn("record_kind");
+    const schema_version = log_format.eventColumn("schema_version");
+    const stream = log_format.eventColumn("stream");
+    const column_schema_id = log_format.eventColumn("column_schema_id");
+    const sequence = log_format.eventColumn("sequence");
+    const monotonic_offset = log_format.eventColumn("monotonic_offset");
+    const event_type = log_format.eventColumn("event_type");
+    const diagnostic_code = log_format.eventColumn("diagnostic_code");
 };
 
 /// Minimum, median and maximum of one measure over its `values` (a case's runs, or its
@@ -701,7 +691,7 @@ test "report measures separate sends, corrections, re-sends, stages and publicat
         testAttempt(2, 2, 1, .atomic_repair, .specification_unit, .unavailable), // its re-send
         testAttempt(3, 1, null, .semantic_review, .semantic_review, .not_sent),
     };
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .terminal_step = "g9-reconcile", .diagnostic = "RepairNoProgress", .attempts = &attempts, .total_tokens = 45 };
+    const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .terminal_step = "g9-reconcile", .diagnostic = "RepairNoProgress", .attempts = &attempts, .total_tokens = 45 };
     const measured = try fromReport(a, report);
     try testing.expectEqual(@as(u64, 4), measured.sends);
     try testing.expectEqual(@as(u64, 1), measured.not_sent);
@@ -917,7 +907,7 @@ test "measures and set summaries are closed, versioned documents" {
     defer arena.deinit();
     const a = arena.allocator();
     const limits: strict.Limits = .{ .maximum_depth = 64 };
-    const reported = try fromReport(a, .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed });
+    const reported = try fromReport(a, .{ .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed });
     const measured: Run = .{ .run = "run", .case_id = "case", .measurement = .{ .measured = .{ .log_threshold = .warning, .report = .{ .measured = reported }, .events = .{ .runaways = 1 } } } };
     const encoded = try std.json.Stringify.valueAlloc(a, measured, .{});
     try testing.expectEqualDeep(measured, try strict.decode(Run, a, encoded, limits));
@@ -943,7 +933,7 @@ test "a set summary keeps every attempt and pools events with their opportunitie
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed };
+    const report: c.Report = .{ .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed };
     var failed_report = report;
     failed_report.status = .workflow_failed;
     failed_report.workflow_outcome = .failed;
@@ -1046,7 +1036,7 @@ test "a request whose last attempt left no structure is never measured by an ear
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .publication_check = .not_run };
+    const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .publication_check = .not_run };
     const reported = try fromReport(a, report);
     // The edge case and the `required` decision sit in rejected first attempts whose
     // second attempts were cut off; another request's records give the run its records.
@@ -1072,7 +1062,7 @@ test "response structures and their pooled counts round-trip as closed documents
     defer arena.deinit();
     const a = arena.allocator();
     const limits: strict.Limits = .{ .maximum_depth = 64 };
-    const reported = try fromReport(a, .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed });
+    const reported = try fromReport(a, .{ .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed });
     const responses: []const Response = &.{
         .{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .claims = .{ .total = 2, .categories = &.{.{ .category = .business, .count = 2 }} } } } },
         .{ .call = 2, .origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .no_feature_claim } },

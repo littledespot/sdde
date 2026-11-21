@@ -674,9 +674,11 @@ pub fn completeScenarios(a: std.mem.Allocator, current: Session) Error!Session {
     return append(current, combined);
 }
 
-/// Cross-batch and cross-unit consistency belongs to the session. The same
-/// check governs admission, completed replacements and assembly; its records
-/// rules, including ADR 0035 restatements, apply while records are admitted.
+/// Cross-batch and cross-unit consistency belongs to the session. Admission
+/// calls it; it acts only on a records batch while records are admitted or
+/// their scenarios written, so the story's composition and assembly, which run
+/// when no records are being admitted, don't. Its records rules, including
+/// ADR 0035 restatements, apply while records are admitted.
 /// `model` is the candidate these checked records came from; it supplies the
 /// observed old value a native delete requires.
 pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Context, checked: g.Checked, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
@@ -802,7 +804,6 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
             .invalid => return error.InvalidSpecificationUnit,
         };
         if (result.response != .content) return error.InvalidSpecificationUnit;
-        if (try checkConsistency(allocator, current, context, result, null) != null) return error.InvalidSpecificationUnit;
         if (g.recordCollection(.canonical, result.response.content)) |unit_records| {
             // Canonical section order is a projection; candidate indices and
             // repair origins retain the model's order throughout the session.

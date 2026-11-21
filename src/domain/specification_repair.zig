@@ -217,7 +217,7 @@ fn targetBound(response: g.Response) Error!u32 {
 /// even when a different sibling is now the unit validator's first rejection.
 pub fn retryValidation(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: session.Session, context: p.Context, candidate: Candidate) Error!?retry.Transition {
     const pending = candidate.pending_repair orelse return null;
-    if (candidate.response != .content or @intFromEnum(std.meta.activeTag(try session.unit(current.completed))) != @intFromEnum(std.meta.activeTag(candidate.response.content))) return error.InvalidSpecificationRepair;
+    if (candidate.response != .content or std.meta.activeTag(try session.unit(current.completed)) != std.meta.activeTag(candidate.response.content.unit())) return error.InvalidSpecificationRepair;
     const merged = candidate.last_repair orelse return error.InvalidSpecificationRepair;
     if (candidate.revision != merged.revision_after or !std.meta.eql(merged.retry orelse return error.InvalidSpecificationRepair, pending.permit)) return error.InvalidSpecificationRepair;
     try p.bind(a, validator, context);
@@ -282,8 +282,8 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     const definitions = @import("specification_result_definitions.zig").Generation;
     const definition: definitions = switch (kind) {
         .provenance => return error.InvalidSpecificationRepair,
-        .value => .value,
-        .attributed => .attributed_value,
+        // A plain value and an attributed one are repaired through the one `value` definition.
+        .value, .attributed => .value,
         .record => switch (authorization.rule.group.?) {
             .membership => .repair_record_entity,
         },

@@ -21,17 +21,17 @@ const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid,
 
 pub const Authorize = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .validated_reference_selections },
+        .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .validated_token_classifications },
         .produces = &.{.reference_extraction_repair_authorization},
     };
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_reference_selections, .result = .reference_extraction_repair_authorization } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_token_classifications, .result = .reference_extraction_repair_authorization } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const outcomes = @import("reference_extraction_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.readNative(&input.step.data, extraction.text_schema, .text_validated);
-        const rejected = values.read(&input.step.data, extraction.selections_schema, reference.Value) catch |operation_error| return operation_error;
+        const rejected = values.read(&input.step.data, extraction.classifications_schema, reference.Value) catch |operation_error| return operation_error;
         const rejection: repair.Rejection = switch (rejected.payload().*) {
             .token_classification_rejected => |diagnostic| .{ .token_classifications = diagnostic },
             else => return error.RepairOwnerMismatch,
@@ -85,7 +85,7 @@ pub const Merge = struct {
     pub const effects: repair_owner.Effects = .{
         .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .reference_extraction_repair_authorization, .reference_extraction_repair_result },
         .replaces = &.{.text_validated_reference_extraction},
-        .invalidates = &.{ .validated_reference_selections, .reference_extraction_repair_authorization, .reference_extraction_repair_result },
+        .invalidates = &.{ .validated_token_classifications, .reference_extraction_repair_authorization, .reference_extraction_repair_result },
     };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .reference_extraction_repair_authorization, .result = .text_validated_reference_extraction } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;

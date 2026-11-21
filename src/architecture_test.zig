@@ -2580,19 +2580,13 @@ test "reference evidence has shared identity types and pure chunk citation bound
     try std.testing.expect(model.ReferenceStateId == evidence.identity.StateId);
     try std.testing.expect(model.ReferenceChunkId == evidence.identity.ChunkId);
     const binding = @import("application/workflow_operation_binding.zig");
-    const operations = @import("application/reference_evidence_workflow.zig");
     // The stage reads the reference content and draws identities, and nothing else.
     const preparing = comptime binding.inspect(@import("application/reference_evidence_preparation_workflow.zig").PrepareReferenceEvidence, &.{});
     try std.testing.expect(preparing.valid and preparing.reference_identity and preparing.reference_content_read);
     try std.testing.expect(!preparing.reference_read and !preparing.model_provider and !preparing.feature_input_read and !preparing.feature_output_write);
-    inline for (.{operations.ValidateCitations}) |T| {
-        const pure = comptime binding.inspect(T, &.{});
-        try std.testing.expectEqual(@import("application/workflow_operation_binding.zig").Inspection{}, pure);
-    }
     inline for (.{
         @embedFile("domain/reference_evidence.zig"),
         @embedFile("actions/reference/prepare_reference_evidence.zig"),
-        @embedFile("actions/reference/validate_source_citations.zig"),
         @embedFile("application/reference_evidence_workflow.zig"),
     }) |source| {
         try expectAbsent(source, "std.Io");
@@ -2612,7 +2606,7 @@ test "extraction candidates reuse citation and identity owners without gaining c
     const binding = @import("application/workflow_operation_binding.zig");
     try std.testing.expect(extraction.ClaimId == identity.ClaimId);
     try std.testing.expect(extraction.CitationId == identity.CitationId);
-    inline for (.{ operations.Parse, operations.ValidateSelections, operations.Validate, operations.Assign, operations.Build, operations.Account }) |T| {
+    inline for (.{ operations.Parse, operations.ValidateTokenClassifications, operations.Validate, operations.Assign, operations.Build, operations.Account }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(@as(usize, 0), @typeInfo(T.Action).@"struct".fields.len);
         try std.testing.expect(T.Action.contract.side_effect == .none);
@@ -2623,17 +2617,17 @@ test "extraction candidates reuse citation and identity owners without gaining c
     for ([_][]const u8{ "state_id", "chunk_id", "claim_id", "citation_id", "disposition", "content" }) |field| {
         inline for (@typeInfo(extraction.Proposal).@"struct".fields) |proposal_field| try std.testing.expect(!std.mem.eql(u8, field, proposal_field.name));
     }
-    inline for (.{ @embedFile("actions/reference/validate_source_citations.zig"), @embedFile("actions/reference/validate_reference_claims.zig") }) |source| {
+    inline for (.{@embedFile("actions/reference/validate_reference_claims.zig")}) |source| {
         try std.testing.expect(std.mem.indexOf(u8, source, "domain/source_citations.zig") != null);
         try expectAbsent(source, "reference.advance");
     }
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "reference_extraction");
 }
 
-test "path-token rules share toolchain authority and scanner bindings are capability free" {
+test "path-token rules share toolchain authority and their bindings are capability free" {
     const bindings = @import("application/workflow_operation_binding.zig");
     const operations = @import("application/path_token_workflow.zig");
-    inline for (.{ operations.Compile, operations.Scan, @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens }) |T| {
+    inline for (.{ operations.Compile, @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens }) |T| {
         try std.testing.expectEqual(bindings.Inspection{}, comptime bindings.inspect(T, &.{}));
         try std.testing.expect(T.Action.contract.side_effect == .none);
     }
@@ -2642,7 +2636,6 @@ test "path-token rules share toolchain authority and scanner bindings are capabi
     const scanner = @embedFile("domain/path_token_scan.zig");
     try expectAbsent(scanner, "\".zig\""); // No extension allowlist belongs in the scanner.
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "path_token");
-    try std.testing.expect(operations.scan_schema.maximum_bytes == null);
     inline for (.{ @embedFile("domain/path_token_grammar.zig"), scanner, @embedFile("domain/naming_rule.zig"), @embedFile("domain/naming_policy.zig") }) |source| {
         try expectAbsent(source, "std.Io.Dir");
         try expectAbsent(source, "/adapters/");
@@ -2677,7 +2670,7 @@ test "typed content has one shared boundary and no passive or exact operational 
 
 test "preservation is a generic YAML boundary with source-only scalars and mandatory accounting" {
     const native = @import("application/structured_token_workflow.zig");
-    const selection = @import("application/reference_extraction_workflow.zig").ValidateSelections;
+    const selection = @import("application/reference_extraction_workflow.zig").ValidateTokenClassifications;
     const binding = @import("application/workflow_operation_binding.zig");
     const key = @import("domain/pipeline.zig").DataKey;
     inline for (.{ @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens, selection, native.AssignTokens, native.BuildClaims }) |T| {
@@ -2687,7 +2680,7 @@ test "preservation is a generic YAML boundary with source-only scalars and manda
     try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction }, selection.Action.contract.requires);
     try std.testing.expectEqualSlices(key, &.{.preserved_token_identities}, native.BuildClaims.Action.contract.requires);
     try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .preserved_token_identities, .reference_extraction_ledger }, @import("actions/reference/validate_reference_extraction_accounting.zig").Action.contract.requires);
-    try std.testing.expect(@import("application/reference_extraction_workflow.zig").selections_schema.maximum_bytes == null);
+    try std.testing.expect(@import("application/reference_extraction_workflow.zig").classifications_schema.maximum_bytes == null);
     const classification = @import("domain/structured_tokens.zig").Classification;
     try std.testing.expect(!@hasField(@FieldType(classification, "preserve"), "raw_value"));
     try std.testing.expect(!@hasField(@FieldType(classification, "preserve"), "citation_id"));
@@ -2723,7 +2716,7 @@ test "required authority has capability-free registered bindings and no model co
     const native = @import("application/required_authority_workflow.zig");
     const binding = @import("application/workflow_operation_binding.zig");
     const authority = @import("domain/required_authority.zig");
-    inline for (.{ native.ProjectSpecification, native.Build, native.Parse, native.Reconcile, native.Validate }) |T| {
+    inline for (.{ native.ProjectSpecification, native.Build, native.Reconcile, native.Validate }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
@@ -2875,7 +2868,7 @@ test "candidate repairs share authority and expose only native scoped operations
     try expectAbsent(reconciliation_owner, "checkBusinessIn");
     try expectAbsent(reconciliation_owner, "checkReferenceIn");
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.text_validated_reference_extraction}, tokens.Merge.effects.replaces);
-    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/reference_extraction_workflow.zig").ValidateSelections.outcomes);
+    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/reference_extraction_workflow.zig").ValidateTokenClassifications.outcomes);
 }
 
 test "the generic repair operations select owner rules through one exhaustive switch and hold none themselves" {
@@ -3091,7 +3084,7 @@ test "the scenarios context repeats the generation context's shared rules and of
 }
 
 test "principle root access stays in its narrow source adapter and shares physical traversal" {
-    inline for (.{ @import("actions/principle/inventory_principle_sources.zig").Action, @import("actions/principle/capture_principle_sources.zig").Action, @import("actions/principle/capture_principle_registry.zig").Action }) |Action| {
+    inline for (.{@import("actions/principle/capture_principle_registry.zig").Action}) |Action| {
         try std.testing.expectEqual(.filesystem_read, Action.contract.side_effect);
         try std.testing.expect(@import("application/workflow_operation_binding.zig").inspect(Action, &.{}).principle_read);
     }

@@ -235,9 +235,10 @@ test "independent wire cases cover every selected specification result and neste
         const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
         if (comptime std.mem.eql(u8, record[0], "entity")) try candidateSchemaCase("generation", "records", need, .enum_mismatch, "/record_kind") else try checkCandidate("generation", "records", need);
         try candidateSchemaCase("generation", "brief", need, .unknown_property, "/record_kind");
-        // No repair writes a whole criterion: the engine writes each one from its slot (ADR 0038 Decision 3).
-        if (comptime std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_" ++ record[0], bytes);
-        if (comptime std.mem.eql(u8, record[0], "acceptance_criterion")) try std.testing.expectError(error.MissingSchemaSelection, checkCandidate("generation", "repair_record_" ++ record[0], bytes));
+        // Only an entity's membership repair writes a whole record. No repair writes a whole criterion: the
+        // engine writes each one from its slot (ADR 0038 Decision 3). A requirement is repaired by its text.
+        if (comptime std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_entity", bytes);
+        if (comptime std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "acceptance_criterion")) try std.testing.expectError(error.MissingSchemaSelection, checkCandidate("generation", "repair_record_" ++ record[0], bytes));
     }
     try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.plain ++ "}");
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");

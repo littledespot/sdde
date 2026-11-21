@@ -599,14 +599,14 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
     {
         const next = try owned.create(allocator, owned.view(current));
         errdefer owned.destroy(next);
-        next.payload = .{ .selections_validated = try token_fixture.classify.execute(next.arena.allocator(), inputs, try token_fixture.candidates(source_allocator, inputs), current.payload.text_validated) };
+        next.payload = .{ .classifications_validated = try token_fixture.classify.execute(next.arena.allocator(), inputs, try token_fixture.candidates(source_allocator, inputs), current.payload.text_validated) };
         owned.destroy(current);
         current = next;
     }
     {
         const next = try owned.create(allocator, owned.view(current));
         errdefer owned.destroy(next);
-        next.payload = .{ .tokens_assigned = try token_fixture.assign.execute(next.arena.allocator(), current.payload.selections_validated) };
+        next.payload = .{ .tokens_assigned = try token_fixture.assign.execute(next.arena.allocator(), current.payload.classifications_validated) };
         owned.destroy(current);
         current = next;
     }

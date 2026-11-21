@@ -80,7 +80,7 @@ pub const Source = struct {
 
     // Correlate responses by ordinal; native identity/version and revision remain
     // in the retained ledger. Only the applicable review subject reaches the model.
-    const Requirement = struct { ordinal: u32, task: []const u8, permitted_not_applicable: ?a.Rule, evidence: admission.Requirements.Guidance };
+    const Requirement = struct { ordinal: u32, task: []const u8, permitted_not_applicable: ?a.Rule, evidence: ?admission.Requirements.Guidance };
 
     pub const Applicability = a.Applicability;
 
@@ -118,7 +118,10 @@ pub const Source = struct {
         } else return error.InvalidRequiredAuthority;
         const required = try applicability(target);
         const evidence_rule = try admission.requirements(scratch, inputs, context.inputs, target);
-        const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, guidance, target), .permitted_not_applicable = if (permitsNotApplicable(required)) required.review else null, .evidence = evidence_rule.guidance() }};
+        // A correction preserves the decision; its retained diagnostic supplies the selected evidence rule once,
+        // so the requirement carries neither the rule nor the permission. Insertion still needs all choices.
+        const correcting = scope == .correction;
+        const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, guidance, target), .permitted_not_applicable = if (!correcting and permitsNotApplicable(required)) required.review else null, .evidence = if (correcting) null else evidence_rule.guidance() }};
         const projected = try @import("model_evidence.zig").project(scratch, all.entries);
         const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
         const subject = try subjects.project(scratch, inputs, context, target);
@@ -126,26 +129,17 @@ pub const Source = struct {
             .reference => |reference| reference != .signal,
             .source_preservation => true,
         };
-        const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(guidance, subject), .evidence_rules = .{ .instruction = try admission.selection_instruction.present(scratch, guidance), .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .exact_texts = projected.exact_texts, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
+        // Guidance offers only verdicts native applicability permits, and a preservation finding has no negative.
+        const evidence_rules = .{ .instruction = try admission.selection_instruction.present(scratch, guidance), .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = if (inputs.projection == .source_preservation and scope == .finding) null else evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum };
+        const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(guidance, subject), .evidence_rules = if (correcting) null else evidence_rules, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .exact_texts = projected.exact_texts, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
         const encoded = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
         var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
         packets.omitAbsent(&projected_input);
-        // Guidance offers only verdicts native applicability permits.
-        packets.omitAbsent(projected_input.object.getPtr("evidence_rules").?);
+        // A member that is absent in this scope reaches the encoding as null, and each level drops it.
+        if (projected_input.object.getPtr("evidence_rules")) |rules| packets.omitAbsent(rules);
         for (projected_input.object.getPtr("requirements").?.array.items) |*requirement| {
             packets.omitAbsent(requirement.object.getPtr("evidence").?);
             packets.omitAbsent(requirement);
-            // A correction preserves the decision; its retained diagnostic supplies
-            // the selected evidence rule once. Insertion still needs all choices.
-            if (scope == .correction) {
-                _ = requirement.object.orderedRemove("evidence");
-                _ = requirement.object.orderedRemove("permitted_not_applicable");
-            }
-        }
-        if (scope == .correction) _ = projected_input.object.orderedRemove("evidence_rules");
-        if (inputs.projection == .source_preservation and scope == .finding) {
-            const rules = &projected_input.object.getPtr("evidence_rules").?.object;
-            _ = rules.orderedRemove("negative");
         }
         const body = try std.json.Stringify.valueAlloc(scratch, projected_input, .{});
         const slot = try reviewSlot(scratch, target);

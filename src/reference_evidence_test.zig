@@ -2,7 +2,7 @@ const std = @import("std");
 const reference = @import("domain/reference_ingestion.zig");
 const evidence = @import("domain/reference_evidence.zig");
 const steps = @import("actions/reference/prepare_reference_evidence.zig").steps;
-const cite = @import("actions/reference/validate_source_citations.zig");
+const citations = @import("domain/source_citations.zig");
 const read = @import("reference_ingestion_test.zig").read;
 const feature: @import("domain/feature_identity.zig").FeatureId = .{ .bytes = "Chosen/Café" };
 
@@ -60,14 +60,14 @@ test "source selections preserve original line endings Unicode repeated text and
             for (choices) |choice| {
                 try reconstructed.appendSlice(a, choice.text);
                 const result = try selections.validate(a, inputs, scope, &.{.{ .first = choice.id, .last = choice.id }});
-                try std.testing.expectEqualStrings(choice.text, result.valid.entries[0].verbatim.?);
+                try std.testing.expectEqualStrings(choice.text, result.entries[0].verbatim.?);
             }
             const whole = try selections.validate(a, inputs, scope, &.{.{ .first = choices[0].id, .last = choices[choices.len - 1].id }});
-            try std.testing.expectEqualStrings(bytes[chunk.span.start.byte..chunk.span.end.byte], whole.valid.entries[0].verbatim.?);
-            try std.testing.expectEqualDeep(chunk.span, whole.valid.entries[0].location);
+            try std.testing.expectEqualStrings(bytes[chunk.span.start.byte..chunk.span.end.byte], whole.entries[0].verbatim.?);
+            try std.testing.expectEqualDeep(chunk.span, whole.entries[0].location);
             const separate = try selections.validate(a, inputs, scope, &.{ .{ .first = choices[0].id, .last = choices[0].id }, .{ .first = choices[choices.len - 1].id, .last = choices[choices.len - 1].id } });
-            try std.testing.expectEqual(@as(usize, 2), separate.valid.entries.len);
-            try std.testing.expectEqualStrings(choices[choices.len - 1].text, separate.valid.entries[1].verbatim.?);
+            try std.testing.expectEqual(@as(usize, 2), separate.entries.len);
+            try std.testing.expectEqualStrings(choices[choices.len - 1].text, separate.entries[1].verbatim.?);
             end = chunk.span.end.byte;
         }
         try std.testing.expectEqual(bytes.len, end);
@@ -75,7 +75,7 @@ test "source selections preserve original line endings Unicode repeated text and
     }
 }
 
-test "source selection diagnostics distinguish missing unknown reversed and stale scope" {
+test "source selection rejects no selection, an unknown or reversed line, and a stale scope" {
     const selections = @import("domain/source_selections.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -83,18 +83,15 @@ test "source selection diagnostics distinguish missing unknown reversed and stal
     var ids: IdSource = .{};
     const inputs = try prepare(a, &ids, try read(a, "shipping.md", "Accept shipments.\nReject expired permits.\n"));
     const scope = proposals(inputs, 0).scope;
-    try std.testing.expectEqual(.missing_selection, (try selections.validate(a, inputs, scope, &.{})).invalid.reason);
+    try std.testing.expectError(error.InvalidSelection, selections.validate(a, inputs, scope, &.{}));
     const valid: selections.Selection = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 2 } };
+    try std.testing.expectEqual(@as(usize, 1), (try selections.validate(a, inputs, scope, &.{valid})).entries.len);
     for ([_]u32{ 0, 3, std.math.maxInt(u32) }) |ordinal| {
         var invalid = valid;
         invalid.last.ordinal = ordinal;
-        const result = (try selections.validate(a, inputs, scope, &.{ valid, invalid })).invalid;
-        try std.testing.expectEqual(.unknown_selection, result.reason);
-        try std.testing.expectEqual(@as(usize, 1), result.index);
-        try std.testing.expectEqualDeep(invalid, result.rejected.?);
-        try std.testing.expectEqualDeep(valid, result.available);
+        try std.testing.expectError(error.InvalidSelection, selections.validate(a, inputs, scope, &.{ valid, invalid }));
     }
-    try std.testing.expectEqual(.reversed_selection, (try selections.validate(a, inputs, scope, &.{.{ .first = .{ .ordinal = 2 }, .last = .{ .ordinal = 1 } }})).invalid.reason);
+    try std.testing.expectError(error.InvalidSelection, selections.validate(a, inputs, scope, &.{.{ .first = .{ .ordinal = 2 }, .last = .{ .ordinal = 1 } }}));
     var foreign = scope;
     foreign.state_id.bytes = "foreign";
     try std.testing.expectError(error.InvalidSourceCitation, selections.validate(a, inputs, foreign, &.{valid}));
@@ -124,7 +121,7 @@ test "global source block identities and total mappings are independent of provi
     try std.testing.expectEqualStrings("chunk-2", result.chunks.entries[1].id.bytes);
     var batch = proposals(result, 0);
     batch.entries = &.{proposal(result.chunks.entries[1])};
-    try std.testing.expectError(error.InvalidSourceCitation, (cite.Action{}).execute(allocator, result, batch));
+    try std.testing.expectError(error.InvalidSourceCitation, citations.validate(allocator, result, batch));
     var reordered_sources = result.corpus;
     reordered_sources.sources = &.{ result.corpus.sources[1], result.corpus.sources[0] };
     try std.testing.expectError(error.InvalidReferenceChunks, steps.validateChunks(input, feature, reordered_sources, result.chunks));
@@ -145,10 +142,10 @@ test "reference scopes reject stale runs unknown chunks and identity-source fail
     try std.testing.expect(first.chunks.entries[0].id.eql(second.chunks.entries[0].id));
     var batch = proposals(first, 0);
     batch.entries = &.{proposal(first.chunks.entries[0])};
-    try std.testing.expectError(error.InvalidSourceCitation, (cite.Action{}).execute(allocator, second, batch));
+    try std.testing.expectError(error.InvalidSourceCitation, citations.validate(allocator, second, batch));
     batch.scope.state_id = second.corpus.state_id;
     batch.scope.chunk_id = .{ .bytes = "unknown" };
-    try std.testing.expectError(error.InvalidSourceCitation, (cite.Action{}).execute(allocator, second, batch));
+    try std.testing.expectError(error.InvalidSourceCitation, citations.validate(allocator, second, batch));
     ids.fail = true;
     try std.testing.expectError(error.IdentityUnavailable, prepare(allocator, &ids, source));
 }
@@ -168,7 +165,7 @@ test "citation proof preserves Unicode decomposed scalars BOM and CRLF exactly" 
         .verbatim = "Cafe\u{301}",
     };
     batch.entries = &.{valid};
-    const result = try (cite.Action{}).execute(allocator, input, batch);
+    const result = try citations.validate(allocator, input, batch);
     try std.testing.expectEqualSlices(u8, "Cafe\u{301}", result.entries[0].verbatim.?);
     try std.testing.expect(result.entries[0].verbatim.?.ptr == input.corpus.sources[0].bytes[3..].ptr);
     for ([_]enum { normalized, byte_split, column, crlf_split, out_of_range, empty, source, block }{
@@ -189,7 +186,7 @@ test "citation proof preserves Unicode decomposed scalars BOM and CRLF exactly" 
             .block => bad.block_id.ordinal += 1,
         }
         batch.entries = &.{bad};
-        try std.testing.expectError(error.InvalidSourceCitation, (cite.Action{}).execute(allocator, input, batch));
+        try std.testing.expectError(error.InvalidSourceCitation, citations.validate(allocator, input, batch));
     }
 }
 
@@ -204,11 +201,11 @@ test "a real citation in a sibling chunk is not authorized by the supplied chunk
     try std.testing.expect(input.chunks.entries.len > 1);
     var batch = proposals(input, 0);
     batch.entries = &.{proposal(input.chunks.entries[1])};
-    try std.testing.expectError(error.InvalidSourceCitation, (cite.Action{}).execute(allocator, input, batch));
+    try std.testing.expectError(error.InvalidSourceCitation, citations.validate(allocator, input, batch));
     var forged = proposal(input.chunks.entries[0]);
     forged.location.end = input.chunks.entries[1].span.end;
     batch.entries = &.{forged};
-    try std.testing.expectError(error.InvalidSourceCitation, (cite.Action{}).execute(allocator, input, batch));
+    try std.testing.expectError(error.InvalidSourceCitation, citations.validate(allocator, input, batch));
 }
 
 test "citable input validation rejects incomplete duplicate reordered and forged mappings" {
@@ -269,5 +266,5 @@ fn allocationCase(backing: std.mem.Allocator) !void {
     const input = try prepare(arena.allocator(), &ids, try read(arena.allocator(), "日本語.md", "# α\r\n"));
     var batch = proposals(input, 0);
     batch.entries = &.{proposal(input.chunks.entries[0])};
-    _ = try (cite.Action{}).execute(arena.allocator(), input, batch);
+    _ = try citations.validate(arena.allocator(), input, batch);
 }

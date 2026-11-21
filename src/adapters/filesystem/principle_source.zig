@@ -17,25 +17,20 @@ pub const Adapter = struct {
     pub fn reader(self: *Adapter) port.Reader {
         return .{ .context = self, .read_fn = read };
     }
-    pub fn enumerator(self: *Adapter) port.Enumerator {
-        return .{ .context = self, .enumerate_fn = enumerate };
-    }
-    pub fn capturer(self: *Adapter) port.Capturer {
-        return .{ .context = self, .capture_fn = capture };
-    }
     fn read(context: *anyopaque, capability: *const roots.ConfiguredBaseRootCapability, a: std.mem.Allocator) port.Error!registry.Captured {
         const raw = try enumerate(context, capability, a);
         const inventory = try registry.classify(a, raw, .{ .normalize_fn = @import("unicode_normalization").nfc }, .{ .fold_fn = @import("unicode_normalization").caseFold });
         return capture(context, capability, a, inventory);
     }
-    fn enumerate(context: *anyopaque, capability: *const roots.ConfiguredBaseRootCapability, a: std.mem.Allocator) port.Error!registry.Raw {
+    /// The two phases of `read`, public so a test can capture against a stale inventory.
+    pub fn enumerate(context: *anyopaque, capability: *const roots.ConfiguredBaseRootCapability, a: std.mem.Allocator) port.Error!registry.Raw {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const binding = roots.bindPrincipleSourcesAdapter(capability) orelse return error.PrincipleSourceUnavailable;
         const root = (directories.openObserved(self.io, self.project_root, binding.project_relative_path, .{ .directory = binding.physical_identity }) catch |err| return unavailable(err)) orelse return error.PrincipleSourceUnavailable;
         defer root.close(self.io);
         return .{ .root = .{ .path = try a.dupe(u8, binding.project_relative_path), .identity = binding.physical_identity }, .entries = scan(self.io, a, root, registry.limits) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else unavailable(err) };
     }
-    fn capture(context: *anyopaque, capability: *const roots.ConfiguredBaseRootCapability, a: std.mem.Allocator, inventory: registry.Inventory) port.Error!registry.Captured {
+    pub fn capture(context: *anyopaque, capability: *const roots.ConfiguredBaseRootCapability, a: std.mem.Allocator, inventory: registry.Inventory) port.Error!registry.Captured {
         const self: *Adapter = @ptrCast(@alignCast(context));
         try registry.validateInventory(inventory);
         const binding = roots.bindPrincipleSourcesAdapter(capability) orelse return error.PrincipleSourceUnavailable;

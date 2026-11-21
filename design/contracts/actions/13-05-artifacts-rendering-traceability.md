@@ -72,12 +72,6 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
   byte-for-byte ([§23.2](../23-rendering.md#232-workflow-reruns-and-protected-clarification-files)).
 - **Rejects:** `clarification_inputs.Error`.
 
-## `PrepareClarificationOutputAction` (`prepare-clarification-output`)
-
-- **Owner:** [`src/actions/clarification/prepare_clarification_output.zig`](../../../src/actions/clarification/prepare_clarification_output.zig)
-- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `refreshed_clarification_state`, `clarification_views` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
-- **Rejects:** the output-preparation errors of `clarification_output.prepare`.
-
 ## Specification generation
 
 ## `CheckSpecificationSourceReadinessAction` (`check-specification-source-readiness`)
@@ -321,9 +315,10 @@ variants of the generic repair operations, specified once in
 
 - **Owner:** [`src/actions/specification/build_specification_state.zig`](../../../src/actions/specification/build_specification_state.zig)
 - **Reads:** `prior_specification_state`, `reference_snapshot`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `identified_specification_content`, `specification_id_ledger`, `specification_coverage`, `principle_registry`, `refreshed_clarification_state`, `validated_specification_rendering` · **Writes:** `specification_publication_state` · **Side effect:** `none`
-- **Does:** Build and validate the next `specification-state` revision after checking a valid
-  rendering, resolved clarifications, the same reference state, and recomputed coverage equal to
-  the accounted coverage.
+- **Does:** Build and validate the next `specification-state` revision once the rendering has
+  validated (the `validated_specification_rendering` key orders this step after that validation, and
+  carries no value), after checking resolved clarifications, the same reference state, and
+  recomputed coverage equal to the accounted coverage.
 - **Rejects:** `InvalidSpecificationState`.
 
 ## `PrepareSpecificationOutputAction` (`prepare-specification-output`)

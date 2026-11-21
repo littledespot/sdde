@@ -159,7 +159,6 @@ const asserted_elsewhere = [_][]const u8{
     "ReferenceStageMismatch",
     "ReconciliationPhaseInvalid",
     "ReconciliationSizeMissing",
-    "PathTokenTextMissing",
 };
 
 /// The causes no offline test raises yet, because the check that names each one either needs state that no

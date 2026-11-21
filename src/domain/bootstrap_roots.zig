@@ -31,14 +31,14 @@ pub const PathKey = enum {
         return switch (self) {
             .references => .reference_read_only,
             .templates => .inaccessible,
-            else => .engine_only,
+            .specs, .specs_archive, .workflows, .toolchain_preset, .principles => .engine_only,
         };
     }
 
     pub fn existencePolicy(self: PathKey) ExistencePolicy {
         return switch (self) {
             .workflows => .required_directory,
-            else => .optional_directory,
+            .specs, .references, .specs_archive, .toolchain_preset, .principles, .templates => .optional_directory,
         };
     }
 };

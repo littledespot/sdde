@@ -1,7 +1,7 @@
 """Hook helper for the user's approval of a set of live Spec runs.
 
 record (UserPromptSubmit, and PostToolUse on Skill): the user's next message ends any
-earlier approval. A typed `/live-e2e <case>... [--repeat <n>] [--no-evaluate]`, or a
+earlier approval. A typed `/live-e2e <case>... [--repeat <n>] [--no-evaluate]` line, or a
 live-e2e Skill call the user confirmed at its prompt, records the runs it names: each
 case's workflow.case.json path and how many runs of it remain. A case is a path or a name
 contained in exactly one case path. Any argument that doesn't parse, or a second
@@ -26,6 +26,10 @@ LAUNCHER = "./scripts/e2e-spec.sh --case "
 SESSION = re.compile(r"[A-Za-z0-9-]+")
 CASE_PATH = re.compile(r"test/e2e/[A-Za-z0-9_./-]+/workflow\.case\.json")
 COUNT = re.compile(r"[1-9][0-9]*")
+# The editor adds its context (the open file, a selection) to the prompt, and the user may
+# write more on later lines; only the command's own line names runs.
+IDE_CONTEXT = re.compile(r"<(ide_[a-z_]+)>.*?</\1>", re.DOTALL)
+TYPED = re.compile(r"/live-e2e(?:[ \t]([^\n]*))?(?:\n.*)?", re.DOTALL)
 
 
 def valid_case(path):
@@ -102,7 +106,7 @@ def replace(hook, approval):
             print(f"Could not end the earlier live-run approval: {error}", file=sys.stderr)
             sys.exit(2)
         prompt = hook.get("prompt")
-        typed = re.fullmatch(r"/live-e2e(\s.*)?", prompt, re.DOTALL) if isinstance(prompt, str) else None
+        typed = TYPED.fullmatch(IDE_CONTEXT.sub("", prompt).strip()) if isinstance(prompt, str) else None
         if typed:
             arguments = typed[1] or ""
     elif hook.get("hook_event_name") == "PostToolUse" and hook.get("tool_name") == "Skill":

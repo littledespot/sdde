@@ -303,10 +303,10 @@ subgraphs:
         call: release-request
         on: {ok: end.ok, failed: end.failed}
   validate-extraction:
-    start: selections
+    start: classifications
     steps:
-      selections:
-        use: validate-reference-selections
+      classifications:
+        use: validate-token-classifications
         on: {ok: assign-tokens, invalid: authorize-extraction-repair, failed: end.failed}
       authorize-extraction-repair:
         use: authorize-repair
@@ -330,7 +330,7 @@ subgraphs:
         on: {ok: release, invalid: end.invalid, failed: end.failed}
       release:
         call: release-request
-        on: {ok: selections, failed: end.failed}
+        on: {ok: classifications, failed: end.failed}
       assign-tokens:
         use: assign-preserved-token-identities
         on: {ok: build-token-claims, failed: end.failed}
@@ -421,10 +421,7 @@ subgraphs:
         on: {ok: parse-reconciliation, failed: end.failed}
       parse-reconciliation:
         use: parse-reference-reconciliation-result
-        on: {ok: check-reconciliation, failed: end.failed}
-      check-reconciliation:
-        use: check-reference-reconciliation-purpose
-        on: {ok: end.ok, more: validate-summary, failed: end.failed}
+        on: {ok: validate-summary, failed: end.failed}
       validate-summary:
         use: validate-reference-reconciliation-summary
         on: {ok: assign-summary, invalid: authorize-summary-repair, failed: end.failed}
@@ -440,11 +437,11 @@ subgraphs:
         on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
       repair-input:
         call: repair-reconciliation-candidate
-        on: {ok: check-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: validate-summary, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       merge:
         use: merge-repair
         with: {owner: reference-reconciliation, retry-limit: 128}
-        on: {ok: check-reconciliation, failed: end.failed}
+        on: {ok: validate-summary, failed: end.failed}
   validate-reconciliation:
     start: validate-dispositions
     steps:
@@ -464,8 +461,8 @@ subgraphs:
         on: {ok: collect-signals, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-signals:
         use: collect-reference-signals-candidate
-        on: {ok: release-signals, failed: end.failed}
-      release-signals:
+        on: {ok: release-collected, failed: end.failed}
+      release-collected:
         call: release-request
         on: {ok: validate-dispositions, failed: end.failed}
       validate-signals:
@@ -484,10 +481,7 @@ subgraphs:
         on: {ok: collect-conflicts, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-conflicts:
         use: collect-reference-conflicts-candidate
-        on: {ok: release-conflicts, failed: end.failed}
-      release-conflicts:
-        call: release-request
-        on: {ok: validate-dispositions, failed: end.failed}
+        on: {ok: release-collected, failed: end.failed}
       validate-conflicts:
         use: validate-reference-conflict-proposals
         on: {ok: assign-records, invalid: authorize-conflicts-repair, failed: end.failed}
@@ -868,8 +862,8 @@ subgraphs:
         use: publish-workflow-output
         on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
       publish-pending-clarifications:
-        call: clarification-output
-        on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
+        call: publish-clarification-output
+        on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
   repair-source-extraction:
     start: input
     steps:
@@ -949,7 +943,13 @@ subgraphs:
     steps:
       check:
         use: check-clarification-progress
-        on: {ok: render, needs-user: render, blocked: end.blocked}
+        on: {ok: output, needs-user: output, blocked: end.blocked}
+      output:
+        call: publish-clarification-output
+        on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
+  publish-clarification-output:
+    start: render
+    steps:
       render:
         use: render-clarification-forms
         on: {ok: snapshot, failed: end.failed}

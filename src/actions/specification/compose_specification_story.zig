@@ -18,7 +18,6 @@ pub const Action = struct {
             .valid => |valid| valid,
             .invalid => |issue| return .{ .blocked = try binding.storyRejection(allocator, context.references, .{ .not_admissible = issue }) },
         };
-        if (try session.checkConsistency(allocator, current, context, checked, null)) |issue| return .{ .blocked = try binding.storyRejection(allocator, context.references, .{ .not_admissible = issue }) };
         return .{ .composed = try session.appendBound(allocator, current, try session.admit(allocator, current, context, checked)) };
     }
 };

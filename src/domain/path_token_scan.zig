@@ -8,25 +8,11 @@ pub const Error = grammar_module.Error || error{InvalidPathTokenText};
 pub const Kind = enum { external_uri, display_path, display_filename };
 pub const Match = struct { start_byte: usize, end_byte: usize, kind: Kind };
 
-pub const Result = opaque {
-    pub fn text(self: *const Result) []const u8 {
-        return storage(self).text;
-    }
-    pub fn matches(self: *const Result) []const Match {
-        return storage(self).matches;
-    }
-};
 pub const Owner = struct { allocator: std.mem.Allocator, arena: std.heap.ArenaAllocator, text: []const u8, matches: []const Match };
-pub fn view(owner: *const Owner) *const Result {
-    return @ptrCast(owner);
-}
 pub fn destroy(owner: *Owner) void {
     const allocator = owner.allocator;
     owner.arena.deinit();
     allocator.destroy(owner);
-}
-fn storage(result: *const Result) *const Owner {
-    return @ptrCast(@alignCast(result));
 }
 
 /// Raw-byte spans remain tied to the owned original text, never NFC offsets.

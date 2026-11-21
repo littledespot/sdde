@@ -393,11 +393,11 @@ pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const p
     return atomic.parse(a, authorization, input, bytes);
 }
 
+/// Only a disposition target carries choices; every other target has none.
 fn dispositionChoices(a: std.mem.Allocator, parsed: r.Parsed, target: Target) Error!?dispositions.RepairChoices {
-    return switch (target) {
-        .disposition => |value| dispositions.repairChoices(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.index, value.claim),
-        else => null,
-    };
+    if (target != .disposition) return null;
+    const value = target.disposition;
+    return dispositions.repairChoices(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.index, value.claim);
 }
 pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
     if (!canonical.matchesInputs(ctx.inputs)) return error.InvalidAtomicRepair;
@@ -484,7 +484,8 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
             .signal_selection, .signal_content, .signal, .insert_signal => {
                 result.phase = if (parsed.phase == .complete) .complete else .signals;
             },
-            else => {},
+            // A summary or conflict change leaves the phase where it was.
+            .statement_selection, .statement_content, .statement, .insert_statement, .conflict_selection, .conflict_summary, .conflict, .insert_conflict => {},
         };
         result.proposal = .{ .global = global };
     }
@@ -497,7 +498,8 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
         .insert_signal => |value| result.source.signals = parsed.source.signals.inserting(a, value.index, parsed.proposal.global.signals.len) catch |err| return occurrenceError(err),
         .conflict => |index| result.source.conflicts = parsed.source.conflicts.deleting(a, index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
         .insert_conflict => |value| result.source.conflicts = parsed.source.conflicts.inserting(a, value.index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
-        else => {},
+        // A replacement keeps the occurrence it replaces; only an insert or a delete moves occurrences.
+        .statement_selection, .statement_content, .disposition, .signal_selection, .signal_content, .conflict_selection, .conflict_summary => {},
     }
     result.source.revision = merged.revision_after;
     result.source.last_repair = merged;
@@ -596,10 +598,8 @@ pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextCo
 }
 fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
     const summary = parsed.proposal == .summary;
-    switch (target) {
-        .disposition => |value| if (!try modelDisposition(parsed.input.progress.plan.layout.items, value.claim)) return error.InvalidAtomicRepair,
-        else => {},
-    }
+    // Only a disposition names a claim that must carry model content.
+    if (target == .disposition and !try modelDisposition(parsed.input.progress.plan.layout.items, target.disposition.claim)) return error.InvalidAtomicRepair;
     return switch (target) {
         .statement_selection, .statement_content, .statement => |index| if (summary and index < parsed.proposal.summary.statements.len) switch (target) {
             .statement_selection => .{ .selection = .{ .claim_ids = parsed.proposal.summary.statements[index].claim_ids } },
@@ -635,7 +635,7 @@ fn owner(a: std.mem.Allocator, parsed: r.Parsed) Error!@import("model_request_id
 fn needsText(unit: d.Unit) bool {
     return switch (unit) {
         .dispositions, .disposition => false,
-        else => true,
+        .summary, .statement, .signals, .signal, .conflicts, .conflict => true,
     };
 }
 fn targetOrigin(target: Target) struct { unit: d.Unit, field: d.Field } {

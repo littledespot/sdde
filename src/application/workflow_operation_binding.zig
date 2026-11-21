@@ -80,7 +80,7 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
     if (T == @import("../ports/unicode_normalizer.zig").CaseFolder) return .{};
     if (T == @import("../ports/unicode_normalizer.zig").LexicalClassifier) return .{};
     const principle_source = @import("../ports/principle_source.zig");
-    if (T == principle_source.Reader or T == principle_source.Enumerator or T == principle_source.Capturer) return .{ .principle_read = true };
+    if (T == principle_source.Reader) return .{ .principle_read = true };
     const reference_source = @import("../ports/reference_corpus_source.zig");
     if (T == reference_source.Enumerator or T == reference_source.Capturer) return .{ .reference_content_read = true };
     if (T == @import("../ports/reference_decoder.zig").Decoder) return .{ .reference_decode = true };

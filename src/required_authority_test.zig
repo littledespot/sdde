@@ -4,7 +4,6 @@ const a = @import("domain/required_authority.zig");
 const build: @import("actions/authority/build_required_authority_ledger.zig").Action = .{};
 const reconcile: @import("actions/authority/reconcile_required_authorities.zig").Action = .{};
 const validate: @import("actions/authority/validate_required_authority_reconciliation.zig").Action = .{};
-const parse: @import("actions/authority/parse_required_authority_observations.zig").Action = .{};
 const source: a.Authority = .{ .canonical = .{ .kind = .specification, .ordinal = 1, .revision = 1 } };
 const sources = [_]a.Authority{source};
 const candidate: a.CandidateId = .{ .ordinal = 1, .revision = 1 };
@@ -195,12 +194,47 @@ test "earliest owner is immutable at downstream discovery and unknown combinatio
     try std.testing.expectEqual(.administrative_block, std.meta.activeTag((try run(allocator, inputs)).entries[0].outcome));
 }
 
-test "closed observation parser rejects scores ownership and resolution assertions" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-    _ = try parse.execute(allocator, "{\"entries\":[]}");
-    for ([_][]const u8{ "{}", "{\"entries\":[],\"score\":100}", "{\"entries\":[],\"passed\":true}", "{\"entries\":[],\"owner\":\"plan\"}", "{\"entries\":[],\"entries\":[]}", "{\"entries\":[],\"resolution\":\"supported\"}" }) |bytes| try std.testing.expectError(error.InvalidRequiredAuthority, parse.execute(allocator, bytes));
+test "a gap found after its owner's stage or in recovery is upstream rework, and one found earlier or at it is a clarification" {
+    const Tag = std.meta.Tag(a.Outcome);
+    for ([_]struct { stage: a.DetectionStage, owner: a.Stage, rework: bool }{
+        .{ .stage = .spec, .owner = .spec, .rework = false },
+        .{ .stage = .spec, .owner = .plan, .rework = false },
+        .{ .stage = .spec, .owner = .tasks, .rework = false },
+        .{ .stage = .plan, .owner = .spec, .rework = true },
+        .{ .stage = .plan, .owner = .plan, .rework = false },
+        .{ .stage = .plan, .owner = .tasks, .rework = false },
+        .{ .stage = .tasks, .owner = .spec, .rework = true },
+        .{ .stage = .tasks, .owner = .plan, .rework = true },
+        .{ .stage = .tasks, .owner = .tasks, .rework = false },
+        .{ .stage = .implement, .owner = .spec, .rework = true },
+        .{ .stage = .implement, .owner = .plan, .rework = true },
+        .{ .stage = .implement, .owner = .tasks, .rework = true },
+        .{ .stage = .recovery, .owner = .spec, .rework = true },
+        .{ .stage = .recovery, .owner = .plan, .rework = true },
+        .{ .stage = .recovery, .owner = .tasks, .rework = true },
+    }) |case| {
+        const expected: Tag = if (case.rework) .upstream_rework_required else .clarification_required;
+        try std.testing.expectEqual(expected, std.meta.activeTag(a.route(case.stage, case.owner, .missing)));
+    }
+    // An unregistered owner never routes, whatever stage found it.
+    try std.testing.expectEqual(@as(Tag, .administrative_block), std.meta.activeTag(a.route(.spec, .spec, .unregistered_ownership_or_policy)));
+}
+
+fn expectDeclaredOrder(comptime E: type, expected: []const []const u8) !void {
+    const names = std.meta.fieldNames(E);
+    try std.testing.expectEqual(expected.len, names.len);
+    for (names, expected) |name, want| try std.testing.expectEqualStrings(want, name);
+}
+
+test "the ledger's order is the declaration order of its enums, so reordering one is a deliberate contract change" {
+    // Requirements sort by kind, unit, slot and contract version, and the stronger of two gaps wins by
+    // order. The ledger index becomes a requirement's ordinal in the model's packet, so these orders are
+    // part of the contract that `a.version` names.
+    try expectDeclaredOrder(a.Kind, &.{ "feature_intent", "reference_meaning", "entity_applicability", "preservation", "design_decision", "executable_decomposition", "policy_predicate" });
+    try expectDeclaredOrder(a.Slot, &.{ "description", "primary_goal", "acceptance_criteria", "functional_requirements", "scenario_coverage", "text", "given", "when", "then", "name", "entities", "disposition", "value", "decision", "compliance" });
+    try expectDeclaredOrder(std.meta.Tag(a.Unit), &.{ "feature", "record", "source", "signal", "conflict", "token", "decision" });
+    try expectDeclaredOrder(a.GapReason, &.{ "missing", "ambiguous", "conflicting", "multiple_non_equivalent", "stale", "unsupported", "unregistered_ownership_or_policy" });
+    try expectDeclaredOrder(@import("domain/specification.zig").Kind, &.{ "acceptance_criterion", "user_visible_outcome", "edge_case", "functional_requirement", "business_rule", "assumption", "non_goal", "prohibited_behavior", "entity" });
 }
 
 test "Specify projects registered native fields and complete reference obligations without invented counts" {
@@ -405,7 +439,7 @@ test "result identity scope cardinality and equivalent membership are rechecked 
     }
 }
 
-test "authority projection parsing and validation release every allocation failure" {
+test "authority projection and validation release every allocation failure" {
     try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(allocator: std.mem.Allocator) !void {
@@ -413,10 +447,8 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     defer arena.deinit();
     const source_inputs = try fixture(arena.allocator(), .design_decision);
     const observed = try observe(arena.allocator(), source_inputs);
-    const bytes = try std.json.Stringify.valueAlloc(arena.allocator(), observed, .{});
-    const parsed = try parse.execute(arena.allocator(), bytes);
-    const result = try reconcile.execute(arena.allocator(), try build.execute(arena.allocator(), source_inputs), parsed);
-    try std.testing.expect(try validate.execute(arena.allocator(), source_inputs, parsed, result));
+    const result = try reconcile.execute(arena.allocator(), try build.execute(arena.allocator(), source_inputs), observed);
+    try std.testing.expect(try validate.execute(arena.allocator(), source_inputs, observed, result));
 }
 
 test "source-backed omissions stay invalid across registered owners and source gaps never authorize repair" {

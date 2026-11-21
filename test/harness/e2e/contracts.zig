@@ -219,8 +219,12 @@ pub const ExchangeEvidence = struct {
     request_id: ?[]const u8,
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
 };
+/// The one current report version, which a report builds with by default. A closed-member change advances
+/// it here alone (SPEC01 §2 rule 12); decoding still requires the member in every document.
+pub const report_schema: ReportSchema = .@"spec-e2e-report/v24";
+const ReportSchema = enum { @"spec-e2e-report/v24" };
 pub const Report = struct {
-    schema: enum { @"spec-e2e-report/v23" },
+    schema: ReportSchema = report_schema,
     origin: enum { live } = .live,
     started_at_utc: []const u8,
     build: ?struct {

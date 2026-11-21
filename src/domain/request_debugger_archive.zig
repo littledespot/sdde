@@ -27,15 +27,15 @@ pub const Archive = struct {
             if (lines.peek() == null) break;
             const encoded = try std.mem.concat(self.allocator, u8, &.{ line, "\n" });
             format.validateEncodedRow(self.allocator, encoded, format.prompt_column_count) catch return error.InvalidDebugArchive;
-            if (!std.mem.eql(u8, try cell(self.allocator, line, 1), limits.schema_version) or !std.mem.eql(u8, try cell(self.allocator, line, 3), limits.prompt_column_schema_id)) return error.InvalidDebugArchive;
-            const row_kind = try cell(self.allocator, line, 0);
+            if (!std.mem.eql(u8, try cell(self.allocator, line, format.sharedColumn("schema_version")), limits.schema_version) or !std.mem.eql(u8, try cell(self.allocator, line, format.sharedColumn("column_schema_id")), limits.prompt_column_schema_id)) return error.InvalidDebugArchive;
+            const row_kind = try cell(self.allocator, line, format.sharedColumn("record_kind"));
             if (std.mem.eql(u8, row_kind, "segment_header") or std.mem.eql(u8, row_kind, "segment_trailer")) continue;
             if (!std.mem.eql(u8, row_kind, "prompt")) return error.InvalidDebugArchive;
-            if (!std.mem.eql(u8, try cell(self.allocator, line, 25), "complete_body")) continue;
-            const call_id = try cell(self.allocator, line, 32);
-            const run = try cell(self.allocator, line, 15);
+            if (!std.mem.eql(u8, try cell(self.allocator, line, format.promptColumn("body_class")), "complete_body")) continue;
+            const call_id = try cell(self.allocator, line, format.promptColumn("call_id"));
+            const run = try cell(self.allocator, line, format.sharedColumn("run_id"));
             const sequence = try rowSequence(line);
-            if (std.meta.stringToEnum(@import("model_call_lineage.zig").Kind, try cell(self.allocator, line, 33)) == null) return error.InvalidDebugArchive;
+            if (std.meta.stringToEnum(@import("model_call_lineage.zig").Kind, try cell(self.allocator, line, format.promptColumn("call_kind"))) == null) return error.InvalidDebugArchive;
             var entry: *Entry = for (self.entries.items) |*entry| {
                 if (std.mem.eql(u8, entry.call.id, call_id) and std.mem.eql(u8, entry.call.run, run)) break entry;
             } else added: {
@@ -43,28 +43,28 @@ pub const Archive = struct {
                     .run = run,
                     .sequence = sequence,
                     .id = call_id,
-                    .workflow = try cell(self.allocator, line, 30),
-                    .action = try cell(self.allocator, line, 31),
-                    .node = try cell(self.allocator, line, 18),
-                    .request_step = try cell(self.allocator, line, 21),
-                    .slot = try cell(self.allocator, line, 22),
-                    .kind = try cell(self.allocator, line, 33),
-                    .original = try cell(self.allocator, line, 34),
-                    .parent = try optionalCell(self.allocator, line, 35),
+                    .workflow = try cell(self.allocator, line, format.promptColumn("workflow_id")),
+                    .action = try cell(self.allocator, line, format.promptColumn("action_id")),
+                    .node = try cell(self.allocator, line, format.sharedColumn("node_id")),
+                    .request_step = try cell(self.allocator, line, format.promptColumn("route_id")),
+                    .slot = try cell(self.allocator, line, format.promptColumn("model_profile_id")),
+                    .kind = try cell(self.allocator, line, format.promptColumn("call_kind")),
+                    .original = try cell(self.allocator, line, format.promptColumn("original_call_id")),
+                    .parent = try optionalCell(self.allocator, line, format.promptColumn("parent_call_id")),
                 } });
                 break :added &self.entries.items[self.entries.items.len - 1];
             };
             entry.call.sequence = @min(entry.call.sequence, sequence);
-            if (!std.mem.eql(u8, entry.call.workflow, try cell(self.allocator, line, 30)) or !std.mem.eql(u8, entry.call.node, try cell(self.allocator, line, 18)) or !std.mem.eql(u8, entry.call.action, try cell(self.allocator, line, 31)) or !std.mem.eql(u8, entry.call.original, try cell(self.allocator, line, 34)) or !debug.sameOptional(entry.call.parent, try optionalCell(self.allocator, line, 35))) return error.InvalidDebugArchive;
-            if (!std.mem.eql(u8, entry.call.kind, try cell(self.allocator, line, 33)) or !std.mem.eql(u8, entry.call.slot, try cell(self.allocator, line, 22)) or !std.mem.eql(u8, entry.call.request_step, try cell(self.allocator, line, 21))) return error.InvalidDebugArchive;
-            const fragment = try cell(self.allocator, line, 23);
+            if (!std.mem.eql(u8, entry.call.workflow, try cell(self.allocator, line, format.promptColumn("workflow_id"))) or !std.mem.eql(u8, entry.call.node, try cell(self.allocator, line, format.sharedColumn("node_id"))) or !std.mem.eql(u8, entry.call.action, try cell(self.allocator, line, format.promptColumn("action_id"))) or !std.mem.eql(u8, entry.call.original, try cell(self.allocator, line, format.promptColumn("original_call_id"))) or !debug.sameOptional(entry.call.parent, try optionalCell(self.allocator, line, format.promptColumn("parent_call_id")))) return error.InvalidDebugArchive;
+            if (!std.mem.eql(u8, entry.call.kind, try cell(self.allocator, line, format.promptColumn("call_kind"))) or !std.mem.eql(u8, entry.call.slot, try cell(self.allocator, line, format.promptColumn("model_profile_id"))) or !std.mem.eql(u8, entry.call.request_step, try cell(self.allocator, line, format.promptColumn("route_id")))) return error.InvalidDebugArchive;
+            const fragment = try cell(self.allocator, line, format.promptColumn("fragment_id"));
             var parts = std.mem.splitScalar(u8, fragment, '-');
             const operation = parts.next() orelse return error.InvalidDebugArchive;
             if (std.meta.stringToEnum(@import("llm_provider_operation.zig").ProviderOperationKind, operation) == null) return error.InvalidDebugArchive;
             const direction = parts.next() orelse return error.InvalidDebugArchive;
             const provenance = parts.next() orelse return error.InvalidDebugArchive;
             const encoding = parts.next() orelse return error.InvalidDebugArchive;
-            const expected_call = try std.fmt.allocPrint(self.allocator, "{s}-{s}-{s}", .{ try cell(self.allocator, line, 20), operation, try cell(self.allocator, line, 19) });
+            const expected_call = try std.fmt.allocPrint(self.allocator, "{s}-{s}-{s}", .{ try cell(self.allocator, line, format.promptColumn("request_id")), operation, try cell(self.allocator, line, format.promptColumn("attempt")) });
             if (!std.mem.eql(u8, call_id, expected_call)) return error.InvalidDebugArchive;
             if (std.mem.eql(u8, direction, "request")) {
                 if (!std.mem.eql(u8, provenance, "provider_body") and !std.mem.eql(u8, provenance, "request_description") and !std.mem.eql(u8, provenance, "source_snapshot")) return error.InvalidDebugArchive;
@@ -72,12 +72,12 @@ pub const Archive = struct {
                 if (!std.mem.eql(u8, provenance, "provider_body") and !std.mem.eql(u8, provenance, "partial_provider_body") and !std.mem.eql(u8, provenance, "transport_outcome")) return error.InvalidDebugArchive;
             } else return error.InvalidDebugArchive;
             const offset = std.fmt.parseInt(usize, parts.next() orelse return error.InvalidDebugArchive, 10) catch return error.InvalidDebugArchive;
-            if (parts.next() != null or !std.mem.eql(u8, direction, try cell(self.allocator, line, 24)) or (!std.mem.eql(u8, encoding, "utf8") and !std.mem.eql(u8, encoding, "base64"))) return error.InvalidDebugArchive;
-            const expected = std.fmt.parseInt(usize, try cell(self.allocator, line, 36), 10) catch return error.InvalidDebugArchive;
-            const content = try cell(self.allocator, line, 26);
-            const retained = std.fmt.parseInt(usize, try cell(self.allocator, line, 27), 10) catch return error.InvalidDebugArchive;
-            if (retained != content.len or content.len > limits.max_prompt_content_bytes or !std.mem.eql(u8, try cell(self.allocator, line, 28), "false")) return error.InvalidDebugArchive;
-            const redacted = try cell(self.allocator, line, 29);
+            if (parts.next() != null or !std.mem.eql(u8, direction, try cell(self.allocator, line, format.promptColumn("direction"))) or (!std.mem.eql(u8, encoding, "utf8") and !std.mem.eql(u8, encoding, "base64"))) return error.InvalidDebugArchive;
+            const expected = std.fmt.parseInt(usize, try cell(self.allocator, line, format.promptColumn("body_bytes")), 10) catch return error.InvalidDebugArchive;
+            const content = try cell(self.allocator, line, format.promptColumn("content"));
+            const retained = std.fmt.parseInt(usize, try cell(self.allocator, line, format.promptColumn("retained_bytes")), 10) catch return error.InvalidDebugArchive;
+            if (retained != content.len or content.len > limits.max_prompt_content_bytes or !std.mem.eql(u8, try cell(self.allocator, line, format.promptColumn("truncated")), "false")) return error.InvalidDebugArchive;
+            const redacted = try cell(self.allocator, line, format.promptColumn("redacted"));
             if (!std.mem.eql(u8, redacted, "true") and !std.mem.eql(u8, redacted, "false")) return error.InvalidDebugArchive;
             if (std.mem.eql(u8, direction, "request")) entry.call.redacted = entry.call.redacted or std.mem.eql(u8, redacted, "true");
             const body: *Body = for (entry.bodies.items) |*body| {
@@ -139,12 +139,12 @@ pub const Archive = struct {
             if (line.len == 0 or lines.peek() == null) break;
             const row = try std.mem.concat(self.allocator, u8, &.{ line, "\n" });
             format.validateEncodedRow(self.allocator, row, format.event_column_count) catch return error.InvalidDebugArchive;
-            if (!std.mem.eql(u8, try cell(self.allocator, line, 1), limits.schema_version) or !std.mem.eql(u8, try cell(self.allocator, line, 3), limits.event_column_schema_id)) return error.InvalidDebugArchive;
-            if (!std.mem.eql(u8, try cell(self.allocator, line, 0), "event")) continue;
-            const correlation = (try optionalCell(self.allocator, line, 20)) orelse continue;
-            const run = try cell(self.allocator, line, 15);
+            if (!std.mem.eql(u8, try cell(self.allocator, line, format.sharedColumn("schema_version")), limits.schema_version) or !std.mem.eql(u8, try cell(self.allocator, line, format.sharedColumn("column_schema_id")), limits.event_column_schema_id)) return error.InvalidDebugArchive;
+            if (!std.mem.eql(u8, try cell(self.allocator, line, format.sharedColumn("record_kind")), "event")) continue;
+            const correlation = (try optionalCell(self.allocator, line, format.eventColumn("correlation_id"))) orelse continue;
+            const run = try cell(self.allocator, line, format.sharedColumn("run_id"));
             for (self.entries.items) |*entry| if (std.mem.eql(u8, entry.call.id, correlation) and std.mem.eql(u8, entry.call.run, run)) {
-                try entry.events.append(self.allocator, .{ .node = try optionalCell(self.allocator, line, 18), .kind = try cell(self.allocator, line, 13), .diagnostic = try optionalCell(self.allocator, line, 24), .outcome = try optionalCell(self.allocator, line, 36) });
+                try entry.events.append(self.allocator, .{ .node = try optionalCell(self.allocator, line, format.sharedColumn("node_id")), .kind = try cell(self.allocator, line, format.eventColumn("event_type")), .diagnostic = try optionalCell(self.allocator, line, format.eventColumn("diagnostic_code")), .outcome = try optionalCell(self.allocator, line, format.eventColumn("outcome")) });
             };
         }
     }
@@ -161,8 +161,8 @@ pub fn segmentOrder(a: std.mem.Allocator, bytes: []const u8, events: bool) Error
     var result: ?SegmentOrder = null;
     while (lines.next()) |line| {
         if (line.len == 0 or lines.peek() == null) break;
-        if (!std.mem.eql(u8, try cell(a, line, 0), if (events) "event" else "prompt")) continue;
-        const run = try cell(a, line, 15);
+        if (!std.mem.eql(u8, try cell(a, line, format.sharedColumn("record_kind")), if (events) "event" else "prompt")) continue;
+        const run = try cell(a, line, format.sharedColumn("run_id"));
         const sequence = try rowSequence(line);
         if (result) |*order| {
             if (!std.mem.eql(u8, run, order.run) or sequence <= order.last) return error.InvalidDebugArchive;
@@ -173,7 +173,7 @@ pub fn segmentOrder(a: std.mem.Allocator, bytes: []const u8, events: bool) Error
 }
 
 fn rowSequence(line: []const u8) Error!u64 {
-    const bytes = format.cellAt(line, 9) orelse return error.InvalidDebugArchive;
+    const bytes = format.cellAt(line, format.sharedColumn("sequence")) orelse return error.InvalidDebugArchive;
     for (bytes) |byte| if (!std.ascii.isDigit(byte)) return error.InvalidDebugArchive;
     const sequence = std.fmt.parseInt(u64, bytes, 10) catch return error.InvalidDebugArchive;
     if (sequence == 0) return error.InvalidDebugArchive;

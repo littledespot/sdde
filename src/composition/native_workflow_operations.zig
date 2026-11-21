@@ -59,11 +59,7 @@ const publication = @import("../application/specification_publication_workflow.z
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
 pub const Assembly = struct {
-    inventory_principles: principles.Inventory,
-    validate_principle_inventory: principles.ValidateInventory,
-    capture_principles: principles.Capture,
     capture_principle_registry: principles.CaptureRegistry,
-    build_principles: principles.Build,
     capture_packet_guidance: packet_guidance.Capture,
     prepare_toolchain: runners.PrepareToolchain,
     invocation: invocation.Invocation,
@@ -72,7 +68,6 @@ pub const Assembly = struct {
     prepare_inputs: input_preparation.PrepareInputs,
     activate_feature_logging: logging.Activate,
     prepare_reference_evidence: evidence_preparation.PrepareReferenceEvidence,
-    validate_source_citations: evidence.ValidateCitations,
     parse_reference_extraction: extraction.Parse,
     validate_extraction_text: extraction.ValidateText,
     validate_reference_claims: extraction.Validate,
@@ -80,9 +75,8 @@ pub const Assembly = struct {
     build_reference_extraction: extraction.Build,
     account_reference_extraction: extraction.Account,
     compile_naming: path_tokens.Compile,
-    scan_path_tokens: path_tokens.Scan,
     prepare_reference_tokens: token_preparation.PrepareReferenceTokens,
-    validate_token_classifications: extraction.ValidateSelections,
+    validate_token_classifications: extraction.ValidateTokenClassifications,
     assign_preserved_tokens: structured_tokens.AssignTokens,
     build_preserved_claims: structured_tokens.BuildClaims,
     build_reconciliation_items: reconciliation.BuildItems,
@@ -104,7 +98,6 @@ pub const Assembly = struct {
     account_reconciliation: reconciliation.Account,
     project_specification_authority: authority.ProjectSpecification,
     build_required_authority: authority.Build,
-    parse_authority_observations: authority.Parse,
     reconcile_required_authority: authority.Reconcile,
     validate_required_authority: authority.Validate,
     model_requests: model_request.Assembly,
@@ -162,7 +155,6 @@ pub const Assembly = struct {
     refresh_clarifications: clarification_refresh.Refresh,
     render_clarifications: clarification_refresh.Render,
     check_clarifications: clarification_refresh.Check,
-    prepare_clarification_output: output.PrepareClarifications,
     publish_output: output.Publish,
     build_resolved_needs: publication.ResolvedNeeds,
     build_specification_state: publication.Build,
@@ -178,16 +170,12 @@ pub const Assembly = struct {
     build_repair_input: generic_repair.BuildRepairInput,
     parse_repair: generic_repair.ParseRepair,
     merge_repair: generic_repair.MergeRepair,
-    entries: [core.entries.len + 116 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 108 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
         self.* = .{
-            .inventory_principles = .{ .allocator = allocator, .action = .{} },
-            .validate_principle_inventory = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
-            .capture_principles = .{ .allocator = allocator, .action = .{} },
             .capture_principle_registry = .{ .allocator = allocator, .action = .{} },
-            .build_principles = .{ .allocator = allocator, .action = .{} },
             .capture_packet_guidance = .{ .allocator = allocator },
             .prepare_toolchain = .{ .allocator = allocator, .action = .{ .project_source = project_source, .preset_source = preset_source, .preset_capture = preset_capture, .parser = document_parser, .policies = policies } },
             .invocation = .{ .allocator = allocator },
@@ -196,7 +184,6 @@ pub const Assembly = struct {
             .prepare_inputs = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .feature_inspector = feature_inspector, .reference_inspector = directory_inspector, .input_source = input_capture, .state_parser = state_parser, .form_parser = form_parser } },
             .activate_feature_logging = .{ .allocator = allocator },
             .prepare_reference_evidence = .{ .allocator = allocator, .action = .{ .enumerator = reference_inventory, .normalizer = unicode, .case_folder = case_folder, .capturer = reference_capture, .decoder = reference_decoder, .identities = reference_identity } },
-            .validate_source_citations = .{ .allocator = allocator },
             .parse_reference_extraction = .{ .allocator = allocator },
             .initialize_extraction = .{ .allocator = allocator },
             .check_extraction = .{},
@@ -236,7 +223,6 @@ pub const Assembly = struct {
             .account_reconciliation = .{ .allocator = allocator },
             .project_specification_authority = .{ .allocator = allocator },
             .build_required_authority = .{ .allocator = allocator },
-            .parse_authority_observations = .{ .allocator = allocator },
             .reconcile_required_authority = .{ .allocator = allocator },
             .validate_required_authority = .{ .allocator = allocator },
             .validate_extraction_text = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
@@ -245,7 +231,6 @@ pub const Assembly = struct {
             .build_reference_extraction = .{ .allocator = allocator },
             .account_reference_extraction = .{ .allocator = allocator },
             .compile_naming = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder } },
-            .scan_path_tokens = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
             .prepare_reference_tokens = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder, .classifier = classifier } },
             .model_requests = undefined,
             .specification_source_readiness = .{ .allocator = allocator },
@@ -259,7 +244,6 @@ pub const Assembly = struct {
             .refresh_clarifications = .{ .allocator = allocator },
             .render_clarifications = .{ .allocator = allocator },
             .check_clarifications = .{},
-            .prepare_clarification_output = .{ .allocator = allocator },
             .publish_output = .{ .allocator = allocator },
             .build_resolved_needs = .{ .allocator = allocator },
             .build_specification_state = .{ .allocator = allocator },
@@ -338,11 +322,7 @@ pub const Assembly = struct {
         };
         self.model_requests.init(allocator);
         self.entries = core.entries ++ self.model_requests.entries ++ [_]operations.Entry{
-            entry(principles.Inventory, &self.inventory_principles),
-            entry(principles.ValidateInventory, &self.validate_principle_inventory),
-            entry(principles.Capture, &self.capture_principles),
             entry(principles.CaptureRegistry, &self.capture_principle_registry),
-            entry(principles.Build, &self.build_principles),
             entry(packet_guidance.Capture, &self.capture_packet_guidance),
             entry(runners.PrepareToolchain, &self.prepare_toolchain),
             .{ .contract = invocation.Invocation.contract, .binding = binding.bind(invocation.Invocation, &self.invocation, invocation.Invocation.invoke) },
@@ -351,7 +331,6 @@ pub const Assembly = struct {
             entry(input_preparation.PrepareInputs, &self.prepare_inputs),
             .{ .contract = logging.Activate.contract, .binding = binding.bind(logging.Activate, &self.activate_feature_logging, logging.Activate.invoke) },
             entry(evidence_preparation.PrepareReferenceEvidence, &self.prepare_reference_evidence),
-            entry(evidence.ValidateCitations, &self.validate_source_citations),
             entry(extraction.Parse, &self.parse_reference_extraction),
             entry(reference_model.Initialize, &self.initialize_extraction),
             entry(reference_model.CheckExtraction, &self.check_extraction),
@@ -399,7 +378,7 @@ pub const Assembly = struct {
             entry(specification_support.Initialize, &self.initialize_specification_review),
             entry(authority.BuildObservations, &self.build_authority_observations),
             entry(authority.Retire, &self.retire_authority),
-            entry(extraction.ValidateSelections, &self.validate_token_classifications),
+            entry(extraction.ValidateTokenClassifications, &self.validate_token_classifications),
             variantEntry(generic_repair.AuthorizeRepair, &self.authorize_repair),
             variantEntry(generic_repair.BuildRepairInput, &self.build_repair_input),
             variantEntry(generic_repair.ParseRepair, &self.parse_repair),
@@ -425,7 +404,6 @@ pub const Assembly = struct {
             entry(reconciliation.Account, &self.account_reconciliation),
             entry(authority.ProjectSpecification, &self.project_specification_authority),
             entry(authority.Build, &self.build_required_authority),
-            entry(authority.Parse, &self.parse_authority_observations),
             entry(authority.Reconcile, &self.reconcile_required_authority),
             entry(authority.Validate, &self.validate_required_authority),
             entry(extraction.ValidateText, &self.validate_extraction_text),
@@ -434,7 +412,6 @@ pub const Assembly = struct {
             entry(extraction.Build, &self.build_reference_extraction),
             entry(extraction.Account, &self.account_reference_extraction),
             entry(path_tokens.Compile, &self.compile_naming),
-            entry(path_tokens.Scan, &self.scan_path_tokens),
             entry(token_preparation.PrepareReferenceTokens, &self.prepare_reference_tokens),
             entry(specification_rendering.Project, &self.project_specification_document),
             entry(specification_rendering.Render, &self.render_specification),
@@ -444,7 +421,6 @@ pub const Assembly = struct {
             entry(clarification_refresh.Refresh, &self.refresh_clarifications),
             entry(clarification_refresh.Render, &self.render_clarifications),
             entry(clarification_refresh.Check, &self.check_clarifications),
-            entry(output.PrepareClarifications, &self.prepare_clarification_output),
             entry(output.Publish, &self.publish_output),
             entry(publication.ResolvedNeeds, &self.build_resolved_needs),
             entry(publication.Build, &self.build_specification_state),
@@ -458,11 +434,7 @@ pub const Assembly = struct {
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{authority.gate_contract} };
     }
 
-    pub fn bindPrinciples(self: *Assembly, root: *const roots.ConfiguredBaseRootCapability, reader: @import("../ports/principle_source.zig").Reader, enumerator: @import("../ports/principle_source.zig").Enumerator, capturer: @import("../ports/principle_source.zig").Capturer) void {
-        self.inventory_principles.action.source = enumerator;
-        self.inventory_principles.action.source.?.capability = root;
-        self.capture_principles.action.source = capturer;
-        self.capture_principles.action.source.?.capability = root;
+    pub fn bindPrinciples(self: *Assembly, root: *const roots.ConfiguredBaseRootCapability, reader: @import("../ports/principle_source.zig").Reader) void {
         self.capture_principle_registry.action.source = reader;
         self.capture_principle_registry.action.source.?.capability = root;
     }
