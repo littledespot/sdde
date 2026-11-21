@@ -1,16 +1,11 @@
 const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const budget = @import("workflow_token_budget.zig");
+const ledger_revision = @import("ledger_revision.zig");
 
 pub const TotalTokenBudget = budget.TotalTokenBudget;
 
-pub const Revision = struct {
-    value: u64,
-    pub const initial: Revision = .{ .value = 0 };
-    pub fn eql(left: Revision, right: Revision) bool {
-        return left.value == right.value;
-    }
-};
+pub const Revision = ledger_revision.Revision("workflow_token_accounting");
 
 // Only validated provider observations enter this boundary. Missing usage is
 // never estimated; only proven non-delivery permits a zero-charge disposition.

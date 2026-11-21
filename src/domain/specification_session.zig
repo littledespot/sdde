@@ -276,7 +276,7 @@ pub fn displayCatalogue(a: std.mem.Allocator, context: p.Context, exact_claims: 
     var requirements: std.ArrayList(projection.Requirement) = .empty;
     var exact_choices: std.ArrayList(projection.ExactLiteral) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
-    for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
+    for (context.references.global().dispositions) |disposition| {
         if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
         const item = try @import("reference_reconciliation.zig").item(all, disposition.claim_id);
         var requirement = try projection.requirement(a, item, context.inputs, context.registry);

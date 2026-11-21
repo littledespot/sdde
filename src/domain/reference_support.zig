@@ -23,7 +23,7 @@ pub fn eligibleSelection(dispositions: []const r.ClaimDisposition, claims: []con
     return true;
 }
 pub fn records(value: r.Accounted) Records {
-    const global = value.records.assignments.checked.prior.prior;
+    const global = value.global();
     return .{ .items = global.input.progress.plan.layout.items, .dispositions = global.dispositions, .signals = value.records.signals, .conflicts = value.records.conflicts };
 }
 pub fn snapshot(a: std.mem.Allocator, value: @import("reference_snapshot.zig").Snapshot) r.Error!Records {

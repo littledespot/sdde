@@ -1536,6 +1536,22 @@ test "a registry that no longer matches the compiled workflow stops the invocati
     }
 }
 
+test "a registry whose operation ids repeat is refused before the first step, and the refusal is never recorded as a pass" {
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+    var barrier: FakeBarrier = .{};
+    var graph = try testGraph();
+    var registry = testRegistry(&control);
+    var doubled = [_]operations.Entry{ control.entries[0], control.entries[0], control.entries[1] };
+    registry.operations = &doubled;
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
+    defer runner.deinit();
+    for (0..2) |_| {
+        const stepped = runner.bindings().invokeStep(test_steps[0].id);
+        try std.testing.expectEqual(execution.Rejection{ .authority = .registry_drift }, stepped.rejected);
+    }
+    try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+}
+
 test "a step the compiled workflow or the registry does not hold is unresolved and never runs" {
     const Fault = enum { none, unknown_step, unregistered_operation };
     for (std.enums.values(Fault)) |fault| {

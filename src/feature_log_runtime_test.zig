@@ -466,6 +466,112 @@ test "fault barriers distinguish lock recovery flush console rotation and retent
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, retention.blocked);
 }
 
+const full_segment: log_stream.StreamState = .{
+    .segment_ordinal = 1,
+    .next_sequence = 3,
+    .segment_bytes = log_limits.max_segment_bytes - 1,
+    .segment_count = 1,
+    .total_segment_count = 1,
+    .records_since_flush = 0,
+    .last_flush_monotonic_ms = 0,
+};
+
+fn seedStream(runner: *runner_module.Runner, comptime stream: log_stream.Stream, state: log_stream.StreamState) void {
+    switch (stream) {
+        .event => runner.event_state = state,
+        .prompt => runner.prompt_state = state,
+    }
+}
+
+fn streamStateOf(runner: *const runner_module.Runner, comptime stream: log_stream.Stream) ?log_stream.StreamState {
+    return switch (stream) {
+        .event => runner.event_state,
+        .prompt => runner.prompt_state,
+    };
+}
+
+fn persistOneRow(runner: *runner_module.Runner, comptime stream: log_stream.Stream) !log_stream.Outcome {
+    return switch (stream) {
+        .event => runner.process(.{
+            .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
+            .fact = .{ .event_type = .run_completed, .fields = .{ .outcome = .completed } },
+        }),
+        .prompt => runner.processPrompt(.{
+            .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
+            .attempt = 1,
+            .request_id = telemetry.Identifier.validate("REQ-1").?,
+            .route_id = telemetry.Identifier.validate("ROUTE-1").?,
+            .model_profile_id = telemetry.Identifier.validate("PROFILE-1").?,
+            .fragment_id = telemetry.Identifier.validate("FRAG-1").?,
+            .direction = .response,
+            .body_class = .code_body,
+            .content = "sanitized",
+            .retained_bytes = 9,
+            .truncated = false,
+            .redacted = true,
+        }),
+    };
+}
+
+test "a full segment rotates before its row, a spent segment budget writes nothing and a failed rotation keeps the old state, in either stream" {
+    const candidate = bindingCandidate();
+    const owner = try log_binding.createValidated(std.testing.allocator, candidate);
+    defer log_binding.deinitOwner(owner);
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
+
+    inline for (.{ log_stream.Stream.event, log_stream.Stream.prompt }) |stream| {
+        {
+            var sink: FaultSink = .{ .fault = .none };
+            var clock: FakeClock = .{};
+            var outputs: FakeOutputs = .{};
+            var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency()) };
+            seedStream(&runner, stream, full_segment);
+            const outcome = try persistOneRow(&runner, stream);
+            try std.testing.expect(outcome == .persisted);
+            // The row opens the next segment, and the cached state follows it.
+            try std.testing.expectEqual(@as(u16, 2), outcome.persisted.segment_ordinal);
+            // The row itself names the segment it opens, not the full one it replaced.
+            try std.testing.expectEqual(@as(u16, 2), sink.row_segment_ordinal);
+            try std.testing.expectEqual(@as(usize, 1), sink.rotated);
+            try std.testing.expectEqual(@as(usize, 1), sink.appended);
+            const state = streamStateOf(&runner, stream).?;
+            try std.testing.expectEqual(@as(u16, 2), state.segment_ordinal);
+            try std.testing.expectEqual(@as(u8, 2), state.segment_count);
+            try std.testing.expectEqual(@as(u64, 4), state.next_sequence);
+            try std.testing.expectEqual(@as(usize, 0), outputs.emergency_count);
+        }
+        {
+            var spent = full_segment;
+            spent.total_segment_count = log_limits.max_segments;
+            var sink: FaultSink = .{ .fault = .none };
+            var clock: FakeClock = .{};
+            var outputs: FakeOutputs = .{};
+            var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency()) };
+            seedStream(&runner, stream, spent);
+            const outcome = try persistOneRow(&runner, stream);
+            try std.testing.expect(outcome == .blocked);
+            try std.testing.expectEqual(log_stream.FailureCode.LOG_SEGMENT_LIMIT_EXHAUSTED, outcome.blocked);
+            try std.testing.expectEqual(@as(usize, 0), sink.rotated);
+            try std.testing.expectEqual(@as(usize, 0), sink.appended);
+            try std.testing.expectEqual(spent, streamStateOf(&runner, stream).?);
+            try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
+        }
+        {
+            var sink: FaultSink = .{ .fault = .rotation };
+            var clock: FakeClock = .{};
+            var outputs: FakeOutputs = .{};
+            var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency()) };
+            seedStream(&runner, stream, full_segment);
+            const outcome = try persistOneRow(&runner, stream);
+            try std.testing.expect(outcome == .blocked);
+            try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
+            try std.testing.expectEqual(@as(usize, 0), sink.appended);
+            try std.testing.expectEqual(full_segment, streamStateOf(&runner, stream).?);
+            try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
+        }
+    }
+}
+
 test "same-run policy transition closes the old binding and continues sequence and total budget" {
     const io = std.testing.io;
     var root = std.testing.tmpDir(.{ .iterate = true });
@@ -870,6 +976,12 @@ const Fault = enum { none, lock, recovery, flush, console, rotation, retention, 
 const FaultSink = struct {
     fault: Fault,
     held: bool = false,
+    /// Rotations and appends the sink completed, so a test can show that a blocked persist wrote nothing.
+    rotated: usize = 0,
+    appended: usize = 0,
+    /// The segment ordinal the last appended row names in its own cell, so a test can show a row was rendered
+    /// against the segment it was appended to.
+    row_segment_ordinal: u16 = 0,
     fn lockAcquirer(self: *FaultSink) sink_port.LockAcquirer {
         return .{ .context = self, .acquire_fn = faultAcquire };
     }
@@ -914,6 +1026,7 @@ fn faultRotate(context: *anyopaque, _: *const log_binding.ValidatedFeatureLogBin
     const self: *FaultSink = @ptrCast(@alignCast(context));
     if (self.fault == .rotation) return error.SinkFailure;
     if (self.fault == .cancel_rotation) return error.Cancelled;
+    self.rotated += 1;
     var next = state;
     next.segment_ordinal += 1;
     next.segment_count += 1;
@@ -938,6 +1051,9 @@ fn faultAppend(context: *anyopaque, _: *const log_binding.ValidatedFeatureLogBin
         self.held = false;
         return error.Cancelled;
     }
+    self.appended += 1;
+    const format = @import("domain/feature_log_format.zig");
+    self.row_segment_ordinal = std.fmt.parseInt(u16, format.cellAt(row, format.sharedColumn("segment_ordinal")).?, 10) catch 0;
     return .{ .segment_ordinal = state.segment_ordinal, .sequence = state.next_sequence, .bytes_written = row.len, .flushed = flush };
 }
 fn faultPrune(context: *anyopaque, _: *const log_binding.ValidatedFeatureLogBinding, _: log_stream.Stream, _: u64) @import("ports/feature_log_sink.zig").Error!void {

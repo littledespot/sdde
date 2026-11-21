@@ -7,32 +7,8 @@ const v = @import("reference_reconciliation_validation.zig");
 const context = @import("reference_reconciliation_context.zig");
 const dispositions = @import("reference_disposition_validation.zig");
 const packets = @import("model_input_packet.zig");
-pub const Target = union(enum) {
-    statement_selection: usize,
-    statement_content: usize,
-    statement: usize,
-    insert_statement: struct { index: usize, claim: r.ClaimId },
-    disposition: struct { index: usize, claim: r.ClaimId },
-    signal_selection: usize,
-    signal_content: usize,
-    signal: usize,
-    insert_signal: struct { index: usize, claim: r.ClaimId },
-    conflict_selection: usize,
-    conflict_summary: usize,
-    conflict: usize,
-    insert_conflict: struct { index: usize, claims: []const r.ClaimId },
-
-    const Guidance = struct { unit: std.meta.Tag(Target), index: ?usize = null, claim: ?r.ClaimId = null, claims: ?[]const r.ClaimId = null };
-    pub fn guidance(self: Target) Guidance {
-        var result: Guidance = .{ .unit = std.meta.activeTag(self) };
-        switch (self) {
-            inline .insert_statement, .disposition, .insert_signal => |value| result.claim = value.claim,
-            .insert_conflict => |value| result.claims = value.claims,
-            inline else => |index| result.index = index,
-        }
-        return result;
-    }
-};
+const Target = d.Target;
+const StableTarget = d.StableTarget;
 pub const Replacement = union(enum) {
     selection: struct { claim_ids: []const r.ClaimId },
     content: r.ContentProposal,
@@ -82,16 +58,6 @@ pub const Block = d.RepairBlock;
 pub const Decision = union(enum) { model: Authorization, automatic: struct { authorization: Authorization, replacement: ?Replacement }, blocked: Block };
 const occurrences = @import("repair_occurrences.zig");
 const Family = enum { selection, content, disposition, membership, coverage, duplicate };
-const StableTarget = union(enum) {
-    statement: occurrences.Id,
-    disposition: r.ClaimId,
-    signal: occurrences.Id,
-    conflict: occurrences.Id,
-    missing_statement: r.ClaimId,
-    missing_signal: r.ClaimId,
-    missing_conflict: []const r.ClaimId,
-};
-pub const ObservationTarget = struct { selected: Target, stable: StableTarget, rule: d.Rule, operation: enum { replace, insert, delete } };
 
 fn stableTarget(a: std.mem.Allocator, source: d.Source, proposal: @FieldType(r.Parsed, "proposal"), target: Target) Error!StableTarget {
     return switch (target) {
@@ -513,8 +479,6 @@ fn occurrenceError(err: occurrences.Error) Error {
     };
 }
 
-pub const ValidationStage = enum { summary, dispositions, signals, conflicts };
-
 pub fn dispositionProgress(a: std.mem.Allocator, parsed: r.Parsed) Error!?@import("workflow_retry.zig").Transition {
     const pending = parsed.source.pending_repair orelse return null;
     if (stageOf(pending.target.selected) != .dispositions) return null;
@@ -525,7 +489,7 @@ pub fn dispositionProgress(a: std.mem.Allocator, parsed: r.Parsed) Error!?@impor
     return .{ .validated = .{ .permit = pending.permit, .revision = parsed.source.revision, .result = if (valid) .resolved else .recurring } };
 }
 
-fn stageOf(target: Target) ValidationStage {
+fn stageOf(target: Target) d.Stage {
     return switch (target) {
         .statement_selection, .statement_content, .statement, .insert_statement => .summary,
         .disposition => .dispositions,
@@ -541,7 +505,7 @@ fn containsOccurrence(set: occurrences.Set, count: usize, id: occurrences.Id) Er
 
 /// Observe the selected native rule after the ordinary stage validator has run.
 /// Other failed records do not substitute for proof about this authorized unit.
-pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextContext, parsed: r.Parsed, stage: ValidationStage, checked_dispositions: []const r.ClaimDisposition) Error!?@import("workflow_retry.zig").Transition {
+pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextContext, parsed: r.Parsed, stage: d.Stage, checked_dispositions: []const r.ClaimDisposition) Error!?@import("workflow_retry.zig").Transition {
     const pending = parsed.source.pending_repair orelse return null;
     const watch = pending.target;
     const target = watch.selected;

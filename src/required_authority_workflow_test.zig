@@ -189,7 +189,11 @@ test "native reconciliation observes changed disposition before validated author
             // the disposition. It cannot make either pending finding disappear.
             try std.testing.expectEqual(prior, state.firstUnresolved().?.outcome);
             try std.testing.expectEqual(@as(usize, 2), state.entries.items.len);
-            const classification = [_]association.Change{.{ .reclassify = .{ .authority_result = .{ .subject = inputs, .result = &result } } }};
+            const classification = [_]association.Change{.{ .reclassify = .{ .authority_result = .{ .subject = inputs, .canonical = .needs_user } } }};
+            // The step's outcome must be the one the owner's result named.
+            const mismatched = [_]association.Change{.{ .reclassify = .{ .authority_result = .{ .subject = inputs, .canonical = .blocked } } }};
+            try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(native.Validate.outcome_association, .needs_user, &mismatched));
+            try std.testing.expectEqual(prior, state.firstUnresolved().?.outcome);
             if (prior == .failed or prior == .cancelled) {
                 try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(native.Validate.outcome_association, .needs_user, &classification));
                 try std.testing.expectEqual(prior, state.firstUnresolved().?.outcome);

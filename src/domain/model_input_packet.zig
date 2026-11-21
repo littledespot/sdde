@@ -79,9 +79,42 @@ const Storage = struct {
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
     presentation_omissions: []const @import("model_field_presentation.zig").Omission = &.{},
     assignment_contexts: []const AssignmentContext = &.{},
+    /// Owns the bytes `original_sources` borrows; shared by every packet projected from this one.
+    source_witness: ?*SourceWitness = null,
     handle: Handle,
 };
 const Handle = struct { owner: *Storage };
+
+/// The captured source bytes of one packet chain. Sources are immutable and never model-visible, so the packets
+/// projected from one another share one witness: the projection that first names the sources copies them, and every
+/// later projection retains that copy. A packet borrows `sources` only while it holds a reference.
+const SourceWitness = struct {
+    allocator: std.mem.Allocator,
+    arena: std.heap.ArenaAllocator,
+    references: usize = 1,
+    sources: []const @import("model_text_wire.zig").SourceText = &.{},
+};
+
+fn createWitness(allocator: std.mem.Allocator, sources: []const @import("model_text_wire.zig").SourceText) Error!*SourceWitness {
+    const witness = try allocator.create(SourceWitness);
+    errdefer allocator.destroy(witness);
+    witness.* = .{ .allocator = allocator, .arena = .init(allocator) };
+    errdefer witness.arena.deinit();
+    const a = witness.arena.allocator();
+    const copy = try a.alloc(@import("model_text_wire.zig").SourceText, sources.len);
+    for (sources, copy) |source, *destination| destination.* = .{ .source_id = source.source_id, .bytes = try a.dupe(u8, source.bytes) };
+    witness.sources = copy;
+    return witness;
+}
+
+fn releaseWitness(witness: *SourceWitness) void {
+    std.debug.assert(witness.references != 0);
+    witness.references -= 1;
+    if (witness.references != 0) return;
+    const allocator = witness.allocator;
+    witness.arena.deinit();
+    allocator.destroy(witness);
+}
 pub fn create(allocator: std.mem.Allocator, body: []const u8, unit: identity.ImmutableUnitOwnerId, purpose: identity.RequestPurposeBinding, result_definition: ?schema.DefinitionId) Error!*Packet {
     return createBound(allocator, body, unit, purpose, result_definition, null, null);
 }
@@ -130,6 +163,7 @@ pub fn release(packet: *const Packet) void {
     std.debug.assert(owner.references != 0);
     owner.references -= 1;
     if (owner.references != 0) return;
+    if (owner.source_witness) |witness| releaseWitness(witness);
     owner.arena.deinit();
     owner.allocator.destroy(owner);
 }
@@ -177,7 +211,7 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
         .body = try a.dupe(u8, context.body),
     };
     storage(result).assignment_contexts = copied_contexts;
-    try copyOriginalSources(storage(result), base.originalSources());
+    try shareSources(storage(result), storage(base));
     if (base.exactScope()) |scope| storage(result).exact_scope = try @import("model_exact_values.zig").clone(a, scope);
     storage(result).prose_fields = try @import("model_text_wire.zig").cloneProseFields(a, base.proseFields());
     storage(result).field_policies = try @import("model_text_field.zig").clone(a, base.fieldPolicies());
@@ -230,7 +264,7 @@ pub fn withOriginalSourceTexts(a: std.mem.Allocator, base: *const Packet, source
     if (!@import("model_text_wire.zig").validSources(sources)) return error.InvalidModelInputPacket;
     const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
     errdefer release(result);
-    try copyOriginalSources(storage(result), sources);
+    try installSources(storage(result), sources);
     return result;
 }
 
@@ -245,11 +279,25 @@ pub fn withExactScope(a: std.mem.Allocator, base: *const Packet, scope: @import(
     return result;
 }
 
-fn copyOriginalSources(owner: *Storage, sources: []const @import("model_text_wire.zig").SourceText) Error!void {
-    const a = owner.arena.allocator();
-    const copy = try a.alloc(@import("model_text_wire.zig").SourceText, sources.len);
-    for (sources, copy) |source, *destination| destination.* = .{ .source_id = source.source_id, .bytes = try a.dupe(u8, source.bytes) };
-    owner.original_sources = copy;
+/// Name sources the caller owns: copy them into a new witness, replacing any witness the packet shared.
+fn installSources(owner: *Storage, sources: []const @import("model_text_wire.zig").SourceText) Error!void {
+    const witness = try createWitness(owner.allocator, sources);
+    if (owner.source_witness) |previous| releaseWitness(previous);
+    owner.source_witness = witness;
+    owner.original_sources = witness.sources;
+}
+
+/// Carry the base packet's sources into a projection without copying their bytes.
+fn shareSources(owner: *Storage, base: *const Storage) Error!void {
+    const witness = base.source_witness orelse return;
+    // A witness is freed through the allocator that made it, so a projection made with another allocator, whose
+    // lifetime may be shorter, keeps a copy of its own.
+    if (owner.allocator.ptr != witness.allocator.ptr or owner.allocator.vtable != witness.allocator.vtable) {
+        return installSources(owner, witness.sources);
+    }
+    witness.references = std.math.add(usize, witness.references, 1) catch return error.InvalidModelInputPacket;
+    owner.source_witness = witness;
+    owner.original_sources = witness.sources;
 }
 
 /// Native presentation facts only. The catalogue stays outside model content;

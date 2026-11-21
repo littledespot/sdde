@@ -57,6 +57,14 @@ pub const Kind = enum {
         };
     }
 
+    /// The families a document prints under its scope subsection: their headings are the level-four ones.
+    pub fn isScopeSection(self: Kind) bool {
+        return switch (self) {
+            .assumption, .non_goal, .prohibited_behavior => true,
+            .acceptance_criterion, .user_visible_outcome, .edge_case, .functional_requirement, .business_rule, .entity => false,
+        };
+    }
+
     /// The families whose records show the source lines their claims cite (§23).
     pub fn showsSources(self: Kind) bool {
         return switch (self) {

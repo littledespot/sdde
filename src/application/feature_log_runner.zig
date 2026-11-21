@@ -119,24 +119,23 @@ pub const Runner = struct {
     /// that really are on disk.
     fn closeStream(self: *Runner, stream: log_stream.Stream, reading: log_stream.ClockReading) ?log_stream.Stop {
         if (self.recoverDropped(stream)) |stop| return stop;
-        const state = (switch (stream) {
-            .event => self.event_state,
-            .prompt => self.prompt_state,
-        }) orelse return null;
+        const state = self.slot(stream).* orelse return null;
         if (self.closeOne(stream, state, reading)) |stop| return stop;
-        switch (stream) {
-            .event => self.event_state = null,
-            .prompt => self.prompt_state = null,
-        }
+        self.slot(stream).* = null;
         return null;
+    }
+
+    /// The cached state of one stream.
+    fn slot(self: *Runner, stream: log_stream.Stream) *?log_stream.StreamState {
+        return switch (stream) {
+            .event => &self.event_state,
+            .prompt => &self.prompt_state,
+        };
     }
 
     /// Drop a stream's cached state because a cancelled step may have left its bytes ahead of it.
     fn forget(self: *Runner, stream: log_stream.Stream) void {
-        switch (stream) {
-            .event => self.event_state = null,
-            .prompt => self.prompt_state = null,
-        }
+        self.slot(stream).* = null;
         self.dropped.insert(stream);
     }
 
@@ -147,9 +146,8 @@ pub const Runner = struct {
         self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return acquire_lock.stop(failure);
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const heading = if (stream == .event) feature_log_format.event_heading else feature_log_format.prompt_heading;
         var recover_stop: ?log_stream.Stop = null;
-        const recovered = self.actions.recover_stream.execute(scratch.allocator(), self.binding, stream, heading) catch |failure| blk: {
+        const recovered = self.actions.recover_stream.execute(scratch.allocator(), self.binding, stream, feature_log_format.segmentHeading(stream)) catch |failure| blk: {
             recover_stop = switch (failure) {
                 error.LogSinkFailure => .{ .blocked = .LOG_SINK_FAILURE },
                 error.Cancelled => .cancelled,
@@ -159,10 +157,7 @@ pub const Runner = struct {
         self.actions.release_lock.execute() catch return .{ .blocked = .LOG_RELEASE_FAILURE };
         if (recover_stop) |stop| return stop;
         switch (recovered.?) {
-            .active => |state| switch (stream) {
-                .event => self.event_state = state,
-                .prompt => self.prompt_state = state,
-            },
+            .active => |state| self.slot(stream).* = state,
             .empty => {},
         }
         self.dropped.remove(stream);
@@ -174,20 +169,14 @@ pub const Runner = struct {
         var open_stop: ?log_stream.Stop = null;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const state = switch (stream) {
-            .event => self.openEventStream(scratch.allocator(), reading),
-            .prompt => self.openPromptStream(scratch.allocator(), reading),
-        } catch |open_failure| blk: {
+        const state = self.openStream(scratch.allocator(), stream, reading) catch |open_failure| blk: {
             open_stop = persistStop(open_failure);
             break :blk null;
         };
         // The lock is released on every path, a cancelled open included.
         self.actions.release_lock.execute() catch return .{ .blocked = .LOG_RELEASE_FAILURE };
         if (open_stop) |stop| return stop;
-        switch (stream) {
-            .event => self.event_state = state.?,
-            .prompt => self.prompt_state = state.?,
-        }
+        self.slot(stream).* = state.?;
         self.dropped.remove(stream);
         return null;
     }
@@ -222,27 +211,22 @@ pub const Runner = struct {
         return close_stop;
     }
 
-    fn persistEvent(
+    /// Persist one row to its stream: render it against the stream's state, rotate a full segment first, append
+    /// it, then advance the state and mirror it to the console.
+    fn persistRow(
         self: *Runner,
-        attributed: telemetry.WorkflowTelemetryFact,
-        definition: log_event_registry.EventDefinition,
+        row: Row,
         reading: log_stream.ClockReading,
     ) PersistError!log_stream.PersistedEvidence {
+        const stream: log_stream.Stream = row;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
         const allocator = scratch.allocator();
-        var state = self.event_state orelse self.openEventStream(allocator, reading) catch |failure| return failure;
-        var event_id_buffer: [32]u8 = undefined;
-
-        var record = (build_event.Action{}).execute(&event_id_buffer, self.binding, state, &reading, attributed) catch {
-            return error.SerializationFailure;
-        };
-        var row = (serialize_event.Action{}).execute(allocator, record) catch {
-            return error.SerializationFailure;
-        };
+        var state = self.slot(stream).* orelse try self.openStream(allocator, stream, reading);
+        var bytes = try renderRow(allocator, self.binding, state, &reading, row);
         const control = serialize_control.Action{};
         const trailer_len = control.measure(
-            .event,
+            stream,
             .segment_trailer,
             self.binding,
             state.segment_ordinal,
@@ -250,52 +234,44 @@ pub const Runner = struct {
             reading.utc(),
         ) catch return error.SerializationFailure;
         const next_header_len = control.measure(
-            .event,
+            stream,
             .segment_header,
             self.binding,
             state.segment_ordinal + 1,
             null,
             reading.utc(),
         ) catch return error.SerializationFailure;
-        switch ((rotation.Action{}).execute(
-            state,
-            row.len,
-            trailer_len,
-            feature_log_format.event_heading.len + next_header_len,
-        )) {
+        const heading = feature_log_format.segmentHeading(stream);
+        switch ((rotation.Action{}).execute(state, bytes.len, trailer_len, heading.len + next_header_len)) {
             .append => {},
             .exhausted => return error.SegmentLimitExhausted,
             .rotate => {
-                const trailer = control.execute(allocator, .event, .segment_trailer, self.binding, state.segment_ordinal, state.next_sequence - 1, reading.utc()) catch return error.SerializationFailure;
-                const next_header = control.execute(allocator, .event, .segment_header, self.binding, state.segment_ordinal + 1, null, reading.utc()) catch return error.SerializationFailure;
+                const trailer = control.execute(allocator, stream, .segment_trailer, self.binding, state.segment_ordinal, state.next_sequence - 1, reading.utc()) catch return error.SerializationFailure;
+                const next_header = control.execute(allocator, stream, .segment_header, self.binding, state.segment_ordinal + 1, null, reading.utc()) catch return error.SerializationFailure;
                 state = self.actions.rotate_segment.execute(
                     self.binding,
-                    .event,
+                    stream,
                     state,
                     trailer,
-                    feature_log_format.event_heading,
+                    heading,
                     next_header,
                 ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.RotateFailure;
-                record = (build_event.Action{}).execute(&event_id_buffer, self.binding, state, &reading, attributed) catch {
-                    return error.SerializationFailure;
-                };
-                row = (serialize_event.Action{}).execute(allocator, record) catch {
-                    return error.SerializationFailure;
-                };
+                bytes = try renderRow(allocator, self.binding, state, &reading, row);
             },
         }
+        const flush_key = flushKeyOf(row);
         const force_flush = (evaluate_flush.Action{}).execute(
             self.policy.*,
-            definition.level,
-            attributed.fact.event_type,
+            flush_key.level,
+            flush_key.event_type,
             state,
             reading.monotonic_ms,
         ) == .flush;
         const evidence = self.actions.append_record.execute(
             self.binding,
-            .event,
+            stream,
             state,
-            row,
+            bytes,
             force_flush,
         ) catch |failure| return switch (failure) {
             error.LogFlushFailure => error.FlushFailure,
@@ -304,33 +280,36 @@ pub const Runner = struct {
         };
         // The row is on disk, so the stream's state advances before the console mirror. A failed mirror (the console
         // is only a mirror, ADR 0018) then leaves the cached state level with the file, not one row behind it.
-        state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
-        self.event_state = state;
-        self.dropped.remove(.event);
-        if (self.policy.console) self.actions.write_console.execute(row) catch |failure| return switch (failure) {
+        state = (advance_state.Action{}).execute(state, bytes.len, force_flush, reading.monotonic_ms);
+        self.slot(stream).* = state;
+        self.dropped.remove(stream);
+        if (self.policy.console) self.actions.write_console.execute(bytes) catch |failure| return switch (failure) {
             error.ConsoleLogWriteFailure => error.ConsoleFailure,
             error.Cancelled => error.Cancelled,
         };
         return evidence;
     }
 
-    fn openEventStream(
+    /// Recover a stream's state from its bytes, or create its first segment when it has none.
+    fn openStream(
         self: *Runner,
         allocator: std.mem.Allocator,
+        stream: log_stream.Stream,
         reading: log_stream.ClockReading,
     ) PersistError!log_stream.StreamState {
+        const heading = feature_log_format.segmentHeading(stream);
         const recovered = self.actions.recover_stream.execute(
             allocator,
             self.binding,
-            .event,
-            feature_log_format.event_heading,
+            stream,
+            heading,
         ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.RecoveryFailure;
         const state = switch (recovered) {
             .active => |active| active,
             .empty => |seed| blk: {
                 const header = (serialize_control.Action{}).execute(
                     allocator,
-                    .event,
+                    stream,
                     .segment_header,
                     self.binding,
                     seed.next_segment_ordinal,
@@ -339,118 +318,10 @@ pub const Runner = struct {
                 ) catch return error.SerializationFailure;
                 break :blk self.actions.create_segment.execute(
                     self.binding,
-                    .event,
+                    stream,
                     seed.next_segment_ordinal,
                     seed,
-                    feature_log_format.event_heading,
-                    header,
-                ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.CreateFailure;
-            },
-        };
-        return state;
-    }
-
-    fn persistPrompt(
-        self: *Runner,
-        fragment: prompt_log.SanitizedPromptFragment,
-        reading: log_stream.ClockReading,
-    ) PersistError!log_stream.PersistedEvidence {
-        var scratch = std.heap.ArenaAllocator.init(self.allocator);
-        defer scratch.deinit();
-        const allocator = scratch.allocator();
-        var state = self.prompt_state orelse self.openPromptStream(allocator, reading) catch |failure| return failure;
-        var event_id_buffer: [32]u8 = undefined;
-        var record = (build_prompt.Action{}).execute(&event_id_buffer, self.binding, state, &reading, fragment) catch return error.SerializationFailure;
-        var row = (serialize_prompt.Action{}).execute(allocator, record) catch return error.SerializationFailure;
-        const control = serialize_control.Action{};
-        const trailer_len = control.measure(
-            .prompt,
-            .segment_trailer,
-            self.binding,
-            state.segment_ordinal,
-            state.next_sequence - 1,
-            reading.utc(),
-        ) catch return error.SerializationFailure;
-        const next_header_len = control.measure(
-            .prompt,
-            .segment_header,
-            self.binding,
-            state.segment_ordinal + 1,
-            null,
-            reading.utc(),
-        ) catch return error.SerializationFailure;
-        switch ((rotation.Action{}).execute(state, row.len, trailer_len, feature_log_format.prompt_heading.len + next_header_len)) {
-            .append => {},
-            .exhausted => return error.SegmentLimitExhausted,
-            .rotate => {
-                const trailer = control.execute(allocator, .prompt, .segment_trailer, self.binding, state.segment_ordinal, state.next_sequence - 1, reading.utc()) catch return error.SerializationFailure;
-                const next_header = control.execute(allocator, .prompt, .segment_header, self.binding, state.segment_ordinal + 1, null, reading.utc()) catch return error.SerializationFailure;
-                state = self.actions.rotate_segment.execute(
-                    self.binding,
-                    .prompt,
-                    state,
-                    trailer,
-                    feature_log_format.prompt_heading,
-                    next_header,
-                ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.RotateFailure;
-                record = (build_prompt.Action{}).execute(&event_id_buffer, self.binding, state, &reading, fragment) catch return error.SerializationFailure;
-                row = (serialize_prompt.Action{}).execute(allocator, record) catch return error.SerializationFailure;
-            },
-        }
-        const force_flush = (evaluate_flush.Action{}).execute(
-            self.policy.*,
-            .debug,
-            .model_prompt_fragment,
-            state,
-            reading.monotonic_ms,
-        ) == .flush;
-        const evidence = self.actions.append_record.execute(
-            self.binding,
-            .prompt,
-            state,
-            row,
-            force_flush,
-        ) catch |failure| return switch (failure) {
-            error.LogFlushFailure => error.FlushFailure,
-            error.LogSinkFailure => error.AppendFailure,
-            error.Cancelled => error.Cancelled,
-        };
-        // As for an event: the row is on disk, so the state advances before the console mirror.
-        state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
-        self.prompt_state = state;
-        self.dropped.remove(.prompt);
-        if (self.policy.console) self.actions.write_console.execute(row) catch |failure| return switch (failure) {
-            error.ConsoleLogWriteFailure => error.ConsoleFailure,
-            error.Cancelled => error.Cancelled,
-        };
-        return evidence;
-    }
-
-    fn openPromptStream(self: *Runner, allocator: std.mem.Allocator, reading: log_stream.ClockReading) PersistError!log_stream.StreamState {
-        const recovered = self.actions.recover_stream.execute(
-            allocator,
-            self.binding,
-            .prompt,
-            feature_log_format.prompt_heading,
-        ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.RecoveryFailure;
-        const state = switch (recovered) {
-            .active => |active| active,
-            .empty => |seed| blk: {
-                const header = (serialize_control.Action{}).execute(
-                    allocator,
-                    .prompt,
-                    .segment_header,
-                    self.binding,
-                    seed.next_segment_ordinal,
-                    null,
-                    reading.utc(),
-                ) catch return error.SerializationFailure;
-                break :blk self.actions.create_segment.execute(
-                    self.binding,
-                    .prompt,
-                    seed.next_segment_ordinal,
-                    seed,
-                    feature_log_format.prompt_heading,
+                    heading,
                     header,
                 ) catch |failure| return if (failure == error.Cancelled) error.Cancelled else error.CreateFailure;
             },
@@ -543,7 +414,7 @@ fn persistEventBinding(
     reading: log_stream.ClockReading,
 ) child_bindings.PersistenceOutcome {
     const self = cast(context);
-    const evidence = self.persistEvent(attributed, definition, reading) catch |failure| {
+    const evidence = self.persistRow(.{ .event = .{ .attributed = attributed, .definition = definition } }, reading) catch |failure| {
         if (failure == error.Cancelled) self.forget(.event);
         return child_bindings.PersistenceOutcome.of(persistStop(failure));
     };
@@ -556,7 +427,7 @@ fn persistPromptBinding(
     reading: log_stream.ClockReading,
 ) child_bindings.PersistenceOutcome {
     const self = cast(context);
-    const evidence = self.persistPrompt(fragment, reading) catch |failure| {
+    const evidence = self.persistRow(.{ .prompt = fragment }, reading) catch |failure| {
         if (failure == error.Cancelled) self.forget(.prompt);
         return child_bindings.PersistenceOutcome.of(persistStop(failure));
     };
@@ -621,6 +492,50 @@ fn processPromptBarrier(context: *anyopaque, fragment: prompt_log.SanitizedPromp
 }
 fn reportFailureBarrier(context: *anyopaque, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) void {
     _ = cast(context).reportFailure(shortcode, failure);
+}
+
+/// One row for a stream. The tag is the stream, so a row cannot meet the other stream's state or heading.
+const Row = union(log_stream.Stream) {
+    event: struct {
+        attributed: telemetry.WorkflowTelemetryFact,
+        definition: log_event_registry.EventDefinition,
+    },
+    prompt: prompt_log.SanitizedPromptFragment,
+};
+
+/// Build the row against the stream's state and serialise it into `allocator`'s memory. The event id the record
+/// borrows is consumed by the serialiser, so its buffer lives only here.
+fn renderRow(
+    allocator: std.mem.Allocator,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
+    state: log_stream.StreamState,
+    reading: *const log_stream.ClockReading,
+    row: Row,
+) PersistError![]u8 {
+    var event_id_buffer: [32]u8 = undefined;
+    switch (row) {
+        .event => |event| {
+            const record = (build_event.Action{}).execute(&event_id_buffer, binding, state, reading, event.attributed) catch {
+                return error.SerializationFailure;
+            };
+            return (serialize_event.Action{}).execute(allocator, record) catch return error.SerializationFailure;
+        },
+        .prompt => |fragment| {
+            const record = (build_prompt.Action{}).execute(&event_id_buffer, binding, state, reading, fragment) catch {
+                return error.SerializationFailure;
+            };
+            return (serialize_prompt.Action{}).execute(allocator, record) catch return error.SerializationFailure;
+        },
+    }
+}
+
+/// The level and event type that decide whether a row forces a flush (26-security.md): an event carries its own,
+/// a prompt fragment is a debug-level `model.prompt_fragment`.
+fn flushKeyOf(row: Row) struct { level: telemetry.CanonicalLogLevel, event_type: telemetry.EventType } {
+    return switch (row) {
+        .event => |event| .{ .level = event.definition.level, .event_type = event.attributed.fact.event_type },
+        .prompt => .{ .level = .debug, .event_type = .model_prompt_fragment },
+    };
 }
 
 const PersistError = error{

@@ -210,5 +210,5 @@ fn check(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candi
     if (index != selections.len) return error.InvalidStructuredTokens;
     var retained = parsed;
     retained.entries = ordered;
-    return .{ .valid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .text_validated = retained, .selections = selections } };
+    return .{ .valid = .{ .text_validated = retained, .selections = selections } };
 }

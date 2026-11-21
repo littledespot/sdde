@@ -109,7 +109,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
             scope_present = true;
         }
         if (mandatory(kind) or cursor.is(kind.heading())) {
-            if (isScope(kind) and !scope_present) return error.InvalidSpecification;
+            if (kind.isScopeSection() and !scope_present) return error.InvalidSpecification;
             try cursor.expect(kind.heading());
             if (kind == .entity) entity_section = .present;
             const Body = @FieldType(spec.Content(spec.Scalar), @tagName(kind));
@@ -149,7 +149,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                 try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .sources = sources, .related = related, .scenario = scenario });
             }
             if (!mandatory(kind) and kind != .entity and records.items.len == start) return error.InvalidSpecification;
-            if (isScope(kind)) scope_records += records.items.len - start;
+            if (kind.isScopeSection()) scope_records += records.items.len - start;
         }
     }
     if (scope_present and scope_records == 0) return error.InvalidSpecification;
@@ -167,9 +167,6 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
 fn mandatory(kind: spec.Kind) bool {
     return spec.requiresRecords(kind);
 }
-fn isScope(kind: spec.Kind) bool {
-    return kind == .assumption or kind == .non_goal or kind == .prohibited_behavior;
-}
 fn sectionPresent(document: spec.CapturedDocument, kind: spec.Kind) bool {
     if (mandatory(kind)) return true;
     if (kind == .entity) return document.entity_section == .present;
@@ -177,7 +174,7 @@ fn sectionPresent(document: spec.CapturedDocument, kind: spec.Kind) bool {
     return false;
 }
 fn hasScope(document: spec.CapturedDocument) bool {
-    for (document.records) |record| if (isScope(record.content)) return true;
+    for (document.records) |record| if (std.meta.activeTag(record.content).isScopeSection()) return true;
     return false;
 }
 

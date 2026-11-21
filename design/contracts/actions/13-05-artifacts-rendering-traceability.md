@@ -243,9 +243,9 @@ variants of the generic repair operations, specified once in
 
 - **Owner:** [`src/actions/specification/initialize_specification_review.zig`](../../../src/actions/specification/initialize_specification_review.zig)
 - **Reads:** `required_authority_inputs` · **Writes:** `specification_support_review` · **Side effect:** `none`
-- **Does:** Start source review on a fresh source-readiness projection.
-- **Rejects:** `InvalidRequiredAuthority` when the projection isn't source readiness or already
-  holds evidence or candidates.
+- **Does:** Start source review on a fresh source-readiness or source-preservation projection.
+- **Rejects:** `InvalidRequiredAuthority` when the projection is neither source readiness nor
+  source preservation, or already holds evidence or candidates.
 
 ## `BuildSpecificationSupportInputAction` (`build-specification-support-input`)
 

@@ -160,6 +160,20 @@ test "shipped workflow conforms to native registrations and rejects contract dri
             // Exercise the existing registry's cross-owner checks, with no model
             // provider or workflow invocation. No parallel contract is constructed.
             try std.testing.expect(runtime.native.registry.validate());
+            // Every operation implementation the assembly holds is registered exactly once, bound to that very
+            // implementation: a field the entry list forgot compiles, so only this check finds it.
+            inline for (std.meta.fields(@TypeOf(runtime.native))) |field| {
+                if (comptime !std.mem.eql(u8, field.name, "model_requests") and !std.mem.eql(u8, field.name, "entries") and !std.mem.eql(u8, field.name, "registry")) {
+                    const id = comptime if (@hasDecl(field.type, "Action")) field.type.Action.contract.id else field.type.contract.id;
+                    var registered: usize = 0;
+                    for (runtime.native.entries) |entry| {
+                        if (!std.mem.eql(u8, entry.contract.id, id)) continue;
+                        registered += 1;
+                        try std.testing.expect(entry.binding.context == @as(?*anyopaque, &@field(runtime.native, field.name)));
+                    }
+                    try std.testing.expectEqual(@as(usize, 1), registered);
+                }
+            }
             const graph = runtime.boot.ready.workflows.registry().resolve(.{ .bytes = choice.workflow_id }).?;
             // A registered native request remains forbidden inside active
             // composition, even when its ordinary data contract still matches.

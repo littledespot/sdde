@@ -69,10 +69,17 @@ pub fn Collect(comptime phase: stage.Stage) type {
         }
     };
 }
+/// The phase names a workflow definition may name: exactly `r.Phase`'s members, so the two cannot drift.
+const phase_values = blk: {
+    const names = std.meta.fieldNames(r.Phase);
+    var spelled: [names.len][]const u8 = undefined;
+    for (names, 0..) |name, index| spelled[index] = name;
+    break :blk spelled;
+};
 pub const Check = struct {
     pub const Action = @import("../actions/reference/check_reference_reconciliation_phase.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
-    pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "phase", .kind = .enumeration, .required = true, .allowed_values = &.{ "dispositions", "signals", "complete" }, .workflow_definition_safe = true }};
+    pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "phase", .kind = .enumeration, .required = true, .allowed_values = &phase_values, .workflow_definition_safe = true }};
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const prior = try extraction.read(&input.step.data, reconciliation.parsed_schema, .reconciliation_parsed);

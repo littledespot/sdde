@@ -111,7 +111,7 @@ pub fn inspectReadOnly(
     tail: enum { ignore, reject },
     first_sequence: ?u64,
 ) InspectError!Inspection {
-    const heading = if (stream == .event) format.event_heading else format.prompt_heading;
+    const heading = format.segmentHeading(stream);
     return inspectSegment(io, directory, allocator, binding, stream, ordinal, heading, if (tail == .ignore) .ignore else .reject, first_sequence);
 }
 
@@ -152,23 +152,13 @@ pub fn inspectGroup(
 pub fn segmentPolicy(io: Io, directory: Io.Dir, allocator: std.mem.Allocator, ordinal: u16, stream: log_stream.Stream) InspectError!?[]const u8 {
     var name_buffer: [32]u8 = undefined;
     const file_name = feature_log_file.segmentName(ordinal, &name_buffer) catch return error.InvalidSegment;
-    var file = directory.openFile(io, file_name, .{
-        .mode = .read_only,
-        .allow_directory = false,
-        .follow_symlinks = false,
-        .resolve_beneath = true,
-    }) catch |err| return fileError(err);
-    defer file.close(io);
-    const stat = file.stat(io) catch |err| return fileError(err);
-    if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) return error.InvalidSegment;
+    const segment = feature_log_file.openSegment(io, directory, file_name, .read_only) catch |err| return openError(err);
+    defer segment.close(io);
     // The segment's bytes stay in a local arena; only the policy is returned.
     var local: std.heap.ArenaAllocator = .init(allocator);
     defer local.deinit();
-    // The size is the one already observed: a reader that stats the file itself would swallow a cancellation.
-    var reader: Io.File.Reader = .initSize(file, io, &.{}, stat.size);
-    const bytes = reader.interface.allocRemaining(local.allocator(), .limited64(stat.size + 1)) catch |err| return readError(&reader, err);
-    if (bytes.len != stat.size) return error.InvalidSegment;
-    const heading = if (stream == .event) format.event_heading else format.prompt_heading;
+    const bytes = feature_log_file.readSegment(io, local.allocator(), segment) catch |err| return readError(err);
+    const heading = format.segmentHeading(stream);
     const header = (try headerRow(bytes, heading, stream)) orelse return null;
     return try allocator.dupe(u8, format.logPolicyCell(header) orelse return error.InvalidSegment);
 }
@@ -213,10 +203,18 @@ pub fn segmentOrdinals(io: Io, directory: Io.Dir, ordinals: *[log_limits.max_seg
     return count;
 }
 
-/// A read the reader gave up on keeps its cause in `reader.err`, which is where a cancellation shows.
-fn readError(reader: *const Io.File.Reader, err: anyerror) InspectError {
-    if (err == error.OutOfMemory) return error.OutOfMemory;
-    return if ((reader.err orelse err) == error.Canceled) error.Cancelled else error.SegmentUnavailable;
+/// A segment the open rejected is invalid; any other failed open call is a file error.
+fn openError(err: anyerror) InspectError {
+    return if (err == error.SegmentRejected) error.InvalidSegment else fileError(err);
+}
+
+fn readError(err: feature_log_file.ReadError) InspectError {
+    return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.Canceled => error.Cancelled,
+        error.ReadFailed => error.SegmentUnavailable,
+        error.SizeDrift => error.InvalidSegment,
+    };
 }
 
 fn fileError(err: anyerror) InspectError {
@@ -241,24 +239,14 @@ fn inspectSegment(
 ) InspectError!Inspection {
     var name_buffer: [32]u8 = undefined;
     const file_name = feature_log_file.segmentName(ordinal, &name_buffer) catch return error.InvalidSegment;
-    var file = directory.openFile(io, file_name, .{
-        .mode = if (tail == .truncate) .read_write else .read_only,
-        .allow_directory = false,
-        .follow_symlinks = false,
-        .resolve_beneath = true,
-    }) catch |err| return fileError(err);
-    defer file.close(io);
-    var stat = file.stat(io) catch |err| return fileError(err);
-    if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
-        return error.InvalidSegment;
-    }
-    var reader: Io.File.Reader = .initSize(file, io, &.{}, stat.size);
-    var bytes = reader.interface.allocRemaining(allocator, .limited64(stat.size + 1)) catch |err| return readError(&reader, err);
-    if (bytes.len != stat.size) return error.InvalidSegment;
+    const segment = feature_log_file.openSegment(io, directory, file_name, if (tail == .truncate) .read_write else .read_only) catch |err| return openError(err);
+    defer segment.close(io);
+    var size = segment.size;
+    var bytes = feature_log_file.readSegment(io, allocator, segment) catch |err| return readError(err);
     // A crash while a segment was created can leave it torn before its header
     // row is complete. Read-only inspection reports that as an active tail.
     if (tail == .ignore and try headerRow(bytes, heading, stream) == null) {
-        return .{ .closed = false, .last_sequence = if (first_sequence) |first| first -| 1 else 0, .bytes = stat.size, .partial_tail = true };
+        return .{ .closed = false, .last_sequence = if (first_sequence) |first| first -| 1 else 0, .bytes = size, .partial_tail = true };
     }
     if (bytes.len == 0) return error.InvalidSegment;
     var partial_tail = false;
@@ -268,9 +256,9 @@ fn inspectSegment(
             .reject => return error.InvalidSegment,
             .ignore => partial_tail = true,
             .truncate => {
-                file.setLength(io, end + 1) catch |err| return fileError(err);
-                file.sync(io) catch |err| return fileError(err);
-                stat.size = end + 1;
+                segment.file.setLength(io, end + 1) catch |err| return fileError(err);
+                segment.file.sync(io) catch |err| return fileError(err);
+                size = end + 1;
             },
         }
         bytes = bytes[0 .. end + 1];
@@ -307,7 +295,7 @@ fn inspectSegment(
             closed = true;
         } else return error.InvalidSegment;
     }
-    return .{ .closed = closed, .last_sequence = last_sequence orelse 0, .bytes = stat.size, .partial_tail = partial_tail };
+    return .{ .closed = closed, .last_sequence = last_sequence orelse 0, .bytes = size, .partial_tail = partial_tail };
 }
 
 fn validRow(allocator: std.mem.Allocator, line: []const u8, columns: usize) InspectError!void {
@@ -354,20 +342,15 @@ fn scanOtherBindings(
                 .invalid => return error.CorruptStream,
             };
             segment_count += 1;
-            var file = try historical.openFile(source.io, historical_entry.name, .{
-                .mode = .read_only,
-                .allow_directory = false,
-                .follow_symlinks = false,
-                .resolve_beneath = true,
-            });
-            defer file.close(source.io);
-            const stat = try file.stat(source.io);
-            if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
-                return error.CorruptStream;
-            }
-            var reader: Io.File.Reader = .initSize(file, source.io, &.{}, stat.size);
-            const bytes = reader.interface.allocRemaining(allocator, .limited64(stat.size + 1)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else if ((reader.err orelse err) == error.Canceled) error.Canceled else err;
-            if (bytes.len != stat.size or !std.mem.startsWith(u8, bytes, heading) or bytes.len == 0 or bytes[bytes.len - 1] != '\n') {
+            const segment = feature_log_file.openSegment(source.io, historical, historical_entry.name, .read_only) catch |err| {
+                return if (err == error.SegmentRejected) error.CorruptStream else err;
+            };
+            defer segment.close(source.io);
+            const bytes = feature_log_file.readSegment(source.io, allocator, segment) catch |err| return switch (err) {
+                error.SizeDrift => error.CorruptStream,
+                else => |other| other,
+            };
+            if (!std.mem.startsWith(u8, bytes, heading) or bytes.len == 0 or bytes[bytes.len - 1] != '\n') {
                 return error.CorruptStream;
             }
             const without_lf = bytes[0 .. bytes.len - 1];

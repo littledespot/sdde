@@ -23,23 +23,16 @@ pub fn prune(io: Io, allocator: std.mem.Allocator, directory: Io.Dir, cutoff_uni
             .ignored => continue,
             .invalid => return error.CorruptStream,
         };
-        var file = directory.openFile(io, directory_entry.name, .{
-            .mode = .read_only,
-            .allow_directory = false,
-            .follow_symlinks = false,
-            .resolve_beneath = true,
-        }) catch |err| return feature_log_file.sinkFault(err);
-        defer file.close(io);
-        const stat = file.stat(io) catch |err| return feature_log_file.sinkFault(err);
-        if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
-            return error.CorruptStream;
-        }
-        // The size is the one already observed: a reader that stats the file itself would swallow a cancellation.
-        var reader: std.Io.File.Reader = .initSize(file, io, &.{}, stat.size);
-        // A read the reader gave up on keeps its cause in `reader.err`, which is where a cancellation shows.
-        const bytes = reader.interface.allocRemaining(allocator, .limited(@intCast(stat.size + 1))) catch |err| return feature_log_file.sinkFault(reader.err orelse err);
+        const segment = feature_log_file.openSegment(io, directory, directory_entry.name, .read_only) catch |err| {
+            return if (err == error.SegmentRejected) error.CorruptStream else feature_log_file.sinkFault(err);
+        };
+        defer segment.close(io);
+        const bytes = feature_log_file.readSegment(io, allocator, segment) catch |err| return switch (err) {
+            error.SizeDrift => error.CorruptStream,
+            error.Canceled => error.Cancelled,
+            error.OutOfMemory, error.ReadFailed => error.SinkFailure,
+        };
         defer allocator.free(bytes);
-        if (bytes.len != stat.size) return error.CorruptStream;
         if (count == entries.len) return error.CorruptStream;
         entries[count] = .{ .ordinal = ordinal, .closed_at_unix_ms = format.trailerUnixMs(bytes) orelse return error.CorruptStream };
         count += 1;

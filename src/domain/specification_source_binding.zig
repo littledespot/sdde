@@ -236,7 +236,7 @@ pub fn rejection(a: std.mem.Allocator, references: r.Accounted) Error!Rejection 
     const records = refs.records(references);
     if (try recordCount(records) != 0) return error.InvalidSpecificationBinding;
     const available = try catalogue(a, records, .question);
-    const prior = references.records.assignments.checked.prior.prior;
+    const prior = references.global();
     // A record catalogue gap belongs to the reconciliation signals response.
     return blocked(references, if (available.len == 0) .empty_catalogue else .no_record_authoring_groups, prior.source.at(.signals, .record), null, available);
 }
@@ -266,7 +266,7 @@ pub fn titleRejection(references: r.Accounted, gap: @import("specification_title
     }, null, null, &.{});
 }
 fn blocked(references: r.Accounted, reason: Reason, origin: ?@import("model_candidate_origin.zig").Origin, issue: ?@import("specification_candidate.zig").Issue, available: []const EligibleSignal) Rejection {
-    const prior = references.records.assignments.checked.prior.prior;
+    const prior = references.global();
     const result: Rejection = .{ .state_id = refs.records(references).items.state_id, .partition_id = prior.input.partition.id, .revision = prior.source.revision, .origin = origin, .reason = reason, .eligible_signals = available, .issue = issue };
     std.debug.assert(result.valid());
     return result;

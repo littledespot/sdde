@@ -304,9 +304,7 @@ test "every orchestrator and coordinator is capability free" {
             .limited(1024 * 1024),
         );
         defer allocator.free(source);
-        try expectAbsent(source, "/actions/");
-        try expectAbsent(source, "/adapters/");
-        try expectAbsent(source, "/ports/");
+        try expectNoImportPathHolding(source, &.{ "/actions/", "/adapters/", "/ports/" });
         try expectAbsent(source, "std.Io");
     }
 }
@@ -322,7 +320,7 @@ test "every application runner is infrastructure independent" {
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, "_runner.zig")) continue;
         const source = try application.readFileAlloc(io, entry.name, allocator, .limited(1024 * 1024));
         defer allocator.free(source);
-        try expectAbsent(source, "/adapters/");
+        try expectNoImportPathHolding(source, &.{"/adapters/"});
         try expectAbsent(source, "std.Io");
     }
 }
@@ -339,13 +337,79 @@ test "domain and port dependency direction is enforced repository wide" {
             if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
             const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
             defer allocator.free(source);
-            try expectAbsent(source, "/actions/");
-            try expectAbsent(source, "/application/");
-            try expectAbsent(source, "/adapters/");
-            try expectAbsent(source, "../actions/");
-            try expectAbsent(source, "../application/");
-            try expectAbsent(source, "../adapters/");
+            // Domain and port modules sit below actions, the application and adapters: they import none of them.
+            try expectNoImportPathHolding(source, &.{ "/actions/", "/application/", "/adapters/", "../actions/", "../application/", "../adapters/" });
         }
+    }
+}
+
+/// Domain modules the generic workflow engine is made of, and the modules only the Spec stages own. Judged by file
+/// name, which the package structure fixes (29-package-structure.md); a rule over imports, not over file contents.
+const generic_core_prefixes = [_][]const u8{ "pipeline", "workflow_", "model_request_", "model_attempt_", "provider_", "llm_provider_", "operation_error", "model_envelope", "model_payload_schema", "model_result_schema", "strict_json", "telemetry", "feature_log_", "log_" };
+const spec_stage_prefixes = [_][]const u8{ "reference_", "specification", "required_authority", "clarification_", "source_omission", "source_preservation", "scenario_", "incomplete_specification", "specify_invocation" };
+
+fn startsWithAny(name: []const u8, prefixes: []const []const u8) bool {
+    for (prefixes) |prefix| if (std.mem.startsWith(u8, name, prefix)) return true;
+    return false;
+}
+
+/// The generic engine's domain modules that import a Spec stage module (ADR 0003: the four workflows are not
+/// special cases in the generic engine). Each is a recorded dependency of the engine's closed error set or
+/// registry on a stage's contract. A new importer fails the test; a file that drops its last Spec import must leave
+/// the list, so the list only shrinks.
+const generic_importers_of_spec_stages = [_][]const u8{ "model_request_identity.zig", "operation_error.zig", "workflow_output.zig" };
+
+test "the generic engine's domain modules import no Spec stage module beyond the recorded ones" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var directory = try std.Io.Dir.cwd().openDir(io, "src/domain", .{ .iterate = true });
+    defer directory.close(io);
+    var found: std.ArrayList([]const u8) = .empty;
+    var iterator = directory.iterate();
+    while (try iterator.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".zig") or std.mem.endsWith(u8, entry.name, "_test.zig")) continue;
+        if (!startsWithAny(entry.name, &generic_core_prefixes) or startsWithAny(entry.name, &spec_stage_prefixes)) continue;
+        const source = try directory.readFileAlloc(io, entry.name, allocator, .limited(1024 * 1024));
+        for (try importsOf(allocator, source)) |path| {
+            if (!startsWithAny(std.fs.path.basename(path), &spec_stage_prefixes)) continue;
+            try found.append(allocator, try allocator.dupe(u8, entry.name));
+            break;
+        }
+    }
+    std.mem.sort([]const u8, found.items, {}, struct {
+        fn less(_: void, left: []const u8, right: []const u8) bool {
+            return std.mem.lessThan(u8, left, right);
+        }
+    }.less);
+    try std.testing.expectEqual(generic_importers_of_spec_stages.len, found.items.len);
+    for (generic_importers_of_spec_stages, found.items) |expected, actual| try std.testing.expectEqualStrings(expected, actual);
+}
+
+test "the outcome association holds no Spec result type and the reference core does not import its dependents" {
+    // C21: the association names an owner's outcome, never the owner's result type.
+    try expectNoImportOfFile(@embedFile("domain/workflow_outcome_association.zig"), &.{ "required_authority.zig", "clarification_refresh.zig" });
+    // C25: the reconciliation core does not depend on the repair, omission or support modules built on it.
+    for ([_][]const u8{ @embedFile("domain/reference_reconciliation.zig"), @embedFile("domain/reference_reconciliation_diagnostic.zig") }) |core| {
+        try expectNoImportOfFile(core, &.{ "reference_reconciliation_repair.zig", "source_omission.zig", "specification_support.zig" });
+    }
+}
+
+test "the checked reconciliation chain is unwound in its owner alone" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var directory = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer directory.close(io);
+    var walker = try directory.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or std.mem.endsWith(u8, entry.basename, "_test.zig") or
+            std.mem.startsWith(u8, entry.path, "test_fixtures/") or std.mem.eql(u8, entry.basename, "reference_reconciliation.zig") or
+            std.mem.eql(u8, entry.basename, "architecture_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(2 * 1024 * 1024));
+        defer allocator.free(source);
+        try expectAbsent(source, "checked.prior.prior");
     }
 }
 
@@ -2768,44 +2832,149 @@ test "feature document filenames and headings agree" {
     }
 }
 
+/// The source with every comment overwritten by spaces, so a rule about code never reads a comment: a comment that
+/// names a forbidden word changes no boundary. Strings stay, because an import path or a literal is code. A source
+/// that is not Zig (a heading, a document) has no comments to mask and is judged as it is.
+fn codeOf(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
+    const terminated = try allocator.dupeZ(u8, source);
+    defer allocator.free(terminated);
+    var ast = try std.zig.Ast.parse(allocator, terminated, .zig);
+    defer ast.deinit(allocator);
+    const masked = try allocator.dupe(u8, source);
+    errdefer allocator.free(masked);
+    if (ast.errors.len != 0) return masked;
+    var tokens = std.zig.Tokenizer.init(terminated);
+    var gap_start: usize = 0;
+    while (true) {
+        const token = tokens.next();
+        blankLineComments(masked, gap_start, token.loc.start);
+        switch (token.tag) {
+            .doc_comment, .container_doc_comment => @memset(masked[token.loc.start..token.loc.end], ' '),
+            else => {},
+        }
+        if (token.tag == .eof) return masked;
+        gap_start = token.loc.end;
+    }
+}
+
+/// Between two tokens there is only white space and `//` comments, so a `//` there starts a comment.
+fn blankLineComments(masked: []u8, start: usize, end: usize) void {
+    var index = start;
+    while (index + 1 < end) : (index += 1) {
+        if (masked[index] != '/' or masked[index + 1] != '/') continue;
+        while (index < end and masked[index] != '\n') : (index += 1) masked[index] = ' ';
+    }
+}
+
 fn expectAbsent(source: []const u8, forbidden: []const u8) !void {
-    try std.testing.expect(std.mem.indexOf(u8, source, forbidden) == null);
+    const code = try codeOf(std.testing.allocator, source);
+    defer std.testing.allocator.free(code);
+    try std.testing.expect(std.mem.indexOf(u8, code, forbidden) == null);
+}
+
+/// The path of every `@import` in a Zig source, read from its tokens, so a comment or a string that spells an import
+/// is not one. The caller owns the result (an arena is the usual owner).
+fn importsOf(allocator: std.mem.Allocator, source: []const u8) ![]const []const u8 {
+    const terminated = try allocator.dupeZ(u8, source);
+    defer allocator.free(terminated);
+    var paths: std.ArrayList([]const u8) = .empty;
+    errdefer paths.deinit(allocator);
+    var tokens = std.zig.Tokenizer.init(terminated);
+    while (true) {
+        const token = tokens.next();
+        if (token.tag == .eof) break;
+        if (token.tag != .builtin or !std.mem.eql(u8, terminated[token.loc.start..token.loc.end], "@import")) continue;
+        if (tokens.next().tag != .l_paren) continue;
+        const literal = tokens.next();
+        if (literal.tag != .string_literal) continue;
+        const text = terminated[literal.loc.start..literal.loc.end];
+        try paths.append(allocator, try allocator.dupe(u8, text[1 .. text.len - 1]));
+    }
+    return paths.toOwnedSlice(allocator);
 }
 
 fn expectAllowedActionImports(source: []const u8) !void {
-    const prefix = "@import(\"";
-    var remaining = source;
-    while (std.mem.indexOf(u8, remaining, prefix)) |import_start| {
-        const path_start = import_start + prefix.len;
-        const path_end = std.mem.indexOfScalarPos(u8, remaining, path_start, '"') orelse {
-            return error.UnterminatedImport;
-        };
-        const path = remaining[path_start..path_end];
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    for (try importsOf(arena.allocator(), source)) |path| {
         try std.testing.expect(
             std.mem.eql(u8, path, "std") or
                 std.mem.eql(u8, path, "builtin") or
                 std.mem.startsWith(u8, path, "../../domain/") or
                 std.mem.startsWith(u8, path, "../../ports/"),
         );
-        remaining = remaining[path_end + 1 ..];
     }
 }
 
 fn expectImportsOnly(source: []const u8, allowed: []const []const u8) !void {
-    const prefix = "@import(\"";
-    var remaining = source;
-    while (std.mem.indexOf(u8, remaining, prefix)) |import_start| {
-        const path_start = import_start + prefix.len;
-        const path_end = std.mem.indexOfScalarPos(u8, remaining, path_start, '"') orelse return error.UnterminatedImport;
-        const path = remaining[path_start..path_end];
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    for (try importsOf(arena.allocator(), source)) |path| {
         for (allowed) |candidate| {
             if (std.mem.eql(u8, candidate, path)) break;
         } else {
             std.debug.print("import not allowed: {s}\n", .{path});
             return error.TestUnexpectedResult;
         }
-        remaining = remaining[path_end + 1 ..];
     }
+}
+
+/// The first import of the source whose path holds one of the fragments (`/adapters/`, `../actions/`), or null.
+fn importHolding(allocator: std.mem.Allocator, source: []const u8, fragments: []const []const u8) !?[]const u8 {
+    for (try importsOf(allocator, source)) |path| {
+        for (fragments) |fragment| if (std.mem.indexOf(u8, path, fragment) != null) return path;
+    }
+    return null;
+}
+
+/// The first import of the source that names one of the files, whatever directory it is reached through, or null.
+fn importOfFile(allocator: std.mem.Allocator, source: []const u8, files: []const []const u8) !?[]const u8 {
+    for (try importsOf(allocator, source)) |path| {
+        for (files) |file| if (std.mem.eql(u8, std.fs.path.basename(path), file)) return path;
+    }
+    return null;
+}
+
+/// No import of the source names a path that holds one of the fragments.
+fn expectNoImportPathHolding(source: []const u8, fragments: []const []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    if (try importHolding(arena.allocator(), source, fragments)) |path| {
+        std.debug.print("import {s} crosses a layer\n", .{path});
+        return error.TestUnexpectedResult;
+    }
+}
+
+/// No import of the source names one of the files.
+fn expectNoImportOfFile(source: []const u8, files: []const []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    if (try importOfFile(arena.allocator(), source, files)) |path| {
+        std.debug.print("import {s} reaches a module this file must not depend on\n", .{path});
+        return error.TestUnexpectedResult;
+    }
+}
+
+test "a comment never trips a rule about code, and an import is read from its tokens" {
+    // Rejected: the word in code, in a string, or in an import.
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const plan = 1;", "plan"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const text = \"hard limit\";", "hard"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const x = @import(\"../adapters/file.zig\");", "/adapters/"));
+    // Accepted: the word only in a line comment, a doc comment or a container doc comment.
+    try expectAbsent("// the plan is hard\nconst a = 1;\n", "plan");
+    try expectAbsent("/// hard reference\nconst a = 1; // plan\n", "hard");
+    try expectAbsent("//! reference\nconst a = 1;\n", "reference");
+    // Text that is not Zig is judged as it is: a URL's slashes start no comment there.
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("see https://x.example/plan for the plan", "plan"));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const imports = try importsOf(arena.allocator(), "// @import(\"../adapters/a.zig\")\nconst s = \"@import(\\\"b.zig\\\")\";\nconst c = @import(\"../ports/c.zig\");\n");
+    try std.testing.expectEqual(@as(usize, 1), imports.len);
+    try std.testing.expectEqualStrings("../ports/c.zig", imports[0]);
+    try std.testing.expect(try importHolding(arena.allocator(), "const c = @import(\"../ports/c.zig\");", &.{ "/adapters/", "/actions/" }) == null);
+    try std.testing.expectEqualStrings("../adapters/c.zig", (try importHolding(arena.allocator(), "const c = @import(\"../adapters/c.zig\");", &.{"/adapters/"})).?);
+    try std.testing.expect(try importOfFile(arena.allocator(), "const c = @import(\"a/specification.zig\");", &.{"required_authority.zig"}) == null);
+    try std.testing.expectEqualStrings("../domain/required_authority.zig", (try importOfFile(arena.allocator(), "const c = @import(\"../domain/required_authority.zig\");", &.{"required_authority.zig"})).?);
 }
 
 fn expectSingleActionContract(source: []const u8) !void {

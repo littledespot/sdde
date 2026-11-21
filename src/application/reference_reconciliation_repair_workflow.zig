@@ -33,7 +33,7 @@ pub fn authorizationBlocked(view: *const data.View) values.Error!bool {
 }
 
 const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .blocked, .failed };
-const Stage = enum { summary, dispositions, signals, conflicts };
+const Stage = r.diagnostic.Stage;
 pub fn Authorize(comptime stage: Stage) type {
     return struct {
         pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = switch (stage) {

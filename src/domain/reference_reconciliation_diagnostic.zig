@@ -17,7 +17,7 @@ pub const Source = struct {
     statements: @import("repair_occurrences.zig").Set = .{},
     signals: @import("repair_occurrences.zig").Set = .{},
     conflicts: @import("repair_occurrences.zig").Set = .{},
-    pending_repair: ?@import("atomic_repair.zig").Pending(@import("reference_reconciliation_repair.zig").ObservationTarget) = null,
+    pending_repair: ?@import("atomic_repair.zig").Pending(ObservationTarget) = null,
     omission_retry: ?@import("workflow_retry.zig").Permit = null,
     omission_conflict_claims: []const r.ClaimId = &.{},
     pub fn at(self: Source, unit: Unit, field: Field) ?Origin {
@@ -35,6 +35,50 @@ pub const Source = struct {
     }
 };
 pub const Unit = union(enum) { summary, statement: usize, dispositions, disposition: usize, signals, signal: usize, conflicts, conflict: usize };
+/// The four reconciliation validation stages: the summary and the three global phases. The one spelling the
+/// assignment context ids, the repair owners and the repair workflow share.
+pub const Stage = enum { summary, dispositions, signals, conflicts };
+
+/// The part of a reconciliation candidate one repair replaces, inserts or deletes. The repair owner selects it
+/// and a rejection's pending repair records it, so the diagnostic that carries the record owns the type.
+pub const Target = union(enum) {
+    statement_selection: usize,
+    statement_content: usize,
+    statement: usize,
+    insert_statement: struct { index: usize, claim: r.ClaimId },
+    disposition: struct { index: usize, claim: r.ClaimId },
+    signal_selection: usize,
+    signal_content: usize,
+    signal: usize,
+    insert_signal: struct { index: usize, claim: r.ClaimId },
+    conflict_selection: usize,
+    conflict_summary: usize,
+    conflict: usize,
+    insert_conflict: struct { index: usize, claims: []const r.ClaimId },
+
+    const Guidance = struct { unit: std.meta.Tag(Target), index: ?usize = null, claim: ?r.ClaimId = null, claims: ?[]const r.ClaimId = null };
+    pub fn guidance(self: Target) Guidance {
+        var result: Guidance = .{ .unit = std.meta.activeTag(self) };
+        switch (self) {
+            inline .insert_statement, .disposition, .insert_signal => |value| result.claim = value.claim,
+            .insert_conflict => |value| result.claims = value.claims,
+            inline else => |index| result.index = index,
+        }
+        return result;
+    }
+};
+const occurrences = @import("repair_occurrences.zig");
+/// A target named by occurrence identity instead of position, so it survives a candidate that moved.
+pub const StableTarget = union(enum) {
+    statement: occurrences.Id,
+    disposition: r.ClaimId,
+    signal: occurrences.Id,
+    conflict: occurrences.Id,
+    missing_statement: r.ClaimId,
+    missing_signal: r.ClaimId,
+    missing_conflict: []const r.ClaimId,
+};
+pub const ObservationTarget = struct { selected: Target, stable: StableTarget, rule: Rule, operation: enum { replace, insert, delete } };
 pub const Rule = enum { membership, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, conflict_coverage, duplicate_conflict, typed_text };
 pub const Constraint = enum {
     unique_nonzero,
@@ -58,8 +102,7 @@ pub const Constraint = enum {
     conflict_pair_covered,
 
     /// Presentation scope only; every merged candidate still runs all validators.
-    pub const Assignment = enum { summary, dispositions, signals, conflicts };
-    pub const Scope = union(enum) { all, selection: enum { statement, signal, conflict }, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Assignment };
+    pub const Scope = union(enum) { all, selection: enum { statement, signal, conflict }, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Stage };
     pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
         const in_purpose = switch (self) {
             .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,

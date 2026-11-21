@@ -187,7 +187,13 @@ pub fn prepare(
                 try changes.add(.{ .resolve = .{ .authority_reconciled = subject } });
             } else if (candidate.diagnostic == null) {
                 if (decision.* != .rejected) return error.InvalidOutcomeAssociation;
-                try changes.add(.{ .reclassify = .{ .authority_result = .{ .subject = subject, .result = result } } });
+                const canonical: association.ResultOutcome = switch (result.continuation) {
+                    .all_resolved => return error.InvalidOutcomeAssociation,
+                    .invalid => .invalid,
+                    .needs_user => .needs_user,
+                    .blocked => .blocked,
+                };
+                try changes.add(.{ .reclassify = .{ .authority_result = .{ .subject = subject, .canonical = canonical } } });
             }
         },
         .clarification_route => {
@@ -212,7 +218,7 @@ pub fn prepare(
             if (candidate.outcome == .ok or candidate.outcome == .blocked) {
                 const result = values.read(&after, clarification.state_schema, @import("../domain/clarification_refresh.zig").Result) catch return error.InvalidOutcomeAssociation;
                 if ((result.* == .ready) != (candidate.outcome == .ok)) return error.InvalidOutcomeAssociation;
-                if (result.* == .blocked) try changes.add(.{ .reclassify = .{ .clarification_result = .{ .subject = subject, .result = result } } });
+                if (result.* == .blocked) try changes.add(.{ .reclassify = .{ .clarification_result = .{ .subject = subject } } });
             }
         },
     }

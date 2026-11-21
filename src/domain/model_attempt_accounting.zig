@@ -2,16 +2,9 @@ const std = @import("std");
 const operation = @import("llm_provider_operation.zig");
 const request_identity = @import("model_request_identity.zig");
 const workflow_retry = @import("workflow_retry.zig");
+const ledger_revision = @import("ledger_revision.zig");
 
-pub const Revision = struct {
-    value: u64,
-
-    pub const initial: Revision = .{ .value = 0 };
-
-    pub fn eql(left: Revision, right: Revision) bool {
-        return left.value == right.value;
-    }
-};
+pub const Revision = ledger_revision.Revision("model_attempt_accounting");
 
 pub const Attempt = union(enum) {
     initial,

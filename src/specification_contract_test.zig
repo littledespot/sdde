@@ -17,6 +17,34 @@ test "specification record identity is closed and grows beyond three digits" {
     try testing.expect(std.meta.stringToEnum(spec.Kind, "open_question") == null);
 }
 
+test "a record family's scope section is the one printed under a level-four heading" {
+    inline for (comptime std.meta.tags(spec.Kind)) |kind| {
+        try testing.expectEqual(std.mem.startsWith(u8, comptime kind.heading(), "#### "), comptime kind.isScopeSection());
+    }
+}
+
+test "the generation schema defines every record family and lets a clarification name each family the records step authors" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(testing.io, "design/workflows/spec/generation.schema.json", allocator, .unlimited);
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, allocator, bytes, .{});
+    const definitions = parsed.object.get("$defs").?.object;
+    const kinds = definitions.get("record_clarification").?.object.get("properties").?.object.get("record_kind").?.object.get("enum").?.array;
+    inline for (comptime std.meta.tags(spec.Kind)) |kind| {
+        const name = @tagName(kind);
+        // Every family has its record definition; a family added to the engine without one is refused here.
+        try testing.expect(definitions.contains("record_" ++ name));
+        // An entity is written by the entities step, so a clarification about a record never names it.
+        var named = false;
+        for (kinds.items) |item| if (std.mem.eql(u8, item.string, name)) {
+            named = true;
+        };
+        try testing.expectEqual(kind.role() != .entity, named);
+    }
+    try testing.expectEqual(@as(usize, std.meta.tags(spec.Kind).len - 1), kinds.items.len);
+}
+
 test "closed specification proposal has one content authority and no IDs modality or questions" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();

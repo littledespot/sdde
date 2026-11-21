@@ -3,15 +3,9 @@ const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
 const identity = @import("model_request_identity.zig");
 const accounting = @import("model_attempt_accounting.zig");
+const ledger_revision = @import("ledger_revision.zig");
 
-pub const Revision = struct {
-    value: u64,
-    pub const initial: Revision = .{ .value = 0 };
-
-    pub fn eql(left: Revision, right: Revision) bool {
-        return left.value == right.value;
-    }
-};
+pub const Revision = ledger_revision.Revision("provider_operation_lifecycle");
 
 pub const Status = enum { assigned, invoked, terminal };
 pub const Assignment = struct {

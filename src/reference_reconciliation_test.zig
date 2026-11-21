@@ -3146,7 +3146,7 @@ test "repair progress separates restored membership from invalid inserted conten
         const rejection = (try textRejection(a, inserted, fixture.context())).?;
         try std.testing.expectEqual(.typed_text, rejection.issue.rule);
         const dispositions = if (global) (try f.validate_dispositions.execute(a, inserted)).valid.dispositions else &.{};
-        const stage: repair.ValidationStage = if (global) .signals else .summary;
+        const stage: @import("domain/reference_reconciliation_diagnostic.zig").Stage = if (global) .signals else .summary;
         const membership = (try repair.progress(a, text.validator, fixture.context(), inserted, stage, dispositions)).?.validated;
         try std.testing.expectEqual(.resolved, membership.result);
         var state = retry.State.init(std.testing.allocator);
@@ -3451,7 +3451,7 @@ test "prepared reconciliation content repairs bind every selected wire member fo
                 const rejected = (try textRejection(a, parsed, fixture.context())).?;
                 try std.testing.expectEqual(@as(r.diagnostic.Rule, if (insertion) (if (global) .signal_coverage else .membership) else .typed_text), rejected.issue.rule);
                 const authorization = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
-                try std.testing.expectEqual(@as(std.meta.Tag(repair.Target), if (insertion) (if (global) .insert_signal else .insert_statement) else (if (global) .signal_content else .statement_content)), std.meta.activeTag(authorization.target));
+                try std.testing.expectEqual(@as(std.meta.Tag(@import("domain/reference_reconciliation_diagnostic.zig").Target), if (insertion) (if (global) .insert_signal else .insert_statement) else (if (global) .signal_content else .statement_content)), std.meta.activeTag(authorization.target));
                 const packet = try repair.packet(a, parsed, fixture.context(), authorization, packet_guidance.marked.summary_purpose);
                 defer packets.release(packet);
                 try std.testing.expectEqualStrings(if (kind == .business or kind == .scope_guard) "business_text" else "reference_text", packet.resultDefinition().?.bytes);

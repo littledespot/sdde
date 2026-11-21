@@ -35,15 +35,7 @@ pub const PositiveOrdinal = struct {
 /// Read-only position in this execution's existing request ledger.
 pub const RecordIndex = struct { value: usize };
 
-pub const LedgerRevision = struct {
-    value: u64,
-
-    pub const initial: LedgerRevision = .{ .value = 0 };
-
-    pub fn eql(left: LedgerRevision, right: LedgerRevision) bool {
-        return left.value == right.value;
-    }
-};
+pub const LedgerRevision = @import("ledger_revision.zig").Revision("model_request_identity");
 
 pub const ReferenceChunkOwner = struct {
     reference_state_id: ReferenceStateId,

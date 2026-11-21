@@ -147,9 +147,10 @@ pub const Registry = struct {
     }
 
     pub fn validate(self: *const Registry) bool {
-        // Rebuild on every call: registry backing slices and bindings can change.
+        // Rebuilt on every call, caching nothing: the caller decides when to check. The runner checks once, before
+        // its first step (14-orchestration.md:35); the registry is assembled once at startup and not changed after.
         // Indexing the closed key set avoids rescanning every schema for every
-        // operation input/output, without caching any validation authority.
+        // operation input/output.
         var schemas: SchemaIndex = @splat(null);
         for (self.data_schemas) |*schema| {
             const slot = &schemas[@intFromEnum(schema.key)];

@@ -221,8 +221,8 @@ Every activated run writes beneath the spec being run, never into the editable s
   transition continues at the historical final sequence plus one, while a fresh run begins at
   one.
 - Timestamps are informational.
-- A complete bounded pipe-delimited event/prompt row plus LF is encoded before lock acquisition
-  and is never split.
+- A complete bounded pipe-delimited event/prompt row plus LF is encoded under the held stream
+  lock, once the stream's recovered or cached state yields its sequence, and is never split.
 - Segment capacity includes the one pipe-delimited column-heading row and required control rows;
   every newly created or rotated segment must durably contain its heading and `segment_header`
   row before accepting an event/prompt row.

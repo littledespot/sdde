@@ -87,7 +87,6 @@ pub fn compile(
                 .maximum_step_executions = maximum_step_executions,
             },
         };
-        @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return rejected(evidence, .outcome_flow, ordinal, null);
     }
     return graphs;
 }

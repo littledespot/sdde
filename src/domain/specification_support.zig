@@ -385,7 +385,7 @@ pub const Source = struct {
             .occurrences = occurrences,
             .occurrence_history = if (previous) |old| old.occurrence_history else &.{},
             .last_repair = if (previous) |old| old.last_repair else null,
-            .omission_conflict_claims = if (previous) |old| old.omission_conflict_claims else context.references.records.assignments.checked.prior.prior.source.omission_conflict_claims,
+            .omission_conflict_claims = if (previous) |old| old.omission_conflict_claims else context.references.global().source.omission_conflict_claims,
         };
         return validateWorking(allocator, inputs, context.inputs, candidate);
     }

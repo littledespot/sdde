@@ -29,10 +29,15 @@ pub const FieldSet = std.EnumSet(Field);
 /// stop or a runaway re-send never goes unrecorded.
 pub const Emission = enum { threshold, always };
 
+/// What a row of the event may carry (F0002 section 6): the event stream's metadata fields are all public
+/// metadata, and only the prompt stream's content is sanitized content. The registry, not the caller, owns it.
+pub const Sensitivity = enum { public_metadata, sanitized_content };
+
 pub const EventDefinition = struct {
     event_type: telemetry.EventType,
     level: telemetry.CanonicalLogLevel,
     emission: Emission = .threshold,
+    sensitivity: Sensitivity = .public_metadata,
     required: FieldSet,
     optional: FieldSet,
 
@@ -47,7 +52,8 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .run_started, .stage_started, .review_requested => definition(event_type, level(event_type), &.{}, &.{}),
         // Every event of one stage of a `request-model` step names the stage (ADR 0030).
         .action_started => definition(event_type, level(event_type), &.{}, &.{.step_id}),
-        .run_completed, .stage_completed, .task_completed => definition(event_type, level(event_type), &.{.outcome}, &.{.duration_ms}),
+        .run_completed, .stage_completed => definition(event_type, level(event_type), &.{.outcome}, &.{.duration_ms}),
+        .task_completed => definition(event_type, level(event_type), &.{ .task_id, .outcome }, &.{.duration_ms}),
         .action_completed => definition(event_type, level(event_type), &.{.outcome}, &.{ .duration_ms, .step_id }),
         .action_invalid => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.step_id}),
         .run_blocked,
@@ -63,11 +69,12 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .run_cancelled,
         .publication_prepared,
         .stage_clarification_pending,
-        .repair_applied,
         .review_approved,
         .review_rejected,
         => definition(event_type, level(event_type), &.{.outcome}, &.{}),
-        .stage_failed, .task_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.duration_ms}),
+        .repair_applied => definition(event_type, level(event_type), &.{ .repair_unit_kind, .outcome }, &.{}),
+        .stage_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.duration_ms}),
+        .task_failed => definition(event_type, level(event_type), &.{ .task_id, .diagnostic_code, .outcome }, &.{.duration_ms}),
         // A failed stage action may also name the internal step it stopped at (ADR 0031), and any
         // action event of a `request-model` stage names the stage (ADR 0030).
         .action_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{ .duration_ms, .step_id }),
@@ -88,17 +95,20 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .command_completed => definition(event_type, level(event_type), &.{ .command_id, .outcome }, &.{ .exit_code, .duration_ms }),
         .command_failed => definition(event_type, level(event_type), &.{ .command_id, .diagnostic_code, .outcome }, &.{ .exit_code, .duration_ms }),
         .task_started => definition(event_type, level(event_type), &.{.task_id}, &.{}),
-        .model_prompt_fragment => .{ .event_type = event_type, .level = level(event_type), .required = none, .optional = none },
+        // A prompt fragment is the prompt stream's content, never an event-stream metadata row.
+        .model_prompt_fragment => .{ .event_type = event_type, .level = level(event_type), .sensitivity = .sanitized_content, .required = none, .optional = none },
     };
 }
 
 pub fn validateFact(fact: telemetry.TelemetryFact) Error!EventDefinition {
-    if (fact.event_type == .model_prompt_fragment) return error.InvalidLogEventFact;
     const event_definition = eventDefinition(fact.event_type);
+    if (event_definition.sensitivity != .public_metadata) return error.InvalidLogEventFact;
     const actual = fieldSet(fact.fields);
     if (!actual.supersetOf(event_definition.required)) return error.InvalidLogEventFact;
     var allowed = event_definition.required;
     allowed.setUnion(event_definition.optional);
+    // F0002 section 6: the evidence status is common to every event row.
+    allowed.insert(.evidence_status);
     if (!allowed.supersetOf(actual)) return error.InvalidLogEventFact;
     return event_definition;
 }
@@ -164,6 +174,64 @@ test "closed event registry validates required and unexpected fields" {
             .command_id = telemetry.Identifier.validate("CMD-1"),
         },
     }));
+}
+
+test "repair.applied names its repair unit, and task.completed and task.failed name their task (F0002 section 6)" {
+    const task = telemetry.Identifier.validate("TASK-1");
+    const code = telemetry.DiagnosticCode.validate("TASK_FAILED");
+    _ = try validateFact(.{ .event_type = .repair_applied, .fields = .{ .repair_unit_kind = .authorized_unit, .outcome = .completed } });
+    try std.testing.expectError(error.InvalidLogEventFact, validateFact(.{ .event_type = .repair_applied, .fields = .{ .outcome = .completed } }));
+    _ = try validateFact(.{ .event_type = .task_completed, .fields = .{ .task_id = task, .outcome = .completed } });
+    try std.testing.expectError(error.InvalidLogEventFact, validateFact(.{ .event_type = .task_completed, .fields = .{ .outcome = .completed } }));
+    _ = try validateFact(.{ .event_type = .task_failed, .fields = .{ .task_id = task, .diagnostic_code = code, .outcome = .failed } });
+    try std.testing.expectError(error.InvalidLogEventFact, validateFact(.{ .event_type = .task_failed, .fields = .{ .diagnostic_code = code, .outcome = .failed } }));
+    // The run and stage events that shared those rows keep theirs.
+    _ = try validateFact(.{ .event_type = .run_completed, .fields = .{ .outcome = .completed } });
+    _ = try validateFact(.{ .event_type = .stage_failed, .fields = .{ .diagnostic_code = code, .outcome = .failed } });
+}
+
+test "the evidence status is common to every event, and no other field is" {
+    for (std.enums.values(telemetry.EventType)) |event_type| {
+        if (eventDefinition(event_type).sensitivity != .public_metadata) continue;
+        const definition_fields = eventDefinition(event_type);
+        var fields: telemetry.TelemetryFields = .{};
+        // Build the event's required fields from its definition, then add the common one.
+        var required = definition_fields.required.iterator();
+        while (required.next()) |field| switch (field) {
+            .outcome => fields.outcome = .completed,
+            .duration_ms => fields.duration_ms = 1,
+            .diagnostic_code => fields.diagnostic_code = telemetry.DiagnosticCode.validate("CODE"),
+            .validator_id => fields.validator_id = telemetry.Identifier.validate("V-1"),
+            .rule_id => fields.rule_id = telemetry.Identifier.validate("R-1"),
+            .step_id => fields.step_id = telemetry.Identifier.validate("S-1"),
+            .model_route_id => fields.model_route_id = telemetry.Identifier.validate("ROUTE-1"),
+            .model_profile_id => fields.model_profile_id = telemetry.Identifier.validate("PROFILE-1"),
+            .input_tokens => fields.input_tokens = 1,
+            .output_tokens => fields.output_tokens = 1,
+            .repair_unit_kind => fields.repair_unit_kind = .authorized_unit,
+            .command_id => fields.command_id = telemetry.Identifier.validate("CMD-1"),
+            .exit_code => fields.exit_code = 0,
+            .evidence_status => fields.evidence_status = .present,
+            .count => fields.count = 1,
+            .task_id => fields.task_id = telemetry.Identifier.validate("TASK-1"),
+        };
+        _ = try validateFact(.{ .event_type = event_type, .fields = fields });
+        fields.evidence_status = .present;
+        _ = try validateFact(.{ .event_type = event_type, .fields = fields });
+        // A field that is neither required, optional nor common is still refused.
+        if (!definition_fields.required.contains(.exit_code) and !definition_fields.optional.contains(.exit_code)) {
+            fields.exit_code = 0;
+            try std.testing.expectError(error.InvalidLogEventFact, validateFact(.{ .event_type = event_type, .fields = fields }));
+        }
+    }
+}
+
+test "only the prompt fragment is sanitized content, and the event stream admits public metadata alone" {
+    for (std.enums.values(telemetry.EventType)) |event_type| {
+        const expected: Sensitivity = if (event_type == .model_prompt_fragment) .sanitized_content else .public_metadata;
+        try std.testing.expectEqual(expected, eventDefinition(event_type).sensitivity);
+    }
+    try std.testing.expectError(error.InvalidLogEventFact, validateFact(.{ .event_type = .model_prompt_fragment }));
 }
 
 test "every event has the level its class states, and its definition carries that level" {

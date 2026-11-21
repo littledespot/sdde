@@ -219,8 +219,12 @@ maps to exactly one event in the closed proof-of-concept registry in Section
 6.2. The registry, rather than the caller, supplies its canonical level,
 message-template ID, fields, and sensitivity.
 
-The code doesn't meet this shape or the Section 6.2 registry yet (SPEC01 "F0002 event
-registry"); this section and Section 6.2 remain the target (user decision, 9 November 2026).
+The code meets the Section 6.2 registry's required fields (`repair_unit_kind` on `repair.applied`,
+`task_id` on `task.completed` and `task.failed`), the common optional `evidence_status` and the
+registry-owned sensitivity ([registry](../../src/domain/log_event_registry.zig)). It does not yet meet
+this section's one `TelemetryFact` variant per event, or `diagnostic_code` as a closed enum, which
+stays a validated token (SPEC01 "F0002 event registry"); this section and Section 6.2 remain the
+target (user decision, 9 November 2026).
 
 A fact may contain registered typed IDs, enums, counts, durations, diagnostic
 codes, command IDs, exit codes, and evidence outcomes. It cannot contain:

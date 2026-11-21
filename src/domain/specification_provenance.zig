@@ -24,12 +24,12 @@ pub const Dependencies = struct {
     outcome: @FieldType(r.Accounted, "outcome"),
 };
 pub fn dependencies(a: std.mem.Allocator, context: Context) Error!Dependencies {
-    const prior = context.references.records.assignments.checked.prior.prior;
+    const prior = context.references.global();
     return .{ .text = try text.dependencies(context.inputs, context.registry, context.current), .lineage = try @import("reference_reconciliation_context.zig").lineage(a, prior.input.progress), .dispositions = prior.dispositions, .signals = context.references.records.signals, .conflicts = context.references.records.conflicts, .outcome = context.references.outcome };
 }
 
 pub fn items(context: Context) Error!r.Items {
-    const result = context.references.records.assignments.checked.prior.prior.input.progress.plan.layout.items;
+    const result = context.references.global().input.progress.plan.layout.items;
     if (!result.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidSpecification;
     return result;
 }
@@ -38,7 +38,7 @@ pub fn items(context: Context) Error!r.Items {
 /// eligibility remain separate checks, not a judgment of every field's meaning.
 pub fn generationReady(references: r.Accounted) bool {
     if (references.outcome != .complete) return false;
-    for (references.records.assignments.checked.prior.prior.dispositions) |disposition| {
+    for (references.global().dispositions) |disposition| {
         if (refs.eligibleClaim(disposition.disposition)) return true;
     }
     return false;
@@ -49,7 +49,7 @@ pub fn bind(allocator: std.mem.Allocator, validator: text.Validator, context: Co
     const all = try items(context);
     if (context.references.outcome != .complete) return error.InvalidSpecification;
     const reconciliation = @import("reference_reconciliation_validation.zig");
-    try reconciliation.history(allocator, context.references.records.assignments.checked.prior.prior.input.progress);
+    try reconciliation.history(allocator, context.references.global().input.progress);
     try reconciliation.bind(allocator, all, .{ .inputs = context.inputs, .registry = context.registry, .current = context.current }, validator);
 }
 

@@ -78,12 +78,12 @@ pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("r
         .conflicts => &.{},
     };
     defer if (prior != .conflicts) allocator.free(ids);
-    const assignment: Constraint.Assignment = switch (prior) {
-        inline else => |_, tag| @field(Constraint.Assignment, @tagName(tag)),
+    const assignment: reconciliation.diagnostic.Stage = switch (prior) {
+        inline else => |_, tag| @field(reconciliation.diagnostic.Stage, @tagName(tag)),
     };
     return reconciliationPacketFor(allocator, current, inputs, registry, .{ .composed = .{ .assignment = assignment, .claim_ids = ids } }, null);
 }
-const Presentation = union(enum) { shared: Constraint.Scope, composed: struct { assignment: Constraint.Assignment, claim_ids: []const reconciliation.ClaimId } };
+const Presentation = union(enum) { shared: Constraint.Scope, composed: struct { assignment: reconciliation.diagnostic.Stage, claim_ids: []const reconciliation.ClaimId } };
 // The workflow-owned summary purpose is semantic guidance for summary authoring
 // and scoped repair, not deterministic proof. Complete-result membership stays
 // in scoped constraints.

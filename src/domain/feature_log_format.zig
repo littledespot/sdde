@@ -13,6 +13,14 @@ pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|l
 
 pub const prompt_column_count = std.mem.countScalar(u8, prompt_heading, '|') + 1;
 
+/// The heading row that opens every segment of a stream.
+pub fn segmentHeading(stream: log_stream.Stream) []const u8 {
+    return switch (stream) {
+        .event => event_heading,
+        .prompt => prompt_heading,
+    };
+}
+
 /// Evaluated at compile time only (`eventColumn`, `promptColumn`, `sharedColumn`).
 fn columnIn(comptime heading: []const u8, comptime name: []const u8) usize {
     @setEvalBranchQuota(100_000);

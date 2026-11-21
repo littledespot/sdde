@@ -96,7 +96,7 @@ pub const Capture = struct {
         var code: [96]u8 = undefined;
         return self.emit(.{ .event_type = event, .node_id = .{ .bytes = node.bytes }, .fields = .{
             .outcome = if (event == .repair_requested) null else outcome(status),
-            .repair_unit_kind = if (event == .repair_applied) null else .authorized_unit,
+            .repair_unit_kind = .authorized_unit,
             .diagnostic_code = if (reason) |value| diagnostic(&code, value) orelse return serialization_failure else null,
         } });
     }

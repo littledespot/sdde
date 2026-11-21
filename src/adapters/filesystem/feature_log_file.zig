@@ -1,9 +1,62 @@
 const std = @import("std");
+const log_limits = @import("../../domain/feature_log_limits.zig");
 const sink_port = @import("../../ports/feature_log_sink.zig");
 
 const Io = std.Io;
 
 pub const lock_name = ".stream.lock";
+
+/// An open segment file and the size observed when it was opened.
+pub const Segment = struct {
+    file: Io.File,
+    size: u64,
+
+    pub fn close(self: Segment, io: Io) void {
+        self.file.close(io);
+    }
+};
+
+/// Open a segment without following a link and require a regular file with owner-only permissions that is no larger
+/// than a segment may be (ADR 0026, 26-security.md). Anything else is `error.SegmentRejected`; the `std.Io` errors
+/// are returned as they came, so each caller keeps its own mapping. The one owner of this open sequence.
+pub fn openSegment(io: Io, directory: Io.Dir, name: []const u8, mode: Io.File.OpenMode) !Segment {
+    const file = try directory.openFile(io, name, .{
+        .mode = mode,
+        .allow_directory = false,
+        .follow_symlinks = false,
+        .resolve_beneath = true,
+    });
+    errdefer file.close(io);
+    const stat = try file.stat(io);
+    if (stat.kind != .file or !hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
+        return error.SegmentRejected;
+    }
+    return .{ .file = file, .size = stat.size };
+}
+
+pub const ReadError = error{ OutOfMemory, Canceled, ReadFailed, SizeDrift };
+
+/// Read a whole segment into `allocator`. The reader is given the size observed at open because a reader that
+/// stats the file itself would swallow a cancellation; a read the reader gave up on keeps its cause in `reader.err`,
+/// which is where a cancellation shows. A file that shrank since the open is `error.SizeDrift`; one that grew
+/// ends the read at its limit, which is a failed read.
+pub fn readSegment(io: Io, allocator: std.mem.Allocator, segment: Segment) ReadError![]u8 {
+    var reader: Io.File.Reader = .initSize(segment.file, io, &.{}, segment.size);
+    const bytes = reader.interface.allocRemaining(allocator, .limited64(segment.size + 1)) catch |err| {
+        if (err == error.OutOfMemory) return error.OutOfMemory;
+        return if ((reader.err orelse err) == error.Canceled) error.Canceled else error.ReadFailed;
+    };
+    if (bytes.len != segment.size) {
+        allocator.free(bytes);
+        return error.SizeDrift;
+    }
+    return bytes;
+}
+
+/// What a failed segment open is to the sink: a rejected segment, like any other fault, is a sink failure.
+pub fn segmentSinkFault(err: anyerror) sink_port.Error {
+    return if (err == error.SegmentRejected) error.SinkFailure else sinkFault(err);
+}
 
 /// What a failed `std.Io` call is to the sink: a cancellation request, which is no sink fault, or a sink
 /// fault. The one owner of that mapping for the sink's filesystem calls (ADR 0026, ADR 0032).

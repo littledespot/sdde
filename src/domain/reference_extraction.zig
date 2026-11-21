@@ -95,14 +95,14 @@ pub const TextValidated = struct {
     omission_retry: ?@import("workflow_retry.zig").Permit = null,
     entries: []const TextValidatedResult,
 };
-pub const Classified = struct { dependencies: ?@import("atomic_repair.zig").Snapshot = null, text_validated: TextValidated, selections: []const tokens.Selected };
+pub const Classified = struct { text_validated: TextValidated, selections: []const tokens.Selected };
 pub const TokenAssignments = struct { classified: Classified, entries: []const tokens.Assignment, next_token_ordinal: u32 };
 pub const PreparedResult = struct {
     scope: evidence.Scope,
     token_classifications: []const tokens.Classification = &.{},
     outcome: union(enum) { claims: []const PreparedClaim, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
-pub const Prepared = struct { dependencies: ?@import("atomic_repair.zig").Snapshot = null, revision: u64, entries: []const PreparedResult };
+pub const Prepared = struct { revision: u64, entries: []const PreparedResult };
 pub const ValidatedResult = struct {
     scope: evidence.Scope,
     token_classifications: []const tokens.Classification = &.{},

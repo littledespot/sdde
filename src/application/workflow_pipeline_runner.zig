@@ -71,6 +71,10 @@ pub const Runner = struct {
     native_iteration: iteration.State = .{},
     remaining_step_executions: usize,
     events_closed: bool = false,
+    /// The operation registry is one object assembled at startup and validated there (13-01); the runner checks its
+    /// structure once, before its first step, so a drifted registry still stops the run before any step executes.
+    /// Each step still resolves its own contract, the policy and the data schemas against the registry.
+    registry_validated: bool = false,
     last_effects: ?execution.AppliedEffects = null,
     /// The internal step a stage action stopped at during the current step invocation, and the display path of the
     /// entry whose own reason it stopped on (ADR 0031).
@@ -907,8 +911,11 @@ pub const Runner = struct {
         return resolved;
     }
 
-    fn authorityMatches(self: *const Runner) bool {
-        if (!self.operation_registry.validate()) return false;
+    fn authorityMatches(self: *Runner) bool {
+        if (!self.registry_validated) {
+            if (!self.operation_registry.validate()) return false;
+            self.registry_validated = true;
+        }
         const authority = self.selected.graph.authority;
         const policy = self.operation_registry.resolvePolicy(authority.policy_profile_id) orelse return false;
         if (!equalStrings(policy.allowed_capabilities, authority.allowed_capabilities)) return false;

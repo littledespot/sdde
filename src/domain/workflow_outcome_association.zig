@@ -153,6 +153,20 @@ pub const Resolution = union(enum) {
     diagnostic_admitted: struct { subject: Subject, evidence: DiagnosticAdmission },
     clarification_routed: struct { subject: Subject, needs: Subject },
 };
+/// The outcomes a native owner's sealed result can name for a step it rejected.
+pub const ResultOutcome = enum {
+    invalid,
+    needs_user,
+    blocked,
+
+    pub fn tag(self: ResultOutcome) workflow.OutcomeTag {
+        return switch (self) {
+            .invalid => .invalid,
+            .needs_user => .needs_user,
+            .blocked => .blocked,
+        };
+    }
+};
 pub const Change = union(enum) {
     observe: Observation,
     preserve: Subject,
@@ -162,8 +176,11 @@ pub const Change = union(enum) {
         missing_final_text: *const @import("provider_invocation_validation.zig").Evidence,
         /// A first runaway takes its one re-send (ADR 0039), like a missing answer.
         runaway: *const @import("provider_invocation_validation.zig").Evidence,
-        authority_result: struct { subject: Subject, result: *const @import("required_authority.zig").Result },
-        clarification_result: struct { subject: Subject, result: *const @import("clarification_refresh.zig").Result },
+        /// The owner's sealed result, read by its binding, names the outcome the step takes; the association checks
+        /// it against the step's outcome and the observation it reclassifies, and holds no owner result type.
+        authority_result: struct { subject: Subject, canonical: ResultOutcome },
+        /// The owner's sealed result is blocked, as its binding read it.
+        clarification_result: struct { subject: Subject },
         repair_blocked: BlockedRepairEvidence,
     },
     seal: Observation,
@@ -464,20 +481,14 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
             },
             .authority_result => |value| {
                 if (descriptor != .authority_reconcile or value.subject != .native or value.subject.native.kind != .authority or !validSubject(value.subject)) return error.InvalidOutcomeAssociation;
-                const canonical: workflow.OutcomeTag = switch (value.result.continuation) {
-                    .all_resolved => return error.InvalidOutcomeAssociation,
-                    .invalid => .invalid,
-                    .needs_user => .needs_user,
-                    .blocked => .blocked,
-                };
-                if (outcome != canonical) return error.InvalidOutcomeAssociation;
+                if (outcome != value.canonical.tag()) return error.InvalidOutcomeAssociation;
                 for (entries.items) |*entry| if (associated(aliases.items, entry.observation.subject, value.subject)) {
                     if (entry.irreversible or entry.observation.outcome == .failed or entry.observation.outcome == .cancelled) return error.InvalidOutcomeAssociation;
-                    entry.observation.outcome = canonical;
+                    entry.observation.outcome = value.canonical.tag();
                 };
             },
             .clarification_result => |value| {
-                if (descriptor != .clarification_refresh or outcome != .blocked or value.result.* != .blocked or value.subject != .native or value.subject.native.kind != .clarification or !validSubject(value.subject)) return error.InvalidOutcomeAssociation;
+                if (descriptor != .clarification_refresh or outcome != .blocked or value.subject != .native or value.subject.native.kind != .clarification or !validSubject(value.subject)) return error.InvalidOutcomeAssociation;
                 for (entries.items) |*entry| if (associated(aliases.items, entry.observation.subject, value.subject)) {
                     if (entry.irreversible or (entry.observation.outcome != .needs_user and entry.observation.outcome != .blocked)) return error.InvalidOutcomeAssociation;
                     entry.observation.outcome = .blocked;
