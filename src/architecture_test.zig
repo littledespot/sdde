@@ -43,6 +43,138 @@ test "unit import routing accepts internal tests and rejects each integration ro
     try std.testing.expectError(error.IntegrationTestImport, validateUnitImportPath("/repo/integration.zig"));
 }
 
+// Zig compiles a test only when a compilation root's import graph reaches its file, so a test file that nothing imports
+// never runs and nothing fails. The graph is read from `@import` tokens. Reaching a file by text is necessary for its
+// tests to run, not sufficient: Zig analyzes a reached file only where a declaration refers to it.
+fn isTestFileName(path: []const u8) bool {
+    const name = std.fs.path.basename(path);
+    return std.mem.endsWith(u8, name, "_test.zig") or std.mem.endsWith(u8, name, "_tests.zig") or std.mem.eql(u8, name, "tests.zig");
+}
+
+fn pathLessThan(_: void, left: []const u8, right: []const u8) bool {
+    return std.mem.lessThan(u8, left, right);
+}
+
+/// The test files of `sources` (absolute-style path to bytes) that no root reaches through relative `@import`s, in
+/// path order. A root is a file by itself, reached or not by any other.
+fn unreachableTestFiles(allocator: std.mem.Allocator, sources: *const std.StringHashMap([]const u8), roots: []const []const u8) ![]const []const u8 {
+    var reached: std.StringHashMap(void) = .init(allocator);
+    var pending: std.ArrayList([]const u8) = .empty;
+    for (roots) |root| try pending.append(allocator, root);
+    while (pending.pop()) |path| {
+        if ((try reached.getOrPut(path)).found_existing) continue;
+        const source = sources.get(path) orelse continue;
+        for (try importsOf(allocator, source)) |imported| {
+            if (!std.mem.endsWith(u8, imported, ".zig")) continue;
+            try pending.append(allocator, try std.fs.path.resolve(allocator, &.{ std.fs.path.dirname(path).?, imported }));
+        }
+    }
+    var missing: std.ArrayList([]const u8) = .empty;
+    var iterator = sources.keyIterator();
+    while (iterator.next()) |path| {
+        if (isTestFileName(path.*) and !reached.contains(path.*)) try missing.append(allocator, path.*);
+    }
+    std.mem.sort([]const u8, missing.items, {}, pathLessThan);
+    return missing.toOwnedSlice(allocator);
+}
+
+/// Every `.zig` path that `build.zig` spells as a string, as an absolute-style path: each is a compilation root, so
+/// the roots come from the build and not from a list kept here. The set is an upper bound: a path named only as a
+/// lint or copy argument also counts, so the check cannot see a test file the build merely names.
+fn buildRoots(allocator: std.mem.Allocator, build_source: []const u8) ![]const []const u8 {
+    const terminated = try allocator.dupeZ(u8, build_source);
+    var roots: std.ArrayList([]const u8) = .empty;
+    var tokens = std.zig.Tokenizer.init(terminated);
+    while (true) {
+        const token = tokens.next();
+        if (token.tag == .eof) break;
+        if (token.tag != .string_literal) continue;
+        const literal = try std.zig.string_literal.parseAlloc(allocator, terminated[token.loc.start..token.loc.end]);
+        if (!std.mem.endsWith(u8, literal, ".zig")) continue;
+        try roots.append(allocator, try std.fs.path.resolve(allocator, &.{ "/", literal }));
+    }
+    return roots.toOwnedSlice(allocator);
+}
+
+test "every test file in the repository is reachable from a build root" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var sources: std.StringHashMap([]const u8) = .init(allocator);
+    var project = try std.Io.Dir.cwd().openDir(io, ".", .{ .iterate = true });
+    defer project.close(io);
+    var top = project.iterate();
+    while (try top.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".zig")) continue;
+        try sources.put(try std.fmt.allocPrint(allocator, "/{s}", .{entry.name}), try project.readFileAlloc(io, entry.name, allocator, .limited(4 * 1024 * 1024)));
+    }
+    for ([_][]const u8{ "src", "test", "build" }) |name| {
+        var directory = try project.openDir(io, name, .{ .iterate = true });
+        defer directory.close(io);
+        var walker = try directory.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next(io)) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+            try sources.put(try std.fmt.allocPrint(allocator, "/{s}/{s}", .{ name, entry.path }), try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024)));
+        }
+    }
+    const roots = try buildRoots(allocator, sources.get("/build.zig").?);
+    try std.testing.expect(roots.len != 0);
+    const missing = try unreachableTestFiles(allocator, &sources, roots);
+    for (missing) |path| std.debug.print("a test file no build root reaches: {s}\n", .{path});
+    try std.testing.expectEqual(@as(usize, 0), missing.len);
+}
+
+test "test reachability follows imports from every root and reports an orphaned test file" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var sources: std.StringHashMap([]const u8) = .init(allocator);
+    try sources.put("/root.zig", "comptime { _ = @import(\"a_test.zig\"); _ = @import(\"std\"); }");
+    try sources.put("/a_test.zig", "const b = @import(\"sub/b_tests.zig\");");
+    try sources.put("/sub/b_tests.zig", "const helper = @import(\"../helper.zig\");");
+    try sources.put("/helper.zig", "");
+    // Reached by nothing, but a helper rather than a test file, so it is not reported.
+    try sources.put("/unused_helper.zig", "");
+    try std.testing.expectEqual(@as(usize, 0), (try unreachableTestFiles(allocator, &sources, &.{"/root.zig"})).len);
+
+    // A test file no root imports, one named `tests.zig` in a directory, and two that a comment or a string spells.
+    try sources.put("/orphan_test.zig", "");
+    try sources.put("/sub/tests.zig", "");
+    try sources.put("/commented_test.zig", "");
+    try sources.put("/stringy_test.zig", "");
+    try sources.put("/mentions.zig", "// _ = @import(\"commented_test.zig\");\nconst text = \"@import(\\\"stringy_test.zig\\\")\";");
+    const roots = [_][]const u8{ "/root.zig", "/mentions.zig" };
+    const missing = try unreachableTestFiles(allocator, &sources, &roots);
+    try std.testing.expectEqual(@as(usize, 4), missing.len);
+    try std.testing.expectEqualStrings("/commented_test.zig", missing[0]);
+    try std.testing.expectEqualStrings("/orphan_test.zig", missing[1]);
+    try std.testing.expectEqualStrings("/stringy_test.zig", missing[2]);
+    try std.testing.expectEqualStrings("/sub/tests.zig", missing[3]);
+
+    // A second root that imports the orphan reaches it, and a root that is itself a test file is not reported.
+    try sources.put("/second_root.zig", "const orphan = @import(\"orphan_test.zig\");");
+    const rooted = try unreachableTestFiles(allocator, &sources, &.{ "/root.zig", "/mentions.zig", "/second_root.zig", "/stringy_test.zig" });
+    try std.testing.expectEqual(@as(usize, 2), rooted.len);
+    try std.testing.expectEqualStrings("/commented_test.zig", rooted[0]);
+    try std.testing.expectEqualStrings("/sub/tests.zig", rooted[1]);
+}
+
+test "build roots are the zig paths build.zig spells in code" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const roots = try buildRoots(allocator,
+        \\const a = b.path("src/root.zig"); // b.path("commented.zig")
+        \\const names = [_][]const u8{ "tests.zig", "case.json", "src/main.zig" };
+    );
+    try std.testing.expectEqual(@as(usize, 3), roots.len);
+    try std.testing.expectEqualStrings("/src/root.zig", roots[0]);
+    try std.testing.expectEqualStrings("/tests.zig", roots[1]);
+    try std.testing.expectEqualStrings("/src/main.zig", roots[2]);
+}
+
 test "production sources exclude internal evaluation tooling and test environment configuration" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;

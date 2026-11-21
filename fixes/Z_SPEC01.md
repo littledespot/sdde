@@ -2870,6 +2870,97 @@ so no benefit is demonstrated. Built offline only; no live run was approved.
 - **Not measured:** the step trace and the live cost. Neither development case's run was repeated, and no accuracy class
   is claimed.
 
+## Q26. A Given only where the source states one (kept 22 November 2026)
+
+**Decided** 20 November 2026 (user: "R1: YES", on the advisory R1 of the `2026-11-20T07-4*` and `07-5*` evaluations);
+**kept** 22 November 2026 (user: "keep Q26, benefit not demonstrated"). **Defect class:** unsupported addition and
+ambiguity in an acceptance criterion's Given. The scenarios request required a Given even where a requirement states
+only a trigger (`minLength` 1 in the response schema, "Write nonblank prose" in the field rule, and "what its own
+wording presupposes" in `scenarios.prompt.md`), so the model repeated the trigger or invented a prerequisite. In the
+20 November set 5 criteria in 4 of 6 runs repeated one event as Given and When, and all 3 accuracy defects were
+unsupported additions in a Given.
+
+**Built:** `given` is an optional property of the scenarios response and of the criterion content (omitted, never
+`null` or blank; an edge case's own given stays required). An omitted Given is a value of its own in the schema's
+`distinct` rule and the duplicate rule. A criterion without one renders "**When** … **Then** …", and an edge case
+linked to it prints its own given alone on its `GIVEN` line. The presupposition sentence is deleted, and the shared
+`given` guidance and the criterion family text are amended. `specification/v8` and `specification-state/v28` advance
+(ADR 0041 takes v29); `model-request-debug`, `packet-guidance`, the required-authority contract and the report formats
+stay. Design text: ADR 0038 Decisions 3 and 7, contracts 12, 17, 21, 22, 23, 24 and 28, F0100, design.md §31.
+Request freezes: `evaluations/request-projection/q26-before` (equal to `coupling-final`) and `q26-after`; the differing
+requests are the scenarios and records calls, their repairs, and the source-repair and support requests that quote the
+family text.
+
+**Screens** (22 November 2026; hello-world `2026-11-21T12-03-05Z` call 9, loan-renewal `2026-11-21T12-02-20Z` call 10;
+`claude-haiku-5-5`, low effort, 10 trials per arm, all 40 completed): hello-world 30 of 30 scenarios kept a Given as
+captured and 0 of 30 with the Q26 request; loan-renewal 30 of 30 in both arms.
+
+**Set** (`2026-11-21T21-28-43Z` to `21-32-12Z`, three runs per case, none retried, build revision `ea69a53`, source
+`83083614…`, every report `build.source.modified: true`; skill `69c55877…`; reference Q14's set, build `c22fa1f`). All
+six published natively and were adjudicated as passed: hello-world 100% three times, loan-renewal 96.43%, 100% and
+96.43% (mean 97.62%; Q14's set 98.6%). Content-basis lost source requirement, weakened obligation, unsupported addition
+and contradiction 0 in every run.
+
+- **Target** (a Given repeating its When): hello-world 0 of 9 criteria, loan-renewal 2 of 15 (the display criterion,
+  whose source line 7 states one event; runs 1 and 3); Q14's set 1 of 10 loan-renewal and 0 of 9 hello-world. Three
+  events, below the floor of about ten: benefit not demonstrated.
+- **Given omitted:** hello-world 9 of 9 criteria, loan-renewal 0 of 15, as the screens showed.
+- **Counted apart:** a generic-precondition Given ("…with an existing due date" on the extension criterion):
+  hello-world 0 of 9, loan-renewal 3 of 15 (Q14's two published loan runs 5 of 10). Under the other reading of §1's open
+  ruling each is a minor `unsupported_addition` (3 content-basis in the set; aggregates 92.86%, 96.43%, 92.86%). The
+  removed sentence did not remove it.
+- **Guards:** lost source requirement 0; weakened obligation 0; publication 6 of 6 (Q14's set 5 of 6).
+- **Watch:** no criterion dropped a Given its source states; the one repair (loan run 2) replaced an AC-002 Then for
+  `foreign_exact`, graded helpful, and touched no Given; no run wrote an edge case; a Then repeating its Given 2 of 15,
+  reported only; one false link in 33 records.
+- **Cause of the retained repeats:** origin `prompt_conflict`, confidence `likely` (the amended `given` guidance beside
+  the field rule at `text_field_policy.zig:110`; both reached call 14 of loan runs 1 and 3), with `model_noncompliance`
+  the other reading.
+
+Evaluations: `evaluations/e2e/<run>/`; adjudications `adjudication-787066f3…`, `-fd878b2c…`, `-6d4d2e00…`,
+`-1bccce67…`, `-037d12a4…` and `-663e6f32…`.
+
+## Test-track closures (22 November 2026)
+
+Offline; the request projection retaken on the final tree is byte-identical to `q26-after`. User: "implement" on C28's unproven path, C41, C42, C45, C47, C31 and T3.
+
+- **C28.** A real SIGINT raised on a scripted call (`std.posix.raise(.INT)`, `ScriptedWire.interrupt_on_call`) ends the
+  harness's `invoke.run` as `.cancelled` / `.workflow_cancelled` with `publication_check == .not_run`, nothing published,
+  one `run.cancelled` row and the SIGINT disposition restored, on hello-world (call 1) and loan-renewal (call 3).
+  `Interrupt.resetForTest()` (`pub`, still behind `builtin.is_test`) clears the never-reset `requested` flag before and
+  after each raise, so later runs in the binary are unaffected. Tests run serially and the scripted transport bypasses the
+  HTTP adapter's timer. Not proven: a kernel-delivered Ctrl-C to an arbitrary thread, `Io.Threaded` sleeps retried on EINTR
+  under the real adapter, the CLI exit code.
+- **C41.** The driver's merge gates are a `merge_routes` table; `isMerge` accepts only a member of it (compile time),
+  and `unboundMerge` returns the first (operation, owner) pair the compiled graph does not bind. The `gates_bound` block
+  fails the scenario with `GatedRouteNotInGraph`. The check runs at scenario 0 of the existing group: the shipped graph
+  binds all four owners, dropping each owner's merge step returns exactly that owner, and renaming every `merge-repair`
+  step returns the first.
+- **C42.** The hello-world-only production-composition test became both development cases, and two more run through
+  `root.Runtime` and `invoke.run` with only the transport scripted: `.repair` alone ends `.ok` with a unit repair and a
+  prepared publication, and `.repair` with `.failed_repair` and `.repeated_provenance_fault` (matrix scenario 6) ends
+  `.failed` / `.workflow_failed` with `terminal_rejection.kind == .retry_limit`, an `atomic_repair` of a specification unit
+  as its last attempt, nothing published and one `run.failed` row. Loan-renewal fits the 125000-token budget with no
+  builder change.
+- **C45.** `Driver.allowance` reads a request's compiled step from its own identity. The summary, global and disposition
+  sequences derive their calls, ordinals and exhaustion counts from it through a plan (`Calls`, `expand`, `expectShape`,
+  `checkSequence`), and run again on a definition whose three faulted requests have retry limit 3, so four attempts
+  (shipped: limit 2, three attempts); the raised group asserts the driver saw an allowance of 4, so a patch the compiler
+  never took fails it. Property tests cover allowances 2 to 4; the rejected case is a shape expanded for another
+  allowance, which fails.
+- **C47.** `architecture_test.zig` reads every `.zig` file under `src/`, `test/` and `build/` and the root's, takes as
+  roots every `.zig` path `build.zig` spells, and fails when a `*_test.zig`, `*_tests.zig` or `tests.zig` is reached by
+  none (`unreachableTestFiles`, `buildRoots`). Fixtures: a transitive chain and a non-test helper pass; an orphan, a
+  directory `tests.zig`, files a comment or a string merely names, and a second root that imports the orphan. The tree
+  has no orphan. The `record-authoring`, `signal-grouping`, `summary-coverage` and `entity-applicability` calibration
+  directories (no reader, parent runs gone) were deleted (user: "Delete all four").
+- **C31.** Both ledger owners already had allocation-failure sweeps; only the record was stale.
+- **T3.** `provider_compatibility_tests.zig` `.prefix_normalized`: the contract's first malformed opening in front of a
+  schema-valid candidate is assessed `compatible` with the normalization reported, over both development domains.
+  `specification_generation_test.zig` `Fixture.initSources` and a test: a record citing two source files shows each file
+  in corpus order, round-trips through the markdown, and a citation of a file outside the corpus is an invalid
+  specification. A record must name a group's claims in the group's order, so no reversed-order case exists.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a

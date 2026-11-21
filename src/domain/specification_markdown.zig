@@ -34,9 +34,13 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                 if (comptime kind == .acceptance_criterion) {
                     try write(w, "- **");
                     try identity(w, record.id.?);
-                    try write(w, "**: **Given** ");
-                    try scalar(w, content.given, .inline_text, .text);
-                    try write(w, clauseSeparator(content.given));
+                    try write(w, "**: ");
+                    // A criterion whose sources state no starting situation has no Given, and no label for one.
+                    if (content.given) |given| {
+                        try write(w, "**Given** ");
+                        try scalar(w, given, .inline_text, .text);
+                        try write(w, clauseSeparator(given));
+                    }
                     try write(w, "**When** ");
                     try scalar(w, content.when, .inline_text, .text);
                     try write(w, clauseSeparator(content.when));
@@ -56,11 +60,14 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                     try write(w, "**\n");
                     if (comptime kind.showsScenario()) {
                         // One `GIVEN` line holds the linked criterion's Given, the separator
-                        // the criterion's own rule derives, then the edge case's own given.
+                        // the criterion's own rule derives, then the edge case's own given; a
+                        // criterion without a Given contributes neither, and the line is the own given.
                         const shown = record.scenario.?;
                         try write(w, given_label);
-                        try scalar(w, shown.given, .inline_text, .text);
-                        try write(w, clauseSeparator(shown.given));
+                        if (shown.given) |copied| {
+                            try scalar(w, copied, .inline_text, .text);
+                            try write(w, clauseSeparator(copied));
+                        }
                         try scalar(w, content.given, .inline_text, .text);
                         try write(w, "\n");
                         try inlineField(w, when_label, shown.when);
@@ -180,7 +187,9 @@ fn hasScope(document: spec.CapturedDocument) bool {
 
 fn acceptance(allocator: std.mem.Allocator, input: []const u8) Error!@FieldType(spec.Content(spec.Scalar), "acceptance_criterion") {
     const labels = [_][]const u8{ "**Given** ", "**When** ", "**Then** " };
-    if (!std.mem.startsWith(u8, input, labels[0])) return error.InvalidSpecification;
+    // The two forms a criterion reads back as: the Given, When, Then triplet, and the When, Then pair of a
+    // criterion with no Given. Any other order, repeat or omission rejects.
+    const sequence: []const usize = if (std.mem.startsWith(u8, input, labels[0])) &.{ 0, 1, 2 } else if (std.mem.startsWith(u8, input, labels[1])) &.{ 1, 2 } else return error.InvalidSpecification;
     // Exact copy spans may themselves contain label-shaped text. The shared
     // Markdown scanner, not a substring split, determines those boundaries.
     const frame = "field ";
@@ -195,21 +204,27 @@ fn acceptance(allocator: std.mem.Allocator, input: []const u8) Error!@FieldType(
         while (span_index < spans.len and spans[span_index].end <= offset + frame.len) span_index += 1;
         if (span_index < spans.len and spans[span_index].start <= offset + frame.len) continue;
         for (labels, 0..) |marker, index| if (std.mem.startsWith(u8, input[offset..], marker)) {
-            if (index != found) return error.InvalidSpecification;
+            if (found == sequence.len or index != sequence[found]) return error.InvalidSpecification;
             // An escaped comma ends the clause's own text, so only an unescaped ", " separates.
-            if (index != 0) separators[index] = if (offset >= 2 and std.mem.eql(u8, input[offset - 2 .. offset], ", ") and !escaped(input, offset - 2)) 2 else if (offset >= 1 and input[offset - 1] == ' ') 1 else return error.InvalidSpecification;
-            positions[index] = offset;
+            if (found != 0) separators[found] = if (offset >= 2 and std.mem.eql(u8, input[offset - 2 .. offset], ", ") and !escaped(input, offset - 2)) 2 else if (offset >= 1 and input[offset - 1] == ' ') 1 else return error.InvalidSpecification;
+            positions[found] = offset;
             found += 1;
         };
     }
-    if (found != labels.len) return error.InvalidSpecification;
-    if (positions[1] - separators[1] < labels[0].len or positions[2] - separators[2] < positions[1] + labels[1].len) return error.InvalidSpecification;
-    const given = try unescape(allocator, input[labels[0].len .. positions[1] - separators[1]]);
-    const when = try unescape(allocator, input[positions[1] + labels[1].len .. positions[2] - separators[2]]);
-    // Only the separator the renderer derives from each clause round-trips.
-    if (!std.mem.eql(u8, clauseSeparator(given), input[positions[1] - separators[1] .. positions[1]]) or
-        !std.mem.eql(u8, clauseSeparator(when), input[positions[2] - separators[2] .. positions[2]])) return error.InvalidSpecification;
-    return .{ .given = given, .when = when, .then = try unescape(allocator, input[positions[2] + labels[2].len ..]) };
+    if (found != sequence.len) return error.InvalidSpecification;
+    var clauses: [3]spec.Scalar = undefined;
+    for (sequence, 0..) |which, at| {
+        const start = positions[at] + labels[which].len;
+        const end = if (at + 1 < sequence.len) positions[at + 1] - separators[at + 1] else input.len;
+        if (end < start) return error.InvalidSpecification;
+        clauses[at] = try unescape(allocator, input[start..end]);
+        // Only the separator the renderer derives from each clause round-trips.
+        if (at + 1 < sequence.len and !std.mem.eql(u8, clauseSeparator(clauses[at]), input[end .. end + separators[at + 1]])) return error.InvalidSpecification;
+    }
+    return if (sequence.len == 3)
+        .{ .given = clauses[0], .when = clauses[1], .then = clauses[2] }
+    else
+        .{ .given = null, .when = clauses[0], .then = clauses[1] };
 }
 
 /// Whether the byte at `index` follows an odd run of backslashes, so it is escaped text.
@@ -270,33 +285,37 @@ const Split = struct { own: spec.Scalar, scenario: spec.Scenario };
 /// The first earlier criterion whose When and Then equal the lines and whose Given and separator
 /// begin the `GIVEN` line is the copy; no such criterion rejects, so an edited copy of a Given,
 /// When or Then, or a `GIVEN` line that does not begin with the copied Given, never reads back.
+/// A criterion with no Given copies nothing, so the whole line is the own given; it is the copy only when
+/// no criterion that holds a Given is. Either choice re-renders the same line.
 fn splitGiven(allocator: std.mem.Allocator, records: []const spec.CapturedRecord, joined: spec.Scalar, when: spec.Scalar, then: spec.Scalar) Error!Split {
-    for (records) |record| {
+    for ([_]bool{ true, false }) |holding| for (records) |record| {
         if (record.content != .acceptance_criterion) continue;
         const criterion = record.content.acceptance_criterion;
+        if ((criterion.given != null) != holding) continue;
         if (!sameScalar(criterion.when, when) or !sameScalar(criterion.then, then)) continue;
-        const copied = criterion.given.bytes.len;
-        const separator = clauseSeparator(criterion.given);
+        const copied_given: spec.Scalar = criterion.given orelse .{ .bytes = "" };
+        const copied = copied_given.bytes.len;
+        const separator = if (criterion.given == null) "" else clauseSeparator(copied_given);
         const start = copied + separator.len;
-        if (joined.bytes.len <= start or !std.mem.startsWith(u8, joined.bytes, criterion.given.bytes) or
+        if (joined.bytes.len <= start or !std.mem.startsWith(u8, joined.bytes, copied_given.bytes) or
             !std.mem.eql(u8, joined.bytes[copied..start], separator)) continue;
         var own_spans: std.ArrayList(spec.CodeSpan) = .empty;
         var copied_spans: usize = 0;
         var matches = true;
         for (joined.code_spans) |span| {
             if (span.end <= copied) {
-                if (copied_spans == criterion.given.code_spans.len or !std.meta.eql(span, criterion.given.code_spans[copied_spans])) matches = false;
+                if (copied_spans == copied_given.code_spans.len or !std.meta.eql(span, copied_given.code_spans[copied_spans])) matches = false;
                 copied_spans += 1;
             } else if (span.start >= start) {
                 try own_spans.append(allocator, .{ .start = span.start - start, .end = span.end - start });
             } else matches = false;
         }
-        if (!matches or copied_spans != criterion.given.code_spans.len) continue;
+        if (!matches or copied_spans != copied_given.code_spans.len) continue;
         return .{
             .own = .{ .bytes = joined.bytes[start..], .code_spans = try own_spans.toOwnedSlice(allocator) },
             .scenario = .{ .given = criterion.given, .when = when, .then = then },
         };
-    }
+    };
     return error.InvalidSpecification;
 }
 

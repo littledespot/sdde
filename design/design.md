@@ -976,7 +976,8 @@ The new engine is ready for production evaluation when all of the following are 
 
 20. **Artifact editability and approvals.**
     - `spec.md` is the sole freely editable stage artifact.
-    - Every acceptance criterion uses the canonical compact `Given`/`When`/`Then` triplet.
+    - Every acceptance criterion uses the canonical compact `Given`/`When`/`Then` triplet, or the
+      `When`/`Then` pair where its sources state no starting situation (ADR 0038 Decision 3).
     - The specification round-trips to normalized specification IR.
     - Plan/design and task files are deterministic read-only review projections and are never
       parsed as authority.

@@ -292,7 +292,10 @@ selection `S` (its slot's one claim) and the batch's source group; the response 
 content only. A defect in a written criterion's text takes the field-level value repair above,
 which never changes that association. The repair's evidence bound for such a criterion is
 `S` plus the values its claim holds, not set equality
-([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). No repair inserts or replaces a whole criterion or
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). A
+criterion's absent `given` holds no value to repair, so it is no repair target, and a repair
+neither adds a Given nor removes one; a held Given is repaired as any other text field is,
+by `replace`. No repair inserts or replaces a whole criterion or
 inserts an edge case, and a claim without its criterion after the merge is an engine
 defect that takes no repair.
 

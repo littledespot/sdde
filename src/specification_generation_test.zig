@@ -3191,6 +3191,45 @@ test "a record shows its claims' cited source lines, merged per file" {
     try std.testing.expectEqualDeep(document, try markdown.parse(a, rendered));
 }
 
+test "a record that cites two source files shows each file in corpus order" {
+    const projection = @import("domain/specification_projection.zig");
+    const markdown = @import("domain/specification_markdown.zig");
+    const support = @import("domain/reference_support.zig");
+    const ClaimId = @import("domain/reference_reconciliation.zig").ClaimId;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // One claim per file, both in one reconciled group, which a record must name in the group's order.
+    var fixture = try Fixture.initSources(a, &.{ "Show the greeting.\nKeep it short.\n", "Log the time.\nReport the zone.\n" }, &.{&.{ 0, 1 }});
+    defer fixture.deinit();
+    const all = try provenance.items(fixture.context);
+    try std.testing.expectEqual(@as(usize, 2), all.entries.len);
+    const claims = [_]ClaimId{ all.entries[0].claim.id, all.entries[1].claim.id };
+    const record = try provenance.checkRecord(.model, a, text.validator, fixture.context, .{
+        .content = .{ .functional_requirement = .{ .text = (try fixture.proposal("The visitor sees a short greeting and the time.")).value } },
+        .source_group_ids = &.{fixture.context.references.records.signals[0].id},
+        .provenance = .{ .claim_ids = &claims, .clarification_response_ids = &.{} },
+    });
+    const descriptive = try provenance.checkAttributed(.model, a, text.validator, fixture.context, try fixture.proposalAllGroups("The visitor sees a short greeting."), .spec_goal);
+    const content = (try identifiers.assign(a, .{ .display_name = fixture_display_name, .primary_user_story = descriptive, .records = &.{record}, .entities = .{ .disposition = .not_applicable, .basis = descriptive } }, .{}, &.{})).content;
+    const document = try projection.project(a, fixture.context, test_directory, content);
+    try std.testing.expectEqual(@as(usize, 1), document.records.len);
+    const shown = document.records[0].sources;
+    try std.testing.expectEqual(@as(usize, 2), shown.len);
+    try std.testing.expectEqualStrings("references/feature/source-0.md", shown[0].path);
+    try std.testing.expectEqualStrings("references/feature/source-1.md", shown[1].path);
+    for (shown) |file| try std.testing.expectEqualSlices(spec.LineRange, &.{.{ .first = 1, .last = 2 }}, file.ranges);
+    const rendered = try markdown.render(a, document);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "  - Source: `references/feature/source-0.md` lines 1–2; `references/feature/source-1.md` lines 1–2\n") != null);
+    try std.testing.expectEqualDeep(document, try markdown.parse(a, rendered));
+
+    // A citation of a file the corpus does not hold is not a display; it is an invalid specification.
+    const occurrences = try support.occurrences(a, support.records(fixture.context.references).items, fixture.context.inputs, &claims);
+    var narrowed = fixture.context.inputs;
+    narrowed.corpus.sources = narrowed.corpus.sources[0..1];
+    try std.testing.expectError(error.InvalidSpecification, projection.sourceLines(a, test_directory, narrowed, occurrences));
+}
+
 test "mixed prose and exact references survive repair coverage rendering and persisted validation" {
     const projection = @import("domain/specification_projection.zig");
     const markdown = @import("domain/specification_markdown.zig");
@@ -3416,18 +3455,27 @@ pub const Fixture = struct {
     fn initAsWritten(a: std.mem.Allocator, bytes: []const u8) !Fixture {
         return build(a, bytes, .business_exact_string, .{ .repeated = .{ .has_claims = true, .count = 1, .technical = false } }, &.{}, false);
     }
-    fn build(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, supplied: Claims, groups: []const []const usize, titled: bool) !Fixture {
-        var ids: evidence.IdSource = .{};
+    /// The further requirement lines `supplied` needs after the source's own text.
+    fn appendedLines(supplied: Claims) usize {
         const copies: usize = switch (supplied) {
             .repeated => |options| if (options.has_claims) @max(options.count, 1) else 1,
             .selected => 1,
         };
         // A technical claim needs no line of its own: another category on the same lines is
         // already distinct evidence.
-        const appended: usize = switch (supplied) {
+        return switch (supplied) {
             .repeated => |options| copies - 1 - @intFromBool(options.technical and copies > 1),
             .selected => 0,
         };
+    }
+    /// Two or more source files (`source-0.md`, `source-1.md`, in corpus order), each with one business claim that
+    /// quotes every line of its file, merged into reconciled groups as `initClaimsGrouped` does.
+    fn initSources(a: std.mem.Allocator, documents: []const []const u8, groups: []const []const usize) !Fixture {
+        const read = try @import("reference_ingestion_test.zig").readSources(std.testing.io, a, documents);
+        return fromInputs(a, read, false, null, .{ .repeated = .{ .has_claims = true, .count = 1, .technical = false } }, groups);
+    }
+    fn build(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, supplied: Claims, groups: []const []const usize, titled: bool) !Fixture {
+        const appended = appendedLines(supplied);
         const source = if (appended == 0) bytes else extended: {
             var all: std.ArrayList(u8) = .empty;
             try all.appendSlice(a, bytes);
@@ -3442,7 +3490,12 @@ pub const Fixture = struct {
         // as no live extraction quoted a title heading.
         const appended_title = titled and (try @import("domain/markdown_code_spans.zig").levelOneHeading(a, source)) == null;
         const document = if (!appended_title) source else try std.mem.concat(a, u8, &.{ source, if (std.mem.endsWith(u8, source, "\n")) "\n" else "\n\n", "# ", fixture_title, "\n" });
-        const inputs = try evidence.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "stories.md", document));
+        return fromInputs(a, try @import("reference_ingestion_test.zig").read(a, "stories.md", document), appended_title, kind, supplied, groups);
+    }
+    fn fromInputs(a: std.mem.Allocator, read: @import("domain/reference_ingestion.zig").Inputs, appended_title: bool, kind: ?@import("domain/structured_tokens.zig").Kind, supplied: Claims, groups: []const []const usize) !Fixture {
+        var ids: evidence.IdSource = .{};
+        const appended = appendedLines(supplied);
+        const inputs = try evidence.prepare(a, &ids, read);
         const passive = try text.prepare(a, inputs);
         errdefer passive.deinit();
         const candidates = try tokens.candidates(a, inputs);
@@ -7905,7 +7958,7 @@ test "exact claim handles derive field and shared-record lineage without rewriti
         const exact_bytes = try std.fmt.allocPrint(a, "Display {s} and again {s}", .{ all.entries[all.entries.len - 1].claim.content.preserved_token.value.raw_value.bytes, all.entries[all.entries.len - 1].claim.content.preserved_token.value.raw_value.bytes });
         for (document.records) |projected| switch (projected.content) {
             .acceptance_criterion => |criterion| {
-                try std.testing.expectEqualStrings("The application starts.", criterion.given.bytes);
+                try std.testing.expectEqualStrings("The application starts.", criterion.given.?.bytes);
                 try std.testing.expectEqualStrings(exact_bytes, criterion.when.bytes);
             },
             .functional_requirement => {},
@@ -7983,6 +8036,67 @@ test "completed requirement links keep separate source sets and many-to-many lin
         try std.testing.expect(std.mem.indexOf(u8, line, check.present) != null);
         try std.testing.expect(std.mem.indexOf(u8, line, check.absent.?) == null);
     }
+}
+
+test "a criterion with no Given round-trips through persisted state, projection and the editable view" {
+    // ADR 0038 Decision 3: an absent Given is persisted as such, reads back as such and
+    // renders as the When and Then pair. A held Given in the same specification keeps its own text policy.
+    const sessions = @import("domain/specification_session.zig");
+    const state = @import("domain/specification_state.zig");
+    const projection = @import("domain/specification_projection.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "Display `MOCK Hello, World!` on startup.");
+    defer fixture.deinit();
+    const all = try provenance.items(fixture.context);
+    const exact = all.entries[all.entries.len - 1].claim.id;
+    var current = try completedFixture(&fixture, false);
+    const records = try a.dupe(spec.RecordProposal, current.units[sessions.records_index].?.response.content.records);
+    const prose = (try fixture.proposal("The application starts.")).value;
+    records[1] = try provenance.checkRecord(.model, a, text.validator, fixture.context, .{
+        .content = .{ .acceptance_criterion = .{
+            .given = null,
+            .when = prose,
+            .then = .{ .segments = &.{ .{ .literal = .{ .value = "The application displays " } }, .{ .exact_copy = .{ .claim_id = exact } } } },
+        } },
+        .source_group_ids = &.{fixture.context.references.records.signals[0].id},
+        .provenance = .{ .claim_ids = &.{all.entries[0].claim.id}, .clarification_response_ids = &.{} },
+    });
+    current.units[sessions.records_index].?.response.content.records = records;
+    const assigned = try sessions.assemble(a, text.validator, fixture.context, current, &.{});
+    const brief = current.units[0].?.response.content.brief;
+    const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+    const binding = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
+    const snapshot: state.State = .{
+        .schema = state.schema,
+        .principle_registry = try @import("test_fixtures/principles.zig").registry(a, null),
+        .feature = current.feature,
+        .revision = 1,
+        .stage = .specified,
+        .reference = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "first" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, binding),
+        .brief = brief,
+        .content = assigned.content,
+        .id_ledger = assigned.ledger,
+        .coverage = try @import("domain/specification_coverage.zig").validate(a, fixture.context.references, brief, assigned.content),
+        .clarification = .{ .state_ordinal = 1, .revision = 1 },
+    };
+    const restored = (try state.parse(a, try std.json.Stringify.valueAlloc(a, snapshot, .{}), current.feature, contracts.port())).specified().?;
+    const criterion_index = for (restored.content.records, 0..) |record, index| {
+        if (record.proposal.content == .acceptance_criterion) break index;
+    } else return error.MissingCriterion;
+    try std.testing.expect(restored.content.records[criterion_index].proposal.content.acceptance_criterion.given == null);
+    const projected = try projection.project(a, fixture.context, restored.reference.directory, restored.content);
+    try std.testing.expect(projected.records[criterion_index].content.acceptance_criterion.given == null);
+    const markdown = try @import("domain/specification_markdown.zig").render(a, projected);
+    try std.testing.expect(std.mem.indexOf(u8, markdown, "- **AC-001**: **When** The application starts. **Then** The application displays ") != null);
+    try std.testing.expectEqualDeep(projected, try @import("domain/specification_markdown.zig").parse(a, markdown));
+    // A Given held beside it is still text: one that breaks the policy never reads back.
+    var tampered = snapshot;
+    const ruined = try a.dupe(spec.IdentifiedRecord, snapshot.content.records);
+    ruined[criterion_index].proposal.content.acceptance_criterion.given = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
+    tampered.content.records = ruined;
+    try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, tampered, .{}), current.feature, contracts.port()));
 }
 
 test "mixed record lineage survives completed readback and rejects a missing derived citation" {
@@ -9365,7 +9479,7 @@ test "record projection retains shared sibling lineage while composition cannot 
         // The selected field alone cannot resolve this reference. Its sibling's
         // legitimate exact insertion contributes the second native source scope.
         try std.testing.expectError(error.InvalidPassiveLiteral, projection.modelValue(a, fixture.context, .{ .value = only_reference, .source_group_ids = record.source_group_ids, .provenance = record.provenance }));
-        try std.testing.expectEqualStrings(passive.value, (try projection.modelRecord(a, fixture.context, record)).acceptance_criterion.given.bytes);
+        try std.testing.expectEqualStrings(passive.value, (try projection.modelRecord(a, fixture.context, record)).acceptance_criterion.given.?.bytes);
         const first_scope: @import("domain/reference_evidence.zig").Scope = .{ .state_id = fixture.context.inputs.corpus.state_id, .chunk_id = first.chunk_id };
         try std.testing.expectError(error.InvalidPassiveLiteral, passive_literals.resolveIn(fixture.context.registry, fixture.context.inputs, &.{first_scope}, passive.id));
         var current = (try sessions.initialize(a, fixture.context.inputs.corpus.feature_id, fixture.context)).ready;
@@ -9885,6 +9999,14 @@ fn repeatedScenarios(a: std.mem.Allocator, numbers: []const u32, copies: []const
 
 const scenario_parts: []const []const u8 = &.{ "Given", "When", "Then" };
 
+/// `answer` with the Given of each scenario of `numbers` omitted, as a scenario states none where its
+/// sources state no starting situation (ADR 0038 Decision 3).
+fn withoutGiven(a: std.mem.Allocator, answer: []const u8, numbers: []const u32) ![]const u8 {
+    var result = answer;
+    for (numbers) |number| result = try std.mem.replaceOwned(u8, a, result, try std.fmt.allocPrint(a, "\"given\":\"MOCK Given {d}.\",", .{number}), "");
+    return result;
+}
+
 fn expectScenarioText(a: std.mem.Allocator, value: spec.BusinessValue, part: []const u8, number: usize) !void {
     try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "MOCK {s} {d}.", .{ part, number }), value.segments[0].literal.value);
 }
@@ -9978,6 +10100,17 @@ test "claim-bound scenarios: the request's schema admits one scenario for each s
         const property = extra[1 .. std.mem.indexOfScalar(u8, extra[1..], '"').? + 1];
         try payload.checkCompiled(selected, .{ .bytes = named, .rejection = .unknown_property, .path = try std.mem.concat(a, u8, &.{ "/scenarios/0/", property }) });
     }
+    // A scenario omits its Given where the sources state none (ADR 0038 Decision 3), so the
+    // number, When and Then are what the schema requires. An omitted Given is a value of its own for the equal-items
+    // rule: two scenarios that share a When and a Then and both omit it are one criterion written twice, and one
+    // that states a Given is not.
+    try payload.checkCompiled(selected, .{ .bytes = try withoutGiven(a, exact, &.{ 2, 4 }) });
+    try payload.checkCompiled(selected, .{ .bytes = try withoutGiven(a, exact, &.{ 1, 2, 3, 4, 5, 6 }) });
+    const twin = try repeatedScenarios(a, &.{ 1, 2, 3, 4, 5, 6 }, &.{2}, &.{ "When", "Then" });
+    try payload.checkCompiled(selected, .{ .bytes = try withoutGiven(a, twin, &.{ 1, 2 }), .rejection = .equal_items, .path = "/scenarios/0" });
+    try payload.checkCompiled(selected, .{ .bytes = try withoutGiven(a, twin, &.{1}) });
+    try payload.checkCompiled(selected, .{ .bytes = try withoutGiven(a, twin, &.{2}) });
+    try payload.checkCompiled(selected, .{ .bytes = try std.mem.replaceOwned(u8, a, try withoutGiven(a, exact, &.{2}), "\"when\":\"MOCK When 2.\",", ""), .rejection = .missing_required_property, .path = "/scenarios/1/when" });
     // A number no slot has is corrected with the integer it gave and the numbers the slots have.
     var foreign = try @import("domain/model_envelope.zig").parseContent(std.testing.allocator, try scenariosAnswer(a, &.{ 1, 2, 3, 4, 5, 7 }), null);
     defer foreign.deinit();
@@ -10006,7 +10139,7 @@ test "claim-bound scenarios: each answered number binds to its slot's claim and 
         try std.testing.expectEqual(@as(usize, 1), criterion.source_group_ids.len);
         try std.testing.expectEqual(room.signal.ordinal, criterion.source_group_ids[0].ordinal);
         // The scenario written for this number: each of its parts in its own field.
-        try expectScenarioText(a, criterion.content.acceptance_criterion.given, "Given", number);
+        try expectScenarioText(a, criterion.content.acceptance_criterion.given.?, "Given", number);
         try expectScenarioText(a, criterion.content.acceptance_criterion.when, "When", number);
         try expectScenarioText(a, criterion.content.acceptance_criterion.then, "Then", number);
     }
@@ -10019,6 +10152,24 @@ test "claim-bound scenarios: each answered number binds to its slot's claim and 
         try std.testing.expectEqual(@as(usize, 1), criterion.provenance.claim_ids.len);
         try std.testing.expectEqual(claim.ordinal, criterion.provenance.claim_ids[0].ordinal);
     }
+
+    // A scenario that omits its Given binds a criterion that holds none, and the unit's own validation admits it
+    // (ADR 0038 Decision 3). The typed duplicate rule reads an absent Given as a value of its own: equal content
+    // with both absent is equal, and with one stated it is not.
+    const bare = try request.parse(a, try withoutGiven(a, try scenariosAnswer(a, &.{ 1, 2, 3, 4, 5, 6 }), &.{ 2, 5 }), plan, room.bound);
+    for (bare, 1..) |criterion, number| {
+        try std.testing.expectEqual(number != 2 and number != 5, criterion.content.acceptance_criterion.given != null);
+        try expectScenarioText(a, criterion.content.acceptance_criterion.when, "When", number);
+        try expectScenarioText(a, criterion.content.acceptance_criterion.then, "Then", number);
+    }
+    const bare_admitted = try room.admitted(a, try std.mem.concat(a, spec.Model.RecordProposal, &.{ &.{requirement}, bare }));
+    try std.testing.expect(bare_admitted[2].content.acceptance_criterion.given == null);
+    try std.testing.expect(bare_admitted[1].content.acceptance_criterion.given != null);
+    const absent = bare_admitted[2].content;
+    var stated = absent;
+    stated.acceptance_criterion.given = bare_admitted[1].content.acceptance_criterion.given;
+    try std.testing.expect(try g.equalContent(a, absent, absent));
+    try std.testing.expect(!try g.equalContent(a, absent, stated));
 
     // The answer cannot name what the engine fixes, and answers each slot once.
     const exact = try scenariosAnswer(a, &.{ 1, 2, 3, 4, 5, 6 });
@@ -10529,6 +10680,31 @@ test "an edge case among three criteria of an unrelated domain prints the scenar
     const rendered = try @import("domain/specification_markdown.zig").render(a, try projection.project(a, fixture.context, test_directory, assigned.content));
     try std.testing.expect(std.mem.indexOf(u8, rendered, "- **THEN** The booking is declined.") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "- **THEN** The guest joins the waiting list.") == null);
+
+    // A criterion with no Given is offered without one, and an edge case that links to it prints its own given
+    // alone, where it prints the criterion's Given before its own for the others (ADR 0038 Decisions 3 and 7).
+    const bare_batch = [_]spec.Model.RecordProposal{
+        batch[0],
+        batch[1],
+        batch[2],
+        authoredRecord(.{ .acceptance_criterion = .{ .given = null, .when = booked.value, .then = waitlisted.value } }, booked),
+        batch[4],
+        batch[5],
+    };
+    const bare_current = try sessionWithBatches(a, &fixture, &.{&bare_batch});
+    const bare_plan = try request.planFor(a, bare_current);
+    try std.testing.expectEqualDeep(&[_]u32{ 2, 3, 4 }, bare_plan.pending[0].candidates);
+    const bare_offered = try request.packet(a, bare_current, fixture.context, 0);
+    defer packets.release(bare_offered);
+    const body = (try std.json.parseFromSlice(std.json.Value, a, bare_offered.body(), .{})).value.object;
+    const criteria = (body.get("acceptance_criteria") orelse return error.TestUnexpectedResult).array.items;
+    try std.testing.expectEqual(@as(usize, 3), criteria.len);
+    for (criteria, [_]bool{ true, false, true }) |entry, holds| try std.testing.expectEqual(holds, entry.object.contains("given"));
+    const bare_choice = try request.admit(a, bare_current, fixture.context, 0, bare_offered, "{\"criterion\":2}");
+    const bare_assigned = try sessions.assemble(a, text.validator, fixture.context, bare_current, try links.resolve(a, bare_plan, &.{bare_choice}));
+    const bare_rendered = try @import("domain/specification_markdown.zig").render(a, try projection.project(a, fixture.context, test_directory, bare_assigned.content));
+    try std.testing.expect(std.mem.indexOf(u8, bare_rendered, "**EC-001**\n- **GIVEN** The room is booked.\n- **WHEN** The room is booked.\n- **THEN** The guest joins the waiting list.\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bare_rendered, "- **AC-002**: **When** The room is booked. **Then** The guest joins the waiting list.") != null);
 }
 
 test "claim-bound scenarios: the session plans a group's slots from the batch its native deletes left" {
@@ -10718,6 +10894,87 @@ test "claim-bound scenarios: a text defect in a written criterion takes the fiel
     try std.testing.expect(done.record_batches[0].last_repair != null);
 }
 
+test "claim-bound scenarios: a criterion with no Given has none to repair, and a defect in its When repairs with the Given still absent" {
+    const sessions = @import("domain/specification_session.zig");
+    const request = @import("domain/scenario_request.zig");
+    const repair = @import("domain/specification_repair.zig");
+    const candidate = @import("domain/specification_candidate.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var room = try MeetingRoom.init(a);
+    defer room.fixture.deinit();
+    const context = room.fixture.context;
+    const batch = [_]spec.Model.RecordProposal{try room.record(a, .{ .functional_requirement = .{ .text = room.wording } }, room.group[0..2])};
+    const current = try sessionInScenarios(a, &room.fixture, try room.fixture.proposalAllGroups("MOCK Book a meeting room."), &.{&batch});
+    const group_plan = try sessions.scenarioPlan(a, current);
+    // The first criterion states a Given and the second states none (ADR 0038 Decision 3).
+    const criteria = try request.parse(a, try withoutGiven(a, try scenariosAnswer(a, &.{ 1, 2 }), &.{2}), group_plan, room.bound);
+    try std.testing.expect(criteria[0].content.acceptance_criterion.given != null);
+    try std.testing.expect(criteria[1].content.acceptance_criterion.given == null);
+    // An absent Given is no target: it holds no value to select, and a repair neither adds nor removes one. A
+    // held Given is selected and replaced as any other text field is.
+    const response: g.Response = .{ .content = .{ .records = criteria } };
+    const absent: candidate.Target = .{ .value = .{ .subject = .{ .record = 1 }, .field = .given } };
+    const held: candidate.Target = .{ .value = .{ .subject = .{ .record = 0 }, .field = .given } };
+    try std.testing.expectError(error.InvalidSpecificationRepair, candidate.select(response, absent));
+    try std.testing.expectError(error.InvalidSpecificationRepair, candidate.replace(a, response, absent, .{ .value = criteria[0].content.acceptance_criterion.given.? }));
+    try std.testing.expectEqualDeep(criteria[0].content.acceptance_criterion.given.?, (try candidate.select(response, held)).value);
+    // The second criterion's When breaks the text rule; its repair replaces the When and leaves the Given absent.
+    const written = try a.dupe(spec.Model.RecordProposal, criteria);
+    written[1].content.acceptance_criterion.when = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
+    var proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = written } } };
+    const rejection = (try validate_unit.execute(a, current, context, proposed)).invalid;
+    try std.testing.expectEqual(candidate.Rule.typed_text, rejection.issue.rule);
+    try std.testing.expect(rejection.issue.field == .target and rejection.issue.field.target == .value);
+    try std.testing.expectEqual(@as(usize, 1), rejection.issue.field.target.value.subject.record);
+    const authorization = try repair.authorize(a, current, context, proposed, rejection, &packet_guidance.marked);
+    try std.testing.expect(authorization.operation == .replace);
+    const replacement = (try room.fixture.proposalAllGroups("MOCK When again.")).value;
+    proposed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, context.inputs), current, context, proposed, authorization, .{ .value = replacement }, null);
+    const fixed = proposed.response.content.records[1];
+    try std.testing.expectEqualDeep(replacement, fixed.content.acceptance_criterion.when);
+    try std.testing.expect(fixed.content.acceptance_criterion.given == null);
+    try std.testing.expectEqualDeep(criteria[1].provenance, fixed.provenance);
+    try std.testing.expectEqualDeep(criteria[0], proposed.response.content.records[0]);
+    _ = (try validate_unit.execute(a, current, context, proposed)).valid;
+}
+
+test "claim-bound scenarios: a criterion with no Given reads back from stored state, and its values are the parts it holds" {
+    const sessions = @import("domain/specification_session.zig");
+    const request = @import("domain/scenario_request.zig");
+    const identity = @import("domain/specification_identity.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var room = try MeetingRoom.init(a);
+    defer room.fixture.deinit();
+    const context = room.fixture.context;
+    const batch = [_]spec.Model.RecordProposal{try room.record(a, .{ .functional_requirement = .{ .text = room.wording } }, room.group[0..2])};
+    const current = try sessionInScenarios(a, &room.fixture, try room.fixture.proposalAllGroups("MOCK Book a meeting room."), &.{&batch});
+    const group_plan = try sessions.scenarioPlan(a, current);
+    const supported = @import("domain/reference_support.zig").records(context.references);
+    // One criterion states a Given and the other states none (ADR 0038 Decision 3). The model's wire and the
+    // canonical content hold the same parts, and an absent Given is no value of either.
+    const written = try request.parse(a, try withoutGiven(a, try scenariosAnswer(a, &.{ 1, 2 }), &.{2}), group_plan, room.bound);
+    try std.testing.expectEqual(@as(usize, 3), (try provenance.recordValues(a, written[0].content)).len);
+    try std.testing.expectEqual(@as(usize, 2), (try provenance.recordValues(a, written[1].content)).len);
+    const canonical = try provenance.recognizeRecord(a, supported, written[1].content, null);
+    try std.testing.expect(canonical.acceptance_criterion.given == null);
+    try std.testing.expectEqual(@as(usize, 2), (try provenance.recordValues(a, canonical)).len);
+    try std.testing.expect(!provenance.hasUnreadableText(canonical));
+    // The batch the unit admits holds the criterion without a Given, and stored readback accepts it, with
+    // the lineage of the parts it holds.
+    const checked = (try g.validate(a, text.validator, context, .records, .{ .content = .{ .records = try std.mem.concat(a, spec.Model.RecordProposal, &.{ written, &batch }) } })).valid;
+    try std.testing.expect(checked.response.content.records[1].content.acceptance_criterion.given == null);
+    try std.testing.expectEqual(@as(usize, 1), (try provenance.storedRecordLineage(a, context.inputs, supported, checked.response.content.records[1])).effective_claim_ids.len);
+    const brief = current.units[0].?.response.content.brief;
+    const passive: @import("domain/passive_literals.zig").Captured = .{ .records = context.registry.records, .occurrences = context.registry.occurrences };
+    const stored = (try identity.assign(a, .{ .display_name = current.title, .primary_user_story = brief.description, .entities = current.units[2].?.response.content.entities.decision(), .records = checked.response.content.records }, .{}, &.{})).content;
+    try provenance.validateStored(a, context.inputs, passive, supported, brief, stored);
+    try std.testing.expect(stored.records[1].proposal.content.acceptance_criterion.given == null);
+}
+
 fn literalValue(a: std.mem.Allocator, bytes: []const u8) !spec.BusinessValue {
     return .{ .segments = try a.dupe(@import("domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = bytes } }}) };
 }
@@ -10876,7 +11133,7 @@ test "claim-bound scenarios: a pair that a field-level repair makes equal is no 
     try std.testing.expectEqual(Rule.typed_text, rejection.issue.rule);
     const authorization = try repair.authorize(a, current, context, proposed, rejection, &packet_guidance.marked);
     try std.testing.expect(authorization.operation == .replace);
-    proposed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, context.inputs), current, context, proposed, authorization, .{ .value = criteria[0].content.acceptance_criterion.given }, null);
+    proposed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, context.inputs), current, context, proposed, authorization, .{ .value = criteria[0].content.acceptance_criterion.given.? }, null);
     // The repaired pair is equal for two claims: equality a repair produces blocks like any competing
     // records, and no repair takes a block.
     const competing = (try validate_unit.execute(a, current, context, proposed)).invalid;

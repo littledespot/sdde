@@ -35,7 +35,8 @@ pub const Scenario = struct {
         .then = spec.textField(spec.scenario_family, "then"),
     };
     number: slots.SlotNumber,
-    given: spec.BusinessValue,
+    /// Omitted where the sources state no starting situation for the requirement.
+    given: ?spec.BusinessValue = null,
     when: spec.BusinessValue,
     then: spec.BusinessValue,
 };

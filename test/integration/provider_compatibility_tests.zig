@@ -16,6 +16,7 @@ const cases = [_][]const u8{
 };
 const Scenario = enum {
     complete,
+    prefix_normalized,
     empty_server_tool_usage_prefix,
     null_server_tool_usage,
     array_server_tool_usage,
@@ -64,6 +65,8 @@ fn body(a: std.mem.Allocator, scenario: Scenario) ![]const u8 {
         .schema_invalid => "{}",
         .malformed_candidate => "not JSON",
         .complete, .null_server_tool_usage, .array_server_tool_usage, .unknown_server_tool_usage, .unknown_usage, .cancelled, .partial_cancelled, .transport_failed, .partial_transport_failed, .missing_usage, .malformed_provider, .noncandidate_stop, .capture_failed => payload,
+        // The first of the three malformed openings in design §22.6, in front of a valid candidate.
+        .prefix_normalized => "{\"" ++ payload,
         .empty_server_tool_usage_prefix => unreachable,
     }, .{});
     const usage = switch (scenario) {
@@ -72,7 +75,7 @@ fn body(a: std.mem.Allocator, scenario: Scenario) ![]const u8 {
         .array_server_tool_usage => ",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12,\"serverToolUsage\":[]}",
         .unknown_server_tool_usage => ",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12,\"serverToolUsage\":{\"unknown\":0}}",
         .unknown_usage => ",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12,\"unknown\":0}",
-        .complete, .empty_server_tool_usage_prefix, .cancelled, .partial_cancelled, .transport_failed, .partial_transport_failed, .malformed_provider, .noncandidate_stop, .schema_invalid, .malformed_candidate, .capture_failed => ",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}",
+        .complete, .prefix_normalized, .empty_server_tool_usage_prefix, .cancelled, .partial_cancelled, .transport_failed, .partial_transport_failed, .malformed_provider, .noncandidate_stop, .schema_invalid, .malformed_candidate, .capture_failed => ",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}",
     };
     return std.fmt.allocPrint(
         a,
@@ -198,7 +201,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     try std.testing.expectEqual(@as(usize, 1), report.model_calls);
 
     const has_usage = switch (scenario) {
-        .complete, .empty_server_tool_usage_prefix, .noncandidate_stop, .schema_invalid, .malformed_candidate => true,
+        .complete, .prefix_normalized, .empty_server_tool_usage_prefix, .noncandidate_stop, .schema_invalid, .malformed_candidate => true,
         .null_server_tool_usage, .array_server_tool_usage, .unknown_server_tool_usage, .unknown_usage, .cancelled, .partial_cancelled, .transport_failed, .partial_transport_failed, .missing_usage, .malformed_provider, .capture_failed => false,
     };
     try std.testing.expectEqual(has_usage, report.usage_complete);
@@ -239,7 +242,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     const actual_response: ?[]const u8 = switch (scenario) {
         .cancelled, .transport_failed => null,
         .partial_cancelled, .partial_transport_failed => response_prefix,
-        .complete, .empty_server_tool_usage_prefix, .null_server_tool_usage, .array_server_tool_usage, .unknown_server_tool_usage, .unknown_usage, .missing_usage, .malformed_provider, .noncandidate_stop, .schema_invalid, .malformed_candidate => wire.inference_body,
+        .complete, .prefix_normalized, .empty_server_tool_usage_prefix, .null_server_tool_usage, .array_server_tool_usage, .unknown_server_tool_usage, .unknown_usage, .missing_usage, .malformed_provider, .noncandidate_stop, .schema_invalid, .malformed_candidate => wire.inference_body,
         .capture_failed => unreachable,
     };
     if (actual_response) |bytes| {
@@ -258,7 +261,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     defer environment.deinit();
     const assessed = try inspection.inspect(io, a, &environment, temporary.dir, "run", selected.workflow_id, probe, report);
     const expected_status: inspection.Status = switch (scenario) {
-        .complete => .compatible,
+        .complete, .prefix_normalized => .compatible,
         .empty_server_tool_usage_prefix, .schema_invalid, .malformed_candidate, .noncandidate_stop => .incompatible,
         .null_server_tool_usage, .array_server_tool_usage, .unknown_server_tool_usage, .unknown_usage, .cancelled, .partial_cancelled, .transport_failed, .partial_transport_failed, .missing_usage, .malformed_provider, .capture_failed => .inconclusive,
     };
@@ -300,6 +303,18 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
             try std.testing.expectEqualStrings(payload, assessed.validation.model_text.?);
             try std.testing.expect(std.mem.indexOf(u8, assessed.validation.model_text.?, "supplied reasoning") == null);
             try checkTampering(io, a, &environment, temporary.dir, run, selected.workflow_id, probe, report, readback.call);
+        },
+        .prefix_normalized => {
+            // A normalized opening in front of a schema-valid candidate stays compatible: the
+            // normalization is reported, the raw text is kept, and the parsed value is the candidate.
+            try std.testing.expectEqual(.valid, assessed.validation.extraction);
+            try std.testing.expectEqual(.valid, assessed.validation.json);
+            try std.testing.expectEqual(.valid, assessed.validation.schema);
+            try std.testing.expectEqual(.removed_leading_brace_quote, assessed.validation.normalization);
+            try std.testing.expectEqualStrings("{\"" ++ payload, assessed.validation.model_text.?);
+            try std.testing.expectEqualStrings("claims", assessed.validation.parsed.?.object.get("kind").?.string);
+            try std.testing.expectEqual(@as(usize, 0), assessed.validation.parsed.?.object.get("claims").?.array.items.len);
+            try std.testing.expect(assessed.reason == null);
         },
         .empty_server_tool_usage_prefix => {
             // The retained claims carry model wording, which ADR 0036 removed.
@@ -490,6 +505,10 @@ test "test.integration.provider_compatibility empty server tool metadata retains
     // This retained provider body exercises usage and prefix normalization only.
     // Its claims predate ADR 0036, so the current schema rejects them.
     for (cases) |case_path| try runScenario(case_path, .empty_server_tool_usage_prefix);
+}
+
+test "test.integration.provider_compatibility a normalized opening in front of a valid candidate is assessed compatible in unrelated domains" {
+    for (cases) |case_path| try runScenario(case_path, .prefix_normalized);
 }
 
 test "test.integration.provider_compatibility malformed server tool metadata and unknown usage retain precise rejection without token authority" {

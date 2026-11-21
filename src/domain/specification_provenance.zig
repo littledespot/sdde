@@ -155,7 +155,11 @@ pub fn effectiveClaims(a: std.mem.Allocator, selected: []const r.ClaimId, values
 pub fn recordValues(a: std.mem.Allocator, content: spec.Content(spec.BusinessValue)) Error![]const spec.BusinessValue {
     var values: std.ArrayList(spec.BusinessValue) = .empty;
     switch (content) {
-        inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| try values.append(a, @field(fields, field.name)),
+        inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+            if (comptime spec.mayOmit(field.type)) {
+                if (@field(fields, field.name)) |held| try values.append(a, held);
+            } else try values.append(a, @field(fields, field.name));
+        },
     }
     return values.toOwnedSlice(a);
 }
@@ -386,7 +390,9 @@ pub fn recognizeRecord(a: std.mem.Allocator, references: refs.Records, content: 
         inline else => |fields, kind| result: {
             var result = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                @field(result, field.name) = try recognizeValue(a, references, @field(fields, field.name), spec.textField(kind, field.name), fixed);
+                if (comptime spec.mayOmit(field.type)) {
+                    if (@field(fields, field.name)) |held| @field(result, field.name) = try recognizeValue(a, references, held, spec.textField(kind, field.name), fixed);
+                } else @field(result, field.name) = try recognizeValue(a, references, @field(fields, field.name), spec.textField(kind, field.name), fixed);
             }
             break :result @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), result);
         },
@@ -401,7 +407,9 @@ pub fn hasUnreadableText(content: spec.Content(spec.BusinessValue)) bool {
         inline else => |fields, kind| unreadable: {
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 if (comptime text.field_policy.get(spec.textField(kind, field.name)).exact_copy == .prohibited) continue;
-                if (unreadableValue(@field(fields, field.name))) break :unreadable true;
+                if (comptime spec.mayOmit(field.type)) {
+                    if (@field(fields, field.name)) |held| if (unreadableValue(held)) break :unreadable true;
+                } else if (unreadableValue(@field(fields, field.name))) break :unreadable true;
             }
             break :unreadable false;
         },
@@ -446,7 +454,9 @@ pub fn modelRecord(a: std.mem.Allocator, references: refs.Records, content: spec
         inline else => |fields, kind| result: {
             var projected = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                @field(projected, field.name) = try modelValue(a, references, @field(fields, field.name));
+                if (comptime spec.mayOmit(field.type)) {
+                    if (@field(fields, field.name)) |held| @field(projected, field.name) = try modelValue(a, references, held);
+                } else @field(projected, field.name) = try modelValue(a, references, @field(fields, field.name));
             }
             break :result @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), projected);
         },
@@ -583,7 +593,9 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
         };
         switch (record.proposal.content) {
             inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                try storedValue(a, inputs, passive, references, resolved, @field(fields, field.name), spec.textField(kind, field.name));
+                if (comptime spec.mayOmit(field.type)) {
+                    if (@field(fields, field.name)) |held| try storedValue(a, inputs, passive, references, resolved, held, spec.textField(kind, field.name));
+                } else try storedValue(a, inputs, passive, references, resolved, @field(fields, field.name), spec.textField(kind, field.name));
             },
         }
     }
@@ -666,7 +678,9 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
             var recognized_fields = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
-                @field(recognized_fields, field.name) = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), @field(fields, field.name), spec.textField(kind, field.name), inspection);
+                if (comptime spec.mayOmit(field.type)) {
+                    if (@field(fields, field.name)) |held| @field(recognized_fields, field.name) = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), held, spec.textField(kind, field.name), inspection);
+                } else @field(recognized_fields, field.name) = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), @field(fields, field.name), spec.textField(kind, field.name), inspection);
             }
             recognized_content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), recognized_fields);
         },
@@ -679,12 +693,17 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
             var normalized = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
-                @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, @field(fields, field.name), spec.textField(kind, field.name), inspection);
-                // The admitted text is judged last, so a defect the field's own policy names comes first.
-                if (bindingOf(recognized_content) == .claim_bound) if (try foreignCopy(refs.records(context.references), candidate.provenance.claim_ids, @field(normalized, field.name))) |node| {
-                    inspection.text_issue = .{ .reason = .foreign_exact, .first_node = node, .last_node = node, .field = spec.textField(kind, field.name) };
-                    return error.InvalidTypedText;
-                };
+                // An absent field holds no text to admit and no copy to judge.
+                const maybe: ?spec.BusinessValue = @field(fields, field.name);
+                if (maybe) |held| {
+                    const admitted = try valueIn(allocator, validator, context, resolved, held, spec.textField(kind, field.name), inspection);
+                    @field(normalized, field.name) = admitted;
+                    // The admitted text is judged last, so a defect the field's own policy names comes first.
+                    if (bindingOf(recognized_content) == .claim_bound) if (try foreignCopy(refs.records(context.references), candidate.provenance.claim_ids, admitted)) |node| {
+                        inspection.text_issue = .{ .reason = .foreign_exact, .first_node = node, .last_node = node, .field = spec.textField(kind, field.name) };
+                        return error.InvalidTypedText;
+                    };
+                }
             }
             result.content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), normalized);
         },

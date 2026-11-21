@@ -43,8 +43,8 @@ Link-derived `unsupported_addition`, counted apart ([Z_SPEC01](Z_SPEC01.md) T7):
 accuracy counts (§2 rule 6). **Ruling needed** (the user's): this revision doesn't count a generic Given such as
 "installed and available to run" or "with a known existing due date" as an unsupported addition, and the revision
 before it did (3 in the hello-world reference). It decides a score in 3 of the 5 publications of Q14's set
-(hello-world run 1 and both loan-renewal runs) without changing a pass. Q26's accuracy-defect count below
-rests on the earlier reading.
+(hello-world run 1 and both loan-renewal runs) without changing a pass. It would add a minor
+`unsupported_addition` to each of the three loan-renewal publications of Q26's set.
 
 **Retained runs:** `zig-out/e2e-spec/` holds the Haiku set (`2026-11-17T08-4*`), D8.4's set (`21-5*` and
 `22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`), Q24's set (`2026-11-18T06-5*`) and two
@@ -169,12 +169,7 @@ change except E7), **T** tests, **C** code-review findings (§10; unscheduled un
 otherwise). "Gap" means between measurement sets. Each screen
 batch and live set needs its own approval (AGENTS.md).
 
-**Output track** (rank order of the table; each item's screens and set follow the set order
-above, inside the decided constraints):
-
-| Rank | Item | Defect class reduced | Effort | Validation | Decided |
-| --- | --- | --- | --- | --- | --- |
-| 1 | **Q26** a Given only where the source states one | unsupported addition and ambiguity in a criterion's Given (all 3 accuracy defects and 5 ambiguities of the 20 November set) | M | Fixtures at the owners, screens of the scenarios call, then a set | Decided 20 November 2026 |
+**Output track:** no item awaits a screen or a set. Q26, the last, is kept; §4 holds its open parts.
 
 **Engine track, in gaps:** E3's feature logging waits on its preconditions (§5 E3); E7 last. E0 is on
 hold. **Tests:** T3 in any gap; T4 with E1–E4. **Adjudication:** the evaluate-e2e skill for every set.
@@ -242,7 +237,7 @@ line means beyond the advisory evaluate-e2e link check.
   later set can show a benefit only if the records call writes edge cases (§2 rule 6; evidence floor about ten).
   **Ruled** 21 November 2026 (user: "update the documentation with rhe recommendations"): the engine-printed
   first part of an edge case's `GIVEN` line, the copied criterion Given, isn't `restatement`; `evaluate-e2e`
-  SKILL.md states it. Q26 must define the `GIVEN` line for a criterion that has no Given.
+  SKILL.md states it. For a criterion with no Given the line is the edge case's own given alone (Q26).
 - **Late block, shown once** (`2026-11-15T07-50-08Z-f971…`, a Q17 run): the records call put claim 4
   ("A loan may be renewed only once.") only in an edge case, so no behaviour statement names it, it gets
   no slot and no criterion, and linking stops with `edge_case_without_criterion` (ADR 0038 Decisions 3
@@ -252,43 +247,26 @@ line means beyond the advisory evaluate-e2e link check.
 
 ### Q26. A Given only where the source states one
 
-**Decided** 20 November 2026 (user: "R1: YES", on the advisory R1 of the `2026-11-20T07-4*` and `07-5*`
-evaluations); unbuilt. **Defect:** unsupported addition and ambiguity in an acceptance criterion's Given.
-The scenarios request requires a Given even when a requirement states only a trigger: the response schema
-gives `given` `minLength` 1, its field rule says "Write nonblank prose", and the purpose names "a
-precondition, trigger and expected result". It also forbids invention and asks for "what its own wording
-presupposes" (`scenarios.prompt.md:4-5`). So the model repeats the trigger or invents a prerequisite:
+**Kept 22 November 2026** (user: "keep Q26, benefit not demonstrated"; record: [Z_SPEC01](Z_SPEC01.md) Q26).
+Open parts only:
 
-- hello-world AC-002 gives Given "has been started" and When "is started", and loan-renewal AC-005 gives
-  Given "has successfully renewed" and When "The renewal completes successfully";
-- hello-world AC-001 gives Given "installed and ready to be run", as in two runs of the 15 November sets.
-
-In that set, a modified build so indicative only (§2 rule 3), 5 criteria in 4 of 6 runs repeat one
-event as Given and When. All 3 accuracy defects are unsupported additions in a Given: "installed" once,
-and "due date is known" twice. Cause: likely. The request is read from call 10 of `07-47-57Z`; that an
-optional Given removes the choice is inferred.
-
-**Change:**
-- `given` is optional in the scenarios response and in the acceptance-criterion content, with its content
-  and state versions advanced. Its field guidance (`packet-guidance.json:21`) says it is omitted when the
-  sources state no starting situation. An edge case's own given (ADR 0038 Decision 7, built 21
-  November 2026) shares that guidance entry and stays required, so this change must give the entry a
-  text that suits both or key the two apart, and must define the edge case's `GIVEN` line (the
-  criterion's Given, the separator, then the own given) for a criterion that has no Given.
-- The prompt's presupposition sentence (`scenarios.prompt.md:3-5`) goes. Not adopted: restating the
-  Given's meaning in the prompt, which the request already carries from the field guidance (one owner).
-- A criterion without a Given renders "**When** … **Then** …".
-- It amends ADR 0038 Decision 3, 17-specify.md:174 and :511, 23-rendering.md:24 and :134, and F0100:1081.
-  The design text lands with the code.
-
-**Expected effect:** fewer Givens that repeat the trigger or add a prerequisite. Loan-renewal AC-003's
-"due date is known" sits beside a starting situation line 9 states, so only the removed sentence bears on
-it, unproven. **Risk:** a criterion drops a Given its source states, such as loan-renewal AC-001's
-eligibility conditions. Guards: lost source requirement and weakened obligation. **Not covered:** a Then
-that repeats its own Given (loan-renewal AC-001 in `07-49-33Z`).
-
-**Next:** `/preflight`, including how the equal-items correction and the duplicate rule compare an absent
-Given; then fixtures at the owners, screens of the scenarios call and a set (§2 rules 4 and 6).
+- **Shared `given` guidance:** the one sentence also reaches the repair request of a held Given, where only
+  `replace` is possible, and the records request for an edge case, whose `given` stays required; no Given was
+  repaired in the set. Keying the two entries apart (`packet-guidance/v8`) is the alternative, and the remedy if
+  the field rule's "Write nonblank prose" (`text_field_policy.zig:110`) causes the retained repeats (evaluator:
+  `prompt_conflict`, `likely`; 3 target events in 24 criteria, below the evidence floor). A prompt or contract
+  change is decided on both development cases with repeated runs (AGENTS.md). A second set on the same request bytes
+  (22 November 2026, build source `7880686f…`, 3 runs per case, all six published and passed, 98.81% for each case)
+  shows both sides: hello-world run 1 filled all 3 Givens with "No starting situation is stated in the sources."
+  (one minor `placeholder`, the same `prompt_conflict` reading, 96.43%) while runs 2 and 3 omitted every Given;
+  loan-renewal kept a Given on 15 of 15 criteria, 1 repeating its When and 5 generic preconditions (counted apart).
+  Across both sets, 4 events of Given repeating its When or a placeholder Given in 48 criteria: still below the floor.
+- **Not driven end to end:** `links.prompt.md` still says "its given and when cover that situation", and no
+  scripted integration scenario drives a Given-less criterion; the owner tests and `verify` cover it. No run has
+  written an edge case, so an edge case's `GIVEN` line for a Given-less criterion is unexercised live (Q14's
+  edge-case bullet).
+- **Generic Givens** ("…with an existing due date", 3 of 15 loan-renewal criteria in the set) wait on §1's
+  ruling needed.
 
 ## 5. Engine track (E)
 
@@ -300,7 +278,7 @@ landing between sets and under §2.12.
 
 On hold since 30 October 2026 (ADR 0041:3-4). Nothing under `src/` names `failure-output`,
 `spec_incomplete` or `run.incomplete_published`. To resume: implement ADR 0041 Decisions 1–8,
-taking `specification-state/v27` (ADR 0041 names v27 since 14 November 2026); align the measures
+taking `specification-state/v29` (ADR 0041 names it); align the measures
 (`test/harness/e2e/measures.zig:207`, test `:739-742`; e2e.md:682-683), design.md:208,
 24-workflow-state.md:78-83, F0100:1145 and `test/harness/e2e/contracts.zig:209-212` with
 Decision 7.1 (an `invalid` run stays `invalid` and may publish), and F0100:1139 with Decision
@@ -357,16 +335,14 @@ E1–E4. §10 C8 adds record-lifecycle gaps.
 
 ### T3. Coverage gaps (B5, B7)
 
-- The §22.6-normalized path has no compatible-assessment coverage: the only exchange that carries
-  the prefix is a retained live GPT-OSS capture of the claim shape ADR 0036 removed, so it is
-  assessed `incompatible` (`provider_compatibility_tests.zig:61`, `:262`, `:305-309`), while
-  `.complete` is assessed `compatible` (`:261`, `:412`). Covering it needs a current-shape GPT-OSS
-  exchange, from an approved `provider-compatibility` run, or a derived fixture that adds a scenario
-  to about eight switches; no slot selects that model now.
+- The retained live GPT-OSS capture, the only exchange with a real §22.6 prefix, has the claim shape ADR 0036
+  removed, so it is assessed `incompatible`. A derived exchange (`.prefix_normalized` in
+  `provider_compatibility_tests.zig`, the contract's first malformed opening in front of a schema-valid candidate) is
+  assessed `compatible`, which proves the harness classification only. A current-shape GPT-OSS capture needs an
+  approved `provider-compatibility` run; no slot selects that model now.
 - Proof limits recorded at implementation ([Z_SPEC01](Z_SPEC01.md)): no scripted scenario
-  quotes an exact copy, so D7.4's freeze doesn't reach its path; Q13's two-source citations
-  are covered at the codec, not the projection (the fixture reads one file); no scripted
-  statement record names both a taken and an untaken claim, so D16.2's partly taken record is
+  quotes an exact copy, so D7.4's freeze doesn't reach its path (requests never carry spans, and the owner has unit
+  tests); no scripted statement record names both a taken and an untaken claim, so D16.2's partly taken record is
   proven only at admission. The baseline generator gives every record the group's whole claim
   selection (`associateFixtureResponse`); only the story-restatement runs keep per-record claims
   (`own_claims`), in their first batch, so a partly taken record needs a per-group generator.
@@ -390,10 +366,12 @@ T5.3 `repeated_instructions`, T5.5 `model_or_case_branches`, T5.6 `model_text_ou
 T5.4 isn't in it. Each change set that a phase reports on
 retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>` with the
 freeze §2.10 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a `slot: repair`
-step whose prompt no non-repair step binds). Last taken 21 November 2026 on the build of Q14's re-measure
-set (`c22fa1f`, modified; freeze `evaluations/request-projection/q14-remeasure`, byte-identical to
-`coupling-final`): T5.1 10, T5.2 0 (tests 69), T5.3 8 at 17 sites, T5.4 7, T5.5 0 and T5.6 15 in 4 files.
-Each equals the 19 November count, so the 21 November engine batch moved none of them. Those counts, beside the
+step whose prompt no non-repair step binds). Last taken 22 November 2026 on the build of Q26's set (`ea69a53`,
+modified; freeze `evaluations/request-projection/q26-after`): T5.1 11, T5.2 0 (tests 69), T5.3 8 at 17 sites,
+T5.4 7, T5.5 0 and T5.6 15 in 4 files. T5.1 gained one single-word absence literal (`given`,
+`model_candidate_json_test.zig:504`); the 21 November engine batch moved none of them (freeze
+`evaluations/request-projection/q14-remeasure`, byte-identical to `coupling-final`: 10, 0, 8 at 17, 7, 0 and
+15 in 4 files, equal to 19 November's). Those counts, beside the
 ones taken 14 November 2026 after E5 (freeze `evaluations/request-projection/e5-final`) and 2 November 2026
 on the `b38628c` tree (freeze `evaluations/request-projection/b38628c`, 130 scenarios, 1,714 calls), are
 in [Z_SPEC01](Z_SPEC01.md) T5. No retake lies between 14 and 19 November, so each difference there is the
@@ -639,7 +617,9 @@ and `specification_support.zig` import each other. Breaking the first moves thos
   directory no longer fails recovery, and `rotation.maxSegments` counts the current binding's segments, which is
   the run's while a run has one binding.
 - **Unproven:** the cancel-within-a-slice path is tested at the timer with a fake clock and a flipping status
-  (`model_http_test.zig`) and at the adapter with `raise`; no test runs the harness's `invoke.run` under SIGINT.
+  (`model_http_test.zig`), at the adapter with `raise`, and through the harness's `invoke.run` with a real SIGINT
+  raised on a scripted call (Z_SPEC01 "Test-track closures"). Not proven: a Ctrl-C the kernel delivers to an arbitrary
+  thread, `Io.Threaded` sleeps retried on EINTR under the real HTTP adapter, and the CLI exit code.
 
 **C30. Typed machinery whose result is constant; what stays.** The general gate mechanism
 stays with no production gate, which Plan's predecessor gates need; nothing now registers `required_authority_gate`
@@ -656,8 +636,10 @@ Open:
 - The ledger owner block is written five times (`createInitial`, `createSuccessor` and
   `createLifecycleSuccessor` in `model_request_identity.zig`; `createInitial` and `apply` in
   `model_attempt_accounting.zig`), with the chain release and retain beside them. A shared helper takes the
-  payload type and each owner's reference-exhaustion error, and needs an allocation-failure test for the two
-  owners first: only the lifecycle owner has one.
+  payload type and each owner's reference-exhaustion error. Both owners have an allocation-failure sweep
+  (`model_request_identity_test.zig` `ledgerAllocationCase`, `model_attempt_accounting_test.zig`
+  `accountingAllocationCase`); `retainOwner`'s exhaustion branches are not allocation failures, and no public seam
+  reaches them.
 
 Closed 21 November 2026 (user: "update the documentation with rhe recommendations"): the engine-config reader
 keeps F0001:162-167's limit and size-drift checks and gains no re-stat, identity or path re-binding, which
@@ -698,37 +680,34 @@ pass where it is read.
 ### 10.6 Tests and harness
 
 **C41. The scripted driver is also the oracle (adds to E8).** A failed assertion in one of its step hooks
-is a panic: `src/test_fixtures/spec_generation_driver.zig` has 104 `catch unreachable` lines. Its
-`isRoute` and `isSourceMerge` gates use typed IDs, which break the build when renamed, but nothing checks
-that the graph still binds those owners.
+is a panic: `src/test_fixtures/spec_generation_driver.zig` has 98 `catch unreachable` lines. Its merge gates are a
+`merge_routes` table of typed (operation, owner) pairs, and the `gates_bound` block fails the scenario with
+`GatedRouteNotInGraph` when the compiled graph binds none of one (Z_SPEC01 "Test-track closures").
 
-**C42. The scripted matrix still runs a hand copy of `Runtime.init`'s wiring** (`workflow_tests.zig:1095`,
-`:1699`, `:3703`, `:3774`, against `composition/root.zig:59`). One offline run now reaches publication
-through `root.Runtime` and the harness's `invoke.run`, with only the transport scripted
-(`test/harness/integration/tests.zig`, "an offline Spec run reaches publication…"; the answers come from
-`spec_generation_responses.build`, and `invoke.Options.runner_view` is its test-only seam). It is the happy
-path of hello-world on the Claude slot. No fault scenario, no second case and no Bedrock slot runs through
-the production composition, so a wiring drift that only a fault path reads still passes the matrix.
+**C42. The scripted matrix still runs a hand copy of `Runtime.init`'s wiring** (`workflow_tests.zig:1061`,
+`:1758`, `:3705`, `:3776`, against `composition/root.zig:65`). Offline runs reach publication, a repaired
+publication and a retry-limit failure through `root.Runtime` and the harness's `invoke.run` for both development
+cases, with only the transport scripted (`test/harness/integration/tests.zig`; the answers come from
+`spec_generation_responses.build`, and `invoke.Options.runner_view` is its test-only seam). No Bedrock slot runs
+through the production composition, and the matrix's other fault paths still run the hand copy, so a wiring drift
+that only one of those reads still passes.
 
-**C45. Hand counts in the sequence fixtures, still open.** `summary_protocol_sequence.zig:70-90` and
-`global_protocol_sequence.zig:72-91` script a scenario for retry limit 2, so their call positions and attempt
-ordinals follow from it, and deriving the limit needs the compiled step's id, a string.
+**C45. Typed limits beyond the sequence fixtures, still open.** The summary, global and disposition sequences derive
+their calls from the compiled step's allowance. The scenarios-step exhaustion (`workflow_tests.zig:2041-2042`) and
+the disposition sequence's fixed calls before its exhausted request (extraction content 2, classification 1) still
+type values that follow from the limit.
 
-**C47. Registration and leftovers.**
+**C47. Leftovers.**
 
-- A `*_test.zig` runs only if `tests.zig`, `src/root.zig` or `src/runtime_tests.zig` imports it.
-  Nothing checks reachability: `test-build-registration` checks test executables on a synthetic
-  graph (traced).
 - Tests write outputs that no test or build step reads: a step trace for every scenario
-  (`workflow_tests.zig:1353`; Z_SPEC01 uses it as structural-equivalence evidence) and calibration
+  (`writeStepTrace`, `workflow_tests.zig:1291`; Z_SPEC01 uses it as structural-equivalence evidence) and calibration
   reports under `.zig-cache/` (`authoring-comparison`,
   `representation-admission`, `semantic-simplicity/phase0`; versioned report schemas, written and
   read back inside their own suites). **Kept** (user, 20 November 2026): the trace is the proof that
   a refactor leaves the executed steps unchanged, and the calibration suites replay retained
   captures.
-- **Not yet checked, same pattern:** `source_loss_calibration.zig:203-225` consumes receipts against
-  `handoff.parent.json`, and no code reads the `record-authoring`, `signal-grouping`, `summary-coverage` and
-  `entity-applicability` calibration material.
+- `source_loss_calibration.zig` consumes a review receipt only when one exists (none does), and its admission gate
+  has accepted and rejected tests: a live-trial slot, **kept**.
 
 ### 10.7 Unconfirmed readings
 

@@ -333,7 +333,9 @@ pub const Tracker = struct {
     fn auditRecords(self: *Tracker, sequence: usize, after_call: usize, checked: generation.Checked, record_offset: usize, proposals: []const specification.RecordProposal) !void {
         for (proposals, 0..) |record, index| switch (record.content) {
             inline else => |fields, kind| inline for (std.meta.fields(@TypeOf(fields))) |field| {
-                try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = @unionInit(candidate.ValueField, field.name, {}) } } }, specification.textField(kind, field.name), @field(fields, field.name));
+                // An absent value is neither admitted nor audited.
+                const held: ?specification.BusinessValue = @field(fields, field.name);
+                if (held) |value| try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = @unionInit(candidate.ValueField, field.name, {}) } } }, specification.textField(kind, field.name), value);
             },
         };
     }
@@ -737,6 +739,24 @@ test "native audit retains distinct equal record fields but deduplicates their a
     try tracker.unit(4, 2, assembled, 0);
     try std.testing.expectEqual(@as(usize, 3), tracker.checks.items.len);
     try validate(a, tracker.snapshot(true), &.{ .{ .call = 1, .origin = testOrigin(1), .usage = null }, .{ .call = 2, .origin = testOrigin(2), .usage = null } });
+}
+
+test "native audit observes the parts an acceptance criterion holds, and none for an absent Given" {
+    const a = std.testing.allocator;
+    var tracker: Tracker = .init(a);
+    defer tracker.deinit();
+    const nodes = [_]text.BusinessSegment{.{ .literal = .{ .value = "The borrower asks to renew the loan." } }};
+    const value: specification.BusinessValue = .{ .segments = &nodes };
+    const provenance: specification.Provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} };
+    const records = [_]specification.RecordProposal{
+        .{ .content = .{ .acceptance_criterion = .{ .given = null, .when = value, .then = value } }, .source_group_ids = &.{}, .provenance = provenance },
+        .{ .content = .{ .acceptance_criterion = .{ .given = value, .when = value, .then = value } }, .source_group_ids = &.{}, .provenance = provenance },
+    };
+    const batch: generation.Checked = .{ .unit = .records, .origins = .{ .initial = testOrigin(1) }, .response = .{ .content = .{ .records = &records } } };
+    try tracker.unit(1, 1, batch, 0);
+    // The criterion without a Given offers its When and Then to the audit; the one with a Given offers all three.
+    try std.testing.expectEqual(@as(usize, 5), tracker.checks.items.len);
+    for ([_]policy.Field{ .ac_when, .ac_then, .ac_given, .ac_when, .ac_then }, tracker.checks.items) |expected, observed| try std.testing.expectEqual(expected, observed.field);
 }
 
 test "audit binds Subject and value kind to the native field policy instead of trusting labels" {

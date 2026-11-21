@@ -140,9 +140,12 @@ Each generation request contains only what the current unit needs:
     owner declares the count native only where a decision requires the request
     itself to stay unchanged; otherwise the count is stated;
   - a repeated member rejects natively as `duplicate_member`;
-  - an owner may declare a `distinct` rule, a list of other item properties, each required in
-    every item variant and none the key: items that return equal values for every listed
-    property, compared as the response returned them, reject natively as `equal_items`,
+  - an owner may declare a `distinct` rule, a list of other item properties, each declared in
+    every item variant, required or not, and none the key: items that return equal values for
+    every listed property, compared as the response returned them, reject natively as
+    `equal_items`. A property an item omits is a value of its own: two items that both omit it
+    agree on it, and an item that omits it differs from one that returns it (the scenarios
+    response's optional `given`, ADR 0038 Decision 3). The rejection is
     located at the first item of the first equal set, after `duplicate_member` and
     `missing_member`. The rule governs one array; equality across arrays is not admission's
     (ADR 0038 Decision 3);

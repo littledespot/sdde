@@ -41,17 +41,18 @@ pub const Interrupt = struct {
     pub fn runtime(_: *const Interrupt) pipeline.NodeRuntime {
         return .{ .status_fn = status };
     }
+
+    /// Clears the flag between tests, including tests outside this file that raise a real interrupt through the
+    /// composition; a production process never clears it.
+    pub fn resetForTest() void {
+        if (!builtin.is_test) @compileError("test-only interrupt reset");
+        requested.store(false, .release);
+    }
 };
 
-/// Clears the flag between tests; a production process never clears it.
-fn resetForTest() void {
-    if (!builtin.is_test) @compileError("test-only interrupt reset");
-    requested.store(false, .release);
-}
-
 test "an interrupt cancels the run once, then the default action returns, and restore reinstates the prior one" {
-    resetForTest();
-    defer resetForTest();
+    Interrupt.resetForTest();
+    defer Interrupt.resetForTest();
     var interrupt = Interrupt.install();
     const runtime = interrupt.runtime();
     try std.testing.expectEqual(pipeline.RuntimeStatus.active, runtime.status());

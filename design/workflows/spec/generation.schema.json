@@ -189,7 +189,6 @@
       },
       "required": [
         "kind",
-        "given",
         "when",
         "then"
       ],
@@ -420,7 +419,6 @@
       },
       "required": [
         "number",
-        "given",
         "when",
         "then"
       ],

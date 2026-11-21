@@ -412,8 +412,10 @@ Tests verify schema validity, detection ambiguity, roots, extensions, naming, pl
 - Markdown escaping and code-fence safety;
 - exact token/copy preservation;
 - fixed heading order;
-- exact compact `Given`/`When`/`Then` acceptance-criterion rendering and
-  parser rejection of unlabeled, free-form, wrong-case, missing,
+- exact compact `Given`/`When`/`Then` acceptance-criterion rendering, the `When`/`Then`
+  pair of a criterion with no Given, and
+  parser rejection of unlabeled, free-form, wrong-case, missing (a missing `When` or `Then`,
+  or a `Given` label with no text),
   duplicate, additional, and reordered criterion fields;
 - correct engine-derived checklist/progress state;
 - no `tasks.md` during plan;

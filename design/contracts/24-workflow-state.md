@@ -27,15 +27,16 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v27,
+`specification-state` contract (currently v28,
 [ADR 0015](../decisions/0015-specification-principle-review.md),
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md),
-[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7 and
-[ADR 0048](../decisions/0048-engine-derived-specification-title.md); v28 is
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 3 and 7 and
+[ADR 0048](../decisions/0048-engine-derived-specification-title.md); v29 is
 reserved for the `spec_incomplete` variant of
 [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
-since 30 October 2026, not implemented) over canonical `specification/v7` content, in which
-an edge case holds its own `given` and the ID of the acceptance criterion it links to, and
+since 30 October 2026, not implemented) over canonical `specification/v8` content, in which
+an acceptance criterion holds a `given` only where its sources state a starting situation
+(ADR 0038 Decision 3), an edge case holds its own `given` and the ID of the acceptance criterion it links to, and
 readback checks the link against the candidate rule of ADR 0038 Decision 7, and the display name is native text
 that readback derives again from the captured sources (ADR 0048);
 stage discriminators distinguish the variants. Earlier versions reject without

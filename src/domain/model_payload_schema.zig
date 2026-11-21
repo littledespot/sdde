@@ -66,16 +66,18 @@ fn sameValue(left: envelope.Value, right: envelope.Value) bool {
 }
 
 /// Whether items `left` and `right` return the same value for every property `members.distinct` lists
-/// (ADR 0038 Decision 3). An item without a listed property equals no other. A correction finds every
-/// equal set by asking this of each pair.
+/// (ADR 0038 Decision 3). A property an item omits is a value of its own: two items that both omit it agree
+/// on it, and an item that omits it differs from one that returns it. A correction finds every equal set by
+/// asking this of each pair.
 pub fn equalItems(items: *const envelope.Array, members: schema.Members, left: usize, right: usize) bool {
     const first = items.at(left).?;
     const second = items.at(right).?;
     if (members.distinct.len == 0 or first != .object or second != .object) return false;
     for (members.distinct) |name| {
-        const one = first.object.get(name) orelse return false;
-        const other = second.object.get(name) orelse return false;
-        if (!sameValue(one, other)) return false;
+        const one = first.object.get(name);
+        const other = second.object.get(name);
+        if ((one == null) != (other == null)) return false;
+        if (one != null and !sameValue(one.?, other.?)) return false;
     }
     return true;
 }

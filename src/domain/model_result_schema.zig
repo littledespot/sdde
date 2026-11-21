@@ -108,8 +108,8 @@ pub const IntegerChoice = struct {
     /// `native` keeps the canonical bounds; admission alone enforces the members.
     member_count: enum { stated, native } = .stated,
     /// With `exact_members`, the other properties of the array's items whose values, taken together,
-    /// no two items may all repeat (ADR 0038 Decision 3). Each is a required property of every item
-    /// variant and none is the member key. Empty states no rule.
+    /// no two items may all repeat (ADR 0038 Decision 3). Each is a declared property of every item
+    /// variant, required or not, and none is the member key. Empty states no rule.
     distinct: []const []const u8 = &.{},
     /// With a `unique_subset` selector on `<array>/items/<property>`, native
     /// cross-item coverage over that array.
@@ -453,8 +453,9 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
             };
             if (collection == .exact_members and selected.matched and next == .path and next.path.len == 1 and next.path[0] == .property) {
                 if (!requiredIntegerKey(items.items, next.path[0].property)) return invalid();
-                // A compared property is one every item has, or the rule could never compare it.
-                for (distinct) |name| if (!requiredProperty(items.items, name)) return invalid();
+                // A compared property is one every item variant declares, whether or not it must return it: an
+                // omitted property is a value the comparison knows.
+                for (distinct) |name| if (!declaredProperty(items.items, name)) return invalid();
                 const values = allowed orelse return invalid();
                 const count = std.math.cast(u32, values.len) orelse return invalid();
                 if (count < items.minimum or count > items.maximum or items.members != null) return invalid();
@@ -541,12 +542,12 @@ fn requiredIntegerKey(node: *const Node, name: []const u8) bool {
         else => false,
     };
 }
-/// A property every item variant requires, of whatever type.
-fn requiredProperty(node: *const Node, name: []const u8) bool {
+/// A property every item variant declares, required or not, of whatever type.
+fn declaredProperty(node: *const Node, name: []const u8) bool {
     return switch (node.*) {
-        .object => |properties| if (findProperty(properties, name)) |property| property.required else false,
+        .object => |properties| findProperty(properties, name) != null,
         .one_of => |variants| for (variants) |variant| {
-            if (!requiredProperty(variant, name)) break false;
+            if (!declaredProperty(variant, name)) break false;
         } else variants.len != 0,
         else => false,
     };

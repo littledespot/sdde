@@ -7,7 +7,7 @@
     "entities": "The disposition states whether required behavior needs business entities. The basis explains which requirements support that decision and why. not_applicable means entity records are unnecessary; all other behavioral requirements remain in force. Displayed values alone do not establish entities, and an explicit declaration of absence is unnecessary."
   },
   "record_families": {
-    "acceptance_criterion": "An observable pass/fail flow with a precondition, trigger and expected result.",
+    "acceptance_criterion": "An observable pass/fail flow with a trigger and expected result.",
     "user_visible_outcome": "A result, confirmation or response directly observable by the user.",
     "edge_case": "A boundary or exceptional condition.",
     "functional_requirement": "Required application behavior, preserving its trigger and conditions.",
@@ -18,7 +18,7 @@
     "entity": "A business data concept."
   },
   "record_fields": {
-    "given": "The starting situation before the trigger, without assuming the result being tested or inventing prerequisites.",
+    "given": "The starting situation before the trigger, without assuming the result being tested or inventing prerequisites. An acceptance criterion whose sources state no starting situation has none.",
     "when": "The action or event that triggers the behavior.",
     "then": "The observable consequences after the trigger, including the obligations being tested.",
     "name": "The business entity's name."

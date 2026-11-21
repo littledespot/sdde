@@ -225,7 +225,9 @@ fn valueAccess(content: *g.spec.Content(g.spec.BusinessValue), selected: ValueFi
     switch (content.*) {
         inline else => |*fields| inline for (@typeInfo(@TypeOf(fields.*)).@"struct".fields) |field| {
             if (std.meta.activeTag(selected) == @field(std.meta.Tag(ValueField), field.name)) {
-                const old = @field(fields, field.name);
+                // An absent field holds no value to repair, and a repair never removes one: only a held value is a
+                // target, and its repair replaces it.
+                const old = if (comptime g.spec.mayOmit(field.type)) (@field(fields, field.name) orelse return error.InvalidSpecificationRepair) else @field(fields, field.name);
                 if (replacement) |value| @field(fields, field.name) = value;
                 return old;
             }

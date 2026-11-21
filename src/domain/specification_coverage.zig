@@ -117,7 +117,9 @@ fn copies(value: spec.BusinessValue, field: text.field_policy.Field, claim_id: r
 fn recordCopies(content: spec.Content(spec.BusinessValue), claim_id: r.ClaimId) bool {
     switch (content) {
         inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-            if (copies(@field(fields, field.name), spec.textField(kind, field.name), claim_id)) return true;
+            // An absent field copies nothing.
+            const held: ?spec.BusinessValue = @field(fields, field.name);
+            if (held) |value| if (copies(value, spec.textField(kind, field.name), claim_id)) return true;
         },
     }
     return false;

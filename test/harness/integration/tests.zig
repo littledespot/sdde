@@ -2471,6 +2471,10 @@ const ScriptedWire = struct {
     foreign_targets: usize = 0,
     /// The first request the scripted answers could not be built for; the exchange then fails.
     failure: ?anyerror = null,
+    /// The builder's fault shape; the attempt is read from the ledger as each request is answered.
+    options: @import("../../../src/test_fixtures/spec_generation_responses.zig").Options = .{},
+    /// Raises the operator's interrupt (a real SIGINT) while this request is in flight, then answers it.
+    interrupt_on_call: ?usize = null,
 
     fn port(self: *ScriptedWire) provider_transport.Port {
         return .{ .context = @ptrCast(self), .exchange_fn = exchange };
@@ -2480,6 +2484,10 @@ const ScriptedWire = struct {
         const self: *ScriptedWire = @ptrCast(@alignCast(context));
         self.calls += 1;
         if (request.target != .anthropic) self.foreign_targets += 1;
+        if (self.interrupt_on_call == self.calls) std.posix.raise(.INT) catch |err| {
+            if (self.failure == null) self.failure = err;
+            return error.Cancelled;
+        };
         var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer scratch.deinit();
         const scripted = self.answer(scratch.allocator()) catch |err| {
@@ -2494,40 +2502,191 @@ const ScriptedWire = struct {
         const runner = if (slot.*) |*prepared| prepared else return error.RunnerNotPrepared;
         const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
         const attempt = @import("../../../src/domain/model_attempt_accounting.zig").latestAttempt(runner.model_accounting.?.attempts).ordinal().value;
-        return @import("../../../src/test_fixtures/spec_generation_responses.zig").build(allocator, view, .{ .attempt = attempt });
+        var options = self.options;
+        options.attempt = attempt;
+        return @import("../../../src/test_fixtures/spec_generation_responses.zig").build(allocator, view, options);
     }
 };
 
-test "an offline Spec run reaches publication through the production composition and the harness oracle" {
+/// One offline Spec run through the harness's `invoke.run` and the production composition, with only the
+/// transport scripted. It owns the materialized project and the evidence directory the run writes.
+const OfflineRun = struct {
+    arena: std.heap.ArenaAllocator,
+    project: std.testing.TmpDir,
+    evidence: std.testing.TmpDir,
+    choice: c.Case,
+    captured: fixture.Capture,
+    report: c.Report,
+    specification: ?[]const u8,
+
+    const hello_world = @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json");
+    const loan_renewal = @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json");
+    const credential = "offline-anthropic-credential";
+
+    fn init(self: *OfflineRun, io: std.Io, case_bytes: []const u8) !void {
+        self.arena = .init(std.testing.allocator);
+        errdefer self.arena.deinit();
+        const a = self.arena.allocator();
+        self.choice = try c.parse(a, case_bytes);
+        self.captured = try fixture.capture(io, a, .cwd(), self.choice);
+        self.project = std.testing.tmpDir(.{});
+        errdefer self.project.cleanup();
+        try materializeQuiet(io, self.project.dir, self.captured);
+        self.evidence = std.testing.tmpDir(.{});
+        self.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+        self.specification = null;
+    }
+
+    fn deinit(self: *OfflineRun) void {
+        self.evidence.cleanup();
+        self.project.cleanup();
+        self.arena.deinit();
+    }
+
+    /// Runs the case. Every request must reach the configured provider and be answered, and the report counts
+    /// each one.
+    fn execute(self: *OfflineRun, io: std.Io, wire: *ScriptedWire) !void {
+        const a = self.arena.allocator();
+        var keys: @import("../environment.zig").GenerationKeys = .initFill(null);
+        keys.set(.anthropic, credential);
+        const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = self.evidence.dir, .secrets = &.{credential} };
+        self.specification = try @import("../e2e/invoke.zig").run(io, a, self.project.dir, self.choice, self.captured, keys, store, &self.report, .{ .purpose = .whole_workflow, .transport = wire.port(), .runner_view = &wire.runner });
+        if (wire.failure) |failure| std.debug.print("scripted answer unavailable: {s}\n", .{@errorName(failure)});
+        try std.testing.expect(wire.failure == null);
+        try std.testing.expect(wire.calls > 0);
+        try std.testing.expectEqual(@as(usize, 0), wire.foreign_targets);
+        try std.testing.expectEqual(@as(?usize, wire.calls), self.report.last_model_call);
+    }
+
+    /// Neither the specification nor the workflow state exists, and the harness read none.
+    fn expectNothingPublished(self: *OfflineRun, io: std.Io) !void {
+        const a = self.arena.allocator();
+        var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, self.captured.config);
+        defer config.deinit();
+        const paths = config.value().paths;
+        try std.testing.expect(self.specification == null);
+        try std.testing.expect(self.report.specification == null);
+        try std.testing.expectEqual(.not_run, self.report.publication_check);
+        for ([_][]const u8{
+            try std.fs.path.join(a, &.{ paths.specs, self.choice.feature, artifacts.specification_filename }),
+            try std.fs.path.join(a, &.{ paths.workflows, "features", self.choice.feature, "state", artifacts.workflow_state_filename }),
+        }) |path| try std.testing.expectError(error.FileNotFound, self.project.dir.access(io, path, .{}));
+    }
+
+    /// The production feature log's rows that end a run: a published run logs `publication.prepared` as its
+    /// finalizer's reason, and a run that ends otherwise logs its own terminal row.
+    fn terminalRows(self: *OfflineRun, io: std.Io) !struct { published: usize, failed: usize, cancelled: usize } {
+        const a = self.arena.allocator();
+        return .{
+            .published = try featureLogRows(io, a, self.project.dir, "|publication.prepared|", "|"),
+            .failed = try featureLogRows(io, a, self.project.dir, "|run.failed|", "|"),
+            .cancelled = try featureLogRows(io, a, self.project.dir, "|run.cancelled|", "|"),
+        };
+    }
+};
+
+test "an offline Spec run of each development case reaches publication through the production composition and the harness oracle" {
     const io = std.testing.io;
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
-    const captured = try fixture.capture(io, a, .cwd(), choice);
-    var project = std.testing.tmpDir(.{});
-    defer project.cleanup();
-    try materializeQuiet(io, project.dir, captured);
-    var wire: ScriptedWire = .{};
-    var keys: @import("../environment.zig").GenerationKeys = .initFill(null);
-    keys.set(.anthropic, "offline-anthropic-credential");
-    var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
-    var evidence_run = std.testing.tmpDir(.{});
-    defer evidence_run.cleanup();
-    const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{"offline-anthropic-credential"} };
-    const specification = try @import("../e2e/invoke.zig").run(io, a, project.dir, choice, captured, keys, store, &report, .{ .purpose = .whole_workflow, .transport = wire.port(), .runner_view = &wire.runner });
-    if (wire.failure) |failure| std.debug.print("scripted answer unavailable: {s}\n", .{@errorName(failure)});
-    try std.testing.expect(wire.failure == null);
-    // Every request went to the configured provider, and the report counts each one.
-    try std.testing.expect(wire.calls > 0);
-    try std.testing.expectEqual(@as(usize, 0), wire.foreign_targets);
-    try std.testing.expectEqual(@as(?usize, wire.calls), report.last_model_call);
-    // The harness's success path: the workflow completed, published, and the oracle found every expected file.
-    try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .ok), report.workflow_outcome);
-    try std.testing.expectEqual(c.Status.generated, report.status);
-    try std.testing.expectEqual(.passed, report.publication_check);
-    try std.testing.expect(report.missing_artifact == null);
-    try std.testing.expect(specification != null and specification.?.len != 0);
+    // The control of the interrupt test below: no interrupt is raised, so the flag the other tests clear stays clear.
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    for ([_][]const u8{ OfflineRun.hello_world, OfflineRun.loan_renewal }) |case_bytes| {
+        var offline: OfflineRun = undefined;
+        try offline.init(io, case_bytes);
+        defer offline.deinit();
+        var wire: ScriptedWire = .{};
+        errdefer std.debug.print("offline run of {s}\n", .{offline.choice.id});
+        try offline.execute(io, &wire);
+        // The harness's success path: the workflow completed, published, and the oracle found every expected file.
+        try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .ok), offline.report.workflow_outcome);
+        try std.testing.expectEqual(c.Status.generated, offline.report.status);
+        try std.testing.expectEqual(.passed, offline.report.publication_check);
+        try std.testing.expect(offline.report.missing_artifact == null);
+        try std.testing.expect(offline.specification != null and offline.specification.?.len != 0);
+        try std.testing.expect(offline.report.specification != null and std.mem.indexOf(u8, offline.report.specification.?, offline.choice.feature) != null);
+        const rows = try offline.terminalRows(io);
+        try std.testing.expectEqual(@as(usize, 1), rows.published);
+        try std.testing.expectEqual(@as(usize, 0), rows.failed + rows.cancelled);
+    }
+}
+
+test "an operator interrupt raised while a request is in flight cancels the harness run and publishes nothing" {
+    const io = std.testing.io;
+    const Interrupt = @import("../../../src/composition/root.zig").Interrupt;
+    // The raised interrupt sets a process-wide flag the production code never clears; clear it before the run and
+    // after it, so no other run in this binary starts cancelled.
+    Interrupt.resetForTest();
+    defer Interrupt.resetForTest();
+    for ([_]struct { []const u8, usize }{
+        .{ OfflineRun.hello_world, 1 },
+        .{ OfflineRun.loan_renewal, 3 },
+    }) |case| {
+        var before: std.posix.Sigaction = undefined;
+        std.posix.sigaction(.INT, null, &before);
+        var offline: OfflineRun = undefined;
+        try offline.init(io, case[0]);
+        defer offline.deinit();
+        var wire: ScriptedWire = .{ .interrupt_on_call = case[1] };
+        errdefer std.debug.print("interrupted run of {s} on call {d}\n", .{ offline.choice.id, case[1] });
+        try offline.execute(io, &wire);
+        // The request in flight finished, and the run stopped at its next boundary: it sent no request after it.
+        try std.testing.expectEqual(case[1], wire.calls);
+        try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .cancelled), offline.report.workflow_outcome);
+        try std.testing.expectEqual(c.Status.workflow_cancelled, offline.report.status);
+        try offline.expectNothingPublished(io);
+        // Cancelled stays distinct from failed and completed in the production feature log.
+        const rows = try offline.terminalRows(io);
+        try std.testing.expectEqual(@as(usize, 1), rows.cancelled);
+        try std.testing.expectEqual(@as(usize, 0), rows.failed + rows.published);
+        // `invoke.run` restored the disposition it replaced, though the one-shot handler had already reset it.
+        var after: std.posix.Sigaction = undefined;
+        std.posix.sigaction(.INT, null, &after);
+        try std.testing.expect(after.handler.handler == before.handler.handler);
+        Interrupt.resetForTest();
+    }
+}
+
+test "an answer repaired once publishes, and a repair that never converges fails the run through the production composition without publishing" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const responses = @import("../../../src/test_fixtures/spec_generation_responses.zig");
+    const OutcomeTag = @import("../../../src/domain/workflow.zig").OutcomeTag;
+    for ([_]struct { responses.Options, OutcomeTag }{
+        .{ .{ .repair = true }, .ok },
+        .{ .{ .repair = true, .failed_repair = true, .repeated_provenance_fault = true }, .failed },
+    }) |row| {
+        var offline: OfflineRun = undefined;
+        try offline.init(io, OfflineRun.hello_world);
+        defer offline.deinit();
+        var wire: ScriptedWire = .{ .options = row[0] };
+        errdefer std.debug.print("repair run expecting {s}\n", .{@tagName(row[1])});
+        try offline.execute(io, &wire);
+        try std.testing.expectEqual(@as(?OutcomeTag, row[1]), offline.report.workflow_outcome);
+        const rows = try offline.terminalRows(io);
+        try std.testing.expectEqual(@as(usize, 0), rows.cancelled);
+        // Both runs repaired one specification unit through the repair slot.
+        var repairs: usize = 0;
+        for (offline.report.attempts) |attempt| {
+            if (attempt.purpose == .atomic_repair and attempt.owner_kind == .specification_unit) repairs += 1;
+        }
+        try std.testing.expect(repairs >= 1);
+        if (row[1] == .ok) {
+            try std.testing.expectEqual(c.Status.generated, offline.report.status);
+            try std.testing.expectEqual(.passed, offline.report.publication_check);
+            try std.testing.expectEqual(@as(usize, 1), rows.published);
+            try std.testing.expectEqual(@as(usize, 0), rows.failed);
+        } else {
+            try std.testing.expectEqual(c.Status.workflow_failed, offline.report.status);
+            try std.testing.expect(offline.report.terminal_rejection != null);
+            try std.testing.expectEqual(.retry_limit, offline.report.terminal_rejection.?.kind);
+            // The request that exhausted the allowance is a repair of one specification unit, and the run ended there.
+            const last = offline.report.attempts[offline.report.attempts.len - 1];
+            try std.testing.expectEqual(.atomic_repair, last.purpose);
+            try std.testing.expectEqual(.specification_unit, last.owner_kind);
+            try offline.expectNothingPublished(io);
+            try std.testing.expectEqual(@as(usize, 1), rows.failed);
+            try std.testing.expectEqual(@as(usize, 0), rows.published);
+        }
+    }
 }
 
 test "a request-model retry exhaustion names its stage in the report and the step event, and another step names none" {

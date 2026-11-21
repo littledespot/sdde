@@ -50,6 +50,9 @@ pub const Options = struct {
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     disposition_sequence: ?enum { recover, exhaust } = null,
     attempt: u32 = 1,
+    /// The attempts the compiled workflow allows the request being answered (its step's retry limit plus
+    /// the first attempt). The summary and global sequences answer wrongly until their last allowed attempt.
+    allowance: ?u32 = null,
     source_loss: ?SourceLoss = null,
     support_fault: ?SupportFault = null,
     applicability: ?Applicability = null,
@@ -213,8 +216,8 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 return @import("reference_reconciliation.zig").repairResponse(allocator, replacement);
             }
             if (input.purpose == .summary) {
-                if (options.global_sequence != null) return @import("summary_protocol_sequence.zig").response(allocator, input, if (input.progress.summary_count == 0 or options.attempt > 1) 3 else 1, .recover);
-                if (options.summary_sequence) |mode| return @import("summary_protocol_sequence.zig").response(allocator, input, options.attempt, mode);
+                if (options.global_sequence != null) return @import("summary_protocol_sequence.zig").response(allocator, input, if (input.progress.summary_count == 0 or options.attempt > 1) options.allowance.? else 1, options.allowance.?, .recover);
+                if (options.summary_sequence) |mode| return @import("summary_protocol_sequence.zig").response(allocator, input, options.attempt, options.allowance.?, mode);
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
                 if (options.reconciliation_fault == .misbound_summary and input.progress.summary_count == 0 and options.attempt == 1) {
                     const statements = try allocator.alloc(r.StatementProposal, proposal.statements.len + 1);

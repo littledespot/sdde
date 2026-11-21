@@ -1351,7 +1351,10 @@ fn stateId(runner: *@import("../../src/application/workflow_pipeline_runner.zig"
     return inputs.corpus.state_id.bytes;
 }
 
-const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links, scenario_repair, scenario_stops };
+/// `raised_retry_limit` runs the scenarios that script a request's faults up to its step's retry limit (the
+/// disposition, summary and global sequences) on a definition whose limit of 2 is 3, so their expected
+/// call positions are derived from the compiled limit and not typed for 2 (SPEC01 C45).
+const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links, scenario_repair, scenario_stops, raised_retry_limit };
 /// The applicability sources' level-1 title heading (ADR 0048).
 const applicability_heading = "# Required output\n";
 
@@ -1359,6 +1362,79 @@ const applicability_heading = "# Required output\n";
 // sweep's allocations would otherwise each pay for a stack trace.
 fn testSpecificationWorkflows(workflow_cases: SpecificationCases) !void {
     return untraced_allocator.run(runSpecificationWorkflows, .{ workflow_cases, null });
+}
+
+/// Scripted requests that the retry-limit scenarios fault are checked against a limit of 3, which writes no
+/// freeze: the projection is of the shipped definition, and these runs patch its limits.
+fn checkRaisedRetryLimit(allocator: std.mem.Allocator) !void {
+    var sink: request_projection.Sink = .{ .allocator = allocator, .io = std.testing.io };
+    defer sink.deinit();
+    try runSpecificationWorkflows(allocator, .raised_retry_limit, &sink);
+}
+
+test "the disposition, summary and global fault sequences follow a raised retry limit: their calls are derived from the compiled step's limit" {
+    try untraced_allocator.run(checkRaisedRetryLimit, .{});
+}
+
+test "a scripted sequence's calls follow from the allowance: ordinals count 1 to n in each request and the request answered until the limit is spent takes every attempt" {
+    const sequence = @import("../../src/test_fixtures/summary_protocol_sequence.zig");
+    const global = @import("../../src/test_fixtures/global_protocol_sequence.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    for ([_][]const sequence.Calls{ &sequence.plan, &global.plan }) |plan| {
+        // Retry limits 1 to 3 (the request-model maximum) give allowances 2 to 4.
+        for ([_]u32{ 2, 3, 4 }) |allowance| {
+            const shape = try sequence.expand(arena.allocator(), plan, allowance);
+            var calls: usize = 0;
+            for (plan) |entry| calls += switch (entry) {
+                .fixed => |fixed| fixed,
+                .allowance => allowance,
+            };
+            try std.testing.expectEqual(calls, shape.ordinals.len);
+            try std.testing.expectEqual(calls, shape.first_calls.len);
+            for (shape.ordinals, shape.first_calls, 0..) |ordinal, first, call| {
+                // A request opens at its own first call, never later, and each of its calls is the next attempt.
+                try std.testing.expect(first <= call);
+                try std.testing.expectEqual(@as(u32, @intCast(call - first + 1)), ordinal);
+                if (call != 0) try std.testing.expect(shape.first_calls[call - 1] <= first);
+            }
+            // The request answered until the limit is spent has every attempt its step allows.
+            const opening = sequence.firstAllowanceCall(plan).?;
+            var attempts: u32 = 0;
+            for (shape.first_calls) |first| attempts += @intFromBool(first == opening);
+            try std.testing.expectEqual(allowance, attempts);
+            try sequence.expectShape(shape, try sequence.expand(arena.allocator(), plan, allowance));
+            // A shape expanded for another allowance is not the run's: positions after the spent request move.
+            try std.testing.expectError(error.TestExpectedEqual, sequence.expectShape(shape, try sequence.expand(arena.allocator(), plan, allowance + 1)));
+        }
+    }
+}
+
+/// The scripted driver gates its merge checks on the merge of a repair owner (SPEC01 C41): the shipped graph
+/// runs every one, and a graph that stops running one reports that owner, however it stops: the step is
+/// gone, or it runs another operation.
+fn checkGatedMerges(steps: []const workflow_compilation.CompiledStep) !void {
+    const allocator = std.testing.allocator;
+    const driver = @import("../../src/test_fixtures/spec_generation_driver.zig");
+    const owners = @import("../../src/domain/repair_owner.zig");
+    try std.testing.expectEqual(@as(?owners.RepairOwner, null), driver.unboundMerge(steps));
+    for ([_]owners.RepairOwner{ .source_omission_extraction, .source_omission_reconciliation, .reference_reconciliation, .specification_support }) |owner| {
+        var kept: std.ArrayList(workflow_compilation.CompiledStep) = .empty;
+        defer kept.deinit(allocator);
+        for (steps) |step| if (!driver.isRoute(step, .merge, owner)) try kept.append(allocator, step);
+        try std.testing.expect(kept.items.len < steps.len);
+        try std.testing.expectEqual(@as(?owners.RepairOwner, owner), driver.unboundMerge(kept.items));
+    }
+    const renamed = try allocator.dupe(workflow_compilation.CompiledStep, steps);
+    defer allocator.free(renamed);
+    var changed: usize = 0;
+    for (renamed) |*step| if (std.mem.eql(u8, step.operation_id.bytes, owners.Operation.merge.id())) {
+        step.operation_id = .{ .bytes = owners.Operation.parse.id() };
+        changed += 1;
+    };
+    try std.testing.expect(changed != 0);
+    // Every merge now runs another operation, so the first gated owner is the one reported.
+    try std.testing.expectEqual(@as(?owners.RepairOwner, .source_omission_extraction), driver.unboundMerge(renamed));
 }
 
 /// A fault scenario's name: its stage, shape and repetition, which identify it without its position.
@@ -1502,6 +1578,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .scenario_links => link_start,
         .scenario_repair => scenario_repair_start,
         .scenario_stops => scenario_stop_start,
+        .raised_retry_limit => disposition_start,
     };
     const case_range_end: usize = switch (workflow_cases) {
         .existing => preservation_start,
@@ -1510,6 +1587,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .scenario_links => scenario_repair_start,
         .scenario_repair => scenario_stop_start,
         .scenario_stops => scenario_count,
+        .raised_retry_limit => brief_start,
     };
     // Scripted corrections of a value outside an integer enumeration that the driver checked.
     var choice_corrections: usize = 0;
@@ -1542,6 +1620,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const protocol_text_scenario = scenario >= protocol_text_start and scenario < protocol_selection_scenario;
         const protocol_content_scenario = scenario >= protocol_content_start and scenario < omission_scenario;
         const fault: ?@TypeOf(faults[0]) = if (brief_scenario) .{ .stage = .generation, .shape = .forbidden_provenance, .repetition = if (scenario - brief_start < 2) .persistent else .{ .first_request = 2 } } else if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else if (scenario == scenario_exhaustion) .{ .stage = .scenarios, .shape = .review_partial_assignment, .repetition = .persistent } else if (scenario == equal_once) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .{ .first_request = 1 } } else if (scenario == equal_exhaustion) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .persistent } else if (scenario == split_claim_once) .{ .stage = .extraction, .shape = .split_claim, .repetition = .{ .first_request = 1 } } else null;
+        if (workflow_cases == .raised_retry_limit and !(disposition_scenario or summary_scenario or global_scenario)) continue;
         // A scenario's freeze directory is keyed by what it exercises, so adding a fault or a range
         // leaves every other range's names alone. An enumeration or a fault list names its member; a
         // numbered range names its member by its offset.
@@ -1632,10 +1711,28 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // These cases exercise two independent model-summary request lifecycles.
         // Two-claim partitions supply another leaf instead of a reusable parent.
         const two_summary_requests = summary_scenario or (brief_scenario and (scenario - brief_start) % 2 == 0);
-        const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
-        defer if (two_summary_requests) allocator.free(configured_definition);
+        const grouped_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
+        defer if (two_summary_requests) allocator.free(grouped_definition);
         // A patch that finds nothing to change would run the scenario unpatched and pass it.
-        if (two_summary_requests) try std.testing.expect(!std.mem.eql(u8, definition, configured_definition));
+        if (two_summary_requests) try std.testing.expect(!std.mem.eql(u8, definition, grouped_definition));
+        // The raised-limit runs give the requests the sequences fault (the summary, dispositions and signals
+        // requests) a limit of 3, and leave every other limit as shipped.
+        const raised_limit = workflow_cases == .raised_retry_limit;
+        var raised_arena: std.heap.ArenaAllocator = .init(allocator);
+        defer raised_arena.deinit();
+        const configured_definition = if (raised_limit) raised: {
+            var text: []const u8 = grouped_definition;
+            for ([_][2][]const u8{
+                .{ "retry-limit: 2\n        on: {ok: collect-reconciliation", "retry-limit: 3\n        on: {ok: collect-reconciliation" },
+                .{ "prompt: dispositions-prompt, result-schema: reconciliation-schema, retry-limit: 2}", "prompt: dispositions-prompt, result-schema: reconciliation-schema, retry-limit: 3}" },
+                .{ "prompt: signals-prompt, result-schema: reconciliation-schema, retry-limit: 2}", "prompt: signals-prompt, result-schema: reconciliation-schema, retry-limit: 3}" },
+            }) |change| {
+                const next = try std.mem.replaceOwned(u8, raised_arena.allocator(), text, change[0], change[1]);
+                try std.testing.expect(!std.mem.eql(u8, text, next));
+                text = next;
+            }
+            break :raised text;
+        } else grouped_definition;
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
         inline for (comptime workflow_resources.paths(@embedFile("../../design/workflows/spec.workflow.yaml"))) |path| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/" ++ path, allocator, .limited(1_048_576));
@@ -1689,6 +1786,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var services = try @import("../../src/model_request_workflow_test.zig").providerServices(allocator, null, &.{ "spec_generation", "repair" }, false);
         defer services.deinit();
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
+        if (workflow_cases == .existing and scenario == 0) try checkGatedMerges(graph.authority.steps);
         var runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services, boot.ready.config.config().workflowTokenBudget);
         defer runner.deinit();
         runner.publication_finalizer = logging.finalizer();
@@ -1810,6 +1908,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (global_scenario) try @import("../../src/test_fixtures/global_protocol_sequence.zig").verify(&driver, result);
         if (summary_scenario) try @import("../../src/test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
+        // The patched limit reached the compiled workflow: a limit of 3 allows 4 attempts (ADR 0030), where the
+        // shipped limit of 2 allows 3. The derived expectations above would otherwise pass at either.
+        if (raised_limit and (summary_scenario or global_scenario)) try std.testing.expectEqual(@as(u32, 4), driver.largest_allowance);
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
         const expected: workflow.OutcomeTag = if (scenario == equal_across_groups) .blocked else if (link_scenario) (if (driver.edge_cases == .unlinked) .blocked else .ok) else if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict or (driver.fault != null and driver.fault.?.repetition == .persistent)) .failed else .ok) else if (candidate_omission or extraction_omission or scenario == records_gap_scenario or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_classification_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
@@ -2926,8 +3027,8 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v27", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v27", "specification-state/v26");
+    try std.testing.expectEqualStrings("specification-state/v28", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v28", "specification-state/v27");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
     try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
     const principles = @import("../../src/domain/principle_registry.zig");

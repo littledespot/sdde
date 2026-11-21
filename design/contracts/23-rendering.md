@@ -21,7 +21,8 @@ Renderers own:
 - `AC/UO/EC/FR/BR/AS/NG/PB/EN-*` specification and `TNNN` task identifiers;
 - the exact F0100 §5.1 heading tree, including `### Acceptance Criteria`
   beneath `## User Scenarios & Testing _(mandatory)_`, and compact title-case
-  `Given`, `When`, `Then` labels in that order for every `AC-*` record;
+  `Given`, `When`, `Then` labels in that order for every `AC-*` record, the `Given` label
+  only where the criterion holds a Given;
 - checkboxes and phase/gate status;
 - Markdown table columns and escaping;
 - code fences around structured contracts where applicable;
@@ -131,8 +132,11 @@ Renderers own:
 - A user may edit semantic fields and add, remove, or reorder semantic records, but engine-owned
   headings, status/checklist fields, acceptance-criterion labels/order, and existing ID syntax
   remain protected by validation.
-- Each acceptance criterion must remain an explicit compact `Given`/`When`/`Then` triplet;
-  free-form or partially labeled criteria do not normalize into authority.
+- Each acceptance criterion must remain an explicit compact `Given`/`When`/`Then` triplet,
+  or the `When`/`Then` pair of a criterion that holds no Given
+  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3); the pair
+  prints no `Given` label and no empty Given, and a `Given` label with no text, a `Then`
+  before a `When`, free-form or partially labeled criteria do not normalize into authority.
 - The renderer joins a clause to the next label with ", " unless the clause already ends in
   terminal punctuation, when a single space joins them, so no clause's own bytes change.
   Terminal punctuation is the closed policy of the
@@ -164,6 +168,7 @@ Renderers own:
   label ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7).
   `GIVEN` is the criterion's Given, the separator above (derived from the criterion's Given,
   applied between the two texts), then the edge case's own given, so no text's bytes change;
+  for a criterion with no Given it is the edge case's own given alone, with no separator;
   `WHEN` and `THEN` are the criterion's When and Then. The copied parts are the criterion's
   own display, exact-value spans included. The link is the criterion's ID, held in the stored
   record (§24), and a candidate only when the criterion is of the edge case's records batch
@@ -171,8 +176,10 @@ Renderers own:
   provenance, and the edge case's own given is its only content. Readback takes the own
   given as the text after the copied Given and the separator, and the first earlier criterion
   whose When and Then equal the lines and whose Given and separator begin the `GIVEN` line is
-  the copy; a `GIVEN` line that begins with no criterion's Given, an edited When or Then that
-  is no criterion's, and a `CONDITION` or `EXPECTED OUTCOME` line reject. A copy edited into
+  the copy. A criterion with no Given is the copy, and the whole line the own given, only when
+  no criterion that holds a Given is; either choice re-renders the same line. Lines whose When
+  and Then no criterion holds (an edited When or Then), a `GIVEN` line that begins with no
+  copying criterion's Given, and a `CONDITION` or `EXPECTED OUTCOME` line reject. A copy edited into
   another criterion's own text still reads back, yet it re-renders differently from the
   projection, so publication's byte comparison rejects it. Every edge case shows its three
   lines.

@@ -171,9 +171,12 @@ Typed content covers these concerns; each concern does not require a separate ca
   references resolve through the canonical projector, not from display equality.
 - There is no unreferenced command description to use as provenance.
 - The model returns typed business content rather than Markdown.
-- Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and
-  `then` value; the model does not supply Markdown labels or combine the three values into
-  free-form prose.
+- Each acceptance-criterion proposal contains exactly one nonempty typed `when` and `then`
+  value and at most one nonempty typed `given`, which it omits where the sources state no
+  starting situation for the requirement
+  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3); the
+  model does not supply Markdown labels or combine the values into free-form prose. An edge
+  case's own `given` stays required.
 
 [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#authored-associations)
 couples semantic support selection with the existing authoring assignments. There
@@ -384,9 +387,12 @@ For each feature-brief or specification unit other than the engine-composed stor
   batch (SPEC01 D12.1). Its result schema admits
   one item per slot, the slot's number and a content-only acceptance criterion, each number
   exactly once (`exact_members`), with no claim, kind or group. The answer has no clarification
-  or inconclusive form. Items that return equal
+  or inconclusive form. An item's `given` is omitted where the claim's sources state no
+  starting situation, and the schema requires only its number, `when` and `then`. Items that return equal
   values for the criterion's given, when and then take the request's protocol correction,
-  which names the number of every item in each equal set (`distinct`, §12.2; §22.6). The engine fixes each
+  which names the number of every item in each equal set (`distinct`, §12.2; §22.6); an omitted
+  given equals only another omitted given, so two items that share a `when` and a `then` and
+  both omit it are equal, and one that omits it differs from one that states it. The engine fixes each
   criterion's kind, claim and group and appends the criteria to the group's batch in slot
   order; full unit validation and the field-level value repair then apply (§22.3), which
   never changes a criterion's claim. A criterion's exact copy must be a value its slot's
@@ -402,11 +408,12 @@ For each feature-brief or specification unit other than the engine-composed stor
   the scenarios step completes, the `link-scenarios` step finds each edge case's candidates
   natively: the acceptance criteria of its own batch that name one of its claims. One
   candidate is the link; two or more make one request per edge case that offers the
-  criteria, numbered, with their given, when and then, and returns one offered id (a result
+  criteria, numbered, with their given (where they hold one), when and then, and returns one offered id (a result
   schema that admits those ids and no text; the prompt is `links.prompt.md`); none blocks
   with the typed rejection `edge_case_without_criterion`, which names the edge case's group
   and claims and is never repaired or retried. The engine prints the edge case as the linked
-  criterion's scenario with the edge case's own given added to its Given (§23.1) and stores
+  criterion's scenario with the edge case's own given added to its Given, or as its whole Given where
+  the criterion has none (§23.1), and stores
   the link as the criterion's ID, which readback checks against the same candidate rule. The
   step takes one native iteration population, the edge cases that need a choice; the model
   never selects a record, writes a `when`, a `then` or an outcome, or sees another batch's
@@ -517,7 +524,7 @@ The engine validates:
 - workflow-declared operation result schema and source references;
 - nonempty mandatory IR fields;
 - fixed singleton provenance keys plus engine-assigned, unique, well-formed `AC/UO/EC/FR/BR/AS/NG/PB/EN-*` identifiers; initial generation is gap-free per prefix, while edits preserve surviving IDs, allocate new monotonically increasing IDs, and never reuse deleted IDs;
-- exactly one nonempty `given`, `when`, and `then` field for each acceptance criterion; combined free-form, unlabeled, missing, duplicated, or reordered acceptance-condition content is invalid;
+- exactly one nonempty `when` and `then` field and at most one nonempty `given` field for each acceptance criterion; combined free-form, unlabeled, missing, duplicated, or reordered acceptance-condition content is invalid;
 - duplicate or byte-identical requirements;
 - typed clarification state rather than fragile substring matching;
 - citation validity and reference-file accounting;

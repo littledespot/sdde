@@ -161,7 +161,9 @@ without adding an assessment model, configuration option or principle loader.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v27` (v26 until an edge
+Completed and clarification-pending state use `specification-state/v28` (v27 until an acceptance
+criterion's `given` became optional, [ADR 0038](0038-record-claims-and-scenario-coverage.md)
+Decision 3, amended 22 November 2026; v26 until an edge
 case's one authored field became its `given`, [ADR 0038](0038-record-claims-and-scenario-coverage.md)
 Decision 7, amended 13 November 2026; v25 until the
 extraction contract's parts became the `request-model` steps, [ADR 0030](0030-engine-owned-model-request.md);

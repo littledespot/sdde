@@ -5,6 +5,8 @@ const native = @import("../application/reference_extraction_workflow.zig");
 const workflow = @import("../application/reference_reconciliation_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const data = @import("../domain/pipeline_data.zig");
+const summary = @import("summary_protocol_sequence.zig");
+const Driver = @import("spec_generation_driver.zig").Driver;
 pub const Mode = enum { recover, exhaust };
 
 pub fn mixed(a: std.mem.Allocator, input: r.Input, proposal: r.Proposal) !r.Proposal {
@@ -21,12 +23,14 @@ pub fn mixed(a: std.mem.Allocator, input: r.Input, proposal: r.Proposal) !r.Prop
     return result;
 }
 
-pub fn corrupt(a: std.mem.Allocator, body: []const u8, part: []const u8, attempt: u32, mode: Mode) ![]const u8 {
+/// `attempt` is the answer's attempt ordinal and `allowance` the attempts the request's step allows: the
+/// signals answer is faulty on every attempt before the last one allowed, and on that one too when `mode` exhausts.
+pub fn corrupt(a: std.mem.Allocator, body: []const u8, part: []const u8, attempt: u32, allowance: u32, mode: Mode) ![]const u8 {
     if (std.mem.eql(u8, part, "dispositions") and attempt == 1) {
         const at = (std.mem.indexOf(u8, body, ",{\"claim_id\"") orelse return error.MissingFixtureDisposition) + 1;
         return std.mem.concat(a, u8, &.{ body[0..at], "\"", body[at..] });
     }
-    if (std.mem.eql(u8, part, "signals") and (attempt < 3 or mode == .exhaust)) {
+    if (std.mem.eql(u8, part, "signals") and (attempt < allowance or mode == .exhaust)) {
         // Remove only the signal object's final brace, keeping inner objects
         // intact. Repeating this body exercises the unchanged-error limit.
         const parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
@@ -38,8 +42,8 @@ pub fn corrupt(a: std.mem.Allocator, body: []const u8, part: []const u8, attempt
     return body;
 }
 
-pub fn assertMerge(before: *const data.View, after: *const data.View, ordinal: usize) !void {
-    if (ordinal == 0) return @import("summary_protocol_sequence.zig").assertMerge(before, after, ordinal, 1);
+pub fn assertMerge(driver: *const Driver, before: *const data.View, after: *const data.View, ordinal: usize) !void {
+    if (ordinal == 0) return summary.assertMerge(driver, before, after, ordinal, .first_attempt);
     const prior = (try native.read(before, workflow.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
     const current = (try native.read(after, workflow.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
     const left = prior.proposal.global;
@@ -63,19 +67,18 @@ pub fn assertMerge(before: *const data.View, after: *const data.View, ordinal: u
     }
 }
 
-pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @import("../domain/run_outcome.zig").Outcome) !void {
+/// The global scenarios' requests in call order: the extraction content request (a protocol fault, then its
+/// correction), the classification request, the two summary requests, the dispositions assignment (its
+/// scripted fault, then its correction), and the signals request (faulty until the last attempt its step
+/// allows, which `Mode` recovers or exhausts).
+pub const plan = [_]summary.Calls{ .{ .fixed = 2 }, .{ .fixed = 1 }, .{ .fixed = 1 }, .{ .fixed = 1 }, .{ .fixed = 2 }, .allowance };
+
+pub fn verify(driver: *Driver, result: @import("../domain/run_outcome.zig").Outcome) !void {
     const exhausted = driver.global_sequence == .exhaust;
     const ledger = driver.runner.tokenLedger();
     try std.testing.expectEqual(driver.calls, ledger.accounted_operations.items.len);
     try std.testing.expectEqual(@as(u128, driver.calls) * (driver.fake.invocation_plan.complete.input_tokens + driver.fake.invocation_plan.complete.output_tokens), ledger.committed());
-    const operations = ledger.accounted_operations.items;
-    const attempts = [_]u32{ 1, 2, 1, 1, 1, 1, 2, 1, 2, 3 };
-    const assignments = [_]usize{ 0, 0, 2, 3, 4, 5, 5, 7, 7, 7 };
-    for (operations[0..10], attempts, assignments) |operation, attempt, first| {
-        try std.testing.expectEqual(attempt, operation.id.model_attempt_ordinal.value);
-        try std.testing.expect(operation.id.model_request_id == operations[first].id.model_request_id);
-    }
-    try std.testing.expect(operations[5].id.model_request_id != operations[7].id.model_request_id);
+    const checked = try summary.checkSequence(driver, &plan);
     const view: data.View = .{ .slots = driver.runner.envelope.slots };
     const extraction = (try native.read(&view, native.parsed_schema, .parsed)).payload().parsed;
     const producers = extraction.entries[0].producers.?;
@@ -85,10 +88,10 @@ pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @im
     try std.testing.expectEqual(@as(usize, if (exhausted) 1 else 2), driver.reconciliation_merges);
     try std.testing.expectEqual(@as(usize, 0), driver.unchanged_reconciliation_merges);
     if (exhausted) {
-        try std.testing.expectEqual(@as(usize, 10), driver.calls);
+        try std.testing.expectEqual(checked.calls, driver.calls);
         try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-        try std.testing.expectEqual(@as(u32, 2), result.execution_rejected.retry_limit.limit.value);
-        try std.testing.expectEqual(@as(u64, 3), result.execution_rejected.retry_limit.completed_executions);
+        try std.testing.expectEqual(checked.allowance - 1, result.execution_rejected.retry_limit.limit.value);
+        try std.testing.expectEqual(@as(u64, checked.allowance), result.execution_rejected.retry_limit.completed_executions);
         const parsed = (try native.read(&view, workflow.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
         try std.testing.expectEqual(.dispositions, parsed.phase);
         try std.testing.expectEqual(@as(usize, 0), parsed.proposal.global.signals.len);
@@ -99,8 +102,8 @@ pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @im
         defer arena.deinit();
         const contents = request.prepared().?.content;
         const previous = try std.json.parseFromSlice(std.json.Value, arena.allocator(), contents[contents.len - 1].bytes(), .{});
-        const body = try @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = .exhaust });
-        try std.testing.expectEqualStrings(try corrupt(arena.allocator(), body, "signals", 3, .exhaust), previous.value.object.get("rejected_response").?.string);
+        const body = try @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = .exhaust, .allowance = checked.allowance });
+        try std.testing.expectEqualStrings(try corrupt(arena.allocator(), body, "signals", checked.allowance, checked.allowance, .exhaust), previous.value.object.get("rejected_response").?.string);
         try std.testing.expect(!view.contains(.published_workflow_output));
     } else {
         try std.testing.expectEqual(.ok, result.executionStatus().?);
@@ -118,6 +121,6 @@ pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @im
         try std.testing.expectEqual(@as(?@TypeOf(dispositions), null), source.at(.conflicts, .record));
         try std.testing.expect(dispositions.request.value != signals.request.value);
         try std.testing.expectEqual(@as(u32, 2), dispositions.attempt.value);
-        try std.testing.expectEqual(@as(u32, 3), signals.attempt.value);
+        try std.testing.expectEqual(checked.allowance, signals.attempt.value);
     }
 }

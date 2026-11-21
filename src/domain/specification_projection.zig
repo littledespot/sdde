@@ -151,7 +151,10 @@ pub fn modelRecord(allocator: std.mem.Allocator, context: provenance.Context, re
         inline else => |fields, kind| result: {
             var rendered: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                @field(rendered, field.name) = try scalarInScopes(allocator, context, @field(fields, field.name), resolved.scopes);
+                @field(rendered, field.name) = if (comptime spec.mayOmit(field.type))
+                    (if (@field(fields, field.name)) |held| try scalarInScopes(allocator, context, held, resolved.scopes) else null)
+                else
+                    try scalarInScopes(allocator, context, @field(fields, field.name), resolved.scopes);
             }
             break :result @unionInit(spec.Content(spec.Scalar), @tagName(kind), rendered);
         },
@@ -230,7 +233,10 @@ pub fn project(allocator: std.mem.Allocator, context: provenance.Context, direct
             inline else => |fields, kind| {
                 var projected: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
                 inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                    @field(projected, field.name) = try scalarInScopes(allocator, context, @field(fields, field.name), scopes);
+                    @field(projected, field.name) = if (comptime spec.mayOmit(field.type))
+                        (if (@field(fields, field.name)) |held| try scalarInScopes(allocator, context, held, scopes) else null)
+                    else
+                        try scalarInScopes(allocator, context, @field(fields, field.name), scopes);
                 }
                 captured.content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), projected);
             },

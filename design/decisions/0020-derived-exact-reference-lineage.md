@@ -261,7 +261,7 @@ handles, never chooses semantic support or adds citations to satisfy a review.
 
 ## Persistence and readback
 
-Canonical content is `specification/v7` (ADR 0048, ADR 0038 Decision 7); completed and clarification-pending
+Canonical content is `specification/v8` (ADR 0048, ADR 0038 Decisions 3 and 7); completed and clarification-pending
 specification state share one version and reject earlier versions without
 migration, dual reader or fallback. Canonical reference snapshots persist no
 presentation roles. Completed readback resolves handles from the captured ledger,

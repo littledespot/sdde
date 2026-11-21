@@ -203,8 +203,10 @@ fn targetBound(response: g.Response) Error!u32 {
             for (records) |record| {
                 count = std.math.add(usize, count, 3) catch return error.InvalidSpecificationRepair;
                 switch (record.content) {
-                    inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |_| {
-                        count = std.math.add(usize, count, 1) catch return error.InvalidSpecificationRepair;
+                    // Each held value is a target; an absent one is not.
+                    inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+                        const held: ?g.spec.BusinessValue = @field(fields, field.name);
+                        if (held != null) count = std.math.add(usize, count, 1) catch return error.InvalidSpecificationRepair;
                     },
                 }
             }

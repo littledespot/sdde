@@ -933,7 +933,7 @@ validators:
   step that makes its request, with that step's own parameters), reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v27`). Neither variant holds review evidence.
+  registry identity (`specification-state/v28`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton
@@ -1071,18 +1071,22 @@ anonymous persisted records.
 ### 5.3 Acceptance-criterion rendering
 
 The renderer restores the original compact acceptance-criterion form while
-retaining three separate typed values and engine-assigned identities:
+retaining separate typed values and engine-assigned identities:
 
 ```markdown
 ### Acceptance Criteria
 
 - **AC-001**: **Given** <precondition>, **When** <action>, **Then** <observable outcome>
+- **AC-002**: **When** <action>, **Then** <observable outcome>
 ```
 
+A criterion holds a `given` only where its sources state a starting situation for the
+requirement ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3);
+one with none renders the second form, `**When**` then `**Then**`, and no empty `Given`.
 The labels, casing, separators and order are canonical. Missing, duplicate,
-reordered or foreign labels reject; label-shaped bytes inside exact Markdown
-code spans remain inert content. Multiline exact values retain the shared
-continuation encoding.
+reordered or foreign labels reject, and so does a `Given` label with no text; label-shaped
+bytes inside exact Markdown code spans remain inert content. Multiline exact values retain
+the shared continuation encoding.
 
 ### 5.4 Empty and conditional collections
 
@@ -1171,7 +1175,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Edge cases use `**EC-001**`, then `- **GIVEN** <text>`, `- **WHEN** <text>` and
   `- **THEN** <text>`, and no other label: the engine copies the Given, When and Then of the
   acceptance criterion the edge case links to (§23), and the model writes only the edge
-  case's own given, which follows the copied Given on the `GIVEN` line.
+  case's own given, which follows the copied Given on the `GIVEN` line; where that criterion
+  has no Given, the `GIVEN` line is the edge case's own given alone.
 - Entities use `**EN-001**`, then `- **NAME** <text>` and, when any statement shares one
   of the entity's source groups, `- **RELATED STATEMENTS** <IDs>`: those statements' IDs
   joined with `, ` in document order, derived by the engine (§23), never model text.

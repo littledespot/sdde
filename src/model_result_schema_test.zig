@@ -1215,14 +1215,13 @@ test "an exact member set states the properties its items must not all repeat, a
     defer plain.release();
     try std.testing.expectEqual(@as(usize, 0), plain.selected().memberChoices()[0].distinct.len);
     try std.testing.expectEqual(@as(usize, 0), schema.findProperty(plain.selected().root().object, "value").?.schema.array.members.?.distinct.len);
-    // The rule needs an exact member set, a property every item has that is not the key, each named once.
+    // The rule needs an exact member set, a property every item variant declares that is not the key, each named once.
     const other_path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "given" } };
     for ([_]schema.IntegerChoice{
         .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .distinct = compared },
         .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .distinct = compared },
         .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"ordinal"} },
         .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"absent"} },
-        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"note"} },
         .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{""} },
         .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{ "then", "then" } },
         .{ .target = .{ .path = other_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"then"} },
@@ -1283,4 +1282,43 @@ test "equal items of one exact member set are rejected as returned, and replay r
         .{ .path = equal_items_path, .allowed = &.{ 3, 5 }, .distinct = &.{"ordinal"} },
         .{ .path = equal_items_path, .allowed = &.{ 3, 5 }, .distinct = &.{ "then", "then" } },
     }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{invalid}, &.{}, &.{}));
+}
+
+test "a compared property an item may omit is a value of its own: omitted equals omitted and differs from returned" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const check = @import("domain/model_payload_schema.zig");
+    const resource = try compile(a, equal_items_schema);
+    // `note` is declared but not required: the rule may compare it, and the replayed rule does too.
+    const compared: []const []const u8 = &.{ "note", "then" };
+    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = compared }});
+    defer restricted.release();
+    const wire = try compile(a, restricted.selected().modelBytes());
+    const restored = try schema.restrictRecorded(std.testing.allocator, wire, restricted.selected().memberChoices(), &.{}, &.{});
+    defer restored.release();
+    const Case = struct { bytes: []const u8, equal: bool };
+    for ([_]Case{
+        // Both omit it and agree on the rest: the same item twice.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\"},{\"ordinal\":3,\"given\":\"h\",\"then\":\"t\"}]}", .equal = true },
+        // Both return it, the same.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\",\"note\":\"n\"},{\"ordinal\":3,\"given\":\"h\",\"then\":\"t\",\"note\":\"n\"}]}", .equal = true },
+        // Only one returns it: the items differ, however alike the rest.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\"},{\"ordinal\":3,\"given\":\"g\",\"then\":\"t\",\"note\":\"n\"}]}", .equal = false },
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\",\"note\":\"n\"},{\"ordinal\":3,\"given\":\"g\",\"then\":\"t\"}]}", .equal = false },
+        // Both return it, differently.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\",\"note\":\"n\"},{\"ordinal\":3,\"given\":\"g\",\"then\":\"t\",\"note\":\"m\"}]}", .equal = false },
+        // Both omit it and differ in another compared property.
+        .{ .bytes = "{\"value\":[{\"ordinal\":5,\"given\":\"g\",\"then\":\"t\"},{\"ordinal\":3,\"given\":\"g\",\"then\":\"u\"}]}", .equal = false },
+    }) |case| {
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, case.bytes, .{ .parse_numbers = false });
+        const value = @import("domain/model_envelope.zig").value(&parsed.value);
+        for ([_]*const schema.Schema{ restricted.selected(), restored.selected() }) |selected| {
+            const rejected = check.validateValue(value, selected.root());
+            if (case.equal) {
+                try std.testing.expectEqual(check.Rejection.equal_items, rejected.?.reason);
+                try std.testing.expectEqualDeep(compared, rejected.?.members.?.distinct);
+            } else try std.testing.expect(rejected == null);
+        }
+    }
 }

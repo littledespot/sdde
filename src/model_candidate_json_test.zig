@@ -492,6 +492,20 @@ test "a claim-bound scenarios answer is a number and the criterion's three parts
     const second = "{\"number\":2," ++ parts ++ "}";
     try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ first ++ "]}");
     try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ second ++ "," ++ first ++ "]}");
+    // ADR 0038 Decision 3: a criterion holds a Given only where the sources state one, so the
+    // answer may omit it, alone or beside an item that holds one, and the wire carries no placeholder for it.
+    const omitted = "{\"number\":1,\"when\":" ++ response_wire.normalized ++ ",\"then\":" ++ response_wire.plain ++ "}";
+    try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ omitted ++ "]}");
+    try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ omitted ++ "," ++ second ++ "]}");
+    {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const encoded = try decodeCandidate("generation", "scenarios", arena.allocator(), "{\"scenarios\":[" ++ omitted ++ "]}");
+        try std.testing.expect(std.mem.indexOf(u8, encoded, "given") == null);
+    }
+    // The When and Then stay required, and an omitted Given is not a null one: the schema rejects the null.
+    try candidateCase("generation", "scenarios", "{\"scenarios\":[{\"number\":1,\"given\":" ++ response_wire.plain ++ ",\"then\":" ++ response_wire.plain ++ "}]}", .missing_required_property, "/scenarios/0/when");
+    try candidateSchemaCase("generation", "scenarios", "{\"scenarios\":[{\"number\":1,\"given\":null,\"when\":" ++ response_wire.plain ++ ",\"then\":" ++ response_wire.plain ++ "}]}", .type_mismatch, "/scenarios/0/given");
     inline for (.{
         .{ "claim_ids", "[7]" },
         .{ "kind", "\"acceptance_criterion\"" },

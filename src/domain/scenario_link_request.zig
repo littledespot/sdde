@@ -27,7 +27,8 @@ pub const CriterionId = struct {
 /// The answer: one offered criterion.
 pub const Answer = struct { criterion: CriterionId };
 
-const Offered = struct { id: CriterionId, given: []const u8, when: []const u8, then: []const u8 };
+/// A criterion with no Given is offered without one, as the encoding omits an absent optional.
+const Offered = struct { id: CriterionId, given: ?[]const u8 = null, when: []const u8, then: []const u8 };
 
 /// The records of the completed records unit, in authoring order.
 pub fn unitRecords(current: session.Session) Error![]const g.spec.RecordProposal {
@@ -88,7 +89,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         const scenario = criterion.content.acceptance_criterion;
         entry.* = .{
             .id = .{ .ordinal = std.math.cast(u32, id) orelse return error.InvalidScenarioLink },
-            .given = (try projection.recordScalar(a, context, criterion, scenario.given)).bytes,
+            .given = if (scenario.given) |held| (try projection.recordScalar(a, context, criterion, held)).bytes else null,
             .when = (try projection.recordScalar(a, context, criterion, scenario.when)).bytes,
             .then = (try projection.recordScalar(a, context, criterion, scenario.then)).bytes,
         };
