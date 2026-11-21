@@ -18,7 +18,6 @@ pub const ignored = [_][]const u8{
     ".zig-cache/source-loss-citation-completeness-current-contract",
     ".zig-cache/workflow-step-trace",
     "zig-out/baseline/claims",
-    "zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959",
     "zig-out/e2e-spec/MOCK-run",
 };
 

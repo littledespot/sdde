@@ -194,9 +194,7 @@ follow-ups:
 - remove `Relations.competing` under §2.12 (`reference_reconciliation_diagnostic.zig:162`);
 - fold `member_count` into `collection`'s `exact_members` variant
   (`model_result_schema.zig:100-103`, `:197`), and ADR 0038 Decision 3's `coverage` into
-  `unique_subset` (`:104-106`, `:206`);
-- assert the exhausted scenario's final rejection reason (`spec_generation_driver.zig:136-153`
-  asserts only `.retry_limit`, `:150-152`).
+  `unique_subset` (`:104-106`, `:206`).
 
 Out of scope unless harm appears: the statement, signal and conflict coverage inserts and
 token classifications.
@@ -206,11 +204,6 @@ token classifications.
 **Defect:** restatement and claims lost in reconciliation when citations repeat. ADR 0036
 Decision 3 and ADR 0038 Decision 4 (the list-item split,
 `reference_extraction_text.zig:144-183`) stay as they are (D8.1, decided 3 November 2026).
-
-- **D8.2** Whether "cites in full" (ADR 0036:129-131) covers a fenced block whose first or last
-  interior line is blank (`markdown_code_spans.zig:53`, `:59`;
-  `exact_token_obligation.zig:40-45`; `source_selections.zig:57-60`). No fixture covers it.
-  Decided offline with fixtures at its owners and §2.10 projections, in any gap, or recorded.
 
 ### Q13. Inline source lines
 
@@ -366,8 +359,6 @@ The policy-transition coordinator's authority is decided on both sides (prior-ru
   from the policy (`feature_log_runner.zig:87`), and decide its order against the current
   activation. The same-run policy transition's authority is decided separately (ADR 0032); E3's
   feature-logging conversion waits on ADR 0032's other preconditions (§5 E3).
-- **Untested candidate arm:** `observation.capture`'s candidate arm
-  (`test/harness/e2e/observation.zig:132-133`) has no direct test.
 
 ### E7. Clarification answer recovery (R2, ADR 0025)
 
@@ -402,7 +393,6 @@ E1–E4. §10 C8 adds record-lifecycle gaps.
   proven only at admission. The baseline generator gives every record the group's whole claim
   selection (`associateFixtureResponse`); only the story-restatement runs keep per-record claims
   (`own_claims`), in their first batch, so a partly taken record needs a per-group generator.
-- Scripted branches no scenario selects: §10 C44.
 
 ### T4. Architecture rules and replay (A5)
 
@@ -460,9 +450,6 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
   `TelemetryFact` is one variant per event (F0002:193-217), but one struct with `event_type`
   and `fields` in code (`telemetry.zig:205-212`). **Next:** the code change, recording any
   event-row or report version it moves (§2 rule 12).
-- **Two same-stage `clarification_required` gaps becoming two forms (§14.14):** no test covers it.
-  (The upstream-rework branch of `required_authority_clarifications.build` is deleted,
-  [Z_SPEC01](Z_SPEC01.md) "Upstream rework".)
 - More, from the 11 November 2026 code review: §10 C39.
 
 ### Retired SPEC01 IDs cited elsewhere
@@ -855,28 +842,18 @@ lock first. 13-05:209 and ADR 0021:24-25 predate the source-preservation project
 
 ### 10.6 Tests and harness
 
-**C41. The scripted driver is also the oracle, and its checks are gated on name literals (adds to
-E8).** `src/test_fixtures/spec_generation_driver.zig` gates checks on operation IDs on seven lines
-(`:558-560`, `:578`, `:609`, `:630`, `:634`), on the `extraction-schema` resource (`:275`) and on
-slot names (`:218`). Renaming one, code and YAML together, turns the guard false and the check
-stops running with no failure. A failed driver assertion is a panic: the file has 101
-`catch unreachable` lines.
+**C41. The scripted driver is also the oracle (adds to E8).** A failed assertion in one of its step hooks
+is a panic: `src/test_fixtures/spec_generation_driver.zig` has 104 `catch unreachable` lines. Its
+`isRoute` and `isSourceMerge` gates use typed IDs, which break the build when renamed, but nothing checks
+that the graph still binds those owners.
 
-**C42. No offline run reaches publication through the production composition.** The scripted
-scenarios run a hand copy of `Runtime.init`'s wiring (`workflow_tests.zig:1082`, `:1582`, `:3224`,
-`:3295`, against `composition/root.zig:57`). Every offline run through `root.Runtime` or the
-harness's `invoke.run` stops before publication (traced), so the harness's success path runs end
-to end only live.
-
-**C43. Scenarios patch shipped assets by exact text with no check that the patch applied.**
-`workflow_tests.zig` (`"group-size: 8"` and `"/reason"` in
-`extraction.composition.json`). If either text changes, the scenario runs unpatched and passes.
-The guarded form is at `test/harness/integration/tests.zig:145-146`.
-
-**C44. Scripted branches that no test selects (adds to T3).** 8 of the driver's 25 fault shapes
-(`Fault.shape` in `spec_generation_driver.zig`: seven of the nine `review_*` shapes and
-`runaway_partial_assignment`). Checked by grep. `SupportFault` has since shrunk to its one
-selected member, `foreign_source_single`.
+**C42. The scripted matrix still runs a hand copy of `Runtime.init`'s wiring** (`workflow_tests.zig:1095`,
+`:1699`, `:3703`, `:3774`, against `composition/root.zig:59`). One offline run now reaches publication
+through `root.Runtime` and the harness's `invoke.run`, with only the transport scripted
+(`test/harness/integration/tests.zig`, "an offline Spec run reaches publication…"; the answers come from
+`spec_generation_responses.build`, and `invoke.Options.runner_view` is its test-only seam). It is the happy
+path of hello-world on the Claude slot. No fault scenario, no second case and no Bedrock slot runs through
+the production composition, so a wiring drift that only a fault path reads still passes the matrix.
 
 **C45. Versions, layouts and lists repeated by hand.**
 
@@ -889,7 +866,7 @@ selected member, `foreign_source_single`.
   directory is missing (`test/harness/e2e/measures_cli.zig:184-203`, `:190`); its tests write
   their own layout (traced), so a moved evidence path would read as zero responses with tests
   passing.
-- The 24 workflow assets are listed again in five places (`workflow_tests.zig:1561`,
+- The 26 workflow assets are listed again in five places (`workflow_tests.zig:1677`,
   `test/packaging/smoke.zig:335-342`, three case files).
 - Sequence fixtures pin call positions and retry limits as number literals
   (`summary_protocol_sequence.zig:71-72`; `global_protocol_sequence.zig:72-73`).
@@ -911,9 +888,14 @@ comment containing "plan", "hard" or "reference" fails a test with no boundary c
   read back inside their own suites). **Kept** (user, 20 November 2026): the trace is the proof that
   a refactor leaves the executed steps unchanged, and the calibration suites replay retained
   captures.
-- `src/test_fixtures/authoring_association_calibration.zig:16` reads a retained run of 11 October
-  2026 that is no longer under `zig-out/e2e-spec/`, so part of a unit test returns `.unavailable`
-  (`:297`) and is skipped.
+- The authoring-association calibration's parent preflight, which skipped part of a unit test because
+  the retained run of 11 October 2026 is gone, is deleted (user, 21 November 2026). A recorded
+  `live-run.json` is now rejected in `collect`, so `collect`'s `run_manifest` is always null and the
+  live-receipt branch of `consumeTrial` is unreachable; `admitReceipt` and `responseFacts` run only from
+  the mock receipts in `receiptChecks`, and `verifyAuthoringDiagnosticParent`
+  (`workflow_tests.zig:2908`) preflights a lineage no panel can launch from. Deleting any of them means
+  deleting the receipt consumption and its README procedure, which is the live panel: delete it whole, or
+  restore a retained current parent and a check that rebuilds its exact request through the replay provider.
 
 ### 10.7 Unconfirmed readings
 

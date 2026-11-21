@@ -18,10 +18,14 @@ pub const Options = struct {
     capture: ?*trace_module.CaptureLog = null,
     /// Only offline tests may replace the transport; the live CLI never supplies it.
     transport: ?@import("../../../src/adapters/provider/model_http_transport.zig").Port = null,
+    /// Only offline tests read the invocation's runner while it runs, to answer each request from the state
+    /// the engine holds. Set to the runner's slot before the first step, which is empty until the run prepares
+    /// it, and dangling once `run` returns: read it only while the run is in flight.
+    runner_view: ?*?*const ?@import("../../../src/application/workflow_pipeline_runner.zig").Runner = null,
 };
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, generation_keys: @import("../environment.zig").GenerationKeys, store: @import("../evidence.zig").Store, report: *c.Report, options: Options) !?[]const u8 {
-    if (!@import("builtin").is_test and options.transport != null) return error.TestTransportForbidden;
+    if (!@import("builtin").is_test and (options.transport != null or options.runner_view != null)) return error.TestTransportForbidden;
     var runtime: root.Runtime = undefined;
     runtime.init(io, allocator, project, .{});
     defer runtime.deinit();
@@ -54,6 +58,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     }
     var invocation = runtime.invocation(&.{ selected.workflow_id, "--feature", selected.feature, "--reference", selected.reference }, .{ .snapshots = supplied });
     defer invocation.deinit();
+    if (options.runner_view) |view| view.* = &invocation.pipeline_runner;
     var expected_config = try @import("../../../src/domain/engine_config_decode.zig").decode(allocator, captured.config);
     defer expected_config.deinit();
 

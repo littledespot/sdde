@@ -46,7 +46,9 @@ pub fn extract(allocator: std.mem.Allocator, inputs: evidence.Inputs) Error!Fact
         };
         defer allocator.free(ranges);
         var position: source.Position = .{ .byte = 0, .line = 1, .column = 1 };
-        for (ranges) |range| {
+        for (ranges) |scanned| {
+            // A fenced block's value has no blank edge lines: a quote of its citable lines holds it in full.
+            const range = if (scanned.form == .code_block) @import("markdown_code_spans.zig").blockValue(document.bytes, scanned) orelse continue else scanned;
             while (position.byte < range.start) position = source.advance(document.bytes, position) catch return error.InvalidStructuredTokens;
             const start = position;
             while (position.byte < range.end) position = source.advance(document.bytes, position) catch return error.InvalidStructuredTokens;

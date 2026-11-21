@@ -565,6 +565,57 @@ test "authority clarification subjects preserve earliest owner and remain stable
     try std.testing.expectError(error.InvalidRequiredAuthority, conversion.build(allocator, source_inputs, later, try observe(allocator, later), rework, &packet_guidance.marked));
 }
 
+test "two gaps owned by one stage become two needs and two open forms with distinct subjects" {
+    const conversion = @import("domain/required_authority_clarifications.zig");
+    const refresh = @import("domain/clarification_refresh.zig");
+    const c = @import("domain/clarification_inputs.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const source_inputs = try clarificationSources(allocator);
+    const one = try fixture(allocator, .feature_intent);
+    var inputs = one;
+    inputs.feature = source_inputs.corpus.feature_id;
+    inputs.detected_at = .spec;
+    // The second requirement has the same owner stage and another slot, so its subject differs.
+    var other = one.seeds[0];
+    other.id.slot = .primary_goal;
+    inputs.seeds = try allocator.dupe(a.Seed, &.{ one.seeds[0], other });
+    const proofs = try allocator.dupe(a.Evidence, &.{ one.evidence[0], one.evidence[0] });
+    proofs[1].id.ordinal = 2;
+    proofs[1].requirement = other.id;
+    for (proofs) |*proof| {
+        proof.finding = .ambiguous;
+        proof.resolution = .{ .existing_authority = source };
+        proof.review = .{ .question = "Which delivery deadline applies? Supply the date and timezone.", .detail = "The source provides no delivery deadline.", .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{} };
+    }
+    proofs[1].review.?.question = "Which delivery mechanism applies? Name the mechanism.";
+    inputs.evidence = proofs;
+    inputs.candidates = &.{};
+    const needs = try conversion.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
+    try std.testing.expectEqual(@as(usize, 2), needs.entries.len);
+    try std.testing.expectEqual(.spec, needs.entries[0].stage);
+    try std.testing.expectEqual(.spec, needs.entries[1].stage);
+    try std.testing.expect(!std.mem.eql(u8, needs.entries[0].question, needs.entries[1].question));
+    const opened = try refresh.refresh(allocator, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, needs);
+    const records = opened.state.value.?.records;
+    try std.testing.expectEqual(@as(usize, 2), records.len);
+    try std.testing.expect(!std.mem.eql(u8, records[0].id, records[1].id));
+    try std.testing.expect(!c.sameSubject(records[0].subject, records[1].subject));
+    // A rerun with the gaps in the other order keeps both subjects and their IDs.
+    inputs.seeds = try allocator.dupe(a.Seed, &.{ other, one.seeds[0] });
+    inputs.evidence = try allocator.dupe(a.Evidence, &.{ proofs[1], proofs[0] });
+    const again = try conversion.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
+    const reopened = try refresh.refresh(allocator, .{ .state = .{ .value = opened.state.value }, .submissions = &.{}, .protected_forms = &.{} }, again);
+    try std.testing.expectEqual(@as(usize, 2), reopened.state.value.?.records.len);
+    for (records) |before| {
+        const kept = for (reopened.state.value.?.records) |after| {
+            if (c.sameSubject(before.subject, after.subject)) break after;
+        } else return error.SubjectLost;
+        try std.testing.expectEqualStrings(before.id, kept.id);
+    }
+}
+
 test "current contradictory assessments fail while genuine missing decisions retain their questions" {
     const needs = @import("domain/required_authority_clarifications.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);

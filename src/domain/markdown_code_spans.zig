@@ -118,6 +118,30 @@ fn less(_: void, a: Range, b: Range) bool {
     return a.start < b.start;
 }
 
+/// The exact value of a fenced block: its interior without the blank lines at either edge. A blank line cannot
+/// be cited (ADR 0036 Decision 1), so a quote of every citable line of the block holds the value in full,
+/// whether or not it also cites the fences. An interior of blank lines holds no value.
+pub fn blockValue(bytes: []const u8, range: Range) ?Range {
+    var first = range.start;
+    while (first < range.end) {
+        const end, const next = lineAt(bytes, first);
+        if (std.mem.trim(u8, bytes[first..end], " \t").len != 0) break;
+        first = next;
+    }
+    if (first >= range.end) return null;
+    var cut = range.end;
+    while (cut > first) {
+        var content_end = cut;
+        if (content_end > first and bytes[content_end - 1] == '\n') content_end -= 1;
+        if (content_end > first and bytes[content_end - 1] == '\r') content_end -= 1;
+        var line_start = content_end;
+        while (line_start > first and std.mem.indexOfScalar(u8, "\r\n", bytes[line_start - 1]) == null) line_start -= 1;
+        if (std.mem.trim(u8, bytes[line_start..content_end], " \t").len != 0) break;
+        cut = line_start;
+    }
+    return .{ .start = first, .end = cut, .form = .code_block };
+}
+
 /// The end of the line at `offset`, without its ending, and the next line's start.
 fn lineAt(bytes: []const u8, offset: usize) struct { usize, usize } {
     const end = std.mem.indexOfAnyPos(u8, bytes, offset, "\r\n") orelse bytes.len;

@@ -261,6 +261,29 @@ test "structured Markdown preserves raw code and link destinations without inter
     }
 }
 
+test "a fenced block's value excludes the blank lines at its edges and an all-blank block holds none" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // A blank line cannot be cited (ADR 0036 Decision 1), so only a value without blank edges can be held in
+    // full by a quote of the block's citable lines.
+    for ([_]struct { source: []const u8, value: ?[]const u8 }{
+        .{ .source = "Example:\n```\na: 1\nb: 2\n```\n", .value = "a: 1\nb: 2\n" },
+        .{ .source = "Example:\n```\n\na: 1\nb: 2\n```\n", .value = "a: 1\nb: 2\n" },
+        .{ .source = "Example:\n```\na: 1\nb: 2\n\n\n```\n", .value = "a: 1\nb: 2\n" },
+        .{ .source = "Example:\n```\n \na: 1\n\nb: 2\n\t\n```\n", .value = "a: 1\n\nb: 2\n" },
+        .{ .source = "Example:\n```\n\na: 1\n", .value = "a: 1\n" },
+        .{ .source = "Example:\n```\n\n  \n```\n", .value = null },
+        .{ .source = "Example:\r\n```\r\n\r\na: 1\r\n\r\n```\r\n", .value = "a: 1\r\n" },
+    }) |case| {
+        const available = try fixture.candidates(a, try inputsFor(a, case.source));
+        if (case.value) |expected| {
+            try std.testing.expectEqual(@as(usize, 1), available.entries.len);
+            try std.testing.expectEqualStrings(expected, available.entries[0].fact.citation.verbatim.?);
+        } else try std.testing.expectEqual(@as(usize, 0), available.entries.len);
+    }
+}
+
 test "fences retain source form while classification owns code versus required output" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

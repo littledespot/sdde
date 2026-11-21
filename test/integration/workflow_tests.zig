@@ -1671,6 +1671,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const two_summary_requests = summary_scenario or (brief_scenario and (scenario - brief_start) % 2 == 0);
         const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
         defer if (two_summary_requests) allocator.free(configured_definition);
+        // A patch that finds nothing to change would run the scenario unpatched and pass it.
+        if (two_summary_requests) try std.testing.expect(!std.mem.eql(u8, definition, configured_definition));
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
         inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "scenarios.prompt.md", "scenarios.context.json", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "support.schema.json", "links.prompt.md", "links.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
@@ -1680,6 +1682,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             const finer = scenario == finer_composition_scenario and std.mem.eql(u8, name, "extraction.composition.json");
             const configured = if (finer) try std.mem.replaceOwned(u8, allocator, bytes, "\"/reason\"", "\"/reason/nodes\"") else bytes;
             defer if (finer) allocator.free(configured);
+            if (finer) try std.testing.expect(!std.mem.eql(u8, bytes, configured));
             try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/spec/" ++ name, .data = configured });
         }
         var project_source = toolchain_authority_source.Adapter.init(io, project.dir);

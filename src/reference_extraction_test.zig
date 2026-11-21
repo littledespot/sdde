@@ -373,6 +373,16 @@ test "claims quote their cited source lines and split only across top-level list
         .{ .source = "```\n  key: v\n```\n", .citations = "[2]", .forced = true },
         .{ .source = "Config:\n```\na: 1\n", .citations = "[1,2,3]", .forced = true },
         .{ .source = "Config:\n\n```\na: 1\nb: 2\n```\n", .citations = "[4]", .forced = false },
+        // A blank interior line at either edge of the block cannot be cited (ADR 0036 Decision 1), so "in full" is
+        // every citable line of the block: the content lines alone or the whole block force the duty, a part leaves
+        // it free.
+        .{ .source = "Config:\n\n```\n\na: 1\nb: 2\n```\n", .citations = "[5,6]", .forced = true },
+        .{ .source = "Config:\n\n```\n\na: 1\nb: 2\n```\n", .citations = "[3,5,6,7]", .forced = true },
+        .{ .source = "Config:\n\n```\n\na: 1\nb: 2\n```\n", .citations = "[5]", .forced = false },
+        .{ .source = "Config:\n\n```\na: 1\nb: 2\n\n```\n", .citations = "[4,5]", .forced = true },
+        .{ .source = "Config:\n\n```\na: 1\nb: 2\n\n```\n", .citations = "[3,4,5,7]", .forced = true },
+        .{ .source = "Config:\n\n```\na: 1\nb: 2\n\n```\n", .citations = "[4]", .forced = false },
+        .{ .source = "Config:\n\n```\n\na: 1\n\nb: 2\n\n```\n", .citations = "[5,7]", .forced = true },
     }) |case| {
         const exact = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", case.source));
         const available = try token_fixture.candidates(a, exact);
@@ -381,6 +391,7 @@ test "claims quote their cited source lines and split only across top-level list
         const wire = try token_fixture.wire(a, body, &.{.{ .irrelevant = available.entries[0].id }});
         const checked = try @import("domain/token_classification_validation.zig").validate(a, exact, available, try text_fixture.check(a, exact, try parse.execute(a, .{ .entries = &.{raw(exact, 0, wire)} })));
         if (case.forced) {
+            try std.testing.expect(checked == .invalid);
             try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{available.entries[0].id}, checked.invalid.choices.required_preserve);
         } else try std.testing.expect(checked == .valid);
     }

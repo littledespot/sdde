@@ -2278,23 +2278,27 @@ const MessagesWire = struct {
         self.calls += 1;
         if (request.target != .anthropic) self.foreign_targets += 1;
         try self.bodies.append(std.testing.allocator, try std.testing.allocator.dupe(u8, request.body));
-        const answer = if (self.calls <= self.texts.len) self.texts[self.calls - 1] else self.text;
-        const body = try std.json.Stringify.valueAlloc(allocator, .{
-            .id = "msg_offline",
-            .type = "message",
-            .role = "assistant",
-            .model = "claude-haiku-5-5",
-            .content = .{.{ .type = "text", .text = answer, .citations = null }},
-            .stop_reason = "end_turn",
-            .stop_sequence = null,
-            .stop_details = null,
-            .usage = .{ .input_tokens = 884, .output_tokens = 48, .cache_creation_input_tokens = null, .cache_read_input_tokens = null, .cache_creation = null, .output_tokens_details = null, .server_tool_use = null, .service_tier = "standard", .inference_geo = null, .speed = null },
-            .container = null,
-            .diagnostics = null,
-        }, .{});
-        return .{ .received = .{ .status = 200, .request_id = "req_offline", .body = body } };
+        return messagesResponse(allocator, if (self.calls <= self.texts.len) self.texts[self.calls - 1] else self.text);
     }
 };
+
+/// One valid Messages envelope whose only content is `text`.
+fn messagesResponse(allocator: std.mem.Allocator, text: []const u8) provider_transport.Error!provider_transport.Response {
+    const body = try std.json.Stringify.valueAlloc(allocator, .{
+        .id = "msg_offline",
+        .type = "message",
+        .role = "assistant",
+        .model = "claude-haiku-5-5",
+        .content = .{.{ .type = "text", .text = text, .citations = null }},
+        .stop_reason = "end_turn",
+        .stop_sequence = null,
+        .stop_details = null,
+        .usage = .{ .input_tokens = 884, .output_tokens = 48, .cache_creation_input_tokens = null, .cache_read_input_tokens = null, .cache_creation = null, .output_tokens_details = null, .server_tool_use = null, .service_tier = "standard", .inference_geo = null, .speed = null },
+        .container = null,
+        .diagnostics = null,
+    }, .{});
+    return .{ .received = .{ .status = 200, .request_id = "req_offline", .body = body } };
+}
 
 test "a Claude-only Spec run sends every call through the shared adapter to the Messages endpoint" {
     const io = std.testing.io;
@@ -2416,6 +2420,74 @@ test "a whole-workflow run reports every repair merge it made, including the one
     // The second merge took the candidate the first left, and each repaired its own chunk.
     try std.testing.expectEqual(first.revision_after, second.revision_before);
     try std.testing.expect(!@import("../../../src/domain/model_request_identity.zig").unitOwnerEql(first.owner, second.owner));
+}
+
+/// Answers every Messages request as the scripted matrix answers the fake provider: from the state the
+/// runner holds as the request is sent, so a run through the production composition can finish. The
+/// answers come from the one builder the matrix uses; only the transport is scripted.
+const ScriptedWire = struct {
+    runner: ?*const ?@import("../../../src/application/workflow_pipeline_runner.zig").Runner = null,
+    calls: usize = 0,
+    foreign_targets: usize = 0,
+    /// The first request the scripted answers could not be built for; the exchange then fails.
+    failure: ?anyerror = null,
+
+    fn port(self: *ScriptedWire) provider_transport.Port {
+        return .{ .context = @ptrCast(self), .exchange_fn = exchange };
+    }
+
+    fn exchange(context: *provider_transport.Context, allocator: std.mem.Allocator, request: provider_transport.Request) provider_transport.Error!provider_transport.Response {
+        const self: *ScriptedWire = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        if (request.target != .anthropic) self.foreign_targets += 1;
+        var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer scratch.deinit();
+        const scripted = self.answer(scratch.allocator()) catch |err| {
+            if (self.failure == null) self.failure = err;
+            return error.Cancelled;
+        };
+        return messagesResponse(allocator, scripted);
+    }
+
+    fn answer(self: *const ScriptedWire, allocator: std.mem.Allocator) ![]const u8 {
+        const slot = self.runner orelse return error.RunnerNotObserved;
+        const runner = if (slot.*) |*prepared| prepared else return error.RunnerNotPrepared;
+        const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+        const attempt = @import("../../../src/domain/model_attempt_accounting.zig").latestAttempt(runner.model_accounting.?.attempts).ordinal().value;
+        return @import("../../../src/test_fixtures/spec_generation_responses.zig").build(allocator, view, .{ .attempt = attempt });
+    }
+};
+
+test "an offline Spec run reaches publication through the production composition and the harness oracle" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try materializeQuiet(io, project.dir, captured);
+    var wire: ScriptedWire = .{};
+    var keys: @import("../environment.zig").GenerationKeys = .initFill(null);
+    keys.set(.anthropic, "offline-anthropic-credential");
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v23", .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var evidence_run = std.testing.tmpDir(.{});
+    defer evidence_run.cleanup();
+    const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{"offline-anthropic-credential"} };
+    const specification = try @import("../e2e/invoke.zig").run(io, a, project.dir, choice, captured, keys, store, &report, .{ .purpose = .whole_workflow, .transport = wire.port(), .runner_view = &wire.runner });
+    if (wire.failure) |failure| std.debug.print("scripted answer unavailable: {s}\n", .{@errorName(failure)});
+    try std.testing.expect(wire.failure == null);
+    // Every request went to the configured provider, and the report counts each one.
+    try std.testing.expect(wire.calls > 0);
+    try std.testing.expectEqual(@as(usize, 0), wire.foreign_targets);
+    try std.testing.expectEqual(@as(?usize, wire.calls), report.last_model_call);
+    // The harness's success path: the workflow completed, published, and the oracle found every expected file.
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .ok), report.workflow_outcome);
+    try std.testing.expectEqual(c.Status.generated, report.status);
+    try std.testing.expectEqual(.passed, report.publication_check);
+    try std.testing.expect(report.missing_artifact == null);
+    try std.testing.expect(specification != null and specification.?.len != 0);
 }
 
 test "a request-model retry exhaustion names its stage in the report and the step event, and another step names none" {

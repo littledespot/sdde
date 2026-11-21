@@ -217,7 +217,10 @@ Where a parser can decide mechanically, the engine extracts facts before involvi
 - The shared [extractor registry](../../src/domain/structured_tokens.zig) registers
   `markdown_inline_code_v1`, `markdown_fenced_code_v1` and
   `markdown_link_destination_v1`: raw inline interiors, fenced bodies and explicit
-  inline-link destinations. Ordinary prose or quotation marks do not create candidates.
+  inline-link destinations. A fenced body has no blank lines at its edges, because a
+  blank line cannot be cited ([ADR 0036](../decisions/0036-source-quoted-claims.md)
+  Decisions 1 and 5), and an all-blank body creates no candidate. Ordinary prose or
+  quotation marks do not create candidates.
 - The bounded source-range parser does not claim a complete Markdown AST. Opaque
   code/HTML interiors do not create nested link candidates; ambiguous overlapping
   markup cannot mint overlapping identities. Other source syntax remains captured evidence.

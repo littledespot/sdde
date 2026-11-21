@@ -14,8 +14,8 @@ const binding = @import("../domain/specification_source_binding.zig");
 const schema_owner = @import("../domain/model_result_schema.zig");
 const root = "test/calibration/authoring-associations";
 const output = ".zig-cache/authoring-associations/v14-text";
-const captured_run = "zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959";
-const captured_feature = captured_run ++ "/project/specs/hello-world";
+/// The diagnostic lineage a live panel must replay. Nothing offline proves it is a current parent, so a
+/// recorded live run is never accepted (`collect`).
 const parent_identity: shared.ReviewParent = .{ .run = "RUN-5603b655c6e6a7498c6980fc0d447584", .call = "request-1-inference-1" };
 
 /// The brief seeds carry no title: the engine takes it from the sources (ADR 0048).
@@ -49,7 +49,6 @@ const Case = struct {
     },
 };
 const File = struct { path: []const u8, sha256: []const u8, bytes: usize };
-const ParentPreparation = union(enum) { unavailable: void, ready: File };
 const Request = struct {
     unit: []const u8,
     group_id: ?u32,
@@ -232,7 +231,6 @@ pub fn run() !void {
     }
     try std.testing.expectEqual(@as(usize, 3), cases.len);
     try std.testing.expectEqual(@as(usize, 18), trials.items.len);
-    const parent = try wirePreflight(a, output, trials.items);
     const paths = [_][]const u8{
         root ++ "/cases.json",                                     root ++ "/README.md",                            root ++ "/scorecard.template.json",
         "src/test_fixtures/authoring_association_calibration.zig", "src/test_fixtures/source_loss_calibration.zig", "src/domain/specification_generation.zig",
@@ -245,7 +243,6 @@ pub fn run() !void {
     };
     var dependencies: std.ArrayList(File) = .empty;
     for (paths) |path| try dependencies.append(a, try pin(a, path));
-    if (parent == .ready) for ([_][]const u8{ captured_run ++ "/evidence/generation/call-000001/context.json", captured_run ++ "/evidence/generation/call-000001/request.json", captured_feature ++ "/logs/prompts/" ++ parent_identity.run ++ "/LOGBIND-1/0001.log", captured_feature ++ "/logs/events/" ++ parent_identity.run ++ "/LOGBIND-1/0001.log" }) |path| try dependencies.append(a, try pin(a, path));
     for (cases) |example| if (example.source_file) |path| {
         var present = false;
         for (dependencies.items) |file| if (std.mem.eql(u8, file.path, path)) {
@@ -261,80 +258,13 @@ pub fn run() !void {
         .limits = .{ .cases = cases.len, .logical_trials = trials.items.len, .repetitions = 2, .physical_sends = physical_sends, .stop_at_actual_input_plus_output_tokens = 200000, .retries_corrections_repairs_model_judges_review_calls_e2e = 0 },
         .admission = "Actual response must pass its frozen schema, current native generation parse/validate/admit and record consistency. A diagnostic receipt is never native workflow origin or publication authority.",
         .downstream = "Native admitted authored associations determine the review subject and evidence. No review model calls or expected-value loss findings are prepared.",
-        .parent = .{ .feature = captured_feature, .identity = parent_identity, .description = parent, .wire_preflight = "Current Converse modified bodies rebuilt through existing replay provider prepare; zero sends. A retained request with different wire bytes is ineligible as an exact current parent. Current compiled graph authorization is a separate required preflight." },
+        .parent = .{ .identity = parent_identity },
         .dependencies = dependencies.items,
         .record_authoring_population = record_populations.items,
         .trials = trials.items,
     }, .{});
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = preparation });
-    try collect(a, output, schema, cases, states, trials.items, starts.items, preparation, parent);
-}
-
-const PreparationAccess = struct {
-    expected: @import("../domain/request_debugger.zig").Description,
-    fn authorize(context: *@import("../ports/request_replay.zig").Context, supplied: @import("../domain/request_debugger.zig").Description) @import("../ports/request_replay.zig").Error!@import("../domain/llm_provider_contracts.zig").ProviderFacts {
-        const self: *PreparationAccess = @ptrCast(@alignCast(context));
-        if (!std.meta.eql(self.expected, supplied)) return error.ReplayUnauthorized;
-        const model = @import("../composition/provider_model_contracts.zig").registry.resolve(
-            @import("../domain/llm_provider_identity.zig").ProviderId.parse(supplied.provider) orelse return error.ReplayUnauthorized,
-            @import("../domain/llm_provider_identity.zig").ModelId.parse(supplied.model) orelse return error.ReplayUnauthorized,
-            supplied.provider_config,
-        ) orelse return error.ReplayUnauthorized;
-        if (!model.capabilities.supports(supplied.response_mode, supplied.controls) or
-            !@import("../domain/llm_provider_contracts.zig").supportsReasoningEffort(model.supported_reasoning_efforts, supplied.reasoning_effort)) return error.ReplayUnauthorized;
-        return model.facts;
-    }
-};
-
-/// Rebuild authentic diagnostic descriptions through the existing replay adapter.
-/// The empty environment and fake transport cannot send to an external provider.
-fn wirePreflight(a: std.mem.Allocator, directory: []const u8, trials: []const Trial) !ParentPreparation {
-    // A clean checkout still exercises every native packet/admission probe.
-    // External archive availability only qualifies the separate live launcher.
-    if (try optional(a, captured_run ++ "/evidence/generation/call-000001/context.json") == null) return .unavailable;
-    const feature = try std.Io.Dir.cwd().openDir(std.testing.io, captured_feature, .{});
-    defer feature.close(std.testing.io);
-    var store: @import("../adapters/filesystem/request_debugger_store.zig").Store = .{ .io = std.testing.io, .feature = feature };
-    const calls = store.load(a) catch |err| switch (err) {
-        // Unsupported historical evidence cannot be a current replay parent.
-        // All native packet/admission probes still execute independently.
-        error.UnsupportedDebugDescriptionVersion => return .unavailable,
-        else => return err,
-    };
-    var parent: ?@import("../domain/request_debugger.zig").Call = null;
-    for (calls) |call| if (std.mem.eql(u8, call.run, parent_identity.run) and std.mem.eql(u8, call.id, parent_identity.call)) {
-        if (parent != null) return error.AmbiguousCalibrationParent;
-        parent = call;
-    };
-    const actual = parent orelse return error.MissingCalibrationParent;
-    if (!actual.request_complete or actual.redacted or actual.description == null or actual.request == null or actual.replay != null) return error.InvalidCalibrationParent;
-    const description = actual.description.?;
-    try validateSettings(description);
-    try std.testing.expectEqualStrings("g7-extract-content", description.request_step);
-    try std.testing.expectEqualStrings("spec-generation", description.workflow_id);
-    try std.testing.expectEqualStrings("spec_generation", description.model_slot);
-    var access: PreparationAccess = .{ .expected = description };
-    var environment: std.process.Environ.Map = .init(a);
-    defer environment.deinit();
-    var wire: @import("../model_transport_test_fixture.zig").Wire = .{};
-    var clock: @import("../provider_authorization_test_fixture.zig").TestClock = .{};
-    var compiler: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    var adapter: @import("../adapters/provider/request_replay.zig").Adapter = .{ .authorization = .{ .context = @ptrCast(&access), .authorize_fn = PreparationAccess.authorize }, .environment = &environment, .transport = wire.port(), .clock = clock.port(), .compiler = compiler.compiler() };
-    const current_parent = std.mem.eql(u8, actual.request.?, try adapter.provider().prepare(a, description));
-    for (trials) |trial| for (trial.requests) |request| {
-        const edit = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, request.edit.path), .{ .maximum_depth = 64 });
-        var modified = description;
-        modified.content = edit.content;
-        modified.schema = edit.schema;
-        access.expected = modified;
-        try std.testing.expectEqualStrings(try shared.read(a, request.request.path), try adapter.provider().prepare(a, modified));
-    };
-    try std.testing.expectEqual(@as(usize, 0), wire.calls);
-    // Exact replay admission is byte-exact. An old provider protocol never
-    // becomes a current parent merely because its model/settings still match.
-    if (!current_parent) return .unavailable;
-    try shared.writeAt(a, directory, "parent", "description.json", try std.json.Stringify.valueAlloc(a, description, .{}));
-    return .{ .ready = try pin(a, try std.fmt.allocPrint(a, "{s}/parent.description.json", .{directory})) };
+    try collect(a, output, schema, cases, states, trials.items, starts.items, preparation);
 }
 
 fn addTrials(a: std.mem.Allocator, trials: *std.ArrayList(Trial), id: []const u8, request: Request) !void {
@@ -414,12 +344,13 @@ fn optional(a: std.mem.Allocator, path: []const u8) !?[]const u8 {
     };
 }
 
-fn collect(a: std.mem.Allocator, directory: []const u8, schema: *const schema_owner.Schema, cases: []const Case, states: []const CaseState, trials: []const Trial, starts: []const session.Session, preparation: []const u8, parent: ParentPreparation) !void {
+fn collect(a: std.mem.Allocator, directory: []const u8, schema: *const schema_owner.Schema, cases: []const Case, states: []const CaseState, trials: []const Trial, starts: []const session.Session, preparation: []const u8) !void {
     const run_bytes = try optional(a, try std.fmt.allocPrint(a, "{s}/live-run.json", .{directory}));
     const run_manifest = if (run_bytes) |bytes| try @import("../domain/strict_json.zig").decode(Run, a, bytes, .{ .maximum_depth = 8 }) else null;
     if (run_manifest) |value| {
         if (!std.mem.eql(u8, value.preparation_sha256, try shared.sha256(a, preparation)) or !std.mem.eql(u8, value.parent.run, parent_identity.run) or !std.mem.eql(u8, value.parent.call, parent_identity.call)) return error.StaleCalibrationRun;
-        if (parent != .ready) return error.MissingCalibrationParent;
+        // No offline check proves the recorded run's parent is a current one, so none is accepted.
+        return error.MissingCalibrationParent;
     }
     var seen: std.ArrayList(ReplayOrigin) = .empty;
     const observations = try a.alloc(Observation, trials.len);

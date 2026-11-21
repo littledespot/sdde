@@ -40,19 +40,14 @@ builds a source-review packet from the admitted authored associations. These
 probes establish mechanics; seeds and their review projections are neither live
 outputs nor evidence of faithful authored meaning.
 
-The prepared parent is authentic extraction Call 1, `request-1-inference-1` in
-`RUN-5603b655c6e6a7498c6980fc0d447584`; it is a diagnostic lineage, not an
-authoring workflow origin. Its descriptor uses the same pinned model controls.
-Offline preparation loads that capture through the canonical debugger store and
-rebuilds both its exact request and every modified authoring request through the
-existing replay provider's `prepare` method. The credential environment is empty,
-the transport is fake, and the test asserts zero exchanges. Current compiled-step
-authorization for its exact `g7-extract-content` binding must also pass before
-launch; neither preflight is live model evidence.
-In a clean checkout without the retained archive, every native packet/admission
-probe still runs, while the separate parent preflight reports `unavailable`.
-That state cannot authorize or freeze a runnable live panel; never manufacture
-an archive or workflow origin to replace it.
+The parent a live panel replays is authentic extraction Call 1,
+`request-1-inference-1` in `RUN-5603b655c6e6a7498c6980fc0d447584`; it is a
+diagnostic lineage, not an authoring workflow origin. No offline check proves a
+parent is a current one, so a recorded `live-run.json` is rejected and the panel
+cannot be run or frozen. Never manufacture an archive or workflow origin to
+replace it. The launch, receipt and admission procedure below applies only once
+a retained current parent exists and a check rebuilds its exact request through
+the replay provider.
 
 ```sh
 zig build test-specification-generation --summary all -j2

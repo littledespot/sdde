@@ -44,10 +44,14 @@
   - 20 November 2026, SPEC01 C49 ("update the docs with the above recommendations", then
     "preflight and implement"): the paragraph reading of Decision 2 drops the Markdown
     structure lines that have no wording and reads a Setext heading's text as a heading.
+  - 21 November 2026, SPEC01 Q8 D8.2, "implement the recommendations for D8.2": a fenced
+    block's value excludes the blank lines at its edges, so a claim that cites every citable
+    line of the block cites it in full (Decision 5).
 - **Amends:**
   - §12.2 and §22.6, whose admission constraints and corrections gain Decision 7's
     agreement rule and its `disagreeing_items` correction;
-  - §16.3, extraction claims that cite a common line;
+  - §16.3, extraction claims that cite a common line, and its fenced-block candidate, whose
+    value has no blank edge lines and which an all-blank block does not create (Decision 5);
   - [ADR 0019](0019-single-request-debugger.md), whose request description records the
     rule, and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) Decision 5,
     whose list of native admission constraints gains it;
@@ -176,7 +180,10 @@ same claim and native checks couldn't tell distinct duties apart.
 5. **Exact values keep their native authority.** ADR 0024's forcing reads the quoted text
    of `business` and `scope_guard` claims. A code span or fenced block that such a claim
    cites in full is therefore preserved, whatever its kind, and becomes an exact
-   obligation. As ADR 0024 already provides, a value whose bytes aren't in NFC doesn't
+   obligation. A fenced block's value is its interior without the blank lines at its
+   edges, which cannot be cited (Decision 1), so a claim that cites every citable line
+   of the block cites it in full, with or without the fence lines. A block whose
+   interior is blank holds no value and creates no candidate. As ADR 0024 already provides, a value whose bytes aren't in NFC doesn't
    survive prose normalization, so it isn't forced.
 
 6. **Generated text loses the code delimiters around an exact value.** Quoted claims
@@ -347,7 +354,8 @@ same claim and native checks couldn't tell distinct duties apart.
     sources whose chunks start inside and after fenced blocks.
   - Exact-value duty for a code span across lines and for fenced blocks: with a blank
     line, content lines only, the opening fence, indented content and an unterminated
-    fence. Citing part of a block leaves it free.
+    fence, and a blank first or last interior line, which the value excludes. Citing
+    part of a block leaves it free.
   - Joining runs: an ellipsis between runs, including inside a JSON value.
   - Allocation stays proportional to the source across 128 chunks.
   - Admission: blank, unsupplied and over-count citations are rejected, for the initial
