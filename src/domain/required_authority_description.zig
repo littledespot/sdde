@@ -32,7 +32,7 @@ pub fn recordFamily(g: *const Guidance, kind: spec.Kind) []const u8 {
 pub fn recordField(g: *const Guidance, kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {
     if (!a.recordField(kind, slot)) return error.InvalidRequiredAuthority;
     if (slot == .text) return recordFamily(g, kind);
-    return g.record_fields.get(guidance.recordField(slot) orelse return error.InvalidRequiredAuthority);
+    return g.record_fields.get(guidance.recordField(kind, slot) orelse return error.InvalidRequiredAuthority);
 }
 
 pub fn recordTask(allocator: std.mem.Allocator, g: *const Guidance, kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {

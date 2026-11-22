@@ -92,6 +92,9 @@ pub const Options = struct {
     /// The first scenario of each group's first scenarios answer has a text defect, which the
     /// field-level repair fixes (ADR 0038 Decision 3).
     scenario_defect: bool = false,
+    /// Every scenario of a scenarios answer omits its Given, as one may where the sources state no starting
+    /// situation for the requirement (ADR 0038 Decision 3). The edge cases a records answer writes keep theirs.
+    scenarios_without_given: bool = false,
 };
 
 pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
@@ -770,6 +773,8 @@ pub const refusal = "The request is refused.";
 fn scenarios(allocator: std.mem.Allocator, current: @import("../domain/specification_session.zig").Session, context: @import("../domain/specification_provenance.zig").Context, options: Options) ![]const u8 {
     const request = @import("../domain/scenario_request.zig");
     const provenance = @import("../domain/specification_provenance.zig");
+    // The scripted defect is a text defect in the first scenario's Given, which an omitted Given cannot carry.
+    if (options.scenario_defect and options.scenarios_without_given) return error.InvalidFixture;
     const group_plan = try @import("../domain/specification_session.zig").scenarioPlan(allocator, current);
     const all = try provenance.items(context);
     const references = @import("../domain/reference_support.zig").records(context.references);
@@ -779,7 +784,7 @@ fn scenarios(allocator: std.mem.Allocator, current: @import("../domain/specifica
         const claim = try withoutExact(allocator, options, try attributed(allocator, all, &.{slot.claim}));
         const value = try provenance.modelValue(allocator, references, claim.value);
         const refuses = options.edge_cases == .chosen and index + 1 == written.len;
-        scenario.* = .{ .number = slot.number, .given = value, .when = value, .then = if (refuses) .{ .segments = &.{.{ .literal = .{ .value = refusal } }} } else value };
+        scenario.* = .{ .number = slot.number, .given = if (options.scenarios_without_given) null else value, .when = value, .then = if (refuses) .{ .segments = &.{.{ .literal = .{ .value = refusal } }} } else value };
     }
     if (options.scenario_defect and options.attempt == 1) written[0].given = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
     return @import("../domain/model_candidate_json.zig").encode(request.Response, allocator, .{ .scenarios = written });

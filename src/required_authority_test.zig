@@ -296,7 +296,7 @@ test "record purposes place workflow guidance in native record frames" {
         inline for (std.meta.fields(@FieldType(spec.Content(spec.BusinessValue), @tagName(kind)))) |field| {
             const slot: a.Slot = @field(a.Slot, field.name);
             const purpose = try descriptions.recordField(g, kind, slot);
-            try std.testing.expectEqualStrings(if (slot == .text) family else g.record_fields.get(keys.recordField(slot).?), purpose);
+            try std.testing.expectEqualStrings(if (slot == .text) family else g.record_fields.get(keys.recordField(kind, slot).?), purpose);
             if (slot != .text) try expected_record.print(allocator, " {s}: {s}", .{ field.name, purpose });
             const selected: a.Id = .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = kind, .ordinal = 3 } }, .slot = slot };
             const task = try descriptions.task(allocator, g, selected);
@@ -321,6 +321,44 @@ test "record purposes place workflow guidance in native record frames" {
     for (text_kinds, 0..) |kind, index| {
         for (text_kinds[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, try descriptions.recordField(shipped, kind, .text), try descriptions.recordField(shipped, prior, .text)));
     }
+}
+
+test "a field two families hold is placed from each family's own entry in every request that presents it" {
+    const spec = @import("domain/specification.zig");
+    const descriptions = @import("domain/required_authority_description.zig");
+    const keys = @import("domain/packet_guidance.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const g = &packet_guidance.marked;
+    const criterion = g.record_fields.get(keys.recordField(.acceptance_criterion, .given).?);
+    const edge = g.record_fields.get(keys.recordField(.edge_case, .given).?);
+    try std.testing.expect(!std.mem.eql(u8, criterion, edge));
+    // Accepted: each family's field, family description, authoring task and repair task carry its own entry.
+    try std.testing.expectEqualStrings(criterion, try descriptions.recordField(g, .acceptance_criterion, .given));
+    try std.testing.expectEqualStrings(edge, try descriptions.recordField(g, .edge_case, .given));
+    const families = [_]struct { kind: spec.Kind, own: []const u8, other: []const u8 }{
+        .{ .kind = .acceptance_criterion, .own = criterion, .other = edge },
+        .{ .kind = .edge_case, .own = edge, .other = criterion },
+    };
+    for (families) |family| {
+        const record = try descriptions.record(allocator, g, family.kind);
+        try std.testing.expect(std.mem.indexOf(u8, record, family.own) != null);
+        try std.testing.expect(std.mem.indexOf(u8, record, family.other) == null);
+        const task = try descriptions.recordTask(allocator, g, family.kind, .given);
+        try std.testing.expect(std.mem.indexOf(u8, task, family.own) != null);
+        try std.testing.expect(std.mem.indexOf(u8, task, family.other) == null);
+    }
+    // Rejected: the records request offers every family but the entity and the criterion, so the criterion's entry,
+    // which says a criterion may have no Given, never reaches the family whose Given is required.
+    var offered: std.ArrayList(spec.Kind) = .empty;
+    for (std.meta.tags(spec.Kind)) |kind| if (kind != .entity and kind != spec.scenario_family) try offered.append(allocator, kind);
+    const records = try descriptions.recordsFor(allocator, g, offered.items);
+    try std.testing.expect(std.mem.indexOf(u8, records, edge) != null);
+    try std.testing.expect(std.mem.indexOf(u8, records, criterion) == null);
+    // An unrelated field keeps its one entry: a family without the field has no lookup.
+    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(g, .entity, .given));
+    try std.testing.expectEqualStrings(g.record_fields.get(keys.recordField(.entity, .name).?), try descriptions.recordField(g, .entity, .name));
 }
 
 test "feature and reference tasks place workflow guidance at native frames" {

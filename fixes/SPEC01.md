@@ -48,7 +48,9 @@ on these Givens being defects, and a revision that doesn't count them can't meas
 score in 3 of the 5 publications of Q14's set (hello-world run 1 and both loan-renewal runs) without changing a pass,
 and adds a minor `unsupported_addition` to each of the three loan-renewal publications of Q26's set. The skill's
 revision changes, so the next set's reference is re-scored on it first (§2 rule 5); the table above stays
-`69c55877…`'s until then.
+`69c55877…`'s until then. Two later sets, scored on it and on the same development cases ([Z_SPEC01](Z_SPEC01.md) "Two
+sets on the batch of 22 November 2026"): hello-world 100% in five of six runs and 96.43% in one; loan-renewal 96.43%,
+96.43%, 89.29% and 92.86% three times, with source-grounding 3 in every loan-renewal run from generic-precondition Givens.
 
 **Retained runs:** `zig-out/e2e-spec/` holds the Haiku set (`2026-11-17T08-4*`), D8.4's set (`21-5*` and
 `22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`), Q24's set (`2026-11-18T06-5*`) and two
@@ -189,7 +191,9 @@ set, then screens of the call kinds it changes and a set, each approved.
   Binding definitions (Q2) wasn't kept; counted as a brittleness measure (T5).
 - **A behaviour claim extraction labels non-business:** the composed story quotes only `business`
   claims, so such a claim is in no story, and coverage passes it on context signals alone
-  (`specification_coverage.zig:64-75`). No evaluation shows it. Reopen as an item, with its own measured
+  (`specification_coverage.zig:64-75`). One run shows the omission (`2026-11-22T06-54-55Z`, whose story drops
+  "A loan may be renewed only once." because extraction labelled it `design`), but its FR and criterion state the limit, so
+  no content-basis defect was filed. Reopen as an item, with its own measured
   class, when a scored run traces a content-basis defect to it, or to a behaviour claim that no
   requirement statement names. Q21, which proposed obligation-bearing claims for the second case, was
   closed 21 November 2026 (user: "update the documentation with the above recommendations"): since ADR
@@ -226,12 +230,12 @@ set, then screens of the call kinds it changes and a set, each approved.
 **Kept 22 November 2026** (user: "keep Q26, benefit not demonstrated"; record: [Z_SPEC01](Z_SPEC01.md) Q26).
 Open parts only:
 
-- **Shared `given` guidance:** the one sentence also reaches the repair request of a held Given, where only
-  `replace` is possible, and the records request for an edge case, whose `given` stays required; no Given was
-  repaired in the set. Keying the two entries apart (`packet-guidance/v8`) is the alternative, and the remedy if
-  the field rule's "Write nonblank prose" (`text_field_policy.zig:110`) causes the retained repeats (evaluator:
-  `prompt_conflict`, `likely`; 3 target events in 24 criteria, below the evidence floor). A prompt or contract
-  change is decided on both development cases with repeated runs (AGENTS.md). A second set on the same request bytes
+- **Retained repeats:** whether the field rule's "Write nonblank prose" (`text_field_policy.zig:110`), read beside the
+  criterion's `given` entry, causes the Givens that repeat their When or fill a placeholder is unsettled (evaluator:
+  `prompt_conflict`, `likely`, with `model_noncompliance` the other reading; 3 target events in 24 criteria in the first
+  set, below the evidence floor). The rule is unchanged: it states the form of a Given that is written, and its
+  per-field policy (`ac_given`, `edge_given`) is already keyed apart. A prompt or contract change is decided on both
+  development cases with repeated runs (AGENTS.md). A second set on the same request bytes
   (22 November 2026, build source `7880686f…`, 3 runs per case, all six published and passed, 98.81% for each case)
   shows both sides: hello-world run 1 filled all 3 Givens with "No starting situation is stated in the sources."
   (one minor `placeholder`, the same `prompt_conflict` reading, 96.43%) while runs 2 and 3 omitted every Given;
@@ -240,34 +244,30 @@ Open parts only:
   hello-world 100%, loan-renewal 97.62%): hello-world omitted the Given on 6 of 9 criteria with no filler and gave the
   other 3 a generic precondition; loan-renewal omitted one Given (the first in 45 loan-renewal criteria), repeated a
   When once and gave 5 of 15 a generic precondition, dropped none its source states, and repaired none (its two repairs
-  replaced a Then). Across the three sets, 5 events (4 Givens repeating their When, 1 placeholder Given) in 72
-  criteria: still below the floor.
-- **Not driven end to end:** `links.prompt.md` still says "its given and when cover that situation", and no
-  scripted integration scenario drives a Given-less criterion; the owner tests and `verify` cover it. No run has
-  written an edge case, so an edge case's `GIVEN` line for a Given-less criterion is unexercised live (Q14's
-  edge-case bullet).
-- **Generic Givens** ("…with an existing due date", 3 of 15 loan-renewal criteria in the set) are a minor
-  `unsupported_addition` under §1's ruling (22 November 2026). The removed presupposition sentence did not remove
-  them, and no open change targets them; later sets count them.
+  replaced a Then). Across those three sets, 5 events (4 Givens repeating their When, 1 placeholder Given) in 72
+  criteria. Two more sets (22 November 2026, builds `b8f50364…` and `4415163b…`, neither projected itself;
+  [Z_SPEC01](Z_SPEC01.md) "Two sets on the batch of 22 November 2026"): 2 Givens repeating their When and no
+  placeholder in 48 criteria (hello-world omitted every Given, 18 of 18; loan-renewal kept one on 30 of 30). Across the
+  five sets, 7 events (6 Givens repeating their When, 1 placeholder Given) in 120 criteria: still below the floor.
+- **Edge case live:** no run has written an edge case, so the edge case's own `given` entry and its `GIVEN` line for a
+  Given-less criterion are unexercised live (Q14's edge-case bullet); the scripted scenario drives them offline.
+- **Generic Givens** ("…with an existing due date"; 3, 5 and 5 of 15 loan-renewal criteria in Q26's three sets, 5 and 6
+  of 15 in the two later ones) are a minor `unsupported_addition` under §1's ruling (22 November 2026). The removed
+  presupposition sentence did not remove them, and no open change targets them; later sets count them.
 
-**Follow-up decided** 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6");
-unbuilt. One change set:
-
-- Key the criterion's and the edge case's `given` guidance apart (`packet-guidance/v8`), so the request no longer
-  tells the model to omit a Given where the schema requires one. `/preflight` settles how the held-Given repair
-  request and the field rule at `text_field_policy.zig:110` read beside the two entries.
-- Reword `links.prompt.md:2` ("its given and when cover that situation") so it holds for a criterion without a Given.
-- Add a scripted integration scenario that drives a criterion without a Given, and an edge case linked to it, to
-  publication.
-
-It removes a conflict in the request that the evaluator traced (`prompt_conflict`, `likely`), so it is request
-hygiene, kept on guards plus its **Keep if** (§2 rule 6, as Q4): no placeholder Given, and no criterion dropping a
-Given its source states. **Set record** (§2 rule 6, before the set): three runs of each development case, extended to
-at most eight per case; reference Q26's three sets (the same request bytes, §2 rule 7), re-scored first on the skill
-revision that carries §1's ruling (§2 rule 5). Guards: lost source requirement, and the publication rate per case.
-Watch: weakened obligation, `unsupported_addition` in a Given, a Given repeating its When, and Q14's restated edge
-cases if any are written. **Next:** `/preflight`, fixtures at the owners, screens of the changed call kinds, then
-the set.
+**Follow-up built** 22 November 2026 (decided the same day; user: "update documenation with recommendation for
+decisions 3 4, 5, 6"; record: [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up"): the criterion's and the edge case's `given`
+guidance are keyed apart (`packet-guidance/v8`), `links.prompt.md` holds for a criterion without a Given, and a scripted
+scenario drives a Given-less criterion and a linked edge case to publication. It removes a conflict in the request that
+the evaluator traced (`prompt_conflict`, `likely`), so it is request hygiene, kept on guards plus its **Keep if**
+(§2 rule 6, as Q4): no placeholder Given, and no criterion dropping a Given its source states. Its request bytes differ
+only in the records requests' edge-case `given` text and the link requests' prompt, and no run has written an edge case,
+so the set may show no benefit by construction. **Set record** (§2 rule 6, before the set): three runs of each
+development case, extended to at most eight per case; reference Q26's three sets and the two later ones (the same
+request bytes as far as projected, §2 rule 7), re-scored first on the skill revision that carries §1's ruling (§2 rule
+5). Guards: lost source requirement, and the publication rate per case. Watch: weakened obligation,
+`unsupported_addition` in a Given, a Given repeating its When, and Q14's restated edge cases if any are written.
+**Next:** screens of the changed call kinds (the records request and the link request), then the set, each approved.
 
 ## 5. Engine track (E)
 
