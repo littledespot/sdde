@@ -3064,6 +3064,36 @@ User: "implement C42 and C45" (decided 22 November 2026). The request projection
   not `runner.finish`, and production builds the provider bootstrap without `control`, so a cancellation boundary count
   excludes it (both pre-date this change).
 
+## C41. A failed check in a scripted step hook fails its scenario (22 November 2026)
+
+User: "implement C41" (decided 22 November 2026). The request projection is byte-identical to `q26-after` (integration
+147/147).
+
+All 98 `catch unreachable` and the 3 `std.debug.panic` sites in `spec_generation_driver.zig` are gone. In `beforeInvoke`, a
+`void` hook, each became `catch |err| return self.hookFailed(err)`, and `hookFailed` keeps the first failure for `run` to
+return. `step` returns an applied outcome, so two helpers record a failure and keep the engine going: `failed(err, result)`
+returns the step's own result unchanged, and `failedBefore(err, id)` records the failure and still runs the real step for a
+check made before it. A panic's printed message is kept as a `std.debug.print` followed by `failed`. `authorityInputs` now
+returns an error union. Every converted check keeps its condition and its place; no scripted answer, order or count changed.
+`else => unreachable` in one exhaustive switch, `.?` and `std.debug.assert` stay, since they are not a swallowed error.
+An architecture pin requires the driver to contain no `unreachable`, `@panic(` or `std.debug.panic(` in code (it failed on
+the unconverted driver first; rejected fixtures for `catch unreachable`, `orelse unreachable`, `else => unreachable`,
+`@panic(` and `std.debug.panic(`; a comment mention is accepted, a string mention is not). The last `else => unreachable`
+in `beforeInvoke` became `hookFailed(error.UnscriptedRequestOwner)`. A test shows `hookFailed` keeps the first failure
+and `failed` returns `.ok`, `.invalid` or `.more` unchanged. Left alone in `test/integration/workflow_tests.zig`: five
+`catch unreachable` that are not step hooks (the matrix provider-bootstrap binding, a matrix-body `readCurrent`, a
+compile-time shortcode parse and two allocations in a probe-test helper).
+A contract review found that nothing exercised `run`'s return of the recorded failure, so three end-to-end cases of
+`SpecificationCases` run the single brief scenario with a fault injected into a hook: a step trace on a
+`FailingAllocator` (`run` returns `OutOfMemory`), a pre-seeded foreign `brief_references` pointer (`run` returns
+`TestUnexpectedResult`), and both (`run` returns the first, `OutOfMemory`). Deleting the return from `run` fails exactly
+these, and making first-failure-wins last-failure-wins fails the third. It also found that `afterInvoke` freed the arena
+a later call's provider could still read when its hook returned early; `afterInvoke` now clears the plan's content with
+the arena, with a test. Not covered, and not claimed: the `.?` unwraps and `std.debug.assert` in the driver still
+abort, and the `Recorder` in `request_projection.zig` still `std.debug.panic`s on a sink failure; neither is a driver
+step-hook error. A single `try`-based conversion point for the 140-odd identical `hookFailed` lines was declined: it
+rewrites every hook site, and the spelling pin guards the pattern.
+
 ## E3 feature logging, E6 prior-run crash finalization and E7 Stage 1 (22 November 2026)
 
 User: "preflight and implement" on E6, E3's feature logging and E7 with C8 and C49. The preflight stopped on missing

@@ -230,6 +230,30 @@ test "the scripted matrix builds its runtime only through the production composi
     try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "hook: ?BeforeStartup,\n") != null);
 }
 
+test "the scripted driver names no unreachable, @panic or std.debug.panic, so a failed check there is returned" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    const driver = try std.Io.Dir.cwd().readFileAlloc(io, "src/test_fixtures/spec_generation_driver.zig", allocator, .limited(2 * 1024 * 1024));
+    defer allocator.free(driver);
+    // An operation error, an unscripted request or a failed check in a hook is returned through `hookFailed`, which keeps
+    // the first failure and fails its scenario; `unreachable` (after `catch`, after `orelse`, or as a switch arm) and a
+    // panic would abort the test binary, and every scenario after it with it. A `.?` unwrap and `std.debug.assert` also
+    // abort and are not covered by this pin, which guards these spellings only.
+    for (aborting_spellings) |spelling| try expectAbsent(driver, spelling);
+    // Code that aborts is rejected, whichever way it spells it; a comment that mentions it is not.
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = parse(bytes) catch unreachable;", "unreachable"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = first(bytes) orelse unreachable;", "unreachable"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = switch (kind) { .known => 1, else => unreachable };", "unreachable"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = @panic(\"invalid\");", "@panic("));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = std.debug.panic(\"invalid\", .{});", "std.debug.panic("));
+    try expectAbsent("// parse(bytes) catch unreachable, an else => unreachable arm, @panic(\"x\") and std.debug.panic(\"x\", .{}) would abort the run\nconst value = 1;", "unreachable");
+    try expectAbsent("// @panic(\"x\") and std.debug.panic(\"x\", .{}) would abort the run\nconst value = 1;", "@panic(");
+    try expectAbsent("// @panic(\"x\") and std.debug.panic(\"x\", .{}) would abort the run\nconst value = 1;", "std.debug.panic(");
+}
+
+/// What aborts the test binary where the scripted driver would fail its scenario.
+const aborting_spellings = [_][]const u8{ "unreachable", "@panic(", "std.debug.panic(" };
+
 /// The test seam in `composition/root.zig`: `initWith` is behind a compile-time test guard, `init` and `initWith` are the
 /// only callers of the two construction phases (two each: assembly, then startup), and the hook runs once, between them,
 /// so no production path holds an optional hook. Returns the failing condition, or null.

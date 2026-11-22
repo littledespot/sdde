@@ -176,9 +176,6 @@ batch and live set needs its own approval (AGENTS.md).
 **Output track:** Q26's follow-up (§4 Q26, decided 22 November 2026) is the only item awaiting a set: one change
 set, then screens of the call kinds it changes and a set, each approved.
 
-**Offline, in gaps** (decided 22 November 2026), each proven byte-identical in every development-case request
-(§2 rules 1 and 10): C41's returned step-hook errors (§10).
-
 **Engine track, in gaps:** E7's later stages wait on the user deciding the recommendations in §5 E7. E0 is on hold. **Tests:** T4 with E1–E4. **Adjudication:** the evaluate-e2e skill for every set.
 
 **Open problems without an item.**
@@ -529,13 +526,15 @@ workflow adds its own text fields, so build it with Plan's first text field, not
 
 ### 10.6 Tests and harness
 
-**C41. The scripted driver is also the oracle (adds to E8).** A failed assertion in one of its step hooks
-is a panic: `src/test_fixtures/spec_generation_driver.zig` has 98 `catch unreachable` lines. Its merge gates are a
-`merge_routes` table of typed (operation, owner) pairs, and the `gates_bound` block fails the scenario with
-`GatedRouteNotInGraph` when the compiled graph binds none of one (Z_SPEC01 "Test-track closures").
-**Decided** 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"); unbuilt:
-each `catch unreachable` in a step hook becomes a returned error that fails its scenario, so a failed assertion
-no longer aborts the test binary.
+**C41. The scripted driver is also the oracle (adds to E8)** (built 22 November 2026, [Z_SPEC01](Z_SPEC01.md)): a
+failed check or operation error at a converted site in one of its step hooks fails its scenario with a returned error and
+no longer aborts the test binary, and an architecture pin keeps `unreachable`, `@panic(` and `std.debug.panic(` out of
+`spec_generation_driver.zig`. Its merge gates are a `merge_routes` table of typed (operation, owner) pairs, and the
+`gates_bound` block fails the scenario with `GatedRouteNotInGraph` when the compiled graph binds none of one. Three
+end-to-end cases run a scenario with an injected hook fault and require `run` to return it (a failing step-trace
+allocator, a wrong expectation, and both, which keeps the first). Still aborting: the `.?` unwraps and
+`std.debug.assert` in the driver, and the `std.debug.panic` sites in the `Recorder` of `request_projection.zig`, which
+wraps the provider on every matrix call and is outside the driver-hook item.
 
 **C42. The scripted matrix runs through `root.Runtime` only** (built 22 November 2026, [Z_SPEC01](Z_SPEC01.md)): the five
 hand copies of `Runtime.init`'s wiring in `test/integration/workflow_tests.zig` are gone and an architecture pin keeps the

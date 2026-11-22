@@ -1383,7 +1383,23 @@ fn stateId(runner: *@import("../../src/application/workflow_pipeline_runner.zig"
 /// `raised_retry_limit` runs the scenarios that script a request's faults up to its step's retry limit (the
 /// disposition, summary and global sequences, and the two scenarios-step exhaustions) on a definition whose limit
 /// of 2 is 3, so their expected call positions are derived from the compiled limit and not typed for 2 (SPEC01 C45).
-const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links, scenario_repair, scenario_stops, raised_retry_limit };
+///
+/// The `hook_*` cases run one brief scenario with a failure injected into a scripted hook and assert what `run`
+/// returns (finding the first failure, never a swallowed one and never an abort): `hook_trace_failure` gives the step
+/// trace an allocator that fails, so a hook's operation error is the failure; `hook_assertion_failure` pre-seeds the
+/// brief scenario's retained reference with a foreign pointer, so the driver's check of it fails; `hook_first_failure`
+/// injects both, and the trace's earlier failure is the one returned.
+const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links, scenario_repair, scenario_stops, raised_retry_limit, hook_trace_failure, hook_assertion_failure, hook_first_failure };
+
+/// What `run` returns in a `hook_*` case, null in every other.
+fn expectedHookFailure(workflow_cases: SpecificationCases) ?anyerror {
+    return switch (workflow_cases) {
+        .hook_trace_failure, .hook_first_failure => error.OutOfMemory,
+        .hook_assertion_failure => error.TestUnexpectedResult,
+        else => null,
+    };
+}
+
 /// The applicability sources' level-1 title heading (ADR 0048).
 const applicability_heading = "# Required output\n";
 
@@ -1464,6 +1480,59 @@ fn checkGatedMerges(steps: []const workflow_compilation.CompiledStep) !void {
     try std.testing.expect(changed != 0);
     // Every merge now runs another operation, so the first gated owner is the one reported.
     try std.testing.expectEqual(@as(?owners.RepairOwner, .source_omission_extraction), driver.unboundMerge(renamed));
+}
+
+// The record's own rules without a run: the first failure stays, and a failed check after a step hands back the
+// step's own result. That `run` returns the record, from a trace hook and from a check, is `checkHookFailure`'s.
+test "recording a failed check in a scripted hook keeps the first failure, and a step's own result passes through it" {
+    const driver_module = @import("../../src/test_fixtures/spec_generation_driver.zig");
+    var driver: driver_module.Driver = .{ .runner = undefined, .fake = undefined, .allocator = std.testing.allocator };
+    try std.testing.expectEqual(@as(?anyerror, null), driver.hook_failure);
+    driver.hookFailed(error.TestExpectedEqual);
+    driver.hookFailed(error.InvalidReferenceSnapshot);
+    try std.testing.expectEqual(@as(?anyerror, error.TestExpectedEqual), driver.hook_failure);
+    // A check that fails after the step ran records its failure and hands back the step's own result unchanged, so
+    // the engine goes on as it would have.
+    for ([_]workflow.OutcomeTag{ .ok, .invalid, .more }) |outcome| {
+        var checked: driver_module.Driver = .{ .runner = undefined, .fake = undefined, .allocator = std.testing.allocator };
+        const applied = checked.failed(error.TestUnexpectedResult, .{ .outcome = outcome });
+        try std.testing.expectEqual(outcome, applied.status());
+        try std.testing.expectEqual(@as(?anyerror, error.TestUnexpectedResult), checked.hook_failure);
+    }
+}
+
+test "a provider call leaves no scripted answer behind it: the plan the next call may meet holds none of the freed arena" {
+    const driver_module = @import("../../src/test_fixtures/spec_generation_driver.zig");
+    var fake: @import("../../src/adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{
+        .allocator = std.testing.allocator,
+        .authorization_leases = undefined,
+        .invocation_plan = .{ .complete = .{ .content = "", .input_tokens = 1, .output_tokens = 1 } },
+    };
+    var driver: driver_module.Driver = .{ .runner = undefined, .fake = &fake, .allocator = std.testing.allocator };
+    driver.call_arena = .init(std.testing.allocator);
+    fake.invocation_plan.complete.content = try driver.call_arena.?.allocator().dupe(u8, "scripted by the call");
+    driver_module.Driver.afterInvoke(&driver);
+    try std.testing.expectEqual(@as(?std.heap.ArenaAllocator, null), driver.call_arena);
+    try std.testing.expectEqualStrings("", fake.invocation_plan.complete.content);
+    // A plan that is not a complete answer is left as it is.
+    fake.invocation_plan = .cancelled;
+    driver.call_arena = .init(std.testing.allocator);
+    driver_module.Driver.afterInvoke(&driver);
+    try std.testing.expect(fake.invocation_plan == .cancelled);
+}
+
+/// A failure a hook records is the failure its scenario's `run` returns (SPEC01 C41), the first one recorded when
+/// several fail. These runs stop short of a published output, so they write no freeze.
+fn checkHookFailure(allocator: std.mem.Allocator, workflow_cases: SpecificationCases) !void {
+    var sink: request_projection.Sink = .{ .allocator = allocator, .io = std.testing.io };
+    defer sink.deinit();
+    try runSpecificationWorkflows(allocator, workflow_cases, &sink);
+}
+
+test "a failure recorded in a scripted hook is the failure its scenario's run returns, and the first of several" {
+    for ([_]SpecificationCases{ .hook_trace_failure, .hook_assertion_failure, .hook_first_failure }) |workflow_cases| {
+        try untraced_allocator.run(checkHookFailure, .{workflow_cases});
+    }
 }
 
 /// A fault scenario's name: its stage, shape and repetition, which identify it without its position.
@@ -1608,6 +1677,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .scenario_repair => scenario_repair_start,
         .scenario_stops => scenario_stop_start,
         .raised_retry_limit => disposition_start,
+        .hook_trace_failure, .hook_assertion_failure, .hook_first_failure => brief_start,
     };
     const case_range_end: usize = switch (workflow_cases) {
         .existing => preservation_start,
@@ -1617,6 +1687,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .scenario_repair => scenario_stop_start,
         .scenario_stops => scenario_count,
         .raised_retry_limit => scenario_count,
+        .hook_trace_failure, .hook_assertion_failure, .hook_first_failure => brief_start + 1,
     };
     // Scripted corrections of a value outside an integer enumeration that the driver checked.
     var choice_corrections: usize = 0;
@@ -1899,10 +1970,19 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             driver.failed_repair = scenario >= membership_start + 4;
             driver.entities_required = (scenario - membership_start) % 2 == 1;
         }
-        var trace: step_trace.Trace = .init(allocator);
+        // The `hook_*` cases inject the failure a hook must return: an allocator that fails for the step trace (every
+        // allocation from the first fails), and a foreign pointer where the brief scenario retains its reference.
+        var failing_trace: std.testing.FailingAllocator = .init(allocator, .{ .fail_index = 0 });
+        const trace_fails = workflow_cases == .hook_trace_failure or workflow_cases == .hook_first_failure;
+        var trace: step_trace.Trace = .init(if (trace_fails) failing_trace.allocator() else allocator);
         defer trace.deinit();
         driver.trace = &trace;
-        const result = try driver.run();
+        if (workflow_cases == .hook_assertion_failure or workflow_cases == .hook_first_failure) driver.brief_references = @ptrFromInt(0x1000);
+        const result = if (expectedHookFailure(workflow_cases)) |failure| {
+            try std.testing.expectError(failure, driver.run());
+            phase = .cleanup;
+            continue;
+        } else try driver.run();
         phase = .assertions;
         assertion_context = "request-projection";
         try std.testing.expectEqual(fake.invocation_call_count, recorder.recorded);

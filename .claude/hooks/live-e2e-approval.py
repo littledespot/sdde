@@ -31,6 +31,15 @@ COUNT = re.compile(r"[1-9][0-9]*")
 # ahead of the command records nothing. Only the command's own line names runs.
 IDE_CONTEXT = re.compile(r"<(ide_[a-z_]+)>[^<\n]*</\1>")
 TYPED = re.compile(r"/live-e2e(?:[ \t]([^\n]*))?(?:\n.*)?", re.DOTALL)
+# A finished background task reaches the conversation as a prompt of its own, once per run. It comes from
+# the harness, not the user, so it must not end an approval: a set of runs would otherwise lose its approval
+# after the first run. It starts with a harness wrapper and holds a task-notification block.
+NOTICE_START = ("<system-reminder>", "<task-notification>", "[SYSTEM NOTIFICATION")
+
+
+def harness_notice(prompt):
+    text = IDE_CONTEXT.sub("", prompt).strip()
+    return text.startswith(NOTICE_START) and "<task-notification>" in text and "</task-notification>" in text
 
 
 def valid_case(path):
@@ -91,6 +100,9 @@ def save(approval, runs):
 
 
 def record(hook, approval):
+    prompt = hook.get("prompt")
+    if hook.get("hook_event_name") == "UserPromptSubmit" and isinstance(prompt, str) and harness_notice(prompt):
+        return
     with locked():
         replace(hook, approval)
 
