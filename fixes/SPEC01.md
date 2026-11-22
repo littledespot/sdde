@@ -187,8 +187,9 @@ batch and live set needs its own approval (AGENTS.md).
 **Output track:** Q26's follow-up (§4 Q26, decided 22 November 2026) was built, screened and run to eight per case,
 and its edge-case entry reverted ([Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set"); nothing awaits a set.
 
-**Engine track, in gaps:** E7 stages 3–8 (decided 22 November 2026; stage 2 folded into stage 6 on 23 November, §5 E7),
-in order, after the Q26 follow-up's set; stage 4 carries C8, and stage 5, its own set, the rest of C49. E0 is on hold.
+**Engine track, in gaps:** E7 stages 4–8 (decided 22 November 2026; stage 2 folded into stage 6 and stage 3 into stage 4
+on 23 November, §5 E7), in order, after the Q26 follow-up's set; stage 4 carries C8, and stage 5, its own set, the rest of
+C49. E0 is on hold.
 **Byte-neutral, sharing the next set's build** (§2 rule 1): C22's remainder (§10.3; built 22 November 2026, its request
 projection equal to Q26's, [Z_SPEC01](Z_SPEC01.md) "C22 remainder"). **Tests:** T4.
 **Adjudication:** the evaluate-e2e skill for every set.
@@ -345,11 +346,12 @@ consume answers (it binds empty response-ID sets, `specification_source_binding.
 record-lifecycle gaps and C49 the clarification subject.
 
 Remaining stages, each landable alone (offline unless stated); stage 2, response-ID admission from a resolved set, is
-folded into stage 6 (decided 23 November 2026, below): 3 the authentication chain, registry, port, OS-account adapter and
-runner lease; 4 accept, publish and close (`clarification-state/v3`), with the response-owned literals; 5 stable subjects
-(C8 bullet 2, C49: key on source identity; removing `record_kind` from the schema changes request bytes and needs a live
-set); 6 generation consumes answers, with the response-ID admission (request bytes change only for runs that have
-responses); 7 the harness two-leg flow; 8 live runs.
+folded into stage 6 and stage 3, the authentication chain, into stage 4 (decided 23 November 2026, below): 4 authenticated
+acceptance: the authentication chain, registry, port, OS-account adapter and runner lease, then accept, publish and close
+(`clarification-state/v3`), with the response-owned literals; 5 stable subjects (C8 bullet 2, C49: key on source
+identity; removing `record_kind` from the schema changes request bytes and needs a live set); 6 generation consumes
+answers, with the response-ID admission (request bytes change only for runs that have responses); 7 the harness two-leg
+flow; 8 live runs.
 
 **Decided** 22 November 2026 (user: "update the documentation with the recommendations"); unbuilt. Each design
 amendment below lands with its stage's code, in ADR 0025 and the contracts it names:
@@ -361,10 +363,10 @@ amendment below lands with its stage's code, in ADR 0025 and the contracts it na
   Decision 1) and the user never re-answers. No ADR 0009 exception and no E0 dependency. Amends ADR 0025:73-74 and 79-80
   (its test of a run that fails after acceptance then expects the next run to accept again), 17-specify.md:502-503 and
   24-workflow-state.md:96-97. E0, when resumed, decides whether its failure output carries them.
-- **Actor-evidence registry** (stage 3; none in `src/`). A feature-directory file with its own closed schema,
-  `actor-evidence-registry/v1`, holding the catalogue's shared registry (13-05-artifacts-rendering-traceability.md:356-423)
-  and published with the responses. It is a fifth registered output: case v4 and the next report version, landing after
-  a set is adjudicated (§2 rule 12).
+- **Actor-evidence registry** (stage 4, folded from stage 3; none in `src/`). A feature-directory file with its own closed
+  schema, `actor-evidence-registry/v1`, holding the catalogue's shared registry
+  (13-05-artifacts-rendering-traceability.md:356-423) and published with the responses. It is a fifth registered output:
+  case v4 and the next report version, landing after a set is adjudicated (§2 rule 12).
 - **Resolved responses** (stage 6, folded from stage 2; decided 23 November 2026, user: "action recommendations", then
   "actions recommendations" to drop stage 2). A record may cite a response ID only if it is in the resolved set: the
   `response_id` of each `resolved_by_user` record in the validated clarification state, so `cancelled_by_user` records
@@ -387,12 +389,34 @@ amendment below lands with its stage's code, in ADR 0025 and the contracts it na
   response, `clarification_inputs.zig:160-164`): it is authenticated, its response and `cancelled_by_user` record are
   built, the other valid closed forms are accepted with it, the clarification state is published, and the run ends
   `cancelled` before any model call. An invalid form beside it still blocks with nothing accepted (ADR 0025 Decision 2).
-- **Authentication step** (stage 3). The standalone `AuthenticateActorAction` (13-05:362-367) with only
-  `AuthenticationPort` and one new `SideEffect` member, `actor_authentication` (`src/domain/pipeline.zig:115-121`; reading
-  the account is not `filesystem_read`, and `none` would hide a port call). ADR 0031:372-376 is why it can't sit inside a
-  stage action; the runner issues the lease (ADR 0025:89-90). The pure registry steps after it (13-05:369-419) are one
-  stage action with no side effect; `/preflight` settles the details.
-- **Proof regime and defect class.** Rule 10 for stages 3, 4 and 6 (development-case runs have no responses, so their
+- **Authentication step** (stage 4, folded from stage 3). The standalone `AuthenticateActorAction` (13-05:362-367) with
+  only `AuthenticationPort` and one new `SideEffect` member, `actor_authentication` (`src/domain/pipeline.zig:115-121`;
+  reading the account is not `filesystem_read`, and `none` would hide a port call). ADR 0031:372-376 is why it can't sit
+  inside a stage action; the runner issues the lease (ADR 0025:89-90). The pure registry steps after it (13-05:369-419)
+  are one stage action with no side effect; `/preflight` settles the details.
+- **Authenticated acceptance** (stage 3 folded into stage 4; decided 23 November 2026, user: "action the above
+  analysis"). Stage 3 alone had no consumer: nothing creates a response until stage 4 (`clarification_refresh.zig:64-65`),
+  the evidence is used only by stage 4's binding and response build (13-05:435-448), and a wired chain would authenticate a
+  valid form and still end `blocked`. Registering its operations unwired is code with no production caller, which C27
+  deleted ([Z_SPEC01](Z_SPEC01.md) C27). The change lands once, when a valid closed form is accepted end to end. Decided:
+  - the `SideEffect` member `actor_authentication` and one capability ID, registered in 06-pipeline-nodes.md with the code
+    (the closed enum is switched at `workflow_pipeline_runner.zig:353` and enumerated at `workflow_graph_validation.zig:298`);
+  - the lease is modelled on the provider authorization lease (`src/ports/provider_authorization_lease.zig`): runner-owned,
+    per execution, one single-use slot for each closed form that passed stage 1's checks, consumed once by
+    `AuthenticateActorAction` through the port; ADR 0025 gains its contract (issuer, consumer, cleanup on every terminal
+    branch, event kind);
+  - an account name outside `validToken`'s syntax (ASCII letters, digits, `-_.@`, 128 bytes; `clarification_inputs.zig:226-230`)
+    is rejected with a typed outcome, and the validator is not widened;
+  - an unreadable account or an unsupported OS ends `failed`, not `blocked`, since the user can't fix it by editing forms;
+    ADR 0025 states the supported OS families. Whether the adapter's libc call is inside the existing boundary
+    (`link_libc` is set on two modules, `build.zig:42`, `:51`) is checked by compiling at the stage's start, and added
+    linking needs an ADR (AGENTS.md).
+
+  Open until the stage's preflight: the registry's location, filename, ID syntax and loader of the prior registry; whether
+  it is written on every run (the harness requires every listed artifact in every case, `test/harness/e2e/contracts.zig:28`);
+  the trusted clock; the run identity the evidence carries. Stage 7's `answers` member is also a closed case member, so it
+  takes the case version after this stage's.
+- **Proof regime and defect class.** Rule 10 for stages 4 and 6 (development-case runs have no responses, so their
   requests stay byte-identical) and a rule 6 set for stage 5. The measure is the clarification-expected case's
   complete-publication rate, zero without E7; guards: the chosen bullet kept (`lost_source_requirement`), the other
   absent (`contradiction`), and no invented resolution (`unsupported_addition`).
@@ -401,7 +425,7 @@ amendment below lands with its stage's code, in ADR 0025 and the contracts it na
 - **Clarification-expected case** (stage 7). A loan-renewal derivative with exactly one pair of contradictory bullets, so
   run 1 should raise one form; neither a reserved qualification feature nor a tuning target. No form, or more than one,
   is reported as an unmet criterion (a model limitation), with no retry or rewording.
-- **Authoring answers between runs** (stage 7). An `answers` member in case v4 holding one bounded text, since every Spec
+- **Authoring answers between runs** (stage 7). An `answers` member in the case version after stage 4's holding one bounded text, since every Spec
   clarification takes one (`build_specification_clarification_need.zig:33`, `required_authority_clarifications.zig:71`).
   One launch runs run 1 and, only when it ends `needs_user` with exactly one open form, writes the text into the answer
   region, sets `requestedStatus: closed` and runs run 2; anything else is reported. No answer is matched to a form by its
