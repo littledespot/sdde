@@ -317,9 +317,11 @@ same claim and native checks couldn't tell distinct duties apart.
   - The extraction schema changes. Persisted specification state already records the
     compiled extraction schema bytes and rejects a mismatch as
     `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE`, so no state version changes.
-  - Stored readback validates claim text against the text policy and re-quotes each stored
-    model claim from its citations, in canonical text with the Unicode normalizer; a claim
-    that no longer quotes its citations rejects the state.
+  - Stored readback validates claim text against the text policy, validates each stored
+    citation against its claim's chunk and the source's bytes with the admission check, and
+    re-quotes each stored model claim from its citations, in canonical text with the Unicode
+    normalizer; a citation that no longer binds, or a claim that no longer quotes its
+    citations, rejects the state.
 - **Tests.**
   - Code delimiters:
     - at the recogniser: equal, double and unequal runs, a backtick shared by two values,

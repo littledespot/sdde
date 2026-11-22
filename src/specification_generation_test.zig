@@ -3760,6 +3760,56 @@ test "readback rejects a stored extraction claim that no longer quotes its citat
     try std.testing.expectError(error.InvalidReferenceExtraction, item_requote.check(a, joined, &.{joined_citation}));
 }
 
+test "readback binds each stored citation to its claim's chunk and to the source's own bytes" {
+    const Claim = @import("domain/reference_extraction.zig").Claim;
+    const Citation = @import("domain/reference_extraction.zig").Citation;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var two = try Fixture.initSources(a, &.{ "First sentence.\n", "Second sentence.\n" }, &.{});
+    defer two.deinit();
+    const snapshot = try requoteSnapshot(a, two);
+    try requote_snapshots.validate(a, snapshot, text.normalizer);
+    try std.testing.expectEqual(@as(usize, 2), snapshot.extraction.claims.len);
+    const own = snapshot.extraction.claims[0].citation_ids[0].ordinal - 1;
+    const other = snapshot.extraction.claims[1].citation_ids[0].ordinal - 1;
+    // Each fault leaves the cited span untouched, so the re-quote alone still accepts the claim: only the binding of
+    // the citation to the claim's chunk and to the source's bytes can reject it.
+    const Fault = enum { other_source, other_block, quoted_text };
+    for (std.enums.values(Fault)) |fault| {
+        const citations = try a.dupe(Citation, snapshot.extraction.citations);
+        switch (fault) {
+            .other_source => citations[own].value.source_id = snapshot.extraction.citations[other].value.source_id,
+            .other_block => citations[own].value.block_id = snapshot.extraction.citations[other].value.block_id,
+            .quoted_text => citations[own].value.verbatim = "Another sentence.",
+        }
+        var forged = snapshot;
+        forged.extraction.citations = citations;
+        var requote = try Requote.init(a, forged.inputs, text.normalizer);
+        try requote.check(a, forged.extraction.claims[0], forged.extraction.citations);
+        try std.testing.expectError(error.InvalidReferenceSnapshot, requote_snapshots.validate(a, forged, text.normalizer));
+    }
+
+    // A preserved token keeps its raw value and its citation's quoted bytes equal to each other, which the snapshot
+    // already checked; both can still differ from the source, which only the binding to the source's bytes catches.
+    var token = try Fixture.init(a, "Show `MOCK Done!` to the visitor.");
+    defer token.deinit();
+    const token_snapshot = try requoteSnapshot(a, token);
+    try requote_snapshots.validate(a, token_snapshot, text.normalizer);
+    const index = for (token_snapshot.extraction.claims, 0..) |claim, position| {
+        if (claim.content == .preserved_token) break position;
+    } else return error.TestExpectedEqual;
+    const claims = try a.dupe(Claim, token_snapshot.extraction.claims);
+    claims[index].content.preserved_token.value.raw_value.bytes = "MOCK Other!";
+    const token_citations = try a.dupe(Citation, token_snapshot.extraction.citations);
+    token_citations[claims[index].content.preserved_token.citation_id.ordinal - 1].value.verbatim = "MOCK Other!";
+    var forged_token = token_snapshot;
+    forged_token.extraction.claims = claims;
+    forged_token.extraction.citations = token_citations;
+    try std.testing.expectError(error.InvalidReferenceSnapshot, requote_snapshots.validate(a, forged_token, text.normalizer));
+}
+
 test "atomic specification repair preserves siblings and rejects stale or foreign replacements" {
     const repair = @import("domain/specification_repair.zig");
     const sessions = @import("domain/specification_session.zig");

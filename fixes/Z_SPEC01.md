@@ -3008,7 +3008,15 @@ authorized.
   two-item list split, fenced code, a `scope_guard` claim, a claim of two runs joined by an ellipsis line and a run
   across a blank line; rejected claims swapped, text cut by a byte, a shifted citation, an extra node and one claim
   over two list items. With the check off the swap test fails. The stored-title and edge-case link readbacks are the
-  unchanged members of the class.
+  unchanged members of the class. A stored citation was already bound to its claim's chunk and to the source's bytes:
+  `reference_support.snapshot`, which `validateRecords` runs, builds the claim items through
+  `reference_claim_items.build`, which validates each stored citation with `source_citations.validate` (source, block,
+  span, quoted bytes) and re-checks a preserved token against a fresh extraction. A contract review's finding that
+  readback did not bind them was wrong; a test now pins it: a citation retargeted to another source or block, or given
+  other quoted bytes, with its span untouched, is rejected, and the test fails when that builder skips the source or
+  block binding or a model claim's quoted bytes. No second call to the validator was added, since it would duplicate
+  the admission policy; ADR 0036's Persistence bullet and 24-workflow-state.md now say readback validates each stored
+  citation, as decided (`specification-state/v28` unchanged).
 - **C22.** `Operations` is the struct of the 108 operation fields, declared in the old row order; `Assembly` is
   `{ ops, model_requests, entries, registry }` with `entries` derived by `shapeOf`, `register` and `registered` (an
   `Action` registers as a step, a shell contract as a variant, any other `contract` directly, a type with neither does

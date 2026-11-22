@@ -177,7 +177,7 @@ batch and live set needs its own approval (AGENTS.md).
 set, then screens of the call kinds it changes and a set, each approved.
 
 **Offline, in gaps** (decided 22 November 2026), each proven byte-identical in every development-case request
-(§2 rules 1 and 10): C50's test (§10), B7's citation binding (§8), then C42, C41, C45 and C22 (§10).
+(§2 rules 1 and 10): C42 and C45 (§10).
 
 **Engine track, in gaps:** E7's later stages wait on the user deciding the recommendations in §5 E7. E0 is on hold. **Tests:** T4 with E1–E4. **Adjudication:** the evaluate-e2e skill for every set.
 
@@ -394,19 +394,6 @@ phase reports on. T5.4's seven sites are the ones under "Repair requests without
 
 §7 (human decisions) is removed; §8–§10 keep their numbers so citations elsewhere still resolve.
 
-### B7 readback leftover
-
-- Readback re-quotes each stored claim's wording from its stored citation spans, but binds no stored citation's
-  `source_id`, `block_id` or `verbatim` to the claim's chunk: the snapshot validator compares ordinals only, and
-  `source_citations.validate` checks all four fields at admission. A state with a retargeted `source_id` or an
-  altered `verbatim` and an unchanged `location` reads back.
-- **Decided** 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"); unbuilt.
-  Readback checks each stored citation's `source_id`, `block_id` and `verbatim` against the claim's chunk by reusing
-  `source_citations.validate`, the admission check, from `reference_snapshot.validateRecords`. `specification-state/v28`
-  isn't advanced (B7's precedent, user: "Authorize, no version advance"), so a state with a retargeted or altered
-  citation stops reading back with `InvalidSpecificationState`. ADR 0036's Persistence bullet and 24-workflow-state.md
-  say so, landing with the code. Offline; requests stay byte-identical.
-
 ### Standing decisions of closed items
 
 Closed 22 November 2026 with nothing left to build (user: "update documenation with recommendation for decisions 3
@@ -575,13 +562,17 @@ for decisions 3 4, 5, 6"); unbuilt: both derive from the compiled step's allowan
   more often. An answered group is authored by E7 (answers are not consumed yet), so until then a rerun asks
   again.
 
-**C50. A workflow definition can route past the configured preservation review** (by reading, not executed).
-`check-source-preservation-policy` routes `ok` to `preservation-requirements` and `more` to `generate`
-(`spec.workflow.yaml:97-99`), and its operation (`SourcePreservationPolicy`, `required_authority_workflow.zig:21-43`)
-declares no outcome association, so a definition that routes `ok` to `generate` compiles and skips a configured
-review. The `required-authority@1` gate, deleted 21 November 2026, never covered this step. **Decided** 22 November
-2026 (user: "update documenation with recommendation for decisions 1 and 2"): it stays open; its entry had been
-removed with no record and no code change. **Next:** a test at the owner that compiles such a definition. If it
-compiles, the policy step gains an outcome association, so a run that leaves its `ok` without the review can't end
-`ok`, as the authority ledger already holds `validate-required-authority-reconciliation`'s result
-(`required_authority_workflow_test.zig`). Not a compile rule naming Spec steps (AGENTS.md "Anti-overfitting rule").
+**C50. A workflow definition can route past the configured preservation review: closed as by design** (user, 22
+November 2026, after the test below). `check-source-preservation-policy` routes `ok` (the source preservation check is
+configured) to `preservation-requirements` and `more` to `generate` (`spec.workflow.yaml:98-100`). Routing both to
+`generate` is rejected: the review step becomes unreachable (a row of the mutation table in
+`test/harness/integration/tests.zig`). Swapping them (`ok: generate, more: preservation-requirements`) compiles and boots
+ready, so a definition can skip a configured review; a harness test asserting `boot != .ready` failed and the same test
+asserting `== .ready` passed (integration 147/147), and it was not kept. An outcome association cannot enforce it: the
+descriptors (`preserve`, `observe`, `authority_reconcile` and the rest) carry the unresolved rejections of native
+subjects, and the policy step's `ok` is decided by configuration and opens no subject. Kept as designed because the
+project authors both its workflow definition and its validation config, so it can already skip the review with
+`sourcePreservationCheck: false`; a swapped definition is its own authoring error, as in C36. The alternative, a
+workflow-owned predecessor gate before `generate` (AGENTS.md: workflows enforce order through their own gates), needs a
+new production gate, since C30 keeps the mechanism with none, and is not built. The `required-authority@1` gate, deleted
+21 November 2026, never covered this step.
