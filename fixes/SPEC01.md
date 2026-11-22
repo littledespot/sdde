@@ -52,6 +52,15 @@ stays `69c55877…`'s. The reference for the Q26 follow-up's set, Q26's three se
 94.5%, with 13 content-basis unsupported additions in Q26's nine loan-renewal runs, all generic Givens, and no lost,
 weakened or contradicting requirement in any run of either case.
 
+**Provider drift** (22 November 2026; [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set", signals screen): replayed unchanged,
+set B's `06-52-17Z` signals request returned the earlier runs' four signals in 3 of 10 trials and three or two in the
+rest, and none of the follow-up set's 8 loan-renewal runs returned four, so a new loan-renewal set may not share the
+inputs of the reference runs above. **Decided** 23 November 2026 (user: "update as per the 4 items suggested"): before
+the next set that decides a change against them (E7 stage 5's), screen that call again as captured, from `06-52-17Z` or
+any loan-renewal run of the follow-up set (the same request bytes), about 10 trials with its own approval; if the drift
+persists, how that set is compared is a **Decision**. Recommended, not decided: the drift persists if any trial returns
+other than the four signals `[1,4]`, `[2]`, `[3]`, `[5]`.
+
 **Retained runs:** `zig-out/e2e-spec/` keeps the newest twelve runs: set B of 22 November 2026 (`2026-11-22T06-36-44Z`
 to `06-54-55Z`) and the Q26 follow-up's set (`08-35-52Z` to `08-39-02Z`, [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set").
 A new set removes the oldest runs past twelve (the Q26 sets' directories were removed that way); their evaluations and

@@ -31,8 +31,8 @@ toward smaller semantic decisions hasn't been accepted.
 
 - The design documents AGENTS.md routes to are large. Use the `design-router` agent
   to collect the governing clauses with citations, rather than reading whole files.
-- Before you propose, implement, review or decide an engine change, check the
-  accepted ADRs for any rule the change would break.
+- Before you implement or review an engine change, check the accepted ADRs for any
+  rule the change would break.
 - Put a durable project rule in AGENTS.md, or a Claude Code rule here, never in
   auto-memory. Memory holds only conversational preferences no repository file states.
 
