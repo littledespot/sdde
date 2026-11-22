@@ -177,7 +177,7 @@ batch and live set needs its own approval (AGENTS.md).
 set, then screens of the call kinds it changes and a set, each approved.
 
 **Offline, in gaps** (decided 22 November 2026), each proven byte-identical in every development-case request
-(§2 rules 1 and 10): C42 and C45 (§10).
+(§2 rules 1 and 10): C41's returned step-hook errors (§10).
 
 **Engine track, in gaps:** E7's later stages wait on the user deciding the recommendations in §5 E7. E0 is on hold. **Tests:** T4 with E1–E4. **Adjudication:** the evaluate-e2e skill for every set.
 
@@ -537,21 +537,25 @@ is a panic: `src/test_fixtures/spec_generation_driver.zig` has 98 `catch unreach
 each `catch unreachable` in a step hook becomes a returned error that fails its scenario, so a failed assertion
 no longer aborts the test binary.
 
-**C42. The scripted matrix still runs a hand copy of `Runtime.init`'s wiring** (`workflow_tests.zig:1061`,
-`:1758`, `:3705`, `:3776`, against `composition/root.zig:65`). Offline runs reach publication, a repaired
-publication and a retry-limit failure through `root.Runtime` and the harness's `invoke.run` for both development
-cases, with only the transport scripted (`test/harness/integration/tests.zig`; the answers come from
-`spec_generation_responses.build`, and `invoke.Options.runner_view` is its test-only seam). No Bedrock slot runs
-through the production composition, and the matrix's other fault paths still run the hand copy, so a wiring drift
-that only one of those reads still passes. **Decided** 22 November 2026 (user: "update documenation with
-recommendation for decisions 3 4, 5, 6"); unbuilt: the matrix's remaining fault paths run through `root.Runtime` and
-`invoke.run`, and the hand copy of `Runtime.init`'s wiring is deleted (no second wiring path).
+**C42. The scripted matrix runs through `root.Runtime` only** (built 22 November 2026, [Z_SPEC01](Z_SPEC01.md)): the five
+hand copies of `Runtime.init`'s wiring in `test/integration/workflow_tests.zig` are gone and an architecture pin keeps the
+file from naming `native_workflow_operations`. Two limits stay. Offline runs reach publication, a repaired publication and
+a retry-limit failure through `root.Runtime` and the harness's `invoke.run` for both development cases, with only the
+transport scripted (`test/harness/integration/tests.zig`; the answers come from `spec_generation_responses.build`, and
+`invoke.Options.runner_view` is its test-only seam); the matrix does not use `invoke.run`, since its frozen projection
+embeds the fake provider's identity and the driver's fault shapes live in fake-provider hooks (decided 22 November 2026:
+`Runtime` only). The matrix overrides the provider bootstrap and runtime, so the production provider path and the Bedrock
+slot are covered only by those development-case tests, and a wiring drift that only a fault path reads in that provider
+wiring still passes.
 
-**C45. Typed limits beyond the sequence fixtures, still open.** The summary, global and disposition sequences derive
-their calls from the compiled step's allowance. The scenarios-step exhaustion (`workflow_tests.zig:2041-2042`) and
-the disposition sequence's fixed calls before its exhausted request (extraction content 2, classification 1) still
-type values that follow from the limit. **Decided** 22 November 2026 (user: "update documenation with recommendation
-for decisions 3 4, 5, 6"); unbuilt: both derive from the compiled step's allowance, as the three sequences do.
+**C45. Typed limits beyond the sequence fixtures** (built 22 November 2026, [Z_SPEC01](Z_SPEC01.md)): the scenarios-step
+and the repair and repeated-scenario exhaustions derive from the compiled step's allowance, and the disposition
+sequence's calls before its exhausted request are asserted as ledger structure, since the three fixed calls (extract
+content 1, extract classifications 1, reconcile summary 1) do not follow from the limit. Still typed: the brief
+scenarios' `attempts == 3` (limit-following on the persistent runs, a scripted fault count on the others, so it needs the
+scenario's repetition), the scripted-fault counts of `repeated_provenance_fault` and the non-exhausted loss runs
+(a fault count plus one, not the limit), and the limit literals in `test/harness/integration/tests.zig` (~:1032-1054,
+~:2374, ~:2386), where no driver exists.
 
 ### 10.7 Unconfirmed readings
 

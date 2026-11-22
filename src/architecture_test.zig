@@ -206,6 +206,42 @@ test "CLI and E2E invocation reuse production composition without harness assemb
     try std.testing.expect(std.mem.indexOf(u8, composition, "assembly.invocation(") != null);
 }
 
+test "the scripted matrix builds its runtime only through the production composition root" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    const matrix = try std.Io.Dir.cwd().readFileAlloc(io, "test/integration/workflow_tests.zig", allocator, .limited(8 * 1024 * 1024));
+    defer allocator.free(matrix);
+    // Every scenario builds `composition.Runtime`; the file assembles no native operations and binds no roots of its own.
+    try std.testing.expect(std.mem.indexOf(u8, matrix, "composition.Runtime") != null);
+    inline for (.{ "native_workflow_operations", ".bindRoots(", ".bindWorkflows(", ".bindConfiguration(", ".bindPrinciples(" }) |forbidden| try expectAbsent(matrix, forbidden);
+    // The one seam is a test-only guarded entry: `init` supplies no hook, and `initWith` cannot compile outside a test.
+    try std.testing.expectEqual(@as(?[]const u8, null), runtimeSeamViolation(@embedFile("composition/root.zig")));
+    // A source that names the assembly module in code is rejected; one that mentions it in a comment is not.
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const native = @import(\"../../src/composition/native_workflow_operations.zig\");", "native_workflow_operations"));
+    try expectAbsent("// native_workflow_operations builds the assembly\nconst runtime = 1;", "native_workflow_operations");
+    // The seam checker rejects a missing guard, a third caller of either phase, a second hook call and an optional hook.
+    const guard = "if (!builtin.is_test) @compileError(\"Runtime.initWith is a test seam\");";
+    const calls = "self.assemble(a);\nself.startup(a);\nself.assemble(a);\nself.startup(a);\nbefore_startup.run(c, n);\n";
+    try std.testing.expectEqual(@as(?[]const u8, null), runtimeSeamViolation(guard ++ calls));
+    try std.testing.expect(runtimeSeamViolation(calls) != null);
+    try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "self.startup(a);\n") != null);
+    try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "self.assemble(a);\n") != null);
+    try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "before_startup.run(c, n);\n") != null);
+    try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "hook: ?BeforeStartup,\n") != null);
+}
+
+/// The test seam in `composition/root.zig`: `initWith` is behind a compile-time test guard, `init` and `initWith` are the
+/// only callers of the two construction phases (two each: assembly, then startup), and the hook runs once, between them,
+/// so no production path holds an optional hook. Returns the failing condition, or null.
+fn runtimeSeamViolation(source: []const u8) ?[]const u8 {
+    if (countOccurrences(source, "if (!builtin.is_test) @compileError(\"Runtime.initWith is a test seam\");") != 1) return "the test guard";
+    if (callCount(source, "self.assemble(") != 2) return "assemble callers";
+    if (callCount(source, "self.startup(") != 2) return "startup callers";
+    if (callCount(source, "before_startup.run(") != 1) return "hook calls";
+    if (std.mem.indexOf(u8, source, "?BeforeStartup") != null) return "an optional hook";
+    return null;
+}
+
 test "production provider wiring retains fact-only authority and no-I/O lease preparation" {
     const contracts_source = @embedFile("composition/provider_model_contracts.zig");
     try expectAbsent(contracts_source, "/adapters/");

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const pipeline = @import("../domain/pipeline.zig");
 const config = @import("../domain/config.zig");
 const engine_config_source = @import("../adapters/filesystem/engine_config_source.zig");
@@ -62,7 +63,28 @@ pub const Runtime = struct {
         snapshots: @import("../adapters/provider/provider_api_key.zig").Supplied,
     };
 
+    /// What a test runs after the native assembly is built and before startup validates its registered operations.
+    pub const BeforeStartup = struct {
+        context: *anyopaque,
+        run: *const fn (*anyopaque, *@import("native_workflow_operations.zig").Assembly) void,
+    };
+
     pub fn init(self: *Runtime, io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, control: pipeline.NodeRuntime) void {
+        self.assemble(io, allocator, project, control);
+        self.startup(io, allocator, project, control);
+    }
+
+    /// A test seam, like `Interrupt.resetForTest`: the hook can register the operations a test workflow names. No
+    /// production path supplies one.
+    pub fn initWith(self: *Runtime, io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, control: pipeline.NodeRuntime, before_startup: BeforeStartup) void {
+        if (!builtin.is_test) @compileError("Runtime.initWith is a test seam");
+        self.assemble(io, allocator, project, control);
+        before_startup.run(before_startup.context, &self.native);
+        self.startup(io, allocator, project, control);
+    }
+
+    /// The adapters and the native assembly, before startup validates its registered operations.
+    fn assemble(self: *Runtime, io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, control: pipeline.NodeRuntime) void {
         self.* = .{
             .allocator = allocator,
             .control = control,
@@ -85,6 +107,10 @@ pub const Runtime = struct {
         self.native.init(allocator, self.toolchain_source.projectCapturer(), self.toolchain_source.presetEnumerator(), self.toolchain_source.presetCapturer(), self.toolchain_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, self.reference.inspector(), self.feature.inspector(), self.inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), self.corpus.enumerator(), self.corpus.capturer(), self.markdown.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, self.identities.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         self.native.ops.publish_output.action.writer = self.outputs.port();
         self.native.ops.prepare_inputs.action.state_source = self.inputs.workflowStateCapturer();
+    }
+
+    /// Startup validates the registry and binds the roots, workflows, configuration, principles and logging.
+    fn startup(self: *Runtime, io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, control: pipeline.NodeRuntime) void {
         self.boot = runInProjectWithRegistry(io, allocator, project, control, &self.native.registry, &self.boot_diagnostic);
         if (self.boot == .ready) {
             self.logging = .{ .allocator = allocator, .io = io, .project = project, .roots = self.boot.ready.roots.registry(), .logs = &self.boot.ready.logs, .inputs = &self.inputs, .outputs = &self.outputs };

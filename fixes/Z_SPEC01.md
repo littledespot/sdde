@@ -3026,6 +3026,44 @@ authorized.
   the owner repair types, the four scenario-generation types once each), and the guard in
   `test/harness/integration/tests.zig` is smaller, plus the same exactly-once check for `model_request.Assembly`.
 
+## C42 and C45. The matrix runs through `Runtime` only, and its typed limits derive from the compiled step (22 November 2026)
+
+User: "implement C42 and C45" (decided 22 November 2026). The request projection of the final tree is byte-identical to
+`q26-after`, checked after each stage (integration 146/146).
+
+- **C45.** The scenarios-step exhaustion computes `allowed = driver.allowance(<last accounted op>.id.model_request_id)`
+  and asserts `limit.value == allowed - 1` and `completed_executions`, `scenario_calls` and `fault_calls == allowed`; the
+  `foreign_content_always` repair exhaustion and the repeated-scenario exhaustion derive their attempts, limit and executions
+  the same way. The disposition sequence's `3 + allowed` was replaced by ledger structure (every operation before the last
+  `allowed` has attempt 1; the last `allowed` are one request with attempts 1..`allowed`) because the three fixed calls do not
+  follow from the limit: the step traces show extract content 1, extract classifications 1 and reconcile summary 1 at both
+  the shipped and the raised limit, and the old comment about content's two attempts was false. The `raised_retry_limit`
+  group gained the two scenarios-write exhaustion scenarios through a fourth text patch (without it the group failed) and
+  asserts the independent literal `allowed == 4`. The fixtures' expected value is always the compiled step's declared
+  limit, never the exhaustion it checks.
+- **C42.** The five hand copies of `Runtime.init`'s wiring in `test/integration/workflow_tests.zig` are gone:
+  `inspectToolchainRun` with its six tests, the two-root feature preflight test, the feature inspection test, the main
+  matrix (166 runs in nine tests) and its reboot, and the registry-extension test. Each uses `composition.Runtime.init`
+  and `runtime.invocation(...)`, and overrides only public fields: `native.ops.prepare_reference_evidence.action.identities`
+  (the counted IDs), `invocation.provider_bootstrap` (the test provider's services) with `invocation.provider_runtime = null`,
+  `runner.provider_clock`, `native.model_requests.prepare_authorization.action` and `invoke_model.action`, `Runtime.control`
+  and the null credential snapshots. The registry-extension test installs its operations through `Runtime.initWith(..,
+  BeforeStartup)`, a declaration behind `if (!builtin.is_test) @compileError`; `init` runs the private `assemble` and
+  `startup` in sequence and `initWith` runs the hook between them, so production holds no hook parameter or branch. An
+  architecture pin requires the matrix file to name `composition.Runtime` and never `native_workflow_operations` or the
+  bind calls, and `runtimeSeamViolation` pins the guard, two callers of each phase, one hook call and no optional hook
+  (rejected fixtures for each; a code mention of the assembly module is rejected, a comment or string is not). The
+  matrix does not use `invoke.run`, which
+  the user decided not to build: its frozen projection embeds the fake provider's identity, so a real provider contract
+  would change every byte, and the driver's faults live in fake-provider hooks. No Bedrock slot runs through the production
+  composition, and the matrix still overrides the provider bootstrap.
+- **Contract review.** No blocker. Fixed: the disposition check keeps the three earlier requests as their own literal
+  (they do not follow from the limit, and an engine change that adds or drops one now fails there), the dispositions rows
+  of the raised group assert `allowed == 4`, the reboot sets the same provider clock as the first run, an unused import
+  went, and the seam pin got its rejected fixtures. Noted, not changed: the driver finalizes through its own finalizer and
+  not `runner.finish`, and production builds the provider bootstrap without `control`, so a cancellation boundary count
+  excludes it (both pre-date this change).
+
 ## E3 feature logging, E6 prior-run crash finalization and E7 Stage 1 (22 November 2026)
 
 User: "preflight and implement" on E6, E3's feature logging and E7 with C8 and C49. The preflight stopped on missing

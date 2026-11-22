@@ -218,6 +218,7 @@ pub const Driver = struct {
         const operations = ledger.accounted_operations.items;
         try std.testing.expect(operations.len != 0);
         const allowed: u32 = if (exhausted) try self.allowance(operations[operations.len - 1].id.model_request_id) else 0;
+        self.largest_allowance = @max(self.largest_allowance, allowed);
         var disposition_corrections: usize = 0;
         var signal_corrections: usize = 0;
         assertion = "initial-reference-correction-attempt";
@@ -248,8 +249,20 @@ pub const Driver = struct {
         const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
         if (exhausted) {
             assertion = "exhaustion-calls-and-phase";
-            // The extraction content request's two attempts and the classification request's one come first.
-            try std.testing.expectEqual(3 + @as(usize, allowed), self.calls);
+            // The requests before the dispositions request (extraction content and classifications, the
+            // reconciliation summary) each ran once, and the dispositions request took every attempt its step
+            // allows: the last `allowed` calls are one request with attempts 1 to `allowed`. The three earlier
+            // requests do not follow from the limit, so their count is its own literal: an engine change that adds or
+            // drops a request before the dispositions request fails here.
+            try std.testing.expect(operations.len >= allowed);
+            const earlier = operations.len - allowed;
+            try std.testing.expectEqual(@as(usize, 3), earlier);
+            for (operations[0..earlier]) |operation| try std.testing.expectEqual(@as(u32, 1), operation.id.model_attempt_ordinal.value);
+            const request = operations[operations.len - 1].id.model_request_id;
+            for (operations[earlier..], 1..) |operation, attempt| {
+                try std.testing.expect(operation.id.model_request_id == request);
+                try std.testing.expectEqual(@as(u32, @intCast(attempt)), operation.id.model_attempt_ordinal.value);
+            }
             for ([_]data.Schema{ reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.conflicts_schema, reconciliation.accounted_schema }) |schema| {
                 try std.testing.expect(!view.contains(schema.key));
             }
