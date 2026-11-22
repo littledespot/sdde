@@ -3707,6 +3707,14 @@ test "an operation type registers by what it declares: its action, closed varian
     try std.testing.expectEqual(@as(usize, 2), ordinary.contract.outcomes.len);
 }
 
+test "the request assembly holds its two context structs and the two tables derived from them, and no context of its own" {
+    // The compiler already requires a context for each stage and a contract for each operation. What it leaves to a
+    // person is a context field returning to the assembly beside the structs it derives from.
+    const assembly = @import("composition/model_request_operations.zig");
+    try std.testing.expectEqual(@as(usize, 4), std.meta.fieldNames(assembly.Assembly).len);
+    inline for (.{ "selectable", "stages", "request_stages", "entries" }) |name| try std.testing.expect(@hasField(assembly.Assembly, name));
+}
+
 test "no per-owner repair operation remains: the four generic operations are the only registered repair operations" {
     // The registry registers the four generic operations and no per-owner one (ADR 0033): the operations table
     // holds each generic repair type once, and no other field declares closed variants.

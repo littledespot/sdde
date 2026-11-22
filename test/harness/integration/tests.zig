@@ -175,26 +175,37 @@ test "shipped workflow conforms to native registrations and rejects contract dri
                 }
                 try std.testing.expectEqual(@as(usize, 1), registered);
             }
-            // The request operations keep their own tables (a stage row per stage context, an entry row per
-            // selectable operation): each of their implementations is registered exactly once, in one of them.
-            inline for (std.meta.fields(@TypeOf(runtime.native.model_requests))) |field| {
-                if (comptime !std.mem.eql(u8, field.name, "request_stages") and !std.mem.eql(u8, field.name, "entries")) {
-                    const id = comptime field.type.contract.id;
-                    const address: ?*anyopaque = &@field(runtime.native.model_requests, field.name);
-                    var registered: usize = 0;
-                    for (runtime.native.model_requests.entries) |row| {
-                        if (!std.mem.eql(u8, row.contract.id, id)) continue;
-                        registered += 1;
-                        try std.testing.expect(row.binding.context == address);
-                    }
-                    for (runtime.native.model_requests.request_stages) |row| {
-                        if (!std.mem.eql(u8, row.contract.id, id)) continue;
-                        registered += 1;
-                        try std.testing.expect(row.binding.context == address);
-                    }
-                    try std.testing.expectEqual(@as(usize, 1), registered);
+            // The request operations keep their own tables, derived from their structs: a selectable operation has
+            // one entry row and a stage context one stage row, each bound to that very field, and no implementation
+            // is in the other table. The stage rows follow the kernel's stages in order.
+            const requests = &runtime.native.model_requests;
+            inline for (std.meta.fields(@TypeOf(requests.selectable))) |field| {
+                const id = comptime field.type.contract.id;
+                const address: ?*anyopaque = &@field(requests.selectable, field.name);
+                var registered: usize = 0;
+                for (requests.entries) |row| {
+                    if (!std.mem.eql(u8, row.contract.id, id)) continue;
+                    registered += 1;
+                    try std.testing.expect(row.binding.context == address);
                 }
+                try std.testing.expectEqual(@as(usize, 1), registered);
+                for (requests.request_stages) |row| try std.testing.expect(!std.mem.eql(u8, row.contract.id, id));
             }
+            const kernel_stages = std.enums.values(@import("../../../src/domain/model_request_kernel.zig").Stage);
+            inline for (std.meta.fields(@TypeOf(requests.stages))) |field| {
+                const id = comptime field.type.contract.id;
+                const address: ?*anyopaque = &@field(requests.stages, field.name);
+                var registered: usize = 0;
+                for (requests.request_stages) |row| {
+                    if (!std.mem.eql(u8, row.contract.id, id)) continue;
+                    registered += 1;
+                    try std.testing.expect(row.binding.context == address);
+                    try std.testing.expectEqualStrings(field.name, @tagName(row.stage));
+                }
+                try std.testing.expectEqual(@as(usize, 1), registered);
+                for (requests.entries) |row| try std.testing.expect(!std.mem.eql(u8, row.contract.id, id));
+            }
+            for (kernel_stages, requests.request_stages) |stage_tag, row| try std.testing.expectEqual(stage_tag, row.stage);
             const graph = runtime.boot.ready.workflows.registry().resolve(.{ .bytes = choice.workflow_id }).?;
             // A registered native request remains forbidden inside active
             // composition, even when its ordinary data contract still matches.
@@ -2059,13 +2070,13 @@ test "production workflow enforces one global token budget and fails required st
         var clock: @import("../../../src/provider_authorization_test_fixture.zig").TestClock = .{};
         runner.provider_clock = clock.port();
         var authorization: @import("../../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = std.testing.allocator };
-        runtime.native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
+        runtime.native.model_requests.stages.prepare_authorization.action = .{ .authorization = authorization.port() };
         var fake: @import("../../../src/adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{
             .allocator = std.testing.allocator,
             .authorization_leases = .{ .context = @ptrCast(runner), .clock = runner.provider_clock.?, .runtime = runner.runtime, .consume_fn = ProductionRun.consumeLease },
             .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 5, .output_tokens = 2 } },
         };
-        runtime.native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
+        runtime.native.model_requests.stages.invoke_model.action = .{ .provider = fake.interface() };
         var tracker: admission.Tracker = .init(std.testing.allocator);
         defer tracker.deinit();
         var scripted: ProductionRun = .{ .allocator = a, .runner = runner, .base = bindings, .fake = &fake, .tracker = &tracker, .mode = mode };

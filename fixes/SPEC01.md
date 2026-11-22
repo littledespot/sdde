@@ -46,17 +46,17 @@ available to run", "with a known existing due date"), is a minor `unsupported_ad
 `69c55877…` counted it (3 in the hello-world reference); `evaluate-e2e` SKILL.md states it. Reason: Q26 was decided
 on these Givens being defects, and a revision that doesn't count them can't measure Q26's class. The ruling decides a
 score in 3 of the 5 publications of Q14's set (hello-world run 1 and both loan-renewal runs) without changing a pass,
-and adds a minor `unsupported_addition` to each of the three loan-renewal publications of Q26's set. The skill's
-revision changes, so the next set's reference is re-scored on it first (§2 rule 5); the table above stays
-`69c55877…`'s until then. Two later sets, scored on it and on the same development cases ([Z_SPEC01](Z_SPEC01.md) "Two
-sets on the batch of 22 November 2026"): hello-world 100% in five of six runs and 96.43% in one; loan-renewal 96.43%,
-96.43%, 89.29% and 92.86% three times, with source-grounding 3 in every loan-renewal run from generic-precondition Givens.
+and adds a minor `unsupported_addition` to each of the three loan-renewal publications of Q26's set. The table above
+stays `69c55877…`'s. The reference for the Q26 follow-up's set, Q26's three sets and the two later ones, is scored on
+`2b3fb8de…` ([Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set"): hello-world 99.2% mean over Q26's nine runs, loan-renewal
+94.5%, with 13 content-basis unsupported additions in Q26's nine loan-renewal runs, all generic Givens, and no lost,
+weakened or contradicting requirement in any run of either case.
 
-**Retained runs:** `zig-out/e2e-spec/` holds the Haiku set (`2026-11-17T08-4*`), D8.4's set (`21-5*` and
-`22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`), Q24's set (`2026-11-18T06-5*`) and two
-hello-world runs that failed at the first extraction call (`2026-11-17T07-1*`), and the runs of 19 to 21
-November 2026. Earlier runs are removed; their evaluations and measures stay under `evaluations/`.
-The current build decodes only `spec-e2e-report/v25` (`report_schema` in `test/harness/e2e/contracts.zig`); every run above is v24 or earlier, so its report is `unavailable` to `e2e-measures` and `adjudicate-spec` rejects it. Each needs the build that made it.
+**Retained runs:** `zig-out/e2e-spec/` keeps the newest twelve runs: set B of 22 November 2026 (`2026-11-22T06-36-44Z`
+to `06-54-55Z`) and the Q26 follow-up's set (`08-35-52Z` to `08-39-02Z`, [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set").
+A new set removes the oldest runs past twelve (the Q26 sets' directories were removed that way); their evaluations and
+measures stay under `evaluations/`. The current build decodes only `spec-e2e-report/v25` (`report_schema` in
+`test/harness/e2e/contracts.zig`), which these reports carry.
 
 ## 2. Rules for measured phases
 
@@ -160,8 +160,8 @@ human-reviewed labels, never by native code or a new judge.
 
 | Boundary | Positive evidence | Negative evidence | Applies to |
 | --- | --- | --- | --- |
-| Summary representation | Combined, split, overlapping expressions; complete membership; stable identities | Missing or foreign IDs, altered categories, false support, changed exact values | Q8 |
-| Normalization | Idempotence; same-evidence duplicates collapse; raw and provenance kept | Different occurrences, distinct obligations, paraphrases, destructive truncation | Q8 (D8.3) |
+| Summary representation | Combined, split, overlapping expressions; complete membership; stable identities | Missing or foreign IDs, altered categories, false support, changed exact values | Any summary representation change |
+| Normalization | Idempotence; same-evidence duplicates collapse; raw and provenance kept | Different occurrences, distinct obligations, paraphrases, destructive truncation | Any normalization change |
 | Native carry-forward | Empty, non-final, final, one/many-child routing; complete lineage | Stale or forged child content, changed evidence, fabricated origin | Any summary change |
 | Repair | Exact target and dependencies, protected siblings, progress, full final validation | Stale authorization, widened scope, reset allowance, invalid survivor | Q14 b3, E4 |
 | Exact-value representation | Occurrences from exact bytes in bound fields survive repair and readback | False matches, ambiguous occurrences, unbound fields, changed obligations | Any exact-value change |
@@ -175,10 +175,14 @@ change except E7), **T** tests, **C** code-review findings (§10; unscheduled un
 otherwise). "Gap" means between measurement sets. Each screen
 batch and live set needs its own approval (AGENTS.md).
 
-**Output track:** Q26's follow-up (§4 Q26, decided 22 November 2026) is the only item awaiting a set: one change
-set, then screens of the call kinds it changes and a set, each approved.
+**Output track:** Q26's follow-up (§4 Q26, decided 22 November 2026) was built, screened and run to eight per case,
+and its edge-case entry reverted ([Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set"); nothing awaits a set.
 
-**Engine track, in gaps:** E7's later stages wait on the user deciding the recommendations in §5 E7. E0 is on hold. **Tests:** T4 with E1–E4. **Adjudication:** the evaluate-e2e skill for every set.
+**Engine track, in gaps:** E7 stages 2–8 (decided 22 November 2026, §5 E7), in order, after the Q26 follow-up's set;
+stage 4 carries C8, and stage 5, its own set, the rest of C49. E0 is on hold.
+**Byte-neutral, sharing the next set's build** (§2 rule 1): C22's remainder (§10.3; built 22 November 2026, its request
+projection equal to Q26's, [Z_SPEC01](Z_SPEC01.md) "C22 remainder"). **Tests:** T4.
+**Adjudication:** the evaluate-e2e skill for every set.
 
 **Open problems without an item.**
 
@@ -249,25 +253,50 @@ Open parts only:
   [Z_SPEC01](Z_SPEC01.md) "Two sets on the batch of 22 November 2026"): 2 Givens repeating their When and no
   placeholder in 48 criteria (hello-world omitted every Given, 18 of 18; loan-renewal kept one on 30 of 30). Across the
   five sets, 7 events (6 Givens repeating their When, 1 placeholder Given) in 120 criteria: still below the floor.
-- **Edge case live:** no run has written an edge case, so the edge case's own `given` entry and its `GIVEN` line for a
-  Given-less criterion are unexercised live (Q14's edge-case bullet); the scripted scenario drives them offline.
+- **Edge case live:** no run has written an edge case, so the edge case's `GIVEN` line for a Given-less criterion is
+  unexercised live (Q14's edge-case bullet); the scripted scenario drives it offline.
+- **Links prompt:** `links.prompt.md:2` says "its given and when cover that situation", and a criterion may have no Given.
+  A reword was built with the follow-up and reverted with it, unmeasured: no development run has a link request.
 - **Generic Givens** ("…with an existing due date"; 3, 5 and 5 of 15 loan-renewal criteria in Q26's three sets, 5 and 6
   of 15 in the two later ones) are a minor `unsupported_addition` under §1's ruling (22 November 2026). The removed
   presupposition sentence did not remove them, and no open change targets them; later sets count them.
 
-**Follow-up built** 22 November 2026 (decided the same day; user: "update documenation with recommendation for
-decisions 3 4, 5, 6"; record: [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up"): the criterion's and the edge case's `given`
-guidance are keyed apart (`packet-guidance/v8`), `links.prompt.md` holds for a criterion without a Given, and a scripted
-scenario drives a Given-less criterion and a linked edge case to publication. It removes a conflict in the request that
-the evaluator traced (`prompt_conflict`, `likely`), so it is request hygiene, kept on guards plus its **Keep if**
-(§2 rule 6, as Q4): no placeholder Given, and no criterion dropping a Given its source states. Its request bytes differ
-only in the records requests' edge-case `given` text and the link requests' prompt, and no run has written an edge case,
-so the set may show no benefit by construction. **Set record** (§2 rule 6, before the set): three runs of each
-development case, extended to at most eight per case; reference Q26's three sets and the two later ones (the same
-request bytes as far as projected, §2 rule 7), re-scored first on the skill revision that carries §1's ruling (§2 rule
-5). Guards: lost source requirement, and the publication rate per case. Watch: weakened obligation,
-`unsupported_addition` in a Given, a Given repeating its When, and Q14's restated edge cases if any are written.
-**Next:** screens of the changed call kinds (the records request and the link request), then the set, each approved.
+**Follow-up built, then reverted** 22 November 2026 (decided the same day; user: "update documenation with recommendation
+for decisions 3 4, 5, 6"; record: [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up" and "Q26 follow-up set"): the criterion's and the
+edge case's `given` guidance were keyed apart (`packet-guidance/v8`), `links.prompt.md` was reworded for a criterion
+without a Given, and a scripted scenario drives a Given-less criterion and a linked edge case to publication. It aimed
+to remove a conflict in the request that the evaluator traced (`prompt_conflict`, `likely`), judged on guards (lost
+source requirement, the publication rate per case) and a **Keep if** (§2 rule 6, as Q4: no placeholder Given, no
+criterion dropping a Given its source states), with weakened obligation, `unsupported_addition` in a Given, a Given
+repeating its When and Q14's restated edge cases as watch items, against reference set B and Q26's sets, scored on
+`evaluate-e2e` `2b3fb8de…`. The keyed-apart guidance and the links reword are reverted (below); the scenario (a test,
+no request byte) and C22's remainder (separate) stay.
+**Screened** 22 November 2026 (records call, 10 trials per arm, [Z_SPEC01](Z_SPEC01.md)): every trial valid, no edge case
+written; hello-world named one of its three claims in 2 of 10 edited trials and in none of 10 as captured, within chance
+at that size and the guard's to watch; loan-renewal equal. The link request has no development call to screen.
+**Set run** 22 November 2026 (`2026-11-22T08-35-52Z` to `09-08-22Z`, build source `62d848af…` for all 16, eight runs per
+case, the rule 6 maximum, all published and adjudicated as passed; [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set"):
+hello-world mean 95.54% (reference, 15 runs on this evaluator, 99.29%), loan-renewal 90.63% (94.05%). **Guards:** no
+lost source requirement under the evaluator's rulings and 16 of 16 published. **Watch fired, two ways.** (1) Hello-world:
+the records call named only claim 2 of the three requirement claims in 2 of 8 runs (`09-04-25Z`, `09-06-47Z`, scored
+89.29% and 85.71%; the requirements survive as story quotes, which coverage accepts, ADR 0047), in 2 of 10 edited-arm
+screen trials against 0 of 10 as captured, and in none of the 15 earlier runs on this evaluator (once earlier, a
+21 November run on a build before Q26's): 4 of 18 with this change against 0 of 25 without, one-sided p about 0.025, the
+live part confounded by the provider drift. (2) Loan-renewal: a weakened obligation ("can renew" for "must be able to" in
+FR-001) in 4 of 8 runs, none in 15 earlier, and every one in a run whose signals call put claim 1 in the three-claim group
+`[1,4,5]` (4 of 6 such runs, 0 of 2 with `[1,4]`), a grouping the drift introduced (a screen of the same signals request
+gave 4, 3 and 2 groups). Unsupported additions: 18 in the 8 loan-renewal runs, 16 of them generic Givens (16 of 40
+criteria; 24 of 75 before) and 2 "followed by" in a user-visible outcome. A placeholder
+Given in 1 of 8 hello-world runs, as in Q26's second set (1 of 3). No edge case was written. **Concurrent screen**
+(22 November 2026, the records call of each case as captured and with the omission sentence put back, 20 trials per arm,
+same moment, same model; [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set"): hello-world named only claim 2 in 5 of 20 as
+captured and in none of 20 with the sentence (one-sided p about 0.024); loan-renewal's `[1,4,5]` call wrote "can renew"
+in 16 of 20 as captured and in 1 of 16 completed with the sentence, which also had 4 protocol-invalid answers
+(`string_length`, 0 as captured) that a correction send handles. **Reverted** 22 November 2026 (user: "action
+recommendation"): the edge case's `given` shares the criterion's entry again (`packet-guidance/v7`, the omission
+sentence in the records request), and `links.prompt.md:2` is as before; ADR 0016 and ADR 0038 say so. The tree's
+request bytes equal Q26's (`evaluations/request-projection/q26-reverted-after` against `q26-after`: 1833 files
+identical, the scripted scenario's calls added). **Next:** a set on the reverted build is the user's call.
 
 ## 5. Engine track (E)
 
@@ -279,7 +308,7 @@ landing between sets and under §2.12.
 
 On hold since 30 October 2026 (ADR 0041:3-4). Nothing under `src/` names `failure-output`,
 `spec_incomplete` or `run.incomplete_published`. To resume: implement ADR 0041 Decisions 1–8,
-taking `specification-state/v29` (ADR 0041 names it); align the measures
+taking the next `specification-state` version (E7 stage 4 takes v29, §5 E7); align the measures
 (`test/harness/e2e/measures.zig:207`, test `:739-742`; e2e.md:682-683), design.md:208,
 24-workflow-state.md:78-83, F0100:1145 and `test/harness/e2e/contracts.zig:209-212` with
 Decision 7.1 (an `invalid` run stays `invalid` and may publish), and F0100:1139 with Decision
@@ -292,12 +321,6 @@ flip every scenario asserting no publication after an eligible failure (the `spe
 test `:162-168`). If ADR 0041 is withdrawn, v16's `incomplete_publication` (e2e.md:353-356)
 and the measures' `incomplete` value become dead code needing a report version.
 Budget-stopped runs publish nothing while it is on hold (none since D13.1).
-
-### E3. Engine routines (A3, ADR 0032)
-
-Startup, provider bootstrap and feature logging (six routines: persist, prepare, close, retention, failure and
-prior-run finalization) are implemented; record in [Z_SPEC01](Z_SPEC01.md) E3 and "E3 feature logging, E6 prior-run
-crash finalization and E7 Stage 1".
 
 ### E7. Clarification answer recovery (R2, ADR 0025)
 
@@ -318,39 +341,54 @@ lease; 4 accept, publish and close (`clarification-state/v3`); 5 stable subjects
 identity; removing `record_kind` from the schema changes request bytes and needs a live set); 6 generation consumes
 answers (request bytes change only for runs that have responses); 7 the harness two-leg flow; 8 live runs.
 
-**Decisions each later stage needs** (the user's; recommendations recorded 22 November 2026, none decided):
+**Decided** 22 November 2026 (user: "update the documentation with the recommendations"); unbuilt. Each design
+amendment below lands with its stage's code, in ADR 0025 and the contracts it names:
 
-- **Publishing responses** (stage 4). ADR 0025:73-74 publishes responses before refresh; ADR 0009:35 keeps output private
-  until whole-workflow validation. Recommendation: hold accepted responses in memory through refresh and generation and
-  publish them at terminal publication on every outcome, as ADR 0018 publishes logs (`workflow_publication`), amending
-  ADR 0025:73-74 only. ADR 0025:79-80 (responses survive a later failure) still holds; after an interruption the forms are
-  untouched and the next run accepts them again.
-- **Actor-evidence registry** (stage 3; none in `src/`). Recommendation: a feature-directory file with its own closed
-  schema, `actor-evidence-registry/v1`, published with the responses. It is a fifth registered output: case v4 and the
-  next report version, landing after a set is adjudicated (§2 rule 12).
-- **Answer-derived literals** (stage 2). Recommendation: re-derived each run from the published response, the sole durable
-  owner of the submitted bytes (ADR 0025:95-96, §23.2).
-- **A valid `cancel`** (stage 4). The run ends `cancelled` (ADR 0025:78). Recommendation: as the invalid-form path, accept
-  no form (valid ones included), write nothing, leave every form as the user left it and make no model call.
-- **Authentication node** (stage 3). ADR 0031:372-376 limits a stage action to `none` or `filesystem_read`, and
-  `SideEffect` (`src/domain/pipeline.zig:115-121`) has no identity member. Recommendation: the standalone
-  `AuthenticateActorAction` ADR 0025 names, with one new `SideEffect` member `actor_authentication`, only
-  `AuthenticationPort`, and the runner as lease issuer (ADR 0025:89).
-- **Proof regime and defect class.** Recommendation: rule 10 for stages 2, 3, 4 and 6 (no request-byte change on runs
-  without responses) and a rule 6 set for stage 5; defect class `contradiction`, guarded by the clarification-expected
-  case's publication rate, which is zero without E7.
-- **Next state version** (the first stage that changes it). `src/` is at `specification-state/v28`; ADR 0041 names v29.
-  Recommendation: whichever lands first takes v29, and ADR 0041 says "the next version" instead.
-- **Clarification-expected case** (stage 7). Recommendation: a derivative of a development case with two contradictory
-  bullets, neither a reserved qualification feature nor a tuning target.
-- **Authoring answers between runs** (stage 7). Recommendation: an `answers` member in case v4. One launch runs run 1,
-  fills the open forms from `answers`, then runs run 2. It touches the "case principle files restate no story
-  requirement" rule (answers sit in the case file, not a principle file, but state requirement content) and the
-  evaluate-e2e skill.
-- **Run 2's rubric and adjudication basis** (stage 7). Recommendation: run 1 is adjudicated as a correct pause (a form for
-  the contradiction, nothing published); run 2 on the case rubric with the declared answer counted as source: the chosen
-  bullet kept, the other dropped, the response ID cited.
-- **Gate re-run after E7** is the user's (ADR 0034:91-95, which recommends re-running after a structural change lands).
+- **Publishing responses** (stage 4). Accepted responses stay in memory through refresh and generation and are published
+  only with the run's own publication: the complete `ok` output, the `needs_user` incomplete publication
+  (17-specify.md:483-486) and a valid cancel (below). A failed, blocked or interrupted run writes nothing; its closed forms
+  still name the current revisions, so the next run accepts them again (running is the act of acceptance, ADR 0025
+  Decision 1) and the user never re-answers. No ADR 0009 exception and no E0 dependency. Amends ADR 0025:73-74 and 79-80
+  (its test of a run that fails after acceptance then expects the next run to accept again), 17-specify.md:502-503 and
+  24-workflow-state.md:96-97. E0, when resumed, decides whether its failure output carries them.
+- **Actor-evidence registry** (stage 3; none in `src/`). A feature-directory file with its own closed schema,
+  `actor-evidence-registry/v1`, holding the catalogue's shared registry (13-05-artifacts-rendering-traceability.md:356-423)
+  and published with the responses. It is a fifth registered output: case v4 and the next report version, landing after
+  a set is adjudicated (§2 rule 12).
+- **Answer-derived literals** (stage 2). Re-derived each run from the published response, the sole durable owner of the
+  submitted bytes (ADR 0025:94-96, §23.2), never persisted apart.
+- **A valid `cancel`** (stage 4). An accepted submission, as the contracts already define it (24-workflow-state.md:102,
+  14-orchestration.md:241-242, the cancelled audit form at 23-rendering.md:263; `cancelled_by_user` with a `cancel_reason`
+  response, `clarification_inputs.zig:160-164`): it is authenticated, its response and `cancelled_by_user` record are
+  built, the other valid closed forms are accepted with it, the clarification state is published, and the run ends
+  `cancelled` before any model call. An invalid form beside it still blocks with nothing accepted (ADR 0025 Decision 2).
+- **Authentication step** (stage 3). The standalone `AuthenticateActorAction` (13-05:362-367) with only
+  `AuthenticationPort` and one new `SideEffect` member, `actor_authentication` (`src/domain/pipeline.zig:115-121`; reading
+  the account is not `filesystem_read`, and `none` would hide a port call). ADR 0031:372-376 is why it can't sit inside a
+  stage action; the runner issues the lease (ADR 0025:89-90). The pure registry steps after it (13-05:369-419) are one
+  stage action with no side effect; `/preflight` settles the details.
+- **Proof regime and defect class.** Rule 10 for stages 2, 3, 4 and 6 (development-case runs have no responses, so their
+  requests stay byte-identical) and a rule 6 set for stage 5. The measure is the clarification-expected case's
+  complete-publication rate, zero without E7; guards: the chosen bullet kept (`lost_source_requirement`), the other
+  absent (`contradiction`), and no invented resolution (`unsupported_addition`).
+- **Next state version.** Stage 4 takes `specification-state/v29` with `clarification-state/v3` (ADR 0025:167-168), and
+  ADR 0041 says "the next version" instead of v29.
+- **Clarification-expected case** (stage 7). A loan-renewal derivative with exactly one pair of contradictory bullets, so
+  run 1 should raise one form; neither a reserved qualification feature nor a tuning target. No form, or more than one,
+  is reported as an unmet criterion (a model limitation), with no retry or rewording.
+- **Authoring answers between runs** (stage 7). An `answers` member in case v4 holding one bounded text, since every Spec
+  clarification takes one (`build_specification_clarification_need.zig:33`, `required_authority_clarifications.zig:71`).
+  One launch runs run 1 and, only when it ends `needs_user` with exactly one open form, writes the text into the answer
+  region, sets `requestedStatus: closed` and runs run 2; anything else is reported. No answer is matched to a form by its
+  wording. The answer is the user's input, which ADR 0025 makes authority, not a project standard, so the principle-file
+  rule (AGENTS.md "Testing expectations") is untouched.
+- **Adjudication basis** (stage 7; the evaluate-e2e skill states it). Run 1 publishes the incomplete specification and
+  its form (17-specify.md:483-486) and is adjudicated as a correct pause: one form naming the contradiction, and an
+  incomplete specification that settles neither bullet. Run 2 is scored on the case rubric with the declared answer
+  counted as source: the chosen bullet kept, the other dropped, the response ID cited.
+
+**Not decided here:** the gate re-run after E7 is the user's (ADR 0034:91-95, which recommends re-running after a
+structural change lands). Of the E7 stages, only stage 5's set changes development-case requests.
 
 ## 6. Test track (T)
 
@@ -374,10 +412,13 @@ T5.3 `repeated_instructions`, T5.5 `model_or_case_branches`, T5.6 `model_text_ou
 T5.4 isn't in it. Each change set that a phase reports on
 retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>` with the
 freeze §2.10 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a `slot: repair`
-step whose prompt no non-repair step binds). Last taken 22 November 2026 on the build of Q26's set (`ea69a53`,
-modified; freeze `evaluations/request-projection/q26-after`): T5.1 11, T5.2 0 (tests 69), T5.3 8 at 17 sites,
-T5.4 7, T5.5 0 and T5.6 15 in 4 files. T5.1 gained one single-word absence literal (`given`,
-`model_candidate_json_test.zig:504`); the 21 November engine batch moved none of them (freeze
+step whose prompt no non-repair step binds). Last taken 22 November 2026 on the tree after the Q26 follow-up's edge-case
+entry was reverted (modified; freeze `evaluations/request-projection/q26-reverted-after`): T5.1 11, T5.2 0 (tests 69),
+T5.3 8 at 17 sites, T5.4 7, T5.5 0 and T5.6 15 in 4 files, equal to the counts on the build of Q26's set (`ea69a53`,
+modified; freeze `evaluations/request-projection/q26-after`). While the keyed-apart entry stood (freeze
+`q26-followup-after`) T5.3 was 9 at 19, the starting-situation sentence held by two entries. T5.1 gained one
+single-word absence literal (`given`,
+`model_candidate_json_test.zig:504`) in Q26's; the 21 November engine batch moved none of them (freeze
 `evaluations/request-projection/q14-remeasure`, byte-identical to `coupling-final`: 10, 0, 8 at 17, 7, 0 and
 15 in 4 files, equal to 19 November's). Those counts, beside the
 ones taken 14 November 2026 after E5 (freeze `evaluations/request-projection/e5-final`) and 2 November 2026
@@ -506,9 +547,8 @@ code, do complete end 2 end analysis, do not guess").
   struct (`Operations`) and the `entries` rows and their count are derived from it (Z_SPEC01 "Refactors that leave
   request bytes unchanged"), so the operation costs an import alias, a field and its initializer there; the YAML,
   `DataKeys` and schemas are unchanged. The initializers are still written by hand, which the compiler checks against
-  the fields, and `model_request_operations.zig` keeps its own `count = 8` and parallel rows (a test guards it).
-  **Decided** 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"); unbuilt:
-  that count and its rows are derived from one struct, as `Operations` is.
+  the fields. `model_request_operations.zig` is derived the same way (built 22 November 2026, [Z_SPEC01](Z_SPEC01.md)
+  "C22 remainder"; decided the same day, user: "update documenation with recommendation for decisions 3 4, 5, 6").
 - One record family: three Zig files the compiler enforces and `Kind.isScopeSection`, now a method with an
   exhaustive switch; a test requires a `record_<kind>` definition and the `record_kind` member for every family
   but the entity. `packet-guidance.json` was already checked at decode. `records.prompt.md:9-13` names the families

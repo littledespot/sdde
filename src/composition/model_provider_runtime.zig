@@ -18,8 +18,8 @@ pub const Assembly = struct {
     provider: ?model_provider.Provider = null,
 
     pub fn deinit(self: *Assembly) void {
-        self.operations.prepare_authorization.action = null;
-        self.operations.invoke_model.action = null;
+        self.operations.stages.prepare_authorization.action = null;
+        self.operations.stages.invoke_model.action = null;
         self.authorization.deinit();
     }
 
@@ -51,8 +51,8 @@ pub const Assembly = struct {
             .transport = self.transport.port(),
             .capture = runner.model_capture.port(),
         };
-        self.operations.prepare_authorization.action = .{ .authorization = self.authorization.port() };
-        self.operations.invoke_model.action = .{ .provider = self.provider.?.port() };
+        self.operations.stages.prepare_authorization.action = .{ .authorization = self.authorization.port() };
+        self.operations.stages.invoke_model.action = .{ .provider = self.provider.?.port() };
     }
 };
 

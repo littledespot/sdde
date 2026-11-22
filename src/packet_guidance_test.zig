@@ -48,9 +48,6 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         .{ .object = &.{ "review_scope", "reference" }, .key = "token", .value = null },
         .{ .object = &.{"support_evidence"}, .key = "selection", .value = null },
         .{ .object = &.{ "support_evidence", "question" }, .key = "required", .value = null },
-        // A field two families hold has an entry for each: neither may stand for the other.
-        .{ .object = &.{"record_fields"}, .key = "edge_case.given", .value = null },
-        .{ .object = &.{"record_fields"}, .key = "acceptance_criterion.given", .value = null },
         .{ .object = &.{ "reference_tasks", "token" }, .key = "after", .value = null },
         .{ .object = &.{}, .key = "summary_purpose", .value = null },
         .{ .object = &.{}, .key = "schema", .value = null },
@@ -60,12 +57,7 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         .{ .object = &.{"feature_purposes"}, .key = "primary_user_story", .value = text },
         .{ .object = &.{"record_fields"}, .key = "text", .value = text },
         // An edge case's one field is its `given` (ADR 0038 Decision 7): `condition` is no entry.
-        .{ .object = &.{"record_fields"}, .key = "edge_case.condition", .value = text },
-        // A field is keyed by its family: the field's name alone (the `packet-guidance/v7` key) and a field the
-        // family doesn't hold are no entries.
-        .{ .object = &.{"record_fields"}, .key = "given", .value = text },
-        .{ .object = &.{"record_fields"}, .key = "entity.given", .value = text },
-        .{ .object = &.{"record_fields"}, .key = "functional_requirement.text", .value = text },
+        .{ .object = &.{"record_fields"}, .key = "condition", .value = text },
         .{ .object = &.{"review_scope"}, .key = "instruction", .value = text },
         // Review scopes of the removed post-generation review are not entries.
         .{ .object = &.{"review_scope"}, .key = "collection", .value = text },
@@ -87,7 +79,7 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         // Unsupported version.
         .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v3" } },
         .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v6" } },
-        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v7" } },
+        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v8" } },
     }) |change| {
         var document = try std.json.parseFromSliceLeaky(std.json.Value, a, valid, .{});
         var target = &document;
@@ -96,14 +88,14 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         const changed = try std.json.Stringify.valueAlloc(a, document, .{});
         try std.testing.expectError(error.InvalidPacketGuidance, guidance.compile(a, changed));
     }
-    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v8\",", "{\"schema\":\"packet-guidance/v8\",\"schema\":\"packet-guidance/v8\",");
+    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v7\",", "{\"schema\":\"packet-guidance/v7\",\"schema\":\"packet-guidance/v7\",");
     try std.testing.expect(!std.mem.eql(u8, duplicate, valid));
     for ([_][]const u8{
         duplicate,
         "",
         "[]",
         "null",
-        "\"packet-guidance/v8\"",
+        "\"packet-guidance/v7\"",
         try std.mem.concat(a, u8, &[_][]const u8{ "[", valid, "]" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "{}" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "x" }),
@@ -116,18 +108,10 @@ test "registered keys follow the native registries and consumers declare their g
         for (std.enums.values(authority.Kind)) |kind| feature = feature or authority.policy(.{ .kind = kind, .unit = .{ .feature = .singleton }, .slot = slot }) != null;
         try std.testing.expectEqual(feature and @import("domain/specification_authority.zig").collectionFamily(slot) == null, std.meta.stringToEnum(guidance.FeaturePurpose, @tagName(slot)) != null);
         if (@import("domain/specification_authority.zig").collectionFamily(slot) != null) try std.testing.expect(feature);
-        // A text field has one key for each family that holds it, named by both; `text` has none.
-        for (std.enums.values(spec.Kind)) |kind| {
-            const key = guidance.recordField(kind, slot);
-            try std.testing.expectEqual(authority.recordField(kind, slot) and slot != .text, key != null);
-            if (key) |held| {
-                var name: [64]u8 = undefined;
-                try std.testing.expectEqualStrings(try std.fmt.bufPrint(&name, "{s}.{s}", .{ @tagName(kind), @tagName(slot) }), @tagName(held));
-            }
-        }
+        var record = false;
+        for (std.enums.values(spec.Kind)) |kind| record = record or authority.recordField(kind, slot);
+        try std.testing.expectEqual(record and slot != .text, std.meta.stringToEnum(guidance.RecordField, @tagName(slot)) != null);
     }
-    // The edge case's `given` and the criterion's are two keys, not one shared by name.
-    try std.testing.expect(guidance.recordField(.edge_case, .given).? != guidance.recordField(.acceptance_criterion, .given).?);
     const Subject = std.meta.Tag(@import("domain/specification_review_subject.zig").Subject);
     const scope = std.meta.fieldNames(@FieldType(guidance.Wire, "review_scope"));
     try std.testing.expectEqual(std.meta.tags(Subject).len + guidance.shared_scope.len, scope.len);
@@ -328,7 +312,7 @@ test "the compiler binds packet guidance only through its capture step and check
 
     // A registered entry is missing from the resource.
     var document = try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{});
-    try std.testing.expect(document.object.getPtr("record_fields").?.object.orderedRemove("entity.name"));
+    try std.testing.expect(document.object.getPtr("record_fields").?.object.orderedRemove("name"));
     const missing: Resource = .{ .path = guidance_file.path, .bytes = try std.json.Stringify.valueAlloc(a, document, .{}) };
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, compileGuided(a, guided_workflow, &.{ missing, prompt_file }));
     // The guidance alias is also bound as a prompt.

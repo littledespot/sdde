@@ -80,7 +80,7 @@ const Request = struct {
         self.runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = packet_value;
         try self.runner.repair_retry.commit(try self.runner.repair_retry.prepare(authorized));
         self.fake = model_tests.invocationProvider(&self.runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = self.fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = self.fake.interface() };
         self.fake.invocation_plan.complete.content = response;
         try model_tests.prepareProtocolAttempt(&self.runner, false);
         for ([_][]const u8{ "call", "validate-response", "complete-operation", "validate-payload", "close-request" }) |step|

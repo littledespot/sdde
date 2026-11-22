@@ -6,7 +6,7 @@ const authority = @import("required_authority.zig");
 const spec = @import("specification.zig");
 const review = @import("specification_review_subject.zig");
 
-pub const version = "packet-guidance/v8";
+pub const version = "packet-guidance/v7";
 pub const Error = error{InvalidPacketGuidance} || std.mem.Allocator.Error;
 pub const max_bytes: u32 = 64 * 1024;
 const max_depth = 3;
@@ -19,23 +19,11 @@ fn featurePurposeSlot(slot: authority.Slot) bool {
     }
     return false;
 }
-/// The key of one family's text field, `<family>.<field>`. A field is keyed by its family as well as its name,
-/// because two families may write one field under different rules (an acceptance criterion's `given` is optional,
-/// an edge case's is required).
-fn recordFieldName(comptime kind: spec.Kind, comptime slot: authority.Slot) []const u8 {
-    return @tagName(kind) ++ "." ++ @tagName(slot);
-}
-/// One key for each text field of each family. A text-only family's sole field is its definition, which
-/// `record_families` holds, so `text` has none.
-fn RecordFieldKey() type {
-    @setEvalBranchQuota(20_000);
-    var names: []const []const u8 = &.{};
-    for (std.enums.values(spec.Kind)) |kind| {
-        for (std.enums.values(authority.Slot)) |slot| {
-            if (slot != .text and authority.recordField(kind, slot)) names = names ++ .{recordFieldName(kind, slot)};
-        }
-    }
-    return @Enum(u8, .exhaustive, names, &std.simd.iota(u8, names.len));
+fn recordFieldSlot(slot: authority.Slot) bool {
+    // A record's text field is its family's definition.
+    if (slot == .text) return false;
+    for (std.enums.values(spec.Kind)) |kind| if (authority.recordField(kind, slot)) return true;
+    return false;
 }
 fn SlotKey(comptime selected: fn (authority.Slot) bool) type {
     @setEvalBranchQuota(20_000);
@@ -48,7 +36,7 @@ fn SlotKey(comptime selected: fn (authority.Slot) bool) type {
 
 /// Registered keys, derived from the native registries rather than listed again.
 pub const FeaturePurpose = SlotKey(featurePurposeSlot);
-pub const RecordField = RecordFieldKey();
+pub const RecordField = SlotKey(recordFieldSlot);
 pub const ReferenceUnit = std.meta.Tag(review.ReferenceSubject);
 pub const QuestionRule = enum { retained_gap, required, omitted };
 pub const RepairTail = enum { value_choices };
@@ -62,12 +50,10 @@ pub fn featurePurpose(slot: authority.Slot) ?FeaturePurpose {
         inline else => |tag| if (@hasField(FeaturePurpose, @tagName(tag))) @field(FeaturePurpose, @tagName(tag)) else null,
     };
 }
-/// The key of a family's text field; a field the family doesn't hold, and `text`, have none.
-pub fn recordField(kind: spec.Kind, slot: authority.Slot) ?RecordField {
-    return switch (kind) {
-        inline else => |family| switch (slot) {
-            inline else => |tag| if (@hasField(RecordField, recordFieldName(family, tag))) @field(RecordField, recordFieldName(family, tag)) else null,
-        },
+/// The key of a record slot with its own field entry; `text` has none.
+pub fn recordField(slot: authority.Slot) ?RecordField {
+    return switch (slot) {
+        inline else => |tag| if (@hasField(RecordField, @tagName(tag))) @field(RecordField, @tagName(tag)) else null,
     };
 }
 
@@ -92,10 +78,10 @@ fn Entries(comptime Key: type, comptime Value: type) type {
     return std.enums.EnumFieldStruct(Key, Value, null);
 }
 
-/// The closed `packet-guidance/v8` wire shape. Missing, extra, duplicate and
+/// The closed `packet-guidance/v7` wire shape. Missing, extra, duplicate and
 /// wrongly typed entries reject while decoding.
 pub const Wire = struct {
-    schema: enum { @"packet-guidance/v8" },
+    schema: enum { @"packet-guidance/v7" },
     feature_purposes: Entries(FeaturePurpose, []const u8),
     record_families: Entries(spec.Kind, []const u8),
     record_fields: Entries(RecordField, []const u8),

@@ -2921,58 +2921,204 @@ and contradiction 0 in every run.
 Evaluations: `evaluations/e2e/<run>/`; adjudications `adjudication-787066f3…`, `-fd878b2c…`, `-6d4d2e00…`,
 `-1bccce67…`, `-037d12a4…` and `-663e6f32…`.
 
-## Q26 follow-up. Guidance keyed by family and field, a links prompt for a criterion without a Given, and a Given-less scenario (22 November 2026)
+## Q26 follow-up. A Given-less scenario kept; the keyed-apart guidance and the links reword reverted (22 November 2026)
 
 Decided 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"), built on "preflight and
-implement". **Defect class:** an unsupported addition or placeholder in a Given. The records request told the model that
-"an acceptance criterion whose sources state no starting situation has none" beside an edge case, whose `given` the
-schema requires, because one `given` entry served both families.
+implement", **reverted 22 November 2026** in all but the scenario (user: "action recommendation", on the concurrent screen
+in "Q26 follow-up set"). **Defect class aimed at:** an unsupported addition or placeholder in a Given. The records request
+told the model that "an acceptance criterion whose sources state no starting situation has none" beside an edge case,
+whose `given` the schema requires, because one `given` entry served both families.
 
-- **Keys.** `packet_guidance.RecordField` is derived from the native registry, `authority.recordField(kind, slot)`, as one
-  key `<family>.<field>` for each text field of each family: `acceptance_criterion.given`, `.when`, `.then`,
-  `edge_case.given` and `entity.name` (a text-only family's field is its definition, which `record_families` holds).
-  `packet-guidance/v8` is that closed key set, and v7 and earlier reject. `recordField(kind, slot)` replaces the
-  slot-only lookup and `required_authority_description.recordField` reads it. No new `Slot`, so the required-authority
-  contract stays 6, and no state, content, debug or report version moved. The criterion's `given`, `when` and `then` and
-  the entity's `name` are the v7 texts byte for byte; `edge_case.given` is the criterion's text without its last
-  sentence, the one change the decision names.
-- **Settled in the preflight.** (1) A held Given's repair request reads its own family's entry through `recordTask`: a
-  criterion's repair is unchanged (no Given was repaired in any set, and an absent Given is no repair target, §22.3), and
-  an edge case's repair now carries its own entry. (2) The field rule at `text_field_policy.zig:110` is unchanged: it
-  states the form of a Given that is written, its policy is already keyed apart (`ac_given`, `edge_given`), and changing
-  it is a request-byte change to every prose field that no evidence yet asks for. Whether it contributes to the retained
-  repeats stays open (SPEC01 §4 Q26).
-- **Links prompt.** `links.prompt.md:2` reads "its when, and its given where it has one, cover that situation, and its
-  then states the result". The driver and `workflow_tests.zig` read the file, so no test text changed.
-- **Scripted scenario.** `link-without-given` (case `criteria_without_given`, appended after the others so that no earlier
+- **Built, then reverted.** `packet-guidance/v8` keyed each record text field by family and field, so the edge case's
+  `given` text lacked that sentence (every other text byte for byte as in v7), and `links.prompt.md:2` read "its when, and
+  its given where it has one, cover that situation". Both are reverted: `packet-guidance/v7` with the one shared `given`
+  entry, and the links line as before, so every request equals Q26's (`evaluations/request-projection/q26-reverted-after`
+  against `q26-after`: 1833 files identical, the scenario's 23 calls added). ADR 0016 and ADR 0038 are restored to the
+  shared-entry wording, and ADR 0038's Decision 7 bullet states why the edge case keeps the sentence. The key derivation,
+  its tests and the T5.3 repeated-sentence count (9 at 19) went with it; the retaken counts equal Q26's.
+- **Scripted scenario (kept).** `link-without-given` (case `criteria_without_given`, appended after the others so that no earlier
   scenario changes its number) runs the `.chosen` sources and edge cases with `Options.scenarios_without_given`: every
   scenarios answer omits its Given (the fixture refuses it together with `scenario_defect`, whose defect is in a Given).
   It asserts that no criterion holds a Given and none prints a `**Given**` label, that each edge case's `GIVEN` line is
   its own given alone, directly above the `WHEN` line, and that the persisted link and its readback hold with the three
   forgeries rejected. With the omission switched off the case fails.
-- **Tests.** `packet_guidance_test.zig`: rejected the v7 version, the v7 slot-keyed `given`, `entity.given`,
-  `functional_requirement.text`, `edge_case.condition`, and a resource missing `edge_case.given` or
-  `acceptance_criterion.given`; the registry test checks every (family, field) pair. `required_authority_test.zig`: each
-  family's field, description, authoring task and repair task carry its own entry, and the records request's kinds never
-  carry the criterion's entry; an unrelated field (`entity.name`) keeps its one entry.
-- **Request freeze** (`evaluations/request-projection/q26-after` to `q26-followup-after`): 207 request files differ only by
-  the edge case's `given` sentence, every one a records request; 16 differ only by the links prompt line, every one a
-  link request; and 23 files are the new scenario's calls. 1610 are byte-identical, and the manifest moves by one
-  group, one scenario and 23 calls. The scenarios requests are unchanged, and no repair or support request in the scripted matrix
-  carries the changed text. Design text: ADR 0016 and ADR 0038 (Decision 7 and the
-  optional-Given amendment), F0005, 12-model-boundary.md and PLAN01.
-- **Contract review.** No blocker. Four minor findings fixed: ADR 0038 restated the keyed-apart fact in four places and
-  left a Persistence sentence that said packet guidance had not moved (ADR 0016 owns the fact, and 0038 says it once);
-  this record cited a freeze that was not yet kept and under-stated the manifest; and the scripted fixture would have
-  given a "Given-less" criterion a Given again if a case set `scenario_defect` too, so it now refuses the pair.
-  `SlotKey` keeps one caller (`FeaturePurpose`) and was left as it is.
-- **Checks.** Final tree: `zig build lint`, `test-architecture` (265 tests), `test-integration` (150 tests; the
-  `q26-followup-after` projection equals the earlier one) and `zig build verify` (146 of 146 steps, 2451 of 2451 tests,
-  two more than before: the new unit test and the new scenario). Run after the last code edit; only this record changed
-  after.
-- **Expected live effect.** Only records requests and link requests change, and no run has written an edge case, so the
-  set may show no benefit by construction; it is request hygiene against SPEC01 §4's Keep if. Screens of the changed
-  call kinds and the set are not run; each needs its own approval.
+- **Screens** (22 November 2026; `claude-haiku-5-5`, low effort, 10 trials per arm, all 40 completed; reports
+  `zig-out/e2e-call/2026-11-22T08-11-04Z`, `08-11-38Z`, `08-12-03Z` and `08-12-35Z`): the records call of each case,
+  hello-world `2026-11-22T06-36-44Z` call 8 and loan-renewal `2026-11-22T06-52-17Z` call 9, as captured and with the
+  edge case's `given` entry as v8 states it. The second arm is the captured content and schema with that one sentence
+  removed (exactly one occurrence changed; its edit files are under `zig-out/q26-followup-screens/`, which the build
+  does not keep, and rebuild from the capture). Every trial was schema-valid. Hello-world wrote 3 functional
+  requirements in 8 of 10 trials in each arm; the other 2 wrote 2 as captured and 1 edited. **Claims named** (the
+  claim IDs of each response's records): as captured, all 10 hello-world trials named claims 1, 2 and 3; edited, 8 did
+  and 2 named only claim 2, one functional requirement for the display requirement, with the start and UTC claims
+  unnamed. That is 2 of 10 against 0 of 10, which is within chance at this size (one-sided p about 0.24) and is not
+  evidence of harm, but its direction is the guard's (lost source requirement), so the set must show it. Loan-renewal
+  wrote one functional requirement and one business rule in all 10 trials of each arm, naming claims 1 and 4 in all 20.
+  No trial wrote an edge case. Input tokens fell by the removed sentence
+  (16023 to 16002, 16654 to 16633). A screen measures structure and decides nothing (SPEC01 §2 rule 4). The link
+  request has no screen: no development run has a link call to replay.
+- **Contract reviews.** The build and the revert each had one: no blocker. The revert's review found the kept links reword
+  changed the link requests, which SPEC01 §2 rule 1 does not allow for an unkept change set, so it was reverted too, and
+  asked that the ADR clauses state the rule once (ADR 0038 Decision 7) and that this record drop the reverted text.
+  The scripted fixture refuses `scenario_defect` together with an omitted Given.
+- **Checks.** Final tree, after the last code edit: `zig build lint`, `test-architecture` (266 tests), `test-integration`
+  (150) and `zig build verify` (146 of 146 steps, 2451 of 2451 tests). T5 retaken on this tree equals Q26's (SPEC01 §5 T5).
+
+## C22 remainder. The model request operations' tables derive from structs (22 November 2026)
+
+Decided 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"), built on "implement C22,
+now" so that it shares the Q26 follow-up's build (SPEC01 §2 rule 1). **Defect class:** change amplification, with no
+published-output effect. `model_request_operations.zig` kept a count (`8`), seven hand entry rows, a 17-entry `stage_types`
+and 17 hand stage rows beside the fields they described, so their agreement was a runtime test.
+
+- **Built.** `Selectable` holds the seven selectable operations in the old row order, and the entry count is its field
+  count plus the kernel entry. `Stages` holds one context for each kernel stage, a field named by its `kernel.Stage` tag, so a
+  stage without a context or a context without a stage does not compile. `stage_types` and the stage rows derive from it in
+  stage order (`kernel.validProjection` requires that order), the entry rows derive from `Selectable` in field order with the
+  kernel entry last, and `Assembly` is `{ selectable, stages, request_stages, entries }`. The contexts' initializers are
+  still written by hand and the compiler checks them against the fields. Four stage fields took their tag names
+  (`prepare` to `prepare_request`, `protocol_retry` to `build_protocol_retry`, `runaway_resend` to `build_runaway_resend`,
+  `complete_request` to `close_request`); `model_provider_runtime.zig` and about 180 test references now read
+  `stages.<name>`. One selectable operation costs an import alias, a field and its initializer; one stage costs its tag, a
+  field and its initializer (before: four or five parallel places each).
+- **Tests.** The guard in `test/harness/integration/tests.zig` is stricter than the combined check it replaces: each selectable
+  context is registered exactly once in `entries`, bound to that field and absent from `request_stages`; each stage context
+  exactly once in `request_stages`, bound to that field, its row's stage named like the field, and absent from `entries`; and the
+  rows follow `std.enums.values(Stage)` in order. A new architecture test fixes what the compiler leaves to a person: the
+  assembly holds its four members, and no context field returns beside the structs the tables derive from. The
+  compile-time rejections (a missing or extra stage context, a field that is not an operation) have no runtime test, and
+  a swap of two stage types whose stages share outcomes (`build_protocol_retry` and `build_runaway_resend`) is caught
+  only by the behavioural tests, as the old hand rows were. The unrelated member of the class is `Operations`, whose
+  table was derived by C22's first part.
+- **Contract review.** No blocker and no major finding; the change is behaviour-identical (initializers, entry and
+  stage order, row addresses). Two minor findings fixed: the first architecture test restated the compiler's checks and was
+  cut to the shape pin, and two sentences of this record named the old path or an exactly-once check the new guard replaces.
+- **Request freeze.** The projection of the integration scenarios is byte-identical to
+  `evaluations/request-projection/q26-followup-after` (`diff -rq` empty, manifest included; integration 150 of 150), so
+  the change shares the coming set's build.
+- **Checks.** Final tree: `zig build lint`, `test-architecture` (266 tests), `test-integration` (150) and
+  `zig build verify` (146 of 146 steps, 2452 of 2452 tests, one more than the Q26 follow-up's: the shape pin). The
+  architecture test was cut after the projection was taken and moves no request byte.
+
+## Q26 follow-up set (22 November 2026)
+
+User: "implement C22, now" (landed first, so the build carries it) and the set from the recommendation list. Three runs of
+each development case, none retried, `2026-11-22T08-35-52Z` to `08-39-02Z`, build revision `29807c964f23…`, every report
+`build.source.modified: true`, source `62d848af…` for all six, `claude-haiku-5-5` at low effort, skill `2b3fb8de…`. The
+reference was re-scored first (below). All six published natively and every adjudication was accepted. The change:
+`packet-guidance/v8` (the edge case's `given` entry apart from the criterion's), `links.prompt.md:2`, and C22's
+remainder, which moves no request byte.
+
+| Run | Case | Calls | Tokens | Aggregate | Content-basis defects (lost / weakened / unsupported / contradiction) |
+| --- | --- | --- | --- | --- | --- |
+| `08-35-52Z` | hello-world | 9 | 38,816 | 100% | 0 / 0 / 0 / 0 |
+| `08-36-27Z` | loan-renewal | 12 | 66,924 | 89.29% | 0 / 1 / 2 / 0 |
+| `08-37-14Z` | hello-world | 9 | 38,831 | 96.43% | 0 / 0 / 0 / 0 |
+| `08-37-44Z` | loan-renewal | 11 | 64,700 | 92.86% | 0 / 0 / 3 / 0 |
+| `08-38-26Z` | hello-world | 9 | 40,495 | 100% | 0 / 0 / 0 / 0 |
+| `08-39-02Z` | loan-renewal | 11 | 64,502 | 89.29% | 0 / 1 / 3 / 0 |
+
+Adjudications `adjudication-f3371a5b…`, `-b84c78b2…`, `-68131f9f…` (hello-world) and `-75c2ec6a…`, `-400978a9…`,
+`-b2a2c983…` (loan-renewal). No protocol correction, re-send, runaway or normalization, and no feature-log or evidence
+anomaly in any run.
+
+- **Hello-world** (mean 98.81%; reference over Q26's nine runs 99.21%): no Given on 9 of 9 criteria, no edge case. The
+  one deduction is run `08-37-14Z`'s doubled label (`**When** When the application is started.`, a minor
+  `rendering_artefact`, `organization` 3). The records call named every requirement claim in all three runs; the screen's
+  2 of 10 edited-arm trials that named one of three claims did not recur.
+- **Loan-renewal** (mean 90.48%; reference 94.45% over Q26's nine runs, 94.05% and 92.86% over the two later sets):
+  every criterion carries a Given (15 of 15), none repeats its When, **8 of 15 are generic preconditions** (all 8 are the
+  content-basis unsupported additions; 24 of 75 in the 15 earlier runs on this evaluator), none dropped a Given its
+  source states, and the one repair (`08-36-27Z`, AC-001's Then, a `foreign_exact` value) was helpful and touched no Given.
+  **Weakened obligation: FR-001 reads "can renew" for "must be able to" in `08-36-27Z` and `08-39-02Z`**, filed as
+  `weakened_obligation` (`eligibility` 3) as earlier evaluations ruled the same text; none of the 15 earlier loan-renewal
+  runs on this evaluator weakened a requirement. Each run also has one `restatement` of AC-001's Then, as Q26's sets did.
+- **No edge case** was written in any run, so the edge case's own `given` entry and its `GIVEN` line are still
+  unexercised live. No Given-less loan-renewal criterion appeared either.
+- **Why 16 calls became 11 to 12.** Not this change. Calls 1 to 4 (extraction, classification, summary, dispositions) are
+  byte-identical to the earlier runs'; the signals call's request is byte-identical to `06-52-17Z`'s and `06-53-38Z`'s, and
+  its answer grouped the five claims into two signals (`[1,4,5]` and `[2,3]`) in all three runs, where the earlier runs
+  had four. The records and scenarios calls run once per group, so each fell from four to two (the whole saving, plus one
+  correction send in `06-52-17Z`). **Signals screen** (22 November 2026, `zig-out/e2e-call/2026-11-22T09-01-32Z`): the
+  as-captured request of `06-52-17Z` call 6 (`g8-validate-request-signals`, checked equal in content, schema, model and
+  effort to `08-36-27Z` call 5), `claude-haiku-5-5`, low effort, 10 trials, all valid. Four signals (`[1,4]`, `[2]`,
+  `[3]`, `[5]`, the earlier runs' answer) in 3 of 10 trials, three signals (`[1,4,5]`, `[2]`, `[3]`) in 5 and two
+  (`[1,4,5]`, `[2,3]`, the set's answer) in 2. The engine did not change that request, so the grouping the model returns
+  for it has shifted since the earlier runs: provider-side drift, confirmed at the call level. It means the loan-renewal runs do not share the reference's inputs below the signals
+  call, so a difference in the records call's output (FR-001's wording, the Given counts) can't be attributed to this change
+  from three runs. Claims offered and named: call 8 offered `[1,4,5]` and named all three (FR, BR, BR); call 9 offered
+  `[2,3]` and named both in every run; no offered claim went unnamed, and no source requirement is lost.
+- **Reference re-scored on `2b3fb8de…`** (`evaluations/e2e/<run>/`; each run's earlier `69c55877…` evaluation replaced).
+  Q26's three sets, hello-world 100 / 100 / 100, 96.43 / 100 / 100, 100 / 100 / 96.43 (set 3 run 3 now carries three
+  generic Givens as unsupported additions); loan-renewal 92.86 / 96.43 / 92.86, 96.43 / 96.43 / 92.86 and 96.43 / 96.43 /
+  89.29, from means of 97.62, 98.81 and 97.62. Content-basis unsupported additions in Q26's loan-renewal runs 3, 5 and 5
+  (13 of 45 criteria, generic Givens), none lost, weakened or contradicting. Only set 3's hello-world runs were applied as
+  new adjudications (their saved original reports were passed to `adjudicate-spec`); the other fifteen re-scores were written as
+  `adjudication-record.2b3fb8de-unapplied.json` beside the applied records, as the 9 November re-scores were (SPEC01 §2 rule
+  12), because their run directories are gone. Origins and links were carried over from the `69c55877…` evaluations.
+
+**Extension to eight per case** (22 November 2026; user: "apply recommendations", on the screen of the signals call, whose
+drift it confirmed). Ten more runs on the same source (`62d848af…` in every report), `09-02-56Z` to `09-08-22Z`, all
+published and adjudicated as passed, one protocol correction (`09-04-52Z`, an extraction answer with a sixth claim), no
+re-send, runaway, normalization or evidence anomaly.
+
+| Run | Case | Calls | Tokens | Aggregate | Content-basis (lost / weakened / unsupported / contradiction) | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| `09-02-56Z` | hello-world | 9 | 40,044 | 96.43% | 0 / 0 / 0 / 0 | three filler Givens, one `placeholder` |
+| `09-03-33Z` | loan-renewal | 14 | 86,646 | 89.29% | 0 / 0 / 2 / 0 | groups `[1,4]`, `[2,3]`, `[5]`; one helpful repair |
+| `09-04-25Z` | hello-world | 9 | 38,290 | 89.29% | 0 / 0 / 1 / 0 | records call named only claim 2 |
+| `09-04-52Z` | loan-renewal | 12 | 68,200 | 92.86% | 0 / 1 / 2 / 0 | `[1,4,5]`, `[2,3]`; FR-001 "can renew" |
+| `09-05-33Z` | hello-world | 9 | 38,936 | 96.43% | 0 / 0 / 0 / 0 | one `restatement` |
+| `09-06-04Z` | loan-renewal | 13 | 83,339 | 89.29% | 0 / 0 / 1 / 0 | `[1,4,5]`, `[2]`, `[3]` |
+| `09-06-47Z` | hello-world | 9 | 38,438 | 85.71% | 0 / 0 / 1 / 0 | records call named only claim 2 |
+| `09-07-14Z` | loan-renewal | 11 | 64,798 | 89.29% | 0 / 1 / 3 / 0 | `[1,4,5]`, `[2,3]`; FR-001 "can renew" |
+| `09-07-54Z` | hello-world | 9 | 39,785 | 100% | 0 / 0 / 0 / 0 | |
+| `09-08-22Z` | loan-renewal | 13 | 84,074 | 92.86% | 0 / 0 / 2 / 0 | `[1,4]`, `[2,3]`, `[5]` |
+
+Adjudications `adjudication-d80af42a…`, `-460d16e1…`, `-88142cb9…`, `-21d33ffa…`, `-d9c5d4bf…` (hello-world) and
+`-b3508dcd…`, `-730f845e…`, `-9a482ed4…`, `-a1272e8c…`, `-302129b6…` (loan-renewal).
+
+- **All eight runs per case.** Published 8 of 8 and accepted 8 of 8 in each case. Hello-world: 100, 96.43, 100, 96.43,
+  89.29, 96.43, 85.71, 100, mean 95.54% (15 reference runs on this evaluator, 99.29%). Loan-renewal: 89.29, 92.86, 89.29,
+  89.29, 92.86, 89.29, 89.29, 92.86, mean 90.63% (94.05%). Content-basis over the 16 runs: lost 0, weakened 4,
+  unsupported addition 20 (2 hello-world, 18 loan-renewal), contradiction 0.
+- **Hello-world's records call naming one claim.** `09-04-25Z` and `09-06-47Z` wrote one functional requirement, for the
+  greeting, and none for startup or UTC; both requirements survive verbatim in the engine-composed story, so the
+  evaluator filed no `lost_source_requirement` (ADR 0047 counts a story quote; the run scored `ambiguity` and
+  `organization` instead). `09-06-47Z` publishes bytes identical to a 21 November run on a build before Q26's, so the
+  failure existed under the old text. Counting the screen, 4 of 18 trials or runs with this change name one claim, against
+  0 of 25 without it (the screen's captured arm and the 15 earlier runs), one-sided p about 0.025. The live runs are on
+  the drifted model, so they are not a like-for-like control; the screen's two arms are concurrent, and 2 of 10 against
+  0 of 10 is within chance by itself.
+- **Loan-renewal's FR-001.** "can renew" for "must be able to" in 4 of 8 runs (`08-36-27Z`, `08-39-02Z`, `09-04-52Z`,
+  `09-07-14Z`), none in the 15 earlier runs, every one of them with claim 1 in the three-claim group `[1,4,5]` (4 of the 6
+  runs with that group; 0 of the 2 with `[1,4]`). The signals request is byte-identical in every run, and the screen of it
+  gave 4, 3 and 2 groups in 3, 5 and 2 of 10 trials, so the three-claim group is the drift's, and the earlier build never
+  produced it. Whether the wording follows the group or this change is not separable from these runs.
+- **Generic Givens** in loan-renewal: 16 of 40 criteria in the 8 runs (8 of 15, 8 of 25), against 24 of 75 before; the 18
+  unsupported additions are those 16 and two "followed by" additions in a user-visible outcome. Filler Givens in 1 of 8
+  hello-world runs, as Q26's second set had 1 of 3 (the same text, so not new). No criterion
+  dropped a Given its source states, no repair touched a Given, and no edge case was written in any of the 16 runs.
+- **Cost:** hello-world 38.3k to 40.0k tokens; loan-renewal 64.8k to 86.6k, 11 to 14 calls, against 105k and 16 before
+  (the grouping).
+- **Concurrent screen** (22 November 2026, user: "action recommendation"; `claude-haiku-5-5`, low effort, 20 trials per
+  arm, the four reports `zig-out/e2e-call/2026-11-22T09-24-57Z`, `09-25-37Z`, `09-26-20Z` and `09-27-06Z`): the records call of
+  each case as captured (the v8 text) and with the omission sentence put back (the v7 text, built from the capture with
+  one occurrence changed; edit files `zig-out/q26-followup-screens/<case>.v7.edit.json`), minutes apart on the same model.
+  Hello-world (`09-06-47Z` call 8): claims 1, 2 and 3 named in 15 of 20 as captured and only claim 2 in 5; with the
+  sentence, all three in 20 of 20 (Fisher one-sided p about 0.024). Loan-renewal (`09-07-14Z` call 8, claims `[1,4,5]`): the
+  functional requirement for claim 1 reads "can renew" in 16 of 20 as captured (and "must be able to" in 4), and with the
+  sentence "must be able to" in 15 of the 16 completed and "can renew" in 1; the sentence arm also had 4 of 20 answers
+  rejected as `protocol_invalid` (`string_length`, 0 of 20 as captured), which the engine answers with a correction send.
+  Both cases move the same way, so removing the sentence from the edge case's text changed what the records call writes.
+- **Reverted** (user: "action recommendation"). The keyed-apart guidance (`packet-guidance/v8`) is reverted to the shared
+  `given` entry (`packet-guidance/v7`), restoring the omission sentence in the edge case's records-request text, and the
+  links reword with it (SPEC01 §2 rule 1: an unkept change set is reverted in full). Kept: the scripted
+  `link-without-given` scenario, a test that moves no request byte, and C22's remainder, which is separate. ADR 0016 and
+  ADR 0038 are restored to the shared-entry wording, ADR 0038's Decision 7 bullet stating the rule once; F0005,
+  `12-model-boundary.md` and PLAN01 say v7 again. Request bytes: the projection of the reverted tree
+  (`evaluations/request-projection/q26-reverted-after`) equals `q26-after` on all 1833 files, plus the scenario's 23 calls.
+  `q26-followup-after` stays as the evidence of the build the 16 runs and the first screens used.
 
 ## Test-track closures (22 November 2026)
 
@@ -3077,7 +3223,7 @@ authorized.
   `outcomes`, which `entry` reads like its other declarations. The 118 registered ids come out in the same order. The
   three architecture pins that named hand rows are typed checks over `Operations` (the four generic repair shells, none of
   the owner repair types, the four scenario-generation types once each), and the guard in
-  `test/harness/integration/tests.zig` is smaller, plus the same exactly-once check for `model_request.Assembly`.
+  `test/harness/integration/tests.zig` is smaller (its check of `model_request.Assembly` is the one "C22 remainder" describes).
 
 ## C42 and C45. The matrix runs through `Runtime` only, and its typed limits derive from the compiled step (22 November 2026)
 
@@ -3099,7 +3245,7 @@ User: "implement C42 and C45" (decided 22 November 2026). The request projection
   matrix (166 runs in nine tests) and its reboot, and the registry-extension test. Each uses `composition.Runtime.init`
   and `runtime.invocation(...)`, and overrides only public fields: `native.ops.prepare_reference_evidence.action.identities`
   (the counted IDs), `invocation.provider_bootstrap` (the test provider's services) with `invocation.provider_runtime = null`,
-  `runner.provider_clock`, `native.model_requests.prepare_authorization.action` and `invoke_model.action`, `Runtime.control`
+  `runner.provider_clock`, `native.model_requests.stages.prepare_authorization.action` and `invoke_model.action`, `Runtime.control`
   and the null credential snapshots. The registry-extension test installs its operations through `Runtime.initWith(..,
   BeforeStartup)`, a declaration behind `if (!builtin.is_test) @compileError`; `init` runs the private `assemble` and
   `startup` in sequence and `initWith` runs the hook between them, so production holds no hook parameter or branch. An

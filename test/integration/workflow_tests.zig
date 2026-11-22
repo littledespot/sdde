@@ -1887,10 +1887,10 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var clock: @import("../../src/provider_authorization_test_fixture.zig").TestClock = .{};
         runner.provider_clock = clock.port();
         var authorization: @import("../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = allocator };
-        native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
+        native.model_requests.stages.prepare_authorization.action = .{ .authorization = authorization.port() };
         var fake = @import("../../src/model_request_workflow_test.zig").invocationProvider(runner, allocator);
         var recorder: request_projection.Recorder = .{ .sink = sink, .scenario = scenario, .name = scenario_name, .inner = fake.interface() };
-        native.model_requests.invoke_model.action = .{ .provider = recorder.interface() };
+        native.model_requests.stages.invoke_model.action = .{ .provider = recorder.interface() };
         var driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = runner, .fake = &fake, .allocator = allocator, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .entities_required = scenario == 11 };
         driver.repeated_provenance_fault = scenario == 6;
         driver.finalizer = logging.finalizer();
@@ -3094,8 +3094,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 try std.testing.expect(next_production.boot == .ready);
                 // The same substitutions as the first run's, so a request this run wrongly made would reach the
                 // recorded provider and count as a call.
-                next_production.native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
-                next_production.native.model_requests.invoke_model.action = .{ .provider = recorder.interface() };
+                next_production.native.model_requests.stages.prepare_authorization.action = .{ .authorization = authorization.port() };
+                next_production.native.model_requests.stages.invoke_model.action = .{ .provider = recorder.interface() };
                 var next_providers: MatrixProviderBootstrap = .{ .allocator = allocator };
                 var next_invocation = next_production.invocation(&.{ "spec-generation", "--feature", "chosen", "--reference", "first" }, .{ .snapshots = .initFill(null) });
                 defer next_invocation.deinit();

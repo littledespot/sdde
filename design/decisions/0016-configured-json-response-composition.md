@@ -132,13 +132,10 @@ Decisions 6 and 7, which removed the entity meaning and relationship entries and
 repair tail, and then the edge case's outcome entry, 11 November 2026 by
 [ADR 0048](0048-engine-derived-specification-title.md), which removed the `display_name`
 purpose, and 13 November 2026 by ADR 0038 Decision 7, implemented 21 November 2026, which
-removed the `condition` entry: an edge case's one authored field is its `given`, and 22 November 2026
-by SPEC01 Q26's follow-up, which keyed each record text field by its family as well as its name, so that
-an edge case's `given`, which is required, has its own entry beside the acceptance criterion's, which may be
-omitted):** workflow resources own the semantic
-guidance that native packet builders present. One closed `packet-guidance/v8` resource holds exactly one text for each
-registered key: feature and record purposes, each record family's text fields (a key `<family>.<field>`), source-review
-scopes, the reconciliation
+removed the `condition` entry: an edge case's one authored field is its `given`, which shares
+the acceptance criterion's `given` entry):** workflow resources own the semantic
+guidance that native packet builders present. One closed `packet-guidance/v7` resource holds exactly one text for each
+registered key: feature and record purposes, source-review scopes, the reconciliation
 summary purpose, support-evidence guidance and the semantic tails of native repair
 requirements. The removed post-generation review's scopes and the engine-derived
 story's and title's purposes have no key. The keys are closed native enums, derived from the native

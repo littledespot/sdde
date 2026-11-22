@@ -147,26 +147,21 @@
     (the criterion's shape), §28.6,
     [text-field-composition.md](../contracts/text-field-composition.md) (the criterion's
     Given row), the §31 artifact-editability item, F0100 §5.3 and §5.6, and
-    [code.md](../code.md); [ADR 0016](0016-configured-json-response-composition.md) (the
-    criterion's `given` guidance entry says a criterion whose sources state no starting situation has
-    none);
+    [code.md](../code.md); [ADR 0016](0016-configured-json-response-composition.md) (the shared
+    `given` guidance entry serves both the criterion's and the edge case's Given);
     [ADR 0020](0020-derived-exact-reference-lineage.md),
     [ADR 0023](0023-advisory-post-generation-review.md) and
     [ADR 0024](0024-native-exact-token-authority.md) (the content and state versions);
     and [ADR 0041](0041-failed-run-incomplete-publication.md) (its reserved state version
     moves from v28 to v29). In the implementing change the canonical content advances to
     `specification/v8` and the state to `specification-state/v28`, and earlier versions
-    reject. Packet guidance advances only when its closed key set changes, so an edit of the
-    `given` and acceptance-criterion texts advances nothing; the required-authority contract 6,
+    reject. `packet-guidance/v7` (its closed key set is unchanged, so an edit of the `given`
+    and acceptance-criterion texts advances nothing), the required-authority contract 6,
     `model-request-debug/v21` and `spec-e2e-report/v25` advance no closed member: the scenarios
     schema's `required` list loses `given` inside the schema bytes a request records, and a
     recorded earlier request replays with its own schema. The scenarios prompt loses the
-    sentence that let a scenario give what its own wording presupposes, because the criterion's
+    sentence that let a scenario give what its own wording presupposes, because the shared
     `given` guidance now owns that rule.
-  - The keyed-apart guidance amendment of 22 November 2026, Decision 7: [ADR 0016](0016-configured-json-response-composition.md)
-    (a record text field is keyed by its family and its name) and the edge case's `given` text
-    below. `packet-guidance/v8` advances because its closed key set changes, and earlier versions
-    reject; no other version moves.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -270,11 +265,10 @@ only block.
      the schema required a nonblank Given, the field rule said to write nonblank prose, and the
      prompt let a scenario give "what its own wording presupposes", so a requirement that
      states only a trigger got that trigger repeated, or an invented prerequisite, as its
-     Given (Z_SPEC01 Q26 holds the measurements). The criterion's `given` field guidance says
-     the starting situation is stated without assuming the result under test or inventing
-     prerequisites, and that a criterion whose sources state none has none; the edge case's
-     own given stays required, and its own guidance entry says nothing of omission. The rest of
-     the contract holds:
+     Given (Z_SPEC01 Q26 holds the measurements). The shared `given` field guidance, which the edge case's own given also
+     reads, says the starting situation is stated without assuming the result under test or
+     inventing prerequisites, and that a criterion whose sources state none has none; the
+     edge case's own given stays required. The rest of the contract holds:
      - **Equality.** An omitted Given is a value of its own for the `distinct` rule and the
        typed duplicate rule: two criteria with equal When and Then that both omit it are equal,
        and one that omits it differs from one that states it (§12.2).
@@ -455,15 +449,19 @@ only block.
       contradicting given prints as a `GIVEN` whose two parts disagree, which the human who
       reviews `spec.md` judges. Where the criterion's Given doesn't carry the condition that
       governs its Then, an outcome the source doesn't support still prints.
-    - The guidance text for the edge case's `given` is its own entry, `edge_case.given`
-      (ADR 0016), because the two families write the field under different rules: a
-      criterion may omit it, an edge case may not. The entry says the starting situation is
-      stated without assuming the result under test or inventing prerequisites. That
-      describes a whole starting situation, where the edge case's own
-      given is one added circumstance; the edge-case family's own text ("A boundary or
-      exceptional condition.") sits beside it in the same request. How the model phrases a
-      given is unmeasured, and the text is kept or changed on scored repeated runs of both
-      development cases.
+    - The guidance text for the edge case's `given` is the registered `given` entry,
+      unchanged. Packet guidance holds exactly one text for each registered key (ADR 0016),
+      and a key follows a field's name across record families
+      (`src/domain/packet_guidance.zig`), so the edge case's `given` shares the criterion's
+      text, which describes a whole starting situation, where the edge case's own given is
+      one added circumstance; the edge-case family's own text ("A boundary or exceptional
+      condition.") sits beside it in the same request. The edge case's text keeps the
+      criterion's sentence about a criterion with no starting situation: a records request
+      without it changed what the call wrote, dropping requirement claims and weakening
+      obligations ("can renew" for "must be able to renew") in paired screens of both
+      development cases. A separate text would need a key by family and field, a native
+      registry change, and must carry that sentence or be decided on scored repeated runs of
+      both development cases. How the model phrases a given is otherwise unmeasured.
     - An edge case repeats its criterion's Given and When, so it can't carry a second flow of
       a claim (a cost of Decision 3's slot criteria, below), and a defect in a criterion's
       Given or When repeats in each edge case linked to it. The 9 November ruling that files
@@ -552,8 +550,7 @@ only block.
   `specification/v7`, `specification-state/v27`, `packet-guidance/v7`, the required-authority
   contract 6, `model-request-debug/v21` and `spec-e2e-report/v23`. The optional-Given
   amendment made an acceptance criterion's `given` optional and took `specification/v8` and
-  `specification-state/v28` only; the other four stay. The keyed-apart guidance amendment took
-  `packet-guidance/v8` only.
+  `specification-state/v28` only; the other four stay.
 - **Tests.**
   - The result-schema rule: admitted (a value only an exclusive item names, ungoverned
     kinds, empty), kept by clones, and invalid configurations rejected; admission
