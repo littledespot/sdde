@@ -187,8 +187,8 @@ batch and live set needs its own approval (AGENTS.md).
 **Output track:** Q26's follow-up (§4 Q26, decided 22 November 2026) was built, screened and run to eight per case,
 and its edge-case entry reverted ([Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set"); nothing awaits a set.
 
-**Engine track, in gaps:** E7 stages 2–8 (decided 22 November 2026, §5 E7), in order, after the Q26 follow-up's set;
-stage 4 carries C8, and stage 5, its own set, the rest of C49. E0 is on hold.
+**Engine track, in gaps:** E7 stages 3–8 (decided 22 November 2026; stage 2 folded into stage 6 on 23 November, §5 E7),
+in order, after the Q26 follow-up's set; stage 4 carries C8, and stage 5, its own set, the rest of C49. E0 is on hold.
 **Byte-neutral, sharing the next set's build** (§2 rule 1): C22's remainder (§10.3; built 22 November 2026, its request
 projection equal to Q26's, [Z_SPEC01](Z_SPEC01.md) "C22 remainder"). **Tests:** T4.
 **Adjudication:** the evaluate-e2e skill for every set.
@@ -344,11 +344,12 @@ consume answers (it binds empty response-ID sets, `specification_source_binding.
 [§17.4 lifecycle](../design/contracts/17-specify.md#174-specification-clarification-behavior) under ADR 0025. §10 C8 adds
 record-lifecycle gaps and C49 the clarification subject.
 
-Remaining stages, each landable alone (offline unless stated): 2 response-ID admission from a typed resolved set, empty
-until stage 4 (no behaviour change); 3 the authentication chain, registry, port, OS-account adapter and runner
-lease; 4 accept, publish and close (`clarification-state/v3`), with the response-owned literals; 5 stable subjects (C8 bullet 2, C49: key on source
-identity; removing `record_kind` from the schema changes request bytes and needs a live set); 6 generation consumes
-answers (request bytes change only for runs that have responses); 7 the harness two-leg flow; 8 live runs.
+Remaining stages, each landable alone (offline unless stated); stage 2, response-ID admission from a resolved set, is
+folded into stage 6 (decided 23 November 2026, below): 3 the authentication chain, registry, port, OS-account adapter and
+runner lease; 4 accept, publish and close (`clarification-state/v3`), with the response-owned literals; 5 stable subjects
+(C8 bullet 2, C49: key on source identity; removing `record_kind` from the schema changes request bytes and needs a live
+set); 6 generation consumes answers, with the response-ID admission (request bytes change only for runs that have
+responses); 7 the harness two-leg flow; 8 live runs.
 
 **Decided** 22 November 2026 (user: "update the documentation with the recommendations"); unbuilt. Each design
 amendment below lands with its stage's code, in ADR 0025 and the contracts it names:
@@ -364,18 +365,17 @@ amendment below lands with its stage's code, in ADR 0025 and the contracts it na
   `actor-evidence-registry/v1`, holding the catalogue's shared registry (13-05-artifacts-rendering-traceability.md:356-423)
   and published with the responses. It is a fifth registered output: case v4 and the next report version, landing after
   a set is adjudicated (§2 rule 12).
-- **Resolved responses** (stage 2; decided 23 November 2026, user: "action recommendations"). A record may cite a response
-  ID only if it is in the resolved set: the `response_id` of each `resolved_by_user` record in the validated clarification
-  state, so `cancelled_by_user` records and `defer_reason` responses grant none (`clarification_inputs.zig:158-167`,
-  `:179`). One closed typed set of `spec.ResponseId`, the raw `u64` converted in the one builder. ADR 0025:74 says
-  "current resolved response IDs" without defining them; the definition lands in ADR 0025 with the code. The set is empty
-  today (no code creates a response), so every current rejection stays (`specification_provenance.zig:93`,
-  `specification_support_evidence.zig:171`; pinned by `specification_generation_test.zig:2819` and `:4683`).
-  **Footprint** (23 November 2026, at its preflight): the provenance `Context` is built in one place (`readContext`,
+- **Resolved responses** (stage 6, folded from stage 2; decided 23 November 2026, user: "action recommendations", then
+  "actions recommendations" to drop stage 2). A record may cite a response ID only if it is in the resolved set: the
+  `response_id` of each `resolved_by_user` record in the validated clarification state, so `cancelled_by_user` records
+  and `defer_reason` responses grant none (`clarification_inputs.zig:158-167`, `:179`). One closed typed set of
+  `spec.ResponseId`, the raw `u64` converted in the one builder. ADR 0025:74 says "current resolved response IDs" without
+  defining them; the definition lands in ADR 0025 with the code. Until then every current rejection stays
+  (`specification_provenance.zig:93`, `specification_support_evidence.zig:171`; pinned by
+  `specification_generation_test.zig:2819` and `:4683`). It was folded because the set is empty until stage 4 and its only
+  consumer is stage 6's binder, which fixes the carrier: the provenance `Context` is built in one place (`readContext`,
   `specification_workflow.zig:248`) but read at 25 call sites in 8 workflow files, and a step's data view holds only its
   declared inputs (`pipeline_data.zig:68`), so a new `Context` input is a key in each of at least 18 action contracts.
-  Recommended, not decided: build the admission with stage 6, where the binder that consumes the set fixes its carrier,
-  and drop stage 2.
 - **Answer-derived literals** (stage 4, where acceptance scans answer text, ADR 0025:65-71; moved from stage 2, decided
   23 November 2026). Re-derived each run from the published response, the sole durable owner of the submitted bytes (ADR
   0025:94-96, §23.2). Four points stay open until stage 4 has its producer: whether the occurrences are persisted (a
@@ -392,7 +392,7 @@ amendment below lands with its stage's code, in ADR 0025 and the contracts it na
   the account is not `filesystem_read`, and `none` would hide a port call). ADR 0031:372-376 is why it can't sit inside a
   stage action; the runner issues the lease (ADR 0025:89-90). The pure registry steps after it (13-05:369-419) are one
   stage action with no side effect; `/preflight` settles the details.
-- **Proof regime and defect class.** Rule 10 for stages 2, 3, 4 and 6 (development-case runs have no responses, so their
+- **Proof regime and defect class.** Rule 10 for stages 3, 4 and 6 (development-case runs have no responses, so their
   requests stay byte-identical) and a rule 6 set for stage 5. The measure is the clarification-expected case's
   complete-publication rate, zero without E7; guards: the chosen bullet kept (`lost_source_requirement`), the other
   absent (`contradiction`), and no invented resolution (`unsupported_addition`).
