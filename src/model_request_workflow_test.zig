@@ -7762,14 +7762,15 @@ const PolicyLog = struct {
     fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) stream.Outcome {
         const self: *PolicyLog = @ptrCast(@alignCast(context));
         const definition = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
-        if ((@import("actions/log/evaluate_log_threshold.zig").Action{}).execute(self.policy, definition) == .drop) return .dropped;
+        if (@import("domain/feature_log_decisions.zig").emission(self.policy, definition) == .drop) return .dropped;
         const diagnostic = if (telemetry.fieldOf(fact.fact, .diagnostic_code)) |code| self.allocator.dupe(u8, code.bytes) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE } else "";
         self.records.append(self.allocator, .{ .event = .{ .event_type = telemetry.eventOf(fact.fact), .attempt = telemetry.commonOf(fact.fact).attempt, .diagnostic = diagnostic } }) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         return .dropped;
     }
     fn select(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) bool {
         const self: *PolicyLog = @ptrCast(@alignCast(context));
-        return (@import("actions/log/evaluate_prompt_log_capture.zig").Action{}).execute(self.policy, fragment) == .capture;
+        _ = fragment;
+        return @import("domain/feature_log_decisions.zig").capture(self.policy) == .capture;
     }
     /// The engine-owned fragment ID names the body's provenance in its third segment
     /// (ADR 0018), for example `inference-request-request_description-utf8-…`.

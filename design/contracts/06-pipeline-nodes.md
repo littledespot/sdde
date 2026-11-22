@@ -4,7 +4,7 @@ Part of the [proposed design](../design.md#6-common-action-and-orchestrator-cont
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - Every action **and** every orchestrator conforms to the same runtime contract. An
-  [ADR 0032](../decisions/0032-engine-routines.md) engine routine (implemented for startup and provider bootstrap; feature logging not yet) is not
+  [ADR 0032](../decisions/0032-engine-routines.md) engine routine (implemented for startup, provider bootstrap and feature logging) is not
   a node and does not.
 - There is one envelope, one result vocabulary, and one dependency declaration mechanism across
   the engine.
@@ -23,7 +23,7 @@ Part of the [proposed design](../design.md#6-common-action-and-orchestrator-cont
 
 [View the Capability-free node runtime sample](../code.md#node-runtime).
 
-It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only; an ADR 0032 engine routine (implemented for startup and provider bootstrap; feature logging not yet) receives them as typed parameters, one port per step function. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
+It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only; an ADR 0032 engine routine (implemented for startup, provider bootstrap and feature logging) receives them as typed parameters, one port per step function. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
 
 The common contract makes data dependencies explicit:
 
@@ -76,21 +76,16 @@ Keys are tags of the engine's one closed, unversioned `DataKey` enum, for exampl
   workflow with one closed `TelemetryFact` union of IDs, enums, counts, timings, and outcomes.
 - It contains no log level, message, arbitrary map, environment value, or raw
   model/reference/code body.
-- The runner's `PipelineTelemetryObserver` starts a separate
-  logging-internal `PipelineEnvelope` and passes those attributed facts plus trusted run/node
-  context through `FeatureLoggingOrchestrator`. Under
-  [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), feature logging
-  becomes a typed engine routine once its preconditions are met. Only that change replaces the
-  logging-internal envelope and logging-only `DataKey`s below with function-local values.
-- Both business and logging nodes still use `PipelineNode` and return all intermediate values
+- The runner's `PipelineTelemetryObserver` passes those attributed facts plus trusted run/node
+  context to the runtime logging lifecycle through the telemetry barrier. Under
+  [ADR 0032](../decisions/0032-engine-routines.md) the lifecycle runs the feature-logging
+  engine routines, whose values are function-local, so logging has no `PipelineEnvelope` and
+  no logging-only `DataKey`s, and sanitized prompt records never persist in workflow state or
+  become model context.
+- Business nodes use `PipelineNode` and return all intermediate values
   through validated `NodeDelta`s. Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet
   implemented), values passed between a stage action's internal functions are function-local;
   only its stage-edge outputs are node values.
-- Logging-only `DataKey`s are compiler-locked, transient, non-model-visible, excluded from
-  business-envelope composition and self-observation, and destroyed by the runner on every
-  terminal logging branch.
-- Thus sanitized prompt records may pass between discrete logging actions without bypassing the
-  common ABI, persisting in workflow state, or becoming model context.
 - `NodeRuntime` exposes no sink, filesystem, or direct logger capability.
 
 - An `invalid` outcome is not an operational error.
@@ -334,7 +329,7 @@ Every orchestrator must:
   outside an allowlist of contracts, outcomes, envelopes, loop controls, and child-node
   bindings.
 - Orchestrator modules cannot import infrastructure or domain-operation adapters.
-- For [ADR 0032](../decisions/0032-engine-routines.md) engine routines (implemented for startup and provider bootstrap; feature logging not yet),
+- For [ADR 0032](../decisions/0032-engine-routines.md) engine routines (implemented for startup, provider bootstrap and feature logging),
   the tests also check:
   - a `*_routine.zig` imports only domain and port modules, never adapters or `std.Io`;
   - no step takes two ports, the port set, a capability bag, `anytype` or `anyopaque`;

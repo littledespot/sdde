@@ -48,7 +48,7 @@ capability.
 
 ## 2. Minimal runtime contract
 
-The runner invokes the logging graph with:
+The runner submits to the runtime logging lifecycle:
 
 - one validated `WorkflowTelemetryFact` the runner emitted, attributed to the active
   workflow's shortcode, or validated transient `SanitizedPromptExchangeLogRecord`
@@ -67,7 +67,7 @@ The graph returns the existing common `Outcome` and composite `NodeDelta`:
 | `cancelled` | The sink observed a cancellation, which is no logging failure: the stream lock was released, no emergency line was written, and the run ends `cancelled` (ADR 0032, "Cancellation mapping"). |
 
 There is no logging-specific public response type or direct producer-to-sink
-call; the runner-owned logging graph owns the drop, persistence, blocked, or
+call; the runtime logging lifecycle owns the drop, persistence, blocked, or
 cancelled outcome.
 
 ## 3. Authority and single ownership
@@ -80,7 +80,7 @@ F0002 never reads `.sddtoolkit.json` and never receives `SDDToolKitConfig` or
 ```text
 F0001 immutable config
   -> logging-policy compiler reads config.logs
-  -> compiled fragment enters persisted bootstrap authority (not yet implemented; ADR 0026)
+  -> compiled fragment becomes the run's in-memory policy; no bootstrap authority is persisted (ADR 0026)
   -> active FeatureLogPolicy and FeatureLogBinding
   -> F0002
 ```
@@ -150,15 +150,15 @@ expands no fixed engine workflow-name union
 | Event field schema | The closed `TelemetryFact` variants (`row`) |
 | Four-character workflow shortcode source and validation | Workflow definition; canonical `WorkflowShortcode` parser; workflow-registry uniqueness validation |
 | Workflow-shortcode/fact binding | The pipeline runner |
-| Emit/drop comparison | `EvaluateLogThresholdAction` |
+| Emit/drop comparison | The persist routine's emission decision (`feature_log_decisions.zig`) |
 | Feature log collection paths | `WorkflowArtifactRegistry` and validated `FeatureLogBinding` |
 | Fact ordering and business-node barriers | Pipeline runner |
 | Concrete adapters and registered node implementation bindings | Composition root |
 | Immutable executable workflow graph construction | Workflow compiler |
 
-F0002 does not recreate any of these decisions. The actions in governing
+F0002 does not recreate any of these decisions. The routines in governing
 Section 13.9 remain the canonical responsibility catalogue; this feature does
-not define a parallel action list.
+not define a parallel routine list.
 
 ## 4. Producer contract
 
@@ -174,7 +174,7 @@ optional fields (Section 6.2), and no other field, so a missing required field o
 the row is a compile error
 ([telemetry.zig](../../src/domain/telemetry.zig) `row` and `Payload`).
 
-- Emission is a typed value handed to the logging graph, not direct logging I/O; it grants
+- Emission is a typed value handed to the runtime logging lifecycle, not direct logging I/O; it grants
   no sink, filesystem, clock, or runner capability.
 - The runner supplies the shortcode only after the workflow definition and complete
   registry validate; no node, action, or model supplies or replaces it.
@@ -217,12 +217,12 @@ codes, command IDs, exit codes, and evidence outcomes. It cannot contain:
 - raw prompt, response, reference, code, patch, or command-output content; or
 - a path, sink, or persistence instruction.
 
-Runner lifecycle facts use the same logging graph. A model response is never a
+Runner lifecycle facts use the same lifecycle. A model response is never a
 trusted fact or event definition.
 
 ## 5. Record processing
 
-For an accepted fact, the runner-invoked graph performs the discrete actions
+For an accepted fact, the persist routine performs the discrete steps
 defined in governing Section 13.9:
 
 1. require the exact-four-character `WorkflowShortcode` carried by the
@@ -236,13 +236,9 @@ defined in governing Section 13.9:
 7. append and flush/rotate as required under the exact stream lock; and
 8. release the lock before returning the common outcome.
 
-The steps remain separate action responsibilities. Their orchestrator receives
-runner-owned child bindings and no filesystem, clock, serializer, redaction,
-or sink capability.
-
-Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), these steps
-become the typed steps of a feature-logging engine routine once the ADR's logging
-preconditions hold. The outcomes, failure path and non-recursion here are unchanged.
+Under [ADR 0032](../decisions/0032-engine-routines.md), these steps are the typed steps of the
+feature-logging persist routine, each taking only the port it uses; the routine holds no
+filesystem, clock, serializer, redaction, or sink capability of its own.
 
 Filtering occurs before event identity, sequence, segment, or lock allocation.
 Logging-internal nodes are not recursively observed.
@@ -595,8 +591,8 @@ Configuration discovery/decode or logging-policy compilation failure blocks
 bootstrap before F0002 is active. No example, packaged config, environment
 value, caller value, or hard-coded threshold is used as fallback.
 
-An initialized logging failure follows the governing
-`FeatureLoggingFailureOrchestrator` exactly:
+An initialized logging failure follows the governing feature-logging failure report
+(Section 14.9) exactly:
 
 1. release/terminalize logging resources and transient content;
 2. make one direct `stderr` attempt using the exact bounded ASCII emergency
@@ -614,9 +610,9 @@ enter this path and writes no emergency line.
   available only after the runner holds the selected compiled workflow's shortcode.
 - Without that attribution F0002 emits no log record; bootstrap uses its non-logging
   diagnostic path and blocks.
-- Restart and same-run policy changes use the historical/current authority rules in
-  Sections 14.10 and 26.5; F0002 never reinterprets stored records with raw or candidate
-  configuration.
+- Restart uses the prior-run finalization and retention rules in Sections 14.10 and 26.5,
+  and a run keeps one binding and policy; F0002 never reinterprets stored records with raw or
+  candidate configuration.
 
 ## 9. Explicit non-responsibilities
 
@@ -656,7 +652,7 @@ F0002 does not:
    the canonical typed parser, registry validation proves uniqueness, and the
    runner attributes each fact it emits to the selected workflow's shortcode.
 4. The runner binds that shortcode to exactly one `TelemetryFact` as a
-   `WorkflowTelemetryFact` before the fact enters the logging graph.
+   `WorkflowTelemetryFact` before the fact enters the runtime logging lifecycle.
 5. The runner is the only producer; emission performs no I/O, and no node, action or
    model can select a level, message, path, format, sensitivity, or sink capability.
 6. Every fact reaches exactly one drop, persisted, blocked, or cancelled outcome
@@ -691,7 +687,7 @@ F0002 does not:
    file append/flush result.
 13. Filtering allocates no record identity, sequence, segment, or lock.
 14. Storage/recovery follows the governing lock, ordering, rotation, retention,
-   restart, and policy-transition contracts without a second implementation.
+   and restart contracts without a second implementation.
 15. Logging failure cleans up, reports once without recursion, abandons the
    execution candidate, and blocks before new work without recovery. A
    cancellation under the log is no logging failure: it releases the lock,

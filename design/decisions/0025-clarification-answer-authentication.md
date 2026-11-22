@@ -147,7 +147,12 @@ input state and record revisions, exact submitted form bytes, typed answer,
     provider and assurance-policy entries;
   - the catalogue's authentication chain and actor-evidence registry;
   - a typed rejection reason for each invalid form, replacing the single
-    `InvalidClarificationInput` error, and a blocked outcome that reports them;
+    `InvalidClarificationInput` error, and a blocked outcome that reports them. Both are
+    built (22 November 2026): the inputs stage names each rejected form with the rule it
+    broke, the run ends `blocked` before any model call, and the CLI prints the outcome,
+    its `InvalidClarificationInput` cause and one line for each form. Every workflow that
+    uses `prepare-inputs` routes `blocked` to a blocked end, which `core.feature-input-read@1`
+    now allows;
   - response-owned passive literals.
 - Changed: refresh, provenance, the resolved-needs action, generation inputs,
   review authority and readback.

@@ -41,6 +41,7 @@ steps:
     use: prepare-inputs
     on:
       ok: principles
+      blocked: end.blocked
       failed: end.failed
   principles:
     use: capture-principle-registry

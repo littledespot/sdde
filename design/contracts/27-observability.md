@@ -6,10 +6,9 @@ Part of the [proposed design](../design.md#27-observability), as amended by the
 - The runner is the only producer of telemetry: it attributes each fact to the selected compiled
   workflow's registry-validated four-character shortcode and emits runner lifecycle facts without
   performing I/O. No action and no `NodeDelta` carries a fact.
-- The emitted `WorkflowTelemetryFact` values pass through the discrete logging actions
-  described in Section 13.9. Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet
-  implemented), those actions become the steps of a feature-logging engine routine, once its
-  logging preconditions hold.
+- The emitted `WorkflowTelemetryFact` values pass through the feature-logging engine routines
+  described in Section 13.9, which [ADR 0032](../decisions/0032-engine-routines.md) makes the
+  steps of one routine per sequence and the runtime logging lifecycle their only caller.
   - The event outcomes, emergency diagnostic and finalization rules here are unchanged.
   - Cancellation under a log lock, or while a segment is read, is the run's `cancelled`, not a
     logging failure: it has no `LOG_*` code and emits no emergency diagnostic (ADR 0032,

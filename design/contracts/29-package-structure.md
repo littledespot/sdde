@@ -11,8 +11,8 @@ The logical dependency boundaries map to this Zig source/build layout:
 - The composition root is the only location that constructs concrete adapters and binds
   registered operation implementations.
 - It also runs the one fixed, nonselectable engine-startup routine. Under
-  [ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup and provider
-  bootstrap; feature logging not yet), that routine and the
+  [ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup, provider
+  bootstrap and feature logging), that routine and the
   other fixed engine sequences are engine routines in `application/*_routine.zig`. Each
   imports only domain and port modules, and the composition root constructs and passes its
   ports.

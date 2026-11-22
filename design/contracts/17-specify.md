@@ -496,7 +496,8 @@ select a repair producer or turn candidate assertions into source requirements.
 - [ADR 0025](../decisions/0025-clarification-answer-authentication.md) defines that actor as the
   operating-system account that runs the engine; running Specify with valid closed forms
   accepts them. If any closed form is invalid, the run accepts none of them, makes no model
-  call and reports a typed reason for each failing form. Not yet implemented.
+  call and reports a typed reason for each failing form: its handle and the rule it broke,
+  printed with the outcome. The run ends `blocked`.
 - An empty close is invalid; `defer` remains open; `cancel` cancels the run.
 - Path-shaped answer text is scanned into the inert passive registry under the assigned response
   ID, and that complete clarification response is published before refresh.

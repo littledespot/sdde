@@ -60,6 +60,16 @@ pub const SegmentPruner = struct {
     }
 };
 
+/// A read of one prior binding's segments under the stream lock the caller holds, without writing, so a routine can
+/// prove an active tail is still one before it closes it and that it closed.
+pub const TailInspector = struct {
+    context: *anyopaque,
+    inspect_fn: *const fn (*anyopaque, *const log_binding.ValidatedFeatureLogBinding, log_stream.Stream) Error!log_stream.TailState,
+    pub fn inspect(self: TailInspector, value: *const log_binding.ValidatedFeatureLogBinding, stream: log_stream.Stream) Error!log_stream.TailState {
+        return self.inspect_fn(self.context, value, stream);
+    }
+};
+
 pub const LockReleaser = struct {
     context: *anyopaque,
     release_fn: *const fn (*anyopaque) Error!void,

@@ -1,10 +1,6 @@
 const log_policy = @import("../domain/log_policy.zig");
-const feature_log_bindings = @import("feature_log_child_bindings.zig");
-const finalization = @import("feature_log_finalization_coordinator.zig");
 const lifecycle_module = @import("feature_log_runtime_lifecycle.zig");
-const retention = @import("feature_log_retention_coordinator.zig");
-const retention_bindings = @import("feature_log_retention_child_bindings.zig");
-const finalization_bindings = @import("feature_log_finalization_child_bindings.zig");
+const runner_module = @import("feature_log_runner.zig");
 const telemetry = @import("../domain/telemetry.zig");
 const barrier_port = @import("../ports/telemetry_barrier.zig");
 
@@ -45,7 +41,7 @@ pub const LogService = struct {
 
     pub fn activate(
         self: *LogService,
-        active: feature_log_bindings.ChildBindings,
+        active: *runner_module.Runner,
         shortcode: telemetry.WorkflowShortcode,
     ) lifecycle_module.Activation {
         return self.lifecycle.activate(active, shortcode);
@@ -53,17 +49,28 @@ pub const LogService = struct {
 
     pub fn finalizeActive(
         self: *LogService,
-        children: finalization_bindings.ChildBindings,
-    ) finalization.Outcome {
-        return self.lifecycle.finalizeActive(children);
+        target: *runner_module.Runner,
+        shortcode: telemetry.WorkflowShortcode,
+    ) lifecycle_module.Finalization {
+        return self.lifecycle.finalizeActive(target, shortcode);
+    }
+
+    pub fn finalizePrior(
+        self: *LogService,
+        ports: lifecycle_module.PriorFinalizationPorts,
+        inputs: lifecycle_module.PriorFinalizationInputs,
+        shortcode: telemetry.WorkflowShortcode,
+    ) lifecycle_module.PriorFinalization {
+        return self.lifecycle.finalizePrior(ports, inputs, shortcode);
     }
 
     pub fn retainHistorical(
         self: *LogService,
-        children: retention_bindings.ChildBindings,
+        ports: lifecycle_module.RetentionPorts,
+        inputs: lifecycle_module.RetentionInputs,
         shortcode: telemetry.WorkflowShortcode,
-    ) retention.Outcome {
-        return self.lifecycle.retainHistorical(children, shortcode);
+    ) lifecycle_module.Retention {
+        return self.lifecycle.retainHistorical(ports, inputs, shortcode);
     }
 
     pub fn deinit(self: *LogService) void {

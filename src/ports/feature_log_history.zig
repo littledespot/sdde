@@ -1,6 +1,7 @@
 //! Read-only discovery of the current feature's prior-run log binding groups for
-//! retention. Discovery never writes or deletes. Every prior group must validate;
-//! a prior run with an active tail in either stream is kept whole (ADR 0026).
+//! retention and for crash finalization. Discovery never writes or deletes. Every
+//! prior group must validate; a prior run with an active tail in either stream is
+//! kept whole until its tails are finalized (ADR 0026).
 const std = @import("std");
 const artifacts = @import("../domain/workflow_artifact_registry.zig");
 const log_binding = @import("../domain/feature_log_binding.zig");
@@ -18,15 +19,21 @@ pub const Error = error{ HistoryUnavailable, InvalidHistory, Cancelled, OutOfMem
 /// segment headers.
 pub const Group = struct { stream: log_stream.Stream, binding: log_binding.BindingCandidate };
 
-/// Groups are ordered by `(runId, bindingId, stream rank)`. `retained_runs`
-/// counts prior runs kept whole because a stream has an active tail.
+/// Groups and tails are each ordered by `(runId, bindingId, stream rank)`. `groups` are the closed groups of runs with
+/// no active tail. `tails` are the binding groups whose last segment holds no trailer but a complete header row: a
+/// crash left them open, and each names the identity its header carries. A group torn before its header row was
+/// complete has no identity to close; it is in neither list, and its run is kept whole. `retained_runs` counts prior
+/// runs kept whole because a stream has an active tail or a torn one.
 pub const Discovery = struct {
     groups: []const Group,
+    tails: []const Group,
     retained_runs: usize,
 
     pub fn deinit(self: Discovery, allocator: std.mem.Allocator) void {
         for (self.groups) |group| freeCandidate(allocator, group.binding);
         allocator.free(self.groups);
+        for (self.tails) |group| freeCandidate(allocator, group.binding);
+        allocator.free(self.tails);
     }
 };
 

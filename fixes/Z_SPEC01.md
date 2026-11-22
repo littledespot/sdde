@@ -2906,8 +2906,9 @@ and contradiction 0 in every run.
   events, below the floor of about ten: benefit not demonstrated.
 - **Given omitted:** hello-world 9 of 9 criteria, loan-renewal 0 of 15, as the screens showed.
 - **Counted apart:** a generic-precondition Given ("…with an existing due date" on the extension criterion):
-  hello-world 0 of 9, loan-renewal 3 of 15 (Q14's two published loan runs 5 of 10). Under the other reading of §1's open
-  ruling each is a minor `unsupported_addition` (3 content-basis in the set; aggregates 92.86%, 96.43%, 92.86%). The
+  hello-world 0 of 9, loan-renewal 3 of 15 (Q14's two published loan runs 5 of 10). Under SPEC01 §1's ruling
+  (22 November 2026) each is a minor `unsupported_addition` (3 content-basis in the set; aggregates 92.86%, 96.43%,
+  92.86%); the adjudications above were applied before it. The
   removed sentence did not remove it.
 - **Guards:** lost source requirement 0; weakened obligation 0; publication 6 of 6 (Q14's set 5 of 6).
 - **Watch:** no criterion dropped a Given its source states; the one repair (loan run 2) replaced an AC-002 Then for
@@ -3016,6 +3017,71 @@ authorized.
   three architecture pins that named hand rows are typed checks over `Operations` (the four generic repair shells, none of
   the owner repair types, the four scenario-generation types once each), and the guard in
   `test/harness/integration/tests.zig` is smaller, plus the same exactly-once check for `model_request.Assembly`.
+
+## E3 feature logging, E6 prior-run crash finalization and E7 Stage 1 (22 November 2026)
+
+User: "preflight and implement" on E6, E3's feature logging and E7 with C8 and C49. The preflight stopped on missing
+decisions; the user approved them (E3: all four; E6: all five; E7: Stage 1 only; then `blocked` through the profile
+widening). The request projection of the final tree is byte-identical to `q26-after` (integration 146/146), no report,
+step-event, debug or state version moved, and no log event or `FailureCode` was added.
+
+- **E3.** Feature logging is five ADR 0032 routines in `src/application/` (`feature_log_persist_routine`,
+  `_prepare_`, `_close_`, `_retention_`, `_failure_`), each with a closed `Step` enum, one `run`, acquire, work and release
+  in one straight line, and one port per step; their pure steps are `domain/feature_log_stop.zig` (the stop mappings and the
+  two release merges), `feature_log_decisions.zig`, `feature_log_rows.zig`, `feature_log_stream.zig` and
+  `feature_log_format.zig` `emergencyLine`. `feature_log_runtime_lifecycle.zig` is the only caller; `feature_log_runner.zig`
+  holds only the typed state and ports. Deleted: the 26 `src/actions/log/*`, the orchestrator, both coordinators, the
+  three `feature_log_*child_bindings.zig`, both runners, `feature_log_actions.zig` and the 20 logging `DataKey`s (they
+  appear in no JSON, YAML, report or projection). Routines poll no `NodeRuntime`: cancellation reaches them only as the
+  sink's `Cancelled`, so finalization after a cancelled run still closes the streams (ADR 0032 says so). Persist, prepare
+  and close let a release failure outrank the earlier stop; retention keeps the prune stop. A golden test pins the exact
+  bytes of four segments and the console mirror (rows, rotation in each stream, mirror, close) on the unconverted and the
+  converted code, and an emergency-site table pins the writer and reporter sites (the lifecycle, composition's
+  `Assembly.fail`, `log_service.zig` and `model_exchange_capture.zig`). T4's logging pins are contract-shape rules (walks
+  over non-test `src` for stabilization and for adapter and filesystem authority in `src/application`, an allowlist of
+  the four surviving `*_child_bindings.zig`, the routine-caller table); the pins that named deleted files went with them.
+  **Evidence:** offline; ADR 0032 makes live evidence unnecessary and the user approved recording that, as for startup
+  (`zig build smoke` covers packaged activation).
+- **E6.** A sixth routine, `feature_log_prior_finalization_routine` (steps `read_clock`, `acquire`, `check_open`,
+  `recover_tail`, `serialize_trailer`, `close_stream`, `verify_closed`, `release`), finalizes one tail per call, and
+  composition loops over the tails `Discovery` now returns, after `logs.activate` and before retention and `run.started`
+  (§14.10 is rewritten to this order). It recovers the tail to its last complete row and appends one trailer stamped with
+  the finalization time, through the sibling adapter `feature_log_historical_tail.zig` (lock, read, recover, close and
+  release only; the retention adapter keeps its lock, prune and release pin) and a `TailInspector` port for the two
+  under-lock checks. A headerless torn segment is neither finalized, deleted nor blocking, so its run stays whole, and any
+  prior open tail is treated as crashed (concurrent same-feature runs are unsupported, ADR 0026). A lock timeout blocks.
+  A crashed headered run now prunes after the retention window. The renamed layout tests changed only what pinned
+  keep-whole for a headered open tail. Tests: fake-port routine tests, real-filesystem layout tests (both streams, partial
+  row, partial trailer, rotated tail, a different policy, a second activation writing nothing, blocking shapes that leave
+  bytes unchanged, cancellation at every lock, truncate, trailer and flush call with a retry that closes once).
+  ADR 0026, ADR 0032, §14.10, §26.5, 13-02, 13-09 and F0002 are amended. It reduces no published-output defect class: it
+  bounds log growth after a crash.
+- **E7 Stage 1.** `domain/clarification_form_rejection.zig` holds a closed `Reason` (14 members: `form_missing`,
+  `form_without_record`, `form_structure`, `engine_text_changed`, `requested_status_invalid`, `answer_text_invalid`,
+  `cancel_reason_missing`, `option_unknown`, `option_duplicate`, `selection_count`, `audit_changed`, `saved_form_changed`,
+  `answer_changed`, `status_contradicts_record`), each typing one existing failure site of the form validation, and a
+  `FormRejections` list (up to 297 forms). `PrepareInputs` declares `{ok, blocked, failed}` and returns `blocked` with an
+  `InvalidClarificationInput` diagnostic when forms are rejected; registry-level failures still end `failed`. `.blocked`
+  was added to `core.feature-input-read@1`'s allowed terminals (the user's decision) with `blocked: end.blocked` edges in
+  the Spec workflow and the two fixtures. The CLI prints one `S01: reason` line per form; no report member carries them.
+  No validation rule was added or removed, and the unsubmitted-draft exemption is unchanged. A harness test on the
+  production composition (both development cases) shows a closed form of no record ends `blocked` with zero model calls,
+  nothing published and the form byte-unchanged. ADR 0025, §17.4 and 13-02 say the reasons and the outcome are built.
+  Stages 2 and later are open (SPEC01 §5 E7); C8 and C49 are untouched.
+- **Contract review.** No blocker; nine findings fixed. After a rotation that landed, the persist routine's cached segment
+  stayed the old one when the following append stopped, so the close failed its size check; the slot now follows the
+  rotation (a test failed first with the old ordinal; cancellation still drops the slot; the deleted runner's behaviour
+  could not be read, and only this failure path changed). The flush policy has per-trigger accepted and rejected cases
+  and the persist routine asserts the flush it appends. The prior-finalization inspection refuses a tail torn before its
+  header row is complete before any write (the truncate path in `feature_log_recovery.zig` cut it to its heading and
+  then failed), and the layout test covers an empty file, a heading alone and a heading with a partial header row.
+  `audit_changed` and `status_contradicts_record` have rejected cases. Two integration tests that passed on the terminal
+  ceiling assert their own rejection step and rule (with the capability check disabled exactly those two fail). Every
+  routine has step-level tests and `feature_log_stop.zig` and `feature_log_rows.zig` have their own. Composition's
+  `Assembly.fail` is named as the failure routine's second caller, and the routine-import exemption for composition is
+  narrowed to `feature_logging_runtime.zig`. ADR 0026 states that a crashed tail that cannot be written blocks every later
+  run and that discovery reads each prior segment twice per activation. Stale prose about the deleted orchestrator and
+  actions is fixed.
 
 ## Decisions that changed nothing (15 November 2026)
 

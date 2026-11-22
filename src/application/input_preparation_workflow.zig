@@ -4,6 +4,7 @@ const feature = @import("../domain/feature_directory.zig");
 const reference = @import("../domain/reference_selector.zig");
 const artifacts = @import("../domain/workflow_artifact_registry.zig");
 const clarification = @import("../domain/clarification_inputs.zig");
+const rejection = @import("../domain/clarification_form_rejection.zig");
 const principles = @import("../domain/principle_registry.zig");
 const invocation_types = @import("../domain/specify_invocation.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
@@ -22,10 +23,16 @@ const stage = @import("../actions/specify/prepare_inputs.zig");
 // steps are functions, not operations, and its intermediates never become pipeline data.
 pub const PrepareInputs = struct {
     pub const Action = stage.Action;
+    /// A rejected clarification form blocks the run before any model call (ADR 0025).
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,
     action: Action,
+    /// The reason each rejected clarification form broke a rule, when the last invocation ended blocked. The composition
+    /// root copies it into the CLI's report: it is presentation data, and no event, log or report of the run records it.
+    rejected_forms: ?rejection.FormRejections = null,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
+        self.rejected_forms = null;
         const invocation = values.read(&input.step.data, invocation_values.invocation, invocation_types.Invocation) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
@@ -34,11 +41,28 @@ pub const PrepareInputs = struct {
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         var diagnostic: stage.Diagnostic = .{};
-        const result = self.action.execute(scratch.allocator(), owner.arena.allocator(), input.step.runtime, &diagnostic, invocation.*) catch |operation_error| {
+        const staged = self.action.execute(scratch.allocator(), owner.arena.allocator(), input.step.runtime, &diagnostic, invocation.*) catch |operation_error| {
             // The stage-owned slot is read before the unchanged error propagates; the runner
             // records the step in the failed action's event (ADR 0031).
             if (input.step.stage_step) |slot| slot.name = if (diagnostic.step) |step| @tagName(step) else null;
             return operation_error;
+        };
+        // The stage's contract writes every edge value whatever the outcome, so a stage that rejected clarification
+        // forms still writes them, with inputs that hold no submission. Only its outcome and diagnostic differ: the run
+        // ends `blocked` before any model call, and the rejected forms are kept by value for the CLI, because the
+        // scratch space is released here.
+        const result = switch (staged) {
+            .ready => |outputs| outputs,
+            .rejected => |rejected| rejected.outputs,
+        };
+        const outcome: @import("../domain/workflow.zig").OutcomeTag = switch (staged) {
+            .ready => .ok,
+            .rejected => |rejected| blocked: {
+                self.rejected_forms = rejected.forms;
+                owner.rejection = error.InvalidClarificationInput;
+                if (input.step.stage_step) |slot| slot.name = if (diagnostic.step) |step| @tagName(step) else null;
+                break :blocked .blocked;
+            },
         };
         owner.payload = .{ .prior_state = result.prior };
         const prior_principles = if (result.prior.specified()) |state_value| state_value.principle_registry else null;
@@ -53,8 +77,8 @@ pub const PrepareInputs = struct {
         delta.data_writes[@intFromEnum(clarification_values.inputs_schema.key)] = values.create(self.allocator, clarification_values.inputs_schema, clarification.Inputs, result.inputs) catch |operation_error| return operation_error;
         delta.data_writes[@intFromEnum(principle_values.prior_schema.key)] = values.create(self.allocator, principle_values.prior_schema, ?principles.Registry, prior_principles) catch |operation_error| return operation_error;
         // Adopting the owner is the last step that can fail; after it no error path remains.
-        const adopted = owned.publish(self.allocator, publication.prior_schema, owner, .ok) catch |operation_error| return operation_error;
+        const adopted = owned.publish(self.allocator, publication.prior_schema, owner, outcome) catch |operation_error| return operation_error;
         delta.data_writes[@intFromEnum(publication.prior_schema.key)] = adopted.delta.data_writes[@intFromEnum(publication.prior_schema.key)];
-        return .{ .outcome = .ok, .delta = delta };
+        return .{ .outcome = outcome, .delta = delta, .diagnostic = adopted.diagnostic };
     }
 };

@@ -5,6 +5,7 @@ const identity = @import("domain/feature_identity.zig");
 const reference = @import("domain/reference_selector.zig");
 const artifacts = @import("domain/workflow_artifact_registry.zig");
 const clarification = @import("domain/clarification_inputs.zig");
+const rejection = @import("domain/clarification_form_rejection.zig");
 const roots = @import("domain/bootstrap_root_registry.zig");
 const invocation_types = @import("domain/specify_invocation.zig");
 const operations = @import("ports/workflow_operation_registry.zig");
@@ -113,7 +114,7 @@ const Fake = struct {
         if (std.mem.eql(u8, bytes, "other")) value.feature_id = "Other/Feature";
         return value;
     }
-    fn parseForm(_: std.mem.Allocator, _: []const u8, _: clarification.Record, _: @import("domain/clarification_form.zig").Binding) clarification.Error!parser_port.Form {
+    fn parseForm(_: std.mem.Allocator, _: []const u8, _: clarification.Record, _: @import("domain/clarification_form.zig").Binding) clarification.Error!parser_port.Parsed {
         _ = active.?.mark(.validate_clarification_forms);
         return error.InvalidClarificationInput;
     }
@@ -137,7 +138,7 @@ test "the stage runs the thirteen steps in order once each and returns the edge 
     var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
     var fake: Fake = .{};
     var diagnostic: stage.Diagnostic = .{};
-    const outputs = try fake.action().execute(scratch.allocator(), std.testing.allocator, .{}, &diagnostic, default_invocation);
+    const outputs = (try fake.action().execute(scratch.allocator(), std.testing.allocator, .{}, &diagnostic, default_invocation)).ready;
     defer scratch.deinit();
     try std.testing.expectEqual(@as(?stage.Step, null), diagnostic.step);
     try std.testing.expectEqualStrings("Chosen/Café", outputs.feature.selector.feature_id.bytes);
@@ -196,12 +197,29 @@ test "a failure in each internal step names that step and propagates the step's 
     try expectStops(malformed.action(), default_invocation, .parse_clarification_state, error.InvalidClarificationInput);
     var other_feature: Fake = .{ .clarification_state = "other" };
     try expectStops(other_feature.action(), default_invocation, .validate_clarification_state, error.InvalidClarificationInput);
-    // A form with no recorded clarification that holds a submission or cannot be read as an open form, with and
-    // without a state, fails the forms step.
+}
+
+fn expectRejects(action: stage.Action, invocation: invocation_types.Invocation, expected: []const rejection.FormRejection) !void {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    var retained: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer retained.deinit();
+    var diagnostic: stage.Diagnostic = .{};
+    const result = try action.execute(scratch.allocator(), retained.allocator(), .{}, &diagnostic, invocation);
+    try std.testing.expect(result == .rejected);
+    try std.testing.expectEqualDeep(expected, result.rejected.forms.slice());
+    // The stage still produces its edge values, and its inputs accept no answer.
+    try std.testing.expectEqual(@as(usize, 0), result.rejected.outputs.inputs.submissions.len);
+    try std.testing.expectEqual(@as(usize, 0), result.rejected.outputs.inputs.protected_forms.len);
+    try std.testing.expectEqual(@as(?stage.Step, .validate_clarification_forms), diagnostic.step);
+}
+
+test "a form with no recorded clarification that holds a submission is named and rejected, with and without a state" {
+    // A rejected form is an expected result of the forms step, not a failure: the stage ends with it and names the step.
     var orphan: Fake = .{ .forms = orphan_form };
-    try expectStops(orphan.action(), default_invocation, .validate_clarification_forms, error.InvalidClarificationInput);
+    try expectRejects(orphan.action(), default_invocation, &.{.{ .id = .{ .stage = .spec, .ordinal = 1 }, .reason = .form_without_record }});
     var orphan_without_state: Fake = .{ .clarification_state = null, .forms = orphan_form };
-    try expectStops(orphan_without_state.action(), default_invocation, .validate_clarification_forms, error.InvalidClarificationInput);
+    try expectRejects(orphan_without_state.action(), default_invocation, &.{.{ .id = .{ .stage = .spec, .ordinal = 1 }, .reason = .form_without_record }});
 }
 
 test "the state steps read bytes without parsing and parse them without reading" {

@@ -1,10 +1,12 @@
 //! Filesystem discovery of the current feature's prior-run log groups for
-//! retention. It only reads. Every prior binding is validated by recovery's
-//! segment inspector against the identity in its first segment header; any
-//! failure is returned, never skipped. A regular file whose name is not a
-//! segment name is not history and is left alone. A prior run whose event or
-//! prompt stream ends in an active tail is kept whole, so a crashed run is never
-//! pruned.
+//! retention and for crash finalization. It only reads. Every prior binding is
+//! validated by recovery's segment inspector against the identity in its first
+//! segment header; any failure is returned, never skipped. A regular file whose
+//! name is not a segment name is not history and is left alone. A prior run whose
+//! event or prompt stream ends in an active tail is kept whole, so a crashed run
+//! is never pruned before it is finalized. An active tail whose last segment's
+//! header row is complete is returned as a tail; one torn before its header row
+//! was complete has no identity to close and only keeps its run whole.
 const std = @import("std");
 const artifacts = @import("../../domain/workflow_artifact_registry.zig");
 const log_binding = @import("../../domain/feature_log_binding.zig");
@@ -37,6 +39,12 @@ pub const Adapter = struct {
         defer {
             for (closed.items) |group| port.freeCandidate(allocator, group.binding);
             closed.deinit(allocator);
+        }
+        // Open tails not yet handed to the result are freed here.
+        var tails: std.ArrayList(port.Group) = .empty;
+        defer {
+            for (tails.items) |group| port.freeCandidate(allocator, group.binding);
+            tails.deinit(allocator);
         }
         var active_runs: std.ArrayList([]const u8) = .empty;
         defer {
@@ -82,7 +90,15 @@ pub const Adapter = struct {
                     defer scratch.deinit();
                     switch (recovery.inspectGroup(self.io, directory, scratch.allocator(), log_binding.binding(owner), stream) catch |err| return inspectionError(err)) {
                         .empty => {},
-                        .active => try markActive(allocator, &active_runs, run_entry.name),
+                        .active => {
+                            // The run is kept whole whichever way its tail ends; only a complete header row names an
+                            // identity finalization can close.
+                            if (try tailIdentified(self.io, scratch.allocator(), directory, stream)) {
+                                try tails.append(allocator, .{ .stream = stream, .binding = candidate });
+                                retained = true;
+                            }
+                            try markActive(allocator, &active_runs, run_entry.name);
+                        },
                         .closed => {
                             try closed.append(allocator, .{ .stream = stream, .binding = candidate });
                             retained = true;
@@ -92,6 +108,12 @@ pub const Adapter = struct {
             }
         }
         std.mem.sort(port.Group, closed.items, {}, lessGroup);
+        std.mem.sort(port.Group, tails.items, {}, lessGroup);
+        const owned_tails = try tails.toOwnedSlice(allocator);
+        errdefer {
+            for (owned_tails) |group| port.freeCandidate(allocator, group.binding);
+            allocator.free(owned_tails);
+        }
         // A run with an active tail in either stream keeps all of its groups.
         var groups: std.ArrayList(port.Group) = try .initCapacity(allocator, closed.items.len);
         errdefer {
@@ -106,9 +128,19 @@ pub const Adapter = struct {
             } else groups.appendAssumeCapacity(group);
         }
         closed.shrinkRetainingCapacity(kept);
-        return .{ .groups = try groups.toOwnedSlice(allocator), .retained_runs = active_runs.items.len };
+        return .{ .groups = try groups.toOwnedSlice(allocator), .tails = owned_tails, .retained_runs = active_runs.items.len };
     }
 };
+
+/// Whether an active group's last segment carries a complete header row. A crash while a segment behind closed ones was
+/// being created leaves it torn before that row, so it names no identity to close and its run is kept whole.
+fn tailIdentified(io: Io, allocator: std.mem.Allocator, directory: Io.Dir, stream: log_stream.Stream) port.Error!bool {
+    var ordinals: [log_limits.max_segments]u16 = undefined;
+    const count = recovery.segmentOrdinals(io, directory, &ordinals) catch |err| return inspectionError(err);
+    if (count == 0) return false;
+    const policy = recovery.segmentPolicy(io, directory, allocator, ordinals[count - 1], stream) catch |err| return inspectionError(err);
+    return policy != null;
+}
 
 fn lessGroup(_: void, left: port.Group, right: port.Group) bool {
     const run = std.mem.order(u8, left.binding.run_id.bytes, right.binding.run_id.bytes);

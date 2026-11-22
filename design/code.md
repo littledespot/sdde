@@ -1790,14 +1790,10 @@ PipelineRunner
 │       │   ├── free-text principles ingestion/indexing actions
 │       │   └── repository discovery actions
 │       └── follow typed transitions; each YAML-selected operation uses a runner-owned binding
-└── FeatureLoggingOrchestrator (runner observer; instrumentation-internal)
-    ├── severity/field projection actions
-    ├── threshold/redaction/safety actions
-    ├── sequence/serialize/rotate/append actions
-    └── FeatureLoggingFailureOrchestrator
-        ├── transient-handle destruction action
-        ├── one emergency-record action
-        └── fail-closed runner-control action
+└── runtime logging lifecycle (runner observer; instrumentation-internal; ADR 0032)
+    ├── persist routine (validate, threshold/capture, sequence/serialize/rotate/append)
+    ├── prepare, close and retention routines
+    └── failure routine (one bounded emergency record)
 
 Project workflow graphs are not registered in source. The compiler constructs
 each graph solely from one validated workflow YAML definition:

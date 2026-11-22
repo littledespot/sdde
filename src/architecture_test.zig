@@ -292,10 +292,45 @@ test "atomic execution exposes no transaction logging or stabilization capabilit
         try std.testing.expect(std.meta.stringToEnum(telemetry.EventType, name) == null);
     }
     try std.testing.expect(!@hasField(telemetry.Field, "transaction_id"));
-    try std.testing.expect(!@hasField(@import("application/feature_log_actions.zig").Set, "stabilize_failure"));
-    try expectAbsent(@embedFile("composition/active_feature_log_runtime.zig"), "stabilizer");
-    try expectAbsent(@embedFile("application/feature_log_runner.zig"), "stabiliz");
     try expectAbsent(@import("domain/feature_log_format.zig").event_heading, "transaction_id");
+}
+
+/// Whether a Zig source's code, not its comments, names stabilization. ADR 0009 keeps the atomic run free of any
+/// stabilizer, so no engine module carries one: the rule the logging runner's and action set's own pins stood for.
+fn namesStabilization(allocator: std.mem.Allocator, source: []const u8) !bool {
+    const code = try codeOf(allocator, source);
+    defer allocator.free(code);
+    return std.mem.indexOf(u8, code, "stabiliz") != null;
+}
+
+test "no engine module names stabilization" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.endsWith(u8, entry.basename, "_test.zig") or
+            std.mem.endsWith(u8, entry.basename, "_test_fixture.zig") or
+            std.mem.eql(u8, entry.basename, "runtime_tests.zig") or
+            std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        if (try namesStabilization(allocator, source)) {
+            std.debug.print("{s} names stabilization\n", .{entry.path});
+            return error.StabilizationNamed;
+        }
+    }
+}
+
+test "stabilization is read from code and not from a comment" {
+    const allocator = std.testing.allocator;
+    try std.testing.expect(!try namesStabilization(allocator, "// a stabilizer would go here\nconst x = 1;\n"));
+    try std.testing.expect(!try namesStabilization(allocator, "pub fn run() void {}\n"));
+    try std.testing.expect(try namesStabilization(allocator, "const stabilizer = @import(\"transaction_stabilizer.zig\");\n"));
+    try std.testing.expect(try namesStabilization(allocator, "pub fn stabilizeFailure() void {}\n"));
 }
 
 test "result schema authority is opaque and compilation remains a kernel concern" {
@@ -671,11 +706,14 @@ fn routineViolation(source: []const u8) ?RoutineViolation {
 }
 
 /// Whether the file at `path` (relative to `src/`) imports a `*_routine.zig` it may not. ADR 0032
-/// names the callers: the composition root, the provider-bootstrap binding for its own routine, and
-/// the logging lifecycle owners (not yet converted, so none is named here). Tests and test fixtures
-/// may import any routine. An action, an orchestrator, a runner or any other application module never does.
+/// names the callers: the composition root for the startup and provider-bootstrap routines, the provider-bootstrap
+/// binding for its own routine, the runtime logging lifecycle for the six feature-logging routines, and composition's
+/// feature-logging runtime, which builds their ports and calls the failure routine for a failure no lifecycle reports.
+/// Tests and test fixtures may import any routine. An action, an orchestrator, a runner, the log service or any other
+/// application or composition module never imports a logging routine.
 fn importsRoutineIllegally(path: []const u8, source: []const u8) bool {
-    if (std.mem.endsWith(u8, path, "_test.zig") or std.mem.startsWith(u8, path, "test_fixtures/") or std.mem.startsWith(u8, path, "composition/")) return false;
+    if (std.mem.endsWith(u8, path, "_test.zig") or std.mem.startsWith(u8, path, "test_fixtures/")) return false;
+    const in_composition = std.mem.startsWith(u8, path, "composition/");
     var rest = source;
     while (std.mem.indexOf(u8, rest, "_routine.zig\")")) |at| {
         var start = at;
@@ -683,8 +721,19 @@ fn importsRoutineIllegally(path: []const u8, source: []const u8) bool {
         const routine = rest[start..at];
         const own_binding = std.mem.eql(u8, path, "application/model_provider_bootstrap_binding.zig") and
             std.mem.eql(u8, routine, "model_provider_bootstrap");
-        if (!own_binding) return true;
+        const logging_lifecycle = std.mem.eql(u8, path, "application/feature_log_runtime_lifecycle.zig") and isLoggingRoutine(routine);
+        const composition_caller = in_composition and (!isLoggingRoutine(routine) or std.mem.eql(u8, path, "composition/feature_logging_runtime.zig"));
+        if (!own_binding and !logging_lifecycle and !composition_caller) return true;
         rest = rest[at + "_routine.zig\")".len ..];
+    }
+    return false;
+}
+
+/// The six feature-logging routines (ADR 0032): the stream's persist, prepare, close and retention, the close of a
+/// crashed prior run's open tail, and the failure report.
+fn isLoggingRoutine(routine: []const u8) bool {
+    for ([_][]const u8{ "feature_log_persist", "feature_log_prepare", "feature_log_close", "feature_log_retention", "feature_log_prior_finalization", "feature_log_failure" }) |name| {
+        if (std.mem.eql(u8, routine, name)) return true;
     }
     return false;
 }
@@ -751,6 +800,30 @@ test "routine rules reject a routine that imports an action or adapter, uses I/O
     try std.testing.expect(importsRoutineIllegally("application/some_runner.zig", import_startup));
     try std.testing.expect(importsRoutineIllegally("application/model_provider_bootstrap_binding.zig", import_startup));
     try std.testing.expect(importsRoutineIllegally("application/workflow_engine_orchestrator.zig", import_provider));
+    // Who may import a feature-logging routine: the runtime logging lifecycle, for each of the six, and composition
+    // and tests; never an action, an orchestrator, a runner, the log service, or the lifecycle for another routine.
+    for ([_][]const u8{ "persist", "prepare", "close", "retention", "prior_finalization", "failure" }) |name| {
+        var buffer: [96]u8 = undefined;
+        const import_logging = try std.fmt.bufPrint(&buffer, "const r = @import(\"feature_log_{s}_routine.zig\");\n", .{name});
+        try std.testing.expect(!importsRoutineIllegally("application/feature_log_runtime_lifecycle.zig", import_logging));
+        try std.testing.expect(!importsRoutineIllegally("composition/feature_logging_runtime.zig", import_logging));
+        try std.testing.expect(!importsRoutineIllegally("feature_log_persist_routine_test.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("actions/log/some_action.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/some_orchestrator.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/feature_log_runner.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/log_service.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/feature_log_persist_routine.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/model_provider_bootstrap_binding.zig", import_logging));
+        // Composition reaches a logging routine only in its feature-logging runtime: no other composition module does.
+        try std.testing.expect(importsRoutineIllegally("composition/root.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("composition/active_feature_log_runtime.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("composition/native_workflow_operations.zig", import_logging));
+    }
+    try std.testing.expect(importsRoutineIllegally("application/feature_log_runtime_lifecycle.zig", import_startup));
+    try std.testing.expect(importsRoutineIllegally("application/feature_log_runtime_lifecycle.zig", import_provider));
+    try std.testing.expect(isLoggingRoutine("feature_log_close"));
+    try std.testing.expect(!isLoggingRoutine("startup"));
+    try std.testing.expect(!isLoggingRoutine("feature_log_history"));
 }
 
 test "public root does not re-export ports or infrastructure adapters" {
@@ -2577,9 +2650,10 @@ test "feature log paths have one opaque artifact authority and one sink consumer
     try expectAbsent(root_domain, "physical_identity: ?roots.PhysicalDirectoryIdentity");
     try expectAbsent(sink, "createDirPathOpen");
     // Prior-run paths come only from the registry, one stream at a time, and
-    // only the retention adapter receives them.
+    // only the retention adapter and the prior-run tail adapter receive them (ADR 0026).
     const historical = @embedFile("adapters/filesystem/feature_log_historical_stream.zig");
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(historical, "bindHistoricalFeatureLogStream("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("adapters/filesystem/feature_log_historical_tail.zig"), "bindHistoricalFeatureLogStream("));
     try expectAbsent(sink, "bindHistoricalFeatureLogStream");
     try expectAbsent(@embedFile("adapters/filesystem/feature_log_history.zig"), "bindHistoricalFeatureLogStream");
 }
@@ -2611,11 +2685,47 @@ test "feature log activation owns only registered target write authority" {
     try expectAbsent(@embedFile("application/feature_logging_workflow.zig"), "/adapters/");
 }
 
-test "feature logging lifecycle coordinates bindings without filesystem authority" {
-    const lifecycle = @embedFile("application/feature_log_runtime_lifecycle.zig");
-    try expectAbsent(lifecycle, "/adapters/");
-    try expectAbsent(lifecycle, "std.Io");
-    try expectAbsent(lifecycle, "createDir");
+const ApplicationViolation = enum { imports_an_adapter, uses_io, creates_a_directory };
+
+/// ADR 0026, ADR 0032: an application module (the runtime logging lifecycle and the log service included) reaches the
+/// filesystem only through ports its composition root supplies, so it imports no adapter, names no `std.Io` and creates
+/// no directory. Read from code, not from comments.
+fn applicationViolation(allocator: std.mem.Allocator, source: []const u8) !?ApplicationViolation {
+    const code = try codeOf(allocator, source);
+    defer allocator.free(code);
+    if (std.mem.indexOf(u8, code, "/adapters/") != null) return .imports_an_adapter;
+    if (std.mem.indexOf(u8, code, "std.Io") != null) return .uses_io;
+    if (std.mem.indexOf(u8, code, "createDir") != null) return .creates_a_directory;
+    return null;
+}
+
+test "no application module holds adapter or filesystem authority" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var application = try std.Io.Dir.cwd().openDir(io, "src/application", .{ .iterate = true });
+    defer application.close(io);
+    var walker = try application.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or std.mem.endsWith(u8, entry.basename, "_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        if (try applicationViolation(allocator, source)) |violation| {
+            std.debug.print("application/{s}: {s}\n", .{ entry.path, @tagName(violation) });
+            return error.ApplicationFilesystemAuthority;
+        }
+    }
+}
+
+test "application modules are held to no adapter, no std.Io and no directory creation" {
+    const allocator = std.testing.allocator;
+    try std.testing.expectEqual(@as(?ApplicationViolation, null), try applicationViolation(allocator, "const port = @import(\"../ports/feature_log_sink.zig\");\n// std.Io and createDir in a comment\n"));
+    try std.testing.expectEqual(@as(?ApplicationViolation, .imports_an_adapter), try applicationViolation(allocator, "const sink = @import(\"../adapters/filesystem/feature_log_sink.zig\");\n"));
+    try std.testing.expectEqual(@as(?ApplicationViolation, .uses_io), try applicationViolation(allocator, "pub fn open(io: std.Io) void {}\n"));
+    try std.testing.expectEqual(@as(?ApplicationViolation, .creates_a_directory), try applicationViolation(allocator, "fn prepare(dir: Dir) void { dir.createDirPath(); }\n"));
+}
+
+test "the active logger is installed by composition and the pipeline reaches it through the barrier" {
     const invocation_assembly = @embedFile("composition/engine_invocation.zig");
     try std.testing.expect(std.mem.indexOf(u8, invocation_assembly, "services.logs.barrier()") != null);
     const composition = @embedFile("composition/root.zig");
@@ -2628,25 +2738,13 @@ test "feature logging policy execution and filesystem operations have focused ow
     try expectAbsent(port, "pub const Sink");
     try expectAbsent(port, "pub const VTable");
 
+    // The logging runner is the run's typed state and ports and calls nothing: the runtime logging lifecycle runs the
+    // routines on it (ADR 0032), so it declares no function and imports no routine. Reaching infrastructure only
+    // through the ports a routine's step takes is the routine rules' and the runner glob rule's, which the sink, clock,
+    // console and emergency import absences this test once held stood for.
     const runner = @embedFile("application/feature_log_runner.zig");
-    try expectAbsent(runner, "feature_log_sink.zig");
-    try expectAbsent(runner, "trusted_log_clock.zig");
-    try expectAbsent(runner, "console_log_sink.zig");
-    try expectAbsent(runner, "emergency_log_sink.zig");
-    try expectAbsent(runner, "transaction_stabilizer.zig");
-    try expectAbsent(runner, "serialize_feature_log_record.zig");
-    try expectAbsent(runner, "fn terminalEvent");
-    try expectAbsent(runner, "fn promptSelected");
-    try expectAbsent(runner, "fn updateState");
-    try std.testing.expect(std.mem.indexOf(u8, runner, "feature_log_child_bindings.zig") != null);
-    const orchestrator = @embedFile("application/feature_log_orchestrator.zig");
-    try expectAbsent(orchestrator, "/actions/");
-    try expectAbsent(orchestrator, "/adapters/");
-    try expectAbsent(orchestrator, "/ports/");
-    const finalization = @embedFile("application/feature_log_finalization_coordinator.zig");
-    try expectAbsent(finalization, "feature_log_runner.zig");
-    const retention = @embedFile("application/feature_log_retention_coordinator.zig");
-    try expectAbsent(retention, "feature_log_runner.zig");
+    try expectAbsent(runner, "fn ");
+    try expectAbsent(runner, "_routine.zig");
 
     const domain_modules = [_][]const u8{
         @embedFile("domain/feature_log_binding.zig"),
@@ -2683,11 +2781,89 @@ test "feature logging policy execution and filesystem operations have focused ow
     const historical = @embedFile("adapters/filesystem/feature_log_historical_stream.zig");
     for ([_][]const u8{ "feature_log_segment_store.zig", "segmentCreator", "segmentRotator", "streamCloser", "recordAppender", "streamRecoverer", "recovery.recover(", ".truncate" }) |forbidden| try expectAbsent(historical, forbidden);
     try std.testing.expect(std.mem.indexOf(u8, historical, "recovery.inspectGroup(") != null);
+    try std.testing.expectEqual(@as(?[]const u8, null), try tailAdapterViolation(std.testing.allocator, @embedFile("adapters/filesystem/feature_log_historical_tail.zig")));
 
     const recovery = @embedFile("adapters/filesystem/feature_log_recovery.zig");
     try std.testing.expect(std.mem.indexOf(u8, recovery, "domain/feature_log_format.zig") != null);
     try expectAbsent(recovery, "fn cellAt");
     try expectAbsent(recovery, "fn parseUtc");
+}
+
+/// ADR 0026: the prior-run tail adapter closes the active tail a crash left. It reads the group, recovers the tail,
+/// writes one trailer and holds the prior run's lock. It creates, rotates, appends and prunes nothing and deletes
+/// nothing, so retention's adapter stays the only prior-run adapter that removes a file. Read from code, not comments;
+/// the result is the first forbidden text the source holds, or the first required text it lacks.
+fn tailAdapterViolation(allocator: std.mem.Allocator, source: []const u8) !?[]const u8 {
+    const code = try codeOf(allocator, source);
+    defer allocator.free(code);
+    for ([_][]const u8{ "segmentCreator", "segmentRotator", "recordAppender", "segmentPruner", "feature_log_retention_store.zig", "segment_store.create(", "segment_store.rotate(", "segment_store.append(", "deleteFile", "deleteTree", "createFile", "createDir" }) |forbidden| {
+        if (std.mem.indexOf(u8, code, forbidden) != null) return forbidden;
+    }
+    for ([_][]const u8{ "recovery.recover(", "recovery.inspectGroup(", "segment_store.close(", "lock.acquire(", "lock.release(" }) |required| {
+        if (std.mem.indexOf(u8, code, required) == null) return required;
+    }
+    return null;
+}
+
+test "the prior-run tail adapter's capability accepts what closes a tail and rejects a create, rotate, append, prune or delete" {
+    const allocator = std.testing.allocator;
+    // Sources are Zig, so that comments are masked as in the real file.
+    const holds = "pub const held = .{ recovery.recover(), recovery.inspectGroup(), segment_store.close(), lock.acquire(), lock.release() };\n";
+    try std.testing.expectEqual(@as(?[]const u8, null), try tailAdapterViolation(allocator, holds));
+    // A forbidden capability named only in a comment is no capability.
+    try std.testing.expectEqual(@as(?[]const u8, null), try tailAdapterViolation(allocator, "// segment_store.append( deleteFile\n" ++ holds));
+    for ([_][]const u8{ "segmentCreator", "segmentRotator", "recordAppender", "segmentPruner", "feature_log_retention_store.zig", "segment_store.create(", "segment_store.rotate(", "segment_store.append(", "deleteFile", "deleteTree", "createFile", "createDir" }) |forbidden| {
+        const source = try std.fmt.allocPrint(allocator, "{s}pub const forbidden = \"{s}\";\n", .{ holds, forbidden });
+        defer allocator.free(source);
+        try std.testing.expectEqualStrings(forbidden, (try tailAdapterViolation(allocator, source)).?);
+    }
+    // An adapter that no longer closes, recovers, reads or locks is no tail adapter.
+    try std.testing.expectEqualStrings("segment_store.close(", (try tailAdapterViolation(allocator, "pub const held = .{ recovery.recover(), recovery.inspectGroup(), lock.acquire(), lock.release() };\n")).?);
+    try std.testing.expectEqualStrings("recovery.recover(", (try tailAdapterViolation(allocator, "pub const held = .{ recovery.inspectGroup(), segment_store.close(), lock.acquire(), lock.release() };\n")).?);
+}
+
+/// The orchestrations that coordinate runner-owned child bindings through a `*_child_bindings.zig` (AGENTS.md "Actions,
+/// orchestrators, and runner"). Feature logging is no longer one: its sequences are ADR 0032 routines, so a logging
+/// child-bindings file is a regression, and a new orchestration adds its name here with its own change.
+const child_bindings_files = [_][]const u8{
+    "workflow_engine_child_bindings.zig",
+    "model_request_child_bindings.zig",
+    "specify_invocation_child_bindings.zig",
+    "workflow_pipeline_child_bindings.zig",
+};
+
+fn isUnlistedChildBindings(basename: []const u8) bool {
+    if (!std.mem.endsWith(u8, basename, "_child_bindings.zig")) return false;
+    for (child_bindings_files) |listed| if (std.mem.eql(u8, basename, listed)) return false;
+    return true;
+}
+
+test "only the four listed orchestrations carry a child-bindings file, and feature logging carries none" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    var seen: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file) continue;
+        if (isUnlistedChildBindings(entry.basename)) {
+            std.debug.print("unlisted child bindings: {s}\n", .{entry.path});
+            return error.UnlistedChildBindings;
+        }
+        if (std.mem.endsWith(u8, entry.basename, "_child_bindings.zig")) seen += 1;
+    }
+    // A row for a file that no longer exists is stale.
+    try std.testing.expectEqual(child_bindings_files.len, seen);
+}
+
+test "child-bindings files are held to the listed orchestrations" {
+    try std.testing.expect(!isUnlistedChildBindings("workflow_pipeline_child_bindings.zig"));
+    try std.testing.expect(!isUnlistedChildBindings("feature_log_runner.zig"));
+    try std.testing.expect(isUnlistedChildBindings("feature_log_child_bindings.zig"));
+    try std.testing.expect(isUnlistedChildBindings("feature_log_retention_child_bindings.zig"));
+    try std.testing.expect(isUnlistedChildBindings("another_child_bindings.zig"));
 }
 
 test "workflow engine selection is workflow-name agnostic while composition binds focused runners" {
@@ -2709,9 +2885,6 @@ test "workflow engine selection is workflow-name agnostic while composition bind
 test "active feature logging concrete assembly remains in composition" {
     const assembly = @embedFile("composition/active_feature_log_runtime.zig");
     try std.testing.expect(std.mem.indexOf(u8, assembly, "adapters/filesystem/feature_log_sink.zig") != null);
-    const service = @embedFile("application/log_service.zig");
-    try expectAbsent(service, "/adapters/");
-    try expectAbsent(service, "std.Io");
 }
 
 test "workflow values have one runner-owned store and no key-only candidate API" {
@@ -3271,6 +3444,73 @@ fn countOccurrences(source: []const u8, needle: []const u8) usize {
         remaining = remaining[index + needle.len ..];
     }
     return count;
+}
+
+/// The occurrences of `needle` that are calls, not definitions: a `fn ` before it makes it the definition.
+fn callCount(source: []const u8, needle: []const u8) usize {
+    var count: usize = 0;
+    var from: usize = 0;
+    while (std.mem.indexOfPos(u8, source, from, needle)) |at| : (from = at + needle.len) {
+        if (at >= 3 and std.mem.eql(u8, source[at - 3 .. at], "fn ")) continue;
+        count += 1;
+    }
+    return count;
+}
+
+const EmergencySites = struct { path: []const u8, writers: usize, reporters: usize };
+
+/// ADR 0032 and F0002: the emergency line is written exactly once per logging failure, and only by a fixed set of
+/// sites. A writer runs the failure routine (`failure_routine.run(`); a reporter calls `reportFailure` or
+/// `invokeReportFailure`, which reach a writer through the active logger. The table is every non-test source file
+/// with a site; a file not in it has none: the runtime logging lifecycle and composition's `Assembly.fail` are the two
+/// writers, and a site in a new file, or a second writer, fails it.
+const emergency_sites = [_]EmergencySites{
+    .{ .path = "application/feature_log_runtime_lifecycle.zig", .writers = 1, .reporters = 0 },
+    .{ .path = "application/log_service.zig", .writers = 0, .reporters = 1 },
+    .{ .path = "application/model_exchange_capture.zig", .writers = 0, .reporters = 1 },
+    .{ .path = "composition/feature_logging_runtime.zig", .writers = 1, .reporters = 1 },
+};
+
+test "call counting counts a call and skips a definition" {
+    try std.testing.expectEqual(@as(usize, 1), callCount("pub fn invokeReportFailure(a: u8) void {}\nx.invokeReportFailure(a);\n", "invokeReportFailure("));
+    try std.testing.expectEqual(@as(usize, 2), callCount("a.reportFailure(x);\nb.reportFailure(y);\n", ".reportFailure("));
+    try std.testing.expectEqual(@as(usize, 0), callCount("pub fn reportFailure(x: u8) void {}\n", "reportFailure("));
+}
+
+test "the emergency line has a fixed set of writer and reporter sites" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    var seen: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.endsWith(u8, entry.basename, "_test.zig") or
+            std.mem.endsWith(u8, entry.basename, "_test_fixture.zig") or
+            std.mem.eql(u8, entry.basename, "runtime_tests.zig") or
+            std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+        const code = try codeOf(allocator, source);
+        const writers = callCount(code, "failure_routine.run(");
+        const reporters = callCount(code, ".reportFailure(") + callCount(code, "invokeReportFailure(");
+        var expected_writers: usize = 0;
+        var expected_reporters: usize = 0;
+        for (emergency_sites) |site| if (std.mem.eql(u8, site.path, entry.path)) {
+            expected_writers = site.writers;
+            expected_reporters = site.reporters;
+            seen += 1;
+        };
+        if (writers != expected_writers or reporters != expected_reporters) {
+            std.debug.print("emergency sites in {s}: {d} writers and {d} reporters, expected {d} and {d}\n", .{ entry.path, writers, reporters, expected_writers, expected_reporters });
+            return error.UnexpectedEmergencySites;
+        }
+    }
+    // A row for a file that no longer exists is stale.
+    try std.testing.expectEqual(emergency_sites.len, seen);
 }
 
 test "candidate repairs share authority and expose only native scoped operations" {

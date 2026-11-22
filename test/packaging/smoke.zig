@@ -428,7 +428,9 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.clearEnvironment();
         check.expectExitCode(if (case.rejected) 1 else 0);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (case.rejected) "InvalidClarificationInput\n" else "");
+        // The blocked outcome and its cause, then each rejected form with the rule it broke: the orphan feature holds a
+        // closed form of no record.
+        check.expectStdErrEqual(if (case.rejected) "blocked\nInvalidClarificationInput\nP01: form_without_record\n" else "");
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_][]const []const u8{

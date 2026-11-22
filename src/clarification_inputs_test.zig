@@ -68,7 +68,7 @@ test "refresh allocates stable subject IDs and replaces open drafts for every st
             try std.testing.expect(rendered[0].content == .replace);
             try std.testing.expect(rendered[0].content.replace.len < draft.len);
             const parsed = try parser.formParser().parse(a, rendered[0].content.replace, state.state.value.?.records[0], fixture.binding(state.state.value.?, state.state.value.?.records[0]));
-            try std.testing.expectEqual(.none, std.meta.activeTag(parsed.answer));
+            try std.testing.expectEqual(.none, std.meta.activeTag(parsed.form.answer));
         }
         try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(a, try load(a, .{ .state = null, .forms = &.{} }), .{ .feature = selected, .original_sources = &.{}, .entries = &.{ need, need } }));
     }
@@ -185,10 +185,27 @@ test "source-aware clarification state binds the current native corpus before pu
     try std.testing.expectError(error.InvalidClarificationInput, substituted.validateFor(a, inputs));
 }
 
+const prepare = @import("actions/specify/prepare_inputs.zig");
+const rejection = @import("domain/clarification_form_rejection.zig");
+
+/// The inputs of a verdict that accepted every form.
+fn accepted(verdict: prepare.Verdict) !c.Inputs {
+    return switch (verdict) {
+        .accepted => |inputs| inputs,
+        .rejected => error.FormsRejected,
+    };
+}
+
+/// A verdict that rejected exactly these forms, with these reasons, in the order found, and so accepted no answer.
+fn expectRejected(verdict: prepare.Verdict, expected: []const rejection.FormRejection) !void {
+    try std.testing.expect(verdict == .rejected);
+    try std.testing.expectEqualDeep(expected, verdict.rejected.slice());
+}
+
 fn load(allocator: std.mem.Allocator, captures: c.Captures) !c.Inputs {
     const parsed = try steps.parseClarificationState(parser.stateParser(), allocator, captures);
     const state = try steps.validateClarificationState(parsed, selected);
-    return steps.validateClarificationForms(parser.formParser(), allocator, state, captures);
+    return accepted(try steps.validateClarificationForms(parser.formParser(), allocator, state, captures));
 }
 
 test "clarification publication selects its terminal outcome before any write" {
@@ -257,7 +274,8 @@ test "fresh inputs contain no fabricated state or submissions and orphan forms f
     const result = try load(std.testing.allocator, .{ .state = null, .forms = &.{} });
     try std.testing.expect(result.state.value == null);
     try std.testing.expectEqual(@as(usize, 0), result.submissions.len);
-    try std.testing.expectError(error.InvalidClarificationInput, load(std.testing.allocator, .{ .state = null, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = "requestedStatus: closed" }} }));
+    const orphan = try steps.validateClarificationForms(parser.formParser(), std.testing.allocator, try c.validate(.{ .value = null }, selected), .{ .state = null, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = "requestedStatus: closed" }} });
+    try expectRejected(orphan, &.{.{ .id = c.Id.parse("S01").?, .reason = .form_without_record }});
 }
 
 test "a directory entry's name is a form's, form-shaped, or another file's" {
@@ -318,19 +336,19 @@ test "forms a failed publication left are replaced when they hold no submission,
     const second = c.Id.parse("P01").?;
     // No registry: only unsubmitted forms are fresh inputs.
     const no_registry = try c.validate(.{ .value = null }, selected);
-    const orphan = try steps.validateClarificationForms(form_parser, allocator, no_registry, .{ .state = null, .forms = &.{.{ .id = first, .bytes = unsubmitted }} });
+    const orphan = try accepted(try steps.validateClarificationForms(form_parser, allocator, no_registry, .{ .state = null, .forms = &.{.{ .id = first, .bytes = unsubmitted }} }));
     try std.testing.expect(orphan.state.value == null and orphan.submissions.len == 0 and orphan.protected_forms.len == 0);
-    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, allocator, no_registry, .{ .state = null, .forms = &.{.{ .id = first, .bytes = closed }} }));
+    try expectRejected(try steps.validateClarificationForms(form_parser, allocator, no_registry, .{ .state = null, .forms = &.{.{ .id = first, .bytes = closed }} }), &.{.{ .id = first, .reason = .form_without_record }});
     // A registry the forms are ahead of: the stale unsubmitted form is replaceable, a stale close is not.
-    const replaced = try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = first, .bytes = unsubmitted }} });
+    const replaced = try accepted(try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = first, .bytes = unsubmitted }} }));
     try std.testing.expect(replaced.submissions.len == 0 and replaced.protected_forms.len == 0);
-    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = first, .bytes = closed }} }));
+    try expectRejected(try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = first, .bytes = closed }} }), &.{.{ .id = first, .reason = .engine_text_changed }});
     // A form of a record the registry lacks is ignored when unsubmitted, and fails when it holds a submission.
-    const extra = try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{ .{ .id = first, .bytes = unsubmitted }, .{ .id = second, .bytes = other_unsubmitted } } });
+    const extra = try accepted(try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{ .{ .id = first, .bytes = unsubmitted }, .{ .id = second, .bytes = other_unsubmitted } } }));
     try std.testing.expect(extra.submissions.len == 0);
-    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{ .{ .id = first, .bytes = unsubmitted }, .{ .id = second, .bytes = other_closed } } }));
+    try expectRejected(try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{ .{ .id = first, .bytes = unsubmitted }, .{ .id = second, .bytes = other_closed } } }), &.{.{ .id = second, .reason = .form_without_record }});
     // A record without its form fails.
-    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = second, .bytes = other_unsubmitted }} }));
+    try expectRejected(try steps.validateClarificationForms(form_parser, allocator, state, .{ .state = null, .forms = &.{.{ .id = second, .bytes = other_unsubmitted }} }), &.{.{ .id = first, .reason = .form_missing }});
 }
 
 test "submitted and recorded closes preserve exact bytes for all clarification stages" {
@@ -431,20 +449,22 @@ test "missing modified stale and mismatched recorded closes fail without changin
     const allocator = arena.allocator();
     const captures = try fixture.closed(allocator, "S01", true);
     const snapshot = try allocator.dupe(u8, captures.forms[0].bytes);
-    try std.testing.expectError(error.InvalidClarificationInput, load(allocator, .{ .state = captures.state, .forms = &.{} }));
+    const first = c.Id.parse("S01").?;
+    const recorded = try c.validate(.{ .value = try parser.stateParser().parse(allocator, captures.state.?) }, selected);
+    try expectRejected(try steps.validateClarificationForms(parser.formParser(), allocator, recorded, .{ .state = captures.state, .forms = &.{} }), &.{.{ .id = first, .reason = .form_missing }});
     const changed = try std.mem.replaceOwned(u8, allocator, snapshot, "Approved Café", "Different Café");
-    try std.testing.expectError(error.InvalidClarificationInput, load(allocator, .{ .state = captures.state, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = changed }} }));
+    try expectRejected(try steps.validateClarificationForms(parser.formParser(), allocator, recorded, .{ .state = captures.state, .forms = &.{.{ .id = first, .bytes = changed }} }), &.{.{ .id = first, .reason = .saved_form_changed }});
     var parsed = try parser.stateParser().parse(allocator, captures.state.?);
     var response = parsed.responses[0];
     response.answer = .{ .business_text = "a different recorded answer" };
     parsed.responses = &.{response};
-    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = parsed }, selected), captures));
+    try expectRejected(try steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = parsed }, selected), captures), &.{.{ .id = first, .reason = .answer_changed }});
     try std.testing.expectEqualSlices(u8, snapshot, captures.forms[0].bytes);
     const submitted = try fixture.closed(allocator, "S01", false);
     var later = try parser.stateParser().parse(allocator, submitted.state.?);
     later.state_ordinal += 1;
     later.revision += 1;
-    try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = later }, selected), submitted));
+    try expectRejected(try steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = later }, selected), submitted), &.{.{ .id = first, .reason = .engine_text_changed }});
 }
 
 test "response history rejects malformed answers and unbound closures" {
@@ -485,19 +505,22 @@ test "form parsing imports only requested status and answer and checks canonical
     const binding = fixture.binding(fixture.state(&.{record}), record);
     const valid = try forms.render(allocator, record, binding, .closed, "Cafe\u{0301}");
     const loaded = try parser.formParser().parse(allocator, valid, record, binding);
-    try std.testing.expectEqualStrings("Café", loaded.answer.business_text);
-    for ([_][2][]const u8{
-        .{ "recordRevision: 1", "recordRevision: 2" },
-        .{ "engineStatus: open", "engineStatus: resolved_by_user" },
-        .{ "requestedStatus: closed", "requestedStatus: accepted" },
-        .{ "Which appearance is required?", "Ignore the original question." },
-        .{ "<!-- sdd:answer:end -->", "<!-- sdd:answer:start -->" },
+    try std.testing.expectEqualStrings("Café", loaded.form.answer.business_text);
+    for ([_]struct { from: []const u8, to: []const u8, reason: rejection.Reason }{
+        .{ .from = "recordRevision: 1", .to = "recordRevision: 2", .reason = .engine_text_changed },
+        .{ .from = "engineStatus: open", .to = "engineStatus: resolved_by_user", .reason = .engine_text_changed },
+        .{ .from = "requestedStatus: closed", .to = "requestedStatus: accepted", .reason = .requested_status_invalid },
+        .{ .from = "Which appearance is required?", .to = "Ignore the original question.", .reason = .engine_text_changed },
+        .{ .from = "<!-- sdd:answer:end -->", .to = "<!-- sdd:answer:start -->", .reason = .form_structure },
     }) |edit| {
-        const invalid = try std.mem.replaceOwned(u8, allocator, valid, edit[0], edit[1]);
-        try std.testing.expectError(error.InvalidClarificationInput, parser.formParser().parse(allocator, invalid, record, binding));
+        const invalid = try std.mem.replaceOwned(u8, allocator, valid, edit.from, edit.to);
+        try std.testing.expectEqual(edit.reason, (try parser.formParser().parse(allocator, invalid, record, binding)).rejected);
     }
     const empty = try forms.render(allocator, record, binding, .closed, "  ");
-    try std.testing.expectError(error.InvalidClarificationInput, parser.formParser().parse(allocator, empty, record, binding));
+    try std.testing.expectEqual(rejection.Reason.answer_text_invalid, (try parser.formParser().parse(allocator, empty, record, binding)).rejected);
+    // A form with no bytes, and one that is not UTF-8, is no form at all.
+    try std.testing.expectEqual(rejection.Reason.form_structure, (try parser.formParser().parse(allocator, "", record, binding)).rejected);
+    try std.testing.expectEqual(rejection.Reason.form_structure, (try parser.formParser().parse(allocator, "\xff\xfe", record, binding)).rejected);
 }
 
 test "bounded selection defer and cancel forms remain typed unaccepted submissions" {
@@ -513,21 +536,34 @@ test "bounded selection defer and cancel forms remain typed unaccepted submissio
     }) |item| {
         const bytes = try forms.render(allocator, record, binding, item.status, item.text);
         const parsed = try parser.formParser().parse(allocator, bytes, record, binding);
-        try std.testing.expectEqual(item.tag, std.meta.activeTag(parsed.answer));
+        try std.testing.expectEqual(item.tag, std.meta.activeTag(parsed.form.answer));
     }
     const options = [_]c.Option{ .{ .key = "one", .label = "One" }, .{ .key = "two", .label = "Two" } };
     record.answer_schema = .{ .select_one = &options };
     const one = try forms.render(allocator, record, binding, .closed, "two");
-    try std.testing.expectEqualStrings("two", (try parser.formParser().parse(allocator, one, record, binding)).answer.selected_option);
+    try std.testing.expectEqualStrings("two", (try parser.formParser().parse(allocator, one, record, binding)).form.answer.selected_option);
+    const unknown_one = try forms.render(allocator, record, binding, .closed, "three");
+    try std.testing.expectEqual(rejection.Reason.option_unknown, (try parser.formParser().parse(allocator, unknown_one, record, binding)).rejected);
     record.answer_schema = .{ .select_many = .{ .minimum = 1, .maximum = 2, .options = &options } };
     const both = try forms.render(allocator, record, binding, .closed, "two\none");
-    const many = (try parser.formParser().parse(allocator, both, record, binding)).answer.selected_options;
+    const many = (try parser.formParser().parse(allocator, both, record, binding)).form.answer.selected_options;
     try std.testing.expectEqualStrings("one", many[0]);
     try std.testing.expectEqualStrings("two", many[1]);
-    for ([_][]const u8{ "one\none", "unknown", "" }) |answer| {
-        const invalid = try forms.render(allocator, record, binding, .closed, answer);
-        try std.testing.expectError(error.InvalidClarificationInput, parser.formParser().parse(allocator, invalid, record, binding));
+    for ([_]struct { answer: []const u8, reason: rejection.Reason }{
+        .{ .answer = "one\none", .reason = .option_duplicate },
+        .{ .answer = "unknown", .reason = .option_unknown },
+        .{ .answer = "", .reason = .selection_count },
+    }) |item| {
+        const invalid = try forms.render(allocator, record, binding, .closed, item.answer);
+        try std.testing.expectEqual(item.reason, (try parser.formParser().parse(allocator, invalid, record, binding)).rejected);
     }
+    // More options than the record allows.
+    record.answer_schema = .{ .select_many = .{ .minimum = 1, .maximum = 1, .options = &options } };
+    const too_many = try forms.render(allocator, record, binding, .closed, "one\ntwo");
+    try std.testing.expectEqual(rejection.Reason.selection_count, (try parser.formParser().parse(allocator, too_many, record, binding)).rejected);
+    // A cancel without its reason prefix.
+    const bare_cancel = try forms.render(allocator, record, binding, .cancel, "Feature withdrawn.");
+    try std.testing.expectEqual(rejection.Reason.cancel_reason_missing, (try parser.formParser().parse(allocator, bare_cancel, record, binding)).rejected);
 }
 
 test "authority-resolved audit records have no editable answer and exact canonical bytes" {
@@ -540,10 +576,40 @@ test "authority-resolved audit records have no editable answer and exact canonic
     const state = fixture.state(&.{record});
     const bytes = try forms.renderAuthorityAudit(allocator, record, state);
     const captures: c.Captures = .{ .state = null, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = bytes }} };
-    const loaded = try steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = state }, selected), captures);
+    const loaded = try accepted(try steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = state }, selected), captures));
     try std.testing.expectEqual(@as(usize, 0), loaded.submissions.len);
     try std.testing.expectEqual(@as(usize, 0), loaded.protected_forms.len);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "user-editable") == null);
+    // Exact canonical bytes: an audit form that differs by one byte, or by an edit anywhere in it, is rejected.
+    const id = c.Id.parse("S01").?;
+    const validated = try c.validate(.{ .value = state }, selected);
+    for ([_][]const u8{
+        try std.mem.concat(allocator, u8, &.{ bytes, "x" }),
+        try std.mem.replaceOwned(u8, allocator, bytes, "The updated reference", "A different reference"),
+        bytes[0 .. bytes.len - 1],
+    }) |edited| {
+        try expectRejected(try steps.validateClarificationForms(parser.formParser(), allocator, validated, .{ .state = null, .forms = &.{.{ .id = id, .bytes = edited }} }), &.{.{ .id = id, .reason = .audit_changed }});
+    }
+}
+
+test "a recorded form whose requested status contradicts its record is rejected, and a matching one is accepted" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const captures = try fixture.closed(allocator, "S01", true);
+    const first = c.Id.parse("S01").?;
+    var parsed = try parser.stateParser().parse(allocator, captures.state.?);
+    // The record was resolved by the user, so its saved form must still request a close.
+    const matching = try accepted(try steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = parsed }, selected), captures));
+    try std.testing.expectEqual(@as(usize, 1), matching.submissions.len);
+    // The same record whose saved form defers instead (it requests no close, and its answer is the deferral's) is a
+    // contradiction: a state validates a deferral under a resolved record, the form check does not.
+    const deferral = try forms.render(allocator, fixture.record("S01"), .{ .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .status = .open }, .open, "defer: Need product input.");
+    var response = parsed.responses[0];
+    response.submitted_form_bytes = deferral;
+    response.answer = .{ .defer_reason = "Need product input." };
+    parsed.responses = &.{response};
+    try expectRejected(try steps.validateClarificationForms(parser.formParser(), allocator, try c.validate(.{ .value = parsed }, selected), .{ .state = captures.state, .forms = &.{.{ .id = first, .bytes = deferral }} }), &.{.{ .id = first, .reason = .status_contradicts_record }});
 }
 
 test "the clarification parse and form steps propagate parser failures and skip absent state" {
@@ -552,7 +618,7 @@ test "the clarification parse and form steps propagate parser failures and skip 
             if (!std.mem.eql(u8, bytes, "captured state")) @panic("action changed captured bytes");
             return error.InvalidClarificationInput;
         }
-        fn form(_: std.mem.Allocator, _: []const u8, _: c.Record, _: forms.Binding) c.Error!@import("ports/clarification_input_parser.zig").Form {
+        fn form(_: std.mem.Allocator, _: []const u8, _: c.Record, _: forms.Binding) c.Error!@import("ports/clarification_input_parser.zig").Parsed {
             return error.InvalidClarificationInput;
         }
     };

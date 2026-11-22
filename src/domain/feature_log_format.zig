@@ -72,6 +72,12 @@ pub fn eventId(buffer: *[32]u8, sequence: u64) ?telemetry.Identifier {
     return telemetry.Identifier.validate(std.fmt.bufPrint(buffer, "EVENT-{d}", .{sequence}) catch return null);
 }
 
+/// The one bounded canonical emergency record of a logging failure (F0002, ADR 0032): a fixed template over the
+/// workflow's shortcode and the failure's closed code, which cannot exceed its bound. Null only if it would.
+pub fn emergencyLine(buffer: *[log_limits.emergency_max_ascii_bytes]u8, shortcode: telemetry.WorkflowShortcode, code: log_stream.FailureCode) ?[]const u8 {
+    return std.fmt.bufPrint(buffer, "SDDE_LOG_FAILURE workflow={s} level=fatal code={s}\n", .{ shortcode.slice(), @tagName(code) }) catch null;
+}
+
 pub const PromptRecord = struct {
     log_policy_id: telemetry.Identifier,
     binding_id: telemetry.Identifier,

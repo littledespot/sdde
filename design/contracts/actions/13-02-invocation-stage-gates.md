@@ -109,10 +109,21 @@ the Specify workflow.
       `closed` form becomes protected. A form that verifiably holds no submission
       (`clarification_form.holding`) is set aside, not rejected, when it does not parse against its
       record, belongs to no record, or has no registry to match
-      ([§23.2](../23-rendering.md)). Rejects `InvalidClarificationInput` for a record without a
-      form, a form of no record or a non-matching form that holds a submission or cannot be read
-      as an open form, changed audit or saved bytes, or a requested status that contradicts the
-      record.
+      ([§23.2](../23-rendering.md)). A form that breaks a rule is no error: the step returns every
+      such form with the typed reason of the rule it broke (`clarification_form_rejection.Reason`),
+      and none of the answers is accepted. The reasons are a record without a form
+      (`form_missing`), a form of no record that holds a submission (`form_without_record`), a form
+      that is not one UTF-8 form with one answer region (`form_structure`), changed engine text
+      (`engine_text_changed`), an unknown or unterminated requested status
+      (`requested_status_invalid`), an answer that is not valid bounded text
+      (`answer_text_invalid`), a `cancel` without its reason (`cancel_reason_missing`), an option the
+      record does not offer, named twice, or selected in the wrong number (`option_unknown`,
+      `option_duplicate`, `selection_count`), changed audit bytes (`audit_changed`), changed saved
+      bytes (`saved_form_changed`), a changed answer (`answer_changed`) and a requested status the
+      record contradicts (`status_contradicts_record`). The stage ends with them and the binding
+      returns the `blocked` outcome with the `InvalidClarificationInput` diagnostic, before any
+      model call; the CLI prints each form's handle and reason after the outcome. A form that
+      cannot be rendered for its record is still the failed `InvalidClarificationInput`.
 
 Feature-log identities ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)): one
 adapter builds the policy ID (`LOGPOL-` and the SHA-256 of the compiled policy), a fresh random
@@ -120,17 +131,6 @@ adapter builds the policy ID (`LOGPOL-` and the SHA-256 of the compiled policy),
 ([`feature_log_identity.zig`](../../../src/adapters/system/feature_log_identity.zig)); no
 registered action builds them, and nothing recomputes the policy ID. Feature-log operations are
 in [13.9](13-09-logging.md).
-
-## `BuildHistoricalFeatureLogStreamFinalizationEvidenceAction`
-
-Proposed, no code (deferred by [ADR 0009](../../decisions/0009-atomic-workflow-execution.md)):
-join one historical log group to its terminal close observation and released lock
-([§14](../14-orchestration.md)).
-
-## `ValidateHistoricalFeatureLogRunFinalizationAction`
-
-Proposed, no code (deferred by ADR 0009): prove every prior-run log group is finalized before
-the current run's sink starts ([§14](../14-orchestration.md)).
 
 ## `ValidateWorkflowMetadataAction`
 

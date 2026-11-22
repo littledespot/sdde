@@ -29,6 +29,7 @@ test {
     _ = @import("domain/model_exact_values.zig");
     _ = @import("domain/ledger_revision.zig");
     _ = @import("domain/ledger_owner.zig");
+    _ = @import("domain/clarification_form_rejection.zig");
     _ = @import("provider_conformance_test.zig");
     _ = @import("model_log_redaction_test.zig");
     _ = @import("model_exchange_capture_test.zig");
@@ -63,6 +64,13 @@ test {
     _ = @import("llm_provider_interface_test.zig");
     _ = @import("model_provider_bootstrap_test.zig");
     _ = @import("startup_routine_test.zig");
+    _ = @import("feature_log_retention_routine_test.zig");
+    _ = @import("feature_log_close_routine_test.zig");
+    _ = @import("feature_log_prepare_routine_test.zig");
+    _ = @import("feature_log_persist_routine_test.zig");
+    _ = @import("feature_log_failure_routine_test.zig");
+    _ = @import("feature_log_prior_finalization_routine_test.zig");
+    _ = @import("feature_log_rows_test.zig");
     _ = @import("model_request_orchestrator_test.zig");
     _ = @import("repair_operations_test.zig");
     _ = @import("repair_routes_test.zig");

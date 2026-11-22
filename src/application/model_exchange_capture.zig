@@ -138,7 +138,7 @@ pub const Capture = struct {
                 .persisted => {},
                 .dropped => return self.fail(initial.direction, .persistence, .prompt_dropped),
                 .blocked => |code| {
-                    // The logging orchestrator already emitted its emergency record.
+                    // The runtime logging lifecycle already emitted its emergency record.
                     self.stopped = .{ .failed = .{ .code = code, .stage = .persistence, .cause = .{ .sink = code }, .origin = metadata.origin, .direction = initial.direction } };
                     return .blocked;
                 },

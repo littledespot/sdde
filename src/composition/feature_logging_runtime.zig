@@ -7,6 +7,9 @@ const active = @import("../domain/active_feature_directory.zig");
 const artifacts = @import("../domain/workflow_artifact_registry.zig");
 const binding = @import("../domain/feature_log_binding.zig");
 const runtime = @import("active_feature_log_runtime.zig");
+const failure_routine = @import("../application/feature_log_failure_routine.zig");
+const prior_finalization_routine = @import("../application/feature_log_prior_finalization_routine.zig");
+const retention_routine = @import("../application/feature_log_retention_routine.zig");
 const run = @import("../domain/run_outcome.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const telemetry = @import("../domain/telemetry.zig");
@@ -60,13 +63,19 @@ pub const Assembly = struct {
             error.Cancelled => .cancelled,
             error.InvalidArtifactRegistry, error.ArtifactStorageUnavailable, error.InsecurePermissions, error.OutOfMemory => self.fail(.LOG_SINK_FAILURE),
         };
-        switch (self.logs.activate(runtime.runner(self.runtime_owner.?).childBindings(), shortcode)) {
+        switch (self.logs.activate(runtime.runner(self.runtime_owner.?), shortcode)) {
             .ok => {},
             .blocked => |failure| return self.fail(failure),
             .cancelled => return .cancelled,
             .invalid => return self.fail(.LOG_SINK_FAILURE),
         }
-        // §26: retention follows recovery and rotation, before the run starts.
+        // ADR 0026: a crashed prior run's open tails are closed once the current run's own log is active, so retention
+        // finds them closed; both follow recovery and rotation and precede the run's start.
+        switch (self.finalizePriorRuns(shortcode)) {
+            .ok => {},
+            .cancelled => return .cancelled,
+            .blocked => |failure| return self.fail(failure),
+        }
         switch (self.retainHistory(selected_binding, shortcode)) {
             .ok => {},
             .cancelled => return .cancelled,
@@ -82,7 +91,55 @@ pub const Assembly = struct {
         return .{ .ready = active.directory(directory) };
     }
 
+    /// What maintaining the prior runs' logs ended in: finalizing their crashed tails, then pruning their closed ones.
     const Retention = union(enum) { ok, cancelled, blocked: Failure };
+
+    /// Close each crashed prior run's open tail, one group and stream at a time under that run's own stream lock
+    /// (ADR 0026). Every prior group must validate, as for retention; a tail torn before its header row was complete
+    /// has no identity to close and is left whole, and an already closed group is never written. Each failure is
+    /// reported through the active logger, which owns the bounded emergency line.
+    fn finalizePriorRuns(self: *Assembly, shortcode: telemetry.WorkflowShortcode) Retention {
+        var arena: std.heap.ArenaAllocator = .init(self.allocator);
+        defer arena.deinit();
+        const scratch = arena.allocator();
+        const registry = artifacts.registry(self.artifact_owner.?);
+        var history: @import("../adapters/filesystem/feature_log_history.zig").Adapter = .{ .io = self.io, .project_root = self.project };
+        const found = history.discoverer().discover(scratch, registry) catch |err| return switch (err) {
+            error.Cancelled => .cancelled,
+            error.HistoryUnavailable, error.InvalidHistory, error.OutOfMemory => self.reportRetention(shortcode, .LOG_SINK_FAILURE),
+        };
+        var clock: @import("../adapters/system/trusted_log_clock.zig").Adapter = .{ .io = self.io };
+        for (found.tails) |tail| {
+            const owner = binding.createValidated(scratch, tail.binding) catch return self.reportRetention(shortcode, .LOG_SINK_FAILURE);
+            defer binding.deinitOwner(owner);
+            const historical = binding.binding(owner);
+            var sink = @import("../adapters/filesystem/feature_log_historical_tail.zig").Adapter.init(scratch, self.io, self.project, registry, historical, tail.stream) catch |err| return switch (err) {
+                error.Cancelled => .cancelled,
+                else => self.reportRetention(shortcode, .LOG_SINK_FAILURE),
+            };
+            defer sink.deinit();
+            const ports: prior_finalization_routine.Ports = .{
+                .clock = clock.clock(),
+                .acquirer = sink.lockAcquirer(),
+                .inspector = sink.tailInspector(),
+                .recoverer = sink.streamRecoverer(),
+                .closer = sink.streamCloser(),
+                .releaser = sink.lockReleaser(),
+            };
+            const inputs: prior_finalization_routine.Inputs = .{
+                .allocator = scratch,
+                .historical = historical,
+                .stream = tail.stream,
+            };
+            // The lifecycle reports lock, recovery, close and release failures itself.
+            switch (self.logs.finalizePrior(ports, inputs, shortcode)) {
+                .ok => {},
+                .blocked => |failure| return .{ .blocked = failure },
+                .cancelled => return .cancelled,
+            }
+        }
+        return .ok;
+    }
 
     /// Prune each prior run's closed segments older than the retention period,
     /// one group and stream at a time under that run's own stream lock. Every
@@ -109,20 +166,21 @@ pub const Assembly = struct {
                 else => self.reportRetention(shortcode, .LOG_SINK_FAILURE),
             };
             defer sink.deinit();
-            var retention: @import("../application/feature_log_retention_runner.zig").Runner = .{
+            const ports: retention_routine.Ports = .{
+                .clock = clock.clock(),
+                .acquirer = sink.lockAcquirer(),
+                .pruner = sink.segmentPruner(),
+                .releaser = sink.lockReleaser(),
+            };
+            const inputs: retention_routine.Inputs = .{
                 .allocator = scratch,
                 .policy = self.logs.policy(),
                 .current = current,
                 .historical = historical,
                 .target_stream = group.stream,
-                .authorize_action = .{ .clock = clock.clock() },
-                .acquire_action = .{ .sink = sink.lockAcquirer() },
-                .prune_action = .{ .sink = sink.segmentPruner() },
-                .release_action = .{ .sink = sink.lockReleaser() },
             };
-            defer retention.deinit();
             // The lifecycle reports lock, prune and release failures itself.
-            switch (self.logs.retainHistorical(retention.childBindings(), shortcode)) {
+            switch (self.logs.retainHistorical(ports, inputs, shortcode)) {
                 .ok => {},
                 .blocked => |failure| return .{ .blocked = failure },
                 .cancelled => return .cancelled,
@@ -141,8 +199,8 @@ pub const Assembly = struct {
             // Failures before sink construction still use the same bounded
             // emergency action; no feature stream can exist yet.
             var output: @import("../adapters/system/log_output.zig").Adapter = .{ .io = self.io };
-            const emergency: @import("../actions/log/emit_emergency_log_failure_record.zig").Action = .{ .sink = output.emergency() };
-            emergency.execute(shortcode, failure);
+            var diagnostic: failure_routine.Diagnostic = .{};
+            _ = failure_routine.run(.{ .emergency = output.emergency() }, shortcode, failure, &diagnostic);
         };
         self.failure = .{ .blocked = failure };
         return .{ .blocked = failure };
@@ -170,11 +228,7 @@ pub const Assembly = struct {
                     .publication => |prepared| events.emit(.{ .publication_prepared = .{ .outcome = if (prepared == .needs_user) .needs_user else .completed } }),
                 };
                 if (event_failure) |stop| self.stopped(stop);
-                var finalization: @import("../application/feature_log_finalization_runner.zig").Runner = .{
-                    .target = runtime.runner(self.runtime_owner.?),
-                    .shortcode = self.shortcode.?,
-                };
-                switch (self.logs.finalizeActive(finalization.childBindings())) {
+                switch (self.logs.finalizeActive(runtime.runner(self.runtime_owner.?), self.shortcode.?)) {
                     .ok => {},
                     .blocked => |failure| self.stopped(.{ .blocked = failure }),
                     .cancelled => self.stopped(.cancelled),

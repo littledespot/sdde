@@ -41,6 +41,10 @@ pub const Recovery = union(enum) {
     active: StreamState,
 };
 
+/// What one binding's segments are, read without writing: no segment, every segment closed, or an active tail (the
+/// last segment holds no trailer).
+pub const TailState = enum { empty, closed, active };
+
 pub const PersistedEvidence = struct {
     segment_ordinal: u16,
     sequence: u64,
@@ -53,6 +57,38 @@ pub const PersistedEvidence = struct {
 pub const Stop = union(enum) {
     blocked: FailureCode,
     cancelled,
+};
+
+/// One stream's cached state. A cancelled step drops it, because a cancellation can land after bytes were written, so
+/// the file may be ahead of the cache: a dropped stream is recovered from its bytes, as after a crash, before it is
+/// written again or closed.
+pub const Slot = union(enum) { unopened, open: StreamState, dropped };
+
+/// What the logging routines act on: both streams' cached states and the activation flags.
+pub const Runtime = struct {
+    event: Slot = .unopened,
+    prompt: Slot = .unopened,
+    prepared: bool = false,
+    retired: bool = false,
+
+    pub fn slot(self: *Runtime, stream: Stream) *Slot {
+        return switch (stream) {
+            .event => &self.event,
+            .prompt => &self.prompt,
+        };
+    }
+
+    pub fn status(self: Runtime) RuntimeStatus {
+        return if (self.retired) .retired else if (self.prepared) .prepared else .unprepared;
+    }
+};
+
+/// How a logging routine ends: the fact was dropped or persisted, or the routine stopped. A stop is reported (an
+/// emergency line for a failure, none for a cancellation) by the routine's caller, never by the routine.
+pub const Result = union(enum) {
+    dropped,
+    persisted: PersistedEvidence,
+    stopped: Stop,
 };
 
 pub const Outcome = union(enum) {

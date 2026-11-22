@@ -2564,6 +2564,21 @@ const OfflineRun = struct {
     /// Runs the case. Every request must reach the configured provider and be answered, and the report counts
     /// each one.
     fn execute(self: *OfflineRun, io: std.Io, wire: *ScriptedWire) !void {
+        try self.run(io, wire);
+        try std.testing.expect(wire.calls > 0);
+        try std.testing.expectEqual(@as(usize, 0), wire.foreign_targets);
+        try std.testing.expectEqual(@as(?usize, wire.calls), self.report.last_model_call);
+    }
+
+    /// Runs a case that must end before its first request: the provider is never reached and no call is counted.
+    fn executeWithoutModel(self: *OfflineRun, io: std.Io, wire: *ScriptedWire) !void {
+        try self.run(io, wire);
+        try std.testing.expectEqual(@as(usize, 0), wire.calls);
+        try std.testing.expectEqual(@as(?usize, null), self.report.last_model_call);
+        try std.testing.expectEqual(@as(usize, 0), self.report.model_calls);
+    }
+
+    fn run(self: *OfflineRun, io: std.Io, wire: *ScriptedWire) !void {
         const a = self.arena.allocator();
         var keys: @import("../environment.zig").GenerationKeys = .initFill(null);
         keys.set(.anthropic, credential);
@@ -2571,9 +2586,6 @@ const OfflineRun = struct {
         self.specification = try @import("../e2e/invoke.zig").run(io, a, self.project.dir, self.choice, self.captured, keys, store, &self.report, .{ .purpose = .whole_workflow, .transport = wire.port(), .runner_view = &wire.runner });
         if (wire.failure) |failure| std.debug.print("scripted answer unavailable: {s}\n", .{@errorName(failure)});
         try std.testing.expect(wire.failure == null);
-        try std.testing.expect(wire.calls > 0);
-        try std.testing.expectEqual(@as(usize, 0), wire.foreign_targets);
-        try std.testing.expectEqual(@as(?usize, wire.calls), self.report.last_model_call);
     }
 
     /// Neither the specification nor the workflow state exists, and the harness read none.
@@ -2624,6 +2636,35 @@ test "an offline Spec run of each development case reaches publication through t
         const rows = try offline.terminalRows(io);
         try std.testing.expectEqual(@as(usize, 1), rows.published);
         try std.testing.expectEqual(@as(usize, 0), rows.failed + rows.cancelled);
+    }
+}
+
+test "an invalid closed clarification form blocks the Spec workflow before its first request and publishes nothing" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const clarification = @import("../../../src/test_fixtures/clarification_inputs.zig");
+    for ([_][]const u8{ OfflineRun.hello_world, OfflineRun.loan_renewal }) |case_bytes| {
+        var offline: OfflineRun = undefined;
+        try offline.init(io, case_bytes);
+        defer offline.deinit();
+        const a = offline.arena.allocator();
+        var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+        defer config.deinit();
+        // A closed form of no record: it holds a submission nothing can take, so the run accepts no answer.
+        const directory = try std.fs.path.join(a, &.{ config.value().paths.specs, offline.choice.feature, "clarify" });
+        try offline.project.dir.createDirPath(io, directory);
+        const form_path = try std.fs.path.join(a, &.{ directory, "S01.md" });
+        const bytes = try forms.render(a, clarification.record("S01"), .{ .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .status = .open }, .closed, "An answer.");
+        try offline.project.dir.writeFile(io, .{ .sub_path = form_path, .data = bytes });
+        var wire: ScriptedWire = .{};
+        errdefer std.debug.print("blocked run of {s}\n", .{offline.choice.id});
+        try offline.executeWithoutModel(io, &wire);
+        // The run is blocked, distinct from failed and cancelled, and publishes nothing.
+        try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .blocked), offline.report.workflow_outcome);
+        try std.testing.expectEqual(c.Status.workflow_blocked, offline.report.status);
+        try offline.expectNothingPublished(io);
+        try std.testing.expectEqualStrings(bytes, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(16 * 1024)));
     }
 }
 

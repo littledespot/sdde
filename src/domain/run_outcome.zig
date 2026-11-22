@@ -21,6 +21,9 @@ pub const Report = struct {
     /// The display path of the reference entry whose own reason ended the run, printed after that reason's name
     /// (13-03, contract 08). Never authority, and no event, log or E2E report records it.
     reference_entry_path: ?@import("pipeline.zig").StageEntryPath = null,
+    /// The rule each rejected clarification form broke, printed after a blocked outcome (ADR 0025). Never authority, and
+    /// no event, log or E2E report records it.
+    form_rejections: []const @import("clarification_form_rejection.zig").FormRejection = &.{},
     arena: std.heap.ArenaAllocator,
 
     pub fn deinit(self: *Report) void {

@@ -245,10 +245,10 @@ Generate large path/task/requirement spaces to prove invariants:
 
 Use spy child nodes; no real filesystem/model ports are available to the orchestrator.
 
-[ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup and provider
-bootstrap; feature logging not yet) replaces the spy-binding
-tests below with routine tests once each sequence converts. This covers the bootstrap,
-provider-bootstrap and feature-logging cases. Each converted engine routine is tested with fake
+[ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup, provider
+bootstrap and feature logging) replaces the spy-binding
+tests below with routine tests. This covers the bootstrap, provider-bootstrap and
+feature-logging cases. Each engine routine is tested with fake
 ports for:
 
 - step order and every branch;

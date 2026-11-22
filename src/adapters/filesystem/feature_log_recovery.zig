@@ -238,10 +238,14 @@ fn inspectSegment(
     var size = segment.size;
     var bytes = feature_log_file.readSegment(io, allocator, segment) catch |err| return readError(err);
     // A crash while a segment was created can leave it torn before its header
-    // row is complete. Read-only inspection reports that as an active tail.
-    if (tail == .ignore and try headerRow(bytes, heading, stream) == null) {
-        return .{ .closed = false, .last_sequence = if (first_sequence) |first| first -| 1 else 0, .bytes = size, .partial_tail = true };
-    }
+    // row is complete. Read-only inspection reports that as an active tail;
+    // recovery refuses it before any write, because truncating a segment with
+    // no identified header would extend what recovery may do to a log file.
+    if (try headerRow(bytes, heading, stream) == null) switch (tail) {
+        .ignore => return .{ .closed = false, .last_sequence = if (first_sequence) |first| first -| 1 else 0, .bytes = size, .partial_tail = true },
+        .truncate => return error.InvalidSegment,
+        .reject => {},
+    };
     if (bytes.len == 0) return error.InvalidSegment;
     var partial_tail = false;
     if (bytes[bytes.len - 1] != '\n') {

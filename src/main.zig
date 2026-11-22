@@ -42,6 +42,11 @@ pub fn main(init: std.process.Init) !void {
             .invalid, .blocked, .failed, .cancelled => {
                 try writeFailure(init.io, @tagName(execution));
                 if (report.last_operation_rejection) |rejection| try writeFailure(init.io, @tagName(rejection.cause));
+                // One line for each clarification form the inputs stage rejected, with the rule it broke (ADR 0025).
+                for (report.form_rejections) |form| {
+                    const name = form.id.filename();
+                    try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "{s}: {s}", .{ name[0..3], @tagName(form.reason) }));
+                }
                 if (report.provider_failure) |detail| {
                     var line: std.Io.Writer.Allocating = .init(init.arena.allocator());
                     try detail.write(&line.writer);

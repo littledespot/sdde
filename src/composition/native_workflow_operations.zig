@@ -378,7 +378,7 @@ const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig")
 }, .{
     .id = "core.feature-input-read@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read },
-    .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
+    .allowed_terminal_outcomes = &.{ .ok, .blocked, .failed, .cancelled },
 }, .{
     .id = "core.reference-ingestion@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser },

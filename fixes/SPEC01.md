@@ -40,11 +40,15 @@ weakened / unsupported addition / contradiction:
 Link-derived `unsupported_addition`, counted apart ([Z_SPEC01](Z_SPEC01.md) T7): 1 in hello-world (1 false link in
 29 records) and none in loan-renewal (1 `partial` link in 55). Advisory scores are scored against the case rubrics
 (`evaluations/e2e/<run>/evaluation.json`); scorer judgment moves one by about ±3.6, and keep decisions use the
-accuracy counts (§2 rule 6). **Ruling needed** (the user's): this revision doesn't count a generic Given such as
-"installed and available to run" or "with a known existing due date" as an unsupported addition, and the revision
-before it did (3 in the hello-world reference). It decides a score in 3 of the 5 publications of Q14's set
-(hello-world run 1 and both loan-renewal runs) without changing a pass. It would add a minor
-`unsupported_addition` to each of the three loan-renewal publications of Q26's set.
+accuracy counts (§2 rule 6). **Ruled** 22 November 2026 (user: "update documenation with recommendation for
+decisions 1 and 2"): a Given that states a precondition the source doesn't, however generic ("installed and
+available to run", "with a known existing due date"), is a minor `unsupported_addition`, as the revision before
+`69c55877…` counted it (3 in the hello-world reference); `evaluate-e2e` SKILL.md states it. Reason: Q26 was decided
+on these Givens being defects, and a revision that doesn't count them can't measure Q26's class. The ruling decides a
+score in 3 of the 5 publications of Q14's set (hello-world run 1 and both loan-renewal runs) without changing a pass,
+and adds a minor `unsupported_addition` to each of the three loan-renewal publications of Q26's set. The skill's
+revision changes, so the next set's reference is re-scored on it first (§2 rule 5); the table above stays
+`69c55877…`'s until then.
 
 **Retained runs:** `zig-out/e2e-spec/` holds the Haiku set (`2026-11-17T08-4*`), D8.4's set (`21-5*` and
 `22-0*`), Q23's set (`23-4*` to `23-58-08Z` and `2026-11-18T05-3*`), Q24's set (`2026-11-18T06-5*`) and two
@@ -169,10 +173,13 @@ change except E7), **T** tests, **C** code-review findings (§10; unscheduled un
 otherwise). "Gap" means between measurement sets. Each screen
 batch and live set needs its own approval (AGENTS.md).
 
-**Output track:** no item awaits a screen or a set. Q26, the last, is kept; §4 holds its open parts.
+**Output track:** Q26's follow-up (§4 Q26, decided 22 November 2026) is the only item awaiting a set: one change
+set, then screens of the call kinds it changes and a set, each approved.
 
-**Engine track, in gaps:** E3's feature logging waits on its preconditions (§5 E3); E7 last. E0 is on
-hold. **Tests:** T3 in any gap; T4 with E1–E4. **Adjudication:** the evaluate-e2e skill for every set.
+**Offline, in gaps** (decided 22 November 2026), each proven byte-identical in every development-case request
+(§2 rules 1 and 10): C50's test (§10), B7's citation binding (§8), then C42, C41, C45 and C22 (§10).
+
+**Engine track, in gaps:** E7's later stages wait on the user deciding the recommendations in §5 E7. E0 is on hold. **Tests:** T4 with E1–E4. **Adjudication:** the evaluate-e2e skill for every set.
 
 **Open problems without an item.**
 
@@ -197,27 +204,6 @@ hold. **Tests:** T3 in any gap; T4 with E1–E4. **Adjudication:** the evaluate-
   disposition that no Q21 option reaches). The limit stays recorded in ADR 0038:430-437.
 
 ## 4. Quality phases (Q)
-
-### Q2b. Generic content-loss guard for repairs
-
-**D2.3** implemented and kept 1 November 2026; record in [Z_SPEC01](Z_SPEC01.md) Q2b D2.3. `collection` is a tagged
-union (Z_SPEC01 "Refactors that leave request bytes unchanged").
-
-Out of scope unless harm appears: the statement, signal and conflict coverage inserts and
-token classifications.
-
-### Q8. Source-claim granularity (B7)
-
-**Defect:** restatement and claims lost in reconciliation when citations repeat. ADR 0036
-Decision 3 and ADR 0038 Decision 4 (the list-item split,
-`reference_extraction_text.zig:144-183`) stay as they are (D8.1, decided 3 November 2026).
-
-### Q13. Inline source lines
-
-D13.1 (post-generation reviews removed) and the inline source lines are in
-[Z_SPEC01](Z_SPEC01.md). **D13.4** (decided 1 November 2026): principles are context and
-constraints only, never origins, and never modified (design.md §3.3 invariant 33). Nothing checks what a shown source
-line means beyond the advisory evaluate-e2e link check.
 
 ### Q14. Scenarios bound to their claims
 
@@ -263,8 +249,28 @@ Open parts only:
   scripted integration scenario drives a Given-less criterion; the owner tests and `verify` cover it. No run has
   written an edge case, so an edge case's `GIVEN` line for a Given-less criterion is unexercised live (Q14's
   edge-case bullet).
-- **Generic Givens** ("…with an existing due date", 3 of 15 loan-renewal criteria in the set) wait on §1's
-  ruling needed.
+- **Generic Givens** ("…with an existing due date", 3 of 15 loan-renewal criteria in the set) are a minor
+  `unsupported_addition` under §1's ruling (22 November 2026). The removed presupposition sentence did not remove
+  them, and no open change targets them; later sets count them.
+
+**Follow-up decided** 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6");
+unbuilt. One change set:
+
+- Key the criterion's and the edge case's `given` guidance apart (`packet-guidance/v8`), so the request no longer
+  tells the model to omit a Given where the schema requires one. `/preflight` settles how the held-Given repair
+  request and the field rule at `text_field_policy.zig:110` read beside the two entries.
+- Reword `links.prompt.md:2` ("its given and when cover that situation") so it holds for a criterion without a Given.
+- Add a scripted integration scenario that drives a criterion without a Given, and an edge case linked to it, to
+  publication.
+
+It removes a conflict in the request that the evaluator traced (`prompt_conflict`, `likely`), so it is request
+hygiene, kept on guards plus its **Keep if** (§2 rule 6, as Q4): no placeholder Given, and no criterion dropping a
+Given its source states. **Set record** (§2 rule 6, before the set): three runs of each development case, extended to
+at most eight per case; reference Q26's three sets (the same request bytes, §2 rule 7), re-scored first on the skill
+revision that carries §1's ruling (§2 rule 5). Guards: lost source requirement, and the publication rate per case.
+Watch: weakened obligation, `unsupported_addition` in a Given, a Given repeating its When, and Q14's restated edge
+cases if any are written. **Next:** `/preflight`, fixtures at the owners, screens of the changed call kinds, then
+the set.
 
 ## 5. Engine track (E)
 
@@ -292,69 +298,76 @@ Budget-stopped runs publish nothing while it is on hold (none since D13.1).
 
 ### E3. Engine routines (A3, ADR 0032)
 
-Startup and provider bootstrap implemented 12 November 2026 and kept 14 November 2026; record in
-[Z_SPEC01](Z_SPEC01.md) E3. Open: feature logging, which waits on its preconditions (ADR
-0032, "Scope and order"). The baseline tests for cancellation under a lock and for the emergency
-lines exist since E6.
-The policy-transition coordinator's authority is decided on both sides (prior-run finalization's, ADR
-0026; the same-run transition's, ADR 0032, decided 14 November 2026). §10 C28 (decided 21 November 2026)
-deletes the same-run transition, which has no producer, and the `finalizeHistorical` stub, so the conversion
-has two coordinators left, not three.
-
-### E6. Logging and visibility gaps
-
-- **Prior-run crash finalization** (§14.10). **Authority decided 14 November 2026** (user:
-  "recommendation accepted"): segment-header identity alone, with no persisted bootstrap
-  lineage (ADR 0026 amended; §14.10 and ADR 0032 updated). Building it is deferred: a crashed
-  run's logs stay whole and unpruned, and only damaged prior logs block later runs. Before
-  building it, check that header identity suffices where the runner selects the prompt stream
-  from the policy (`feature_log_runner.zig:87`), and decide its order against the current
-  activation. Build it as an ADR 0032 routine; §10 C28 deletes today's `finalizeHistorical` stub and the
-  same-run policy transition. E3's feature-logging conversion waits on ADR 0032's other preconditions
-  (§5 E3).
+Startup, provider bootstrap and feature logging (six routines: persist, prepare, close, retention, failure and
+prior-run finalization) are implemented; record in [Z_SPEC01](Z_SPEC01.md) E3 and "E3 feature logging, E6 prior-run
+crash finalization and E7 Stage 1".
 
 ### E7. Clarification answer recovery (R2, ADR 0025)
 
-Not started; no §13 authentication chain exists in `src/`. Fresh answers can't complete
-recovery: refresh rejects new submissions (`clarification_refresh.zig:65`); provenance
-rejects nonempty response-ID sets (`specification_provenance.zig:88`,
-`specification_support_evidence.zig:171`); form validation returns one
-`InvalidClarificationInput` (`validateClarificationForms` in `src/actions/specify/prepare_inputs.zig`);
-resolved needs are empty (`src/actions/clarification/build_resolved_clarification_needs.zig`);
-passive literal origins are source-only (`passive_literals.zig:16`), so answer text can't get
-ADR 0025's response-owned origin (0025:70-71); generation doesn't consume answers (it binds
-empty response-ID sets, `specification_source_binding.zig:136`, `:188`). Complete the
-[§17.4 lifecycle](../design/contracts/17-specify.md#174-specification-clarification-behavior)
-under ADR 0025. Live validation needs a user-chosen clarification-expected case run twice with
-forms answered between runs; neither the case nor a two-run harness flow exists. Last, after
-E1–E4. §10 C8 adds record-lifecycle gaps.
+**Stage 1 built 22 November 2026** (typed per-form rejections; [Z_SPEC01](Z_SPEC01.md)): an invalid closed form ends the
+run `blocked` before any model call, with one typed reason per form in the CLI report. The rest is not started; no §13
+authentication chain exists in `src/`. Fresh answers can't complete recovery: refresh rejects new submissions
+(`clarification_refresh.zig:65`); provenance rejects nonempty response-ID sets (`specification_provenance.zig:93`,
+`specification_support_evidence.zig:171`); resolved needs are empty
+(`src/actions/clarification/build_resolved_clarification_needs.zig`); passive literal origins are source-only
+(`passive_literals.zig:16`), so answer text can't get ADR 0025's response-owned origin (0025:70-71); generation doesn't
+consume answers (it binds empty response-ID sets, `specification_source_binding.zig:136`, `:196`). Complete the
+[§17.4 lifecycle](../design/contracts/17-specify.md#174-specification-clarification-behavior) under ADR 0025. §10 C8 adds
+record-lifecycle gaps and C49 the clarification subject.
+
+Remaining stages, each landable alone (offline unless stated): 2 response-owned literals and response-ID admission from an
+empty resolved set (no behaviour change); 3 the authentication chain, registry, port, OS-account adapter and runner
+lease; 4 accept, publish and close (`clarification-state/v3`); 5 stable subjects (C8 bullet 2, C49: key on source
+identity; removing `record_kind` from the schema changes request bytes and needs a live set); 6 generation consumes
+answers (request bytes change only for runs that have responses); 7 the harness two-leg flow; 8 live runs.
+
+**Decisions each later stage needs** (the user's; recommendations recorded 22 November 2026, none decided):
+
+- **Publishing responses** (stage 4). ADR 0025:73-74 publishes responses before refresh; ADR 0009:35 keeps output private
+  until whole-workflow validation. Recommendation: hold accepted responses in memory through refresh and generation and
+  publish them at terminal publication on every outcome, as ADR 0018 publishes logs (`workflow_publication`), amending
+  ADR 0025:73-74 only. ADR 0025:79-80 (responses survive a later failure) still holds; after an interruption the forms are
+  untouched and the next run accepts them again.
+- **Actor-evidence registry** (stage 3; none in `src/`). Recommendation: a feature-directory file with its own closed
+  schema, `actor-evidence-registry/v1`, published with the responses. It is a fifth registered output: case v4 and the
+  next report version, landing after a set is adjudicated (§2 rule 12).
+- **Answer-derived literals** (stage 2). Recommendation: re-derived each run from the published response, the sole durable
+  owner of the submitted bytes (ADR 0025:95-96, §23.2).
+- **A valid `cancel`** (stage 4). The run ends `cancelled` (ADR 0025:78). Recommendation: as the invalid-form path, accept
+  no form (valid ones included), write nothing, leave every form as the user left it and make no model call.
+- **Authentication node** (stage 3). ADR 0031:372-376 limits a stage action to `none` or `filesystem_read`, and
+  `SideEffect` (`src/domain/pipeline.zig:115-121`) has no identity member. Recommendation: the standalone
+  `AuthenticateActorAction` ADR 0025 names, with one new `SideEffect` member `actor_authentication`, only
+  `AuthenticationPort`, and the runner as lease issuer (ADR 0025:89).
+- **Proof regime and defect class.** Recommendation: rule 10 for stages 2, 3, 4 and 6 (no request-byte change on runs
+  without responses) and a rule 6 set for stage 5; defect class `contradiction`, guarded by the clarification-expected
+  case's publication rate, which is zero without E7.
+- **Next state version** (the first stage that changes it). `src/` is at `specification-state/v28`; ADR 0041 names v29.
+  Recommendation: whichever lands first takes v29, and ADR 0041 says "the next version" instead.
+- **Clarification-expected case** (stage 7). Recommendation: a derivative of a development case with two contradictory
+  bullets, neither a reserved qualification feature nor a tuning target.
+- **Authoring answers between runs** (stage 7). Recommendation: an `answers` member in case v4. One launch runs run 1,
+  fills the open forms from `answers`, then runs run 2. It touches the "case principle files restate no story
+  requirement" rule (answers sit in the case file, not a principle file, but state requirement content) and the
+  evaluate-e2e skill.
+- **Run 2's rubric and adjudication basis** (stage 7). Recommendation: run 1 is adjudicated as a correct pause (a form for
+  the contradiction, nothing published); run 2 on the case rubric with the declared answer counted as source: the chosen
+  bullet kept, the other dropped, the response ID cited.
+- **Gate re-run after E7** is the user's (ADR 0034:91-95, which recommends re-running after a structural change lands).
 
 ## 6. Test track (T)
 
-### T3. Coverage gaps (B5, B7)
-
-- The retained live GPT-OSS capture, the only exchange with a real §22.6 prefix, has the claim shape ADR 0036
-  removed, so it is assessed `incompatible`. A derived exchange (`.prefix_normalized` in
-  `provider_compatibility_tests.zig`, the contract's first malformed opening in front of a schema-valid candidate) is
-  assessed `compatible`, which proves the harness classification only. A current-shape GPT-OSS capture needs an
-  approved `provider-compatibility` run; no slot selects that model now.
-- Proof limits recorded at implementation ([Z_SPEC01](Z_SPEC01.md)): no scripted scenario
-  quotes an exact copy, so D7.4's freeze doesn't reach its path (requests never carry spans, and the owner has unit
-  tests); no scripted statement record names both a taken and an untaken claim, so D16.2's partly taken record is
-  proven only at admission. The baseline generator gives every record the group's whole claim
-  selection (`associateFixtureResponse`); only the story-restatement runs keep per-record claims
-  (`own_claims`), in their first batch, so a partly taken record needs a per-group generator.
-
 ### T4. Architecture rules and replay (A5)
 
-`architecture_test.zig` has 110 tests, about 80 of them pinning named files by substring. Built: every
-`expectAbsent` reads code only (comments are masked by the tokenizer; text that isn't Zig is judged as is),
-imports are read from tokens, and the layer rules for orchestrators, runners and `domain/` and `ports/` are
-import rules. Open: the per-file pins that stand for an ADR rule (ADR 0030:475-479, 0031:372-388, 0032:329-341,
-0033:367-370, 0011:187-188) become contract-shape rules one at a time, each keeping its rejected fixture, since
-none may be loosened and a file-name pin has no graph equivalent without a per-file allowlist. The precondition
-"E1–E4 remove files" no longer holds: only E3's logging conversion can still remove pinned files. Prefer
-replaying retained captures over extending `spec_generation_responses.zig`.
+`architecture_test.zig` still pins many named files by substring. Built: every `expectAbsent` reads code only
+(comments are masked by the tokenizer; text that isn't Zig is judged as is), imports are read from tokens, the layer
+rules for orchestrators, runners and `domain/` and `ports/` are import rules, the logging pins (ADR 0032:331-343,
+ADR 0026) are contract-shape rules (walks over non-test `src`, an allowlist of the surviving `*_child_bindings.zig`,
+the routine-caller table), and every test file must be reachable from a build root. Open: the remaining per-file pins
+that stand for an ADR rule (ADR 0030:482-486, 0031:371-387, 0033:366-369, 0011:187-188) become contract-shape rules one
+at a time, each keeping its rejected fixture, since none may be loosened and a file-name pin has no graph equivalent
+without a per-file allowlist. No planned change removes the files they pin. Prefer replaying retained captures over
+extending `spec_generation_responses.zig`.
 
 ### T5. Brittleness counts
 
@@ -387,21 +400,46 @@ phase reports on. T5.4's seven sites are the ones under "Repair requests without
   `source_id`, `block_id` or `verbatim` to the claim's chunk: the snapshot validator compares ordinals only, and
   `source_citations.validate` checks all four fields at admission. A state with a retargeted `source_id` or an
   altered `verbatim` and an unchanged `location` reads back.
+- **Decided** 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"); unbuilt.
+  Readback checks each stored citation's `source_id`, `block_id` and `verbatim` against the claim's chunk by reusing
+  `source_citations.validate`, the admission check, from `reference_snapshot.validateRecords`. `specification-state/v28`
+  isn't advanced (B7's precedent, user: "Authorize, no version advance"), so a state with a retargeted or altered
+  citation stops reading back with `InvalidSpecificationState`. ADR 0036's Persistence bullet and 24-workflow-state.md
+  say so, landing with the code. Offline; requests stay byte-identical.
 
-### Design–code conflicts (7 November 2026 review)
+### Standing decisions of closed items
 
-**Defect:** none in published output: design text that the code contradicts or lacks misleads
-design-routed changes. **Owner:** the cited documents (ADR and AGENTS.md changes are policy
-edits). **Next:** **Decision** marks what only the user settles.
+Closed 22 November 2026 with nothing left to build (user: "update documenation with recommendation for decisions 3
+4, 5, 6"). These decisions still bind:
 
-- More, from the 11 November 2026 code review: §10 C39.
+- **Q2b:** the statement, signal and conflict coverage inserts and the token classifications stay out of scope
+  unless harm appears.
+- **Q8 D8.1** (3 November 2026): ADR 0036 Decision 3 and ADR 0038 Decision 4 (the list-item split) stay as they are.
+- **C4** (20 November 2026): the feature log's `model.completed` gains no cause field (the E2E report's
+  `last_provider_rejection` and the CLI carry it), and result-schema and composition rejections get no cause per
+  profile section (F0005 §9).
+- **C15:** the clean path's validator re-runs, the codec's second parse and the registry's binding re-check stay. Each
+  costs time only, and removing one needs an ADR 0022 amendment, value-decode parity or a sealed `ValidatedGraphs`
+  first.
+- **C19 and C25:** no import-acyclicity rule for `domain/`, which would be new authority; C19's shrink-only list and
+  C25's rank pin stay.
+- **C20** (21 November 2026): `DataKey` stays one closed enum; a key with no producer, consumer or schema is deleted
+  when found.
+- **C31** (21 November 2026): the engine-config reader gains no re-stat, identity or path re-binding (F0008:75
+  requires them of the provider reader only).
+- **C38** (20 November 2026): `/verify` judges a pass by its exit status and the `--summary line` count; no
+  injectable emergency sink.
+- **C47** (20 November 2026): the per-scenario step trace, the calibration reports and `source_loss_calibration.zig`'s
+  live-trial slot stay.
 
 ### Retired SPEC01 IDs cited elsewhere
 
 "SPEC01 <ID>" citations of items now in [Z_SPEC01](Z_SPEC01.md) resolve there. Items removed on
 20 November 2026 as not affecting the Spec workflow's completion, tech debt or simplicity (Q4, Q7, Q17,
 E1, E2, E5, E15, T2, H1–H5, R1, R6, C9, C11–C14, C16, C17, C48 and the wider-scope list) are in git
-history.
+history. Items closed on 22 November 2026 with nothing left to build (Q2b, Q8, Q13, T3, C4, C15, C19–C21, C25, C28,
+C30, C31, C36–C39 and C47) and the emptied §8 "Design–code conflicts" list are in git history and, where built, in
+Z_SPEC01; their standing decisions are above.
 
 ## 9. Guardrails
 
@@ -456,51 +494,13 @@ code, do complete end 2 end analysis, do not guess").
   so those counts can't be retaken, and the six retained runs of 14 November serve where a
   finding says so. The four `anthropic` / `claude-haiku-5-5` runs of 9 November 2026 were left
   out and no model is compared (§9). T5's counts were not retaken.
-- **Status:** nothing here is approved or scheduled, and each item needs its phase approval
+- **Status:** an item is unscheduled unless it records a decision, and each item needs its phase approval
   (§2). An item that names no defect class targets no published-output defect: it reports a fact
   or asks a Decision, and proposes no change (AGENTS.md: cost is reported, never the reason for
   a change). An item that changes a model request is a Q phase with a named class. **D** marks a
   cost that an accepted ADR or a contract requires, so removing it is a **Decision**.
 
 ### 10.1 Failures first
-
-**C4. Most failures report one payload-free name.**
-
-- **Provider and authorization (built 20 November 2026, Z_SPEC01):** the run report and the CLI
-  carry the last call's typed failure (contract 08). **Decided** 20 November 2026 (user: "update the
-  documatation with above recommendations"):
-  - **Closed, no change.** The feature log's `model.completed` gains no cause field
-    (27-observability.md:103-105): the E2E report's `last_provider_rejection` and the CLI carry the
-    cause. A provider stop and a runner rejection print no provider line (contract 08:37-39): every
-    stop writes a warning `model.provider_stopped` with its reason (27-observability.md:141), and
-    retry exhaustion prints its own line (`main.zig:65-68`).
-  - **Open residual.** ADR 0028 rejects an undocumented field, so a new provider field would fail every call
-    with no retry (`decode=body_refused`); no retained run has shown it. The E2E harness rejects a missing or
-    invalid key before the run (`test/harness/environment.zig`), so only the CLI path reports `credential=`.
-- **Workflow definition (built 20 November 2026, Z_SPEC01):** a rejection used to be one of two
-  codes with no step, key or rule. It now prints a rule class, the definition's path and the
-  step or resource after its code; the schema, compile and graph owners still return one error
-  each, and a rule is one per section or stage, so a finer cause (the data key a data-flow
-  rejection names) is not reported. A key missed from a
-  hand-written invalidation list (`source_omission.zig:156-158`; `required_authority.zig:124`)
-  fails the same way, because the data-flow check rejects producing a key that is still
-  available (`workflow_data_flow.zig:87-95`).
-- **Result schemas and compositions:** a rejected resource already prints its file and
-  `resource=<id>` under `compiled_resources` (`workflow_graph_compilation.zig:264`, `:276`); the
-  cause inside it is not reported, because `model_result_schema.zig` (94 `invalid()` sites) and
-  `json_composition.zig` (47) return one error each. About 40 of the schema sites and 35 of the
-  composition sites are startup compile; the rest are request-time restriction and projection
-  (`restrictFieldPolicies`, `narrowChoice`, `projectVariants`), which F0005 §9 does not govern.
-  **Decided not to build** (user, 20 November 2026, after the preflight): a cause per profile section
-  would need a typed slot through the four compiler-port functions and about nine new rule classes,
-  amending F0005 §9 ("a rule names a stage, not a cause"; "never per call site"), 13-01 and ADR 0032,
-  for a diagnostic that names no published-output defect. Four unrecorded returns in
-  `compileResources` (`:253`, `:256`, `:257`, `:275`) print the step only.
-- **Reference ingestion (built 20 November 2026, Z_SPEC01):** an entry that could not be read or
-  decoded fails `validateAccounting` with the error of its own reason, and the CLI prints the first
-  failing entry's display path after that name (contract 08). The nine names stay.
-- **Toolchain:** every toolchain failure is `error.InvalidToolchain`; the stage names the
-  failing step in the event (`Step` in `prepare_toolchain.zig`), not the rule that failed.
 
 **C8. Clarification records (adds to E7).**
 
@@ -514,65 +514,7 @@ code, do complete end 2 end analysis, do not guess").
   survive a rebuild. 24-workflow-state.md:115-117 says regenerated IDs don't define a new
   clarification.
 
-### 10.2 Optimisation
-
-**C15. Repeated native work (no time to recover; one rule kept at many sites).** What no ADR
-requires is built: one registry structure check per runner, one copy of a packet chain's source
-bytes, no unused token-classification snapshot, one outcome-flow check at startup, and one parse of
-`spec.md` at publication (four renders, as 13-05:299-311 and :328-330 require). What stays:
-
-- The clean path re-runs validators: `validate-dispositions` three times and `validate-signals`
-  twice with a conflict group, once fewer without one, because each release returns to the first
-  validator (`release-collected` in `validate-reconciliation`). Not routing alone: the collect
-  actions invalidate the carrier the next validator reads, so only a validator step rebuilds it. Removing
-  the re-runs means the collect actions replace the carrier and the YAML gains release sites, an ADR 0022
-  amendment (:24-26, :161) and a 13-03 amendment; no clause requires the repeats, and the validators cost
-  little beside a model call. `check-summary-reuse` and `validate-summary` run once per partition, which
-  ADR 0022:63-70 and :88-91 require. Inside the parent path `reuse-summary` re-runs `reusableSummary`
-  after `check-summary-reuse`; removing that needs a new `DataKey`, and ADR 0022:63-69 keeps a stale child
-  failing, never falling back.
-- The codec parses a response, re-serialises it and parses it again (`decode` in
-  `model_candidate_json.zig`). Nothing needs the re-serialised bytes, but a value-based decode needs
-  parity for the types with `jsonParse` hooks (`specification_source_binding.zig:40`,
-  `positive_json_integer.zig:26`), which isn't established.
-- Registry publication re-checks the resource bindings as `cloneGraph`'s precondition
-  (`workflow_registry.zig:158`; `src/workflow_registry_test.zig` pins it). `ValidatedGraphs` is a plain
-  struct, not a sealed proof, so dropping the check needs it sealed first.
-
 ### 10.3 Coupling
-
-**C19. The generic domain core imports the Spec stages.** The engine's error set is a union of
-operation error sets (`operation_error.zig`, re-exported at `workflow_execution.zig:52`), and
-`model_request_identity.zig` and `workflow_output.zig` also import a Spec-stage module; each Spec file
-imports `pipeline.zig` for data keys, and `pipeline.zig` and `pipeline_data.zig` import each other. ADR
-0003:100-101 says the four workflows are "not special cases in the generic engine". Built: a rule in
-`architecture_test.zig` lists the generic engine's domain files that import a Spec stage (by file-name
-prefix), those three today, and fails on a new one or a stale entry, so the list only shrinks. No clause
-forbids an import cycle in `domain/`, so none is asserted; a cycle-free rule would be new authority.
-Whether the 119-file cycle the 11 November review counted is one strongly connected component was never
-established by a graph pass.
-
-**C20. `DataKey` is one closed enum of 128 keys** (`pipeline.zig:4-133`): 20 logging, 17 model
-request and 2 output keys, and 89 startup keys and keys that only Spec operations touch. Every
-per-step structure is sized by the total. **D:** 06-pipeline-nodes.md:38 alone requires one enum
-(ADR 0003:84-85 states only the engine-change rule); splitting it edits that contract, and about 20 architecture
-pins name keys.
-**Decided** 21 November 2026 (user: "update the documentation with the above recommendations"): keep the one
-closed enum. Per-workflow enums would break ADR 0003:109-110 (workflows are run-time YAML sharing operations), an
-enum assembled from contracts is the same enum, and a union of owner enums loses dense indexing (06:9-10, :38); the
-size is cost only, and the kernel keys' move was refused on 19 November 2026 ("E1 DataKey - NO",
-[Z_SPEC01](Z_SPEC01.md)). A key with no producer, consumer or schema is deleted when found. The enum then shrinks
-only through the feature-logging conversion (E3) and stage conversions.
-
-**C21. The generic outcome association keeps closed readers by decision.** The two Spec result types in the
-`reclassify` arms are gone: the binding reads the owner's sealed result and the association checks the
-`ResultOutcome` it names. A blockable repair still needs a member of `BlockedReader` and its arm in
-`authorizationBlocked`, a second diagnostic admission a member of `AdmissionReader`, and a second clarification
-route a member of `RouteReader`, each with its arm; a missing arm does not compile. ADR 0033:195-201, F0005:660-663
-and 13-04:326-332 make them closed, so owner-supplied readers would be an amendment. A second workflow with its own
-gate or refresh descriptor still edits the association and the binding. The request descriptors keep their evidence
-keys in `requestOperation`: closed, because every model call runs each of the 14 kernel stages that produce them,
-and a workflow definition can't author them (ADR 0030).
 
 **C22. Change amplification (traced).**
 
@@ -581,6 +523,8 @@ and a workflow definition can't author them (ADR 0030).
   request bytes unchanged"), so the operation costs an import alias, a field and its initializer there; the YAML,
   `DataKeys` and schemas are unchanged. The initializers are still written by hand, which the compiler checks against
   the fields, and `model_request_operations.zig` keeps its own `count = 8` and parallel rows (a test guards it).
+  **Decided** 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"); unbuilt:
+  that count and its rows are derived from one struct, as `Operations` is.
 - One record family: three Zig files the compiler enforces and `Kind.isScopeSection`, now a method with an
   exhaustive switch; a test requires a `record_<kind>` definition and the `record_kind` member for every family
   but the entity. `packet-guidance.json` was already checked at decode. `records.prompt.md:9-13` names the families
@@ -596,88 +540,15 @@ tests and the harness, and amends text-field-composition.md:53 ("one closed nati
 21 November 2026 (user: "update the documentation with rhe recommendations"): it pays off only when a second
 workflow adds its own text fields, so build it with Plan's first text field, not before.
 
-**C25. Repair, omission and support modules still import each other.** The reconciliation core and its
-diagnostic no longer import them (the repair target types moved to the diagnostic, which carries the pending
-repair), and `Accounted.global()` is the one place the checked chain is unwound; both are pinned in
-`architecture_test.zig`. `source_omission.zig` no longer imports `reference_reconciliation_repair.zig`,
-`reference_extraction_repair.zig` or `specification_support.zig`: the repair-authority derivation is
-`source_omission_authority.zig` and `Authorization`, `Replacement` and `Repair` are `source_omission_repair.zig`'s.
-A rank pin in `architecture_test.zig` holds the direct-import order of those six modules; it does not claim
-transitive acyclicity. A 58-module domain cycle group remains: `source_omission` with `required_authority`
-(`:5`, `:101-102`, `:516`), `source_omission_comparison` and `specification_support_evidence`, and
-`reference_extraction.zig:69`, `:94` with `reference_extraction_repair.zig`. No document names these edges.
-
-### 10.4 Simplification
-
-**C28. The run's cancellation source; what stays.** The operator's interrupt is the one cancellation source
-(`src/adapters/system/interrupt_source.zig`, installed by `composition/root.zig` `run` and the E2E harness; ADR
-0030 "Request deadline"). A lease expiry still reaches `Rejection.deadline_exhausted`; `RuntimeStatus` has no deadline member.
-- **The request debugger installs no handler.** Its idle `accept` loop never reads the status and `Io.Threaded`
-  retries its sleeps on EINTR, so a handler would swallow the first Ctrl-C; the default kill stays there.
-- **Exit code:** a cancelled CLI run exits 1, not 130 (`main.zig:42-76`); a second Ctrl-C is the default kill.
-- **Recovery no longer scans the run's other bindings:** a stray entry in the run directory outside the binding
-  directory no longer fails recovery, and `rotation.maxSegments` counts the current binding's segments, which is
-  the run's while a run has one binding.
-- **Unproven:** the cancel-within-a-slice path is tested at the timer with a fake clock and a flipping status
-  (`model_http_test.zig`), at the adapter with `raise`, and through the harness's `invoke.run` with a real SIGINT
-  raised on a scripted call (Z_SPEC01 "Test-track closures"). Not proven: a Ctrl-C the kernel delivers to an arbitrary
-  thread, `Io.Threaded` sleeps retried on EINTR under the real HTTP adapter, and the CLI exit code.
-
-**C30. Typed machinery whose result is constant; what stays.** The general gate mechanism
-stays with no production gate, which Plan's predecessor gates need; nothing now registers `required_authority_gate`
-as gate evidence, so only the outcome ledger and the sole writer (`validate-required-authority-reconciliation`)
-enforce it. A definition that routes a rejected authority result onward runs the later step and still can't end
-`ok`; one that skips validation leaves its step unreachable (`required_authority_workflow_test.zig`).
-
-**C31. Per-kind and copied code (traced unless a line is cited).** Built: one persist path for both log
-streams, one segment open and one whole-segment read in `feature_log_file.zig`, one generic `Revision`, one `select`
-over the statement, signal and conflict kinds in `reference_reconciliation_repair.zig`, and one ledger owner
-(`ledger_owner.zig`, shared by `model_request_identity.zig` and `model_attempt_accounting.zig`; Z_SPEC01 "Refactors
-that leave request bytes unchanged"). `retainOwner`'s exhaustion branches are not allocation failures, and no public
-seam of either ledger reaches them; the helper's own tests do.
-
-Closed 21 November 2026 (user: "update the documentation with rhe recommendations"): the engine-config reader
-keeps F0001:162-167's limit and size-drift checks and gains no re-stat, identity or path re-binding, which
-F0008:75 requires of the provider reader only.
-
-### 10.5 Brittleness (latent)
-
-**C36. Order and position, still open.** The YAML pairs prompts with units by step position (subgraph
-`generate-specification`). The test driver ties each unit to its prompt (`generationPrompt` in
-`spec_generation_driver.zig`, which it asserts against each request's prompt bytes), so a swap fails `zig build test-integration`, but the engine accepts it: ADR
-0005:74-76 and 0012:57 make the pairing the workflow's to declare, and resources are validated by kind only
-(`workflow_graph_compilation.zig:349-354`).
-
-**C37. Limits that don't bind.** The retry values `64` and `128` are ADR 0033:99, :103, :202-206's, and
-`maximum_population = 128` is a user decision (15 November 2026). `workflow_retry.Limit` decides when a limit is
-exhausted (`standing`, `allowance`); the retry scope, the runner, the compiled allowance and the attempt accounting
-call it and keep their own error mappings. The accounting error can't fire through the runner (only
-`model_attempt_accounting_test.zig` reaches it), and ADR 0030:124-125 fixes the semantics.
-
-**C38. A passing `zig build verify` still reads as a failure.** Zig prints a `failed command:` line for
-any step that wrote to stderr, and the default summary mode prints no success line; only `--summary line`
-shows `N/N steps succeeded; M/M tests passed`. What still writes to stderr:
-about 300 feature-log rows (0.45 MB) from the baseline acquisition tests, whose production code
-materializes the frozen case config itself; and 33 `SDDE_LOG_FAILURE` emergency lines in `test` from the
-layout tests, because the composition builds `log_output.Adapter` inline (`feature_logging_runtime.zig:143`).
-**Decided** 20 November 2026 (user: "update the documentations with the above recommendations"): judge the
-pass where it is read.
-- `/verify` runs `zig build verify --summary line` and judges the run by its exit status and the
-  `N/N steps succeeded` line (`.claude/skills/verify/SKILL.md` step 6, changed the same day).
-- **No** injectable emergency sink. ADR 0032:168-169 keeps the emergency line exactly once, and the composition
-  root builds every adapter (ADR 0032:114; 29-package-structure.md:11-12), so a seam there would serve only 33
-  predictable test lines.
-
-**C39. Design text the code contradicts (adds to §8 "Design–code conflicts").** Corrected:
-26-security.md now says a log row is encoded under the held lock once the stream state yields its sequence, and
-13-05 names both source projections. ADR 0021 never stated the restriction.
-
 ### 10.6 Tests and harness
 
 **C41. The scripted driver is also the oracle (adds to E8).** A failed assertion in one of its step hooks
 is a panic: `src/test_fixtures/spec_generation_driver.zig` has 98 `catch unreachable` lines. Its merge gates are a
 `merge_routes` table of typed (operation, owner) pairs, and the `gates_bound` block fails the scenario with
 `GatedRouteNotInGraph` when the compiled graph binds none of one (Z_SPEC01 "Test-track closures").
+**Decided** 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"); unbuilt:
+each `catch unreachable` in a step hook becomes a returned error that fails its scenario, so a failed assertion
+no longer aborts the test binary.
 
 **C42. The scripted matrix still runs a hand copy of `Runtime.init`'s wiring** (`workflow_tests.zig:1061`,
 `:1758`, `:3705`, `:3776`, against `composition/root.zig:65`). Offline runs reach publication, a repaired
@@ -685,24 +556,15 @@ publication and a retry-limit failure through `root.Runtime` and the harness's `
 cases, with only the transport scripted (`test/harness/integration/tests.zig`; the answers come from
 `spec_generation_responses.build`, and `invoke.Options.runner_view` is its test-only seam). No Bedrock slot runs
 through the production composition, and the matrix's other fault paths still run the hand copy, so a wiring drift
-that only one of those reads still passes.
+that only one of those reads still passes. **Decided** 22 November 2026 (user: "update documenation with
+recommendation for decisions 3 4, 5, 6"); unbuilt: the matrix's remaining fault paths run through `root.Runtime` and
+`invoke.run`, and the hand copy of `Runtime.init`'s wiring is deleted (no second wiring path).
 
 **C45. Typed limits beyond the sequence fixtures, still open.** The summary, global and disposition sequences derive
 their calls from the compiled step's allowance. The scenarios-step exhaustion (`workflow_tests.zig:2041-2042`) and
 the disposition sequence's fixed calls before its exhausted request (extraction content 2, classification 1) still
-type values that follow from the limit.
-
-**C47. Leftovers.**
-
-- Tests write outputs that no test or build step reads: a step trace for every scenario
-  (`writeStepTrace`, `workflow_tests.zig:1291`; Z_SPEC01 uses it as structural-equivalence evidence) and calibration
-  reports under `.zig-cache/` (`authoring-comparison`,
-  `representation-admission`, `semantic-simplicity/phase0`; versioned report schemas, written and
-  read back inside their own suites). **Kept** (user, 20 November 2026): the trace is the proof that
-  a refactor leaves the executed steps unchanged, and the calibration suites replay retained
-  captures.
-- `source_loss_calibration.zig` consumes a review receipt only when one exists (none does), and its admission gate
-  has accepted and rejected tests: a live-trial slot, **kept**.
+type values that follow from the limit. **Decided** 22 November 2026 (user: "update documenation with recommendation
+for decisions 3 4, 5, 6"); unbuilt: both derive from the compiled step's allowance, as the three sequences do.
 
 ### 10.7 Unconfirmed readings
 
@@ -712,3 +574,14 @@ type values that follow from the limit.
   another kind mints another form. This is true of every records clarification; the batch only reaches it
   more often. An answered group is authored by E7 (answers are not consumed yet), so until then a rerun asks
   again.
+
+**C50. A workflow definition can route past the configured preservation review** (by reading, not executed).
+`check-source-preservation-policy` routes `ok` to `preservation-requirements` and `more` to `generate`
+(`spec.workflow.yaml:97-99`), and its operation (`SourcePreservationPolicy`, `required_authority_workflow.zig:21-43`)
+declares no outcome association, so a definition that routes `ok` to `generate` compiles and skips a configured
+review. The `required-authority@1` gate, deleted 21 November 2026, never covered this step. **Decided** 22 November
+2026 (user: "update documenation with recommendation for decisions 1 and 2"): it stays open; its entry had been
+removed with no record and no code change. **Next:** a test at the owner that compiles such a definition. If it
+compiles, the policy step gains an outcome association, so a run that leaves its `ok` without the review can't end
+`ok`, as the authority ledger already holds `validate-required-authority-reconciliation`'s result
+(`required_authority_workflow_test.zig`). Not a compile rule naming Spec steps (AGENTS.md "Anti-overfitting rule").

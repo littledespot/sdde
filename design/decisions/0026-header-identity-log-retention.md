@@ -19,7 +19,7 @@
     rule that only complete finalization evidence authorizes the current binding,
     sink and `run.started`;
   - §26.5: the selection order `(closedAtUtc, runId, ordinal)`;
-  - the §13 catalogue input of `BuildFeatureLogRetentionAuthorizationAction`;
+  - the §13.9 catalogue input of the retention routine's authorization step;
   - F0002 §7, which defers retention to §§14.10 and 26.5.
 
   Everything else in §26.5 still governs, including "alias; or permission failure
@@ -29,21 +29,19 @@
   listing of `logs/events` and `logs/prompts`, including the current run's and the
   debugger's. A regular file whose name is not a segment name is left alone
   instead of blocking.
-- **Amended by:** [ADR 0032](0032-engine-routines.md) (22 October 2026, feature
-  logging not yet implemented). The retention coordinator becomes a typed engine routine once
-  ADR 0032's logging preconditions are met. Its five-step order and the rule that only
-  this path prunes are unchanged. Fake-port routine tests replace the coordinator's
-  step-order spy test.
+- **Amended by:** [ADR 0032](0032-engine-routines.md) (22 October 2026, implemented). Retention
+  is a typed engine routine, which the runtime logging lifecycle runs. Its five-step order and
+  the rule that only this path prunes are unchanged. Fake-port routine tests replace the
+  coordinator's step-order spy test.
 - **Amended 14 November 2026** (user: "recommendation accepted"): this amendment reaches
   prior-run crash finalization, not retention. Finalization resolves each historical policy
   solely through its `segment_header` control row's policy identity. No persisted
   `BootstrapAuthorityState` or bootstrap lineage is read for a prior run. This decides the
   authority only. The identity is a digest of the compiled policy: it names a policy without
-  supplying its content. Before finalization is built, confirm that the identity suffices for
-  every historical-policy value finalization needs (the runner reads the policy to select the
-  prompt stream), or state what a mismatch with the current policy does. Finalization stays
-  unimplemented, and its order relative to the current activation stays undecided. A run
-  keeps one logging binding and policy ([ADR 0032](0032-engine-routines.md)).
+  supplying its content. A run keeps one logging binding and policy
+  ([ADR 0032](0032-engine-routines.md)).
+- **Amended 22 November 2026** (user: approved the E6 decisions): prior-run crash
+  finalization is built ([below](#crash-finalization--22-november-2026)).
 - **Amended 19 November 2026** (user: "yes, and implement E6"): this amendment reaches the
   "Cancellation" decision below, which no longer reports a cancellation under the lock or
   during a segment read as a logging failure. It is decided and built in
@@ -63,8 +61,9 @@ A fresh run prunes its feature's prior-run segments, using the identity recorded
 in those segments.
 
 - **When.** After the current run's activation has recovered and rotated its own
-  streams, and before `run.started`. The current binding and sink therefore exist
-  first, which §14.10 orders the other way round.
+  streams, and before `run.started`: first the finalization of crashed prior tails
+  ([below](#crash-finalization--22-november-2026)), then retention. The current binding
+  and sink therefore exist first, which §14.10 orders the other way round.
 - **Discovery is read-only.** For each stream, it lists the feature's prior runs and
   their binding directories under the registry's log collections. The current run
   is never included.
@@ -107,15 +106,17 @@ in those segments.
   discovery, in retention and in the current run's sink alike. The sink port
   carries `Cancelled` ([ADR 0032](0032-engine-routines.md)). A cancelled step
   releases its lock, carries no `LOG_*` code and writes no emergency line.
-- **Crashed runs are kept whole.** A crash leaves a binding's last segment in one
-  of three shapes, in either stream:
+- **Crashed runs are kept whole until finalized.** A crash leaves a binding's last
+  segment in one of three shapes, in either stream:
   - torn before its header row was complete, including empty, when a segment was
     being created or rotated;
   - without a trailer;
   - with bytes after its last complete row.
 
   Every group of such a run is kept, including that run's closed segments in the
-  other stream. Finalizing such a tail (§14.10) is still not implemented.
+  other stream, until its tails are finalized. A tail torn before its header row was
+  complete has no identity to close and is never finalized, so its run stays whole;
+  the other two shapes are closed by finalization and then follow the rules below.
 - **Order.** Closed groups are processed in `(runId, bindingId, stream rank)` order.
   Within a group, retention deletes the longest prefix of segments, in ordinal
   order, whose close time is at or before the cutoff. Sequence is the ordering
@@ -124,7 +125,7 @@ in those segments.
   are taken one group at a time, so no single order spans runs.
 - **Pruning.** For each group, the composition opens one stream of that run through
   the registry's per-stream path derivation. That adapter can only lock, prune and
-  release. The retention runner then:
+  release. The retention routine then:
   1. builds the single-use authorization, which binds the current run, the
      historical binding, the stream and the cutoff from the trusted clock;
   2. takes that run's own stream lock;
@@ -142,8 +143,12 @@ in those segments.
 
 - Retention now runs on every fresh activation. A prior run's logs disappear only
   after they are closed and older than 14 days.
-- A crashed run's logs are kept until crash finalization is built (14 November 2026
-  amendment).
+- A crashed run's headered tails are closed by the next activation, so its segments are
+  pruned after the retention period like any closed ones; a tail torn before its header
+  row was complete keeps its run whole.
+- A crashed tail that cannot be written (a read-only segment, an insecure directory, a
+  lock held elsewhere) blocks every later run of the feature until someone repairs or
+  removes it. Before finalization such a run was kept whole and did not block.
 - Damaged or tampered prior-run logs block every later run of the feature until
   someone repairs or removes them. The emergency line gives the failure code but no
   path. This follows §26.5. Since the log-folder entries amendment, a stray regular
@@ -151,18 +156,20 @@ in those segments.
 - Torn detection assumes the bytes on disk are a prefix of what was written. A
   filesystem that leaves a crashed new file zero-filled at its full length makes
   that segment invalid, and later runs block.
-- Discovery reads every prior segment in full on each activation. Each run's
+- Discovery reads every prior segment in full, twice on each activation: once to find
+  the crashed tails to finalize and once to find the closed groups to prune. Each run's
   segments are bounded, but the number of retained prior runs is not.
 - Two concurrent runs of the same feature are not supported. If they happen, the
-  under-lock check refuses any group that is no longer closed.
+  under-lock check refuses any group that is no longer closed. A prior run's active tail
+  is therefore treated as crashed.
 - Path authority stays with the workflow artifact registry, which now records its
   log collections. It derives historical stream paths only for the current feature
   and a different run.
 - Tests in `src/feature_log_layout_test.zig` cover:
   - pruning of expired runs in both streams;
   - keeping recent, crashed (one stream active) and current runs;
-  - crash shapes of a last segment, alone or behind closed segments, each keeping
-    its run whole;
+  - crash shapes of a last segment, alone or behind closed segments: a tail torn
+    before its header row keeps its run whole, and one left open after it is closed;
   - multi-segment groups: prefix pruning, inverted timestamps, and a group that
     starts after ordinal 1;
   - a prior run with one stream missing;
@@ -175,14 +182,53 @@ in those segments.
   - a failed deletion;
   - per-stream path derivation.
 
-  `src/feature_log_runtime_test.zig` checks the coordinator's step order and its
-  failure propagation: a prune failure stays the reported cause when release
-  also fails. `src/architecture_test.zig` keeps discovery read-only,
-  limits the historical adapter to lock, prune and release, and keeps pruning out
+  `src/feature_log_retention_routine_test.zig` checks the retention routine's step
+  order and its failure propagation: a prune failure stays the reported cause when
+  release also fails. `src/architecture_test.zig` keeps discovery read-only,
+  limits the historical adapter to lock, prune and release, limits the prior-run
+  tail adapter to lock, read, recover, close and release, and keeps pruning out
   of the current run's sink. `src/feature_log_runtime_test.zig` and
   `src/feature_log_layout_test.zig` also cover a cancellation at each sink
   operation, in the run-history scan and under the retention lock: the run ends
   `cancelled`, the lock is released and no emergency line is written.
+
+## Crash finalization — 22 November 2026
+
+**Approved by the user** on 22 November 2026, with the decisions below. A fresh run closes
+each crashed prior run's open tail before retention, as the sixth feature-logging routine
+([ADR 0032](0032-engine-routines.md)), which the runtime logging lifecycle runs.
+
+- **Order.** After the current run's activation, before retention and `run.started`. This
+  reverses §14.10's order (finalization before the current binding exists); the current
+  binding and the active logger exist first, so a failure reports through the logger's
+  one emergency line.
+- **Identity.** The header identity alone suffices. Discovery finds both streams by listing
+  their directories, never by the current policy, so a prior run's prompt stream is closed
+  whatever the current policy captures. The trailer needs only the binding identity, the
+  ordinal, the final sequence and the trusted clock. A policy ID that differs from the
+  current run's is no error.
+- **What it writes.** For each tail whose last segment has a complete header row, under that
+  run's own stream lock: it reads the group again and proves it still ends in an active
+  tail, truncates the tail to its last complete row (the tail truncation recovery already
+  makes), writes one `segment_trailer` stamped with the trusted clock's reading at
+  finalization, proves the group closed, and releases the lock. Those are the only writes;
+  retention stays the only deletion. The trailer's close time is the finalization time, so
+  the finalized segment prunes after the retention period from then.
+- **What it leaves.** A tail torn before its header row was complete, alone or behind closed
+  segments, has no identity to close. It is not written, not deleted and does not block;
+  its run stays whole.
+- **Crashed by assumption.** Concurrent runs of one feature are unsupported, so any prior
+  run's active tail is crashed. A group no longer an active tail under the lock, or one
+  that fails validation, blocks the run as an ordinary logging failure
+  (`LOG_SINK_FAILURE`); a lock held elsewhere times out and blocks
+  (`LOG_LOCK_TIMEOUT`). Each failure goes through the active logger's one emergency line.
+- **Cancellation.** As above: a cancellation releases the lock, carries no `LOG_*` code and
+  writes no emergency line. A trailer cut short by a cancellation or a crash is truncated
+  as a partial row by the next finalization, so finalization is idempotent.
+- **Adapter.** A sibling of the historical stream adapter opens one stream of one prior
+  run through the registry's per-stream path derivation. It can lock, read, recover, close
+  and release; it creates, rotates, appends, prunes and deletes nothing. The historical
+  stream adapter keeps its limit: lock, prune and release.
 
 ## Log-folder entries amendment — 21 October 2026
 

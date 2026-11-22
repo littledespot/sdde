@@ -109,6 +109,9 @@ the engine, its prompts or its deterministic code.
        `unsupported_addition`.
      - "Notification" or "notified" naming the displayed message is a minor
        `unsupported_addition`.
+     - A Given that states a precondition the source doesn't, however generic ("installed and
+       available to run", "with a known existing due date"), is a minor `unsupported_addition`.
+       A Given that states the source's own starting situation is not.
      - A generic trigger naming who starts the application ("The user launches the
        application") is not an invented step.
      - Judge the specification as rendered. Escapes, quotes around code spans and sentences

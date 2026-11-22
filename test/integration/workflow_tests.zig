@@ -29,7 +29,6 @@ const log_binding = @import("../../src/domain/feature_log_binding.zig");
 const log_limits = @import("../../src/domain/feature_log_limits.zig");
 const feature_log_sink = @import("../../src/adapters/filesystem/feature_log_sink.zig");
 const active_feature_log_runtime = @import("../../src/composition/active_feature_log_runtime.zig");
-const feature_log_finalization_runner = @import("../../src/application/feature_log_finalization_runner.zig");
 const model_provider_bootstrap = @import("../../src/composition/model_provider_bootstrap.zig");
 const engine_invocation = @import("../../src/composition/engine_invocation.zig");
 const workflow_operation_registry = @import("../../src/ports/workflow_operation_registry.zig");
@@ -49,6 +48,16 @@ fn runInvocationInProject(
     arguments: []const []const u8,
 ) run_outcome.Outcome {
     return runInvocationInProjectWithRuntime(io, allocator, project_root, arguments, .{}, null);
+}
+
+/// What a rejected definition's startup detail records: the startup step that refused it and the rule it broke. A
+/// rejection that several checks could have caused is told apart by this, not by the public code, which is the same
+/// for all of them.
+fn rejectionDetail(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8) !@import("../../src/domain/definition_rejection.zig").Detail {
+    var report = try reportInvocation(io, allocator, project_root, arguments, .{}, null);
+    defer report.deinit();
+    if (report.outcome != .bootstrap_failed) return error.TestExpectedBootstrapFailure;
+    return report.bootstrap_detail orelse error.TestExpectedRejectionDetail;
 }
 
 // Tests that need only the native outcome use the same production invocation.
@@ -3155,7 +3164,12 @@ test "feature input failures preserve invalid stale and changed close submission
         if (failure == .wrong_feature) captures.state = try std.mem.replaceOwned(u8, allocator, captures.state.?, "Chosen/Café", "Unrelated");
         if (failure == .orphan_form) captures.state = null;
         try writeClarificationCapture(io, project.dir, captures);
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+        // A rejected form blocks the run (ADR 0025); a registry that is not the feature's, or not a registry, still fails it.
+        const expected: workflow.OutcomeTag = switch (failure) {
+            .malformed_state, .wrong_feature => .failed,
+            .malformed_form, .stale_form, .changed_answer, .missing_form, .orphan_form => .blocked,
+        };
+        try std.testing.expectEqual(expected, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
         if (failure == .missing_form) {
             try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/clarify/S01.md", .{}));
         } else {
@@ -3316,7 +3330,10 @@ test "clarification publication refreshes stable paths and protects concurrent c
             const input_steps = @import("../../src/actions/specify/prepare_inputs.zig").steps;
             const parsed = try input_steps.parseClarificationState(parser.stateParser(), a, captured);
             const state = try c.validate(parsed, selected.feature_id);
-            const inputs = try input_steps.validateClarificationForms(parser.formParser(), a, state, captured);
+            const inputs = switch (try input_steps.validateClarificationForms(parser.formParser(), a, state, captured)) {
+                .accepted => |accepted| accepted,
+                .rejected => return error.FormsRejected,
+            };
             const record = fixture.record(name);
             const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
             const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need}, .original_sources = &.{} });
@@ -3391,7 +3408,10 @@ fn clarificationRound(io: std.Io, keep: std.mem.Allocator, project: std.Io.Dir, 
     const input_steps = @import("../../src/actions/specify/prepare_inputs.zig").steps;
     const parsed = try input_steps.parseClarificationState(parser.stateParser(), a, captured);
     const state = try c.validate(parsed, selected.feature_id);
-    const inputs = try input_steps.validateClarificationForms(parser.formParser(), a, state, captured);
+    const inputs = switch (try input_steps.validateClarificationForms(parser.formParser(), a, state, captured)) {
+        .accepted => |accepted| accepted,
+        .rejected => return error.FormsRejected,
+    };
     const record = fixture.record(name);
     const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
     const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need}, .original_sources = &.{} });
@@ -3443,7 +3463,7 @@ test "a registry write that fails behind its forms is replaced by the rerun unle
         if (closed_by_user) {
             form_after = try forms.render(a, fixture.record("S01"), .{ .state_ordinal = 9, .state_revision = 9, .record_revision = 9, .status = .open }, .closed, "An answer.");
             try project.dir.writeFile(io, .{ .sub_path = files.form, .data = form_after });
-            try std.testing.expectError(error.InvalidClarificationInput, clarificationRound(io, a, project.dir, "S01", false, &files));
+            try std.testing.expectError(error.FormsRejected, clarificationRound(io, a, project.dir, "S01", false, &files));
             try std.testing.expectEqualStrings(form_after, try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes)));
             try expectRegistry(io, a, project.dir, files.registry, registry_before);
         } else {
@@ -3487,9 +3507,65 @@ test "an unsubmitted form of no record is left in place and ignored by later rou
     // Once the user closes it, it holds a submission no record can take, and every round stops with it unchanged.
     const closed = try forms.render(a, fixture.record("P01"), .{ .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .status = .open }, .closed, "An answer.");
     try project.dir.writeFile(io, .{ .sub_path = orphan.form, .data = closed });
-    try std.testing.expectError(error.InvalidClarificationInput, clarificationRound(io, a, project.dir, "S01", false, &files));
+    try std.testing.expectError(error.FormsRejected, clarificationRound(io, a, project.dir, "S01", false, &files));
     try std.testing.expectEqualStrings(closed, try project.dir.readFileAlloc(io, orphan.form, a, .limited(c.max_form_bytes)));
     try std.testing.expectEqualStrings("finder", try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/.DS_Store", a, .limited(64)));
+}
+
+// ADR 0025: one invalid closed form blocks the run and none of the answers are accepted. The inputs stage names each
+// rejected form with the rule it broke where the operator reads it, and writes nothing: forms and registry stay byte
+// for byte as they were.
+test "an invalid closed clarification form blocks the run with the rule it broke and writes nothing" {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../src/domain/clarification_form.zig");
+    const fixture = @import("../../src/test_fixtures/clarification_inputs.zig");
+    const rejection = @import("../../src/domain/clarification_form_rejection.zig");
+    const io = std.testing.io;
+    const open_binding: forms.Binding = .{ .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .status = .open };
+    const Row = struct { captures: c.Captures, expected: []const rejection.FormRejection };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var rows: std.ArrayList(Row) = .empty;
+    // A recorded response whose form was edited after acceptance.
+    const recorded = try fixture.closed(a, "S01", true);
+    const edited = try std.mem.replaceOwned(u8, a, recorded.forms[0].bytes, "Approved Café", "Different Café");
+    try rows.append(a, .{ .captures = .{ .state = recorded.state, .forms = &.{.{ .id = recorded.forms[0].id, .bytes = edited }} }, .expected = &.{.{ .id = recorded.forms[0].id, .reason = .saved_form_changed }} });
+    // A record whose form was removed.
+    try rows.append(a, .{ .captures = .{ .state = recorded.state, .forms = &.{} }, .expected = &.{.{ .id = c.Id.parse("S01").?, .reason = .form_missing }} });
+    // A closed form of no record, in each stage.
+    for ([_][]const u8{ "S01", "P01", "T01" }) |name| {
+        const bytes = try forms.render(a, fixture.record(name), open_binding, .closed, "An answer.");
+        try rows.append(a, .{ .captures = .{ .state = null, .forms = &.{.{ .id = c.Id.parse(name).?, .bytes = bytes }} }, .expected = &.{.{ .id = c.Id.parse(name).?, .reason = .form_without_record }} });
+    }
+    for (rows.items) |row| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        try writeClarificationCapture(io, project.dir, row.captures);
+        var report = reportInvocation(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }, .{}, null) catch return error.TestUnexpectedResult;
+        defer report.deinit();
+        try std.testing.expectEqual(workflow.OutcomeTag.blocked, report.outcome.executionStatus().?);
+        try std.testing.expectEqualStrings("InvalidClarificationInput", @tagName(report.last_operation_rejection.?.cause));
+        try std.testing.expectEqualDeep(row.expected, report.form_rejections);
+        // Nothing was written or removed: the forms and the registry are as the user and the last run left them.
+        for (row.captures.forms) |form| {
+            const retained = try project.dir.readFileAlloc(io, try std.mem.concat(a, u8, &.{ "requirements/current/Chosen/Café/clarify/", &form.id.filename() }), a, .limited(c.max_form_bytes));
+            try std.testing.expectEqualStrings(form.bytes, retained);
+        }
+        if (row.captures.state) |bytes| try std.testing.expectEqualStrings(bytes, try project.dir.readFileAlloc(io, "engine/workflows/features/Chosen/Café/state/clarifications.json", a, .limited(c.max_state_bytes)));
+        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
+        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "engine/workflows/features/Chosen/Café/state/workflow.json", .{}));
+    }
+    // The same forms that are valid are accepted, so a rejection is the form's and no property of the run.
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try writeClarificationCapture(io, project.dir, recorded);
+    var accepted = reportInvocation(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }, .{}, null) catch return error.TestUnexpectedResult;
+    defer accepted.deinit();
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, accepted.outcome.executionStatus().?);
+    try std.testing.expectEqual(@as(usize, 0), accepted.form_rejections.len);
 }
 
 /// The registry file holds exactly `expected` bytes, or does not exist when `expected` is null.
@@ -3668,7 +3744,12 @@ test "feature input compiler requires the declared read capability" {
         const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"), edit[0], edit[1]);
         defer std.testing.allocator.free(changed);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = changed });
-        try std.testing.expect(runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }) == .bootstrap_failed);
+        // The narrower profile also lacks the `blocked` terminal the step declares, which another rule would refuse
+        // later: the rule named here is the capability check's own.
+        const Rule = @import("../../src/domain/definition_rejection.zig").Rule;
+        const detail = try rejectionDetail(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" });
+        try std.testing.expectEqualStrings("compile_workflows", detail.step);
+        try std.testing.expectEqual(@as(?Rule, .step_capabilities), detail.evidence.rule);
     }
 }
 
@@ -3807,9 +3888,13 @@ test "feature inspection rejects missing authority stale roots and forged resolv
 
 test "input stage YAML rejects unknown parameters and insufficient read authority" {
     const io = std.testing.io;
+    const Rule = @import("../../src/domain/definition_rejection.zig").Rule;
+    // Each change is refused by its own startup step and rule, named here: an unknown parameter is refused while the
+    // definition is parsed, before any rule is recorded, and the narrower profile, which also lacks the `blocked`
+    // terminal the step declares, is refused by the capability check, which another rule would otherwise follow.
     const changes = .{
-        .{ "use: prepare-inputs", "use: prepare-inputs\n    with: { unexpected: true }" },
-        .{ "policy: core.feature-input-read@1", "policy: core.reference-read@1" },
+        .{ "use: prepare-inputs", "use: prepare-inputs\n    with: { unexpected: true }", "parse_workflows", @as(?Rule, null) },
+        .{ "policy: core.feature-input-read@1", "policy: core.reference-read@1", "compile_workflows", @as(?Rule, .step_capabilities) },
     };
     inline for (changes) |change| {
         var project = std.testing.tmpDir(.{});
@@ -3818,7 +3903,9 @@ test "input stage YAML rejects unknown parameters and insufficient read authorit
         const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"), change[0], change[1]);
         defer std.testing.allocator.free(changed);
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
-        try std.testing.expect(runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "chosen", "--reference", "source" }) == .bootstrap_failed);
+        const detail = try rejectionDetail(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "chosen", "--reference", "source" });
+        try std.testing.expectEqualStrings(change[2], detail.step);
+        try std.testing.expectEqual(change[3], detail.evidence.rule);
     }
 }
 
@@ -4055,7 +4142,7 @@ test "feature log storage opens only an activated layout from present artifact a
     defer active_feature_log_runtime.deinit(active_runtime);
     const shortcode = try @import("../../src/domain/telemetry.zig").WorkflowShortcode.parse("TEST");
     try std.testing.expect(boot.ready.logs.activate(
-        active_feature_log_runtime.runner(active_runtime).childBindings(),
+        active_feature_log_runtime.runner(active_runtime),
         shortcode,
     ) == .ok);
     const persisted = boot.ready.logs.barrier().process(.{
@@ -4064,11 +4151,7 @@ test "feature log storage opens only an activated layout from present artifact a
     });
     try std.testing.expect(persisted == .persisted);
     try project_root.dir.access(io, "specs/F0002/logs/events/RUN-1/LOGBIND-1/0001.log", .{});
-    var finalization_execution: feature_log_finalization_runner.Runner = .{
-        .target = active_feature_log_runtime.runner(active_runtime),
-        .shortcode = shortcode,
-    };
-    try std.testing.expect(boot.ready.logs.finalizeActive(finalization_execution.childBindings()) == .ok);
+    try std.testing.expect(boot.ready.logs.finalizeActive(active_feature_log_runtime.runner(active_runtime), shortcode) == .ok);
     const bytes = try project_root.dir.readFileAlloc(
         io,
         "specs/F0002/logs/events/RUN-1/LOGBIND-1/0001.log",

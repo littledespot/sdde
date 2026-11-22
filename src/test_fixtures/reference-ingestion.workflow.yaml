@@ -8,7 +8,7 @@ start: inputs
 steps:
   inputs:
     use: prepare-inputs
-    on: { ok: evidence, failed: end.failed }
+    on: { ok: evidence, blocked: end.blocked, failed: end.failed }
   evidence:
     use: prepare-reference-evidence
     on: { ok: end.ok, failed: end.failed }
