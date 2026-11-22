@@ -5,6 +5,7 @@ const output = @import("../../domain/workflow_output.zig");
 const c = @import("../../domain/clarification_inputs.zig");
 const codec = @import("../../domain/specification_markdown.zig");
 pub const Action = struct {
+    normalizer: state.Normalizer,
     contracts: ?state.ContractSource = null,
     pub const contract: pipeline.NodeContract = .{
         .id = "prepare-specification-output",
@@ -15,7 +16,7 @@ pub const Action = struct {
     };
     pub fn execute(self: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_directory.zig").Directory, paths: @import("../../domain/workflow_artifact_registry.zig").FeaturePaths, captured: c.Captures, inputs: c.Inputs, clarifications: @import("../../domain/clarification_refresh.zig").Result, views: []const @import("../../domain/clarification_views.zig").View, prior: state.Prior, value: state.State, context: @import("../../domain/specification_provenance.zig").Context, specification: []const u8, reference_context: []const u8) !output.Prepared {
         if (clarifications != .ready) return error.InvalidWorkflowOutput;
-        try state.validate(allocator, value, feature.selector.feature_id, self.contracts);
+        try state.validate(allocator, value, feature.selector.feature_id, self.contracts, self.normalizer);
         const resolved = try state.checkClarifications(try clarifications.ready.validateFor(allocator, context.inputs));
         if (value.revision != try state.nextRevision(prior) or value.clarification.state_ordinal != resolved.state_ordinal or value.clarification.revision != resolved.revision) return error.InvalidWorkflowOutput;
         if (!value.reference.inputs.corpus.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidWorkflowOutput;
@@ -27,7 +28,7 @@ pub const Action = struct {
         var prepared = try @import("../../domain/clarification_output.zig").prepare(allocator, feature, paths, captured, inputs, clarifications, views);
         if (prepared.terminal_outcome != .ok) return error.InvalidWorkflowOutput;
         const canonical = try @import("../../domain/canonical_json.zig").encode(state.State, allocator, value);
-        _ = try state.parse(allocator, canonical, feature.selector.feature_id, self.contracts);
+        _ = try state.parse(allocator, canonical, feature.selector.feature_id, self.contracts, self.normalizer);
         const files = try allocator.alloc(output.File, prepared.files.len + 3);
         files[0] = .{ .target = .{ .artifact = .specification }, .bytes = specification };
         files[1] = .{ .target = .{ .artifact = .reference_context }, .bytes = reference_context };

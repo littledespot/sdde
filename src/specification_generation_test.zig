@@ -59,7 +59,7 @@ test "draft readiness requires selectable provenance while source interpretation
 test "source preservation reviews the corpus before fields exist and reuses bounded omission repair" {
     const authority = @import("domain/required_authority.zig");
     const support = @import("domain/specification_support.zig").Source;
-    const loss = @import("domain/source_omission.zig");
+    const loss = @import("domain/source_omission_authority.zig");
     const projector = @import("actions/authority/build_source_preservation_requirements.zig").Action{};
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -3352,14 +3352,14 @@ test "code samples remain reference evidence and cannot be copied into business 
     const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
     const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
     const snapshot = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "references" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
-    try @import("domain/reference_snapshot.zig").validate(a, snapshot);
+    try @import("domain/reference_snapshot.zig").validate(a, snapshot, text.normalizer);
     var forged = snapshot;
     const claims = try a.dupe(@import("domain/reference_extraction.zig").Claim, forged.extraction.claims);
     for (claims) |*entry| if (entry.content == .preserved_token) {
         entry.content.preserved_token.value.candidate_id.extractor_id = .markdown_inline_code_v1;
     };
     forged.extraction.claims = claims;
-    try std.testing.expectError(error.InvalidReferenceSnapshot, @import("domain/reference_snapshot.zig").validate(a, forged));
+    try std.testing.expectError(error.InvalidReferenceSnapshot, @import("domain/reference_snapshot.zig").validate(a, forged, text.normalizer));
     // Reusing the shared segment type cannot smuggle downstream token selections
     // into an extraction claim when reading canonical source evidence.
     const invalid_claims = try a.dupe(@import("domain/reference_extraction.zig").Claim, snapshot.extraction.claims);
@@ -3608,6 +3608,157 @@ pub const Fixture = struct {
         return .{ .value = .{ .segments = segments }, .source_group_ids = try self.allocator.dupe(references.r.SignalId, &.{group}), .provenance = .{ .claim_ids = claims, .citation_ids = claim.citation_ids, .clarification_response_ids = &.{} } };
     }
 };
+
+const Requote = @import("domain/reference_extraction_text.zig").Requote;
+const requote_snapshots = @import("domain/reference_snapshot.zig");
+
+fn identityNormalization(a: std.mem.Allocator, input: []const u8, maximum_bytes: usize) @import("ports/unicode_normalizer.zig").Error![]u8 {
+    _ = maximum_bytes;
+    return a.dupe(u8, input);
+}
+
+fn requoteSnapshot(a: std.mem.Allocator, fixture: Fixture) !requote_snapshots.Snapshot {
+    const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+    const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
+    return requote_snapshots.build(.{ .bytes = "references" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
+}
+
+/// Re-quote every stored claim of `snapshot` with `normalizer`; the count of model claims, which preserved tokens are not.
+fn requoteClaims(a: std.mem.Allocator, snapshot: requote_snapshots.Snapshot, normalizer: @import("ports/unicode_normalizer.zig").Normalizer) !usize {
+    var requote = try Requote.init(a, snapshot.inputs, normalizer);
+    var model: usize = 0;
+    for (snapshot.extraction.claims) |claim| {
+        try requote.check(a, claim, snapshot.extraction.citations);
+        model += @intFromBool(claim.content == .model);
+    }
+    return model;
+}
+
+test "readback re-quotes each stored extraction claim from its citations in canonical text" {
+    const Proposal = @import("domain/reference_extraction.zig").Proposal;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const identity: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = identityNormalization };
+
+    // A source line that is not in NFC: the stored wording is the NFC form of its quote, so re-quoting without the
+    // normalizer cannot reproduce it.
+    var decomposed = try Fixture.init(a, "Greet the Cafe\u{301} visitors.");
+    defer decomposed.deinit();
+    const decomposed_snapshot = try requoteSnapshot(a, decomposed);
+    try requote_snapshots.validate(a, decomposed_snapshot, text.normalizer);
+    try std.testing.expectEqual(@as(usize, 1), try requoteClaims(a, decomposed_snapshot, text.normalizer));
+    try std.testing.expect(std.mem.indexOf(u8, decomposed_snapshot.inputs.corpus.sources[0].bytes, "\u{e9}") == null);
+    try std.testing.expect(std.mem.indexOf(u8, decomposed_snapshot.extraction.claims[0].content.model.business.value.segments[0].literal.value, "Caf\u{e9}") != null);
+    try std.testing.expectError(error.InvalidReferenceExtraction, requoteClaims(a, decomposed_snapshot, identity));
+
+    // Lines of two list items are two claims, each quoting its own item.
+    var items = try Fixture.initClaims(a, "- First item.\n- Second item.\n", null, .{ .selected = &[_]Proposal{.{ .category = .business, .citations = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } } }} });
+    defer items.deinit();
+    const item_snapshot = try requoteSnapshot(a, items);
+    try requote_snapshots.validate(a, item_snapshot, text.normalizer);
+    try std.testing.expectEqual(@as(usize, 2), try requoteClaims(a, item_snapshot, text.normalizer));
+
+    // Fenced code keeps every byte, so its leading whitespace is part of the quote.
+    var fenced = try Fixture.initClaims(a, "```\n  indented code\ncode two\n```\n", null, .{ .selected = &[_]Proposal{.{ .category = .technical, .citations = &.{ .{ .ordinal = 2 }, .{ .ordinal = 3 } } }} });
+    defer fenced.deinit();
+    const fenced_snapshot = try requoteSnapshot(a, fenced);
+    try requote_snapshots.validate(a, fenced_snapshot, text.normalizer);
+    try std.testing.expectEqual(@as(usize, 1), try requoteClaims(a, fenced_snapshot, text.normalizer));
+    try std.testing.expect(std.mem.startsWith(u8, fenced_snapshot.extraction.claims[0].content.model.technical.value.nodes[0].literal.value, "  "));
+
+    // A scope guard stores segments, not nodes.
+    var guard = try Fixture.initClaims(a, "Do not keep payment cards.\n", null, .{ .selected = &[_]Proposal{.{ .category = .scope_guard, .citations = &.{.{ .ordinal = 1 }} }} });
+    defer guard.deinit();
+    const guard_snapshot = try requoteSnapshot(a, guard);
+    try requote_snapshots.validate(a, guard_snapshot, text.normalizer);
+    try std.testing.expectEqual(@as(usize, 1), try requoteClaims(a, guard_snapshot, text.normalizer));
+
+    // Two runs of cited lines with an uncited line between them are one claim with two citations, joined by an
+    // ellipsis line.
+    var runs = try Fixture.initClaims(a, "First sentence.\nMiddle sentence.\nThird sentence.\n", null, .{ .selected = &[_]Proposal{.{ .category = .business, .citations = &.{ .{ .ordinal = 1 }, .{ .ordinal = 3 } } }} });
+    defer runs.deinit();
+    const run_snapshot = try requoteSnapshot(a, runs);
+    try requote_snapshots.validate(a, run_snapshot, text.normalizer);
+    try std.testing.expectEqual(@as(usize, 1), try requoteClaims(a, run_snapshot, text.normalizer));
+    try std.testing.expectEqual(@as(usize, 2), run_snapshot.extraction.claims[0].citation_ids.len);
+    try std.testing.expect(std.mem.indexOf(u8, run_snapshot.extraction.claims[0].content.model.business.value.segments[0].literal.value, "\n…\n") != null);
+
+    // A blank line between two cited lines continues the run: one citation spans all three lines.
+    var blank = try Fixture.initClaims(a, "First sentence.\n\nThird sentence.\n", null, .{ .selected = &[_]Proposal{.{ .category = .business, .citations = &.{ .{ .ordinal = 1 }, .{ .ordinal = 3 } } }} });
+    defer blank.deinit();
+    const blank_snapshot = try requoteSnapshot(a, blank);
+    try requote_snapshots.validate(a, blank_snapshot, text.normalizer);
+    try std.testing.expectEqual(@as(usize, 1), try requoteClaims(a, blank_snapshot, text.normalizer));
+    try std.testing.expectEqual(@as(usize, 1), blank_snapshot.extraction.claims[0].citation_ids.len);
+}
+
+test "readback rejects a stored extraction claim that no longer quotes its citations" {
+    const Claim = @import("domain/reference_extraction.zig").Claim;
+    const Citation = @import("domain/reference_extraction.zig").Citation;
+    const typed = @import("domain/typed_text.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var two = try Fixture.initContent(a, "Show the greeting.", null, true, 2);
+    defer two.deinit();
+    const snapshot = try requoteSnapshot(a, two);
+    try requote_snapshots.validate(a, snapshot, text.normalizer);
+    try std.testing.expectEqual(@as(usize, 2), try requoteClaims(a, snapshot, text.normalizer));
+    const claims = snapshot.extraction.claims;
+    const citations = snapshot.extraction.citations;
+    var requote = try Requote.init(a, snapshot.inputs, text.normalizer);
+
+    // Claim A's wording under claim B's citations, and the reverse.
+    const swapped = try a.dupe(Claim, claims);
+    swapped[0].content = claims[1].content;
+    swapped[1].content = claims[0].content;
+    for (swapped) |claim| try std.testing.expectError(error.InvalidReferenceExtraction, requote.check(a, claim, citations));
+    var forged = snapshot;
+    forged.extraction.claims = swapped;
+    try std.testing.expectError(error.InvalidReferenceSnapshot, requote_snapshots.validate(a, forged, text.normalizer));
+
+    // The stored wording cut by one byte.
+    const wording = claims[0].content.model.business.value.segments[0].literal.value;
+    var cut = claims[0];
+    cut.content = .{ .model = .{ .business = .{ .value = .{ .segments = try a.dupe(typed.BusinessSegment, &.{.{ .literal = .{ .value = wording[0 .. wording.len - 1] } }}) } } } };
+    try std.testing.expectError(error.InvalidReferenceExtraction, requote.check(a, cut, citations));
+
+    // A citation range shifted to the other claim's lines.
+    const shifted = try a.dupe(Citation, citations);
+    shifted[claims[0].citation_ids[0].ordinal - 1].value = citations[claims[1].citation_ids[0].ordinal - 1].value;
+    try std.testing.expectError(error.InvalidReferenceExtraction, requote.check(a, claims[0], shifted));
+
+    // An extra typed node after the quote.
+    var fenced = try Fixture.initClaims(a, "```\n  indented code\ncode two\n```\n", null, .{ .selected = &[_]@import("domain/reference_extraction.zig").Proposal{.{ .category = .technical, .citations = &.{ .{ .ordinal = 2 }, .{ .ordinal = 3 } } }} });
+    defer fenced.deinit();
+    const fenced_snapshot = try requoteSnapshot(a, fenced);
+    const original = fenced_snapshot.extraction.claims[0].content.model.technical.value.nodes;
+    const nodes = try a.alloc(typed.ReferenceNode, original.len + 1);
+    @memcpy(nodes[0..original.len], original);
+    nodes[original.len] = .{ .source = .{ .source_id = fenced_snapshot.inputs.corpus.sources[0].id } };
+    var extended = fenced_snapshot.extraction.claims[0];
+    extended.content = .{ .model = .{ .technical = .{ .value = .{ .nodes = nodes } } } };
+    var fenced_requote = try Requote.init(a, fenced_snapshot.inputs, text.normalizer);
+    try std.testing.expectError(error.InvalidReferenceExtraction, fenced_requote.check(a, extended, fenced_snapshot.extraction.citations));
+
+    // One claim over two top-level list items: admission quotes each item as its own claim, so a stored claim whose
+    // citation spans both is rejected even when its wording is exactly the joined quote.
+    var items = try Fixture.initClaims(a, "- First item.\n- Second item.\n", null, .{ .selected = &[_]@import("domain/reference_extraction.zig").Proposal{.{ .category = .business, .citations = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } } }} });
+    defer items.deinit();
+    const item_snapshot = try requoteSnapshot(a, items);
+    const item_claims = item_snapshot.extraction.claims;
+    const item_citations = item_snapshot.extraction.citations;
+    try std.testing.expectEqual(@as(usize, 2), item_claims.len);
+    var joined_citation = item_citations[item_claims[0].citation_ids[0].ordinal - 1];
+    joined_citation.value.location.end = item_citations[item_claims[1].citation_ids[0].ordinal - 1].value.location.end;
+    var joined = item_claims[0];
+    joined.citation_ids = try a.dupe(@TypeOf(joined.citation_ids[0]), &.{.{ .ordinal = 1 }});
+    joined.content = .{ .model = .{ .business = .{ .value = .{ .segments = try a.dupe(typed.BusinessSegment, &.{.{ .literal = .{ .value = "- First item.\n- Second item." } }}) } } } };
+    var item_requote = try Requote.init(a, item_snapshot.inputs, text.normalizer);
+    try std.testing.expectError(error.InvalidReferenceExtraction, item_requote.check(a, joined, &.{joined_citation}));
+}
 
 test "atomic specification repair preserves siblings and rejects stale or foreign replacements" {
     const repair = @import("domain/specification_repair.zig");
@@ -5109,7 +5260,7 @@ fn supportDecision(a: std.mem.Allocator, inputs: @import("domain/required_author
     return .{ .inputs = inputs, .observations = observations, .result = try authority.reconcile(a, ledger, observations) };
 }
 
-fn omissionSupport(fixture: *const Fixture, location: @import("domain/source_omission.zig").Location, obligation: []const u8) !@import("domain/source_omission.zig").Support {
+fn omissionSupport(fixture: *const Fixture, location: @import("domain/source_omission.zig").Location, obligation: []const u8) !@import("domain/source_omission_authority.zig").Support {
     const support = @import("domain/specification_support.zig").Source;
     const a = fixture.allocator;
     const inputs = if (location == .reconciliation_signal or location == .reconciliation_conflict)
@@ -6595,7 +6746,7 @@ test "review-purpose eligibility retains native duplicate token evidence without
         const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
         const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
         const saved = try snapshot.build(.{ .bytes = "references" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
-        try snapshot.validate(a, saved);
+        try snapshot.validate(a, saved, text.normalizer);
         for ([_]r.Disposition{ .superseded, .conflicting }) |kind| {
             var forged = saved;
             const changed = try a.dupe(r.ClaimDisposition, saved.dispositions);
@@ -6604,7 +6755,7 @@ test "review-purpose eligibility retains native duplicate token evidence without
             forged.dispositions = changed;
             const rejected = (try @import("domain/reference_disposition_validation.zig").check(a, items, changed)).invalid;
             try std.testing.expectEqual(.native_token_disposition, rejected.issue.expected.constraint);
-            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshot.validate(a, forged));
+            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshot.validate(a, forged, text.normalizer));
         }
     }
 }
@@ -6752,8 +6903,8 @@ test "multiple missing exact obligations do not authorize invalid insertion-only
     try std.testing.expectEqualStrings(before, try std.json.Stringify.valueAlloc(a, current, .{}));
 }
 
-fn checkSourceOmissionProgress(a: std.mem.Allocator, permit: @import("domain/workflow_retry.zig").Permit, negative: @import("domain/source_omission.zig").Support, context: provenance.Context) !void {
-    const loss = @import("domain/source_omission.zig");
+fn checkSourceOmissionProgress(a: std.mem.Allocator, permit: @import("domain/workflow_retry.zig").Permit, negative: @import("domain/source_omission_authority.zig").Support, context: provenance.Context) !void {
+    const loss = @import("domain/source_omission_authority.zig");
     const support = @import("domain/specification_support.zig").Source;
     const json = @import("domain/model_candidate_json.zig");
     try std.testing.expectEqual(negative.inputs.projection, (try loss.pendingReview(a, permit, context.inputs.corpus.feature_id, context.inputs.corpus.state_id)).?);
@@ -7027,7 +7178,7 @@ test "incomplete specifications publish supported business evidence and bound qu
         clarification.feature_id = snapshot.inputs.corpus.feature_id.bytes;
         const validated = try c.validate(.{ .value = clarification }, snapshot.inputs.corpus.feature_id);
         const prior: state.Prior = .{ .captured = null };
-        const value = try draft.build(a, prior, snapshot, validated, contracts.port());
+        const value = try draft.build(a, prior, snapshot, validated, contracts.port(), text.normalizer);
         const rendered = try codec.render(a, value, validated);
         try std.testing.expect(std.mem.indexOf(u8, rendered, "Status: Incomplete") != null);
         // Exact business text is escaped by the canonical Markdown owner.
@@ -7045,7 +7196,7 @@ test "incomplete specifications publish supported business evidence and bound qu
         technical_signals[0].value.content = .{ .model = technical_claims[0].content.model };
         technical.reference.extraction.claims = technical_claims;
         technical.reference.signals = technical_signals;
-        try draft.validate(a, technical, value.feature, contracts.port());
+        try draft.validate(a, technical, value.feature, contracts.port(), text.normalizer);
         const without_technical = try codec.render(a, technical, validated);
         try std.testing.expect(std.mem.indexOf(u8, without_technical, escaped.written()) == null);
         try std.testing.expect(std.mem.indexOf(u8, try @import("domain/reference_context.zig").render(a, technical.reference, null), escaped.written()) != null);
@@ -7059,17 +7210,17 @@ test "incomplete specifications publish supported business evidence and bound qu
         try std.testing.expectError(error.InvalidSpecification, @import("domain/specification_markdown.zig").parse(a, rendered));
         const bytes = try json.encode(draft.State, a, value);
         const unknown = try std.mem.concat(a, u8, &.{ "{\"unknown\":true,", bytes[1..] });
-        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, unknown, value.feature, contracts.port()));
-        const restored = try state.parse(a, bytes, value.feature, contracts.port());
+        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, unknown, value.feature, contracts.port(), text.normalizer));
+        const restored = try state.parse(a, bytes, value.feature, contracts.port(), text.normalizer);
         try std.testing.expect(restored.value == .pending and restored.specified() == null);
         try std.testing.expectEqualStrings(rendered, try codec.render(a, restored.value.pending, validated));
         try std.testing.expectEqual(@as(u64, 2), try state.nextRevision(restored));
         var successor = restored;
         successor.value.pending.id_ledger.next[0] = 42;
-        const next = try draft.build(a, successor, snapshot, validated, contracts.port());
+        const next = try draft.build(a, successor, snapshot, validated, contracts.port(), text.normalizer);
         try std.testing.expectEqual(@as(u32, 42), next.id_ledger.next[0]);
         try std.testing.expectEqual(@as(u64, 2), next.revision);
-        try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, state.parse(a, bytes, value.feature, null));
+        try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, state.parse(a, bytes, value.feature, null, text.normalizer));
         for (0..10) |mode| {
             var bad = value;
             switch (mode) {
@@ -7085,10 +7236,10 @@ test "incomplete specifications publish supported business evidence and bound qu
                 9 => bad.schema = "specification-state/v21",
                 else => unreachable,
             }
-            try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try json.encode(draft.State, a, bad), value.feature, contracts.port()));
+            try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try json.encode(draft.State, a, bad), value.feature, contracts.port(), text.normalizer));
         }
         const forged = try std.mem.replaceOwned(u8, a, bytes, "spec_clarification_pending", "specified");
-        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, forged, value.feature, contracts.port()));
+        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, forged, value.feature, contracts.port(), text.normalizer));
         var stale = value;
         stale.clarification.revision += 1;
         try std.testing.expectError(error.InvalidIncompleteSpecification, codec.render(a, stale, validated));
@@ -7100,7 +7251,7 @@ test "incomplete specifications publish supported business evidence and bound qu
         closed_records[0].authority_resolution = "Resolved from current sources.";
         var closed = clarification;
         closed.records = closed_records;
-        try std.testing.expectError(error.InvalidIncompleteSpecification, draft.build(a, prior, snapshot, try c.validate(.{ .value = closed }, value.feature), contracts.port()));
+        try std.testing.expectError(error.InvalidIncompleteSpecification, draft.build(a, prior, snapshot, try c.validate(.{ .value = closed }, value.feature), contracts.port(), text.normalizer));
         const selected = try @import("domain/feature_directory.zig").validate(a, .{ .bytes = value.feature.bytes }, .{ .specs = "requirements", .archive = "archive" });
         const paths = try @import("domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, .{ .specs = "requirements", .archive = "archive", .workflows = "engine" }, selected);
         const directory: @import("domain/feature_directory.zig").Directory = .{ .selector = selected, .root_observation = .absent, .observation = .absent };
@@ -7109,7 +7260,7 @@ test "incomplete specifications publish supported business evidence and bound qu
         for (snapshot.inputs.corpus.sources, original_sources) |captured_source, *witness| witness.* = .{ .source_id = captured_source.id, .bytes = captured_source.bytes };
         const ready: @import("domain/clarification_refresh.zig").Ready = .{ .state = validated, .original_sources = original_sources };
         const forms = try @import("domain/clarification_views.zig").render(a, ready, &.{});
-        const prepare: @import("actions/specification/prepare_incomplete_specification_output.zig").Action = .{ .contracts = contracts.port() };
+        const prepare: @import("actions/specification/prepare_incomplete_specification_output.zig").Action = .{ .normalizer = text.normalizer, .contracts = contracts.port() };
         const prepared = try prepare.execute(a, directory, paths, .{ .state = null, .forms = &.{} }, inputs, .{ .ready = ready }, forms, prior, value, rendered);
         try std.testing.expectEqual(.needs_user, prepared.terminal_outcome);
         try std.testing.expectEqual(@as(usize, 5), prepared.files.len);
@@ -7347,7 +7498,7 @@ test "false conflicts repair a closed relation group with exact preconditions an
         const admitted = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).accepted;
         const decision = try supportDecision(a, admitted.inputs);
         try std.testing.expectEqual(.invalid, decision.result.continuation);
-        const support: @import("domain/source_omission.zig").Support = .{ .repair_phase = .pre_generation, .review = admitted.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result };
+        const support: @import("domain/source_omission_authority.zig").Support = .{ .repair_phase = .pre_generation, .review = admitted.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result };
         const auth = try repair.authorize(a, parsed, ctx, support);
         try std.testing.expectEqualDeep(claims, auth.target.conflict_group);
         const packet = try repair.packet(a, parsed, ctx, support, auth, &packet_guidance.marked);
@@ -7358,7 +7509,7 @@ test "false conflicts repair a closed relation group with exact preconditions an
         for (packet.integerChoices()) |choice| if (choice.collection == .exact_members) {
             members = choice;
         };
-        try std.testing.expectEqual(.native, members.?.member_count);
+        try std.testing.expectEqual(.native, members.?.collection.exact_members.count);
         try std.testing.expectEqualStrings("claim_dispositions", members.?.target.path[0].property);
         try std.testing.expectEqual(claims.len, members.?.allowed.len);
         for (claims, members.?.allowed) |id, allowed| try std.testing.expectEqual(@as(i64, id.ordinal), allowed);
@@ -7465,7 +7616,7 @@ test "false conflicts repair a closed relation group with exact preconditions an
         const reordered_conflicts = try a.dupe(r.Conflict, support.inputs.references.?.conflicts);
         reordered_conflicts[0].value.claim_ids = &.{ claims[1], claims[0] };
         reordered.inputs.references.?.conflicts = reordered_conflicts;
-        const again = try @import("domain/source_omission.zig").retryPermit(a, .reconciliation, auth.owner, auth.id, auth.revision, reordered, ledger.requirements[conflict_index].seed.id, auth.retry);
+        const again = try @import("domain/source_omission_authority.zig").retryPermit(a, .reconciliation, auth.owner, auth.id, auth.revision, reordered, ledger.requirements[conflict_index].seed.id, auth.retry);
         try std.testing.expectEqualDeep(auth.retry.?.key, again.key);
         // A genuine conflict remains a user decision, never repair permission.
         entries[conflict_index].value.kind = .conflicting;
@@ -7696,7 +7847,7 @@ test "false cross-kind conflict and seven question repairs cannot publish a clar
         const gate = try supportDecision(a, collected.accepted.inputs);
         try std.testing.expectEqual(.invalid, gate.result.continuation);
         try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(a, fixture.context.inputs, gate.inputs, gate.observations, gate.result, &packet_guidance.marked));
-        try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/source_omission.zig").select(a, fixture.context.inputs, .{ .repair_phase = .generation_started, .review = collected.accepted.candidate, .inputs = gate.inputs, .observations = gate.observations, .result = gate.result }));
+        try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/source_omission_authority.zig").select(a, fixture.context.inputs, .{ .repair_phase = .generation_started, .review = collected.accepted.candidate, .inputs = gate.inputs, .observations = gate.observations, .result = gate.result }));
     }
 }
 
@@ -8081,7 +8232,7 @@ test "a criterion with no Given round-trips through persisted state, projection 
         .coverage = try @import("domain/specification_coverage.zig").validate(a, fixture.context.references, brief, assigned.content),
         .clarification = .{ .state_ordinal = 1, .revision = 1 },
     };
-    const restored = (try state.parse(a, try std.json.Stringify.valueAlloc(a, snapshot, .{}), current.feature, contracts.port())).specified().?;
+    const restored = (try state.parse(a, try std.json.Stringify.valueAlloc(a, snapshot, .{}), current.feature, contracts.port(), text.normalizer)).specified().?;
     const criterion_index = for (restored.content.records, 0..) |record, index| {
         if (record.proposal.content == .acceptance_criterion) break index;
     } else return error.MissingCriterion;
@@ -8096,7 +8247,7 @@ test "a criterion with no Given round-trips through persisted state, projection 
     const ruined = try a.dupe(spec.IdentifiedRecord, snapshot.content.records);
     ruined[criterion_index].proposal.content.acceptance_criterion.given = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
     tampered.content.records = ruined;
-    try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, tampered, .{}), current.feature, contracts.port()));
+    try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, tampered, .{}), current.feature, contracts.port(), text.normalizer));
 }
 
 test "mixed record lineage survives completed readback and rejects a missing derived citation" {
@@ -8142,7 +8293,7 @@ test "mixed record lineage survives completed readback and rejects a missing der
             .clarification = .{ .state_ordinal = 1, .revision = 1 },
         };
         const bytes = try std.json.Stringify.valueAlloc(a, snapshot, .{});
-        const restored = (try state.parse(a, bytes, current.feature, contracts.port())).specified().?;
+        const restored = (try state.parse(a, bytes, current.feature, contracts.port(), text.normalizer)).specified().?;
         const traces = try @import("domain/specification_projection.zig").traceSnapshot(a, restored.reference, restored.content);
         try std.testing.expectEqual(restored.content.records.len, traces.len);
         for (restored.content.records, traces) |record, trace| try std.testing.expectEqualDeep(record.id, trace.id);
@@ -8176,7 +8327,7 @@ test "mixed record lineage survives completed readback and rejects a missing der
         const altered = try a.dupe(spec.IdentifiedRecord, snapshot.content.records);
         altered[criterion_index].proposal.provenance.citation_ids = all.entries[0].claim.citation_ids;
         tampered.content.records = altered;
-        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, tampered, .{}), current.feature, contracts.port()));
+        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, tampered, .{}), current.feature, contracts.port(), text.normalizer));
 
         // Skipping a token-only record task does not erase its aggregate exact
         // obligation. Even a legitimate incidental mapping cannot satisfy it.
@@ -8199,7 +8350,7 @@ test "mixed record lineage survives completed readback and rejects a missing der
         try std.testing.expectEqual(@as(usize, 0), (try @import("domain/specification_coverage.zig").exactTargets(a, missing_exact.brief, missing_exact.content, exact)).len);
         // The stored provenance remains valid; current coverage is what fails.
         try provenance.validateStored(a, fixture.context.inputs, .{ .records = fixture.context.registry.records, .occurrences = fixture.context.registry.occurrences }, @import("domain/reference_support.zig").records(fixture.context.references), missing_exact.brief, missing_exact.content);
-        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, missing_exact, .{}), current.feature, contracts.port()));
+        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, missing_exact, .{}), current.feature, contracts.port(), text.normalizer));
     }
 }
 
@@ -9276,7 +9427,7 @@ test "persisted reference and specification readers enforce composition and orig
         const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
         const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
         const snapshot = try snapshots.build(.{ .bytes = "references" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
-        try snapshots.validate(a, snapshot);
+        try snapshots.validate(a, snapshot, text.normalizer);
         for ([_]bool{ false, true }) |wire| {
             const rejected: spec.BusinessValue = .{ .segments = if (wire)
                 &.{.{ .literal = .{ .value = encoded } }}
@@ -9286,12 +9437,12 @@ test "persisted reference and specification readers enforce composition and orig
             const claims = try a.dupe(@import("domain/reference_extraction.zig").Claim, snapshot.extraction.claims);
             claims[0].content.model.business.value.segments = rejected.segments;
             broken.extraction.claims = claims;
-            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, broken));
+            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, broken, text.normalizer));
             broken = snapshot;
             const signals = try a.dupe(references.r.Signal, snapshot.signals);
             signals[0].value.content.model.business.value.segments = rejected.segments;
             broken.signals = signals;
-            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, broken));
+            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, broken, text.normalizer));
             const current = try completedFixture(&fixture, false);
             const assembled = try sessions.assemble(a, text.validator, fixture.context, current, &.{});
             const brief = current.units[0].?.response.content.brief;
@@ -9692,7 +9843,7 @@ test "equal-byte originals retain mixed-kind exact duties through one representa
     const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
     const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
     const snapshot = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "mixed-kinds" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
-    try @import("domain/reference_snapshot.zig").validate(a, snapshot);
+    try @import("domain/reference_snapshot.zig").validate(a, snapshot, text.normalizer);
     for (snapshot.dispositions) |disposition| if ((try r.item(all, disposition.claim_id)).claim.content == .preserved_token) try std.testing.expect(try native.matches(all, disposition));
     const state = @import("domain/specification_state.zig");
     const brief = current.units[0].?.response.content.brief;
@@ -9709,19 +9860,19 @@ test "equal-byte originals retain mixed-kind exact duties through one representa
         .coverage = covered,
         .clarification = .{ .state_ordinal = 1, .revision = 1 },
     };
-    const restored = (try state.parse(a, try std.json.Stringify.valueAlloc(a, stored, .{}), current.feature, contracts.port())).specified().?;
+    const restored = (try state.parse(a, try std.json.Stringify.valueAlloc(a, stored, .{}), current.feature, contracts.port(), text.normalizer)).specified().?;
     try std.testing.expectEqualDeep(stored.coverage, restored.coverage);
     try std.testing.expectEqualDeep(stored.reference.extraction, restored.reference.extraction);
     // Every original duplicate duty participates in readback equality even
     // though the representative supplies the single exact byte witness.
     var omitted = stored;
     omitted.coverage.obligations = covered.obligations[0..2];
-    try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, omitted, .{}), current.feature, contracts.port()));
+    try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, omitted, .{}), current.feature, contracts.port(), text.normalizer));
     var forged = stored;
     const dispositions = try a.dupe(r.ClaimDisposition, snapshot.dispositions);
     dispositions[all.entries[3].claim.id.ordinal - 1].related_claim_ids = &.{all.entries[2].claim.id};
     forged.reference.dispositions = dispositions;
-    try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, forged, .{}), current.feature, contracts.port()));
+    try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, forged, .{}), current.feature, contracts.port(), text.normalizer));
 }
 
 test "records name the claims they support from their group, requirements own their claims, and an uncovered behaviour claim gets an engine-bound criterion" {
@@ -10053,13 +10204,14 @@ test "claim-bound scenarios: the request's schema admits one scenario for each s
     const plan = (try slots.plan(a, room.signal, try room.admitted(a, &.{try room.requirement(a)}))) orelse return error.TestUnexpectedResult;
     // The one native choice: every slot's number once, on the scenarios definition's number.
     const choice = try request.numberChoice(a, plan);
-    try std.testing.expectEqual(.exact_members, choice.collection);
+    try std.testing.expectEqual(.exact_members, std.meta.activeTag(choice.collection));
     try std.testing.expectEqualDeep(&[_]schema.ChoiceStep{ .{ .property = "scenarios" }, .items, .{ .property = "number" } }, choice.target.path);
     try std.testing.expectEqualStrings(request.definition.id().bytes, choice.definition.?.bytes);
     try std.testing.expectEqualSlices(i64, &.{ 1, 2, 3, 4, 5, 6 }, choice.allowed);
     // No two scenarios of the answer repeat the same given, when and then (ADR 0038 Decision 3).
-    try std.testing.expectEqual(@as(usize, 3), choice.distinct.len);
-    for (scenario_parts, choice.distinct) |part, compared| try std.testing.expectEqualStrings(try std.ascii.allocLowerString(a, part), compared);
+    const distinct = choice.collection.exact_members.distinct;
+    try std.testing.expectEqual(@as(usize, 3), distinct.len);
+    for (scenario_parts, distinct) |part, compared| try std.testing.expectEqualStrings(try std.ascii.allocLowerString(a, part), compared);
 
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const canonical = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
@@ -10072,7 +10224,7 @@ test "claim-bound scenarios: the request's schema admits one scenario for each s
     try std.testing.expectEqual(@as(u32, 6), listed.maximum);
     try std.testing.expectEqual(@as(usize, 1), selected.memberChoices().len);
     try std.testing.expectEqualSlices(i64, choice.allowed, selected.memberChoices()[0].allowed);
-    try std.testing.expectEqualDeep(choice.distinct, selected.memberChoices()[0].distinct);
+    try std.testing.expectEqualDeep(distinct, selected.memberChoices()[0].distinct);
 
     // Each number once, in any order, is the only accepted answer.
     const exact = try scenariosAnswer(a, &.{ 1, 2, 3, 4, 5, 6 });

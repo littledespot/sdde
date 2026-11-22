@@ -97,7 +97,7 @@ pub const Action = struct {
         try checkpoint(diagnostic, runtime, .capture_state);
         const state_bytes = steps.captureState(self.state_source, retained, observed, paths) catch |err| return stopped(diagnostic, .capture_state, err);
         try checkpoint(diagnostic, runtime, .parse_state);
-        const prior = steps.parseState(retained, self.contracts, observed.selector.feature_id, state_bytes) catch |err| return stopped(diagnostic, .parse_state, err);
+        const prior = steps.parseState(retained, self.contracts, self.normalizer, observed.selector.feature_id, state_bytes) catch |err| return stopped(diagnostic, .parse_state, err);
         try checkpoint(diagnostic, runtime, .capture_clarifications);
         const captures = steps.captureClarifications(self.input_source, scratch, observed, paths) catch |err| return stopped(diagnostic, .capture_clarifications, err);
         try checkpoint(diagnostic, runtime, .parse_clarification_state);
@@ -160,8 +160,8 @@ pub const steps = struct {
         return (source orelse return error.FeatureInputUnavailable).capture(allocator, selected, paths);
     }
 
-    pub fn parseState(allocator: std.mem.Allocator, contracts: ?state.ContractSource, selected: identity.FeatureId, bytes: ?[]const u8) state.Error!state.Prior {
-        return state.parse(allocator, bytes, selected, contracts);
+    pub fn parseState(allocator: std.mem.Allocator, contracts: ?state.ContractSource, normalizer: normalizer_port.Normalizer, selected: identity.FeatureId, bytes: ?[]const u8) state.Error!state.Prior {
+        return state.parse(allocator, bytes, selected, contracts, normalizer);
     }
 
     pub fn captureClarifications(source: input_port.Capturer, allocator: std.mem.Allocator, observed: feature.Directory, paths: artifacts.FeaturePaths) input_port.Error!clarification.Captures {

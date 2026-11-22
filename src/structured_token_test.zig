@@ -147,7 +147,7 @@ test "stored classification replay rejects omitted native duties and forged pres
             .passive_records = &.{},
             .passive_occurrences = &.{},
         };
-        try snapshots.validate(a, snapshot);
+        try snapshots.validate(a, snapshot, text.normalizer);
         const items = try @import("domain/reference_claim_items.zig").build(a, inputs, completed.ledger);
         try std.testing.expect(try duty.itemRequired(items, .{ .ordinal = 2 }));
         try std.testing.expect(!(try duty.itemRequired(items, .{ .ordinal = 1 })));
@@ -187,7 +187,7 @@ test "stored classification replay rejects omitted native duties and forged pres
                 try std.testing.expectEqual(@as(u32, 2), stored.extraction.next_claim_ordinal);
                 try std.testing.expectEqual(@as(u32, 2), stored.extraction.next_citation_ordinal);
             }
-            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, stored));
+            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, stored, text.normalizer));
         }
     }
 }

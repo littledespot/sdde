@@ -528,6 +528,77 @@ test "the outcome association holds no Spec result type and the reference core d
     }
 }
 
+/// C25: the omission modules import in one direction. This pins the direct imports among the six named modules; it
+/// does not claim that the domain is acyclic, because a wider cycle group still runs through some of them. A module
+/// imports only listed modules of a strictly lower rank.
+const omission_import_ranks = [_]struct { file: []const u8, rank: u8 }{
+    .{ .file = "source_omission.zig", .rank = 0 },
+    .{ .file = "specification_support.zig", .rank = 1 },
+    .{ .file = "source_omission_authority.zig", .rank = 2 },
+    .{ .file = "reference_extraction_repair.zig", .rank = 3 },
+    .{ .file = "reference_reconciliation_repair.zig", .rank = 3 },
+    .{ .file = "source_omission_repair.zig", .rank = 4 },
+};
+
+fn omissionRank(file: []const u8) ?u8 {
+    for (omission_import_ranks) |entry| if (std.mem.eql(u8, entry.file, file)) return entry.rank;
+    return null;
+}
+
+/// The first listed module that `source`, the text of listed module `file`, imports at its own rank or a higher one.
+/// A module outside the list is not constrained.
+fn misorderedOmissionImport(allocator: std.mem.Allocator, file: []const u8, source: []const u8) !?[]const u8 {
+    const rank = omissionRank(file) orelse return null;
+    for (try importsOf(allocator, source)) |path| {
+        const imported = std.fs.path.basename(path);
+        if ((omissionRank(imported) orelse continue) >= rank) return imported;
+    }
+    return null;
+}
+
+test "the omission modules import in rank order" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    inline for (omission_import_ranks) |entry| {
+        if (try misorderedOmissionImport(arena.allocator(), entry.file, @embedFile("domain/" ++ entry.file))) |imported| {
+            std.debug.print("{s} imports {s}, which is not of a lower rank\n", .{ entry.file, imported });
+            return error.OmissionImportOrder;
+        }
+    }
+}
+
+test "the omission import order accepts lower-ranked and unlisted imports and rejects an equal or higher rank" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    // Accepted: lower-ranked and unlisted imports, and names that only a comment or a string spells.
+    try std.testing.expectEqual(@as(?[]const u8, null), try misorderedOmissionImport(allocator, "source_omission_authority.zig",
+        \\const loss = @import("source_omission.zig");
+        \\const support = @import("../domain/specification_support.zig");
+        \\const atomic = @import("atomic_repair.zig");
+        \\// const repair = @import("source_omission_repair.zig");
+        \\const text = "@import(\"source_omission_repair.zig\")";
+    ));
+    try std.testing.expectEqual(@as(?[]const u8, null), try misorderedOmissionImport(allocator, "unlisted.zig", "const a = @import(\"source_omission_repair.zig\");"));
+    // Rejected: a lower rank importing a higher one, siblings of one rank importing each other, and the top rank
+    // imported from below.
+    const Case = struct { file: []const u8, source: []const u8, offender: []const u8 };
+    for ([_]Case{
+        .{ .file = "source_omission.zig", .source = "const x = @import(\"reference_reconciliation_repair.zig\");", .offender = "reference_reconciliation_repair.zig" },
+        .{ .file = "source_omission.zig", .source = "const x = @import(\"specification_support.zig\");", .offender = "specification_support.zig" },
+        .{ .file = "reference_extraction_repair.zig", .source = "const x = @import(\"reference_reconciliation_repair.zig\");", .offender = "reference_reconciliation_repair.zig" },
+        .{ .file = "reference_reconciliation_repair.zig", .source = "const x = @import(\"reference_extraction_repair.zig\");", .offender = "reference_extraction_repair.zig" },
+        .{ .file = "reference_extraction_repair.zig", .source = "const x = @import(\"source_omission_repair.zig\");", .offender = "source_omission_repair.zig" },
+        .{ .file = "source_omission_authority.zig", .source = "const x = @import(\"../domain/source_omission_repair.zig\");", .offender = "source_omission_repair.zig" },
+    }) |case| {
+        const found = (try misorderedOmissionImport(allocator, case.file, case.source)) orelse return error.TestExpectedEqual;
+        try std.testing.expectEqualStrings(case.offender, found);
+    }
+    // Two modules that import each other cannot both pass: the edge from the lower rank is the one rejected.
+    try std.testing.expect((try misorderedOmissionImport(allocator, "source_omission.zig", "const a = @import(\"source_omission_authority.zig\");")) != null);
+    try std.testing.expectEqual(@as(?[]const u8, null), try misorderedOmissionImport(allocator, "source_omission_authority.zig", "const a = @import(\"source_omission.zig\");"));
+}
+
 test "the checked reconciliation chain is unwound in its owner alone" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
@@ -2439,7 +2510,7 @@ test "the prepare-inputs stage steps that validate hand the next step a distinct
     try std.testing.expect(validatedHandoff(ParameterType(steps.validateClarificationState, 0), ReturnPayload(steps.validateClarificationState), ParameterType(steps.validateClarificationForms, 2)));
     // Observation precedes path resolution and the prior state is parsed from bytes the capture read.
     try std.testing.expect(ReturnPayload(steps.inspectFeature) == ParameterType(steps.resolvePaths, 2));
-    try std.testing.expect(ReturnPayload(steps.captureState) == ?[]const u8 and ParameterType(steps.parseState, 3) == ?[]const u8);
+    try std.testing.expect(ReturnPayload(steps.captureState) == ?[]const u8 and ParameterType(steps.parseState, 4) == ?[]const u8);
 }
 
 test "no absorbed input-preparation operation remains registered, bound or placed in a workflow" {
@@ -3314,12 +3385,56 @@ test "the generic repair operations select owner rules through one exhaustive sw
     }
 }
 
+test "an operation type registers by what it declares: its action, closed variants or its own contract, never neither" {
+    const native = @import("composition/native_workflow_operations.zig");
+    const invocation = @import("application/specify_invocation_runner.zig");
+    const generic_repair = @import("application/repair_workflow.zig");
+    try std.testing.expect(comptime native.shapeOf(invocation.ValidateArguments) == .action);
+    try std.testing.expect(comptime native.shapeOf(generic_repair.AuthorizeRepair) == .shell);
+    try std.testing.expect(comptime native.shapeOf(invocation.Invocation) == .direct);
+    // A type with neither an action nor a contract is not an operation; registering one does not compile.
+    try std.testing.expect(comptime native.shapeOf(struct { allocator: u8 }) == null);
+    // The invocation parse is the invocation step by its own declarations, not by a branch in the table; an
+    // ordinary action keeps the step kind and the default outcomes.
+    var parse: invocation.ParseInvocation = .{ .allocator = std.testing.allocator };
+    const invoked = native.entry(invocation.ParseInvocation, &parse);
+    try std.testing.expectEqual(.invocation, invoked.contract.kind);
+    try std.testing.expectEqual(@as(usize, 1), invoked.contract.outcomes.len);
+    try std.testing.expectEqual(.ok, invoked.contract.outcomes[0]);
+    var validate: invocation.ValidateArguments = .{ .allocator = std.testing.allocator };
+    const ordinary = native.entry(invocation.ValidateArguments, &validate);
+    try std.testing.expectEqual(.step, ordinary.contract.kind);
+    try std.testing.expectEqual(@as(usize, 2), ordinary.contract.outcomes.len);
+}
+
 test "no per-owner repair operation remains: the four generic operations are the only registered repair operations" {
-    // The registry registers the four generic operations and no per-owner one (ADR 0033).
-    const composition = @embedFile("composition/native_workflow_operations.zig");
-    try std.testing.expectEqual(@as(usize, 4), countOccurrences(composition, "variantEntry(generic_repair."));
-    for ([_][]const u8{ "entry(text_repair.", "entry(extraction_repair.", "entry(reconciliation_repair.", "entry(source_omission.", "entry(specification_repair.", "entry(support_repair." }) |forbidden| {
-        try expectAbsent(composition, forbidden);
+    // The registry registers the four generic operations and no per-owner one (ADR 0033): the operations table
+    // holds each generic repair type once, and no other field declares closed variants.
+    @setEvalBranchQuota(100_000);
+    const native = @import("composition/native_workflow_operations.zig");
+    const generic_repair = @import("application/repair_workflow.zig");
+    inline for (.{ generic_repair.AuthorizeRepair, generic_repair.BuildRepairInput, generic_repair.ParseRepair, generic_repair.MergeRepair }) |generic| {
+        var fields: usize = 0;
+        inline for (std.meta.fields(native.Operations)) |field| fields += @intFromBool(field.type == generic);
+        try std.testing.expectEqual(@as(usize, 1), fields);
+    }
+    var shells: usize = 0;
+    inline for (std.meta.fields(native.Operations)) |field| shells += @intFromBool(comptime native.shapeOf(field.type) == .shell);
+    try std.testing.expectEqual(@as(usize, 4), shells);
+    // No owner binding is an operation: no type an owner module declares is a field of the table.
+    inline for (.{
+        @import("application/reference_text_repair_workflow.zig"),
+        @import("application/reference_extraction_repair_workflow.zig"),
+        @import("application/reference_reconciliation_repair_workflow.zig"),
+        @import("application/source_omission_repair_workflow.zig"),
+        @import("application/specification_repair_workflow.zig"),
+        @import("application/specification_support_repair_workflow.zig"),
+    }) |owner_module| {
+        inline for (@typeInfo(owner_module).@"struct".decls) |decl| {
+            const member = @field(owner_module, decl.name);
+            if (@TypeOf(member) != type) continue;
+            inline for (std.meta.fields(native.Operations)) |field| try std.testing.expect(field.type != member);
+        }
     }
     // Each owner's binding is an owner module: it declares its data effects and rules, imports no action
     // and registers no contract of its own.
@@ -3399,8 +3514,12 @@ test "the engine binds each acceptance criterion to its slot, and the scenarios 
     // the operations the unit steps run (each appears in both subgraphs), so no second model path
     // exists. Collection and validation run on the group's batch unchanged; building the request and
     // parsing the answer switch on the session's scenarios phase.
-    const native = @embedFile("composition/native_workflow_operations.zig");
-    try std.testing.expectEqual(@as(usize, 4), countOccurrences(native, "entry(scenario_generation."));
+    const scenario_generation = @import("application/scenario_generation_workflow.zig");
+    inline for (.{ scenario_generation.Plan, scenario_generation.Check, scenario_generation.Advance, scenario_generation.Complete }) |operation| {
+        var fields: usize = 0;
+        inline for (std.meta.fields(@import("composition/native_workflow_operations.zig").Operations)) |field| fields += @intFromBool(field.type == operation);
+        try std.testing.expectEqual(@as(usize, 1), fields);
+    }
     // One transition completes the records unit: the completion operation is the only caller of
     // `completeScenarios`. The plan only measures the population, the admission only joins a group's
     // criteria, and the progress check only reads, so none of them completes it.

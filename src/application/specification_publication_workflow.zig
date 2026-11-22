@@ -32,7 +32,7 @@ pub const ResolvedNeeds = struct {
 pub const Build = struct {
     pub const Action = @import("../actions/specification/build_specification_state.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;
@@ -84,7 +84,7 @@ pub const RenderReference = struct {
 pub const Prepare = struct {
     pub const Action = @import("../actions/specification/prepare_specification_output.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;

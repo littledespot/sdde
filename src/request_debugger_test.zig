@@ -1133,17 +1133,17 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     }
     if (shape == 9) {
         const canonical = try compiler.compile(a, agreement_schema);
-        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = agreement_path }, .allowed = &.{ 2, 4 }, .collection = .unique_subset, .agree = "topic" }});
+        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = agreement_path }, .allowed = &.{ 2, 4 }, .collection = .{ .unique_subset = .{ .agree = "topic" } } }});
         return .{ .schema = restriction.selected(), .response = "{\"entries\":[{\"topic\":\"north\",\"refs\":[2]},{\"topic\":\"south\",\"refs\":[4]}]}", .restriction = restriction };
     }
     if (shape == 8) {
         const canonical = try compiler.compile(a, coverage_schema);
-        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = coverage_path }, .allowed = &.{ 2, 4 }, .collection = .unique_subset, .coverage = coverage_rule }});
+        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = coverage_path }, .allowed = &.{ 2, 4 }, .collection = .{ .unique_subset = .{ .coverage = coverage_rule } } }});
         return .{ .schema = restriction.selected(), .response = "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2,4]}]}", .fields = &.{.{ .field = .business_rule, .path = &.{ .{ .property = "entries" }, .items, .{ .property = "content" }, .{ .variant = "rule" }, .{ .property = "text" } } }}, .restriction = restriction };
     }
     if (shape == 7) {
         const canonical = try compiler.compile(a, member_schema);
-        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = member_path }, .allowed = &.{ 2, 4 }, .collection = .exact_members, .distinct = &.{"note"} }});
+        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = member_path }, .allowed = &.{ 2, 4 }, .collection = .{ .exact_members = .{ .distinct = &.{"note"} } } }});
         return .{ .schema = restriction.selected(), .response = "{\"findings\":[{\"ordinal\":4,\"note\":\"b\"},{\"ordinal\":2,\"note\":\"a\"}]}", .restriction = restriction };
     }
     if (shape == 5) {

@@ -2918,7 +2918,7 @@ test "selection repair response bounds follow authorized compatible claims rathe
         try std.testing.expectEqual(@as(usize, if (global) 2 else 1), allowed.len);
         try std.testing.expect(allowed.len < input.partition.group.claim_ids.len);
         const choice = packet.integerChoices()[packet.integerChoices().len - 1];
-        try std.testing.expectEqual(.unique_subset, choice.collection);
+        try std.testing.expectEqual(.unique_subset, std.meta.activeTag(choice.collection));
         try std.testing.expectEqual(allowed.len, choice.allowed.len);
         for (choice.allowed, allowed) |ordinal, claim| try std.testing.expectEqual(@as(i64, claim.ordinal), ordinal);
         const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
@@ -3086,7 +3086,7 @@ test "conflict selection respects occupied pairs without conflating conflict kin
             const pairs = body.value.object.get("repair").?.object.get("rule").?.object.get("conflicting_pairs").?.array.items;
             try std.testing.expectEqual(@as(usize, 1), pairs.len);
             try std.testing.expectEqualStrings("repair_conflict_selection", packet.resultDefinition().?.bytes);
-            try std.testing.expectEqual(.sequence, packet.integerChoices()[packet.integerChoices().len - 1].collection);
+            try std.testing.expectEqual(.sequence, std.meta.activeTag(packet.integerChoices()[packet.integerChoices().len - 1].collection));
             try std.testing.expectEqual(@as(usize, 0), body.value.object.get("input").?.object.get("constraints").?.array.items.len);
             try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, "{\"claim_ids\":[1,2]}"));
             const wire = "{\"group_id\":1}";

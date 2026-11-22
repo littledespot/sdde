@@ -115,7 +115,7 @@ fn select(current: extraction.TextValidated, scope: evidence.Scope) Error!Replac
 /// Source-backed loss uses the same CAS algebra and canonical extraction
 /// validator; it cannot replace an entire partly-correct chunk.
 pub const Omission = struct {
-    const loss = @import("source_omission.zig");
+    const loss = @import("source_omission_authority.zig");
     pub const OmissionTarget = union(enum) { claim: usize, outcome, classification: usize };
     pub const OmissionReplacement = union(enum) {
         claim: extraction.Proposal,

@@ -83,12 +83,12 @@ pub const Runtime = struct {
             .provider_runtime = undefined,
         };
         self.native.init(allocator, self.toolchain_source.projectCapturer(), self.toolchain_source.presetEnumerator(), self.toolchain_source.presetCapturer(), self.toolchain_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, self.reference.inspector(), self.feature.inspector(), self.inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), self.corpus.enumerator(), self.corpus.capturer(), self.markdown.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, self.identities.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-        self.native.publish_output.action.writer = self.outputs.port();
-        self.native.prepare_inputs.action.state_source = self.inputs.workflowStateCapturer();
+        self.native.ops.publish_output.action.writer = self.outputs.port();
+        self.native.ops.prepare_inputs.action.state_source = self.inputs.workflowStateCapturer();
         self.boot = runInProjectWithRegistry(io, allocator, project, control, &self.native.registry, &self.boot_diagnostic);
         if (self.boot == .ready) {
             self.logging = .{ .allocator = allocator, .io = io, .project = project, .roots = self.boot.ready.roots.registry(), .logs = &self.boot.ready.logs, .inputs = &self.inputs, .outputs = &self.outputs };
-            self.native.activate_feature_logging.activator = self.logging.?.activator();
+            self.native.ops.activate_feature_logging.activator = self.logging.?.activator();
             self.native.bindRoots(self.boot.ready.roots.registry());
             self.native.bindWorkflows(self.boot.ready.workflows.registry());
             self.native.bindConfiguration(self.boot.ready.config.config());

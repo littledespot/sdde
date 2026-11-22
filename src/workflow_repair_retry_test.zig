@@ -1,6 +1,35 @@
 const std = @import("std");
 const retry = @import("domain/workflow_retry.zig");
 
+test "a limit allows its retries and the first execution, and executions at or past the allowance are exhausted" {
+    const widest: u32 = std.math.maxInt(u32);
+    for ([_]u32{ 0, 1, 2, 64, 128, widest }) |value| {
+        const limit: retry.Limit = .{ .value = value };
+        try std.testing.expectEqual(@as(u64, value) + 1, limit.allowance());
+        for ([_]struct { executions: u64, expected: retry.Limit.Standing }{
+            .{ .executions = 0, .expected = .admits },
+            .{ .executions = value, .expected = .admits },
+            .{ .executions = @as(u64, value) + 1, .expected = .exhausted },
+            .{ .executions = @as(u64, value) + 2, .expected = .exhausted },
+            .{ .executions = std.math.maxInt(u64), .expected = .exhausted },
+        }) |case| try std.testing.expectEqual(case.expected, limit.standing(case.executions));
+    }
+}
+
+test "an exhaustion exists only once the allowance is spent, and only for a nameable step" {
+    const workflow = @import("domain/workflow.zig");
+    const step = workflow.WorkflowStepId.parse("merge").?;
+    for ([_]u32{ 0, 1, 2 }) |value| {
+        const limit: retry.Limit = .{ .value = value };
+        try std.testing.expect(retry.Exhaustion.init(step, limit, value) == null);
+        const spent = retry.Exhaustion.init(step, limit, @as(u64, value) + 1).?;
+        try std.testing.expectEqual(@as(u64, value) + 1, spent.completed_executions);
+        try std.testing.expectEqual(.retry_limit, spent.reason);
+        try std.testing.expectEqualStrings("merge", spent.operation().bytes);
+        try std.testing.expect(retry.Exhaustion.init(.{ .bytes = "" }, limit, @as(u64, value) + 1) == null);
+    }
+}
+
 test "unchanged canonical replacements exhaust actual repair attempts without acceptance" {
     const atomic = @import("domain/atomic_repair.zig");
     const Replacement = union(enum) { narrative: []const u8, selection: []const u32 };

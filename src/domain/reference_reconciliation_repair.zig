@@ -318,7 +318,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .target = .{ .path = &.{.{ .property = if (authorization.target == .conflict_selection) "group_id" else "claim_ids" }} },
         .definition = definition.id(),
         .allowed = ids,
-        .collection = if (authorization.target == .conflict_selection) .sequence else .unique_subset,
+        .collection = if (authorization.target == .conflict_selection) .sequence else .{ .unique_subset = .none },
     }});
 }
 
@@ -560,33 +560,67 @@ pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextCo
     };
     return .{ .validated = .{ .permit = pending.permit, .revision = parsed.source.revision, .result = if (valid) .resolved else .recurring } };
 }
+/// The records a repair target of one kind can name. A summary proposal holds statements; a global one holds
+/// signals and conflicts.
+const Kind = enum { statement, signal, conflict };
+/// Which part of a record a target replaces: the claims it selects, its text, or the whole record.
+const Part = enum { selection, text, record };
+
+/// How many records of `kind` the proposal holds, or null when it is the other proposal.
+fn recordCount(comptime kind: Kind, proposal: @FieldType(r.Parsed, "proposal")) ?usize {
+    return switch (kind) {
+        .statement => if (proposal == .summary) proposal.summary.statements.len else null,
+        .signal => if (proposal == .global) proposal.global.signals.len else null,
+        .conflict => if (proposal == .global) proposal.global.conflicts.len else null,
+    };
+}
+
+/// The part of record `index` that the target replaces, as the replacement it holds today.
+fn recordPart(comptime kind: Kind, proposal: @FieldType(r.Parsed, "proposal"), index: usize, part: Part) Error!Replacement {
+    if (index >= (recordCount(kind, proposal) orelse return error.InvalidAtomicRepair)) return error.InvalidAtomicRepair;
+    return switch (kind) {
+        .statement => switch (part) {
+            .selection => .{ .selection = .{ .claim_ids = proposal.summary.statements[index].claim_ids } },
+            .text => .{ .content = proposal.summary.statements[index].content },
+            .record => .{ .statement = proposal.summary.statements[index] },
+        },
+        .signal => switch (part) {
+            .selection => .{ .selection = .{ .claim_ids = proposal.global.signals[index].claim_ids } },
+            .text => .{ .content = proposal.global.signals[index].content },
+            .record => .{ .signal = proposal.global.signals[index] },
+        },
+        .conflict => switch (part) {
+            .selection => .{ .selection = .{ .claim_ids = proposal.global.conflicts[index].claim_ids } },
+            .text => .{ .summary = proposal.global.conflicts[index].summary },
+            .record => .{ .conflict = proposal.global.conflicts[index] },
+        },
+    };
+}
+
+/// An insertion adds a record after the last one, so it has no replacement to read.
+fn insertionPoint(comptime kind: Kind, proposal: @FieldType(r.Parsed, "proposal"), index: usize) Error!?Replacement {
+    if (index != (recordCount(kind, proposal) orelse return error.InvalidAtomicRepair)) return error.InvalidAtomicRepair;
+    return null;
+}
+
 fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
     const summary = parsed.proposal == .summary;
     // Only a disposition names a claim that must carry model content.
     if (target == .disposition and !try modelDisposition(parsed.input.progress.plan.layout.items, target.disposition.claim)) return error.InvalidAtomicRepair;
     return switch (target) {
-        .statement_selection, .statement_content, .statement => |index| if (summary and index < parsed.proposal.summary.statements.len) switch (target) {
-            .statement_selection => .{ .selection = .{ .claim_ids = parsed.proposal.summary.statements[index].claim_ids } },
-            .statement_content => .{ .content = parsed.proposal.summary.statements[index].content },
-            .statement => .{ .statement = parsed.proposal.summary.statements[index] },
-            else => unreachable,
-        } else error.InvalidAtomicRepair,
-        .insert_statement => |value| if (summary and value.index == parsed.proposal.summary.statements.len) null else error.InvalidAtomicRepair,
+        .statement_selection => |index| try recordPart(.statement, parsed.proposal, index, .selection),
+        .statement_content => |index| try recordPart(.statement, parsed.proposal, index, .text),
+        .statement => |index| try recordPart(.statement, parsed.proposal, index, .record),
+        .insert_statement => |value| try insertionPoint(.statement, parsed.proposal, value.index),
         .disposition => |value| if (!summary and value.index < parsed.proposal.global.claim_dispositions.len) .{ .disposition = parsed.proposal.global.claim_dispositions[value.index].disposition } else error.InvalidAtomicRepair,
-        .signal_selection, .signal_content, .signal => |index| if (!summary and index < parsed.proposal.global.signals.len) switch (target) {
-            .signal_selection => .{ .selection = .{ .claim_ids = parsed.proposal.global.signals[index].claim_ids } },
-            .signal_content => .{ .content = parsed.proposal.global.signals[index].content },
-            .signal => .{ .signal = parsed.proposal.global.signals[index] },
-            else => unreachable,
-        } else error.InvalidAtomicRepair,
-        .insert_signal => |value| if (!summary and value.index == parsed.proposal.global.signals.len) null else error.InvalidAtomicRepair,
-        .conflict_selection, .conflict_summary, .conflict => |index| if (!summary and index < parsed.proposal.global.conflicts.len) switch (target) {
-            .conflict_selection => .{ .selection = .{ .claim_ids = parsed.proposal.global.conflicts[index].claim_ids } },
-            .conflict_summary => .{ .summary = parsed.proposal.global.conflicts[index].summary },
-            .conflict => .{ .conflict = parsed.proposal.global.conflicts[index] },
-            else => unreachable,
-        } else error.InvalidAtomicRepair,
-        .insert_conflict => |value| if (!summary and value.index == parsed.proposal.global.conflicts.len) null else error.InvalidAtomicRepair,
+        .signal_selection => |index| try recordPart(.signal, parsed.proposal, index, .selection),
+        .signal_content => |index| try recordPart(.signal, parsed.proposal, index, .text),
+        .signal => |index| try recordPart(.signal, parsed.proposal, index, .record),
+        .insert_signal => |value| try insertionPoint(.signal, parsed.proposal, value.index),
+        .conflict_selection => |index| try recordPart(.conflict, parsed.proposal, index, .selection),
+        .conflict_summary => |index| try recordPart(.conflict, parsed.proposal, index, .text),
+        .conflict => |index| try recordPart(.conflict, parsed.proposal, index, .record),
+        .insert_conflict => |value| try insertionPoint(.conflict, parsed.proposal, value.index),
     };
 }
 
@@ -663,7 +697,7 @@ fn retireSignals(a: std.mem.Allocator, parsed: r.Parsed, claims: []const r.Claim
 }
 
 pub const Omission = struct {
-    const loss = @import("source_omission.zig");
+    const loss = @import("source_omission_authority.zig");
     pub const Facts = struct { reconciliation: context.Facts, support: loss.Support };
     const OmissionRule = struct { finding: @import("required_authority.zig").ReviewEvidence, disposition_choices: ?dispositions.RepairChoices };
     pub const OmissionTarget = union(enum) { unit: Target, conflict_group: []const r.ClaimId };
@@ -858,3 +892,73 @@ pub const Omission = struct {
     pub const Authorization = OmissionAuthorization;
     pub const Error = OmissionError;
 };
+
+test "select reads each kind's record from its own proposal and rejects an index or a proposal that does not match" {
+    const ids = [_]r.ClaimId{ .{ .ordinal = 1 }, .{ .ordinal = 2 }, .{ .ordinal = 3 }, .{ .ordinal = 4 } };
+    const statements = [_]r.StatementProposal{
+        .{ .claim_ids = ids[0..1], .content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 1 } } } },
+        .{ .claim_ids = ids[1..2], .content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 2 } } } },
+    };
+    const signals = [_]r.SignalProposal{
+        .{ .claim_ids = ids[0..2], .content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 3 } } } },
+        .{ .claim_ids = ids[2..4], .content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 4 } } } },
+    };
+    const conflicts = [_]r.ConflictProposal{
+        .{ .claim_ids = ids[0..2], .kind = .value_mismatch, .summary = .{ .nodes = &.{} } },
+        .{ .claim_ids = ids[2..4], .kind = .scope_mismatch, .summary = .{ .nodes = &.{} } },
+    };
+    // Only the proposal is read for these targets: the input is read only to check a disposition.
+    const summary: r.Parsed = .{ .input = undefined, .proposal = .{ .summary = .{ .statements = &statements } } };
+    const global: r.Parsed = .{ .input = undefined, .proposal = .{ .global = .{ .claim_dispositions = &.{}, .signals = &signals, .conflicts = &conflicts } } };
+
+    // Accepted: each part of each record, at every index.
+    for (0..2) |index| {
+        const Row = struct { parsed: r.Parsed, target: Target, expected: Replacement };
+        for ([_]Row{
+            .{ .parsed = summary, .target = .{ .statement_selection = index }, .expected = .{ .selection = .{ .claim_ids = statements[index].claim_ids } } },
+            .{ .parsed = summary, .target = .{ .statement_content = index }, .expected = .{ .content = statements[index].content } },
+            .{ .parsed = summary, .target = .{ .statement = index }, .expected = .{ .statement = statements[index] } },
+            .{ .parsed = global, .target = .{ .signal_selection = index }, .expected = .{ .selection = .{ .claim_ids = signals[index].claim_ids } } },
+            .{ .parsed = global, .target = .{ .signal_content = index }, .expected = .{ .content = signals[index].content } },
+            .{ .parsed = global, .target = .{ .signal = index }, .expected = .{ .signal = signals[index] } },
+            .{ .parsed = global, .target = .{ .conflict_selection = index }, .expected = .{ .selection = .{ .claim_ids = conflicts[index].claim_ids } } },
+            .{ .parsed = global, .target = .{ .conflict_summary = index }, .expected = .{ .summary = conflicts[index].summary } },
+            .{ .parsed = global, .target = .{ .conflict = index }, .expected = .{ .conflict = conflicts[index] } },
+        }) |row| try std.testing.expectEqualDeep(@as(?Replacement, row.expected), try select(row.parsed, row.target));
+    }
+    // Accepted: an insertion names the position after the last record and has no replacement to read.
+    for ([_]struct { parsed: r.Parsed, target: Target }{
+        .{ .parsed = summary, .target = .{ .insert_statement = .{ .index = statements.len, .claim = ids[0] } } },
+        .{ .parsed = global, .target = .{ .insert_signal = .{ .index = signals.len, .claim = ids[0] } } },
+        .{ .parsed = global, .target = .{ .insert_conflict = .{ .index = conflicts.len, .claims = ids[0..2] } } },
+    }) |row| try std.testing.expectEqual(@as(?Replacement, null), try select(row.parsed, row.target));
+
+    // Rejected: an index past the last record, an insertion anywhere but after it, and a target of a kind the
+    // proposal does not hold.
+    for ([_]struct { parsed: r.Parsed, target: Target }{
+        .{ .parsed = summary, .target = .{ .statement_selection = statements.len } },
+        .{ .parsed = summary, .target = .{ .statement_content = statements.len } },
+        .{ .parsed = summary, .target = .{ .statement = statements.len } },
+        .{ .parsed = global, .target = .{ .signal_selection = signals.len } },
+        .{ .parsed = global, .target = .{ .signal_content = signals.len } },
+        .{ .parsed = global, .target = .{ .signal = signals.len } },
+        .{ .parsed = global, .target = .{ .conflict_selection = conflicts.len } },
+        .{ .parsed = global, .target = .{ .conflict_summary = conflicts.len } },
+        .{ .parsed = global, .target = .{ .conflict = conflicts.len } },
+        .{ .parsed = summary, .target = .{ .insert_statement = .{ .index = 0, .claim = ids[0] } } },
+        .{ .parsed = global, .target = .{ .insert_signal = .{ .index = 0, .claim = ids[0] } } },
+        .{ .parsed = global, .target = .{ .insert_conflict = .{ .index = 0, .claims = ids[0..2] } } },
+        .{ .parsed = global, .target = .{ .statement_selection = 0 } },
+        .{ .parsed = global, .target = .{ .statement_content = 0 } },
+        .{ .parsed = global, .target = .{ .statement = 0 } },
+        .{ .parsed = global, .target = .{ .insert_statement = .{ .index = 0, .claim = ids[0] } } },
+        .{ .parsed = summary, .target = .{ .signal_selection = 0 } },
+        .{ .parsed = summary, .target = .{ .signal_content = 0 } },
+        .{ .parsed = summary, .target = .{ .signal = 0 } },
+        .{ .parsed = summary, .target = .{ .insert_signal = .{ .index = 0, .claim = ids[0] } } },
+        .{ .parsed = summary, .target = .{ .conflict_selection = 0 } },
+        .{ .parsed = summary, .target = .{ .conflict_summary = 0 } },
+        .{ .parsed = summary, .target = .{ .conflict = 0 } },
+        .{ .parsed = summary, .target = .{ .insert_conflict = .{ .index = 0, .claims = ids[0..2] } } },
+    }) |row| try std.testing.expectError(error.InvalidAtomicRepair, select(row.parsed, row.target));
+}

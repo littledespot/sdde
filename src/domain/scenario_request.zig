@@ -65,8 +65,7 @@ pub fn numberChoice(allocator: std.mem.Allocator, group_plan: slots.Plan) std.me
         .target = .{ .path = &.{ .{ .property = "scenarios" }, .items, .{ .property = "number" } } },
         .definition = definition.id(),
         .allowed = try group_plan.numbers(allocator),
-        .collection = .exact_members,
-        .distinct = criterion_properties,
+        .collection = .{ .exact_members = .{ .distinct = criterion_properties } },
     };
 }
 

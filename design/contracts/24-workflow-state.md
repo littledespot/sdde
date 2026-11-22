@@ -62,7 +62,8 @@ invalidates affected descendants through the stage rules below.
   display bytes. Request-native exact scope binds its snapshot and eligible occurrence
   bytes; `model-request-debug/v21` retains it for diagnostics, not state recovery.
   Published-state validation needs no model request, historical capture or operation
-  port.
+  port. It re-quotes each stored extraction claim from its citations with the pure Unicode
+  normalizer (ADR 0036).
 - **Review evidence.** State holds no review evidence (ADR 0023). Source-review
   findings, including §12's nullable `authority_gap` and ADR 0023's source-only
   readiness evidence, are execution-local, and readback restores none of them.

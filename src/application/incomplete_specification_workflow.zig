@@ -16,7 +16,7 @@ pub const Build = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .refreshed_clarification_state, .evidence = .refreshed_clarification_state, .result = .incomplete_specification_state } };
     pub const Action = @import("../actions/specification/build_incomplete_specification.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;
@@ -48,7 +48,7 @@ pub const Prepare = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .incomplete_specification_state, .evidence = .refreshed_clarification_state, .result = .prepared_workflow_output } };
     pub const Action = @import("../actions/specification/prepare_incomplete_specification_output.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;

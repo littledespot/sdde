@@ -206,7 +206,7 @@ pub fn isKernel(step: compilation.CompiledStep) bool {
 /// A request's attempt allowance (DE1 decision 4): each attempt, correction or not, plus the one
 /// runaway re-send each may take (ADR 0039).
 pub fn attemptAllowance(limit: workflow_retry.Limit) u64 {
-    return 2 * (1 + @as(u64, limit.value));
+    return 2 * limit.allowance();
 }
 
 pub fn stageStep(step: compilation.CompiledStep, stage: Stage) ?*const compilation.CompiledStep {

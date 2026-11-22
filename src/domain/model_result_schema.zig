@@ -94,31 +94,88 @@ pub const ChoiceTarget = union(enum) {
     tagged: struct { kind: []const u8, field: []const u8 },
     path: []const ChoiceStep,
 };
+/// How a selection bounds the collection that holds the selected integers. Each variant carries only what
+/// it can use, so a rule that belongs to another variant cannot be stated.
+pub const Collection = union(enum) {
+    /// Sequence selectors keep canonical bounds.
+    sequence,
+    /// A native unique-selection invariant also bounds collection cardinality.
+    /// Duplicate admission remains with the native owner; the schema profile
+    /// has no uniqueness keyword.
+    unique_subset: UniqueRule,
+    /// Selects an integer property of array items: the array must name every allowed value
+    /// exactly once (one complete assignment).
+    exact_members: ExactMembers,
+
+    /// With a `unique_subset` selector on `<array>/items/<property>`, the one native rule over that
+    /// array, so a recorded choice names at most one.
+    pub const UniqueRule = union(enum) {
+        none,
+        /// Native cross-item coverage over the array.
+        coverage: ItemCoverage,
+        /// The item property whose value items listing a common value must share (ADR 0036
+        /// Decision 7). It is a required enumeration of every item, which must be an object, and not
+        /// the listed property.
+        agree: []const u8,
+    };
+    pub const ExactMembers = struct {
+        /// Whether the guidance schema states the item count. `native` keeps the canonical bounds;
+        /// admission alone enforces the members.
+        count: enum { stated, native } = .stated,
+        /// The other properties of the array's items whose values, taken together, no two items may
+        /// all repeat (ADR 0038 Decision 3). Each is a declared property of every item variant,
+        /// required or not, and none is the member key. Empty states no rule.
+        distinct: []const []const u8 = &.{},
+    };
+
+    pub fn coverage(self: Collection) ?ItemCoverage {
+        return switch (self) {
+            .unique_subset => |rule| switch (rule) {
+                .coverage => |covered| covered,
+                .none, .agree => null,
+            },
+            .sequence, .exact_members => null,
+        };
+    }
+
+    pub fn agreement(self: Collection) ?[]const u8 {
+        return switch (self) {
+            .unique_subset => |rule| switch (rule) {
+                .agree => |name| name,
+                .none, .coverage => null,
+            },
+            .sequence, .exact_members => null,
+        };
+    }
+
+    /// The same collection with its rules cleared, which is how a selector that applies none checks
+    /// that its target exists: only the variant and the stated member count carry over.
+    pub fn bare(self: Collection) Collection {
+        return switch (self) {
+            .sequence => .sequence,
+            .unique_subset => .{ .unique_subset = .none },
+            .exact_members => |members| .{ .exact_members = .{ .count = members.count } },
+        };
+    }
+
+    /// A copy whose every slice and string `a` owns.
+    pub fn clone(self: Collection, a: std.mem.Allocator) std.mem.Allocator.Error!Collection {
+        return switch (self) {
+            .sequence => .sequence,
+            .unique_subset => |rule| .{ .unique_subset = switch (rule) {
+                .none => .none,
+                .coverage => |covered| .{ .coverage = try covered.clone(a) },
+                .agree => |name| .{ .agree = try a.dupe(u8, name) },
+            } },
+            .exact_members => |members| .{ .exact_members = .{ .count = members.count, .distinct = try cloneStrings(a, members.distinct) } },
+        };
+    }
+};
 pub const IntegerChoice = struct {
     target: ChoiceTarget,
     definition: ?DefinitionId = null,
     allowed: []const i64,
-    /// A native unique-selection invariant also bounds collection cardinality.
-    /// Duplicate admission remains with the native owner; the schema profile
-    /// has no uniqueness keyword. Sequence selectors keep canonical bounds.
-    /// `exact_members` selects an integer property of array items: the array
-    /// must name every allowed value exactly once (one complete assignment).
-    collection: enum { sequence, unique_subset, exact_members } = .sequence,
-    /// With `exact_members`, whether the guidance schema states the item count.
-    /// `native` keeps the canonical bounds; admission alone enforces the members.
-    member_count: enum { stated, native } = .stated,
-    /// With `exact_members`, the other properties of the array's items whose values, taken together,
-    /// no two items may all repeat (ADR 0038 Decision 3). Each is a declared property of every item
-    /// variant, required or not, and none is the member key. Empty states no rule.
-    distinct: []const []const u8 = &.{},
-    /// With a `unique_subset` selector on `<array>/items/<property>`, native
-    /// cross-item coverage over that array.
-    coverage: ?ItemCoverage = null,
-    /// With a `unique_subset` selector on `<array>/items/<property>`, the item property whose
-    /// value items listing a common value must share (ADR 0036 Decision 7). It is a required
-    /// enumeration of every item, which must be an object, and not the listed property; a coverage
-    /// on the same selector is refused, so a recorded choice names one rule.
-    agree: ?[]const u8 = null,
+    collection: Collection = .sequence,
 
     /// A copy whose every slice and string `a` owns, so a packet projection keeps no borrowed selection.
     pub fn clone(self: IntegerChoice, a: std.mem.Allocator) std.mem.Allocator.Error!IntegerChoice {
@@ -129,9 +186,7 @@ pub const IntegerChoice = struct {
         };
         copy.definition = if (self.definition) |id| .{ .bytes = try a.dupe(u8, id.bytes) } else null;
         copy.allowed = try a.dupe(i64, self.allowed);
-        copy.distinct = try cloneStrings(a, self.distinct);
-        copy.coverage = if (self.coverage) |rule| try rule.clone(a) else null;
-        copy.agree = if (self.agree) |name| try a.dupe(u8, name) else null;
+        copy.collection = try self.collection.clone(a);
         return copy;
     }
 };
@@ -220,22 +275,21 @@ pub fn restrictFieldPolicies(allocator: std.mem.Allocator, canonical: *const Sch
                 for (path) |step| if (step == .property and step.property.len == 0) return invalid();
             },
         }
-        if (entry.member_count == .native and entry.collection != .exact_members) return invalid();
-        if (entry.distinct.len != 0 and entry.collection != .exact_members) return invalid();
         if (entry.collection == .exact_members) {
+            const distinct = entry.collection.exact_members.distinct;
             const path = if (entry.target == .path) entry.target.path else return invalid();
             if (entry.allowed.len == 0 or path.len < 2 or path[path.len - 2] != .items or path[path.len - 1] != .property) return invalid();
             // One complete member set: an outer array would repeat or omit it.
             for (path[0 .. path.len - 2]) |step| if (step == .items) return invalid();
             // The compared properties are distinct names, and none is the key that already differs.
-            for (entry.distinct, 0..) |name, position| {
+            for (distinct, 0..) |name, position| {
                 if (name.len == 0 or std.mem.eql(u8, name, path[path.len - 1].property)) return invalid();
-                for (entry.distinct[0..position]) |prior| if (std.mem.eql(u8, prior, name)) return invalid();
+                for (distinct[0..position]) |prior| if (std.mem.eql(u8, prior, name)) return invalid();
             }
         }
-        if (entry.coverage) |rule| {
+        if (entry.collection.coverage()) |rule| {
             const path = if (entry.target == .path) entry.target.path else return invalid();
-            if (entry.collection != .unique_subset or path.len < 2 or path[path.len - 2] != .items or path[path.len - 1] != .property) return invalid();
+            if (path.len < 2 or path[path.len - 2] != .items or path[path.len - 1] != .property) return invalid();
             // One governed array: an outer array would split the rule across several arrays,
             // and a correction could no longer list every naming.
             for (path[0 .. path.len - 2]) |step| if (step == .items) return invalid();
@@ -248,9 +302,9 @@ pub fn restrictFieldPolicies(allocator: std.mem.Allocator, canonical: *const Sch
                 if (group == 1) for (rule.exclusive) |exclusive| if (std.mem.eql(u8, exclusive, kind)) return invalid();
             };
         }
-        if (entry.agree) |name| {
+        if (entry.collection.agreement()) |name| {
             const path = if (entry.target == .path) entry.target.path else return invalid();
-            if (entry.collection != .unique_subset or entry.coverage != null or path.len < 2 or path[path.len - 2] != .items or path[path.len - 1] != .property) return invalid();
+            if (path.len < 2 or path[path.len - 2] != .items or path[path.len - 1] != .property) return invalid();
             // One governed array, as for coverage: an outer array would split the rule across
             // several arrays, and a correction could no longer list every set.
             for (path[0 .. path.len - 2]) |step| if (step == .items) return invalid();
@@ -277,21 +331,21 @@ pub fn restrictFieldPolicies(allocator: std.mem.Allocator, canonical: *const Sch
                     if (std.mem.eql(u8, id.bytes, definition.id.bytes)) break definition.root;
                 } else return invalid();
                 // Membership, coverage and agreement must constrain the schema actually validated.
-                if (entry.collection == .exact_members or entry.coverage != null or entry.agree != null) return invalid();
-                if (!(try narrowChoice(arena.allocator(), other, entry.target, entry.allowed, entry.collection, entry.member_count, &.{}, null, null)).matched) return invalid();
+                if (entry.collection == .exact_members or entry.collection.coverage() != null or entry.collection.agreement() != null) return invalid();
+                if (!(try narrowChoice(arena.allocator(), other, entry.target, entry.allowed, entry.collection.bare())).matched) return invalid();
                 continue;
             }
         }
-        const narrowed = try narrowChoice(arena.allocator(), root, entry.target, entry.allowed, entry.collection, entry.member_count, entry.distinct, entry.coverage, entry.agree);
+        const narrowed = try narrowChoice(arena.allocator(), root, entry.target, entry.allowed, entry.collection);
         // A selector the selected schema doesn't hold may go unused after the complete parent is checked below,
         // as for a composition part that lacks the array. Membership and coverage must constrain the schema
         // actually validated; agreement does too wherever its array is present, and nowhere else.
-        if (!narrowed.matched and (entry.collection == .exact_members or entry.coverage != null)) return invalid();
+        if (!narrowed.matched and (entry.collection == .exact_members or entry.collection.coverage() != null)) return invalid();
         if (!narrowed.matched and entry.target == .path) {
             const parent = storage(canonical).projection_of orelse return invalid();
-            if (!(try narrowChoice(arena.allocator(), parent.root(), entry.target, entry.allowed, entry.collection, entry.member_count, &.{}, null, null)).matched) return invalid();
+            if (!(try narrowChoice(arena.allocator(), parent.root(), entry.target, entry.allowed, entry.collection.bare())).matched) return invalid();
         }
-        if (narrowed.matched) if (entry.agree) |name| try agreements.append(arena.allocator(), .{ .path = try cloneChoicePath(arena.allocator(), entry.target.path), .allowed = try arena.allocator().dupe(i64, entry.allowed), .agree = try arena.allocator().dupe(u8, name) });
+        if (narrowed.matched) if (entry.collection.agreement()) |name| try agreements.append(arena.allocator(), .{ .path = try cloneChoicePath(arena.allocator(), entry.target.path), .allowed = try arena.allocator().dupe(i64, entry.allowed), .agree = try arena.allocator().dupe(u8, name) });
         root = narrowed.node;
     }
     // Whatever form a later choice took, each member key must still offer exactly
@@ -300,8 +354,8 @@ pub fn restrictFieldPolicies(allocator: std.mem.Allocator, canonical: *const Sch
     var members: std.ArrayList(MemberChoice) = .empty;
     var coverages: std.ArrayList(CoverageChoice) = .empty;
     for (integer_choices) |entry| {
-        if (entry.collection == .exact_members) try members.append(arena.allocator(), .{ .path = try cloneChoicePath(arena.allocator(), entry.target.path), .allowed = try arena.allocator().dupe(i64, entry.allowed), .distinct = try cloneStrings(arena.allocator(), entry.distinct) });
-        if (entry.coverage) |rule| try coverages.append(arena.allocator(), .{ .path = try cloneChoicePath(arena.allocator(), entry.target.path), .allowed = try arena.allocator().dupe(i64, entry.allowed), .coverage = try rule.clone(arena.allocator()) });
+        if (entry.collection == .exact_members) try members.append(arena.allocator(), .{ .path = try cloneChoicePath(arena.allocator(), entry.target.path), .allowed = try arena.allocator().dupe(i64, entry.allowed), .distinct = try cloneStrings(arena.allocator(), entry.collection.exact_members.distinct) });
+        if (entry.collection.coverage()) |rule| try coverages.append(arena.allocator(), .{ .path = try cloneChoicePath(arena.allocator(), entry.target.path), .allowed = try arena.allocator().dupe(i64, entry.allowed), .coverage = try rule.clone(arena.allocator()) });
     }
     const selected = try createSchema(arena.allocator(), root, canonical.bytes(), &.{}, .{ .restriction_of = canonical, .definition_id = storage(canonical).definition_id, .projection_of = storage(canonical).projection_of, .choice_definitions = storage(canonical).choice_definitions, .member_choices = members.items, .coverage_choices = coverages.items, .agreement_choices = agreements.items });
     owned.* = .{ .allocator = allocator, .arena = arena, .canonical = canonical, .selected = selected, .handle = .{ .owner = owned } };
@@ -315,9 +369,9 @@ pub fn restrictRecorded(allocator: std.mem.Allocator, selected: *const Schema, m
     defer scratch.deinit();
     const choices = try scratch.allocator().alloc(IntegerChoice, members.len + coverages.len + agreements.len);
     // The recorded bytes already carry whatever item count the request stated.
-    for (members, choices[0..members.len]) |member, *choice| choice.* = .{ .target = .{ .path = member.path }, .allowed = member.allowed, .collection = .exact_members, .member_count = .native, .distinct = member.distinct };
-    for (coverages, choices[members.len..][0..coverages.len]) |recorded, *choice| choice.* = .{ .target = .{ .path = recorded.path }, .allowed = recorded.allowed, .collection = .unique_subset, .coverage = recorded.coverage };
-    for (agreements, choices[members.len + coverages.len ..]) |recorded, *choice| choice.* = .{ .target = .{ .path = recorded.path }, .allowed = recorded.allowed, .collection = .unique_subset, .agree = recorded.agree };
+    for (members, choices[0..members.len]) |member, *choice| choice.* = .{ .target = .{ .path = member.path }, .allowed = member.allowed, .collection = .{ .exact_members = .{ .count = .native, .distinct = member.distinct } } };
+    for (coverages, choices[members.len..][0..coverages.len]) |recorded, *choice| choice.* = .{ .target = .{ .path = recorded.path }, .allowed = recorded.allowed, .collection = .{ .unique_subset = .{ .coverage = recorded.coverage } } };
+    for (agreements, choices[members.len + coverages.len ..]) |recorded, *choice| choice.* = .{ .target = .{ .path = recorded.path }, .allowed = recorded.allowed, .collection = .{ .unique_subset = .{ .agree = recorded.agree } } };
     return restrictFieldPolicies(allocator, selected, &.{}, choices, &.{});
 }
 
@@ -361,7 +415,7 @@ fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const Exclu
 }
 
 const Narrowed = struct { node: *const Node, matched: bool };
-fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, allowed: ?[]const i64, collection: @FieldType(IntegerChoice, "collection"), member_count: @FieldType(IntegerChoice, "member_count"), distinct: []const []const u8, coverage: ?ItemCoverage, agree: ?[]const u8) Error!Narrowed {
+fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, allowed: ?[]const i64, collection: Collection) Error!Narrowed {
     if (target == .path and target.path.len == 0 and node.* != .one_of) {
         // A nullable field keeps its explicit absence alternative. The selector
         // still has to match and constrain an integer-bearing sibling below.
@@ -390,7 +444,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
             const copy = try a.dupe(*const Node, variants);
             var matched = false;
             for (copy) |*variant| {
-                const selected = try narrowChoice(a, variant.*, target, allowed, collection, member_count, distinct, coverage, agree);
+                const selected = try narrowChoice(a, variant.*, target, allowed, collection);
                 // Membership must hold in every alternative, or one escapes it.
                 if (collection == .exact_members and !selected.matched) return invalid();
                 variant.* = selected.node;
@@ -405,7 +459,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
                 const tag = findProperty(properties, "kind");
                 if (tag != null and tag.?.schema.* == .constant and tag.?.schema.constant == .string and std.mem.eql(u8, tag.?.schema.constant.string, target.tagged.kind)) {
                     if (findProperty(properties, target.tagged.field) == null) return invalid();
-                    return narrowChoice(a, node, .{ .path = &.{.{ .property = target.tagged.field }} }, allowed, collection, member_count, distinct, coverage, agree);
+                    return narrowChoice(a, node, .{ .path = &.{.{ .property = target.tagged.field }} }, allowed, collection);
                 }
             }
             const copy = try a.dupe(Property, properties);
@@ -415,7 +469,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
                     if (target.path[0] != .property or !std.mem.eql(u8, target.path[0].property, property.name)) continue;
                     break :blk .{ .path = target.path[1..] };
                 };
-                const selected = try narrowChoice(a, property.schema, next, allowed, collection, member_count, distinct, coverage, agree);
+                const selected = try narrowChoice(a, property.schema, next, allowed, collection);
                 // An absent optional property would escape membership entirely.
                 if (collection == .exact_members and selected.matched and !property.required) return invalid();
                 property.schema = selected.node;
@@ -431,7 +485,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
                 break :blk .{ .path = target.path[1..] };
             };
             if (target == .path and allowed != null and allowed.?.len == 0 and items.minimum == 0) {
-                const checked = try narrowChoice(a, items.items, next, null, collection, member_count, &.{}, null, null);
+                const checked = try narrowChoice(a, items.items, next, null, collection.bare());
                 if (checked.matched) {
                     const empty = try a.create(Node);
                     empty.* = node.*;
@@ -439,31 +493,32 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
                     return .{ .node = empty, .matched = true };
                 }
             }
-            const selected = try narrowChoice(a, items.items, next, allowed, collection, member_count, distinct, coverage, agree);
+            const selected = try narrowChoice(a, items.items, next, allowed, collection);
             const result = try a.create(Node);
             result.* = node.*;
             result.array.items = selected.node;
-            if (coverage) |rule| if (selected.matched and next == .path and next.path.len == 1 and next.path[0] == .property) {
+            if (collection.coverage()) |rule| if (selected.matched and next == .path and next.path.len == 1 and next.path[0] == .property) {
                 if (items.coverage != null) return invalid();
                 result.array.coverage = .{ .property = try a.dupe(u8, next.path[0].property), .rule = try rule.clone(a) };
             };
-            if (agree) |name| if (selected.matched and next == .path and next.path.len == 1 and next.path[0] == .property) {
+            if (collection.agreement()) |name| if (selected.matched and next == .path and next.path.len == 1 and next.path[0] == .property) {
                 if (items.agreement != null) return invalid();
                 result.array.agreement = .{ .property = try a.dupe(u8, next.path[0].property), .agree = try a.dupe(u8, name) };
             };
             if (collection == .exact_members and selected.matched and next == .path and next.path.len == 1 and next.path[0] == .property) {
+                const members = collection.exact_members;
                 if (!requiredIntegerKey(items.items, next.path[0].property)) return invalid();
                 // A compared property is one every item variant declares, whether or not it must return it: an
                 // omitted property is a value the comparison knows.
-                for (distinct) |name| if (!declaredProperty(items.items, name)) return invalid();
+                for (members.distinct) |name| if (!declaredProperty(items.items, name)) return invalid();
                 const values = allowed orelse return invalid();
                 const count = std.math.cast(u32, values.len) orelse return invalid();
                 if (count < items.minimum or count > items.maximum or items.members != null) return invalid();
-                if (member_count == .stated) {
+                if (members.count == .stated) {
                     result.array.minimum = count;
                     result.array.maximum = count;
                 }
-                result.array.members = .{ .property = try a.dupe(u8, next.path[0].property), .values = try a.dupe(i64, values), .distinct = try cloneStrings(a, distinct) };
+                result.array.members = .{ .property = try a.dupe(u8, next.path[0].property), .values = try a.dupe(i64, values), .distinct = try cloneStrings(a, members.distinct) };
             }
             return .{ .node = result, .matched = selected.matched };
         },

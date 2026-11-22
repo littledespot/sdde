@@ -81,7 +81,7 @@ test "native unique subsets derive collection cardinality without restricting ov
     const resource = try compile(a, selectionChoices);
     const nested = resource.select(.{ .bytes = "nested" }).?;
     const path: []const schema.ChoiceStep = &.{ .{ .property = "records" }, .{ .items = {} }, .{ .property = "handles" } };
-    const one: schema.IntegerChoice = .{ .target = .{ .path = path }, .allowed = &.{7}, .collection = .unique_subset };
+    const one: schema.IntegerChoice = .{ .target = .{ .path = path }, .allowed = &.{7}, .collection = .{ .unique_subset = .none } };
     const selected = try schema.restrict(std.testing.allocator, nested, &.{}, &.{one});
     defer selected.release();
     try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[7]},{\"handles\":[7]}]}", true);
@@ -92,12 +92,12 @@ test "native unique subsets derive collection cardinality without restricting ov
     try std.testing.expectEqual(@as(u32, 1), handles.array.maximum);
     // Uniqueness is an existing native-owner obligation. The closed schema
     // profile does not claim to enforce duplicates within the derived bound.
-    const two = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7 }, .collection = .unique_subset }});
+    const two = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7 }, .collection = .{ .unique_subset = .none } }});
     defer two.release();
     try expectSelection(a, two.selected(), "{\"records\":[{\"handles\":[2,7]},{\"handles\":[7]}]}", true);
     try expectSelection(a, two.selected(), "{\"records\":[{\"handles\":[2,2]}]}", true);
     try std.testing.expect(std.mem.indexOf(u8, two.selected().modelBytes(), "uniqueItems") == null);
-    const larger = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7, 9 }, .collection = .unique_subset }});
+    const larger = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7, 9 }, .collection = .{ .unique_subset = .none } }});
     defer larger.release();
     try expectSelection(a, larger.selected(), "{\"records\":[{\"handles\":[2,7,9]}]}", false);
     // Opt-in subset facts never alter another owner's sequence semantics.
@@ -113,12 +113,12 @@ test "native unique subsets derive collection cardinality without restricting ov
     try expectSelection(a, empty.selected(), "{\"records\":[]}", true);
     try expectSelection(a, empty.selected(), "{\"records\":[{\"handles\":[7]}]}", false);
     const optional = resource.select(.{ .bytes = "selection" }).?;
-    const optional_empty = try schema.restrict(std.testing.allocator, optional, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = &.{}, .collection = .unique_subset }});
+    const optional_empty = try schema.restrict(std.testing.allocator, optional, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = &.{}, .collection = .{ .unique_subset = .none } }});
     defer optional_empty.release();
     try expectSelection(a, optional_empty.selected(), "{\"source_ids\":[]}", true);
-    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "claim_id" }} }, .allowed = &.{7}, .collection = .unique_subset }}));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "claim_id" }} }, .allowed = &.{7}, .collection = .{ .unique_subset = .none } }}));
     const required = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":2,\"maxItems\":4,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}}"));
-    for ([_][]const i64{ &.{}, &.{7} }) |ids| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = ids, .collection = .unique_subset }}));
+    for ([_][]const i64{ &.{}, &.{7} }) |ids| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = ids, .collection = .{ .unique_subset = .none } }}));
 }
 
 test "exact members admit one item per allowed key and reject partial repeated or foreign assignments" {
@@ -128,7 +128,7 @@ test "exact members admit one item per allowed key and reject partial repeated o
     const check = @import("domain/model_payload_schema.zig");
     const resource = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10},\"note\":{\"type\":\"string\",\"maxLength\":20}},\"required\":[\"ordinal\",\"note\"],\"additionalProperties\":false}}"));
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ordinal" } };
-    const exact = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }});
+    const exact = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } }});
     defer exact.release();
     // Any order of the complete member set is admitted, by native and wire schemas alike.
     try expectSelection(a, exact.selected(), "{\"value\":[{\"ordinal\":5,\"note\":\"b\"},{\"ordinal\":3,\"note\":\"a\"}]}", true);
@@ -158,10 +158,10 @@ test "exact members admit one item per allowed key and reject partial repeated o
     try std.testing.expect(std.mem.indexOf(u8, exact.selected().modelBytes(), "uniqueItems") == null);
     // The selector must name an integer property of array items, with members.
     for ([_]schema.IntegerChoice{
-        .{ .target = .{ .path = path }, .allowed = &.{}, .collection = .exact_members },
-        .{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{3}, .collection = .exact_members },
-        .{ .target = .{ .tagged = .{ .kind = "value", .field = "ordinal" } }, .allowed = &.{3}, .collection = .exact_members },
-        .{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, .collection = .exact_members },
+        .{ .target = .{ .path = path }, .allowed = &.{}, .collection = .{ .exact_members = .{} } },
+        .{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{3}, .collection = .{ .exact_members = .{} } },
+        .{ .target = .{ .tagged = .{ .kind = "value", .field = "ordinal" } }, .allowed = &.{3}, .collection = .{ .exact_members = .{} } },
+        .{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, .collection = .{ .exact_members = .{} } },
     }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
 }
 
@@ -170,7 +170,7 @@ test "exact members require a required scalar key in the validated schema" {
     defer arena.deinit();
     const a = arena.allocator();
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ordinal" } };
-    const members: []const schema.IntegerChoice = &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }};
+    const members: []const schema.IntegerChoice = &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } }};
     // A nullable, optional or collection-valued key cannot identify one member per item.
     for ([_][]const u8{
         "{\"oneOf\":[{\"type\":\"null\"},{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}]}",
@@ -197,7 +197,7 @@ test "exact members require a required scalar key in the validated schema" {
     const nested: []const schema.ChoiceStep = &.{ .{ .property = "records" }, .{ .items = {} }, .{ .property = "handles" } };
     const foreign = try schema.restrict(std.testing.allocator, review, &.{}, &.{.{ .target = .{ .path = nested }, .definition = .{ .bytes = "nested" }, .allowed = &.{1} }});
     foreign.release();
-    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, review, &.{}, &.{.{ .target = .{ .path = nested }, .definition = .{ .bytes = "nested" }, .allowed = &.{1}, .collection = .exact_members }}));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, review, &.{}, &.{.{ .target = .{ .path = nested }, .definition = .{ .bytes = "nested" }, .allowed = &.{1}, .collection = .{ .exact_members = .{} } }}));
     // Every root alternative carrying the selector must be constrained; an
     // alternative where the key does not match would escape membership.
     const alternatives = try compile(a,
@@ -215,17 +215,17 @@ test "exact members require a required scalar key in the validated schema" {
     const assignment = definitions.select(.{ .bytes = "assignment" }).?;
     const named: schema.DefinitionId = .{ .bytes = "assignment" };
     for ([_][2]schema.IntegerChoice{
-        .{ .{ .target = .{ .path = path }, .definition = named, .allowed = &.{ 3, 5 }, .collection = .exact_members }, .{ .target = .{ .path = path }, .allowed = &.{3} } },
-        .{ .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }, .{ .target = .{ .path = path }, .definition = named, .allowed = &.{3} } },
+        .{ .{ .target = .{ .path = path }, .definition = named, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } }, .{ .target = .{ .path = path }, .allowed = &.{3} } },
+        .{ .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } }, .{ .target = .{ .path = path }, .definition = named, .allowed = &.{3} } },
     }) |stacked| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, assignment, &.{}, &stacked));
-    const single = try schema.restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = path }, .definition = named, .allowed = &.{ 3, 5 }, .collection = .exact_members }});
+    const single = try schema.restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = path }, .definition = named, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } }});
     single.release();
     // An optional member array could be omitted, and an outer array would repeat or
     // omit the set; neither is one complete assignment.
     const optional_array = try compile(a, "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[],\"additionalProperties\":false}");
     try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, optional_array, &.{}, members));
     const grouped = try compile(a, "{\"type\":\"object\",\"properties\":{\"groups\":{\"type\":\"array\",\"maxItems\":4,\"items\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[\"value\"],\"additionalProperties\":false}}},\"required\":[\"groups\"],\"additionalProperties\":false}");
-    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, grouped, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "groups" }, .items, .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 3, 5 }, .collection = .exact_members }}));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, grouped, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "groups" }, .items, .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } }}));
     // A tagged choice on the same key, in either order, leaves no admissible set.
     const tagged_items = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"keep\"},\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"kind\",\"ordinal\"],\"additionalProperties\":false}}"));
     const tagged_key: schema.IntegerChoice = .{ .target = .{ .tagged = .{ .kind = "keep", .field = "ordinal" } }, .allowed = &.{3} };
@@ -250,7 +250,7 @@ test "recorded exact members reconstruct native admission from provider schema b
     const resource = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}"));
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ordinal" } };
     const exact = try schema.restrict(std.testing.allocator, resource, &.{}, &.{
-        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members },
+        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } },
     });
     defer exact.release();
     try std.testing.expectEqual(@as(usize, 0), resource.memberChoices().len);
@@ -279,7 +279,7 @@ test "recorded exact members reconstruct native admission from provider schema b
     // ADR 0046: a native-count set leaves the canonical bounds in the wire bytes;
     // replay restores admission's membership over those bounds, unchanged.
     const native = try schema.restrict(std.testing.allocator, resource, &.{}, &.{
-        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .member_count = .native },
+        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .count = .native } } },
     });
     defer native.release();
     const open_wire = try compile(a, native.selected().modelBytes());
@@ -309,7 +309,7 @@ test "nullable terminal integer choices preserve absence and narrow only authori
     const a = arena.allocator();
     const ids = "{\"oneOf\":[{\"type\":\"null\"},{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}}]}";
     const original = try compile(a, try fieldSchema(a, ids));
-    const narrowed = try schema.restrict(std.testing.allocator, original, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{ 3, 8 }, .collection = .unique_subset }});
+    const narrowed = try schema.restrict(std.testing.allocator, original, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{ 3, 8 }, .collection = .{ .unique_subset = .none } }});
     defer narrowed.release();
     for ([_][]const u8{ "{\"value\":null}", "{\"value\":[]}", "{\"value\":[3,8]}" }) |good| try expectSelection(a, narrowed.selected(), good, true);
     for ([_][]const u8{ "{\"value\":[1]}", "{\"value\":[3,8,3]}", "{\"value\":{\"kind\":\"unknown\"}}", "{\"value\":null,\"extra\":3}" }) |bad| try expectSelection(a, narrowed.selected(), bad, false);
@@ -352,7 +352,7 @@ fn uniqueCollectionPacket(allocator: std.mem.Allocator) !void {
     const packets = @import("domain/model_input_packet.zig");
     const base = try packets.create(allocator, "{}", .workflow_step, .initial_generation, null);
     defer packets.release(base);
-    const selected = try packets.withIntegerChoices(allocator, base, &.{.{ .target = .{ .tagged = .{ .kind = "selection", .field = "handles" } }, .allowed = &.{ 3, 8 }, .collection = .unique_subset }});
+    const selected = try packets.withIntegerChoices(allocator, base, &.{.{ .target = .{ .tagged = .{ .kind = "selection", .field = "handles" } }, .allowed = &.{ 3, 8 }, .collection = .{ .unique_subset = .none } }});
     defer packets.release(selected);
     const contextual = try packets.withContext(struct { description: []const u8 }, allocator, selected, "assignment", .{ .description = "MOCK native selection" });
     defer packets.release(contextual);
@@ -377,12 +377,12 @@ fn comparedPacket(allocator: std.mem.Allocator) !void {
     const packets = @import("domain/model_input_packet.zig");
     const base = try packets.create(allocator, "{}", .workflow_step, .initial_generation, null);
     defer packets.release(base);
-    const selected = try packets.withIntegerChoices(allocator, base, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{ "given", "then" } }});
+    const selected = try packets.withIntegerChoices(allocator, base, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = &.{ "given", "then" } } } }});
     defer packets.release(selected);
     const contextual = try packets.withContext(struct { description: []const u8 }, allocator, selected, "assignment", .{ .description = "MOCK native selection" });
     defer packets.release(contextual);
     try std.testing.expectEqual(@as(usize, 1), contextual.integerChoices().len);
-    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "given", "then" }), contextual.integerChoices()[0].distinct);
+    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "given", "then" }), contextual.integerChoices()[0].collection.exact_members.distinct);
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const resource = try compile(arena.allocator(), equal_items_schema);
@@ -941,7 +941,7 @@ test "admission requires no scenario coverage, and the cross-item rule's kinds a
     const resource = try compile(a, try fieldSchema(a, items));
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ids" } };
     const rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} };
-    const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .coverage = rule }});
+    const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .{ .unique_subset = .{ .coverage = rule } } }});
     defer governed.release();
     const item = "{{\"content\":{{\"kind\":\"{s}\",\"text\":\"t\"}},\"ids\":{s}}}";
     const respond = struct {
@@ -965,21 +965,20 @@ test "admission requires no scenario coverage, and the cross-item rule's kinds a
     const cloned = try governed.selected().clone(a);
     try std.testing.expectEqualDeep(governed.selected().coverageChoices(), cloned.coverageChoices());
     try std.testing.expect(schema.findProperty(cloned.root().object, "value").?.schema.array.coverage != null);
-    // The rule must name a subset selector on an item list whose kinds it can see.
+    // The rule must name a selector on an item list whose kinds it can see.
     for ([_]schema.IntegerChoice{
-        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .coverage = rule },
-        .{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{3}, .collection = .unique_subset, .coverage = rule },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "kinds", .exclusive = &.{"rule"}, .owning = &.{} } },
+        .{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = rule } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "kinds", .exclusive = &.{"rule"}, .owning = &.{} } } } },
         // Exclusive kinds are present, distinct and offered by the items.
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{}, .owning = &.{"check"} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{ "note", "note" }, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"ghost"}, .owning = &.{} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{""}, .owning = &.{} } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{}, .owning = &.{"check"} } } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{ "note", "note" }, .owning = &.{} } } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{"ghost"}, .owning = &.{} } } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{""}, .owning = &.{} } } } },
         // Owning kinds are distinct, offered by the items, and never exclusive.
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{"note"} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{ "rule", "rule" } } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{"ghost"} } },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{""} } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{"note"} } } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{ "rule", "rule" } } } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{"ghost"} } } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{""} } } } },
     }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
 }
 
@@ -995,7 +994,7 @@ test "the statements array of a response is the array its schema covers, as repl
     try std.testing.expect(composition.statementsOf(resource) == null);
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ids" } };
     const rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} };
-    const covered = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .coverage = rule }});
+    const covered = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .{ .unique_subset = .{ .coverage = rule } } }});
     defer covered.release();
     const statements = composition.statementsOf(covered.selected()).?;
     try std.testing.expectEqualDeep(path, statements.path);
@@ -1018,10 +1017,10 @@ test "cross-item rules govern one array, never arrays nested in an outer array" 
     const resource = try compile(a, try fieldSchema(a, outer));
     const rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{"rule"}, .owning = &.{} };
     const nested: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "inner" }, .{ .items = {} }, .{ .property = "ids" } };
-    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = nested }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .coverage = rule }}));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = nested }, .allowed = &.{ 3, 5 }, .collection = .{ .unique_subset = .{ .coverage = rule } } }}));
     // The same inner array as the response's one governed array is accepted.
     const single = try compile(a, try fieldSchema(a, inner));
-    const governed = try schema.restrict(std.testing.allocator, single, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ids" } } }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .coverage = rule }});
+    const governed = try schema.restrict(std.testing.allocator, single, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ids" } } }, .allowed = &.{ 3, 5 }, .collection = .{ .unique_subset = .{ .coverage = rule } } }});
     governed.release();
 }
 
@@ -1035,9 +1034,9 @@ test "an agreement rule needs a subset selector on one array's item list and a c
     const items = "{\"type\":\"array\",\"minItems\":0,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"topic\":{\"enum\":[\"north\",\"south\"]},\"size\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":9},\"side\":{\"enum\":[\"left\",\"right\"]},\"label\":{\"type\":\"string\",\"maxLength\":8},\"refs\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"more\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}}},\"required\":[\"topic\",\"size\",\"label\",\"refs\"],\"additionalProperties\":false}}";
     const resource = try compile(a, try fieldSchema(a, items));
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "refs" } };
-    const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .agree = "topic" }});
+    const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .{ .unique_subset = .{ .agree = "topic" } } }});
     defer governed.release();
-    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset }});
+    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .{ .unique_subset = .none } }});
     defer plain.release();
     // The provider schema can't express the rule, so the model bytes are those of the plain subset.
     try std.testing.expectEqualStrings(plain.selected().modelBytes(), governed.selected().modelBytes());
@@ -1077,29 +1076,25 @@ test "an agreement rule needs a subset selector on one array's item list and a c
     defer unrestricted.release();
     const loose = try std.json.parseFromSlice(std.json.Value, a, disagreeing, .{ .parse_numbers = false });
     try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&loose.value), unrestricted.selected().root()) == null);
-    // The rule names a subset selector on an item list, and a required enumeration of every item other than that list.
+    // The rule names a selector on an item list, and a required enumeration of every item other than that list.
     const mismatched: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "more" } };
     for ([_]schema.IntegerChoice{
-        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .agree = "topic" },
-        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .agree = "topic" },
-        .{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{3}, .collection = .unique_subset, .agree = "topic" },
+        .{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "topic" } } },
         // The compared property exists, is required, is a string or an enumeration, and is not the list itself.
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .agree = "" },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .agree = "refs" },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .agree = "ghost" },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .agree = "size" },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .agree = "side" },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "refs" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "ghost" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "size" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "side" } } },
         // Prose is never compared: a required string is no enumeration.
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .agree = "label" },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "label" } } },
         // The listed property is required, so the rule can apply to every item.
-        .{ .target = .{ .path = mismatched }, .allowed = &.{3}, .collection = .unique_subset, .agree = "topic" },
-        // One rule names one selector: a coverage on the same choice is refused.
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .agree = "topic", .coverage = .{ .kind_property = "topic", .exclusive = &.{"north"}, .owning = &.{} } },
+        .{ .target = .{ .path = mismatched }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "topic" } } },
     }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
     // Two rules on one selector would stack incompatible narrowings.
     try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset, .agree = "topic" },
-        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .unique_subset },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .{ .agree = "topic" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .none } },
     }));
     // A recorded choice that no longer matches the wire bytes is refused rather than ignored.
     try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, &.{.{ .path = path, .allowed = &.{ 3, 5, 7 }, .agree = "ghost" }}));
@@ -1119,7 +1114,7 @@ test "an agreement selector may go unused by a composition part that lacks its a
     const content = try plan.selectSchema(0, &.{});
     const classifications = try plan.selectSchema(1, &.{.{ .part = 0, .value = prior.value }});
     const claims_path: []const schema.ChoiceStep = &.{ .{ .property = "claims" }, .{ .items = {} }, .{ .property = "citations" } };
-    const choice: schema.IntegerChoice = .{ .target = .{ .path = claims_path }, .allowed = &.{ 1, 3 }, .collection = .unique_subset, .agree = "category" };
+    const choice: schema.IntegerChoice = .{ .target = .{ .path = claims_path }, .allowed = &.{ 1, 3 }, .collection = .{ .unique_subset = .{ .agree = "category" } } };
     const governed = try schema.restrict(std.testing.allocator, content, &.{}, &.{choice});
     defer governed.release();
     try std.testing.expectEqual(@as(usize, 1), governed.selected().agreementChoices().len);
@@ -1130,7 +1125,7 @@ test "an agreement selector may go unused by a composition part that lacks its a
     try std.testing.expectEqual(@as(usize, 0), unused.selected().agreementChoices().len);
     try std.testing.expectEqualStrings(classifications.modelBytes(), unused.selected().modelBytes());
     // A selector that no schema holds, the complete parent included, is refused.
-    const absent: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "nowhere" }, .{ .items = {} }, .{ .property = "citations" } } }, .allowed = &.{ 1, 3 }, .collection = .unique_subset, .agree = "category" };
+    const absent: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "nowhere" }, .{ .items = {} }, .{ .property = "citations" } } }, .allowed = &.{ 1, 3 }, .collection = .{ .unique_subset = .{ .agree = "category" } } };
     try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, classifications, &.{}, &.{absent}));
 }
 
@@ -1146,7 +1141,7 @@ test "no exclusive item names both taken and untaken values, owning items are un
     // A note is exclusive with rules; an own item takes its values wherever it appears and
     // is never constrained itself; a check is ungoverned.
     const rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{ "rule", "note" }, .owning = &.{"own"} };
-    const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .coverage = rule }});
+    const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5, 7 }, .collection = .{ .unique_subset = .{ .coverage = rule } } }});
     defer governed.release();
     const item = "{{\"content\":{{\"kind\":\"{s}\",\"text\":\"t\"}},\"ids\":{s}}}";
     const respond = struct {
@@ -1199,7 +1194,7 @@ test "an exact member set states the properties its items must not all repeat, a
     const a = arena.allocator();
     const resource = try compile(a, equal_items_schema);
     const compared: []const []const u8 = &.{ "given", "then" };
-    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = compared }});
+    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = compared } } }});
     defer restricted.release();
     const array = schema.findProperty(restricted.selected().root().object, "value").?.schema.array;
     try std.testing.expectEqual(@as(usize, 2), array.members.?.distinct.len);
@@ -1211,20 +1206,18 @@ test "an exact member set states the properties its items must not all repeat, a
     try std.testing.expectEqualDeep(restricted.selected().memberChoices(), cloned.memberChoices());
     try std.testing.expectEqualDeep(array.members.?.distinct, schema.findProperty(cloned.root().object, "value").?.schema.array.members.?.distinct);
     // A selection that states no rule records an empty one, so the rule is opt-in.
-    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }});
+    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } }});
     defer plain.release();
     try std.testing.expectEqual(@as(usize, 0), plain.selected().memberChoices()[0].distinct.len);
     try std.testing.expectEqual(@as(usize, 0), schema.findProperty(plain.selected().root().object, "value").?.schema.array.members.?.distinct.len);
-    // The rule needs an exact member set, a property every item variant declares that is not the key, each named once.
+    // The rule names a property every item variant declares that is not the key, each named once, on the member key's items.
     const other_path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "given" } };
     for ([_]schema.IntegerChoice{
-        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .distinct = compared },
-        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .distinct = compared },
-        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"ordinal"} },
-        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"absent"} },
-        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{""} },
-        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{ "then", "then" } },
-        .{ .target = .{ .path = other_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = &.{"then"} },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = &.{"ordinal"} } } },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = &.{"absent"} } } },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = &.{""} } } },
+        .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = &.{ "then", "then" } } } },
+        .{ .target = .{ .path = other_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = &.{"then"} } } },
     }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
 }
 
@@ -1235,9 +1228,9 @@ test "equal items of one exact member set are rejected as returned, and replay r
     const check = @import("domain/model_payload_schema.zig");
     const resource = try compile(a, equal_items_schema);
     const compared: []const []const u8 = &.{ "given", "then" };
-    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = compared }});
+    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = compared } } }});
     defer restricted.release();
-    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }});
+    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{} } }});
     defer plain.release();
     // Provider bytes carry neither rule, so replay reapplies the recorded one.
     const wire = try compile(a, restricted.selected().modelBytes());
@@ -1292,7 +1285,7 @@ test "a compared property an item may omit is a value of its own: omitted equals
     const resource = try compile(a, equal_items_schema);
     // `note` is declared but not required: the rule may compare it, and the replayed rule does too.
     const compared: []const []const u8 = &.{ "note", "then" };
-    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .distinct = compared }});
+    const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = compared } } }});
     defer restricted.release();
     const wire = try compile(a, restricted.selected().modelBytes());
     const restored = try schema.restrictRecorded(std.testing.allocator, wire, restricted.selected().memberChoices(), &.{}, &.{});
@@ -1321,4 +1314,62 @@ test "a compared property an item may omit is a value of its own: omitted equals
             } else try std.testing.expect(rejected == null);
         }
     }
+}
+
+const sample_rule: schema.ItemCoverage = .{ .kind_property = "content", .exclusive = &.{"note"}, .owning = &.{"check"} };
+
+test "a collection carries only the rules of its own variant, so a rule of another variant cannot be stated" {
+    // The pairings the restriction once refused at run time (a member count, a compared property, a coverage or an
+    // agreement beside the wrong collection, or two rules on one selector) are not expressible.
+    inline for (.{ "member_count", "distinct", "coverage", "agree" }) |name| try std.testing.expect(!@hasField(schema.IntegerChoice, name));
+    inline for (.{ "count", "distinct" }) |name| try std.testing.expect(@hasField(schema.Collection.ExactMembers, name));
+    inline for (.{ "none", "coverage", "agree" }) |name| try std.testing.expect(@hasField(schema.Collection.UniqueRule, name));
+    const covered: schema.Collection = .{ .unique_subset = .{ .coverage = sample_rule } };
+    try std.testing.expect(covered.coverage() != null and covered.agreement() == null);
+    const agreed: schema.Collection = .{ .unique_subset = .{ .agree = "topic" } };
+    try std.testing.expect(agreed.coverage() == null);
+    try std.testing.expectEqualStrings("topic", agreed.agreement().?);
+    for ([_]schema.Collection{ .sequence, .{ .unique_subset = .none }, .{ .exact_members = .{ .distinct = &.{"then"} } } }) |plain| {
+        try std.testing.expect(plain.coverage() == null and plain.agreement() == null);
+    }
+}
+
+test "bare keeps the variant and the stated member count and clears every rule" {
+    const Case = struct { collection: schema.Collection, bare: schema.Collection };
+    for ([_]Case{
+        .{ .collection = .sequence, .bare = .sequence },
+        .{ .collection = .{ .unique_subset = .none }, .bare = .{ .unique_subset = .none } },
+        .{ .collection = .{ .unique_subset = .{ .agree = "topic" } }, .bare = .{ .unique_subset = .none } },
+        .{ .collection = .{ .unique_subset = .{ .coverage = sample_rule } }, .bare = .{ .unique_subset = .none } },
+        .{ .collection = .{ .exact_members = .{} }, .bare = .{ .exact_members = .{} } },
+        .{ .collection = .{ .exact_members = .{ .distinct = &.{"then"} } }, .bare = .{ .exact_members = .{} } },
+        .{ .collection = .{ .exact_members = .{ .count = .native, .distinct = &.{ "given", "then" } } }, .bare = .{ .exact_members = .{ .count = .native } } },
+    }) |case| try std.testing.expectEqualDeep(case.bare, case.collection.bare());
+}
+
+test "a collection clone equals its source and owns every payload" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sources = [_]schema.Collection{
+        .sequence,
+        .{ .unique_subset = .none },
+        .{ .unique_subset = .{ .agree = "topic" } },
+        .{ .unique_subset = .{ .coverage = sample_rule } },
+        .{ .exact_members = .{ .count = .native, .distinct = &.{ "given", "then" } } },
+    };
+    for (sources) |source| try std.testing.expectEqualDeep(source, try source.clone(a));
+    const agreed = try sources[2].clone(a);
+    try std.testing.expect(agreed.agreement().?.ptr != sources[2].agreement().?.ptr);
+    const covered = try sources[3].clone(a);
+    try std.testing.expect(covered.coverage().?.kind_property.ptr != sample_rule.kind_property.ptr);
+    try std.testing.expect(covered.coverage().?.exclusive.ptr != sample_rule.exclusive.ptr);
+    const members = try sources[4].clone(a);
+    try std.testing.expect(members.exact_members.distinct.ptr != sources[4].exact_members.distinct.ptr);
+    try std.testing.expect(members.exact_members.distinct[0].ptr != sources[4].exact_members.distinct[0].ptr);
+    // A packet projection keeps a choice's collection owned by its own arena.
+    const choice: schema.IntegerChoice = .{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = sources[4] };
+    const copy = try choice.clone(a);
+    try std.testing.expectEqualDeep(choice, copy);
+    try std.testing.expect(copy.collection.exact_members.distinct.ptr != choice.collection.exact_members.distinct.ptr);
 }

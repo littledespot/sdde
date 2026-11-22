@@ -74,6 +74,37 @@ test "attempt classification rejects hidden retry and repeated initial" {
     try std.testing.expectEqual(@as(u64, 1), attempts.current().revision().value);
 }
 
+test "a retry runs only while the retries already made are under the limit, at any count" {
+    var requests = request_runner.Runner.init(std.testing.allocator);
+    defer requests.deinit();
+    try requests.initialize(identity.RequestPurposeRegistry.all());
+    const request = try requests.assign(.initial, unitOwner("cluster-1"), modelOperation("generate"), .initial_generation);
+    var attempts = try attempt_runner.Runner.init(std.testing.allocator, requests.ledger().?.stageRunEpochId());
+    defer attempts.deinit();
+    var revision: u64 = 0;
+    try expectOrdinal(1, try attempts.reserve(.{ .value = revision }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial));
+    revision += 1;
+    // Limit 1 allows one retry: the retry after no completed retries runs, the next does not.
+    try expectOrdinal(2, try attempts.reserve(.{ .value = revision }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = retryAuthority(1), .completed_retries = 0 } }));
+    revision += 1;
+    // The widest limit admits the last retry below it, and a count at the limit or at the top of u64 never wraps to admitted.
+    const widest = std.math.maxInt(u32);
+    try expectOrdinal(3, try attempts.reserve(.{ .value = revision }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = retryAuthority(widest), .completed_retries = widest - 1 } }));
+    revision += 1;
+    for ([_]struct { limit: u32, completed: u64 }{
+        .{ .limit = 1, .completed = 1 },
+        .{ .limit = 1, .completed = std.math.maxInt(u64) },
+        .{ .limit = widest, .completed = widest },
+        .{ .limit = widest, .completed = std.math.maxInt(u64) },
+    }) |case| {
+        try std.testing.expectError(
+            error.ModelRetryLimitExhausted,
+            attempts.reserve(.{ .value = revision }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = retryAuthority(case.limit), .completed_retries = case.completed } }),
+        );
+    }
+    try std.testing.expectEqual(@as(u32, 3), attempts.current().attemptsReserved(request));
+}
+
 test "attempt and request revisions plus lifecycle reject stale or terminal reservations" {
     var requests = request_runner.Runner.init(std.testing.allocator);
     defer requests.deinit();

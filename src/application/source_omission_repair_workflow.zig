@@ -2,6 +2,7 @@
 const std = @import("std");
 const loss = @import("../domain/source_omission.zig");
 const source_repair = @import("../domain/source_omission_repair.zig");
+const omission = @import("../domain/source_omission_authority.zig");
 const repair_owner = @import("../domain/repair_owner.zig");
 const ex = @import("../domain/reference_extraction_repair.zig").Omission;
 const values = @import("pipeline_values.zig");
@@ -14,8 +15,8 @@ const rec = @import("reference_reconciliation_workflow.zig");
 const reference = @import("../domain/reference_candidate_value.zig");
 const authority = @import("required_authority_workflow.zig");
 const authority_values = @import("required_authority_values.zig");
-const Rejection = struct { reason: loss.Rejection, support: loss.Support };
-const owned = @import("retained_candidate.zig").Storage(union(enum) { repair: loss.Repair, rejected: ?Rejection }, .{ .rejected = null });
+const Rejection = struct { reason: loss.Rejection, support: omission.Support };
+const owned = @import("retained_candidate.zig").Storage(union(enum) { repair: source_repair.Repair, rejected: ?Rejection }, .{ .rejected = null });
 pub const schema = values.schema(.source_omission_repair, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{schema};
 pub fn rejection(view: *const data.View) values.Error!?Rejection {
@@ -23,11 +24,11 @@ pub fn rejection(view: *const data.View) values.Error!?Rejection {
     const value = owned.payload(try values.read(view, schema, owned.Value));
     return if (value.* == .rejected) value.rejected else null;
 }
-pub fn read(view: *const data.View) operations.Error!loss.Repair {
+pub fn read(view: *const data.View) operations.Error!source_repair.Repair {
     return owned.readNative(view, schema, .repair) catch |operation_error| operation_error;
 }
 pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
-fn support(view: *const data.View) operations.Error!loss.Support {
+fn support(view: *const data.View) operations.Error!omission.Support {
     const review = authority_values.read(view, @import("specification_support_workflow.zig").schema, .support) catch |operation_error| return operation_error;
     if (review != .accepted) return error.RepairOwnerMismatch;
     return .{ .repair_phase = (try @import("specification_generation_facts.zig").read(view)).phase(), .review = review.accepted.candidate, .inputs = authority_values.read(view, authority.inputs_schema, .inputs) catch |operation_error| return operation_error, .observations = authority_values.read(view, authority.observations_schema, .observations) catch |operation_error| return operation_error, .result = authority_values.read(view, authority.result_schema, .result) catch |operation_error| return operation_error };

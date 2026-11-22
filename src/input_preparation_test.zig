@@ -207,9 +207,10 @@ test "a failure in each internal step names that step and propagates the step's 
 test "the state steps read bytes without parsing and parse them without reading" {
     const selected = identity.FeatureId.parse("Chosen/Café").?;
     // Absent bytes are an absent prior state; unparsable bytes are an invalid one.
-    const prior = try steps.parseState(std.testing.allocator, null, selected, null);
+    const normalizer: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = @import("unicode_normalization").nfc };
+    const prior = try steps.parseState(std.testing.allocator, null, normalizer, selected, null);
     try std.testing.expectEqual(@as(?[]const u8, null), prior.captured);
-    try std.testing.expectError(error.InvalidSpecificationState, steps.parseState(std.testing.allocator, null, selected, "not a specification state"));
+    try std.testing.expectError(error.InvalidSpecificationState, steps.parseState(std.testing.allocator, null, normalizer, selected, "not a specification state"));
     // Reading the state hands back the bytes unparsed, even when they are not a state.
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

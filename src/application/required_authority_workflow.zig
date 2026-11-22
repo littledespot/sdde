@@ -32,7 +32,7 @@ pub const SourcePreservationPolicy = struct {
             const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
             var arena: std.heap.ArenaAllocator = .init(self.allocator);
             defer arena.deinit();
-            const pending = @import("../domain/source_omission.zig").pendingReview(arena.allocator(), permit, sources.corpus.feature_id, sources.corpus.state_id) catch |err| switch (err) {
+            const pending = @import("../domain/source_omission_authority.zig").pendingReview(arena.allocator(), permit, sources.corpus.feature_id, sources.corpus.state_id) catch |err| switch (err) {
                 error.OutOfMemory => return error.OutOfMemory,
                 error.InvalidRequiredAuthority => return .{ .outcome = .invalid, .delta = .{}, .diagnostic = error.InvalidRequiredAuthority },
             };

@@ -57,7 +57,7 @@ pub fn withCitationChoices(allocator: std.mem.Allocator, packet: *const packets.
     var lines: std.ArrayList(i64) = .empty;
     const selections = @import("source_selections.zig");
     for (try selections.lines(arena.allocator(), inputs, scope)) |line| if (selections.citable(line.text)) try lines.append(arena.allocator(), line.id.ordinal);
-    return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = path }, .allowed = lines.items, .collection = .unique_subset, .agree = agree }});
+    return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = path }, .allowed = lines.items, .collection = .{ .unique_subset = if (agree) |name| .{ .agree = name } else .none } }});
 }
 
 /// `summary_purpose` is the workflow's guidance text, present exactly for a summary input.
@@ -203,7 +203,7 @@ pub fn withSemanticChoices(a: std.mem.Allocator, packet: *const packets.Packet, 
     defer a.free(ids);
     const field = if (assignment == .summary) "statements" else "signals";
     const definition_id: schema.DefinitionId = @as(@import("specification_result_definitions.zig").Reconciliation, if (assignment == .summary) .summary else .signals_assignment).id();
-    return packets.withIntegerChoices(a, narrowed, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids, .collection = .unique_subset }});
+    return packets.withIntegerChoices(a, narrowed, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids, .collection = .{ .unique_subset = .none } }});
 }
 /// Availability projects existing evidence, not semantics or a second registry.
 /// Engine-derived exact occurrences never have a selectable model alternative.
@@ -249,10 +249,7 @@ pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packe
         // omitted or repeated claim and corrects the whole assignment. The schema
         // states no count, so the request is unchanged; an empty set admits only [].
         var dispositions: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } } }, .definition = packet.resultDefinition(), .allowed = ordinals };
-        if (ordinals.len != 0) {
-            dispositions.collection = .exact_members;
-            dispositions.member_count = .native;
-        }
+        if (ordinals.len != 0) dispositions.collection = .{ .exact_members = .{ .count = .native } };
         try choices.append(scratch, dispositions);
         try choices.append(scratch, .{ .target = .{ .path = &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = packet.resultDefinition(), .allowed = ordinals });
     }

@@ -200,15 +200,8 @@ hold. **Tests:** T3 in any gap; T4 with E1–E4. **Adjudication:** the evaluate-
 
 ### Q2b. Generic content-loss guard for repairs
 
-**D2.3** implemented and kept 1 November 2026; record in [Z_SPEC01](Z_SPEC01.md) Q2b D2.3. Open
-follow-ups:
-
-- fold `member_count` into `collection`'s `exact_members` variant and `coverage` and `agree` into
-  `unique_subset` (`IntegerChoice` in `model_result_schema.zig:97-123`; `coverage` is ADR 0038 Decision 5, not
-  Decision 3). Turning `collection` into a tagged union makes the illegal pairings of `:223-254` unrepresentable
-  and touches 39 sites outside the owner (tests, and `reference_model_input.zig:249`, `specification_support.zig`,
-  `scenario_request.zig`) plus about 15 comparisons inside it. It changes no request byte and no ADR requires it
-  (ADR 0046:50-53 keeps the native count, as a representation). Not done: prove it with the request freeze.
+**D2.3** implemented and kept 1 November 2026; record in [Z_SPEC01](Z_SPEC01.md) Q2b D2.3. `collection` is a tagged
+union (Z_SPEC01 "Refactors that leave request bytes unchanged").
 
 Out of scope unless harm appears: the statement, signal and conflict coverage inserts and
 token classifications.
@@ -260,7 +253,12 @@ Open parts only:
   shows both sides: hello-world run 1 filled all 3 Givens with "No starting situation is stated in the sources."
   (one minor `placeholder`, the same `prompt_conflict` reading, 96.43%) while runs 2 and 3 omitted every Given;
   loan-renewal kept a Given on 15 of 15 criteria, 1 repeating its When and 5 generic preconditions (counted apart).
-  Across both sets, 4 events of Given repeating its When or a placeholder Given in 48 criteria: still below the floor.
+  A third set (22 November 2026, build source `4f3793a0…`, the same request bytes; all six published and passed,
+  hello-world 100%, loan-renewal 97.62%): hello-world omitted the Given on 6 of 9 criteria with no filler and gave the
+  other 3 a generic precondition; loan-renewal omitted one Given (the first in 45 loan-renewal criteria), repeated a
+  When once and gave 5 of 15 a generic precondition, dropped none its source states, and repaired none (its two repairs
+  replaced a Then). Across the three sets, 5 events (4 Givens repeating their When, 1 placeholder Given) in 72
+  criteria: still below the floor.
 - **Not driven end to end:** `links.prompt.md` still says "its given and when cover that situation", and no
   scripted integration scenario drives a Given-less criterion; the owner tests and `verify` cover it. No run has
   written an edge case, so an edge case's `GIVEN` line for a Given-less criterion is unexercised live (Q14's
@@ -383,11 +381,12 @@ phase reports on. T5.4's seven sites are the ones under "Repair requests without
 
 §7 (human decisions) is removed; §8–§10 keep their numbers so citations elsewhere still resolve.
 
-### B7 contract-review leftovers
+### B7 readback leftover
 
-- Prior-state readback checks stored claim text against the text policy only
-  (`reference_snapshot.zig:116-117`; ADR 0036:205-206); re-quoting needs the Unicode
-  normalizer at readback.
+- Readback re-quotes each stored claim's wording from its stored citation spans, but binds no stored citation's
+  `source_id`, `block_id` or `verbatim` to the claim's chunk: the snapshot validator compares ordinals only, and
+  `source_citations.validate` checks all four fields at admission. A state with a retargeted `source_id` or an
+  altered `verbatim` and an unchanged `location` reads back.
 
 ### Design–code conflicts (7 November 2026 review)
 
@@ -483,7 +482,7 @@ code, do complete end 2 end analysis, do not guess").
   step or resource after its code; the schema, compile and graph owners still return one error
   each, and a rule is one per section or stage, so a finer cause (the data key a data-flow
   rejection names) is not reported. A key missed from a
-  hand-written invalidation list (`source_omission.zig:343`, `:345`; `required_authority.zig:124`)
+  hand-written invalidation list (`source_omission.zig:156-158`; `required_authority.zig:124`)
   fails the same way, because the data-flow check rejects producing a key that is still
   available (`workflow_data_flow.zig:87-95`).
 - **Result schemas and compositions:** a rejected resource already prints its file and
@@ -577,11 +576,11 @@ and a workflow definition can't author them (ADR 0030).
 
 **C22. Change amplification (traced).**
 
-- One operation with one new key: about 8 production files. `native_workflow_operations.zig` keeps three
-  parallel lists (fields, initializers and `entries` rows) and a hand-kept count (`core.entries.len + 108 +
-  model_request.count`). A field with no row compiles; a test in `test/harness/integration/tests.zig` now finds it.
-  One table would need the operation fields in their own struct, because `entries` can't type itself from the
-  struct that holds it, and about 12 external `native.<field>` accesses would move.
+- One operation with one new key: about 8 production files. In `native_workflow_operations.zig` the fields are one
+  struct (`Operations`) and the `entries` rows and their count are derived from it (Z_SPEC01 "Refactors that leave
+  request bytes unchanged"), so the operation costs an import alias, a field and its initializer there; the YAML,
+  `DataKeys` and schemas are unchanged. The initializers are still written by hand, which the compiler checks against
+  the fields, and `model_request_operations.zig` keeps its own `count = 8` and parallel rows (a test guards it).
 - One record family: three Zig files the compiler enforces and `Kind.isScopeSection`, now a method with an
   exhaustive switch; a test requires a `record_<kind>` definition and the `record_kind` member for every family
   but the entity. `packet-guidance.json` was already checked at decode. `records.prompt.md:9-13` names the families
@@ -600,10 +599,13 @@ workflow adds its own text fields, so build it with Plan's first text field, not
 **C25. Repair, omission and support modules still import each other.** The reconciliation core and its
 diagnostic no longer import them (the repair target types moved to the diagnostic, which carries the pending
 repair), and `Accounted.global()` is the one place the checked chain is unwound; both are pinned in
-`architecture_test.zig`. Still cyclic: `reference_reconciliation_repair.zig` and `source_omission.zig` import each
-other (`Authorization`, `Replacement` and `Repair` at `source_omission.zig:325-338`), and `source_omission.zig`
-and `specification_support.zig` import each other. Breaking the first moves those unions to
-`source_omission_repair.zig`; no document names either edge.
+`architecture_test.zig`. `source_omission.zig` no longer imports `reference_reconciliation_repair.zig`,
+`reference_extraction_repair.zig` or `specification_support.zig`: the repair-authority derivation is
+`source_omission_authority.zig` and `Authorization`, `Replacement` and `Repair` are `source_omission_repair.zig`'s.
+A rank pin in `architecture_test.zig` holds the direct-import order of those six modules; it does not claim
+transitive acyclicity. A 58-module domain cycle group remains: `source_omission` with `required_authority`
+(`:5`, `:101-102`, `:516`), `source_omission_comparison` and `specification_support_evidence`, and
+`reference_extraction.zig:69`, `:94` with `reference_extraction_repair.zig`. No document names these edges.
 
 ### 10.4 Simplification
 
@@ -628,18 +630,11 @@ enforce it. A definition that routes a rejected authority result onward runs the
 `ok`; one that skips validation leaves its step unreachable (`required_authority_workflow_test.zig`).
 
 **C31. Per-kind and copied code (traced unless a line is cited).** Built: one persist path for both log
-streams, one segment open and one whole-segment read in `feature_log_file.zig`, and one generic `Revision`.
-Open:
-
-- Reconciliation writes statement, signal and conflict logic once a kind (`select` in
-  `reference_reconciliation_repair.zig`).
-- The ledger owner block is written five times (`createInitial`, `createSuccessor` and
-  `createLifecycleSuccessor` in `model_request_identity.zig`; `createInitial` and `apply` in
-  `model_attempt_accounting.zig`), with the chain release and retain beside them. A shared helper takes the
-  payload type and each owner's reference-exhaustion error. Both owners have an allocation-failure sweep
-  (`model_request_identity_test.zig` `ledgerAllocationCase`, `model_attempt_accounting_test.zig`
-  `accountingAllocationCase`); `retainOwner`'s exhaustion branches are not allocation failures, and no public seam
-  reaches them.
+streams, one segment open and one whole-segment read in `feature_log_file.zig`, one generic `Revision`, one `select`
+over the statement, signal and conflict kinds in `reference_reconciliation_repair.zig`, and one ledger owner
+(`ledger_owner.zig`, shared by `model_request_identity.zig` and `model_attempt_accounting.zig`; Z_SPEC01 "Refactors
+that leave request bytes unchanged"). `retainOwner`'s exhaustion branches are not allocation failures, and no public
+seam of either ledger reaches them; the helper's own tests do.
 
 Closed 21 November 2026 (user: "update the documentation with rhe recommendations"): the engine-config reader
 keeps F0001:162-167's limit and size-drift checks and gains no re-stat, identity or path re-binding, which
@@ -653,11 +648,11 @@ F0008:75 requires of the provider reader only.
 0005:74-76 and 0012:57 make the pairing the workflow's to declare, and resources are validated by kind only
 (`workflow_graph_compilation.zig:349-354`).
 
-**C37. Limits that don't bind, still open.** The retry values `64` and `128` are ADR 0033:99, :103, :202-206's, and `maximum_population = 128` is a user decision (15 November 2026); the
-retry limit is enforced at `workflow_retry.zig:447`, `workflow_pipeline_runner.zig:529`,
-`model_attempt_accounting.zig:288` and `workflow_compilation.zig:223`, of which the accounting error can't fire
-through the runner (only `model_attempt_accounting_test.zig:26-30`, `:50-59` reach it), and ADR 0030:200-203
-fixes the semantics, so unifying them is its own change.
+**C37. Limits that don't bind.** The retry values `64` and `128` are ADR 0033:99, :103, :202-206's, and
+`maximum_population = 128` is a user decision (15 November 2026). `workflow_retry.Limit` decides when a limit is
+exhausted (`standing`, `allowance`); the retry scope, the runner, the compiled allowance and the attempt accounting
+call it and keep their own error mappings. The accounting error can't fire through the runner (only
+`model_attempt_accounting_test.zig` reaches it), and ADR 0030:124-125 fixes the semantics.
 
 **C38. A passing `zig build verify` still reads as a failure.** Zig prints a `failed command:` line for
 any step that wrote to stderr, and the default summary mode prints no success line; only `--summary line`

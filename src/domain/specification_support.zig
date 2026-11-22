@@ -247,7 +247,7 @@ pub const Source = struct {
         for (assigned.comparisons, ids) |view, *id| id.* = view.id.ordinal;
         // Native admission requires exactly one assessment per comparison, so
         // response admission binds the same member set.
-        return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{ .{ .property = "assessments" }, .items, .{ .property = "comparison_id" } } }, .definition = @import("specification_result_definitions.zig").Support.preservation_comparisons.id(), .allowed = ids, .collection = .exact_members }});
+        return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{ .{ .property = "assessments" }, .items, .{ .property = "comparison_id" } } }, .definition = @import("specification_result_definitions.zig").Support.preservation_comparisons.id(), .allowed = ids, .collection = .{ .exact_members = .{} } }});
     }
 
     pub fn admitComparisons(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate, retained: @import("source_omission.zig").comparisons.Assignment, bytes: []const u8) ComparisonError!@import("source_omission.zig").comparisons.Attribution {

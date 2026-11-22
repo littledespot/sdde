@@ -4,6 +4,7 @@ const state = @import("../../domain/specification_state.zig");
 const snapshot = @import("../../domain/reference_snapshot.zig");
 const coverage = @import("../../domain/specification_coverage.zig");
 pub const Action = struct {
+    normalizer: state.Normalizer,
     contracts: ?state.ContractSource = null,
     pub const contract: pipeline.NodeContract = .{
         .id = "build-specification-state",
@@ -32,7 +33,7 @@ pub const Action = struct {
             .clarification = .{ .state_ordinal = clarification.state_ordinal, .revision = clarification.revision },
             .principle_registry = principles,
         };
-        try state.validate(allocator, value, feature, self.contracts);
+        try state.validate(allocator, value, feature, self.contracts, self.normalizer);
         return value;
     }
 };

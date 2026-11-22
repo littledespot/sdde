@@ -2961,6 +2961,62 @@ Offline; the request projection retaken on the final tree is byte-identical to `
   in corpus order, round-trips through the markdown, and a citation of a file outside the corpus is an invalid
   specification. A record must name a group's claims in the group's order, so no reversed-order case exists.
 
+## Refactors that leave request bytes unchanged (22 November 2026)
+
+User: "implement" on C25, C31, C22, C37, Q2b and B7. Each item took a request projection before its first edit and
+after its change; all equal `evaluations/request-projection/q26-after`, as does the projection of the final tree
+(`diff -rq` empty, integration 144/144). B7 is the exception in kind, not in bytes: a validation addition the user
+authorized.
+
+- **C31 ledger owner.** `ledger_owner.zig` is `LedgerOwner(Owner, Payload, reference_exhausted)`: begin, seal, retain
+  and release for one chain of owners, each instantiation naming its own exhaustion error. The five builders in
+  `model_request_identity.zig` and `model_attempt_accounting.zig` use it; `retainOwner` and `deinitOwner` stay one-line
+  delegations. Allocation order, cleanup order (arena, then storage) and retain-last are those of the five blocks it
+  replaces, and both allocation-failure sweeps are unchanged. Tests in the module: a chain frees every owner and gives
+  the root back once, an exhausted count is refused with the chain's own error and leaks nothing, two instantiations
+  report their own errors, and an allocation-failure sweep.
+- **C37.** `workflow_retry.Limit` gains `allowance()` (limit + 1, as u64) and `standing(executions)` (exhausted when
+  executions reach the allowance). The retry scope (`countAttempt`, `Exhaustion.init`, `Exhaustion.unchanged`), the
+  runner, the compiled allowance (null on `usize` overflow, as before) and the attempt accounting
+  (`standing(completed_retries +| 1)`, so a saturated count stays exhausted) call it; the kernel's 2x(1 + limit)
+  predicate under ADR 0039 takes only its +1 from it. The four sites enforced one rule. A table covers limits 0, 1, 2,
+  64, 128 and `maxInt(u32)` against executions around each; accounting has limit-1, widest-limit and saturated cases.
+  The fixtures' `Driver.allowance` stays an independent oracle.
+- **C25.** `source_omission_authority.zig` holds the repair-authority derivation; `source_omission_repair.zig` holds
+  `Authorization`, `Replacement` and `Repair`. `source_omission.zig` imports none of the two repair modules or
+  `specification_support.zig`. `architecture_test.zig` pins the direct-import rank of six modules (accepted: lower-ranked
+  or unlisted imports and mentions in comments or strings; rejected: a lower rank importing a higher, same-rank
+  siblings, an A-B-A pair) and says it does not claim transitive acyclicity.
+- **C31 `select`.** One `select` over `Kind` (statement, signal, conflict) and `Part` (selection, text, record) in
+  `reference_reconciliation_repair.zig`. A table test (written against the old `select` first) covers nine parts at two
+  indices per kind, the three insertion points and 24 rejections.
+- **Q2b.** `Collection` is `sequence`, `unique_subset` (`none`, `coverage` or `agree`) or `exact_members` (native or
+  stated count, `distinct`); `IntegerChoice` holds only it, `narrowChoice` takes it whole, and the rule-less calls pass
+  `bare()`. The pairings the runtime used to reject are not expressible; seven test rows that tested exactly those were
+  deleted, every remaining rejection (target, path, `items`, `allowed`, value checks) keeps its rejected test, and the
+  wire schema (from `createSchema` over the `Node` tree) is untouched.
+- **B7.** Readback re-quotes each stored extraction claim from its stored citations with the Unicode normalizer and
+  rejects one that no longer quotes them (`Requote` in `reference_extraction_text.zig`, built on the `Layout.quote` that
+  admission uses; called from `reference_snapshot.validateRecords`; preserved tokens skipped). The `Normalizer` port is
+  threaded through `specification_state` and `incomplete_specification` and bound by the composition root to the four
+  actions that read a state back. `specification-state/v28` is unchanged (user: "Authorize, no version advance"; the
+  `foreign_exact` readback rule is the precedent), so an earlier build's state whose claim text predates the current
+  quote rules stops reading back with `InvalidSpecificationState`. ADR 0036's Persistence bullet and a clause of
+  24-workflow-state.md say so. A stored claim whose cited lines span two top-level list items is rejected too, by the
+  `spansItems` rule admission's `quotes` uses (ADR 0038). Tests: accepted a decomposed (non-NFC) source line, a
+  two-item list split, fenced code, a `scope_guard` claim, a claim of two runs joined by an ellipsis line and a run
+  across a blank line; rejected claims swapped, text cut by a byte, a shifted citation, an extra node and one claim
+  over two list items. With the check off the swap test fails. The stored-title and edge-case link readbacks are the
+  unchanged members of the class.
+- **C22.** `Operations` is the struct of the 108 operation fields, declared in the old row order; `Assembly` is
+  `{ ops, model_requests, entries, registry }` with `entries` derived by `shapeOf`, `register` and `registered` (an
+  `Action` registers as a step, a shell contract as a variant, any other `contract` directly, a type with neither does
+  not compile). The 108 hand rows and the literal count are gone, and `ParseInvocation` declares `kind` and
+  `outcomes`, which `entry` reads like its other declarations. The 118 registered ids come out in the same order. The
+  three architecture pins that named hand rows are typed checks over `Operations` (the four generic repair shells, none of
+  the owner repair types, the four scenario-generation types once each), and the guard in
+  `test/harness/integration/tests.zig` is smaller, plus the same exactly-once check for `model_request.Assembly`.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a

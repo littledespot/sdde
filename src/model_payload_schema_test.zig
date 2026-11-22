@@ -876,7 +876,7 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     defer arena.deinit();
     var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const assignment = try adapter.compiler().compile(arena.allocator(), "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[\"value\"],\"additionalProperties\":false}");
-    const members = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .exact_members }});
+    const members = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .{ .exact_members = .{} } }});
     defer members.release();
     var fixture: Fixture = undefined;
     try fixture.initWithCompiledSchema(members.selected());
@@ -884,7 +884,7 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     try checkFixture(&fixture, .{ .bytes = "{\"value\":[{\"ordinal\":2},{\"ordinal\":4},{\"ordinal\":2}]}", .rejection = .duplicate_member, .path = "/value/2", .expected_path = "/value" });
     // With the count native, the schema keeps its canonical bounds, so a
     // member no item names is reported at the array and named in the correction.
-    const native = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .exact_members, .member_count = .native }});
+    const native = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .{ .exact_members = .{ .count = .native } } }});
     defer native.release();
     try std.testing.expectEqual(@as(u32, 1), native.selected().root().object[0].schema.array.minimum);
     try std.testing.expectEqual(@as(u32, 8), native.selected().root().object[0].schema.array.maximum);
@@ -902,7 +902,7 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     // native count keeps that bound. An empty array omits every member, so it is
     // rejected at the array like any other omission, naming the first (ADR 0046).
     const unbounded = try adapter.compiler().compile(arena.allocator(), "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[\"value\"],\"additionalProperties\":false}");
-    const owed = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, unbounded, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .exact_members, .member_count = .native }});
+    const owed = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, unbounded, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .{ .exact_members = .{ .count = .native } } }});
     defer owed.release();
     try std.testing.expectEqual(@as(u32, 0), owed.selected().root().object[0].schema.array.minimum);
     for ([_]Case{
@@ -922,7 +922,7 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     const variant = "{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"KIND\"},\"text\":{\"type\":\"string\",\"maxLength\":20}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false}";
     const kinds = try std.mem.join(arena.allocator(), ",", &.{ try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "rule"), try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "check"), try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "scope"), try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "own") });
     const listed = try adapter.compiler().compile(arena.allocator(), try std.fmt.allocPrint(arena.allocator(), "{{\"type\":\"object\",\"properties\":{{\"value\":{{\"type\":\"array\",\"minItems\":0,\"maxItems\":4,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[{s}]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{kinds}));
-    const coverage = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, listed, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ids" } } }, .allowed = &.{ 3, 5, 7 }, .collection = .unique_subset, .coverage = .{ .kind_property = "content", .exclusive = &.{ "rule", "scope" }, .owning = &.{"own"} } }});
+    const coverage = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, listed, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ids" } } }, .allowed = &.{ 3, 5, 7 }, .collection = .{ .unique_subset = .{ .coverage = .{ .kind_property = "content", .exclusive = &.{ "rule", "scope" }, .owning = &.{"own"} } } } }});
     defer coverage.release();
     const item = struct {
         fn of(comptime kind: []const u8, comptime ids: []const u8) []const u8 {
@@ -1064,10 +1064,10 @@ test "items of one response that return equal values take one correction naming 
     const contract = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8},\"given\":{\"oneOf\":[{\"type\":\"string\",\"maxLength\":4},{\"type\":\"object\",\"properties\":{\"part\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":9},\"text\":{\"type\":\"string\",\"maxLength\":4}},\"required\":[\"part\",\"text\"],\"additionalProperties\":false}]},\"then\":{\"type\":\"string\",\"maxLength\":4}},\"required\":[\"ordinal\",\"given\",\"then\"],\"additionalProperties\":false}},\"other\":{\"type\":\"array\",\"maxItems\":4,\"items\":{\"type\":\"object\",\"properties\":{\"given\":{\"type\":\"string\",\"maxLength\":4}},\"required\":[\"given\"],\"additionalProperties\":false}}},\"required\":[\"value\",\"other\"],\"additionalProperties\":false}";
     const assignment = try adapter.compiler().compile(arena.allocator(), contract);
     const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } };
-    const equal = try schema.restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .exact_members, .distinct = &.{ "given", "then" } }});
+    const equal = try schema.restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .{ .exact_members = .{ .distinct = &.{ "given", "then" } } } }});
     defer equal.release();
     // The same array without the rule: items equal to each other are no admission defect for any other request.
-    const plain = try schema.restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .exact_members }});
+    const plain = try schema.restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .{ .exact_members = .{} } }});
     defer plain.release();
     const item = struct {
         fn of(comptime ordinal: []const u8, comptime given: []const u8, comptime then: []const u8) []const u8 {
@@ -1129,10 +1129,10 @@ test "items listing a common value under different values take one correction na
     const contract = "{\"type\":\"object\",\"properties\":{\"entries\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":" ++ entry ++ "},\"other\":{\"type\":\"array\",\"maxItems\":4,\"items\":" ++ entry ++ "}},\"required\":[\"entries\",\"other\"],\"additionalProperties\":false}";
     const compiled = try adapter.compiler().compile(arena.allocator(), contract);
     const path: []const schema.ChoiceStep = &.{ .{ .property = "entries" }, .items, .{ .property = "refs" } };
-    const agreed = try schema.restrict(std.testing.allocator, compiled, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .unique_subset, .agree = "topic" }});
+    const agreed = try schema.restrict(std.testing.allocator, compiled, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .{ .unique_subset = .{ .agree = "topic" } } }});
     defer agreed.release();
     // The same array without the rule: no other request changes.
-    const plain = try schema.restrict(std.testing.allocator, compiled, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .unique_subset }});
+    const plain = try schema.restrict(std.testing.allocator, compiled, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .{ .unique_subset = .none } }});
     defer plain.release();
     const item = struct {
         fn of(comptime topic: []const u8, comptime refs: []const u8) []const u8 {

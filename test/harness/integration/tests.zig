@@ -164,15 +164,33 @@ test "shipped workflow conforms to native registrations and rejects contract dri
             // provider or workflow invocation. No parallel contract is constructed.
             try std.testing.expect(runtime.native.registry.validate());
             // Every operation implementation the assembly holds is registered exactly once, bound to that very
-            // implementation: a field the entry list forgot compiles, so only this check finds it.
-            inline for (std.meta.fields(@TypeOf(runtime.native))) |field| {
-                if (comptime !std.mem.eql(u8, field.name, "model_requests") and !std.mem.eql(u8, field.name, "entries") and !std.mem.eql(u8, field.name, "registry")) {
-                    const id = comptime if (@hasDecl(field.type, "Action")) field.type.Action.contract.id else field.type.contract.id;
+            // implementation, and no two share an id.
+            inline for (std.meta.fields(@TypeOf(runtime.native.ops))) |field| {
+                const id = comptime if (@hasDecl(field.type, "Action")) field.type.Action.contract.id else field.type.contract.id;
+                var registered: usize = 0;
+                for (runtime.native.entries) |entry| {
+                    if (!std.mem.eql(u8, entry.contract.id, id)) continue;
+                    registered += 1;
+                    try std.testing.expect(entry.binding.context == @as(?*anyopaque, &@field(runtime.native.ops, field.name)));
+                }
+                try std.testing.expectEqual(@as(usize, 1), registered);
+            }
+            // The request operations keep their own tables (a stage row per stage context, an entry row per
+            // selectable operation): each of their implementations is registered exactly once, in one of them.
+            inline for (std.meta.fields(@TypeOf(runtime.native.model_requests))) |field| {
+                if (comptime !std.mem.eql(u8, field.name, "request_stages") and !std.mem.eql(u8, field.name, "entries")) {
+                    const id = comptime field.type.contract.id;
+                    const address: ?*anyopaque = &@field(runtime.native.model_requests, field.name);
                     var registered: usize = 0;
-                    for (runtime.native.entries) |entry| {
-                        if (!std.mem.eql(u8, entry.contract.id, id)) continue;
+                    for (runtime.native.model_requests.entries) |row| {
+                        if (!std.mem.eql(u8, row.contract.id, id)) continue;
                         registered += 1;
-                        try std.testing.expect(entry.binding.context == @as(?*anyopaque, &@field(runtime.native, field.name)));
+                        try std.testing.expect(row.binding.context == address);
+                    }
+                    for (runtime.native.model_requests.request_stages) |row| {
+                        if (!std.mem.eql(u8, row.contract.id, id)) continue;
+                        registered += 1;
+                        try std.testing.expect(row.binding.context == address);
                     }
                     try std.testing.expectEqual(@as(usize, 1), registered);
                 }

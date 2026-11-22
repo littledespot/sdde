@@ -170,7 +170,7 @@ pub const Apply = struct {
         } };
         var delta: pipeline.NodeDelta = .{};
         if (input.step.repair_permit) |active| {
-            delta.repair_transition = @import("../domain/source_omission.zig").admittedValidation(owner.arena.allocator(), active, reviewed.accepted) catch |err| switch (err) {
+            delta.repair_transition = @import("../domain/source_omission_authority.zig").admittedValidation(owner.arena.allocator(), active, reviewed.accepted) catch |err| switch (err) {
                 error.OutOfMemory => return error.OutOfMemory,
                 error.InvalidRequiredAuthority => return rejected(self.allocator, owner),
             };

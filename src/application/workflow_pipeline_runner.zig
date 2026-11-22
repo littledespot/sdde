@@ -531,7 +531,7 @@ pub const Runner = struct {
                 if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 admitted_count = admitted.allowed;
             } else {
-                if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, self.retry_execution_counts[index], stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
+                if (authority.limit.standing(self.retry_execution_counts[index]) == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, self.retry_execution_counts[index], stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 // Compiled limits are u32; exhaustion is checked before increment.
                 self.retry_execution_counts[index] += 1;
                 admitted_count = self.retry_execution_counts[index];

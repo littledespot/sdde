@@ -39,6 +39,8 @@ const runInProjectWithRegistry = composition.runInProjectWithRegistry;
 const reportInvocation = composition.reportInvocation;
 const policy_registry = @import("../../src/composition/toolchain_policy_registry.zig").registry;
 const untraced_allocator = @import("../../src/test_fixtures/untraced_allocator.zig");
+/// The Unicode port prior-state readback re-quotes stored claims with.
+const readback_normalizer: @import("../../src/ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = @import("unicode_normalization").nfc };
 
 fn runInvocationInProject(
     io: std.Io,
@@ -489,7 +491,7 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
     var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
     operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-    operations.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
+    operations.ops.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry, null);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
@@ -1060,7 +1062,7 @@ test "native YAML validates extraction and reconciliation before continuation" {
         var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
         var native: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
         native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-        native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
+        native.ops.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
         var extraction_producer: ReferenceExtractionTestProducer = .{ .mode = mode };
         var reconciliation_producer: ReferenceReconciliationTestProducer = .{ .mode = mode };
         var protected_arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -1762,8 +1764,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         phase = .runner;
         defer boot.deinit();
         var feature_outputs: @import("../../src/adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        native.publish_output.action.writer = feature_outputs.port();
-        native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
+        native.ops.publish_output.action.writer = feature_outputs.port();
+        native.ops.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
         if (boot != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot});
         try std.testing.expect(boot == .ready);
         try std.testing.expectEqual(preservation_scenario, boot.ready.config.config().validation.sourcePreservationCheck);
@@ -1777,7 +1779,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             .outputs = &feature_outputs,
         };
         defer logging.deinit();
-        native.activate_feature_logging.activator = logging.activator();
+        native.ops.activate_feature_logging.activator = logging.activator();
         native.bindRoots(boot.ready.roots.registry());
         native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../../src/adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
@@ -1978,7 +1980,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     defer allocator.free(saved);
                     var readback: std.heap.ArenaAllocator = .init(allocator);
                     defer readback.deinit();
-                    _ = (try specification_state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, contracts)).specified() orelse return error.ExpectedSpecifiedState;
+                    _ = (try specification_state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, contracts, readback_normalizer)).specified() orelse return error.ExpectedSpecifiedState;
                     const link = if (chosen) "\"outcome_of\":{\"kind\":\"acceptance_criterion\",\"ordinal\":2}" else "\"outcome_of\":{\"kind\":\"acceptance_criterion\",\"ordinal\":1}";
                     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, saved, link));
                     for ([_][2][]const u8{
@@ -1988,7 +1990,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     }) |forgery| {
                         const forged = try std.mem.replaceOwned(u8, readback.allocator(), saved, forgery[0], forgery[1]);
                         try std.testing.expect(!std.mem.eql(u8, forged, saved));
-                        try std.testing.expectError(error.InvalidSpecificationState, specification_state.parse(readback.allocator(), forged, .{ .bytes = "chosen" }, contracts));
+                        try std.testing.expectError(error.InvalidSpecificationState, specification_state.parse(readback.allocator(), forged, .{ .bytes = "chosen" }, contracts, readback_normalizer));
                     }
                 },
             }
@@ -2160,9 +2162,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 defer readback.deinit();
                 const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
                 const state = @import("../../src/domain/specification_state.zig");
-                var restored = (try state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified() orelse return error.MissingPublishedSpecification;
+                var restored = (try state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer)).specified() orelse return error.MissingPublishedSpecification;
                 restored.content.entities.disposition = if (driver.entities_required) .not_applicable else .required;
-                try std.testing.expectError(error.InvalidSpecificationState, state.validate(readback.allocator(), restored, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource()));
+                try std.testing.expectError(error.InvalidSpecificationState, state.validate(readback.allocator(), restored, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer));
             }
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
@@ -2203,7 +2205,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             var readback: std.heap.ArenaAllocator = .init(allocator);
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-            const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
+            const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer)).specified().?;
             try std.testing.expect(state.principle_registry.sources.len > 0 and state.principle_registry.chunks.len > 0);
         }
         if (applicability) |mode| {
@@ -2217,7 +2219,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             defer readback.deinit();
             const a = readback.allocator();
             const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
-            const restored = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
+            const restored = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer);
             const state = restored.specified() orelse return error.ExpectedSpecifiedState;
             const reference = state.reference;
             try std.testing.expectEqual(@as(usize, 0), reference.conflicts.len);
@@ -2235,7 +2237,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expect(std.mem.startsWith(u8, published, "# Feature Specification: Required output\n"));
             const forged = try std.mem.replaceOwned(u8, a, saved, "\"display_name\":{\"bytes\":\"Required output\"", "\"display_name\":{\"bytes\":\"Required outputs\"");
             try std.testing.expect(!std.mem.eql(u8, forged, saved));
-            try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, forged, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource()));
+            try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, forged, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer));
             try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .functional_requirement));
             try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .acceptance_criterion));
             try std.testing.expectEqual(@as(@TypeOf(state.content.entities.disposition), if (mode == .entities) .required else .not_applicable), state.content.entities.disposition);
@@ -2248,7 +2250,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 var readback: std.heap.ArenaAllocator = .init(allocator);
                 defer readback.deinit();
                 const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-                const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
+                const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer)).specified().?;
                 // Two semantic repair subjects plus the native token remain
                 // fully accounted after the semantic-only disposition repair.
                 try std.testing.expectEqual(@as(usize, 3), state.reference.extraction.claims.len);
@@ -2481,7 +2483,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 var readback: std.heap.ArenaAllocator = .init(allocator);
                 defer readback.deinit();
                 const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-                const restored = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
+                const restored = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer);
                 try std.testing.expect(restored.specified() != null);
             }
             if (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition) {
@@ -2878,7 +2880,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expect(std.mem.indexOf(u8, bytes, "Status: Incomplete") != null);
             try std.testing.expectError(error.InvalidSpecification, @import("../../src/domain/specification_markdown.zig").parse(a, bytes));
             const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
-            const pending = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
+            const pending = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer);
             try std.testing.expect(pending.value == .pending and pending.specified() == null);
             for (pending.value.pending.open_clarifications) |id| {
                 const name = id.filename();
@@ -2934,7 +2936,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 const a = readback.allocator();
                 const state_path = "engine/workflows/features/chosen/state/workflow.json";
                 const saved = try project.dir.readFileAlloc(io, state_path, a, .limited(64 * 1024 * 1024));
-                var restored = (try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
+                var restored = (try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer)).specified().?;
                 try std.testing.expectEqualStrings("spec-generation", restored.reference.extraction_contract.?.workflow_id.bytes);
                 restored.reference.extraction_contract.?.workflow_version += 1;
                 try project.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, restored, .{}) });
@@ -3025,12 +3027,12 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const a = arena.allocator();
     check = "canonical persisted state";
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
-    const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
+    const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts, readback_normalizer);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
     try std.testing.expectEqualStrings("specification-state/v28", persisted.schema);
     const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v28", "specification-state/v27");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
-    try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
+    try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts, readback_normalizer));
     const principles = @import("../../src/domain/principle_registry.zig");
     const live_registry = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/principle_workflow.zig").registry_schema, principles.Registry);
     try std.testing.expect(try principles.equal(a, live_registry.*, persisted.principle_registry));
@@ -3711,7 +3713,7 @@ test "feature preflight uses configured specs roots and preserves selected files
         var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
         var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
         native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-        native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
+        native.ops.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
         var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry, null);
         defer boot.deinit();
         try std.testing.expect(boot == .ready);
@@ -3782,7 +3784,7 @@ test "feature inspection rejects missing authority stale roots and forged resolv
     var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
     var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
     native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-    native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
+    native.ops.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry, null);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);

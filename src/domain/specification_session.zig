@@ -492,17 +492,17 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
         if (!try binding.tokenOnly(records, group.signal_id)) try basis_ids.append(a, group.signal_id.ordinal);
     };
     var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
-    try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
-    if (selected == .records and content_batch) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .unique_subset, .coverage = statement_rule });
+    try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .{ .unique_subset = .none } });
+    if (selected == .records and content_batch) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .{ .unique_subset = .{ .coverage = statement_rule } } });
     if (selected != .records and positive_ids.len != 0) switch (selected) {
         // Each brief field the model writes selects its own groups.
         .brief => inline for (comptime std.meta.fieldNames(@FieldType(g.ModelResponse, "brief"))) |field| {
-            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .{ .unique_subset = .none } });
         },
         .primary_user_story => return error.InvalidSpecificationUnit,
         .entities => {
-            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "basis" }, .{ .property = "signal_ids" } } }, .allowed = basis_ids.items, .collection = .unique_subset });
-            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "basis" }, .{ .property = "signal_ids" } } }, .allowed = basis_ids.items, .collection = .{ .unique_subset = .none } });
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .{ .unique_subset = .none } });
         },
         .records => unreachable,
     };

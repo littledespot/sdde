@@ -60,7 +60,7 @@ pub const Error = @import("pipeline_data.zig").ValueError ||
     @import("specification_coverage.zig").Error ||
     @import("scenario_link.zig").Error ||
     @import("specification_repair.zig").Error ||
-    @import("source_omission.zig").Error ||
+    @import("source_omission_authority.zig").Error ||
     @import("required_authority.zig").Error ||
     @import("reference_ingestion.zig").Error ||
     @import("workflow_retry.zig").StateError ||

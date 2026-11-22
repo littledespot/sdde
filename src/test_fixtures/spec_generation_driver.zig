@@ -412,7 +412,7 @@ pub const Driver = struct {
                     var permits_applicability = false;
                     const references = (@import("../application/specification_workflow.zig").readContext(&view) catch unreachable).references;
                     const native = authorityInputs(&view);
-                    const pending = if (self.runner.repair_retry.currentPermit()) |permit| @import("../domain/source_omission.zig").pendingReview(arena.allocator(), permit, native.feature, @import("../domain/reference_support.zig").records(references).items.state_id) catch unreachable else null;
+                    const pending = if (self.runner.repair_retry.currentPermit()) |permit| @import("../domain/source_omission_authority.zig").pendingReview(arena.allocator(), permit, native.feature, @import("../domain/reference_support.zig").records(references).items.state_id) catch unreachable else null;
                     if (pending) |projection| {
                         std.testing.expectEqual(projection, native.projection) catch |err| return self.hookFailed(err);
                         self.dependent_source_review_calls += 1;

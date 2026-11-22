@@ -40,8 +40,9 @@ pub fn build(directory: @import("reference_ingestion.zig").RelativePath, inputs:
 }
 
 /// Validate persisted source/claim/citation joins before any part of a prior
-/// state is reused. Prose support remains model-assisted evidence.
-pub fn validate(allocator: std.mem.Allocator, value: Snapshot) Error!void {
+/// state is reused. Each stored extraction claim must still be the canonical quote
+/// of its citations (ADR 0036). Prose support remains model-assisted evidence.
+pub fn validate(allocator: std.mem.Allocator, value: Snapshot, normalizer: @import("../ports/unicode_normalizer.zig").Normalizer) Error!void {
     const inputs = value.inputs;
     const corpus = inputs.corpus;
     const ledger = value.extraction;
@@ -102,10 +103,10 @@ pub fn validate(allocator: std.mem.Allocator, value: Snapshot) Error!void {
     if (claim_index != ledger.claims.len or citation_index != ledger.citations.len) return error.InvalidReferenceSnapshot;
     for (value.passive_records, 1..) |record, ordinal| if (record.id.ordinal != ordinal or record.value.len == 0) return error.InvalidReferenceSnapshot;
     for (value.passive_occurrences) |occurrence| if (occurrence.id.ordinal == 0 or occurrence.id.ordinal > value.passive_records.len) return error.InvalidReferenceSnapshot;
-    validateRecords(allocator, value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceSnapshot;
+    validateRecords(allocator, value, normalizer) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceSnapshot;
 }
 
-fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
+fn validateRecords(allocator: std.mem.Allocator, value: Snapshot, normalizer: @import("../ports/unicode_normalizer.zig").Normalizer) !void {
     var scratch: std.heap.ArenaAllocator = .init(allocator);
     defer scratch.deinit();
     const a = scratch.allocator();
@@ -115,6 +116,8 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
     const captured: passive.Captured = .{ .records = value.passive_records, .occurrences = value.passive_occurrences };
     for (value.extraction.chunks) |chunk| if (chunk.outcome == .no_feature_claim) try x.text.stored(x.text.ReferenceNode, a, .{ .inputs = value.inputs, .passive = captured, .scopes = &.{chunk.scope}, .field = .extraction_reason }, chunk.outcome.no_feature_claim.value.nodes);
     for (items.entries) |item| if (item.claim.content == .model) try storedContent(a, value.inputs, captured, &.{.{ .state_id = items.state_id, .chunk_id = item.claim.chunk_id }}, .extraction, item.claim.content.model);
+    var requote = try @import("reference_extraction_text.zig").Requote.init(a, value.inputs, normalizer);
+    for (value.extraction.claims) |claim| try requote.check(a, claim, value.extraction.citations);
     if (try @import("reference_disposition_validation.zig").check(a, items, records.dispositions) == .invalid) return error.InvalidReferenceSnapshot;
     const allowed = try a.alloc(r.ClaimId, items.entries.len);
     for (items.entries, allowed) |item, *id| id.* = item.claim.id;

@@ -7,8 +7,20 @@ pub const parameter_id = "retry-limit";
 pub const Limit = struct {
     value: u32,
 
+    pub const Standing = enum { admits, exhausted };
+
     pub fn within(self: Limit, maximum: u32) bool {
         return maximum != 0 and self.value <= maximum;
+    }
+
+    /// The executions the limit allows: the first and `value` retries (ADR 0030, a limit of 0 permits only the first).
+    pub fn allowance(self: Limit) u64 {
+        return @as(u64, self.value) + 1;
+    }
+
+    /// Whether `executions` already made have spent the allowance, so the next may not run.
+    pub fn standing(self: Limit, executions: u64) Standing {
+        return if (executions >= self.allowance()) .exhausted else .admits;
     }
 };
 
@@ -35,7 +47,7 @@ pub const Exhaustion = struct {
     };
 
     pub fn init(step: workflow.WorkflowStepId, limit: Limit, completed: u64) ?Exhaustion {
-        if (workflow.WorkflowStepId.parse(step.bytes) == null or completed <= limit.value) return null;
+        if (workflow.WorkflowStepId.parse(step.bytes) == null or limit.standing(completed) == .admits) return null;
         var result: Exhaustion = .{ .operation_name = @splat(0), .operation_name_len = @intCast(step.bytes.len), .limit = limit, .completed_executions = completed, .reason = .retry_limit, .defect = null };
         @memcpy(result.operation_name[0..step.bytes.len], step.bytes);
         return result;
@@ -44,7 +56,7 @@ pub const Exhaustion = struct {
     /// An unchanged canonical repair ends the same allowance immediately. The
     /// count remains the actual admitted executions, never the configured limit.
     fn unchanged(step: workflow.WorkflowStepId, limit: Limit, completed: u64, key: Key) ?Exhaustion {
-        if (workflow.WorkflowStepId.parse(step.bytes) == null or completed == 0 or completed > @as(u64, limit.value) + 1) return null;
+        if (workflow.WorkflowStepId.parse(step.bytes) == null or completed == 0 or completed > limit.allowance()) return null;
         var result: Exhaustion = .{ .operation_name = @splat(0), .operation_name_len = @intCast(step.bytes.len), .limit = limit, .completed_executions = completed, .reason = .unchanged_repair, .defect = key };
         @memcpy(result.operation_name[0..step.bytes.len], step.bytes);
         return result;
@@ -444,7 +456,7 @@ pub const State = struct {
         for (self.attempts.items) |*attempt| {
             if (!attempt.key.eql(key) or !std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) continue;
             if (attempt.limit.value != limit.value) return error.InvalidRepairProgress;
-            if (attempt.completed > limit.value) return .{ .exhausted = attempt.completed };
+            if (limit.standing(attempt.completed) == .exhausted) return .{ .exhausted = attempt.completed };
             const next_revision = std.math.add(u64, self.revision, 1) catch return error.InvalidRepairProgress;
             attempt.completed += 1;
             self.revision = next_revision;

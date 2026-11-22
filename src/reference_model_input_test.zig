@@ -414,7 +414,7 @@ test "a dispositions assignment binds every semantic claim natively and states n
             try std.testing.expect(bound == null);
             bound = choice;
         };
-        try std.testing.expectEqual(.native, bound.?.member_count);
+        try std.testing.expectEqual(.native, bound.?.collection.exact_members.count);
         try std.testing.expectEqualDeep(&[_]schema.ChoiceStep{ .{ .property = "claim_dispositions" }, .items, .{ .property = "claim_id" } }, bound.?.target.path);
         try std.testing.expectEqual(semantic.len, bound.?.allowed.len);
         for (semantic, bound.?.allowed) |id, allowed| try std.testing.expectEqual(@as(i64, id.ordinal), allowed);
@@ -427,7 +427,6 @@ test "a dispositions assignment binds every semantic claim natively and states n
         const plain = try a.dupe(schema.IntegerChoice, packet.integerChoices());
         for (plain) |*choice| if (choice.collection == .exact_members) {
             choice.collection = .sequence;
-            choice.member_count = .stated;
         };
         const sequence = try schema.restrict(a, selected, packet.excludedVariants(), plain);
         defer sequence.release();
@@ -442,12 +441,6 @@ test "a dispositions assignment binds every semantic claim natively and states n
         try std.testing.expectEqual(.missing_member, omission.reason);
         try std.testing.expectEqual(bound.?.allowed[0], omission.member.?);
         try std.testing.expectEqualStrings("/claim_dispositions", (try omission.describe(a)).path);
-        // A native count on any other collection is not a valid restriction.
-        const misbound = try a.dupe(schema.IntegerChoice, plain);
-        for (misbound) |*choice| if (choice.target == .path and std.mem.eql(u8, choice.target.path[0].property, "claim_dispositions")) {
-            choice.member_count = .native;
-        };
-        try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(a, selected, packet.excludedVariants(), misbound));
     }
 }
 
@@ -523,7 +516,7 @@ test "extraction claims that cite the same lines name one category, and nothing 
         defer packets.release(packet);
         // The initial request names the claim property that claims citing the same lines must share.
         try std.testing.expectEqual(@as(usize, 1), packet.integerChoices().len);
-        try std.testing.expectEqualStrings("category", packet.integerChoices()[0].agree.?);
+        try std.testing.expectEqualStrings("category", packet.integerChoices()[0].collection.agreement().?);
         const restricted = try schema.restrict(std.testing.allocator, schemas, packet.excludedVariants(), packet.integerChoices());
         defer restricted.release();
         const contract = restricted.selected();
@@ -560,7 +553,7 @@ test "extraction claims that cite the same lines name one category, and nothing 
         const repair = try input.withCitationChoices(std.testing.allocator, base, inputs, scope, &.{.{ .property = "citations" }}, null);
         defer packets.release(repair);
         try std.testing.expectEqual(@as(usize, 1), repair.integerChoices().len);
-        try std.testing.expect(repair.integerChoices()[0].agree == null);
+        try std.testing.expect(repair.integerChoices()[0].collection.agreement() == null);
     }
 }
 

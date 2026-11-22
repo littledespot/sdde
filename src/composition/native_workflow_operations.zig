@@ -55,9 +55,10 @@ const packet_guidance = @import("../application/packet_guidance_workflow.zig");
 const incomplete = @import("../application/incomplete_specification_workflow.zig");
 const publication = @import("../application/specification_publication_workflow.zig");
 
-/// Composition of native implementations, not a workflow graph. No setup action
-/// executes until the selected YAML reaches its registered operation.
-pub const Assembly = struct {
+/// The native operation implementations, one field each. A field is one registered operation, in the order the
+/// registry lists them: `registered` derives every entry and the entry count from these fields, so declaring an
+/// operation here registers it exactly once, at its own address.
+pub const Operations = struct {
     capture_principle_registry: principles.CaptureRegistry,
     capture_packet_guidance: packet_guidance.Capture,
     prepare_toolchain: runners.PrepareToolchain,
@@ -68,38 +69,6 @@ pub const Assembly = struct {
     activate_feature_logging: logging.Activate,
     prepare_reference_evidence: evidence_preparation.PrepareReferenceEvidence,
     parse_reference_extraction: extraction.Parse,
-    validate_extraction_text: extraction.ValidateText,
-    validate_reference_claims: extraction.Validate,
-    assign_reference_claims: extraction.Assign,
-    build_reference_extraction: extraction.Build,
-    account_reference_extraction: extraction.Account,
-    compile_naming: path_tokens.Compile,
-    prepare_reference_tokens: token_preparation.PrepareReferenceTokens,
-    validate_token_classifications: extraction.ValidateTokenClassifications,
-    assign_preserved_tokens: structured_tokens.AssignTokens,
-    build_preserved_claims: structured_tokens.BuildClaims,
-    build_reconciliation_items: reconciliation.BuildItems,
-    partition_reconciliation: reconciliation.Partition,
-    assign_reconciliation_partitions: reconciliation.AssignPartitions,
-    validate_reconciliation_partitions: reconciliation.ValidatePartitions,
-    build_reconciliation_input: reconciliation.BuildInput,
-    check_summary_reuse: reconciliation.CheckSummaryReuse,
-    reuse_reconciliation_summary: reconciliation.ReuseSummary,
-    parse_reconciliation: reconciliation.Parse,
-    validate_reconciliation_summary: reconciliation.ValidateSummary,
-    assign_reconciliation_summary: reconciliation.AssignSummary,
-    build_reconciliation_summary: reconciliation.BuildSummary,
-    validate_reconciliation_dispositions: reconciliation.ValidateDispositions,
-    validate_reconciliation_signals: reconciliation.ValidateSignals,
-    validate_reconciliation_conflicts: reconciliation.ValidateConflicts,
-    assign_reconciliation_records: reconciliation.AssignRecords,
-    build_reconciliation_records: reconciliation.BuildRecords,
-    account_reconciliation: reconciliation.Account,
-    project_specification_authority: authority.ProjectSpecification,
-    build_required_authority: authority.Build,
-    reconcile_required_authority: authority.Reconcile,
-    validate_required_authority: authority.Validate,
-    model_requests: model_request.Assembly,
     initialize_extraction: reference_model.Initialize,
     check_extraction: reference_model.CheckExtraction,
     build_extraction_packet: reference_model.BuildExtractionInput,
@@ -136,6 +105,7 @@ pub const Assembly = struct {
     build_scenario_link_packet: scenario_link.BuildInput,
     admit_scenario_link: scenario_link.Admit,
     assemble_specification: specification.Assemble,
+    validate_specification_coverage: specification.ValidateCoverage,
     build_specification_support: specification_support.BuildInput,
     collect_specification_support: specification_support.Collect,
     check_specification_support_localization: specification_support.CheckLocalization,
@@ -145,7 +115,43 @@ pub const Assembly = struct {
     initialize_specification_review: specification_support.Initialize,
     build_authority_observations: authority.BuildObservations,
     retire_authority: authority.Retire,
-    validate_specification_coverage: specification.ValidateCoverage,
+    validate_token_classifications: extraction.ValidateTokenClassifications,
+    // The four generic repair operations (ADR 0033). Each holds its owners' bindings, so an owner's
+    // rules exist once, and a repair step names its owner (`owner:`), not a per-owner operation.
+    authorize_repair: generic_repair.AuthorizeRepair,
+    build_repair_input: generic_repair.BuildRepairInput,
+    parse_repair: generic_repair.ParseRepair,
+    merge_repair: generic_repair.MergeRepair,
+    assign_preserved_tokens: structured_tokens.AssignTokens,
+    build_preserved_claims: structured_tokens.BuildClaims,
+    build_reconciliation_items: reconciliation.BuildItems,
+    partition_reconciliation: reconciliation.Partition,
+    assign_reconciliation_partitions: reconciliation.AssignPartitions,
+    validate_reconciliation_partitions: reconciliation.ValidatePartitions,
+    build_reconciliation_input: reconciliation.BuildInput,
+    check_summary_reuse: reconciliation.CheckSummaryReuse,
+    reuse_reconciliation_summary: reconciliation.ReuseSummary,
+    parse_reconciliation: reconciliation.Parse,
+    validate_reconciliation_summary: reconciliation.ValidateSummary,
+    assign_reconciliation_summary: reconciliation.AssignSummary,
+    build_reconciliation_summary: reconciliation.BuildSummary,
+    validate_reconciliation_dispositions: reconciliation.ValidateDispositions,
+    validate_reconciliation_signals: reconciliation.ValidateSignals,
+    validate_reconciliation_conflicts: reconciliation.ValidateConflicts,
+    assign_reconciliation_records: reconciliation.AssignRecords,
+    build_reconciliation_records: reconciliation.BuildRecords,
+    account_reconciliation: reconciliation.Account,
+    project_specification_authority: authority.ProjectSpecification,
+    build_required_authority: authority.Build,
+    reconcile_required_authority: authority.Reconcile,
+    validate_required_authority: authority.Validate,
+    validate_extraction_text: extraction.ValidateText,
+    validate_reference_claims: extraction.Validate,
+    assign_reference_claims: extraction.Assign,
+    build_reference_extraction: extraction.Build,
+    account_reference_extraction: extraction.Account,
+    compile_naming: path_tokens.Compile,
+    prepare_reference_tokens: token_preparation.PrepareReferenceTokens,
     project_specification_document: specification_rendering.Project,
     render_specification: specification_rendering.Render,
     validate_specification_rendering: specification_rendering.Validate,
@@ -163,17 +169,18 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    // The four generic repair operations (ADR 0033). Each holds its owners' bindings, so an owner's
-    // rules exist once, and a repair step names its owner (`owner:`), not a per-owner operation.
-    authorize_repair: generic_repair.AuthorizeRepair,
-    build_repair_input: generic_repair.BuildRepairInput,
-    parse_repair: generic_repair.ParseRepair,
-    merge_repair: generic_repair.MergeRepair,
-    entries: [core.entries.len + 108 + model_request.count]operations.Entry,
+};
+
+/// Composition of native implementations, not a workflow graph. No setup action
+/// executes until the selected YAML reaches its registered operation.
+pub const Assembly = struct {
+    ops: Operations,
+    model_requests: model_request.Assembly,
+    entries: [core.entries.len + std.meta.fields(Operations).len + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
-        self.* = .{
+        self.ops = .{
             .capture_principle_registry = .{ .allocator = allocator, .action = .{} },
             .capture_packet_guidance = .{ .allocator = allocator },
             .prepare_toolchain = .{ .allocator = allocator, .action = .{ .project_source = project_source, .preset_source = preset_source, .preset_capture = preset_capture, .parser = document_parser, .policies = policies } },
@@ -231,7 +238,6 @@ pub const Assembly = struct {
             .account_reference_extraction = .{ .allocator = allocator },
             .compile_naming = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder } },
             .prepare_reference_tokens = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder, .classifier = classifier } },
-            .model_requests = undefined,
             .specification_source_readiness = .{ .allocator = allocator },
             .source_preservation_policy = .{ .allocator = allocator },
             .project_source_preservation = .{ .allocator = allocator },
@@ -245,13 +251,13 @@ pub const Assembly = struct {
             .check_clarifications = .{},
             .publish_output = .{ .allocator = allocator },
             .build_resolved_needs = .{ .allocator = allocator },
-            .build_specification_state = .{ .allocator = allocator },
-            .build_incomplete_specification = .{ .allocator = allocator },
+            .build_specification_state = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
+            .build_incomplete_specification = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .render_incomplete_specification = .{ .allocator = allocator },
-            .prepare_incomplete_specification_output = .{ .allocator = allocator },
+            .prepare_incomplete_specification_output = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .build_reference_snapshot = .{ .allocator = allocator },
             .render_reference_context = .{ .allocator = allocator },
-            .prepare_specification_output = .{ .allocator = allocator },
+            .prepare_specification_output = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .render_specification = .{ .allocator = allocator },
             .validate_specification_rendering = .{ .allocator = allocator },
             .validate_specification_coverage = .{ .allocator = allocator, .action = .{} },
@@ -315,151 +321,40 @@ pub const Assembly = struct {
                 .specification_unit = .{ .allocator = allocator, .normalizer = unicode },
                 .specification_support = .{ .allocator = allocator, .normalizer = unicode },
             },
-            .entries = undefined,
-            .registry = undefined,
         };
         self.model_requests.init(allocator);
-        self.entries = core.entries ++ self.model_requests.entries ++ [_]operations.Entry{
-            entry(principles.CaptureRegistry, &self.capture_principle_registry),
-            entry(packet_guidance.Capture, &self.capture_packet_guidance),
-            entry(runners.PrepareToolchain, &self.prepare_toolchain),
-            .{ .contract = invocation.Invocation.contract, .binding = binding.bind(invocation.Invocation, &self.invocation, invocation.Invocation.invoke) },
-            invocationEntry(invocation.ParseInvocation, &self.parse_invocation),
-            entry(invocation.ValidateArguments, &self.validate_arguments),
-            entry(input_preparation.PrepareInputs, &self.prepare_inputs),
-            .{ .contract = logging.Activate.contract, .binding = binding.bind(logging.Activate, &self.activate_feature_logging, logging.Activate.invoke) },
-            entry(evidence_preparation.PrepareReferenceEvidence, &self.prepare_reference_evidence),
-            entry(extraction.Parse, &self.parse_reference_extraction),
-            entry(reference_model.Initialize, &self.initialize_extraction),
-            entry(reference_model.CheckExtraction, &self.check_extraction),
-            entry(reference_model.BuildExtractionInput, &self.build_extraction_packet),
-            entry(reference_model.ForceClassifications, &self.force_classifications),
-            entry(reference_model.CollectExtraction, &self.collect_extraction),
-            entry(reference_model.FinishExtraction, &self.finish_extraction),
-            entry(reconciliation_stage.Build(.dispositions), &self.build_dispositions),
-            entry(reconciliation_stage.Collect(.dispositions), &self.collect_dispositions),
-            entry(reconciliation_stage.Build(.signals), &self.build_signals),
-            entry(reconciliation_stage.Collect(.signals), &self.collect_signals),
-            entry(reconciliation_stage.Build(.conflicts), &self.build_conflicts),
-            entry(reconciliation_stage.Collect(.conflicts), &self.collect_conflicts),
-            entry(reconciliation_stage.Check, &self.check_reconciliation_phase),
-            entry(reference_model.BuildReconciliationInput, &self.build_reconciliation_packet),
-            entry(reference_model.CheckReconciliation, &self.check_reconciliation),
-            entry(reference_model.CollectReconciliation, &self.collect_reconciliation),
-            entry(specification.SourceReadiness, &self.specification_source_readiness),
-            entry(authority.SourcePreservationPolicy, &self.source_preservation_policy),
-            entry(authority.ProjectSourcePreservation, &self.project_source_preservation),
-            entry(specification.Initialize, &self.initialize_specification),
-            entry(specification.ComposeStory, &self.compose_specification_story),
-            entry(specification.Check, &self.check_specification),
-            entry(specification.BuildInput, &self.build_specification_packet),
-            entry(specification.Collect, &self.collect_specification),
-            entry(specification.Parse, &self.parse_specification),
-            entry(specification.Validate, &self.validate_specification),
-            entry(specification.Advance, &self.advance_specification),
-            entry(scenario_generation.Plan, &self.plan_scenario_generation),
-            entry(scenario_generation.Check, &self.check_scenario_generation),
-            entry(scenario_generation.Advance, &self.advance_scenario_generation),
-            entry(scenario_generation.Complete, &self.complete_scenario_generation),
-            entry(scenario_link.Plan, &self.plan_scenario_links),
-            entry(scenario_link.Check, &self.check_scenario_links),
-            entry(scenario_link.BuildInput, &self.build_scenario_link_packet),
-            entry(scenario_link.Admit, &self.admit_scenario_link),
-            entry(specification.Assemble, &self.assemble_specification),
-            entry(specification.ValidateCoverage, &self.validate_specification_coverage),
-            entry(specification_support.BuildInput, &self.build_specification_support),
-            entry(specification_support.Collect, &self.collect_specification_support),
-            entry(specification_support.CheckLocalization, &self.check_specification_support_localization),
-            entry(specification_support.BuildLossInput, &self.build_specification_support_loss),
-            entry(specification_support.CollectLoss, &self.collect_specification_support_loss),
-            entry(specification_support.Apply, &self.apply_specification_support),
-            entry(specification_support.Initialize, &self.initialize_specification_review),
-            entry(authority.BuildObservations, &self.build_authority_observations),
-            entry(authority.Retire, &self.retire_authority),
-            entry(extraction.ValidateTokenClassifications, &self.validate_token_classifications),
-            variantEntry(generic_repair.AuthorizeRepair, &self.authorize_repair),
-            variantEntry(generic_repair.BuildRepairInput, &self.build_repair_input),
-            variantEntry(generic_repair.ParseRepair, &self.parse_repair),
-            variantEntry(generic_repair.MergeRepair, &self.merge_repair),
-            entry(structured_tokens.AssignTokens, &self.assign_preserved_tokens),
-            entry(structured_tokens.BuildClaims, &self.build_preserved_claims),
-            entry(reconciliation.BuildItems, &self.build_reconciliation_items),
-            entry(reconciliation.Partition, &self.partition_reconciliation),
-            entry(reconciliation.AssignPartitions, &self.assign_reconciliation_partitions),
-            entry(reconciliation.ValidatePartitions, &self.validate_reconciliation_partitions),
-            entry(reconciliation.BuildInput, &self.build_reconciliation_input),
-            entry(reconciliation.CheckSummaryReuse, &self.check_summary_reuse),
-            entry(reconciliation.ReuseSummary, &self.reuse_reconciliation_summary),
-            entry(reconciliation.Parse, &self.parse_reconciliation),
-            entry(reconciliation.ValidateSummary, &self.validate_reconciliation_summary),
-            entry(reconciliation.AssignSummary, &self.assign_reconciliation_summary),
-            entry(reconciliation.BuildSummary, &self.build_reconciliation_summary),
-            entry(reconciliation.ValidateDispositions, &self.validate_reconciliation_dispositions),
-            entry(reconciliation.ValidateSignals, &self.validate_reconciliation_signals),
-            entry(reconciliation.ValidateConflicts, &self.validate_reconciliation_conflicts),
-            entry(reconciliation.AssignRecords, &self.assign_reconciliation_records),
-            entry(reconciliation.BuildRecords, &self.build_reconciliation_records),
-            entry(reconciliation.Account, &self.account_reconciliation),
-            entry(authority.ProjectSpecification, &self.project_specification_authority),
-            entry(authority.Build, &self.build_required_authority),
-            entry(authority.Reconcile, &self.reconcile_required_authority),
-            entry(authority.Validate, &self.validate_required_authority),
-            entry(extraction.ValidateText, &self.validate_extraction_text),
-            entry(extraction.Validate, &self.validate_reference_claims),
-            entry(extraction.Assign, &self.assign_reference_claims),
-            entry(extraction.Build, &self.build_reference_extraction),
-            entry(extraction.Account, &self.account_reference_extraction),
-            entry(path_tokens.Compile, &self.compile_naming),
-            entry(token_preparation.PrepareReferenceTokens, &self.prepare_reference_tokens),
-            entry(specification_rendering.Project, &self.project_specification_document),
-            entry(specification_rendering.Render, &self.render_specification),
-            entry(specification_rendering.Validate, &self.validate_specification_rendering),
-            entry(clarification_refresh.BuildAuthorityNeeds, &self.build_authority_needs),
-            entry(clarification_refresh.BuildSpecificationNeed, &self.build_specification_need),
-            entry(clarification_refresh.Refresh, &self.refresh_clarifications),
-            entry(clarification_refresh.Render, &self.render_clarifications),
-            entry(clarification_refresh.Check, &self.check_clarifications),
-            entry(output.Publish, &self.publish_output),
-            entry(publication.ResolvedNeeds, &self.build_resolved_needs),
-            entry(publication.Build, &self.build_specification_state),
-            entry(incomplete.Build, &self.build_incomplete_specification),
-            entry(incomplete.Render, &self.render_incomplete_specification),
-            entry(incomplete.Prepare, &self.prepare_incomplete_specification_output),
-            entry(publication.BuildSnapshot, &self.build_reference_snapshot),
-            entry(publication.RenderReference, &self.render_reference_context),
-            entry(publication.Prepare, &self.prepare_specification_output),
-        };
+        self.entries = core.entries ++ self.model_requests.entries ++ registered(&self.ops);
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
     }
 
     pub fn bindPrinciples(self: *Assembly, root: *const roots.ConfiguredBaseRootCapability, reader: @import("../ports/principle_source.zig").Reader) void {
-        self.capture_principle_registry.action.source = reader;
-        self.capture_principle_registry.action.source.?.capability = root;
+        self.ops.capture_principle_registry.action.source = reader;
+        self.ops.capture_principle_registry.action.source.?.capability = root;
     }
     pub fn bindConfiguration(self: *Assembly, config: *const @import("../domain/config.zig").SDDToolKitConfig) void {
-        self.source_preservation_policy.policy = &config.validation;
+        self.ops.source_preservation_policy.policy = &config.validation;
     }
     pub fn bindWorkflows(self: *Assembly, registry: *const @import("../domain/workflow_registry.zig").ValidatedWorkflowDefinitionRegistry) void {
         const contracts = registry.contractSource();
-        self.prepare_inputs.action.contracts = contracts;
-        self.build_specification_state.action.contracts = contracts;
-        self.build_incomplete_specification.action.contracts = contracts;
-        self.prepare_incomplete_specification_output.action.contracts = contracts;
-        self.prepare_specification_output.action.contracts = contracts;
+        self.ops.prepare_inputs.action.contracts = contracts;
+        self.ops.build_specification_state.action.contracts = contracts;
+        self.ops.build_incomplete_specification.action.contracts = contracts;
+        self.ops.prepare_incomplete_specification_output.action.contracts = contracts;
+        self.ops.prepare_specification_output.action.contracts = contracts;
     }
     pub fn bindRoots(self: *Assembly, registry: *const roots.BootstrapRootRegistry) void {
-        self.prepare_toolchain.action.project_source.capability = registry.projectPrinciples();
-        self.prepare_toolchain.action.preset_source.capability = registry.toolchainPresetRegistry();
-        self.prepare_toolchain.action.preset_capture.capability = registry.toolchainPresetRegistry();
-        self.prepare_inputs.action.reference_inspector.capability = registry.referenceSources();
-        self.prepare_inputs.action.feature_roots = registry.featureDirectoryRoots();
-        self.prepare_inputs.action.feature_inspector.capability = registry.featureDirectoryRead();
-        self.prepare_inputs.action.artifact_roots = registry.featureArtifactRoots();
-        self.prepare_inputs.action.input_source.capability = registry.featureInputRead();
-        if (self.prepare_inputs.action.state_source) |*reader| reader.capability = registry.featureInputRead();
-        if (self.publish_output.action.writer) |*writer| writer.capability = registry.featureOutputWrite();
-        self.prepare_reference_evidence.action.enumerator.capability = registry.referenceContentRead();
-        self.prepare_reference_evidence.action.capturer.capability = registry.referenceContentRead();
+        self.ops.prepare_toolchain.action.project_source.capability = registry.projectPrinciples();
+        self.ops.prepare_toolchain.action.preset_source.capability = registry.toolchainPresetRegistry();
+        self.ops.prepare_toolchain.action.preset_capture.capability = registry.toolchainPresetRegistry();
+        self.ops.prepare_inputs.action.reference_inspector.capability = registry.referenceSources();
+        self.ops.prepare_inputs.action.feature_roots = registry.featureDirectoryRoots();
+        self.ops.prepare_inputs.action.feature_inspector.capability = registry.featureDirectoryRead();
+        self.ops.prepare_inputs.action.artifact_roots = registry.featureArtifactRoots();
+        self.ops.prepare_inputs.action.input_source.capability = registry.featureInputRead();
+        if (self.ops.prepare_inputs.action.state_source) |*reader| reader.capability = registry.featureInputRead();
+        if (self.ops.publish_output.action.writer) |*writer| writer.capability = registry.featureOutputWrite();
+        self.ops.prepare_reference_evidence.action.enumerator.capability = registry.referenceContentRead();
+        self.ops.prepare_reference_evidence.action.capturer.capability = registry.referenceContentRead();
     }
 };
 
@@ -490,11 +385,31 @@ const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig")
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .blocked, .failed, .cancelled },
 } };
 
-fn invocationEntry(comptime T: type, context: *T) operations.Entry {
-    var result = entry(T, context);
-    result.contract.kind = .invocation;
-    result.contract.outcomes = &.{.ok};
-    return result;
+/// How an operation type states its registered contract. An `Action` states it through the action's own
+/// contract (`entry`); a type with `contract` states it itself, as closed variants (`variantEntry`, which admits only a
+/// shell) or in full. A type with neither has no contract to register.
+const Shape = enum { action, shell, direct };
+
+pub fn shapeOf(comptime T: type) ?Shape {
+    if (@hasDecl(T, "Action")) return .action;
+    if (@hasDecl(T, "contract")) return if (T.contract.hasVariants()) .shell else .direct;
+    return null;
+}
+
+/// The entry of one `Operations` field, by the shape its type declares.
+fn register(comptime T: type, context: *T) operations.Entry {
+    return switch (comptime shapeOf(T) orelse @compileError(@typeName(T) ++ " declares neither an Action nor a contract, so it registers no operation")) {
+        .action => entry(T, context),
+        .shell => variantEntry(T, context),
+        .direct => .{ .contract = T.contract, .binding = binding.bind(T, context, T.invoke) },
+    };
+}
+
+/// One entry per `Operations` field, in field order, each bound to its own field.
+fn registered(ops: *Operations) [std.meta.fields(Operations).len]operations.Entry {
+    var rows: [std.meta.fields(Operations).len]operations.Entry = undefined;
+    inline for (std.meta.fields(Operations), 0..) |field, index| rows[index] = register(field.type, &@field(ops, field.name));
+    return rows;
 }
 
 /// An operation whose one registered contract is made of closed variants (ADR 0030 "Contract
@@ -511,7 +426,7 @@ pub fn entry(comptime T: type, context: *T) operations.Entry {
     return .{
         .contract = .{
             .id = contract.id,
-            .kind = .step,
+            .kind = if (@hasDecl(T, "kind")) T.kind else .step,
             .parameters = if (@hasDecl(T, "parameters")) &T.parameters else &.{},
             .requires = contract.requires,
             .optional = contract.optional,

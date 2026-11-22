@@ -41,7 +41,7 @@ pub const AccountedAttempt = opaque {
 };
 
 pub fn latestAttempt(owner: *const Owner) *const AccountedAttempt {
-    return @ptrCast(ownerStorageConst(owner).accounting.latest_record.?);
+    return @ptrCast(Chain.read(owner).latest_record.?);
 }
 
 pub const Transition = struct {
@@ -90,15 +90,13 @@ const Storage = struct {
     stage_run_epoch_id: request_identity.StageRunEpochId,
     revision: Revision,
     latest_record: ?*const Record,
+
+    pub fn releaseRoot(self: *Storage) void {
+        self.stage_run_epoch_id.reference.release();
+    }
 };
 
-const OwnerStorage = struct {
-    backing_allocator: std.mem.Allocator,
-    reference_count: usize,
-    previous_owner: ?*Owner,
-    arena: std.heap.ArenaAllocator,
-    accounting: Storage,
-};
+const Chain = @import("ledger_owner.zig").LedgerOwner(Owner, Storage, error.ModelAttemptAccountingOwnerReferenceExhausted);
 
 pub const ValidationError = error{
     InvalidAccountingTransition,
@@ -139,25 +137,13 @@ pub fn createInitial(
     allocator: std.mem.Allocator,
     stage_run_epoch_id: request_identity.StageRunEpochId,
 ) Error!*Owner {
-    const value = try allocator.create(OwnerStorage);
-    errdefer allocator.destroy(value);
-    value.* = .{
-        .backing_allocator = allocator,
-        .reference_count = 1,
-        .previous_owner = null,
-        .arena = .init(allocator),
-        .accounting = undefined,
-    };
-    errdefer value.arena.deinit();
-    const epoch = stage_run_epoch_id.reference.retain();
-    const owner: *Owner = @ptrCast(value);
-    value.accounting = .{
-        .owner = owner,
-        .stage_run_epoch_id = .{ .reference = epoch },
+    const pending = try Chain.beginInitial(allocator);
+    return pending.sealInitial(.{
+        .owner = pending.owner(),
+        .stage_run_epoch_id = .{ .reference = stage_run_epoch_id.reference.retain() },
         .revision = .initial,
         .latest_record = null,
-    };
-    return owner;
+    });
 }
 
 pub fn propose(
@@ -212,54 +198,29 @@ pub fn apply(
     };
 
     const previous_owner = current_storage.owner;
-    const previous_storage = ownerStorage(previous_owner);
-    const value = try previous_storage.backing_allocator.create(OwnerStorage);
-    errdefer previous_storage.backing_allocator.destroy(value);
-    value.* = .{
-        .backing_allocator = previous_storage.backing_allocator,
-        .reference_count = 1,
-        .previous_owner = null,
-        .arena = .init(previous_storage.backing_allocator),
-        .accounting = undefined,
-    };
-    errdefer value.arena.deinit();
-    const record = try value.arena.allocator().create(Record);
+    const pending = try Chain.beginSuccessor(previous_owner);
+    errdefer pending.abort();
+    const record = try pending.arena().create(Record);
     record.* = .{
         .previous = current_storage.latest_record,
         .model_request_id = transition.model_request_id,
         .attempts_reserved = transition.next_request_value,
         .latest_resent = transition.attempt == .runaway_resend,
     };
-    try retainOwner(previous_owner);
-    value.previous_owner = previous_owner;
-    const owner: *Owner = @ptrCast(value);
-    value.accounting = .{
-        .owner = owner,
+    return pending.sealSuccessor(previous_owner, .{
+        .owner = pending.owner(),
         .stage_run_epoch_id = current_storage.stage_run_epoch_id,
         .revision = .{ .value = next_revision },
         .latest_record = record,
-    };
-    return owner;
+    });
 }
 
 pub fn accounting(owner: *const Owner) *const RunnerModelAttemptAccounting {
-    return @ptrCast(&ownerStorageConst(owner).accounting);
+    return @ptrCast(Chain.read(owner));
 }
 
 pub fn deinitOwner(owner: *Owner) void {
-    var next: ?*Owner = owner;
-    while (next) |current| {
-        const value = ownerStorage(current);
-        std.debug.assert(value.reference_count > 0);
-        value.reference_count -= 1;
-        if (value.reference_count != 0) return;
-        const previous = value.previous_owner;
-        if (previous == null) value.accounting.stage_run_epoch_id.reference.release();
-        const allocator = value.backing_allocator;
-        value.arena.deinit();
-        allocator.destroy(value);
-        next = previous;
-    }
+    Chain.release(owner);
 }
 
 fn validateAttempt(
@@ -278,7 +239,8 @@ fn validateAttempt(
             {
                 return error.InvalidAttemptClassification;
             }
-            if (retry.completed_retries >= authority.limit.value) return error.ModelRetryLimitExhausted;
+            // The retries already made plus the first execution are the executions that have run.
+            if (authority.limit.standing(retry.completed_retries +| 1) == .exhausted) return error.ModelRetryLimitExhausted;
         },
         // One re-send per attempt: a re-send is never re-sent.
         .runaway_resend => if (reserved == 0 or latest_resent) return error.InvalidAttemptClassification,
@@ -297,23 +259,11 @@ fn resolveRecord(
 }
 
 pub fn retainOwner(owner: *Owner) ValidationError!void {
-    const value = ownerStorage(owner);
-    std.debug.assert(value.reference_count > 0);
-    value.reference_count = std.math.add(usize, value.reference_count, 1) catch {
-        return error.ModelAttemptAccountingOwnerReferenceExhausted;
-    };
+    return Chain.retain(owner);
 }
 
 fn storage(value: *const RunnerModelAttemptAccounting) *const Storage {
     return @ptrCast(@alignCast(value));
-}
-
-fn ownerStorage(owner: *Owner) *OwnerStorage {
-    return @ptrCast(@alignCast(owner));
-}
-
-fn ownerStorageConst(owner: *const Owner) *const OwnerStorage {
-    return @ptrCast(@alignCast(owner));
 }
 
 test "a runaway re-send is a later attempt of a reserved request, outside the retry limit" {
