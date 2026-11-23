@@ -183,8 +183,8 @@ not the complete Specify workflow.
 
 - The single native persisted schema is
   [`clarification_inputs.State`](../../src/domain/clarification_inputs.zig): strict JSON
-  tagged `clarification-state/v3`, bound to the selected feature, with registry/record
-  revisions, stage ID counters, stable subjects, authority bindings, bounded answer
+  tagged `clarification-state/v4`, bound to the selected feature, with registry/record
+  revisions, stage ID counters, stable source-derived subjects, authority bindings, bounded answer
   schemas and recorded responses, each of which joins an entry of the actor-evidence registry.
 - Reference authority uses the real reference state identity; other authorities use the
   shared canonical kind/ordinal/revision contract.
@@ -1247,9 +1247,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - The model's `kind` selects `brief`, `entities`, `records`, `clarification` or
   `inconclusive`, with that variant's fields directly, without the IR's `content`
   wrapper. No model response carries the story (ADR 0047).
-- Record-assignment clarifications also require a closed `record_kind`; narrative
-  and applicability clarifications prohibit it. Native validation and the shared
-  question builder retain the per-family clarification subject.
+- A clarification carries a reason and a question, and no record family. The shared
+  question builder derives its subject from its accounted evidence (ADR 0025, the
+  clarification subject): the lines cited by the claims of a records need's bound signal,
+  or the unit for the brief and entities.
 - Repair uses the same compact codec, and its expected-value guidance uses the response
   wire shape.
 - Under ADR 0006 and §7.1, model business values are plain strings or a closed

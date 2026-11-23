@@ -6,7 +6,7 @@ pub fn record(id: []const u8) c.Record {
     return .{
         .id = id,
         .revision = 1,
-        .subject = .{ .requirement = "FR-001", .unit = "primary", .slot = "appearance" },
+        .subject = .{ .requirement = "FR-001", .unit = "primary", .slot = "appearance", .sources = &.{} },
         .authority = &.{.{ .reference = .{ .bytes = "reference-fixture-1" } }},
         .question = "Which appearance is required?",
         .why_required = "The reference does not identify the intended appearance.",

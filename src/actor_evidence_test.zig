@@ -35,7 +35,7 @@ fn openState(a: std.mem.Allocator, count: usize) !c.State {
     const records = try a.alloc(c.Record, count);
     for (records, 0..) |*record, index| {
         record.* = fixture.record(try std.fmt.allocPrint(a, "S{d:0>2}", .{index + 1}));
-        record.subject = .{ .requirement = try std.fmt.allocPrint(a, "FR-{d:0>3}", .{index + 1}), .unit = "primary", .slot = "appearance" };
+        record.subject = .{ .requirement = try std.fmt.allocPrint(a, "FR-{d:0>3}", .{index + 1}), .unit = "primary", .slot = "appearance", .sources = &.{} };
     }
     return fixture.state(records);
 }

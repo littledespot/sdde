@@ -19,7 +19,7 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
         const registered = a.policy(entry.requirement) orelse return error.InvalidRequiredAuthority;
         if (registered.owner != gap.owner or entry.input_authorities.len == 0) return error.InvalidRequiredAuthority;
         // Wording, finding order and execution revision never identify a form.
-        const subject = try subjectFor(allocator, entry.requirement);
+        const subject = try subjectFor(allocator, source_inputs, inputs.references, entry.requirement);
         var questions: std.ArrayList(u8) = .empty;
         defer questions.deinit(allocator);
         var details: std.ArrayList(u8) = .empty;
@@ -74,15 +74,58 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
     if (needs.items.len == 0) return error.InvalidRequiredAuthority;
     return .{ .feature = inputs.feature, .original_sources = refresh.originalSources(allocator, source_inputs) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority, .entries = try needs.toOwnedSlice(allocator) };
 }
-pub fn subjectFor(allocator: std.mem.Allocator, id: a.Id) a.Error!c.Subject {
+/// What a requirement's clarification is about: its kind and slot, and the unit's kind with the source text the unit
+/// concerns. A unit built from the sources names that text, whole for a source and by the lines its claims cite for a
+/// signal, a conflict or a token. The contract version and the ordinals of generated units differ from one run to the
+/// next and never identify a subject (design.md §3.3, item 31). A record or a decision has no source text: no workflow
+/// that owns one exists yet, so it keeps its ordinal.
+pub fn subjectFor(allocator: std.mem.Allocator, source_inputs: @import("reference_evidence.zig").Inputs, references: ?@import("reference_support.zig").Records, id: a.Id) a.Error!c.Subject {
     if (a.policy(id) == null) return error.InvalidRequiredAuthority;
-    return .{
-        .requirement = try std.fmt.allocPrint(allocator, "{s}@{d}", .{ @tagName(id.kind), id.contract_version }),
-        .unit = switch (id.unit) {
-            .feature => "feature",
-            .record => |record| try std.fmt.allocPrint(allocator, "{s}.{d}", .{ @tagName(record.kind), record.ordinal }),
-            inline .source, .signal, .conflict, .token, .decision => |value, tag| try std.fmt.allocPrint(allocator, "{s}.{d}", .{ @tagName(tag), value.ordinal }),
+    const derivation = @import("clarification_subject.zig");
+    const corpus = source_inputs.corpus.sources;
+    const named: struct { unit: []const u8, spans: []const c.SourceSpan } = switch (id.unit) {
+        .feature => .{ .unit = "feature", .spans = &.{} },
+        .record => |record| .{ .unit = try std.fmt.allocPrint(allocator, "{s}.{d}", .{ @tagName(record.kind), record.ordinal }), .spans = &.{} },
+        .decision => |decision| .{ .unit = try std.fmt.allocPrint(allocator, "decision.{d}", .{decision.ordinal}), .spans = &.{} },
+        .source => |source| .{ .unit = "source", .spans = derivation.wholeSource(allocator, corpus, source) catch |err| return mapped(err) },
+        .signal, .conflict, .token => cited: {
+            const held = references orelse return error.InvalidRequiredAuthority;
+            const ids = (try citationsOf(allocator, held, id.unit)) orelse return error.InvalidRequiredAuthority;
+            defer allocator.free(ids);
+            break :cited .{ .unit = @tagName(id.unit), .spans = derivation.fromCitations(allocator, corpus, held.items.entries, ids) catch |err| return mapped(err) };
         },
-        .slot = @tagName(id.slot),
     };
+    return .{ .requirement = @tagName(id.kind), .unit = named.unit, .slot = @tagName(id.slot), .sources = named.spans };
+}
+
+fn mapped(err: @import("clarification_subject.zig").Error) a.Error {
+    return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidClarificationInput => error.InvalidRequiredAuthority,
+    };
+}
+
+/// The citations of the claims a signal, a conflict or a token holds, from the engine's accounted evidence, or none when
+/// the evidence holds no such unit. The caller frees them.
+fn citationsOf(allocator: std.mem.Allocator, references: @import("reference_support.zig").Records, unit: a.Unit) a.Error!?[]const @import("reference_reconciliation.zig").CitationId {
+    switch (unit) {
+        .signal => |signal| {
+            for (references.signals) |candidate| if (candidate.id.ordinal == signal.ordinal) return try allocator.dupe(@import("reference_reconciliation.zig").CitationId, candidate.value.citation_ids);
+            return null;
+        },
+        .conflict => |conflict| {
+            for (references.conflicts) |candidate| if (candidate.id.ordinal == conflict.ordinal) return try allocator.dupe(@import("reference_reconciliation.zig").CitationId, candidate.value.citation_ids);
+            return null;
+        },
+        .token => |token| {
+            for (references.items.entries) |item| {
+                if (item.claim.content != .preserved_token or item.claim.content.preserved_token.value.id.ordinal != token.ordinal) continue;
+                const ids = try allocator.alloc(@import("reference_reconciliation.zig").CitationId, item.citations.len);
+                for (item.citations, ids) |citation, *target| target.* = citation.id;
+                return ids;
+            }
+            return null;
+        },
+        .feature, .record, .source, .decision => return null,
+    }
 }

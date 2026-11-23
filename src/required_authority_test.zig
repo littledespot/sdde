@@ -597,6 +597,108 @@ test "authority clarification subjects preserve earliest owner and remain stable
     try std.testing.expectError(error.InvalidRequiredAuthority, conversion.build(allocator, source_inputs, later, try observe(allocator, later), rework, &packet_guidance.marked));
 }
 
+test "an authority subject names the source text its unit concerns, never a generated ordinal or the contract version" {
+    const c = @import("domain/clarification_inputs.zig");
+    const clarifications = @import("domain/required_authority_clarifications.zig");
+    const support = @import("domain/reference_support.zig");
+    const r = @import("domain/reference_reconciliation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const f = @import("test_fixtures/reference_reconciliation.zig");
+    const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{ "Display `Hello, World!`.\n", "Renew a library loan.\n" });
+    defer reference.deinit();
+    const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+    const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
+    const held = support.records(accounted);
+    const read = reference.inputs;
+    const signal = struct {
+        fn id(ordinal: u32) a.Id {
+            return .{ .kind = .reference_meaning, .unit = .{ .signal = .{ .ordinal = ordinal } }, .slot = .disposition };
+        }
+    };
+    // A signal names the lines its claims cite, and the kind alone, with no contract version, names its requirement.
+    const first = try clarifications.subjectFor(allocator, read, held, signal.id(held.signals[0].id.ordinal));
+    try std.testing.expectEqualStrings("reference_meaning", first.requirement);
+    try std.testing.expectEqualStrings("signal", first.unit);
+    try std.testing.expectEqualStrings("disposition", first.slot);
+    try std.testing.expect(first.sources.len != 0 and c.validSources(first.sources));
+    for (first.sources) |span| {
+        var held_path = false;
+        for (read.corpus.sources) |origin| held_path = held_path or std.mem.eql(u8, origin.path.bytes, span.path);
+        try std.testing.expect(held_path and span.lines != null);
+    }
+    // Another run numbers the same claims differently and names the same subject; other claims name another.
+    const renumbered = try allocator.dupe(r.Signal, held.signals);
+    renumbered[0].id = .{ .ordinal = 77 };
+    var regenerated = held;
+    regenerated.signals = renumbered;
+    const again = try clarifications.subjectFor(allocator, read, regenerated, signal.id(77));
+    try std.testing.expect(c.sameSubject(first, again));
+    const other = try clarifications.subjectFor(allocator, read, held, signal.id(held.signals[2].id.ordinal));
+    try std.testing.expect(!c.sameSubject(first, other));
+    // The subject is the lines, so a claim quoted from inside a sentence's line is the same subject as the sentence: two
+    // needs on those lines are one ambiguous subject, which the refresh rejects (§14: one stage and subject, one need).
+    const inside = try clarifications.subjectFor(allocator, read, held, signal.id(held.signals[1].id.ordinal));
+    try std.testing.expect(c.sameSubject(first, inside));
+    // A unit the evidence does not hold, or evidence that is absent, is no subject.
+    try std.testing.expectError(error.InvalidRequiredAuthority, clarifications.subjectFor(allocator, read, held, signal.id(999)));
+    try std.testing.expectError(error.InvalidRequiredAuthority, clarifications.subjectFor(allocator, read, null, signal.id(held.signals[0].id.ordinal)));
+    // A token names the lines of its claim.
+    const token_id = for (held.items.entries) |item| {
+        if (item.claim.content == .preserved_token) break item.claim.content.preserved_token.value.id;
+    } else return error.ExpectedToken;
+    const token = try clarifications.subjectFor(allocator, read, held, .{ .kind = .preservation, .unit = .{ .token = token_id }, .slot = .value });
+    try std.testing.expectEqualStrings("preservation", token.requirement);
+    try std.testing.expectEqualStrings("token", token.unit);
+    try std.testing.expect(token.sources.len == 1 and token.sources[0].lines.?.first == 1);
+    // A whole source is named by its path, and a source the corpus lacks is no subject.
+    const whole = try clarifications.subjectFor(allocator, read, null, .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 1 } }, .slot = .disposition });
+    try std.testing.expectEqualStrings("source", whole.unit);
+    try std.testing.expect(whole.sources.len == 1 and whole.sources[0].lines == null);
+    try std.testing.expectEqualStrings(read.corpus.sources[0].path.bytes, whole.sources[0].path);
+    try std.testing.expectError(error.InvalidRequiredAuthority, clarifications.subjectFor(allocator, read, null, .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 99 } }, .slot = .disposition }));
+    // The feature has no source text, and a decision, owned by a workflow that does not exist yet, keeps its ordinal.
+    const feature = try clarifications.subjectFor(allocator, read, null, id(.feature_intent));
+    try std.testing.expectEqualStrings("feature", feature.unit);
+    try std.testing.expectEqual(@as(usize, 0), feature.sources.len);
+    const decision = try clarifications.subjectFor(allocator, read, null, id(.design_decision));
+    try std.testing.expectEqualStrings("decision.1", decision.unit);
+    try std.testing.expectEqual(@as(usize, 0), decision.sources.len);
+}
+
+test "a conflict's subject names the lines its claims cite in every source, whatever number the run gave it" {
+    const c = @import("domain/clarification_inputs.zig");
+    const clarifications = @import("domain/required_authority_clarifications.zig");
+    const support = @import("domain/reference_support.zig");
+    const r = @import("domain/reference_reconciliation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const f = @import("test_fixtures/reference_reconciliation.zig");
+    const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{ "Confirm immediately.\n", "Request approval first.\n" });
+    defer reference.deinit();
+    const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+    const accounted = (try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context())).valid;
+    const held = support.records(accounted);
+    const requirement = struct {
+        fn id(ordinal: u32) a.Id {
+            return .{ .kind = .reference_meaning, .unit = .{ .conflict = .{ .ordinal = ordinal } }, .slot = .disposition };
+        }
+    };
+    const subject = try clarifications.subjectFor(allocator, reference.inputs, held, requirement.id(held.conflicts[0].id.ordinal));
+    try std.testing.expectEqualStrings("conflict", subject.unit);
+    // The conflict sets one source against another, so its subject names both.
+    try std.testing.expectEqual(@as(usize, 2), subject.sources.len);
+    try std.testing.expect(c.validSources(subject.sources));
+    const renumbered = try allocator.dupe(r.Conflict, held.conflicts);
+    renumbered[0].id = .{ .ordinal = 41 };
+    var regenerated = held;
+    regenerated.conflicts = renumbered;
+    try std.testing.expect(c.sameSubject(subject, try clarifications.subjectFor(allocator, reference.inputs, regenerated, requirement.id(41))));
+    try std.testing.expectError(error.InvalidRequiredAuthority, clarifications.subjectFor(allocator, reference.inputs, held, requirement.id(999)));
+}
+
 test "two gaps owned by one stage become two needs and two open forms with distinct subjects" {
     const conversion = @import("domain/required_authority_clarifications.zig");
     const refresh = @import("domain/clarification_refresh.zig");

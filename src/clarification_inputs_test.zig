@@ -461,7 +461,8 @@ test "strict state parser rejects unknown duplicate missing fields versions and 
     }) |invalid| try std.testing.expectError(error.InvalidClarificationInput, load(allocator, .{ .state = invalid, .forms = &.{} }));
     var wrong = fixture.state(&.{});
     // The previous version has no reader: its evidence IDs join no registry (ADR 0025).
-    for ([_][]const u8{ "clarification-state/v1", "clarification-state/v2" }) |older| {
+    // v3 keyed a subject by a per-run ordinal or a model-picked kind, so none of its subjects matches a current need.
+    for ([_][]const u8{ "clarification-state/v1", "clarification-state/v2", "clarification-state/v3" }) |older| {
         wrong.schema = older;
         try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = wrong }, selected));
     }
@@ -477,7 +478,7 @@ test "a state string member is a JSON string, never an array of byte values" {
     const allocator = arena.allocator();
     const valid = try std.json.Stringify.valueAlloc(allocator, fixture.state(&.{}), .{});
     _ = try parser.stateParser().parse(allocator, valid);
-    const bytes = try std.mem.replaceOwned(u8, allocator, valid, "\"clarification-state/v3\"", "[99]");
+    const bytes = try std.mem.replaceOwned(u8, allocator, valid, "\"clarification-state/v4\"", "[99]");
     try std.testing.expectError(error.InvalidClarificationInput, parser.stateParser().parse(allocator, bytes));
 }
 
@@ -710,6 +711,176 @@ test "the clarification parse and form steps propagate parser failures and skip 
     const state = try c.validate(.{ .value = fixture.state(&.{record}) }, selected);
     const form_parser: @import("ports/clarification_input_parser.zig").FormParser = .{ .parse_form_fn = fake.form };
     try std.testing.expectError(error.InvalidClarificationInput, steps.validateClarificationForms(form_parser, std.testing.allocator, state, .{ .state = null, .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = "captured form" }} }));
+}
+
+/// Comptime, so a literal list of spans is static data a record may borrow.
+fn span(comptime path: []const u8, comptime first: u32, comptime last: u32) c.SourceSpan {
+    return .{ .path = path, .lines = .{ .first = first, .last = last } };
+}
+
+test "a subject's source selector is canonical: accepted and rejected shapes" {
+    const whole: c.SourceSpan = .{ .path = "stories.md", .lines = null };
+    for ([_][]const c.SourceSpan{
+        &.{},
+        &.{whole},
+        &.{span("stories.md", 5, 5)},
+        &.{ span("a/stories.md", 1, 4), span("a/stories.md", 6, 6), span("b.md", 2, 9) },
+        &.{ whole, span("z.md", 1, 1) },
+    }) |canonical| try std.testing.expect(c.validSources(canonical));
+    for ([_][]const c.SourceSpan{
+        &.{ span("b.md", 1, 1), span("a.md", 1, 1) },
+        &.{ span("a.md", 6, 6), span("a.md", 1, 4) },
+        &.{ span("a.md", 1, 5), span("a.md", 5, 8) },
+        &.{ span("a.md", 1, 5), span("a.md", 6, 8) },
+        &.{ span("a.md", 1, 5), span("a.md", 1, 5) },
+        &.{ .{ .path = "a.md", .lines = null }, span("a.md", 1, 1) },
+        &.{ span("a.md", 1, 1), .{ .path = "a.md", .lines = null } },
+        &.{span("a.md", 0, 3)},
+        &.{span("a.md", 4, 3)},
+        &.{span("", 1, 1)},
+        &.{span("/a.md", 1, 1)},
+        &.{span("a/", 1, 1)},
+        &.{span("a//b.md", 1, 1)},
+    }) |malformed| try std.testing.expect(!c.validSources(malformed));
+    var many: [c.max_subject_spans + 1]c.SourceSpan = undefined;
+    for (&many, 0..) |*slot, index| slot.* = .{ .path = "a.md", .lines = .{ .first = @intCast(index * 2 + 1), .last = @intCast(index * 2 + 1) } };
+    try std.testing.expect(c.validSources(many[0..c.max_subject_spans]));
+    try std.testing.expect(!c.validSources(&many));
+}
+
+test "only the same source text is the same subject, and the order of subjects is total" {
+    const base: c.Subject = .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = &.{ span("a.md", 5, 6), span("b.md", 1, 1) } };
+    var same = base;
+    same.sources = &.{ span("a.md", 5, 6), span("b.md", 1, 1) };
+    try std.testing.expect(c.sameSubject(base, same));
+    try std.testing.expectEqual(std.math.Order.eq, c.orderSubject(base, same));
+    const others = [_]c.Subject{
+        .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = &.{ span("a.md", 5, 7), span("b.md", 1, 1) } },
+        .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = &.{ span("a.md", 4, 6), span("b.md", 1, 1) } },
+        .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = &.{ span("c.md", 5, 6), span("d.md", 1, 1) } },
+        .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = &.{span("a.md", 5, 6)} },
+        .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = &.{ span("a.md", 5, 6), span("b.md", 1, 1), span("b.md", 3, 3) } },
+        .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = &.{ .{ .path = "a.md", .lines = null }, span("b.md", 1, 1) } },
+        .{ .requirement = "specification", .unit = "entities", .slot = "content", .sources = base.sources },
+        .{ .requirement = "specification", .unit = "records", .slot = "text", .sources = base.sources },
+        .{ .requirement = "reference_meaning", .unit = "records", .slot = "content", .sources = base.sources },
+    };
+    for (others, 0..) |other, index| {
+        try std.testing.expect(!c.sameSubject(base, other));
+        // Antisymmetric, and no two of the others tie.
+        try std.testing.expect(c.orderSubject(base, other) != .eq);
+        try std.testing.expectEqual(c.orderSubject(base, other), c.orderSubject(other, base).invert());
+        for (others[0..index]) |earlier| try std.testing.expect(!c.sameSubject(earlier, other));
+    }
+}
+
+test "a subject's source lines persist in a state at the contract's deepest nesting" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var record = fixture.record("S01");
+    record.subject = .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = &.{ span("a/stories.md", 5, 6), .{ .path = "b.md", .lines = null } } };
+    const expected = fixture.state(&.{record});
+    _ = try c.validate(.{ .value = expected }, selected);
+    const bytes = try std.json.Stringify.valueAlloc(allocator, expected, .{});
+    const parsed = try parser.stateParser().parse(allocator, bytes);
+    try std.testing.expectEqualDeep(expected, parsed);
+    _ = try c.validate(.{ .value = parsed }, selected);
+    // A subject that is not canonical is a state the engine never wrote.
+    record.subject.sources = &.{ span("a.md", 1, 5), span("a.md", 6, 8) };
+    try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = fixture.state(&.{record}) }, selected));
+    // Two records of one stage name two subjects only by their text: the same text is a duplicate.
+    var pair = [_]c.Record{ fixture.record("S01"), fixture.record("S02") };
+    pair[0].subject.sources = &.{span("a.md", 1, 2)};
+    pair[1].subject.sources = &.{span("a.md", 1, 3)};
+    _ = try c.validate(.{ .value = fixture.state(&pair) }, selected);
+    pair[1].subject.sources = &.{span("a.md", 1, 2)};
+    try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = fixture.state(&pair) }, selected));
+}
+
+test "a rerun that names the same source text reuses the clarification ID whatever else the run drew" {
+    const refresh = @import("domain/clarification_refresh.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const need = struct {
+        const authorities = [_][1]c.Authority{ .{.{ .reference = .{ .bytes = "reference-one" } }}, .{.{ .reference = .{ .bytes = "reference-two" } }} };
+        fn make(sources: []const c.SourceSpan, question: []const u8, authority: usize) refresh.Need {
+            return .{ .stage = .spec, .subject = .{ .requirement = "specification", .unit = "records", .slot = "content", .sources = sources }, .authority = &authorities[authority], .question = question, .why_required = "The source leaves this open.", .answer_schema = .{ .bounded_business_text = c.max_text_bytes } };
+        }
+    };
+    const first = try refresh.refresh(allocator, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, .{ .feature = selected, .original_sources = &.{}, .entries = &.{need.make(&.{span("stories.md", 5, 6)}, "Which duration applies?", 0)} });
+    // A different question wording, reference state and span order of the same text name the same record.
+    const again = try refresh.refresh(allocator, .{ .state = first.state, .submissions = &.{}, .protected_forms = &.{} }, .{ .feature = selected, .original_sources = &.{}, .entries = &.{need.make(&.{span("stories.md", 5, 6)}, "How many days apply?", 1)} });
+    try std.testing.expectEqual(@as(usize, 1), again.state.value.?.records.len);
+    try std.testing.expectEqualStrings("S01", again.state.value.?.records[0].id);
+    // Other text of the same source is another gap: another record, and the first stays.
+    const other = try refresh.refresh(allocator, .{ .state = again.state, .submissions = &.{}, .protected_forms = &.{} }, .{ .feature = selected, .original_sources = &.{}, .entries = &.{need.make(&.{span("stories.md", 8, 8)}, "Which fee applies?", 1)} });
+    try std.testing.expectEqual(@as(usize, 2), other.state.value.?.records.len);
+    try std.testing.expectEqualStrings("S01", other.state.value.?.records[0].id);
+    try std.testing.expectEqualStrings("S02", other.state.value.?.records[1].id);
+    // The same text under another unit is another subject: a different kind of gap on the same lines is its own record.
+    const by_unit = [_]refresh.Need{ need.make(&.{span("stories.md", 5, 6)}, "Which duration applies?", 0), blk: {
+        var named = need.make(&.{span("stories.md", 5, 6)}, "Do the sources disagree?", 0);
+        named.subject.unit = "conflict";
+        break :blk named;
+    } };
+    const kinds = try refresh.refresh(allocator, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, .{ .feature = selected, .original_sources = &.{}, .entries = &by_unit });
+    try std.testing.expectEqual(@as(usize, 2), kinds.state.value.?.records.len);
+    // Two needs of one stage with the same text are one ambiguous subject, not two forms.
+    try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(allocator, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, .{ .feature = selected, .original_sources = &.{}, .entries = &.{ need.make(&.{span("stories.md", 5, 6)}, "One?", 0), need.make(&.{span("stories.md", 5, 6)}, "Another?", 0) } }));
+}
+
+test "citations merge into canonical source text however they were split, and nothing cited is no subject" {
+    const derivation = @import("domain/clarification_subject.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const placed = struct {
+        fn of(path: []const u8, first: u32, last: u32) derivation.Placed {
+            return .{ .path = path, .first = first, .last = last };
+        }
+    };
+    var split = [_]derivation.Placed{ placed.of("b.md", 2, 2), placed.of("a.md", 7, 8), placed.of("a.md", 5, 5), placed.of("a.md", 6, 6), placed.of("a.md", 5, 5) };
+    var whole = [_]derivation.Placed{ placed.of("a.md", 5, 8), placed.of("b.md", 2, 2) };
+    const left = try derivation.merged(allocator, &split);
+    const right = try derivation.merged(allocator, &whole);
+    try std.testing.expectEqualDeep(left, right);
+    try std.testing.expectEqualDeep(&[_]c.SourceSpan{ span("a.md", 5, 8), span("b.md", 2, 2) }, left);
+    // Lines a line apart stay two spans, and one span inside another is absorbed.
+    var apart = [_]derivation.Placed{ placed.of("a.md", 1, 9), placed.of("a.md", 3, 4), placed.of("a.md", 11, 11) };
+    try std.testing.expectEqualDeep(&[_]c.SourceSpan{ span("a.md", 1, 9), span("a.md", 11, 11) }, try derivation.merged(allocator, &apart));
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.merged(allocator, &.{}));
+    var empty_path = [_]derivation.Placed{placed.of("", 1, 1)};
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.merged(allocator, &empty_path));
+    var inverted = [_]derivation.Placed{placed.of("a.md", 4, 3)};
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.merged(allocator, &inverted));
+    // A malformed line range is refused wherever it falls, not absorbed by a range that covers it.
+    var covered = [_]derivation.Placed{ placed.of("a.md", 1, 10), placed.of("a.md", 5, 3) };
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.merged(allocator, &covered));
+    var zero = [_]derivation.Placed{ placed.of("a.md", 1, 10), placed.of("a.md", 0, 2) };
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.merged(allocator, &zero));
+    // A subject names at most `max_subject_spans` spans: the last one that fits is a subject, the next is not.
+    var disjoint: [c.max_subject_spans + 1]derivation.Placed = undefined;
+    for (&disjoint, 0..) |*item, index| item.* = .{ .path = "a.md", .first = @intCast(index * 2 + 1), .last = @intCast(index * 2 + 1) };
+    try std.testing.expectEqual(@as(usize, c.max_subject_spans), (try derivation.merged(allocator, disjoint[0..c.max_subject_spans])).len);
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.merged(allocator, &disjoint));
+}
+
+test "merging citations releases every allocation on every failure" {
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(checkMergeAllocation, .{});
+}
+fn checkMergeAllocation(backing: std.mem.Allocator) !void {
+    const derivation = @import("domain/clarification_subject.zig");
+    var placed = [_]derivation.Placed{
+        .{ .path = "b.md", .first = 2, .last = 2 },
+        .{ .path = "a.md", .first = 7, .last = 8 },
+        .{ .path = "a.md", .first = 5, .last = 6 },
+        .{ .path = "a.md", .first = 12, .last = 12 },
+    };
+    const spans = try derivation.merged(backing, &placed);
+    defer backing.free(spans);
+    try std.testing.expectEqual(@as(usize, 3), spans.len);
 }
 
 test "clarification pipeline ownership is leak-free on allocation failures" {

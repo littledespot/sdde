@@ -1142,7 +1142,7 @@ gives its title and status.
 | [0022](decisions/0022-native-reference-phase-handoffs.md) | Native reference phase handoffs | Accepted |
 | [0023](decisions/0023-advisory-post-generation-review.md) | Required source review only; post-generation review removed | Accepted amendment |
 | [0024](decisions/0024-native-exact-token-authority.md) | Own exact-token authority and record scheduling natively | Accepted amendment |
-| [0025](decisions/0025-clarification-answer-authentication.md) | Accept valid clarification answers in the run that reads them | Accepted amendment; not yet implemented |
+| [0025](decisions/0025-clarification-answer-authentication.md) | Accept valid clarification answers in the run that reads them | Accepted amendment; the authentication chain, acceptance, publication, the cancel and the source-derived subject are implemented, and generation's use of answers is not |
 | [0026](decisions/0026-header-identity-log-retention.md) | Prune prior-run log segments by header identity | Accepted amendment |
 | [0028](decisions/0028-anthropic-messages-provider.md) | Anthropic Messages API provider on shared provider owners | Accepted amendment |
 | [0029](decisions/0029-bedrock-model-families.md) | Bedrock model families | Accepted amendment |

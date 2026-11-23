@@ -7,13 +7,18 @@ pub const max_forms = 297;
 pub const max_form_bytes = 16 * 1024;
 pub const max_state_bytes = 8 * 1024 * 1024;
 /// The deepest nesting the closed state has: the document, records, a record, its answer
-/// schema, `select_many`, its options, one option.
+/// schema, `select_many`, its options, one option. A subject's lines reach it too: the document, records, a record, its
+/// subject, its sources, one span, its lines.
 pub const max_state_depth = 7;
 pub const max_responses = 4096;
 pub const max_text_bytes = 2000;
 /// v3: every response's `authentication_evidence_id` joins the actor-evidence registry, so a v2 state, whose IDs join none,
-/// is rejected without a reader (ADR 0025).
-pub const schema_version = "clarification-state/v3";
+/// is rejected without a reader (ADR 0025). v4: a subject carries the engine-derived source selector, not a per-run
+/// ordinal or a model-picked kind, so a v3 state's subjects match no current need and the state is rejected without a
+/// reader (ADR 0025).
+pub const schema_version = "clarification-state/v4";
+/// The most source spans one subject names.
+pub const max_subject_spans = 128;
 pub const Error = std.mem.Allocator.Error || error{InvalidClarificationInput};
 pub const Stage = enum { spec, plan, tasks };
 pub const Id = struct {
@@ -60,7 +65,12 @@ pub const Id = struct {
 
 pub const FormCapture = struct { id: Id, bytes: []const u8 };
 pub const Captures = struct { state: ?[]const u8, forms: []const FormCapture };
-pub const Subject = struct { requirement: []const u8, unit: []const u8, slot: []const u8 };
+/// The text of one source a clarification is about: the source's normalized relative path in the reference directory and
+/// the exact lines, or the whole source when `lines` is null. Not a per-run ID, a hash or a model value.
+pub const SourceSpan = struct { path: []const u8, lines: ?@import("source_coordinates.zig").Lines };
+/// What a clarification is about, derived by the engine. `sources` is canonical (`validSources`): sorted by path, then
+/// lines, with no overlapping or adjacent line ranges, and empty when the unit names no source text.
+pub const Subject = struct { requirement: []const u8, unit: []const u8, slot: []const u8, sources: []const SourceSpan };
 pub const Authority = @import("authority_identity.zig").Authority;
 pub const Option = struct { key: []const u8, label: []const u8 };
 pub const AnswerSchema = union(enum) {
@@ -220,10 +230,53 @@ pub fn findResponse(state: State, id: u64) ?Response {
     return null;
 }
 pub fn sameSubject(a: Subject, b: Subject) bool {
-    return std.mem.eql(u8, a.requirement, b.requirement) and std.mem.eql(u8, a.unit, b.unit) and std.mem.eql(u8, a.slot, b.slot);
+    return orderSubject(a, b) == .eq;
+}
+/// The one total order of subjects: the three names, then the spans. Equal exactly when the subjects are the same.
+pub fn orderSubject(a: Subject, b: Subject) std.math.Order {
+    inline for (.{ "requirement", "unit", "slot" }) |field| {
+        const order = std.mem.order(u8, @field(a, field), @field(b, field));
+        if (order != .eq) return order;
+    }
+    for (a.sources, 0..) |span, index| {
+        if (index == b.sources.len) return .gt;
+        const order = orderSpan(span, b.sources[index]);
+        if (order != .eq) return order;
+    }
+    return if (a.sources.len < b.sources.len) .lt else .eq;
+}
+fn orderSpan(a: SourceSpan, b: SourceSpan) std.math.Order {
+    const path = std.mem.order(u8, a.path, b.path);
+    if (path != .eq) return path;
+    // A whole source precedes any lines of it.
+    const left = a.lines orelse return if (b.lines == null) .eq else .lt;
+    const right = b.lines orelse return .gt;
+    if (left.first != right.first) return std.math.order(left.first, right.first);
+    return std.math.order(left.last, right.last);
 }
 fn validSubject(subject: Subject) bool {
-    return validToken(subject.requirement) and validToken(subject.unit) and validToken(subject.slot);
+    return validToken(subject.requirement) and validToken(subject.unit) and validToken(subject.slot) and validSources(subject.sources);
+}
+/// Canonical spans: each path passes the reference directory's path policy, lines are one-based and ordered, paths
+/// ascend, and on one path a whole source stands alone and line ranges ascend without overlapping or touching.
+pub fn validSources(spans: []const SourceSpan) bool {
+    if (spans.len > max_subject_spans) return false;
+    for (spans, 0..) |span, index| {
+        @import("relative_directory_path.zig").validate(span.path) catch return false;
+        if (span.lines) |lines| if (lines.first == 0 or lines.last < lines.first) return false;
+        if (index == 0) continue;
+        const previous = spans[index - 1];
+        switch (std.mem.order(u8, previous.path, span.path)) {
+            .gt => return false,
+            .lt => {},
+            .eq => {
+                const before = previous.lines orelse return false;
+                const after = span.lines orelse return false;
+                if (after.first <= before.last +| 1) return false;
+            },
+        }
+    }
+    return true;
 }
 /// The one syntax of a stored identifier or actor name: ASCII letters, digits and `-_.@`, at most 128 bytes.
 pub fn validToken(bytes: []const u8) bool {

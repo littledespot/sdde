@@ -364,10 +364,11 @@ For each feature-brief or specification unit other than the engine-composed stor
   retain their existing owners. Request grouping grants no semantic repair authority.
   Original candidate indices/origins survive canonical section-order projection;
   native repair targets records by those candidate indices, never by canonical ID.
-  A record clarification must name its closed `record_kind`; other generation
-  units prohibit that field. The existing clarification builder uses that family
-  as its subject, preserving identities across reruns instead of merging all record
-  questions into a new generic subject. This changes no clarification admission rule.
+  A generation clarification is a reason and a question, and names no record
+  family. The engine derives its subject ([ADR 0025](../decisions/0025-clarification-answer-authentication.md),
+  the clarification subject): a records need is about the source lines cited by the
+  claims of its bound signal, so a rerun that draws the same claims, citations and
+  signal grouping names the same record. This changes no clarification admission rule.
 
 - **Scenario slots** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
   Decision 3): once every group's records are admitted and the native deletes have run,

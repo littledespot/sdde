@@ -217,10 +217,9 @@ test "independent wire cases cover every selected specification result and neste
         try std.testing.expectError(error.InvalidJsonDocument, decodeCandidate("generation", "brief", arena.allocator(), "{\"kind\":\"primary_user_story\",\"signal_ids\":[" ++ response_wire.id ++ "],\"value\":" ++ response_wire.plain ++ "}"));
     }
     try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ ",\"records\":[]}");
-    inline for (.{ "brief", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
+    inline for (.{ "brief", "entities", "records" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
     // Assignment-specific rules require the unit context: schema checks here,
     // with native validation covered by specification_generation_test.
-    try candidateSchemaCase("generation", "records", response_wire.clarification, .missing_required_property, "/record_kind");
     inline for (response_wire.records) |record| {
         const bytes = "{\"content\":" ++ record[1] ++ "}";
         // Authored records name their supporting claims (ADR 0038); repairs stay content-only.
@@ -233,8 +232,8 @@ test "independent wire cases cover every selected specification result and neste
             try candidateCase("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}", .missing_required_property, "/records/0/claim_ids");
         }
         const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
-        if (comptime std.mem.eql(u8, record[0], "entity")) try candidateSchemaCase("generation", "records", need, .enum_mismatch, "/record_kind") else try checkCandidate("generation", "records", need);
-        try candidateSchemaCase("generation", "brief", need, .unknown_property, "/record_kind");
+        // The engine says what a clarification is about, so no step lets the model name a family (design.md §3.3, item 31).
+        inline for (.{ "records", "brief" }) |selection| try candidateSchemaCase("generation", selection, need, .unknown_property, "/record_kind");
         // Only an entity's membership repair writes a whole record. No repair writes a whole criterion: the
         // engine writes each one from its slot (ADR 0038 Decision 3). A requirement is repaired by its text.
         if (comptime std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_entity", bytes);

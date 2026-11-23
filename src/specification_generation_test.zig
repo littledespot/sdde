@@ -1390,7 +1390,7 @@ test "a records batch over a group that holds an open question is offered only i
             asked.value = .{ .segments = &.{.{ .literal = .{ .value = case.question } }} };
             const wires = [_]struct { response: g.Response, accepted: bool }{
                 .{ .response = .{ .content = .{ .records = &.{requirement} } }, .accepted = !question_batch },
-                .{ .response = .{ .clarification = .{ .reason = .missing, .question = asked, .record_kind = .functional_requirement } }, .accepted = true },
+                .{ .response = .{ .clarification = .{ .reason = .missing, .question = asked } }, .accepted = true },
             };
             for (wires) |wire| {
                 const answer = try std.json.parseFromSlice(std.json.Value, a, try json.encode(g.ModelResponse, a, try g.ModelResponse.from(a, fixture.context, wire.response)), .{ .parse_numbers = false });
@@ -2454,7 +2454,7 @@ test "native record dispatch keeps clarifications bound without treating them as
         current.scenario_cursor = 0;
         current.units[sessions.records_index] = null;
         const question = try fixture.proposal("MOCK Which condition permits this behavior?");
-        const response: g.Response = .{ .clarification = .{ .reason = .missing, .question = question, .record_kind = .functional_requirement } };
+        const response: g.Response = .{ .clarification = .{ .reason = .missing, .question = question } };
         const admitted = (try validate_unit.execute(a, current, fixture.context, .{ .response = response })).valid;
         try std.testing.expect(admitted.response == .clarification);
         try std.testing.expect(admitted.record_assignment == null);
@@ -2775,29 +2775,43 @@ test "source-bound record batches reject duplicates without merging their eviden
     try std.testing.expect((try sessions.checkConsistency(a, current, fixture.context, different, null)) == null);
 }
 
-test "grouped record clarifications retain family subjects and reject absent or foreign assignment selectors" {
+test "a records clarification names the source text of its bound signal, and the other units name their unit" {
+    const c = @import("domain/clarification_inputs.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var fixture = try Fixture.init(a, "A librarian renews a loan.");
     defer fixture.deinit();
     const value = try fixture.proposal("Which renewal duration applies? State its duration and starting event.");
-    for (std.enums.values(spec.Kind)) |kind| {
-        const proposal: g.Response = .{ .clarification = .{ .reason = .missing, .question = value, .record_kind = kind } };
-        if (kind == .entity) {
-            try std.testing.expect((try g.validate(a, text.validator, fixture.context, .records, proposal)) == .invalid);
-            const feature_question: g.Response = .{ .clarification = .{ .reason = .missing, .question = value } };
-            const checked_entity = (try g.validate(a, text.validator, fixture.context, .entities, feature_question)).valid;
-            const entity_needs = try (@import("actions/clarification/build_specification_clarification_need.zig").Action{}).execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked_entity);
-            try std.testing.expectEqualStrings("entities", entity_needs.entries[0].subject.unit);
-            continue;
-        }
-        const checked = (try g.validate(a, text.validator, fixture.context, .records, proposal)).valid;
-        const needs = try (@import("actions/clarification/build_specification_clarification_need.zig").Action{}).execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked);
-        try std.testing.expectEqualStrings(@tagName(kind), needs.entries[0].subject.unit);
-        try std.testing.expect((try g.validate(a, text.validator, fixture.context, .primary_user_story, proposal)) == .invalid);
-    }
-    try std.testing.expect((try g.validate(a, text.validator, fixture.context, .records, .{ .clarification = .{ .reason = .missing, .question = value } })) == .invalid);
+    const proposal: g.Response = .{ .clarification = .{ .reason = .missing, .question = value } };
+    const builder = @import("actions/clarification/build_specification_clarification_need.zig").Action{};
+    const checked = (try g.validate(a, text.validator, fixture.context, .records, proposal)).valid;
+    const subject = (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked)).entries[0].subject;
+    try std.testing.expectEqualStrings("specification", subject.requirement);
+    try std.testing.expectEqualStrings("records", subject.unit);
+    try std.testing.expectEqualStrings("content", subject.slot);
+    try std.testing.expect(subject.sources.len != 0 and c.validSources(subject.sources));
+    // The same need asked again names the same subject: nothing a run draws enters it.
+    const again = (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked)).entries[0].subject;
+    try std.testing.expect(c.sameSubject(subject, again));
+    // It names the one line of the one source the bound signal's claim cites, and nothing else.
+    try std.testing.expectEqual(@as(usize, 1), subject.sources.len);
+    try std.testing.expectEqualStrings(fixture.context.inputs.corpus.sources[0].path.bytes, subject.sources[0].path);
+    try std.testing.expectEqual(@as(u32, 1), subject.sources[0].lines.?.first);
+    try std.testing.expectEqual(@as(u32, 1), subject.sources[0].lines.?.last);
+    // Citations the evidence does not hold, none at all, and a source the corpus does not hold are no subject.
+    const derivation = @import("domain/clarification_subject.zig");
+    const entries = (try @import("domain/specification_provenance.zig").items(fixture.context)).entries;
+    const cited = checked.response.clarification.question.provenance.citation_ids;
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.fromCitations(a, fixture.context.inputs.corpus.sources, entries, &.{.{ .ordinal = 999 }}));
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.fromCitations(a, fixture.context.inputs.corpus.sources, entries, &.{}));
+    try std.testing.expectError(error.InvalidClarificationInput, derivation.fromCitations(a, &.{}, entries, cited));
+    // An entities clarification names its unit and no source text.
+    const checked_entity = (try g.validate(a, text.validator, fixture.context, .entities, proposal)).valid;
+    const entity_subject = (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked_entity)).entries[0].subject;
+    try std.testing.expectEqualStrings("entities", entity_subject.unit);
+    try std.testing.expectEqual(@as(usize, 0), entity_subject.sources.len);
+    try std.testing.expect(!c.sameSubject(subject, entity_subject));
 }
 
 test "specification provenance rejects foreign missing duplicate stale and unaccepted support" {

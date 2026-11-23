@@ -20,10 +20,12 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 - **Reads:** `validated_specification_unit`, `relative_feature_directory`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `clarification_needs` · **Side effect:** `none`
 - **Does:** Turn a generation unit's clarification response into one `spec`-stage need: the
   model's question prepared under [§12.7](../12-model-boundary.md#127-workflow-defined-model-operations),
-  a fixed reason for `missing`, `ambiguous` or `conflicting`, the reference authority and a
-  bounded business-text answer.
+  a fixed reason for `missing`, `ambiguous` or `conflicting`, the reference authority, a
+  bounded business-text answer and the subject. A records need's subject names the source
+  lines cited by its bound signal's claims, and the brief's and entities' name their unit
+  ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md), the clarification subject).
 - **Rejects:** `InvalidSpecification` when the unit holds no clarification, the feature differs,
-  or a records unit names no record kind.
+  or the question's citations name no line of a source the corpus holds.
 
 ## `BuildRequiredAuthorityClarificationNeedsAction` (`build-required-authority-clarification-needs`)
 
@@ -32,10 +34,13 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 - **Does:** Convert every `clarification_required` gap into one need for its requirement's
   registered owner stage ([§14.14](../14-orchestration.md#1414-authorityreconciliationorchestrator)).
   Admitted review questions and details are carried under §12.7; a descriptor question serves
-  only a `missing` or `stale` gap.
+  only a `missing` or `stale` gap. The need's subject names the requirement's kind and slot and
+  the unit's kind, with the source text the unit concerns: the whole source, or the lines cited
+  by a signal's, a conflict's or a token's claims. The contract version and a generated unit's
+  ordinal are not part of it (ADR 0025, the clarification subject).
 - **Rejects:** `InvalidRequiredAuthority` for an invalid ledger, a candidate defect, an
-  administrative block, an upstream-rework entry, an owner mismatch, or a semantic gap with no
-  review question.
+  administrative block, an upstream-rework entry, an owner mismatch, a semantic gap with no
+  review question, or a unit the accounted evidence or the corpus does not hold.
 
 ## `BuildResolvedClarificationNeedsAction` (`build-resolved-clarification-needs`)
 

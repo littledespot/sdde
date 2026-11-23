@@ -123,7 +123,10 @@ State alone never authorizes a stage.
 - Reruns use applicable validated answers before proposing new questions.
 - Deduplication uses the stable target, earliest owner, requirement kind, subject selector and
   required slot; execution IDs, regenerated authority IDs, wording and transient gap reasons do
-  not define a new clarification.
+  not define a new clarification. The subject selector is the source text the engine derives from
+  its citations: each cited source's normalized relative path with the exact lines, persisted in
+  `clarification-state/v4`, which `specification-state` binds by ordinal and revision only
+  ([ADR 0025](../decisions/0025-clarification-answer-authentication.md), the clarification subject).
 - Current applicability is validated separately; changed evidence may reopen only an unprotected
   record, and §23.2 governs a protected one.
 - Ambiguous subject correspondence blocks rather than using fuzzy text matching.

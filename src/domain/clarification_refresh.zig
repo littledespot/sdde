@@ -142,11 +142,7 @@ pub fn refresh(allocator: std.mem.Allocator, inputs: c.Inputs, needs: Needs) Err
 
 fn lessNeed(_: void, a: Need, b: Need) bool {
     if (a.stage != b.stage) return @intFromEnum(a.stage) < @intFromEnum(b.stage);
-    inline for (.{ "requirement", "unit", "slot" }) |field| {
-        const order = std.mem.order(u8, @field(a.subject, field), @field(b.subject, field));
-        if (order != .eq) return order == .lt;
-    }
-    return false;
+    return c.orderSubject(a.subject, b.subject) == .lt;
 }
 fn lessRecord(_: void, a: c.Record, b: c.Record) bool {
     return c.Id.parse(a.id).?.index() < c.Id.parse(b.id).?.index();

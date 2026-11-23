@@ -3444,8 +3444,9 @@ class moves: the change is correct recovery plumbing, which no live run has meas
   2494 of 2494 tests; the scenarios run through the production composition with a fake account (the host's name may be
   outside the token syntax): accept and rerun, a cancel beside an answered form (two passes, two leases), four typed account
   failures that end `failed` with nothing published, a run that fails after acceptance and publishes nothing followed by a
-  run that accepts again, and the registry writer's preconditions and order. Rule 10's one live run per case needs the
-  user's `/live-e2e` and was not run.
+  run that accepts again, and the registry writer's preconditions and order. Rule 10's one live run per case ran in the set
+  of 23 November 2026 (user: "perform 3 live run and evaluation per test case"): hello-world and loan-renewal, three each,
+  all published and accepted, `evaluations/e2e/2026-11-23T02-49-26Z…` to `02-59-26Z…`.
 - **Contract review.** No blocker; one major (the registry's writer had no negative tests: four cases added at the adapter
   and `validateShape`, plus a foreign change after the run's own write) and ten minor, fixed: a cancelled log close no longer
   lets a cancelled output publish; the architecture pins that proved less than they said (a tautology, a file list), now a
@@ -3460,6 +3461,87 @@ class moves: the change is correct recovery plumbing, which no live run has meas
   (no consumer before stage 6). Brittleness reduced: the account and the evidence are typed and tested, not measured live.
   Scope: the development cases have no responses, so no run reaches the chain's accept or cancel path; offline scenarios
   alone cover them.
+
+## E7 stage 5 precondition: the signals drift screen (23 November 2026)
+
+User: "action the preconditions for stage 5", on SPEC01 §1's decision of 23 November 2026. The retained runs the record
+named (`06-52-17Z`, the follow-up set) carry `spec-e2e-case/v3`, which this build rejects (`e2e-call` ended
+`InvalidE2ECase`, nothing sent). The screen replayed call 5 (`g8-validate-request-signals`) of loan-renewal run
+`2026-11-23T02-52-01Z`, whose `request.json` is byte-identical to `06-52-17Z` call 6 (`diff -q`) and whose captured
+model and effort are the same (`claude-haiku-5-5`, low): `zig-out/e2e-call/2026-11-23T06-18-45Z-cb4d08d588019738ab661fddd0ba4abb`,
+10 trials, one invocation, no retry, all valid. Four signals (`[1,4]`, `[2]`, `[3]`, `[5]`) in 2 trials (3, 8), three
+(`[1,4,5]`, `[2]`, `[3]`) in 5 (1, 2, 4, 7, 9), two (`[1,4,5]`, `[2,3]`) in 3 (5, 6, 10). The 22 November screen
+gave 3, 5 and 2. The grouping is not deterministic for this request, and the two screens do not show a shift between
+them (10 trials each). Protocol checks only; the semantic quality of the signals was not assessed.
+
+## E7 stage 5. Source-derived clarification subjects (23 November 2026)
+
+User: "action the preconditions for stage 5", then "approved A, B, D and implement stage 5" on the preflight's decisions A
+(the selector), B (what changes with it) and D (the amendments). C, the measure of stage 5's set, and the recommendations the
+review raised were approved the next request ("update documents with recommendations"): stage 5's set is a rule 6 hygiene
+set, the authority builder will consolidate needs of one subject (SPEC01 stage 5b, unbuilt), and the selector stays until
+stage 7's case. The defect class is an invariant breach (design.md §3.3 item 31: a rerun minted another record for the
+same gap), not a published-output class: the development cases raise no clarification, so no run has shown it.
+
+- **Change.** `Subject` gains `sources`, the canonical source text a need is about (`SourceSpan`: a source's normalized
+  relative path and its exact lines, or the whole source), and the state is `clarification-state/v4` (a v3 state is rejected
+  without a reader). `clarification_subject.zig` derives it from the engine's citations for both producers: a records need
+  names the lines cited by its bound signal's claims, an authority gap on a signal, a conflict or a token names the lines its
+  claims cite, and one on a source names the whole source. The authority requirement names its kind without the contract
+  version, and the unit its kind without an ordinal. `record` and `decision` units, which no Spec workflow produces, keep
+  their ordinal. The model's clarification response is a reason and a question: `Need.record_kind`, the `unit_kind` check on
+  a clarification and the schema's `record_clarification` definition are deleted (`records` now references `clarification`).
+  ADR 0025 (the clarification subject, Decision 5), 17-specify.md, F0100, 13-05 and 24-workflow-state.md say so.
+- **Deviation from the approved recommendation** (accepted 23 November 2026, user: "update documents with recommendations").
+  `specification-state` is not advanced to v30. The recommendation said "a version advance only, as stage 4 did", but
+  `specification_state.zig:20` binds the clarification state by ordinal and revision only, so its contract does not change.
+  ADR 0041's reservation of v30 stays.
+- **Limits accepted** (ADR 0025, "Limits this accepts"; both found by the contract review, neither shown by a run). The
+  subject is the lines, so two needs of one stage whose cited lines coincide (two signals over one line, or a sentence and a
+  token quoted inside it) are one subject: the refresh rejects them with `InvalidClarificationInput`, which
+  `clarification_refresh_workflow.zig:60` does not map to `blocked`, so the run ends `failed` on every rerun of those sources.
+  Ordinals used to keep them apart. `required_authority_test.zig` pins the coincidence. And a subject is stable only while the
+  claims, citations and signal grouping are, which come from the model: the drift screen's three groupings of one request
+  show a rerun can name another subject and orphan a protected answer. SPEC01 E7 records the decisions: consolidate the
+  collision (stage 5b), keep the selector until stage 7's case.
+- **Evidence.** The request projection differs from `q26-reverted-after` in 211 of 1857 requests, each only in the records
+  call's response schema (`record_kind` removed from the clarification variant, `required` 4 to 3; two also carry it in a
+  rendered guidance block), stated before landing. `zig build verify` on the final tree was 146 of 146 steps and 2502 of 2502
+  tests (2339 in the repository suite, architecture 273, integration 156), lint clean. New tests: the canonical selector (accepted and
+  rejected shapes), its total order, a state at the depth bound that round-trips, a rerun that reuses the ID whatever
+  wording and reference state it draws, the pure merge, a records clarification's subject, and the authority subject for a
+  signal, a conflict, a token, a source, the feature and a decision.
+- **Contract review.** No blocker; two major findings and five minor. Major: the first draft of ADR 0025, 17-specify and F0100
+  claimed the subject came "from the sources and nothing else" and was stable "whatever the model drew", though its lines
+  depend on model-proposed citations and a model grouping of signals (reworded, and the limit recorded above); and the
+  collision ends the run `failed` rather than `blocked` and covers more than a sentence and its token (recorded above;
+  decided afterwards: consolidate, stage 5b). Minor, fixed: `merged` validated its own input only by the final check, so a malformed range inside a
+  covering one was absorbed (it now refuses an item with a zero or inverted line, tested); `max_subject_spans` and its outcome
+  were in no ADR (named in ADR 0025); the records test proved only that some lines were named (it now pins the path and the
+  line, and the rejected citations, source and empty set); `merged` had no allocation-failure sweep (added); no `refresh` test
+  separated two needs by unit alone (added); `subjectFor` read the unit in two switches (one now); 24-workflow-state.md listed
+  v4 among the causes of `specification-state` v29, ADR 0025 said "all four" of five decisions and called the state version
+  advance unqualified, and design.md still indexed ADR 0025 as not implemented (all corrected); the ADR's limits now name the
+  line shift on a source edit and the §14 citation names §14.14 and §24.3. Not changed: `record` and `decision` units keep
+  their ordinal, as approved (B), though no Spec workflow produces them.
+- **Live set** (23 November 2026, user: "perform 3 live runs per test case"; `evaluations/e2e/2026-11-23T07-32-15Z…` to
+  `07-47-56Z…`; one build, revision `5fdfe883…` modified, source `19167d3a…`). Hello-world and loan-renewal, three each:
+  6 of 6 published and accepted, 100, 89.29 and 100% and 92.86, 85.71 and 92.86%, no critical failure. Content-basis accuracy
+  defects: lost source requirement 0, weakened obligation 1 (loan-renewal FR-001 "can renew"), unsupported addition 4 (generic
+  Givens: one in hello-world, three in loan-renewal), contradiction 1 (loan-renewal FR-003, whose trigger excludes its own
+  refusal condition). Hello-world's third run named one of its three claims in its records, filed as a minor `ambiguity`
+  under the story-quoted ruling; a stricter reading files two `lost_source_requirement` and the run `critical_failed`. The
+  four repairs were all graded helpful, and one protocol correction (an extraction retry) occurred. Signals drawn:
+  hello-world one signal in all three runs; loan-renewal `[1,4,5]` and `[2,3]`, then `[1,4]`, `[2]`, `[3]` and `[5]`, then
+  `[1,4,5]`, `[2]` and `[3]`, so three groupings in three runs. Calls: hello-world 9 each (38,129 to 40,391 tokens),
+  loan-renewal 12, 17 and 15 (66,931 to 105,896). Against the §2 rule 6 guards the set shows no lost source requirement under
+  that ruling and a publication rate of 6 of 6; whether the set is kept is the user's call, and nothing here attributes a
+  difference from the earlier set to stage 5 (one set each, on different builds, with the signals drifting).
+- **Reported separately.** Implementation complete: yes. Mechanical checks passed: yes. Semantic benefit: not demonstrated
+  (nothing consumes an accepted answer before stage 6, and the development cases raise no clarification). Brittleness
+  reduced: the model-picked record family, the per-run ordinals and the contract version leave the key, and the subject is
+  typed, canonical and tested; its stability against a model's regrouping is not achieved, and no subject was measured live.
+  Scope: both producers; the live set above is a hygiene set under SPEC01 §1 and E7.
 
 ## Decisions that changed nothing (15 November 2026)
 

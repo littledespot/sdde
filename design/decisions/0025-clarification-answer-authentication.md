@@ -1,7 +1,8 @@
 # ADR 0025: Accept valid clarification answers in the run that reads them
 
-- **Status:** Accepted amendment. The authentication chain, the actor-evidence registry, acceptance, publication and the
-  valid cancel are implemented. Generation's use of accepted answers, and the response-owned passive literals, are not
+- **Status:** Accepted amendment. The authentication chain, the actor-evidence registry, acceptance, publication, the
+  valid cancel and the source-derived clarification subject are implemented. Generation's use of accepted answers, and
+  the response-owned passive literals, are not
   ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 - **Date:** 2026-10-20, rewritten and accepted 2026-10-21
 - **Decision authority:** The user's decisions of 21 October 2026. The user first
@@ -135,13 +136,43 @@ input state and record revisions, exact submitted form bytes, typed answer,
   letters, digits and `-_.@`, at most 128 bytes. A name outside it is rejected with a
   typed outcome, never widened.
 
+### The clarification subject
+
+An accepted answer belongs to one record, and a rerun must name that record again for the same gap (design.md §3.3, item
+31). The engine therefore derives a record's subject from its accounted evidence, the citations of the claims a need
+concerns. No field the model fills in for the clarification, no per-run ID, no wording, no contract version and no hash
+enters it. The claims, their citations and a signal's grouping are model output that the engine validated, so a subject
+is stable only while they are (Limits this accepts).
+
+- **The tuple.** `{requirement, unit, slot, sources}`. `requirement` and `slot` name the kind and slot of the authority
+  requirement (`specification` and `content` for a generation need), and `unit` names the kind of unit with no ordinal.
+- **The selector.** `sources` is the canonical list of the text the need is about: each source's normalized relative path
+  in the reference directory, with the exact lines (one-based, inclusive) or the whole source. It is canonical when paths
+  ascend, line ranges ascend within a path, and ranges that overlap or touch are one. The engine derives it from its own
+  citations, so how a need's evidence was split into citations does not change it:
+  - a records need names the lines cited by the claims of the signal the engine bound to the call;
+  - an authority gap on a source names the whole source, and one on a signal, a conflict or a token names the lines its
+    claims cite;
+  - the feature, and the brief and entities units of a specification, name no text: each has one need, so their unit
+    names them. A record or a decision, which no workflow owns yet, keeps its ordinal until its workflow is built.
+- **One subject, one need.** The subject is the lines, so a claim quoted from inside a sentence's line is the same subject
+  as the sentence. Two needs of one stage with one subject are an ambiguous subject, which the refresh rejects
+  (`InvalidClarificationInput`; [§14.14](../contracts/14-orchestration.md#1414-authorityreconciliationorchestrator),
+  [§24.3](../contracts/24-workflow-state.md#243-gate-behavior)).
+- **The model names no part of it.** A generation clarification is a reason and a question. It names no record family.
+- **Bounds.** A subject names at most 128 spans (`max_subject_spans`). A need whose citations merge into more, or into
+  none the corpus holds, is no subject: the builder fails with `InvalidSpecification` or `InvalidRequiredAuthority`.
+- **Persistence.** `clarification-state/v4` carries the selector in each record's subject, and a v3 state, whose subjects
+  match no current need, is rejected without a reader. The specification state binds the clarification state by ordinal
+  and revision only, so it does not change.
+
 ### Persistence
 
 - Evidence goes in the catalogue's actor-evidence registry, not in a store local to
   clarifications: `actor-evidence-registry/v1` at
   `<paths.workflows>/features/<feature>/state/actor-evidence.json`, beside the
   clarification state. Each response's `authentication_evidence_id` (`AE-<ordinal>`)
-  references its registry entry, and the clarification state (`clarification-state/v3`)
+  references its registry entry, and the clarification state (`clarification-state/v4`)
   is valid only when every response joins an entry with the same account and time,
   each entry joined once. An entry no response names is tolerated: the registry is
   written before the state, so a run that stops between them leaves evidence and
@@ -167,6 +198,17 @@ input state and record revisions, exact submitted form bytes, typed answer,
   fit its bound. A misread answer is therefore unlikely. But no option defines how to
   withdraw or revise an accepted response, so an answer the user regrets cannot be
   changed. That stays out of scope here.
+- A subject is stable only while its inputs are. A claim's citation and a signal's grouping come from the model and are
+  validated by the engine, so a rerun that draws another grouping of the same sources (ten replays of one signals request
+  returned three, [Z_SPEC01](../../fixes/Z_SPEC01.md) "E7 stage 5 precondition") names another subject and mints another
+  record. A source edited above a cited line moves its lines the same way. A protected answer on the earlier record then
+  stays protected and unused, and the new form asks again.
+- Two needs of one stage whose cited lines coincide, such as two signals over one line or a sentence and a token quoted inside
+  it, are one subject. The refresh rejects them, the run ends `failed` rather than `blocked`, and every rerun on those
+  sources fails the same way until the sources change. Ordinals used to keep them apart. The user decided on 23 November
+  2026 that the authority builder consolidates needs of one subject into one, which §12.7 allows, and does not block with a
+  typed reason; it is not yet built (SPEC01 stage 5b). The regrouping limit stays until stage 7's case shows whether an
+  answered subject matches on a rerun.
 
 ## Options considered and rejected
 
@@ -185,6 +227,14 @@ input state and record revisions, exact submitted form bytes, typed answer,
   neither who edited the file nor who ran the engine.
 - **Signed answers.** This is strongest, but it needs key management and tooling
   that a local CLI does not have.
+- **A subject keyed by a source's ordinal.** The ordinal is its position among the sorted paths, so adding a source that
+  sorts earlier moves every later one, and an answer would attach to the wrong source. `validateQuestions` rejects only a
+  question that copies source text, and does not check coordinates, so nothing else would catch it.
+- **A subject keyed by a claim, signal, conflict or citation ID.** Each is a per-run ordinal, and §16 says a snapshot-local
+  ID is not a clarification subject. A signal's claims also differ from run to run.
+- **A subject keyed by a hash of the text.** §16 and §24 allow no fingerprint, and a hash names no source a reader can check.
+- **A subject keyed by a model-picked record family.** It was the earlier rule. A rerun that picks another family mints
+  another record, which is the failure this decision removes.
 
 ## Consequences
 
@@ -212,14 +262,15 @@ input state and record revisions, exact submitted form bytes, typed answer,
   - a run that fails after acceptance and publishes nothing, followed by a run that
     accepts the same forms again, and a run that reuses published responses;
   - a `cancel` beside an answered form, and a deferral.
-- `specification-state` and the clarification state version advance, and the
+- `specification-state` and the clarification state version advance (v29 and v3 for the authentication chain; stage 5
+  advanced the clarification state alone, to v4), and the
   actor-evidence registry is a new persisted state, with no compatibility readers.
 - E2E coverage needs a clarification-expected case run twice, with the forms
   answered between the runs.
 
 ## Decisions
 
-The user approved all four on 21 October 2026.
+The user approved decisions 1 to 4 on 21 October 2026.
 
 1. The invoking account is the authenticated actor, and running Specify with valid
    closed forms is the act of acceptance, with no separate confirmation.
@@ -227,3 +278,5 @@ The user approved all four on 21 October 2026.
 3. Evidence is recorded in the catalogue's shared actor-evidence registry.
 4. The scope is Specify only. Plan- and tasks-stage clarifications are decided when
    those workflows are built.
+5. A clarification's subject is the engine-derived source selector above, and the model names no record family
+   (approved 23 November 2026, user: "approved A, B, D and implement stage 5").
