@@ -1390,7 +1390,7 @@ test "a records batch over a group that holds an open question is offered only i
             asked.value = .{ .segments = &.{.{ .literal = .{ .value = case.question } }} };
             const wires = [_]struct { response: g.Response, accepted: bool }{
                 .{ .response = .{ .content = .{ .records = &.{requirement} } }, .accepted = !question_batch },
-                .{ .response = .{ .clarification = .{ .reason = .missing, .question = asked } }, .accepted = true },
+                .{ .response = .{ .clarification = .{ .reason = .missing, .question = asked, .record_kind = .functional_requirement } }, .accepted = true },
             };
             for (wires) |wire| {
                 const answer = try std.json.parseFromSlice(std.json.Value, a, try json.encode(g.ModelResponse, a, try g.ModelResponse.from(a, fixture.context, wire.response)), .{ .parse_numbers = false });
@@ -2454,7 +2454,7 @@ test "native record dispatch keeps clarifications bound without treating them as
         current.scenario_cursor = 0;
         current.units[sessions.records_index] = null;
         const question = try fixture.proposal("MOCK Which condition permits this behavior?");
-        const response: g.Response = .{ .clarification = .{ .reason = .missing, .question = question } };
+        const response: g.Response = .{ .clarification = .{ .reason = .missing, .question = question, .record_kind = .functional_requirement } };
         const admitted = (try validate_unit.execute(a, current, fixture.context, .{ .response = response })).valid;
         try std.testing.expect(admitted.response == .clarification);
         try std.testing.expect(admitted.record_assignment == null);
@@ -2783,7 +2783,8 @@ test "a records clarification names the source text of its bound signal, and the
     var fixture = try Fixture.init(a, "A librarian renews a loan.");
     defer fixture.deinit();
     const value = try fixture.proposal("Which renewal duration applies? State its duration and starting event.");
-    const proposal: g.Response = .{ .clarification = .{ .reason = .missing, .question = value } };
+    const proposal: g.Response = .{ .clarification = .{ .reason = .missing, .question = value, .record_kind = .functional_requirement } };
+    const feature_proposal: g.Response = .{ .clarification = .{ .reason = .missing, .question = value } };
     const builder = @import("actions/clarification/build_specification_clarification_need.zig").Action{};
     const checked = (try g.validate(a, text.validator, fixture.context, .records, proposal)).valid;
     const subject = (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked)).entries[0].subject;
@@ -2807,11 +2808,28 @@ test "a records clarification names the source text of its bound signal, and the
     try std.testing.expectError(error.InvalidClarificationInput, derivation.fromCitations(a, fixture.context.inputs.corpus.sources, entries, &.{}));
     try std.testing.expectError(error.InvalidClarificationInput, derivation.fromCitations(a, &.{}, entries, cited));
     // An entities clarification names its unit and no source text.
-    const checked_entity = (try g.validate(a, text.validator, fixture.context, .entities, proposal)).valid;
+    const checked_entity = (try g.validate(a, text.validator, fixture.context, .entities, feature_proposal)).valid;
     const entity_subject = (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked_entity)).entries[0].subject;
     try std.testing.expectEqualStrings("entities", entity_subject.unit);
     try std.testing.expectEqual(@as(usize, 0), entity_subject.sources.len);
     try std.testing.expect(!c.sameSubject(subject, entity_subject));
+    // The family the model names is validated and never read for identity (ADR 0025): every family names the same subject, the
+    // entity's is refused, and no other unit takes one.
+    for (std.enums.values(spec.Kind)) |kind| {
+        const named: g.Response = .{ .clarification = .{ .reason = .missing, .question = value, .record_kind = kind } };
+        if (kind == .entity) {
+            try std.testing.expect((try g.validate(a, text.validator, fixture.context, .records, named)) == .invalid);
+            continue;
+        }
+        const same = (try g.validate(a, text.validator, fixture.context, .records, named)).valid;
+        try std.testing.expect(c.sameSubject(subject, (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, same)).entries[0].subject));
+        for ([_]g.Unit{ .brief, .entities, .primary_user_story }) |other| try std.testing.expect((try g.validate(a, text.validator, fixture.context, other, named)) == .invalid);
+    }
+    // A records clarification that names no family is not admitted, and the builder refuses one that reached it.
+    try std.testing.expect((try g.validate(a, text.validator, fixture.context, .records, feature_proposal)) == .invalid);
+    var unnamed = checked;
+    unnamed.response.clarification.record_kind = null;
+    try std.testing.expectError(error.InvalidSpecification, builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, unnamed));
 }
 
 test "specification provenance rejects foreign missing duplicate stale and unaccepted support" {

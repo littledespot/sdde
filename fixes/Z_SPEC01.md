@@ -3489,25 +3489,28 @@ same gap), not a published-output class: the development cases raise no clarific
   names the lines cited by its bound signal's claims, an authority gap on a signal, a conflict or a token names the lines its
   claims cite, and one on a source names the whole source. The authority requirement names its kind without the contract
   version, and the unit its kind without an ordinal. `record` and `decision` units, which no Spec workflow produces, keep
-  their ordinal. The model's clarification response is a reason and a question: `Need.record_kind`, the `unit_kind` check on
-  a clarification and the schema's `record_clarification` definition are deleted (`records` now references `clarification`).
-  ADR 0025 (the clarification subject, Decision 5), 17-specify.md, F0100, 13-05 and 24-workflow-state.md say so.
+  their ordinal. The first form also removed the model's `record_kind` (`Need.record_kind`, the `unit_kind` check on a
+  clarification and the schema's `record_clarification` definition) so that a clarification was a reason and a question; **that
+  part was reverted the same day** after the screen below, and the model still names the family, which the engine validates and
+  never reads for identity. ADR 0025 (the clarification subject, Decisions 5 and 6), 17-specify.md, F0100 and 13-05 say so,
+  and 24-workflow-state.md says the subject is the selector.
 - **Deviation from the approved recommendation** (accepted 23 November 2026, user: "update documents with recommendations").
   `specification-state` is not advanced to v30. The recommendation said "a version advance only, as stage 4 did", but
   `specification_state.zig:20` binds the clarification state by ordinal and revision only, so its contract does not change.
   ADR 0041's reservation of v30 stays.
 - **Limits accepted** (ADR 0025, "Limits this accepts"; both found by the contract review, neither shown by a run). The
-  subject is the lines, so two needs of one stage whose cited lines coincide (two signals over one line, or a sentence and a
-  token quoted inside it) are one subject: the refresh rejects them with `InvalidClarificationInput`, which
+  subject is the lines, so two needs of one stage whose cited lines coincide (two signals over one line; this entry's first
+  example, a sentence and a token, was wrong, since their requirement kinds differ) are one subject: the refresh rejects them with `InvalidClarificationInput`, which
   `clarification_refresh_workflow.zig:60` does not map to `blocked`, so the run ends `failed` on every rerun of those sources.
   Ordinals used to keep them apart. `required_authority_test.zig` pins the coincidence. And a subject is stable only while the
   claims, citations and signal grouping are, which come from the model: the drift screen's three groupings of one request
   show a rerun can name another subject and orphan a protected answer. SPEC01 E7 records the decisions: consolidate the
   collision (stage 5b), keep the selector until stage 7's case.
-- **Evidence.** The request projection differs from `q26-reverted-after` in 211 of 1857 requests, each only in the records
-  call's response schema (`record_kind` removed from the clarification variant, `required` 4 to 3; two also carry it in a
-  rendered guidance block), stated before landing. `zig build verify` on the final tree was 146 of 146 steps and 2502 of 2502
-  tests (2339 in the repository suite, architecture 273, integration 156), lint clean. New tests: the canonical selector (accepted and
+- **Evidence.** Before the revert, the request projection differed from `q26-reverted-after` in 211 of 1857 requests, each
+  only in the records call's response schema (`record_kind` removed from the clarification variant, `required` 4 to 3; two
+  also carry it in a rendered guidance block), stated before landing; after it, none differ. `zig build verify` before the
+  revert was 146 of 146 steps and 2502 of 2502 tests (2339 in the repository suite, which holds the 273 architecture pins, 156
+  in integration and 7 in smaller steps), lint clean (the final run is in "Evidence after the revert" below). New tests: the canonical selector (accepted and
   rejected shapes), its total order, a state at the depth bound that round-trips, a rerun that reuses the ID whatever
   wording and reference state it draws, the pure merge, a records clarification's subject, and the authority subject for a
   signal, a conflict, a token, a source, the feature and a decision.
@@ -3542,6 +3545,87 @@ same gap), not a published-output class: the development cases raise no clarific
   reduced: the model-picked record family, the per-run ordinals and the contract version leave the key, and the subject is
   typed, canonical and tested; its stability against a model's regrouping is not achieved, and no subject was measured live.
   Scope: both producers; the live set above is a hygiene set under SPEC01 §1 and E7.
+
+## E7 stage 5 screen: the records call with and without `record_kind` (23 November 2026)
+
+User: "approved", on the replay of SPEC01 §1. Per case, 10 replays of one records call in each of two arms, the arms started
+seconds apart (`08-13-06Z`/`08-13-07Z`, `08-14-56Z`/`08-14-59Z`), `claude-haiku-5-5` at low effort, 40 provider calls, no retry.
+Requests: hello-world, call 8 of `2026-11-23T02-49-26Z` (all three claims in one signal); loan-renewal, call 8 of
+`2026-11-23T02-59-26Z` (the group of claims 1, 4 and 5). The captured arm sends the request as captured (the schema before stage
+5); the changed arm sends it with `--edit` (`zig-out/q26-followup-screens/stage5-<case>.edit.json`), whose schema equals the stage 5
+build's. The requests actually sent differ only in `record_kind`, in the output schema and its copy in the system text; messages,
+model and limits are equal (first trial of each pair, by text diff). Reports: `zig-out/e2e-call/2026-11-23T08-13-06Z-eb64…` and
+`08-13-07Z-dae6…` (hello-world, captured and changed), `08-14-56Z-2281…` and `08-14-59Z-14a3…` (loan-renewal).
+
+- **Hello-world.** Captured: 1 of 10 trials named only the greeting claim (T09); one more (T05) named all three claims in one
+  record that states no startup requirement. Changed: 5 of 10 named only the greeting claim (T01, T04, T07, T09, T10).
+- **Loan-renewal.** Captured: 9 valid trials with no weakened, missing or contradicting record, and one `protocol_invalid`
+  trial (schema-invalid, and it named no claim 4). Changed: 10 valid trials, one with "can renew" for "must be able to" (T03).
+  Sentences joined without a separator ("renewed.Renewal") appeared in 4 of 10 captured trials and in none of the changed ones; the
+  rule's classes do not include it.
+- **Test.** The rule's one-sided exact test, pooled, with p ≤ 0.10 for "clearly worse": p = 0.053 (6 of 20 changed, 1 of 19 captured)
+  when the invalid trial is a failed trial left out of the defect counts, and p = 0.118 (6 of 20, 2 of 20) when it is a defect.
+  Hello-world alone gives p = 0.070 and loan-renewal alone p = 0.76. How to count the invalid trial was not fixed before the results,
+  so the pooled result straddles the threshold. No mechanism by which the removal changes ordinary records answers is shown in
+  the code; if the effect is real, constrained decoding over the changed schema is the speculative route.
+- **Outcome.** Inconclusive by the rule's threshold, with the direction against the removal in hello-world. **Decided** 23
+  November 2026 (user: "no, running more will not change", then "action"): the removal is reverted, with no further batch. The
+  schema, `Need.record_kind` and the `unit_kind` check are restored; the engine validates the family and never reads it for the
+  subject; ADR 0025 records the exception (Decision 6). The request projection is byte-identical to `q26-reverted-after` again
+  (1857 files compared, none differing, manifest present), so the model sees what it saw before stage 5, and the subject work
+  (the selector, `clarification-state/v4`, the authority producer) is kept. Stage 5b does not depend on it.
+- **Evidence after the revert.** `zig build verify` was 146 of 146 steps and 2502 of 2502 tests (2339 in the repository suite,
+  which holds the 273 architecture pins, 156 in integration and 7 in smaller steps), lint clean. The tests restored: the schema test (a clarification may name each family the
+  records step authors, never the entity, and no other step's clarification names one), the wire cases, and the two
+  `record_kind` sites of the generation tests. The stage 5 records test now also proves that every family names the same
+  subject, that the entity and a family on another unit are refused, and that a records clarification with no family is neither
+  admitted nor built.
+
+## E7 stage 5b: one need for one subject (23 November 2026)
+
+User: "implement stage 5b" (decided 23 November 2026, "update documents with recommendations"). Offline; no model request
+changes.
+
+- **Defect class.** Gaps of one stage whose cited lines coincide have one subject (stage 5; ADR 0025 "Limits this accepts"),
+  and the refresh rejects two needs of one stage and subject with `InvalidClarificationInput`
+  (`clarification_refresh.zig:94`), which no workflow maps to `blocked`, so the run ended `failed` on every rerun of those
+  sources. No retained run showed it; stage 5's tests found it, from two signals over one line.
+- **Change.** The authority builder (`required_authority_clarifications.zig`) first builds one `Part` per gap, with the logic it
+  had, then `consolidate` makes one need for each stage and subject (`c.sameSubject`), in the order each is first named. The
+  need asks each distinct question and gives each distinct reason (exact bytes, the ledger's order, joined by a line feed),
+  binds the union of the authorities and cites the union of the evidence. A part that names only sources beside a part that
+  cites expands to the citations of those sources, since `prepare` uses citations when any are given and sources
+  otherwise; a lone part reduces to the old need. A merged question or reason over `c.max_text_bytes`, authorities over a
+  record's bound (`c.max_record_authorities`, which replaces the literal 64 of the state validation) and one canonical record
+  at two revisions (`Authority.sameRecord`, extracted from the state validation and the ledger's authority check, which now
+  share it) fail `InvalidRequiredAuthority` for every group size; nothing is truncated or dropped. That ends the run
+  `blocked`, the builder's existing mapping (`clarification_refresh_workflow.zig:116`), not `failed`. The refresh keeps its
+  own check. The records builder is unchanged: it names one need per generation unit, so it cannot collide.
+- **Tests.** `required_authority_test.zig`: the real same-line signals fixture (three gaps, two needs; the pair's question and
+  reason carry both, the other source's carries its own, one bound authority, two open forms, and a rerun with the evidence
+  reordered and reworded keeps both IDs); a pure test over a conflict subject with two spans (another stage and another lines
+  stay their own needs; distinct questions, reasons and authorities merge once; the same canonical record at another
+  revision, a merged question, a merged reason and authorities over a record's each fail, where each part alone passes); and a
+  test that a part naming only a source keeps its quotation beside a citing part. `clarification_inputs_test.zig`:
+  `sameRecord` and the record's authority bounds, accepted and rejected.
+- **Records.** ADR 0025 (second limit), 14-orchestration.md, 13-05 and §12.7 (its next sentence, that shared citations across
+  subjects resolve nothing, stands), SPEC01 (engine track, E7 paragraph).
+- **Evidence.** On the final code tree: lint clean; `test-architecture` 273 of 273; `test-required-authority` 353 of 353;
+  `test-clarification-inputs` 154 of 154; `test-specification-generation` 487 of 487; `zig build verify` 146 of 146 steps and
+  2506 of 2506 tests (the 2502 of the stage 5 revert and the four new tests). The request projection of the tree
+  (`SDDE_REQUEST_PROJECTION`, integration 156 of 156) is identical to `q26-reverted-after` (`diff -rq`), so rule 10 holds.
+- **Contract review.** No blocker; one major and seven minor. Major: ADR 0025 said an overflow ends the run `failed`, but
+  `InvalidRequiredAuthority` maps to `blocked` (reworded; the class is a merged text beyond the bound, which a rerun does
+  not clear). Minor, fixed: the ADR's example of a signal and a token sharing a subject (they cannot, their requirement kinds
+  differ), and its claim that stage 6 binds the answer to the gaps (now stage 6's open decision); a stale line citation in
+  SPEC01; the same-record predicate duplicated in the ledger's authority check (now `Authority.sameRecord`, one owner); a
+  branch that applied another rule to a lone part (removed: one rule for every group size, and a seed's authorities are
+  already unique, `required_authority.zig:197`); a test named for unit kinds it did not vary (renamed) with no merged-reason
+  overflow case (added); `consolidate` doing the grouping and the merge (the merge is now `merged`) and no arena note (added).
+- **Not shown.** No live run was made; the development cases raise no clarification, so stage 5b has no effect on a published
+  specification. A merged form asks several questions and takes one answer; what that answer decides for each gap is stage
+  6's open decision (ADR 0025). A merged text beyond the form's bound ends the run `blocked` on every rerun of those sources,
+  which no run has shown: a review detail may be 2000 bytes, so two or three long details over one subject reach it (likely).
 
 ## Decisions that changed nothing (15 November 2026)
 

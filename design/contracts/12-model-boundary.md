@@ -644,7 +644,9 @@ A genuine missing data decision must state its behavioral effect and request the
 details needed to resolve it, rather than a bare yes/no about entities. This guidance
 does not authorize native inference from question prose or verdict reassessment.
 
-Consolidate only the same engine-built subject under existing identity rules.
+Consolidate only the same engine-built subject under existing identity rules: the authority
+builder merges the gaps of one stage and one subject into one need that asks every distinct
+question, binds the union of their authorities and cites the union of their evidence (§14.14).
 Equal wording or shared citations across subjects do not establish equivalent
 decisions or let one answer resolve multiple requirements. A related-needs display
 is a projection only. Broader answer sharing requires an explicitly approved

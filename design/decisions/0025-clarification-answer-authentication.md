@@ -20,7 +20,9 @@
   - the §13 catalogue, by giving `AuthenticateActorAction`'s `AuthenticationPort`
     its first provider, and by making `ValidateClarificationUserSubmissionAction`
     report a typed reason for each rejected form;
-  - F0100 §3.2, by selecting its authentication mechanism.
+  - F0100 §3.2, by selecting its authentication mechanism;
+  - [ADR 0006](0006-minimal-model-response.md)'s rule that only data the model must supply is in its response, by one
+    exception: the records clarification's `record_kind` (Decision 6).
 
   It leaves §23.2's protection of user-closed forms, ADR 0017's incomplete
   publication and ADR 0009's fresh-invocation rule unchanged. The overall design
@@ -159,7 +161,18 @@ is stable only while they are (Limits this accepts).
   as the sentence. Two needs of one stage with one subject are an ambiguous subject, which the refresh rejects
   (`InvalidClarificationInput`; [§14.14](../contracts/14-orchestration.md#1414-authorityreconciliationorchestrator),
   [§24.3](../contracts/24-workflow-state.md#243-gate-behavior)).
-- **The model names no part of it.** A generation clarification is a reason and a question. It names no record family.
+- **The model's record family is not part of it.** A records clarification is a reason, a question and the closed `record_kind`
+  it is about; every other step's names none. The engine validates the family (a records unit names one, never the entity,
+  and no other unit names any) and never reads it for identity. It is an exception to the model supplying only what the
+  engine needs (ADR 0006, AGENTS.md "Project authority"), kept on a measurement that settled nothing by its threshold: a replay
+  of the records call with the field and without it, 10 trials per arm in each development case, was inconclusive, showed no
+  difference in loan-renewal, showed a lower claim coverage without the field in hello-world, and shows no mechanism; the user
+  decided to keep the field without a further batch ([Z_SPEC01](../../fixes/Z_SPEC01.md) "E7 stage 5 screen", which holds the
+  figures). Its accepted and rejected cases are the tests "the generation schema defines every record family and lets a
+  clarification name each family the records step authors" (`src/specification_contract_test.zig`), "independent wire cases cover
+  every selected specification result and nested content variant" (`src/model_candidate_json_test.zig`) and "a records
+  clarification names the source text of its bound signal, and the other units name their unit"
+  (`src/specification_generation_test.zig`), which also proves that every family names the same subject.
 - **Bounds.** A subject names at most 128 spans (`max_subject_spans`). A need whose citations merge into more, or into
   none the corpus holds, is no subject: the builder fails with `InvalidSpecification` or `InvalidRequiredAuthority`.
 - **Persistence.** `clarification-state/v4` carries the selector in each record's subject, and a v3 state, whose subjects
@@ -203,12 +216,16 @@ is stable only while they are (Limits this accepts).
   returned three, [Z_SPEC01](../../fixes/Z_SPEC01.md) "E7 stage 5 precondition") names another subject and mints another
   record. A source edited above a cited line moves its lines the same way. A protected answer on the earlier record then
   stays protected and unused, and the new form asks again.
-- Two needs of one stage whose cited lines coincide, such as two signals over one line or a sentence and a token quoted inside
-  it, are one subject. The refresh rejects them, the run ends `failed` rather than `blocked`, and every rerun on those
-  sources fails the same way until the sources change. Ordinals used to keep them apart. The user decided on 23 November
-  2026 that the authority builder consolidates needs of one subject into one, which §12.7 allows, and does not block with a
-  typed reason; it is not yet built (SPEC01 stage 5b). The regrouping limit stays until stage 7's case shows whether an
-  answered subject matches on a rerun.
+- Gaps of one stage whose requirement kind, unit kind and slot agree and whose cited lines coincide, such as two signals
+  over one line or two conflicts over the same lines, are one subject, and ordinals no longer keep them apart. A signal and
+  a token never share one, since their requirement kinds differ. The user decided on 23 November 2026 that the authority
+  builder consolidates them into one need, which §12.7 allows, and adds no new blocked reason. The need asks every
+  distinct question, gives every distinct reason, binds the union of the gaps' authorities and cites the union of their
+  evidence; the refresh still rejects two needs of one subject. One form therefore carries several questions and takes one
+  answer, and what that answer decides for each gap is stage 6's open decision. A merged question or reason beyond the
+  form's text bound, or authorities beyond a record's, ends the run `blocked` with `InvalidRequiredAuthority`, the
+  builder's existing mapping (`clarification_refresh_workflow.zig:116`); nothing is truncated. The regrouping limit stays
+  until stage 7's case shows whether an answered subject matches on a rerun.
 
 ## Options considered and rejected
 
@@ -234,7 +251,10 @@ is stable only while they are (Limits this accepts).
   ID is not a clarification subject. A signal's claims also differ from run to run.
 - **A subject keyed by a hash of the text.** §16 and §24 allow no fingerprint, and a hash names no source a reader can check.
 - **A subject keyed by a model-picked record family.** It was the earlier rule. A rerun that picks another family mints
-  another record, which is the failure this decision removes.
+  another record, which is the failure this decision removes. The field itself stays in the model's schema (the subject
+  section), outside the key.
+- **Removing the field from the schema.** The engine does not need it, but the replay above found a lower claim coverage in
+  hello-world without it, between requests that differed only in this field.
 
 ## Consequences
 
@@ -278,5 +298,8 @@ The user approved decisions 1 to 4 on 21 October 2026.
 3. Evidence is recorded in the catalogue's shared actor-evidence registry.
 4. The scope is Specify only. Plan- and tasks-stage clarifications are decided when
    those workflows are built.
-5. A clarification's subject is the engine-derived source selector above, and the model names no record family
+5. A clarification's subject is the engine-derived source selector above, and the model's record family is not part of it
    (approved 23 November 2026, user: "approved A, B, D and implement stage 5").
+6. The model's `record_kind` stays in the records response schema as a validated field the subject does not use, an
+   exception recorded above (approved 23 November 2026, user: "action", on the recommendation to restore it after the
+   replay).

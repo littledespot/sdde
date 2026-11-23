@@ -337,9 +337,12 @@ The feature-logging sequences in §§14.9–14.10 are typed engine routines (per
 - Only a gate whose gaps are all `clarification_required` reaches the need builder; an
   upstream-rework or administrative-block entry blocks the gate first
   (`required_authority.zig:276`). The builder converts every such gap in one run: one
-  registered typed need per gap, owned by its requirement's registered owner stage (user
-  decision, 9 November 2026). The shared clarification refresh opens or updates one form per
-  need, keyed by its structural subject, and rejects two needs with the same stage and subject.
+  registered typed need per stage and structural subject, owned by its requirement's registered
+  owner stage (user decision, 9 November 2026). Gaps of one stage over one subject, such as two
+  signals over one line, are one need that asks each of their questions and binds the union of
+  their authorities (user decision, 23 November 2026; §12.7; ADR 0025). The shared clarification
+  refresh opens or updates one form per need, keyed by its structural subject, and rejects two
+  needs with the same stage and subject.
 - No gap is treated as resolved or omitted; a rerun rebuilds the ledger from current authority.
 - The complete reference-conflict set transition keeps its separate snapshot-consistency
   contract, which requires atomic set equality.

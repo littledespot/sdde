@@ -25,22 +25,28 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
   lines cited by its bound signal's claims, and the brief's and entities' name their unit
   ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md), the clarification subject).
 - **Rejects:** `InvalidSpecification` when the unit holds no clarification, the feature differs,
-  or the question's citations name no line of a source the corpus holds.
+  a records unit names no record kind (which the subject does not use), or the question's
+  citations name no line of a source the corpus holds.
 
 ## `BuildRequiredAuthorityClarificationNeedsAction` (`build-required-authority-clarification-needs`)
 
 - **Owner:** [`src/actions/clarification/build_required_authority_clarification_needs.zig`](../../../src/actions/clarification/build_required_authority_clarification_needs.zig)
 - **Reads:** `citable_reference_inputs`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `packet_guidance` · **Writes:** `clarification_needs` · **Side effect:** `none`
-- **Does:** Convert every `clarification_required` gap into one need for its requirement's
+- **Does:** Convert every `clarification_required` gap into a need for its requirement's
   registered owner stage ([§14.14](../14-orchestration.md#1414-authorityreconciliationorchestrator)).
   Admitted review questions and details are carried under §12.7; a descriptor question serves
   only a `missing` or `stale` gap. The need's subject names the requirement's kind and slot and
   the unit's kind, with the source text the unit concerns: the whole source, or the lines cited
   by a signal's, a conflict's or a token's claims. The contract version and a generated unit's
-  ordinal are not part of it (ADR 0025, the clarification subject).
+  ordinal are not part of it (ADR 0025, the clarification subject). Gaps of one stage and one
+  subject are one need: it asks each distinct question and gives each distinct reason, in the
+  ledger's order, binds the union of the gaps' authorities and cites the union of their evidence.
+  A gap over other text, or of another stage, stays its own need.
 - **Rejects:** `InvalidRequiredAuthority` for an invalid ledger, a candidate defect, an
   administrative block, an upstream-rework entry, an owner mismatch, a semantic gap with no
-  review question, or a unit the accounted evidence or the corpus does not hold.
+  review question, a unit the accounted evidence or the corpus does not hold, a subject whose
+  merged question or reason exceeds the form's text bound, whose authorities exceed a record's,
+  or that names one canonical record at two revisions. Nothing is truncated or dropped to fit.
 
 ## `BuildResolvedClarificationNeedsAction` (`build-resolved-clarification-needs`)
 

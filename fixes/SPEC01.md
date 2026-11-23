@@ -60,8 +60,8 @@ inputs of the reference runs above. **Screened** 23 November 2026 (user: "action
 `[3]`, `[5]`, so the drift persists by the test recommended on 23 November. **Decided** 23 November 2026 (user: "update
 documents with recommendations"): decide the schema change at the call level, as the earlier screens did (the records call,
 captured schema against the changed one, 10 concurrent replays per arm and case, with its own approval), and judge the rule
-6 set on the accuracy counts, reporting the signals grouping each run drew. The user asked for the set's three runs per case
-first, the same day, so the call-level screen is not yet run.
+6 set on the accuracy counts, reporting the signals grouping each run drew. The set ran first, then the call-level screen
+([Z_SPEC01](Z_SPEC01.md) "E7 stage 5 screen"), which settled the schema change.
 
 **Retained runs:** `zig-out/e2e-spec/` keeps the newest twelve runs: set B of 22 November 2026 (`2026-11-22T06-36-44Z`
 to `06-54-55Z`) and the Q26 follow-up's set (`08-35-52Z` to `08-39-02Z`, [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set").
@@ -192,8 +192,8 @@ batch and live set needs its own approval (AGENTS.md).
 **Output track:** Q26's follow-up (§4 Q26, decided 22 November 2026) was built, screened and run to eight per case,
 and its edge-case entry reverted ([Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set"); nothing awaits a set.
 
-**Engine track, in gaps:** E7 stages 5b and 6–8 (decided 22 and 23 November 2026; stage 2 folded into stage 6 and stage 3
-into stage 4 on 23 November, §5 E7), in order; stages 4 and 5 are built, and stage 5's set, which changes
+**Engine track, in gaps:** E7 stages 6–8 (decided 22 and 23 November 2026; stage 2 folded into stage 6 and stage 3
+into stage 4 on 23 November, §5 E7), in order; stages 4, 5 and 5b are built, and stage 5's set, which changes
 development-case request bytes, ran on 23 November 2026 as a rule 6 hygiene set (its keep is the user's call, under the
 decisions of §1 and E7). E0 is on
 hold.
@@ -345,33 +345,36 @@ Budget-stopped runs publish nothing while it is on hold (none since D13.1).
 before any model call, with one typed reason per form; a valid closed form or `cancel` is authenticated, recorded as a
 response with its evidence, and published with the run; a `defer` is ignored; a clarification's subject is the
 engine-derived source selector, not a per-run ordinal or a model-picked record family (ADR 0025, the clarification
-subject; `clarification-state/v4`). Stage 5's request bytes differ from the frozen baseline in 211 of 1857 projected
-requests, each the records call's schema without `record_kind`; its set ran on 23 November 2026
-([Z_SPEC01](Z_SPEC01.md) "E7 stage 5", "Live set"). Limits it
+subject; `clarification-state/v4`). The model still names the record family, which the engine validates and never reads for
+identity (ADR 0025 Decision 6), so the request projection equals the frozen baseline; the live set and the call-level screen
+are in [Z_SPEC01](Z_SPEC01.md) ("E7 stage 5", "Live set", "E7 stage 5 screen"). Limits it
 accepts (ADR 0025, "Limits this accepts"): a subject is stable only while the claims, citations and signal grouping are,
 and ten replays of one signals request returned three groupings, so a records or signal need can name another subject on a
-rerun of the same sources; and two needs of one stage whose cited lines coincide are one subject, which the refresh rejects
-with `InvalidClarificationInput`, so the run ends `failed`, not `blocked`, on every rerun of those sources. No run has
-shown either. **Decided** 23 November 2026 (user: "update documents with recommendations"): for the collision, the
-authority builder consolidates needs of one subject (§12.7 allows it for one engine-built subject, and it restores the two
-forms ordinals gave), built as stage 5b below, not a new blocked reason; for the drift, keep the selector until stage 7's
+rerun of the same sources. The second limit, two needs of one stage whose cited lines coincide being one subject that the
+refresh rejects with `InvalidClarificationInput` (the run ending `failed`, not `blocked`, on every rerun of those sources),
+is closed by stage 5b below. No run has shown either. **Decided** 23 November 2026 (user: "update documents with
+recommendations"): for the collision, the authority builder consolidates needs of one subject (§12.7 allows it for one
+engine-built subject), built as stage 5b below, not a new blocked reason; for the drift, keep the selector until stage 7's
 clarification-expected case shows whether an answered subject matches on a rerun, since an engine-owned selector cannot name
 a multi-claim signal. What is left: provenance rejects nonempty
 response-ID sets (`specification_provenance.zig:93`, `specification_support_evidence.zig:171`); resolved needs are empty
 (`src/actions/clarification/build_resolved_clarification_needs.zig`); passive literal origins are source-only
 (`passive_literals.zig:16`), so answer text can't get ADR 0025's response-owned origin; generation doesn't consume answers
 (it binds empty response-ID sets, `specification_source_binding.zig:136`, `:196`), and a re-raised need for an accepted
-subject ends `blocked` with `ProtectedClarification` (`clarification_refresh.zig:107-108`), so stages 4 and 5 show no
+subject ends `blocked` with `ProtectedClarification` (`clarification_refresh.zig:107-108`), so stages 4, 5 and 5b show no
 benefit before stage 6 (likely, not run). Complete the
 [§17.4 lifecycle](../design/contracts/17-specify.md#174-specification-clarification-behavior) under ADR 0025. §10 C8 adds
 record-lifecycle gaps and C49 the clarification subject.
 
+Stage 5b is built (23 November 2026; offline, no model request changes): the authority builder
+(`src/domain/required_authority_clarifications.zig`, `consolidate`) makes the gaps of one stage and one subject one need that
+asks each distinct question, gives each distinct reason, binds the union of the authorities and cites the union of the
+evidence. ADR 0025's second limit, 14-orchestration.md:341-345, 13-05 and §12.7's consolidation line carry it. Its results are
+in [Z_SPEC01](Z_SPEC01.md) "E7 stage 5b".
+
 Remaining stages, each landable alone (offline unless stated); stage 2, response-ID admission from a resolved set, is
-folded into stage 6: 5b the authority builder consolidates the needs of one subject into one (offline; no model request
-changes, which rule 10's projection should show; its amendments, ADR 0025's second limit, 14-orchestration.md:341-342,
-13-05 and §12.7's consolidation line, land with its code); 6 generation consumes answers, with the response-ID admission
-and the answer-derived literals (request bytes change only for runs that have responses); 7 the harness two-leg flow; 8
-live runs.
+folded into stage 6: 6 generation consumes answers, with the response-ID admission and the answer-derived literals (request
+bytes change only for runs that have responses); 7 the harness two-leg flow; 8 live runs.
 
 **Decided** 22 and 23 November 2026 (user: "update the documentation with the recommendations", "action recommendations");
 the stage 4 and 5 decisions are built and recorded in Z_SPEC01, and the ones below are unbuilt. Each design amendment below
@@ -408,7 +411,7 @@ lands with its stage's code, in ADR 0025 and the contracts it names:
   run 1 should raise one form; neither a reserved qualification feature nor a tuning target. No form, or more than one,
   is reported as an unmet criterion (a model limitation), with no retry or rewording.
 - **Authoring answers between runs** (stage 7). An `answers` member in the case version after stage 4's holding one bounded text, since every Spec
-  clarification takes one (`build_specification_clarification_need.zig:33`, `required_authority_clarifications.zig:71`).
+  clarification takes one (`build_specification_clarification_need.zig:33`, `required_authority_clarifications.zig:159`).
   One launch runs run 1 and, only when it ends `needs_user` with exactly one open form, writes the text into the answer
   region, sets `requestedStatus: closed` and runs run 2; anything else is reported. No answer is matched to a form by its
   wording. The answer is the user's input, which ADR 0025 makes authority, not a project standard, so the principle-file
@@ -631,8 +634,8 @@ scenario's repetition), the scripted-fault counts of `repeated_provenance_fault`
 - **A clarification-only batch's subject:** built (stage 5, 23 November 2026). The subject was
   `{specification, record_kind, content}` with `record_kind` picked by the model, so a rerun that picked another kind
   minted another form. It is now `{specification, records, content}` with the source lines cited by the bound signal's
-  claims, and the model names no kind. An answered group is authored by E7 (answers are not consumed yet), so until stage 6
-  a rerun asks again.
+  claims, and the model's kind, which it still names and the engine validates, is not part of it. An answered group is
+  authored by E7 (answers are not consumed yet), so until stage 6 a rerun asks again.
 
 **C50. A workflow definition can route past the configured preservation review: closed as by design** (user, 22
 November 2026, after the test below). `check-source-preservation-policy` routes `ok` (the source preservation check is

@@ -187,7 +187,7 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     for (inputs.authorities, 0..) |authority, index| {
         if (!authority.valid()) return error.InvalidRequiredAuthority;
         for (inputs.authorities[0..index]) |other| {
-            if (other == .canonical and authority == .canonical and other.canonical.kind == authority.canonical.kind and other.canonical.ordinal == authority.canonical.ordinal) return error.InvalidRequiredAuthority;
+            if (other.sameRecord(authority)) return error.InvalidRequiredAuthority;
         }
     }
     const requirements = try allocator.alloc(Requirement, inputs.seeds.len);

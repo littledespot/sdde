@@ -18,4 +18,8 @@ pub const Authority = union(enum) {
             .canonical => |value| std.meta.eql(value, other.canonical),
         };
     }
+    /// Whether two authorities name one record: equal, or one canonical record at two revisions.
+    pub fn sameRecord(self: Authority, other: Authority) bool {
+        return self.eql(other) or (self == .canonical and other == .canonical and self.canonical.kind == other.canonical.kind and self.canonical.ordinal == other.canonical.ordinal);
+    }
 };

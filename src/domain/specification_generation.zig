@@ -21,7 +21,9 @@ pub fn Responses(comptime boundary: spec.Boundary) type {
                 return .{ .disposition = self.disposition, .basis = self.basis };
             }
         };
-        pub const Need = struct { reason: NeedReason, question: fields.AttributedValue };
+        /// `record_kind` is the family a records clarification is about. The engine validates it (a records unit names one, any other unit
+        /// none, and never the entity) and never reads it for a subject's identity (ADR 0025, the clarification subject).
+        pub const Need = struct { reason: NeedReason, question: fields.AttributedValue, record_kind: ?spec.Kind = null };
         pub const Content = union(enum) {
             brief: fields.Brief,
             primary_user_story: fields.AttributedValue,
@@ -97,12 +99,13 @@ pub const ModelResponse = union(enum) {
         pub const model_fields = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
         reason: NeedReason,
         question: AuthoringValue,
+        record_kind: ?spec.Kind = null,
     },
     inconclusive: Inconclusive,
 
     pub fn from(allocator: std.mem.Allocator, context: provenance.Context, response: Response) Error!ModelResponse {
         return switch (response) {
-            .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = try wireValue(allocator, context, need.question) } },
+            .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = try wireValue(allocator, context, need.question), .record_kind = need.record_kind } },
             .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
                 .brief => |brief| .{ .brief = .{ .description = try wireValue(allocator, context, brief.description), .primary_goal = try wireValue(allocator, context, brief.primary_goal) } },
@@ -135,7 +138,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("sp
     return switch (response) {
         .clarification => |need| clarification: {
             if (bound == .records and (need.question.signal_ids.len != 1 or need.question.signal_ids[0].ordinal != bound.records.signal.ordinal)) return error.InvalidSpecificationUnit;
-            break :clarification .{ .clarification = .{ .reason = need.reason, .question = try associated(allocator, available, need.question, .question) } };
+            break :clarification .{ .clarification = .{ .reason = need.reason, .question = try associated(allocator, available, need.question, .question), .record_kind = need.record_kind } };
         },
         .inconclusive => |failure| .{ .inconclusive = failure },
         .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{ .description = try associated(allocator, available, brief.description, .content), .primary_goal = try associated(allocator, available, brief.primary_goal, .content) } } } else error.InvalidSpecificationUnit,
@@ -256,10 +259,14 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
     var inspection: provenance.Inspection = .{};
     const result: CanonicalResponse = switch (proposed) {
         .inconclusive => |failure| return .{ .invalid = .{ .unit = unit, .field = .interpretation, .rule = .interpretation, .observed = null, .blocked = .inconclusive_review, .detail = failure.detail } },
-        .clarification => |need| .{ .clarification = .{
-            .reason = need.reason,
-            .question = inspectAuthored(boundary, allocator, validator, context, need.question, .clarification_question, .question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
-        } },
+        .clarification => |need| need: {
+            if ((unit == .records) != (need.record_kind != null) or (unit == .records and need.record_kind == .entity)) return .{ .invalid = .{ .unit = unit, .field = .clarification_question, .rule = .unit_kind, .observed = null, .blocked = .clarification_question } };
+            break :need .{ .clarification = .{
+                .reason = need.reason,
+                .record_kind = need.record_kind,
+                .question = inspectAuthored(boundary, allocator, validator, context, need.question, .clarification_question, .question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
+            } };
+        },
         .content => |content| blk: {
             if (std.meta.activeTag(unit) != std.meta.activeTag(content.unit())) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
             break :blk .{ .content = switch (content) {

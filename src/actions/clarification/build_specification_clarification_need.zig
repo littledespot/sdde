@@ -13,6 +13,8 @@ pub const Action = struct {
     };
     pub fn execute(_: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_identity.zig").FeatureId, context: @import("../../domain/specification_provenance.zig").Context, checked: g.Checked) projection.Error!refresh.Needs {
         if (checked.response != .clarification or !std.mem.eql(u8, feature.bytes, context.inputs.corpus.feature_id.bytes)) return error.InvalidSpecification;
+        // A records need names the family it is about, and the subject does not use it: the model's pick differs from one run to the next.
+        if (checked.unit == .records and checked.response.clarification.record_kind == null) return error.InvalidSpecification;
         const question = try projection.scalar(allocator, context, checked.response.clarification.question);
         const entries = (try @import("../../domain/specification_provenance.zig").items(context)).entries;
         const citation_ids = checked.response.clarification.question.provenance.citation_ids;

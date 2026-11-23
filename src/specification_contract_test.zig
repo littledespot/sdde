@@ -23,21 +23,28 @@ test "a record family's scope section is the one printed under a level-four head
     }
 }
 
-test "the generation schema defines every record family and no clarification names one" {
+test "the generation schema defines every record family and lets a clarification name each family the records step authors" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
     const bytes = try std.Io.Dir.cwd().readFileAlloc(testing.io, "design/workflows/spec/generation.schema.json", allocator, .unlimited);
     const parsed = try std.json.parseFromSliceLeaky(std.json.Value, allocator, bytes, .{});
     const definitions = parsed.object.get("$defs").?.object;
-    // Every family has its record definition; a family added to the engine without one is refused here.
-    inline for (comptime std.meta.tags(spec.Kind)) |kind| try testing.expect(definitions.contains("record_" ++ @tagName(kind)));
-    // The engine says what a clarification is about, from the sources, and the model names nothing of it (design.md §3.3,
-    // item 31), so the one clarification definition serves every step and carries no record family.
-    try testing.expect(!definitions.contains("record_clarification"));
-    const properties = definitions.get("clarification").?.object.get("properties").?.object;
-    try testing.expect(!properties.contains("record_kind"));
-    try testing.expectEqual(@as(usize, 3), properties.count());
+    const kinds = definitions.get("record_clarification").?.object.get("properties").?.object.get("record_kind").?.object.get("enum").?.array;
+    inline for (comptime std.meta.tags(spec.Kind)) |kind| {
+        const name = @tagName(kind);
+        // Every family has its record definition; a family added to the engine without one is refused here.
+        try testing.expect(definitions.contains("record_" ++ name));
+        // An entity is written by the entities step, so a clarification about a record never names it.
+        var named = false;
+        for (kinds.items) |item| if (std.mem.eql(u8, item.string, name)) {
+            named = true;
+        };
+        try testing.expectEqual(kind.role() != .entity, named);
+    }
+    try testing.expectEqual(@as(usize, std.meta.tags(spec.Kind).len - 1), kinds.items.len);
+    // The other steps' clarification names no family: the field belongs to the records step alone.
+    try testing.expect(!definitions.get("clarification").?.object.get("properties").?.object.contains("record_kind"));
 }
 
 test "closed specification proposal has one content authority and no IDs modality or questions" {

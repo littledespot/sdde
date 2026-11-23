@@ -8,7 +8,7 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
     if (inputs.references) |references| if (!source_inputs.corpus.state_id.eql(references.items.state_id)) return error.InvalidRequiredAuthority;
     if (try a.validate(allocator, inputs, observations, result)) return error.InvalidRequiredAuthority;
     for (result.entries) |entry| if (entry.candidate_defect != null) return error.InvalidRequiredAuthority;
-    var needs: std.ArrayList(refresh.Need) = .empty;
+    var parts: std.ArrayList(Part) = .empty;
     for (result.entries) |entry| {
         const gap: a.Gap = switch (entry.outcome) {
             .clarification_required => |value| value,
@@ -61,18 +61,107 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
             .missing, .stale => {},
             else => return error.InvalidRequiredAuthority,
         };
-        const prepared = @import("clarification_preparation.zig").prepare(allocator, if (questions.items.len != 0) questions.items else try @import("required_authority_description.zig").question(allocator, guidance, entry.requirement), reason, if (inputs.references) |refs| refs.items.entries else &.{}, .{ .citation_ids = citations.items, .source_ids = sources.items }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
-        try needs.append(allocator, .{
+        try parts.append(allocator, .{
             .stage = gap.owner,
             .subject = subject,
             .authority = entry.input_authorities,
-            .question = prepared.question,
-            .why_required = prepared.why_required,
-            .answer_schema = .{ .bounded_business_text = c.max_text_bytes },
+            .question = if (questions.items.len != 0) try questions.toOwnedSlice(allocator) else try @import("required_authority_description.zig").question(allocator, guidance, entry.requirement),
+            .reason = reason,
+            .citations = try citations.toOwnedSlice(allocator),
+            .sources = try sources.toOwnedSlice(allocator),
         });
     }
-    if (needs.items.len == 0) return error.InvalidRequiredAuthority;
-    return .{ .feature = inputs.feature, .original_sources = refresh.originalSources(allocator, source_inputs) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority, .entries = try needs.toOwnedSlice(allocator) };
+    if (parts.items.len == 0) return error.InvalidRequiredAuthority;
+    const entries = try consolidate(allocator, if (inputs.references) |refs| refs.items.entries else &.{}, parts.items);
+    return .{ .feature = inputs.feature, .original_sources = refresh.originalSources(allocator, source_inputs) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority, .entries = entries };
+}
+/// One gap's clarification before the gaps of one subject become one need: what the gap asks, why, which authorities it
+/// binds and which source evidence it cites.
+pub const Part = struct {
+    stage: c.Stage,
+    subject: c.Subject,
+    authority: []const c.Authority,
+    question: []const u8,
+    reason: []const u8,
+    citations: []const @import("reference_reconciliation.zig").CitationId,
+    sources: []const @import("reference_identity.zig").SourceId,
+};
+/// One need for every stage and subject the parts name, in the order each is first named. The refresh opens one form for
+/// a stage and subject and rejects two needs with both the same (§14.14), so several gaps over one subject are one need
+/// here (§12.7's consolidation of the same engine-built subject): a part over other lines or of another stage stays its
+/// own need. The caller's arena owns every allocation, as it does for the refresh.
+pub fn consolidate(allocator: std.mem.Allocator, items: []const @import("reference_reconciliation.zig").Item, parts: []const Part) a.Error![]const refresh.Need {
+    const taken = try allocator.alloc(bool, parts.len);
+    defer allocator.free(taken);
+    @memset(taken, false);
+    var needs: std.ArrayList(refresh.Need) = .empty;
+    for (parts, 0..) |lead, first| {
+        if (taken[first]) continue;
+        var members: std.ArrayList(Part) = .empty;
+        defer members.deinit(allocator);
+        for (parts[first..], first..) |part, at| {
+            if (taken[at] or part.stage != lead.stage or !c.sameSubject(part.subject, lead.subject)) continue;
+            taken[at] = true;
+            try members.append(allocator, part);
+        }
+        try needs.append(allocator, try merged(allocator, items, members.items));
+    }
+    return needs.toOwnedSlice(allocator);
+}
+/// The one need the parts of one stage and subject make: it asks every distinct question and gives every distinct reason,
+/// by exact bytes and in the order named, binds the union of the authorities and cites the union of the evidence. Text
+/// beyond the form's bound, authorities beyond a record's and one canonical record at two revisions fail; nothing is
+/// truncated or dropped.
+fn merged(allocator: std.mem.Allocator, items: []const @import("reference_reconciliation.zig").Item, members: []const Part) a.Error!refresh.Need {
+    const reconciliation = @import("reference_reconciliation.zig");
+    const lead = members[0];
+    var questions: std.ArrayList([]const u8) = .empty;
+    defer questions.deinit(allocator);
+    var reasons: std.ArrayList([]const u8) = .empty;
+    defer reasons.deinit(allocator);
+    var authority: std.ArrayList(c.Authority) = .empty;
+    defer authority.deinit(allocator);
+    var citations: std.ArrayList(reconciliation.CitationId) = .empty;
+    defer citations.deinit(allocator);
+    var sources: std.ArrayList(@import("reference_identity.zig").SourceId) = .empty;
+    defer sources.deinit(allocator);
+    // A form's evidence is its citations when any member cites one, and its sources otherwise. A member that names only
+    // sources keeps its evidence beside a member that cites by expanding to the citations of those sources.
+    var cited = false;
+    for (members) |member| cited = cited or member.citations.len != 0;
+    for (members) |member| {
+        if (!containsText(questions.items, member.question)) try questions.append(allocator, member.question);
+        if (!containsText(reasons.items, member.reason)) try reasons.append(allocator, member.reason);
+        for (member.authority) |held| {
+            for (authority.items) |prior| {
+                if (prior.eql(held)) break;
+                if (prior.sameRecord(held)) return error.InvalidRequiredAuthority;
+            } else try authority.append(allocator, held);
+        }
+        for (member.citations) |citation| if (!reconciliation.contains(reconciliation.CitationId, citations.items, citation)) try citations.append(allocator, citation);
+        for (member.sources) |source| if (!reconciliation.contains(@import("reference_identity.zig").SourceId, sources.items, source)) try sources.append(allocator, source);
+        if (cited and member.citations.len == 0) for (items) |item| {
+            if (!reconciliation.contains(@import("reference_identity.zig").SourceId, member.sources, item.source_id)) continue;
+            for (item.citations) |citation| if (!reconciliation.contains(reconciliation.CitationId, citations.items, citation.id)) try citations.append(allocator, citation.id);
+        };
+    }
+    if (authority.items.len > c.max_record_authorities) return error.InvalidRequiredAuthority;
+    const question = try std.mem.join(allocator, "\n", questions.items);
+    const reason = try std.mem.join(allocator, "\n", reasons.items);
+    if (question.len > c.max_text_bytes or reason.len > c.max_text_bytes) return error.InvalidRequiredAuthority;
+    const prepared = @import("clarification_preparation.zig").prepare(allocator, question, reason, items, .{ .citation_ids = citations.items, .source_ids = sources.items }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
+    return .{
+        .stage = lead.stage,
+        .subject = lead.subject,
+        .authority = try authority.toOwnedSlice(allocator),
+        .question = prepared.question,
+        .why_required = prepared.why_required,
+        .answer_schema = .{ .bounded_business_text = c.max_text_bytes },
+    };
+}
+fn containsText(haystack: []const []const u8, text: []const u8) bool {
+    for (haystack) |held| if (std.mem.eql(u8, held, text)) return true;
+    return false;
 }
 /// What a requirement's clarification is about: its kind and slot, and the unit's kind with the source text the unit
 /// concerns. A unit built from the sources names that text, whole for a source and by the lines its claims cite for a

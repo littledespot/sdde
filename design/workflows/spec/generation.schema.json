@@ -348,7 +348,7 @@
           "$ref": "#/$defs/content_records"
         },
         {
-          "$ref": "#/$defs/clarification"
+          "$ref": "#/$defs/record_clarification"
         },
         {
           "$ref": "#/$defs/inconclusive"
@@ -447,6 +447,39 @@
         "ambiguous",
         "conflicting"
       ]
+    },
+    "record_clarification": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "clarification"
+        },
+        "reason": {
+          "$ref": "#/$defs/clarification_reason"
+        },
+        "question": {
+          "$ref": "#/$defs/authoring_value"
+        },
+        "record_kind": {
+          "enum": [
+            "acceptance_criterion",
+            "user_visible_outcome",
+            "edge_case",
+            "functional_requirement",
+            "business_rule",
+            "assumption",
+            "non_goal",
+            "prohibited_behavior"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "reason",
+        "question",
+        "record_kind"
+      ],
+      "additionalProperties": false
     },
     "repair_record_entity": {
       "type": "object",

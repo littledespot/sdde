@@ -637,8 +637,8 @@ test "an authority subject names the source text its unit concerns, never a gene
     try std.testing.expect(c.sameSubject(first, again));
     const other = try clarifications.subjectFor(allocator, read, held, signal.id(held.signals[2].id.ordinal));
     try std.testing.expect(!c.sameSubject(first, other));
-    // The subject is the lines, so a claim quoted from inside a sentence's line is the same subject as the sentence: two
-    // needs on those lines are one ambiguous subject, which the refresh rejects (§14: one stage and subject, one need).
+    // The subject is the lines, so a claim quoted from inside a sentence's line is the same subject as the sentence: the
+    // builder consolidates gaps over them into one need (§12.7, §14.14), as its own test checks.
     const inside = try clarifications.subjectFor(allocator, read, held, signal.id(held.signals[1].id.ordinal));
     try std.testing.expect(c.sameSubject(first, inside));
     // A unit the evidence does not hold, or evidence that is absent, is no subject.
@@ -748,6 +748,177 @@ test "two gaps owned by one stage become two needs and two open forms with disti
         } else return error.SubjectLost;
         try std.testing.expectEqualStrings(before.id, kept.id);
     }
+}
+
+test "gaps over the same lines become one need and one form, and gaps over other lines stay their own" {
+    const conversion = @import("domain/required_authority_clarifications.zig");
+    const refresh = @import("domain/clarification_refresh.zig");
+    const c = @import("domain/clarification_inputs.zig");
+    const support = @import("domain/reference_support.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const f = @import("test_fixtures/reference_reconciliation.zig");
+    // The first source's sentence and its quoted token are on one line; the second source is another subject.
+    const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{ "Display `Hello, World!`.\n", "Renew a library loan.\n" });
+    defer reference.deinit();
+    const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+    const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
+    const held = support.records(accounted);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, accounted);
+    const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
+    for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
+    var asked: usize = 0;
+    for (evidence) |*entry| {
+        if (entry.requirement.unit != .signal) continue;
+        const signal = for (held.signals) |member| {
+            if (member.id.ordinal == entry.requirement.unit.signal.ordinal) break member;
+        } else return error.ExpectedSignal;
+        entry.finding = .ambiguous;
+        entry.review = .{
+            .question = try std.fmt.allocPrint(allocator, "Which reading of requirement {d} applies?", .{asked}),
+            .detail = try std.fmt.allocPrint(allocator, "The source leaves requirement {d} open.", .{asked}),
+            .provenance = .{ .claim_ids = &.{}, .citation_ids = signal.value.citation_ids, .clarification_response_ids = &.{} },
+            .source_ids = &.{},
+        };
+        asked += 1;
+    }
+    try std.testing.expect(asked >= 3);
+    inputs.evidence = evidence;
+    const needs = try conversion.build(allocator, reference.inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
+    // The signals over one line are one need that asks each question and gives each reason; the third has its own.
+    try std.testing.expectEqual(@as(usize, 2), needs.entries.len);
+    const first_path = reference.inputs.corpus.sources[0].path.bytes;
+    const together = for (needs.entries) |need| {
+        if (std.mem.eql(u8, need.subject.sources[0].path, first_path)) break need;
+    } else return error.ExpectedSharedNeed;
+    const alone = for (needs.entries) |need| {
+        if (!std.mem.eql(u8, need.subject.sources[0].path, first_path)) break need;
+    } else return error.ExpectedOwnNeed;
+    const first_question = std.mem.indexOf(u8, together.question, "Which reading of requirement 0 applies?") orelse return error.QuestionLost;
+    const second_question = std.mem.indexOf(u8, together.question, "Which reading of requirement 1 applies?") orelse return error.QuestionLost;
+    try std.testing.expect(first_question < second_question);
+    try std.testing.expect(std.mem.indexOf(u8, together.why_required, "requirement 0 open") != null and std.mem.indexOf(u8, together.why_required, "requirement 1 open") != null);
+    try std.testing.expect(std.mem.indexOf(u8, alone.question, "requirement 2 applies") != null and std.mem.indexOf(u8, alone.question, "requirement 0") == null);
+    // The authority every gap binds is bound once, not once per gap.
+    try std.testing.expectEqual(inputs.authorities.len, together.authority.len);
+    // The refresh opens one form for each need, and a rerun with the evidence in another order and another wording keeps both.
+    const opened = try refresh.refresh(allocator, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, needs);
+    try std.testing.expectEqual(@as(usize, 2), opened.state.value.?.records.len);
+    const reversed = try allocator.dupe(a.Evidence, evidence);
+    std.mem.reverse(a.Evidence, reversed);
+    for (reversed) |*entry| if (entry.review) |*review| {
+        review.detail = "Another reviewer worded this differently.";
+    };
+    inputs.evidence = reversed;
+    const again = try conversion.build(allocator, reference.inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
+    const reopened = try refresh.refresh(allocator, .{ .state = .{ .value = opened.state.value }, .submissions = &.{}, .protected_forms = &.{} }, again);
+    try std.testing.expectEqual(@as(usize, 2), reopened.state.value.?.records.len);
+    for (opened.state.value.?.records, reopened.state.value.?.records) |before, after| {
+        try std.testing.expect(c.sameSubject(before.subject, after.subject));
+        try std.testing.expectEqualStrings(before.id, after.id);
+    }
+}
+
+test "consolidation merges the parts of one stage and subject, never another subject or stage, and fails rather than truncates" {
+    const conversion = @import("domain/required_authority_clarifications.zig");
+    const c = @import("domain/clarification_inputs.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const lines: []const c.SourceSpan = &.{ .{ .path = "a.md", .lines = .{ .first = 2, .last = 3 } }, .{ .path = "b.md", .lines = null } };
+    const subject: c.Subject = .{ .requirement = "reference_meaning", .unit = "conflict", .slot = "disposition", .sources = lines };
+    const specification = struct {
+        fn authority(ordinal: u32, revision: u32) c.Authority {
+            return .{ .canonical = .{ .kind = .specification, .ordinal = ordinal, .revision = revision } };
+        }
+    };
+    const one: []const c.Authority = &.{ specification.authority(1, 1), specification.authority(2, 1) };
+    const two: []const c.Authority = &.{ specification.authority(2, 1), specification.authority(3, 1) };
+    const parts = [_]conversion.Part{
+        .{ .stage = .spec, .subject = subject, .authority = one, .question = "Which applies?", .reason = "The sources disagree.", .citations = &.{}, .sources = &.{} },
+        .{ .stage = .plan, .subject = subject, .authority = one, .question = "Which applies?", .reason = "The sources disagree.", .citations = &.{}, .sources = &.{} },
+        .{ .stage = .spec, .subject = .{ .requirement = "reference_meaning", .unit = "conflict", .slot = "disposition", .sources = lines[1..] }, .authority = one, .question = "Which other applies?", .reason = "Another conflict.", .citations = &.{}, .sources = &.{} },
+        .{ .stage = .spec, .subject = subject, .authority = two, .question = "Which applies?", .reason = "A second reviewer agrees.", .citations = &.{}, .sources = &.{} },
+        .{ .stage = .spec, .subject = subject, .authority = two, .question = "Which takes precedence?", .reason = "The sources disagree.", .citations = &.{}, .sources = &.{} },
+    };
+    const needs = try conversion.consolidate(allocator, &.{}, &parts);
+    // The stage and the lines name a need: a part of another stage and a part over other lines stay their own.
+    try std.testing.expectEqual(@as(usize, 3), needs.len);
+    try std.testing.expectEqual(.spec, needs[0].stage);
+    try std.testing.expectEqual(.plan, needs[1].stage);
+    try std.testing.expectEqualStrings("Which other applies?", needs[2].question);
+    // The members of one subject are merged in the order named, each distinct question and reason once, each authority once.
+    try std.testing.expectEqualStrings("Which applies?\nWhich takes precedence?", needs[0].question);
+    try std.testing.expectEqualStrings("The sources disagree.\nA second reviewer agrees.", needs[0].why_required);
+    try std.testing.expectEqual(@as(usize, 3), needs[0].authority.len);
+    for ([_]u32{ 1, 2, 3 }, needs[0].authority) |ordinal, held| try std.testing.expectEqual(ordinal, held.canonical.ordinal);
+    // A lone part passes through as it was named.
+    try std.testing.expectEqualStrings("Which applies?", needs[1].question);
+    try std.testing.expectEqual(@as(usize, 2), needs[1].authority.len);
+    // No part is lost or doubled.
+    var count: usize = 0;
+    for (needs) |need| count += if (c.sameSubject(need.subject, subject)) 1 else 0;
+    try std.testing.expectEqual(@as(usize, 2), count);
+    // The one canonical record at two revisions is not one authority, and no merge hides it.
+    var disputed = parts[0];
+    disputed.authority = &.{specification.authority(1, 2)};
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{ parts[0], disputed }));
+    // A merged text beyond the form's bound fails, where either part alone is within it.
+    const long = try allocator.alloc(u8, c.max_text_bytes / 2 + 1);
+    @memset(long, 'q');
+    var wordy = parts[0];
+    wordy.question = long;
+    var other = wordy;
+    other.question = try std.fmt.allocPrint(allocator, "r{s}", .{long[1..]});
+    _ = try conversion.consolidate(allocator, &.{}, &.{wordy});
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{ wordy, other }));
+    var explained = parts[0];
+    explained.reason = long;
+    var elsewhere = explained;
+    elsewhere.reason = other.question;
+    _ = try conversion.consolidate(allocator, &.{}, &.{explained});
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{ explained, elsewhere }));
+    // So do more authorities than a record names.
+    const many = try allocator.alloc(c.Authority, c.max_record_authorities);
+    for (many, 0..) |*held, index| held.* = specification.authority(@intCast(index + 1), 1);
+    var wide = parts[0];
+    wide.authority = many;
+    var extra = parts[0];
+    extra.authority = &.{specification.authority(c.max_record_authorities + 1, 1)};
+    _ = try conversion.consolidate(allocator, &.{}, &.{wide});
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{ wide, extra }));
+}
+
+test "a merged need keeps the evidence of a part that names only sources beside one that cites" {
+    const conversion = @import("domain/required_authority_clarifications.zig");
+    const c = @import("domain/clarification_inputs.zig");
+    const support = @import("domain/reference_support.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const f = @import("test_fixtures/reference_reconciliation.zig");
+    const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{ "Display the catalogue.\n", "Renew a library loan.\n" });
+    defer reference.deinit();
+    const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+    const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
+    const held = support.records(accounted);
+    const cited = held.items.entries[0];
+    const named = held.items.entries[held.items.entries.len - 1];
+    try std.testing.expect(!std.meta.eql(cited.source_id, named.source_id));
+    const subject: c.Subject = .{ .requirement = "reference_meaning", .unit = "signal", .slot = "disposition", .sources = &.{} };
+    const authority: []const c.Authority = &.{.{ .canonical = .{ .kind = .specification, .ordinal = 1, .revision = 1 } }};
+    const citing: conversion.Part = .{ .stage = .spec, .subject = subject, .authority = authority, .question = "Which applies?", .reason = "Open.", .citations = &.{cited.citations[0].id}, .sources = &.{cited.source_id} };
+    const naming: conversion.Part = .{ .stage = .spec, .subject = subject, .authority = authority, .question = "Which applies?", .reason = "Open.", .citations = &.{}, .sources = &.{named.source_id} };
+    const alone = try conversion.consolidate(allocator, held.items.entries, &.{naming});
+    const merged = try conversion.consolidate(allocator, held.items.entries, &.{ citing, naming });
+    try std.testing.expectEqual(@as(usize, 1), merged.len);
+    // The part that names only a source quotes it alone, as it would alone, and the merge keeps that quotation.
+    const heading = try std.fmt.allocPrint(allocator, "Source {d}, line", .{named.source_id.ordinal});
+    try std.testing.expect(std.mem.indexOf(u8, alone[0].question, heading) != null);
+    try std.testing.expect(std.mem.indexOf(u8, merged[0].question, heading) != null);
+    const kept = try std.fmt.allocPrint(allocator, "Source {d}, line", .{cited.source_id.ordinal});
+    try std.testing.expect(std.mem.indexOf(u8, merged[0].question, kept) != null);
 }
 
 test "current contradictory assessments fail while genuine missing decisions retain their questions" {

@@ -525,6 +525,34 @@ test "state validates IDs subjects revisions ledgers schemas and lifecycle bindi
     try std.testing.expect(c.Id.parse("T99") != null);
 }
 
+test "a record names each authority once and no more than the bound, whether the repeat is exact or another revision" {
+    const canonical = struct {
+        fn at(ordinal: u32, revision: u32) c.Authority {
+            return .{ .canonical = .{ .kind = .specification, .ordinal = ordinal, .revision = revision } };
+        }
+    };
+    const reference: c.Authority = .{ .reference = .{ .bytes = "reference-fixture-1" } };
+    try std.testing.expect(canonical.at(1, 1).sameRecord(canonical.at(1, 1)));
+    try std.testing.expect(canonical.at(1, 1).sameRecord(canonical.at(1, 2)));
+    try std.testing.expect(!canonical.at(1, 1).sameRecord(canonical.at(2, 1)));
+    try std.testing.expect(!canonical.at(1, 1).sameRecord(reference));
+    try std.testing.expect(reference.sameRecord(reference));
+    var records = [_]c.Record{fixture.record("S01")};
+    const valid = fixture.state(&records);
+    records[0].authority = &.{ reference, canonical.at(1, 1), canonical.at(2, 1) };
+    _ = try c.validate(.{ .value = valid }, selected);
+    records[0].authority = &.{ canonical.at(1, 1), canonical.at(1, 1) };
+    try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = valid }, selected));
+    records[0].authority = &.{ canonical.at(1, 1), canonical.at(1, 2) };
+    try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = valid }, selected));
+    var many: [c.max_record_authorities + 1]c.Authority = undefined;
+    for (&many, 0..) |*held, index| held.* = canonical.at(@intCast(index + 1), 1);
+    records[0].authority = many[0..c.max_record_authorities];
+    _ = try c.validate(.{ .value = valid }, selected);
+    records[0].authority = &many;
+    try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = valid }, selected));
+}
+
 test "missing modified stale and mismatched recorded closes fail without changing input bytes" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

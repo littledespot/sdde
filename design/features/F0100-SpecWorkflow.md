@@ -1247,10 +1247,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - The model's `kind` selects `brief`, `entities`, `records`, `clarification` or
   `inconclusive`, with that variant's fields directly, without the IR's `content`
   wrapper. No model response carries the story (ADR 0047).
-- A clarification carries a reason and a question, and no record family. The shared
-  question builder derives its subject from its accounted evidence (ADR 0025, the
-  clarification subject): the lines cited by the claims of a records need's bound signal,
-  or the unit for the brief and entities.
+- Record-assignment clarifications also require a closed `record_kind`; narrative
+  and applicability clarifications prohibit it. Native validation checks it, and the
+  shared question builder derives the subject from the sources without reading it
+  (ADR 0025, the clarification subject and Decision 6).
 - Repair uses the same compact codec, and its expected-value guidance uses the response
   wire shape.
 - Under ADR 0006 and §7.1, model business values are plain strings or a closed

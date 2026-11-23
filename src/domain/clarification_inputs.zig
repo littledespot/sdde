@@ -19,6 +19,8 @@ pub const max_text_bytes = 2000;
 pub const schema_version = "clarification-state/v4";
 /// The most source spans one subject names.
 pub const max_subject_spans = 128;
+/// The most authorities one record names.
+pub const max_record_authorities = 64;
 pub const Error = std.mem.Allocator.Error || error{InvalidClarificationInput};
 pub const Stage = enum { spec, plan, tasks };
 pub const Id = struct {
@@ -156,14 +158,14 @@ pub fn validate(parsed: ParsedState, selected: feature.FeatureId) Error!Validate
         counts[stage_index] += 1;
         if (id.ordinal != counts[stage_index] or record.revision == 0 or record.revision > state.revision or
             !validSubject(record.subject) or !validText(record.question, max_text_bytes) or
-            !validText(record.why_required, max_text_bytes) or record.authority.len == 0 or record.authority.len > 64) return error.InvalidClarificationInput;
+            !validText(record.why_required, max_text_bytes) or record.authority.len == 0 or record.authority.len > max_record_authorities) return error.InvalidClarificationInput;
         for (state.records[0..index]) |other| {
             if (Id.parse(other.id).?.stage == id.stage and sameSubject(other.subject, record.subject)) return error.InvalidClarificationInput;
         }
         for (record.authority, 0..) |authority, authority_index| {
             if (!authority.valid()) return error.InvalidClarificationInput;
             for (record.authority[0..authority_index]) |other| {
-                if (other.eql(authority) or (other == .canonical and authority == .canonical and other.canonical.kind == authority.canonical.kind and other.canonical.ordinal == authority.canonical.ordinal)) return error.InvalidClarificationInput;
+                if (other.sameRecord(authority)) return error.InvalidClarificationInput;
             }
         }
         try validateAnswerSchema(record.answer_schema);
