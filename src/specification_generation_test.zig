@@ -7311,12 +7311,16 @@ test "incomplete specifications publish supported business evidence and bound qu
         const ready: @import("domain/clarification_refresh.zig").Ready = .{ .state = validated, .original_sources = original_sources };
         const forms = try @import("domain/clarification_views.zig").render(a, ready, &.{});
         const prepare: @import("actions/specification/prepare_incomplete_specification_output.zig").Action = .{ .normalizer = text.normalizer, .contracts = contracts.port() };
-        const prepared = try prepare.execute(a, directory, paths, .{ .state = null, .forms = &.{} }, inputs, .{ .ready = ready }, forms, prior, value, rendered);
+        const no_evidence = @import("domain/actor_evidence.zig").empty(selected.feature_id);
+        const prepared = try prepare.execute(a, directory, paths, .{ .state = null, .forms = &.{} }, inputs, .{ .ready = ready }, forms, prior, value, rendered, no_evidence, null);
         try std.testing.expectEqual(.needs_user, prepared.terminal_outcome);
-        try std.testing.expectEqual(@as(usize, 5), prepared.files.len);
+        try std.testing.expectEqual(@as(usize, 6), prepared.files.len);
         try std.testing.expectEqual(.specification, prepared.files[0].target.artifact);
+        // The registry comes before the clarification state that joins it, and workflow state stays last.
+        try std.testing.expectEqual(.actor_evidence, prepared.files[prepared.files.len - 3].target.artifact);
+        try std.testing.expectEqual(.clarification_state, prepared.files[prepared.files.len - 2].target.artifact);
         try std.testing.expectEqual(.workflow_state, prepared.files[prepared.files.len - 1].target.artifact);
-        try std.testing.expectError(error.InvalidWorkflowOutput, prepare.execute(a, directory, paths, .{ .state = null, .forms = &.{} }, inputs, .{ .ready = ready }, forms, prior, value, "forged spec"));
+        try std.testing.expectError(error.InvalidWorkflowOutput, prepare.execute(a, directory, paths, .{ .state = null, .forms = &.{} }, inputs, .{ .ready = ready }, forms, prior, value, "forged spec", no_evidence, null));
     }
 }
 

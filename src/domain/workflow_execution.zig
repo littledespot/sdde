@@ -84,6 +84,11 @@ pub const AuthorityReason = enum {
     authorization_denied,
     /// The authorization clock is unavailable.
     authorization_clock_unavailable,
+    /// The runner cannot issue an authentication lease for an `actor_authentication` step: the execution's leases are
+    /// spent, or one is still outstanding.
+    authentication_lease_unavailable,
+    /// An `actor_authentication` step ended `ok` without consuming the lease the runner issued it.
+    authentication_unconsumed,
     /// The repair permit or the request assignment of a retry-bearing step does not match.
     repair_permit_mismatch,
     /// A runner-owned accounting transition cannot be prepared or applied: attempt accounting, provider

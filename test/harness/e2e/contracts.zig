@@ -3,7 +3,7 @@ const evaluator = @import("../contracts.zig");
 const relative = @import("../../../src/domain/relative_directory_path.zig");
 const execution = @import("../../../src/domain/workflow_execution.zig");
 const workflow_retry = @import("../../../src/domain/workflow_retry.zig");
-pub const Artifact = enum { specification, reference_context, clarification_state, workflow_state };
+pub const Artifact = enum { specification, reference_context, clarification_state, workflow_state, actor_evidence };
 pub const ExpectedOutcome = enum { publication, clarification };
 pub const Copy = struct { source: []const u8, destination: []const u8 };
 pub const Case = struct {
@@ -22,7 +22,7 @@ pub const Case = struct {
 
 pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) !Case {
     const value = try evaluator.decode(Case, allocator, bytes);
-    if (!std.mem.eql(u8, value.schema, "spec-e2e-case/v3") or value.id.len == 0 or value.id.len > 128 or
+    if (!std.mem.eql(u8, value.schema, "spec-e2e-case/v4") or value.id.len == 0 or value.id.len > 128 or
         @import("../../../src/domain/workflow.zig").WorkflowId.parse(value.workflow_id) == null or
         value.files.len == 0 or value.files.len > 128 or value.directories.len > 32 or
         value.expected_artifacts.len != @typeInfo(Artifact).@"enum".fields.len) return error.InvalidE2ECase;
@@ -221,8 +221,8 @@ pub const ExchangeEvidence = struct {
 };
 /// The one current report version, which a report builds with by default. A closed-member change advances
 /// it here alone (SPEC01 §2 rule 12); decoding still requires the member in every document.
-pub const report_schema: ReportSchema = .@"spec-e2e-report/v25";
-const ReportSchema = enum { @"spec-e2e-report/v25" };
+pub const report_schema: ReportSchema = .@"spec-e2e-report/v26";
+const ReportSchema = enum { @"spec-e2e-report/v26" };
 pub const Report = struct {
     schema: ReportSchema = report_schema,
     origin: enum { live } = .live,

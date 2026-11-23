@@ -111,7 +111,7 @@ Each item has no code; the owner column names where its contract is.
 | Review, approval and review-decision records | §14.5, §24.5; 13-05:510-518 | No approval type or state |
 | Multi-stage workflow state | §24.1; 13-02:140-151 | One `workflow.json` typed as Spec state, stages `specified` and `spec_clarification_pending` only (`src/domain/specification_state.zig:8`, `:54`) |
 | Plan entry gate | §14.2, §18.1 | `checkClarifications` checks open `S` only and serves Spec (`specification_state.zig:117-124`). The gate also recaptures the reference and routes a change back to Specify (18-plan.md:261-263, :268; 24-workflow-state.md:152) |
-| Plan artifacts and their renderers | §18.5, §23 | Publication targets are Spec's four (`src/domain/workflow_output.zig:6`; `src/domain/workflow_artifact_registry.zig:14`) |
+| Plan artifacts and their renderers | §18.5, §23 | Publication targets are Spec's five (`src/domain/workflow_output.zig:6`; `src/domain/workflow_artifact_registry.zig`) |
 | Research evidence and dependency registries | §18.2 (18-plan.md:151-160); dependencies, 12-model-boundary.md:183-187 | No configuration member (09-configuration.md:57-62) |
 | AST parsing and import resolution | §10.5; 18-plan.md:90 | Parser and tree-sitter libraries are a deferred choice (design.md:1189), and a production dependency needs an accepted ADR (AGENTS.md "Zig implementation expectations"); PD7 |
 | Plan workflow definition, prompts, schemas and contexts | ADR 0003; ADR 0034 "What waits" | `design/workflows/` holds Spec's only, and none is written before the gate (0034:32-36) |
@@ -136,7 +136,7 @@ change, not a Plan-local one:
 | Policy profiles and capabilities | Only `core.specification-output@1` permits `feature-output-write` (`native_workflow_operations.zig:362-365`); a capability derives from a port type through one closed table (`src/application/workflow_operation_binding.zig:73-99`) | A profile and a project-read capability |
 | Clarification progress | Reports `needs_user` for an open record of any stage (`clarification_refresh.zig:54-59`). Spec routes that to its pending publication (`design/workflows/spec.workflow.yaml:820-822`), which collects only open `S` records and rejects an empty set (`src/domain/incomplete_specification.zig:26`, `:46`). So with an open `PNN` and no open `S`, a Spec rerun ends `failed` (`spec.workflow.yaml:935-937`), although only an open `S` stops Spec completing (`specification_state.zig:117-124`) and a reference change returns through Specify (18-plan.md:268) | Progress scoped by stage (§9 Phase 1) |
 | Feature log retention | A run validates and prunes the feature's prior-run segments by the identity recorded in them, and invalid history blocks it (ADR 0026:60-83; 26-security.md:243-245). Every run so far found only Spec's | A Plan run beside Spec's logs, and a Spec rerun beside Plan's; neither is exercised (§9 Phases 2 and 6) |
-| Reserved names | `core.safety@1` reserves Spec's four artifact names (`toolchain_policy_registry.zig:13-16`) | Plan's artifact names |
+| Reserved names | `core.safety@1` reserves Spec's five artifact names (`toolchain_policy_registry.zig`) | Plan's artifact names |
 | Architecture rules | In `src/architecture_test.zig`: stage-module prefixes and their recorded importers (`spec_stage_prefixes`, `generic_importers_of_spec_stages`); the child-bindings list (`child_bindings_files`); a test for each stage action ("the prepare-inputs stage action obeys ADR 0031's stage rules" and its siblings); the toolchain's two readers ("the valid toolchain has one producer and is required only by the two stages that read the toolchain") | Its prefixes and rules; a third toolchain reader (PD7) |
 | Packaged smoke test | Installs and runs the Spec definition (`test/packaging/smoke.zig:324-342`) | The Plan definition |
 | E2E harness and live-step lists | §8 | §8 |
@@ -580,12 +580,12 @@ What each engine-track item means for Plan; its status is its owner's.
 ## 8. Evaluation gap
 
 - **The harness is Spec-only:**
-  - case `spec-e2e-case/v3`, which requires a reference and Spec's four artifacts
+  - case `spec-e2e-case/v4`, which requires a reference and Spec's five artifacts
     (`test/harness/e2e/contracts.zig:6`, `:15`, `:25-28`). The harness passes `--feature` and
     `--reference` (`test/harness/e2e/invoke.zig:61`), its oracle keeps the specification's bytes
     alone (`test/harness/e2e/oracle.zig:46`), and runs are retained under `zig-out/e2e-spec`
     (`test/harness/e2e/cli.zig:5`);
-  - report `spec-e2e-report/v25` (`contracts.zig:224-225`): changing a closed member needs a
+  - report `spec-e2e-report/v26` (`contracts.zig`): changing a closed member needs a
     new version (SPEC01 §2 rule 12), and earlier runs need their own build (SPEC01 §1, Retained
     runs). **Recommended:** a Plan report of its own, which leaves Spec's decoder unchanged;
   - adjudication `spec-adjudication-record/v1`, which yields `spec-adjudication/v3`

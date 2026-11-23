@@ -11,7 +11,9 @@ pub const max_state_bytes = 8 * 1024 * 1024;
 pub const max_state_depth = 7;
 pub const max_responses = 4096;
 pub const max_text_bytes = 2000;
-pub const schema_version = "clarification-state/v2";
+/// v3: every response's `authentication_evidence_id` joins the actor-evidence registry, so a v2 state, whose IDs join none,
+/// is rejected without a reader (ADR 0025).
+pub const schema_version = "clarification-state/v3";
 pub const Error = std.mem.Allocator.Error || error{InvalidClarificationInput};
 pub const Stage = enum { spec, plan, tasks };
 pub const Id = struct {
@@ -223,7 +225,8 @@ pub fn sameSubject(a: Subject, b: Subject) bool {
 fn validSubject(subject: Subject) bool {
     return validToken(subject.requirement) and validToken(subject.unit) and validToken(subject.slot);
 }
-fn validToken(bytes: []const u8) bool {
+/// The one syntax of a stored identifier or actor name: ASCII letters, digits and `-_.@`, at most 128 bytes.
+pub fn validToken(bytes: []const u8) bool {
     if (bytes.len == 0 or bytes.len > 128) return false;
     for (bytes) |byte| if (!(std.ascii.isAlphanumeric(byte) or byte == '-' or byte == '_' or byte == '.' or byte == '@')) return false;
     return true;

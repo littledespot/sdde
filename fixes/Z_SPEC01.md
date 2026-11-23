@@ -3401,6 +3401,66 @@ Content-basis lost source requirement, weakened obligation and contradiction wer
 - **Comparison:** both sets were scored on `2b3fb8de…`; Q26's three sets stay on `69c55877…` until the reference is
   re-scored (SPEC01 §2 rule 5), so a difference between them is orientation only.
 
+## E7 stage 4. Authenticated acceptance, the registry and the valid cancel (23 November 2026)
+
+User: "implement stage 4", on the decisions recorded in SPEC01 §5 E7 (22 and 23 November 2026; stage 3 was folded into
+this stage). A valid closed form or `cancel` is authenticated, recorded as a response with its evidence, and published
+with the run; a `defer` is ignored. Nothing consumes an accepted answer before stage 6, so no published-output defect
+class moves: the change is correct recovery plumbing, which no live run has measured.
+
+- **Chain.** The Spec workflow runs `logging`, `actor-evidence`, `authenticate`, then `extract`. `prepare-actor-evidence`
+  (stage action, `filesystem_read`: capture, parse, validate the registry against the clarification state) feeds a loop of
+  `plan`, `check`, `authenticate-actor`, `advance` over the forms that await an account, one runner-issued lease each,
+  then `accept-clarification-responses` (stage action, `none`: bind each form to its captured bytes, record the evidence in
+  one registry revision, build the responses, check the join) and `check-clarification-cancellation`. `authenticate-actor`
+  is the only action with the new `actor_authentication` side effect and the `actor-authentication` capability, which the
+  registry, the graph validator and the runner require together. The runner owns the lease (`actor_authentication_lease`):
+  issued before the step, consumed by the port before it reads the account, finalized on every path by a `defer`;
+  `authentication_unconsumed` and `authentication_lease_unavailable` are the new authority reasons (06-pipeline-nodes.md).
+  The account is `getpwuid_r(getuid())` through `std.c` on Linux, macOS and the BSDs, else `UnsupportedPlatform`; libc was
+  already linked (`build.zig:42`, `:51`). The registry is `actor-evidence-registry/v1` at `state/actor-evidence.json`, written
+  before the clarification state, with exact-prior preconditions. `clarification-state/v3` requires each response to join
+  its entry; `specification-state/v29`, `spec-e2e-case/v4` (fifth artifact) and `spec-e2e-report/v26`.
+- **Cancel.** `TerminalOutcome` gained `cancelled`. `check-clarification-cancellation` (`.preserve` on `clarification_inputs`)
+  and `prepare-cancelled-clarification-output` (`.preserve` to `prepared_workflow_output`) carry the observation to the
+  publisher, so `permitsPublication` admits it and the run ends `cancelled` before any model call, having published the
+  forms, the registry and the clarification state and no `spec.md`, reference context or workflow state. The publisher's
+  outcomes gained `cancelled`, which forced a `cancelled` edge up every call chain that reaches a publisher (YAML only).
+  The runner accepts a `cancelled` finalizer answer only for a cancelled prepared output, and a cancelled log stop no longer
+  leaves a cancelled output publishable (`feature_log_stop.keepsOutcome`).
+- **Deviations from the record.** `specification-state/v29` adds no member: the recorded "adds the registry revision to the
+  clarification binding" was an inference marked to confirm, and the binding already changes with the responses. The cancel
+  decision is its own pure check action, not an outcome of the accept stage, because ADR 0031 fixes a stage action's
+  association to `independent` and routes no outcome. `actor_observation` is `captured` retention: with the default
+  `current`, the second pass's `advance` found the progress dependent on the invalidated first observation and ended in
+  `iteration_contract` (a two-form scenario exposed it; a one-form scenario had hidden it). A deferred form no longer ends
+  `blocked` (`clarification_refresh.zig`); a cancel not accepted before refresh still does.
+- **Records.** ADR 0025 (status, flow, contract, persistence, tests), 0009, 0041 (reservation moves to v30), design.md
+  invariant 31, contracts 13-02, 13-05 (the chain is seven operations; the per-step actions are internal), 14, 16, 17, 24,
+  25, 28, F0005, F0100, e2e.md and acceptance.md, PLAN01's artifact counts and versions. SPEC01 E7 keeps stages 5 to 8.
+  The retained v25 run directories are unreadable by this build's measures tool (SPEC01 §1, "Retained runs").
+- **Evidence.** The request projection of the final tree is identical to `q26-reverted-after` (`diff -rq`, integration
+  156/156 under `SDDE_REQUEST_PROJECTION`), so rule 10 holds for this stage. `zig build verify` was 146 of 146 steps and
+  2494 of 2494 tests; the scenarios run through the production composition with a fake account (the host's name may be
+  outside the token syntax): accept and rerun, a cancel beside an answered form (two passes, two leases), four typed account
+  failures that end `failed` with nothing published, a run that fails after acceptance and publishes nothing followed by a
+  run that accepts again, and the registry writer's preconditions and order. Rule 10's one live run per case needs the
+  user's `/live-e2e` and was not run.
+- **Contract review.** No blocker; one major (the registry's writer had no negative tests: four cases added at the adapter
+  and `validateShape`, plus a foreign change after the run's own write) and ten minor, fixed: a cancelled log close no longer
+  lets a cancelled output publish; the architecture pins that proved less than they said (a tautology, a file list), now a
+  walk of every layer for the lease table; the two host-dependent scenarios (they skipped) now inject the account through
+  `invoke.Options.authenticator`; a failure test for each accept step and an allocation-failure sweep for both stages;
+  `max_leases` reads `max_forms`; the evidence's UTC check is the feature log's; the adapter's `run_id` is cleared on
+  `deinit`. Not changed: `State.permitsPublication(.cancelled)` and `validateShape` do not tie `cancelled` to a file set, as
+  for `needs_user` (parity); the lease's `table` and `slot` stay public fields. Not verified: the account lookup under glibc
+  NSS, static builds and containers with no passwd entry; a Linux cross-compile stops earlier on `std.c.fstat` in
+  `file_access.zig` and `file_identity.zig`, files this change did not touch.
+- **Reported separately.** Implementation complete: yes. Mechanical checks passed: yes. Semantic benefit: not demonstrated
+  (no consumer before stage 6). Brittleness reduced: the account and the evidence are typed and tested, not measured live.
+  Scope: the development cases have no responses, so no run reaches the chain's accept or cancel path; offline scenarios
+  alone cover them.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a

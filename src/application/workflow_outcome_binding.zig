@@ -245,6 +245,7 @@ pub fn permitsPublication(envelope: *const envelope_module.PipelineEnvelope, pre
     return envelope.outcomes.permitsPublication(.{ .kind = .clarification, .key = binding.prepared_schema.key, .generation = origin.generation, .occurrence = origin.occurrence }, switch (prepared.terminal_outcome) {
         .ok => .ok,
         .needs_user => .needs_user,
+        .cancelled => .cancelled,
     });
 }
 

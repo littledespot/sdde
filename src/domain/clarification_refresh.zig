@@ -62,7 +62,13 @@ pub fn progress(result: Result) Progress {
 /// Missing prior subjects are retained, never inferred resolved from absence.
 pub fn refresh(allocator: std.mem.Allocator, inputs: c.Inputs, needs: Needs) Error!Ready {
     for (inputs.submissions) |submission| {
-        if (submission.origin == .submitted and submission.answer != .none) return error.AuthenticationRequired;
+        if (submission.origin != .submitted) continue;
+        switch (submission.answer) {
+            // A deferred form takes no account and records nothing: its record stays open and its form is rendered afresh
+            // (ADR 0025). Every other submitted answer is accepted, authenticated, before refresh, or it is not accepted.
+            .none, .defer_reason => {},
+            .business_text, .selected_option, .selected_options, .cancel_reason => return error.AuthenticationRequired,
+        }
     }
     const prior = try c.validate(.{ .value = inputs.state.value }, needs.feature);
     try c.validateQuestions(allocator, prior, needs.original_sources);

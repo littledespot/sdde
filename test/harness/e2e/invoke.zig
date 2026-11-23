@@ -22,15 +22,18 @@ pub const Options = struct {
     /// the engine holds. Set to the runner's slot before the first step, which is empty until the run prepares
     /// it, and dangling once `run` returns: read it only while the run is in flight.
     runner_view: ?*?*const ?@import("../../../src/application/workflow_pipeline_runner.zig").Runner = null,
+    /// Only offline tests may replace the account the engine authenticates; the live CLI reads the operating-system account.
+    authenticator: ?@import("../../../src/ports/actor_authentication.zig").Port = null,
 };
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, generation_keys: @import("../environment.zig").GenerationKeys, store: @import("../evidence.zig").Store, report: *c.Report, options: Options) !?[]const u8 {
-    if (!@import("builtin").is_test and (options.transport != null or options.runner_view != null)) return error.TestTransportForbidden;
+    if (!@import("builtin").is_test and (options.transport != null or options.runner_view != null or options.authenticator != null)) return error.TestTransportForbidden;
     var interrupt = root.Interrupt.install();
     defer interrupt.restore();
     var runtime: root.Runtime = undefined;
     runtime.init(io, allocator, project, interrupt.runtime());
     defer runtime.deinit();
+    if (options.authenticator) |account| runtime.native.ops.authenticate_actor.action.port = account;
     switch (runtime.boot) {
         .ready => {},
         .failed => |reason| {

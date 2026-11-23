@@ -54,6 +54,10 @@ pub fn Writer(comptime replace_file: @TypeOf(files.replace)) type {
                 const current = reader.captureWorkflowStateBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
                 if (!output.sameBytes(prepared.prior_workflow_state.captured, current)) return error.OutputChanged;
             }
+            if (prepared.prior_actor_evidence == .captured) {
+                const current = reader.captureActorEvidenceBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
+                if (!output.sameBytes(prepared.prior_actor_evidence.captured, current)) return error.OutputChanged;
+            }
             const specs = (directories.openObserved(self.io, self.project_root, binding.paths.specs, binding.specs_observation) catch |err| return outputChanged(err)) orelse
                 (directories.ensure(self.io, self.project_root, binding.paths.specs) catch |err| return outputWriteFailed(err));
             defer specs.close(self.io);
@@ -64,6 +68,8 @@ pub fn Writer(comptime replace_file: @TypeOf(files.replace)) type {
             defer feature.close(self.io);
             observed.observation = .{ .directory = directories.inspectReadable(self.io, feature) catch |err| return outputWriteFailed(err) };
             var expected = prepared.prior;
+            // The registry bytes the output expects on disk: the prior ones until the registry is written, then its own.
+            var expected_registry: ?[]const u8 = if (prepared.prior_actor_evidence == .captured) prepared.prior_actor_evidence.captured else null;
             for (prepared.files) |file| {
                 // Whole controlled-input set, not just the file being replaced.
                 const current = reader.captureBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
@@ -80,6 +86,10 @@ pub fn Writer(comptime replace_file: @TypeOf(files.replace)) type {
                     const current_state = reader.captureWorkflowStateBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
                     if (!output.sameBytes(prepared.prior_workflow_state.captured, current_state)) return error.OutputChanged;
                 }
+                if (prepared.prior_actor_evidence == .captured) {
+                    const current_registry = reader.captureActorEvidenceBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
+                    if (!output.sameBytes(expected_registry, current_registry)) return error.OutputChanged;
+                }
                 var condition: files.Expected = .any;
                 if (file.target == .form) {
                     condition = .absent;
@@ -94,11 +104,15 @@ pub fn Writer(comptime replace_file: @TypeOf(files.replace)) type {
                     condition = if (fresh.state) |bytes| .{ .exact = bytes } else .absent;
                 } else if (file.target.artifact == .workflow_state) {
                     condition = if (prepared.prior_workflow_state.captured) |bytes| .{ .exact = bytes } else .absent;
+                } else if (file.target.artifact == .actor_evidence) {
+                    condition = if (prepared.prior_actor_evidence.captured) |bytes| .{ .exact = bytes } else .absent;
                 }
                 replace_file(self.io, a, parent, std.fs.path.basename(path.root_relative), condition, file.bytes) catch |err| return outputWriteFailed(err);
                 switch (file.target) {
-                    .artifact => |kind| if (kind == .clarification_state) {
-                        expected.state = file.bytes;
+                    .artifact => |kind| switch (kind) {
+                        .clarification_state => expected.state = file.bytes,
+                        .actor_evidence => expected_registry = file.bytes,
+                        .specification, .reference_context, .workflow_state => {},
                     },
                     .form => |id| {
                         var next: std.ArrayList(c.FormCapture) = .empty;

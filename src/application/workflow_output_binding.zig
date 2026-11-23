@@ -11,7 +11,7 @@ pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ prepared_s
 pub const Publish = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .prepared_workflow_output, .evidence = .prepared_workflow_output, .result = .published_workflow_output } };
     pub const Action = @import("../actions/workflow/publish_workflow_output.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .needs_user, .failed };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .needs_user, .cancelled, .failed };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -22,6 +22,7 @@ pub const Publish = struct {
         candidate.outcome = switch (prepared.terminal_outcome) {
             .ok => .ok,
             .needs_user => .needs_user,
+            .cancelled => .cancelled,
         };
         self.action.execute(self.allocator, prepared.*) catch |operation_error| return operation_error;
         return candidate;

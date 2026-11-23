@@ -86,7 +86,7 @@ the Specify workflow.
   6. `inspectReference`: observes the selected reference directory through the read-only
      inspector. Rejects `ReferenceDirectoryUnavailable`, and `Cancelled` for a cancelled call.
   7. `resolvePaths`: derives every registered artifact path for the feature (specification,
-     reference context, clarification forms and state, workflow state, event and prompt logs)
+     reference context, clarification forms and state, actor-evidence registry, workflow state, event and prompt logs)
      from the configured roots; no model or user supplies a path. Rejects
      `InvalidFeatureArtifactPath` when roots are unbound or the selector no longer revalidates.
   8. `captureState`: reads the feature's canonical workflow-state file through the state-source

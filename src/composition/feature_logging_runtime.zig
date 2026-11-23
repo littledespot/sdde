@@ -24,6 +24,9 @@ pub const Assembly = struct {
     logs: *@import("../application/log_service.zig").LogService,
     inputs: *@import("../adapters/filesystem/feature_input_source.zig").Adapter,
     outputs: *@import("../adapters/filesystem/workflow_output.zig").Adapter,
+    /// The account adapter, which learns the run's identity here: the log owns it, and evidence records the run it was
+    /// observed in (ADR 0025).
+    accounts: ?*@import("../adapters/system/os_account.zig").Adapter = null,
     binding_owner: ?*binding.BindingOwner = null,
     directory_owner: ?*active.Owner = null,
     artifact_owner: ?*artifacts.Owner = null,
@@ -52,6 +55,7 @@ pub const Assembly = struct {
             else => self.fail(.LOG_SINK_FAILURE),
         };
         const selected_binding = binding.binding(self.binding_owner.?);
+        if (self.accounts) |accounts| accounts.run_id = selected_binding.runId().bytes;
         var layout: @import("../adapters/filesystem/feature_log_layout.zig").Adapter = .{ .io = self.io, .project_root = self.project };
         self.directory_owner = layout.port().activate(self.allocator, self.roots.featureOutputWrite(), prior, selected_binding) catch |err| return switch (err) {
             error.Cancelled => .cancelled,
@@ -225,7 +229,11 @@ pub const Assembly = struct {
                 const events: @import("../application/workflow_event_capture.zig").Capture = .{ .barrier = self.logs.barrier(), .shortcode = self.shortcode.? };
                 const event_failure = switch (reason) {
                     .terminal => events.terminal(outcome),
-                    .publication => |prepared| events.emit(.{ .publication_prepared = .{ .outcome = if (prepared == .needs_user) .needs_user else .completed } }),
+                    .publication => |prepared| events.emit(.{ .publication_prepared = .{ .outcome = switch (prepared) {
+                        .ok => .completed,
+                        .needs_user => .needs_user,
+                        .cancelled => .cancelled,
+                    } } }),
                 };
                 if (event_failure) |stop| self.stopped(stop);
                 switch (self.logs.finalizeActive(runtime.runner(self.runtime_owner.?), self.shortcode.?)) {
@@ -244,7 +252,7 @@ pub const Assembly = struct {
                 return .{ .execution_rejected = .{ .model_capture = detail } };
             }
             // A run that is already cancelled stays the outcome it was; the log's own cancellation adds nothing.
-            if (stop == .cancelled and outcome.executionStatus() == .cancelled) return outcome;
+            if (@import("../domain/feature_log_stop.zig").keepsOutcome(stop, reason == .publication, outcome.executionStatus() == .cancelled)) return outcome;
             const terminal = execution.Rejection.logStop(stop);
             // An outcome that is no rejection is replaced with no first cause. Finalizing again keeps what
             // the first failure replaced, as it keeps the failure itself; the runner alone decides which
@@ -265,6 +273,8 @@ pub const Assembly = struct {
         std.debug.assert(self.logs.lifecycle.active == null);
         self.inputs.active_feature = null;
         self.outputs.active_feature = null;
+        // The account adapter borrowed the run's identity from the binding owner freed below.
+        if (self.accounts) |accounts| accounts.run_id = null;
         if (self.runtime_owner) |owner| runtime.deinit(owner);
         if (self.artifact_owner) |owner| artifacts.deinitOwner(owner);
         if (self.directory_owner) |owner| active.deinitOwner(owner);

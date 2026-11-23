@@ -67,7 +67,16 @@ steps:
       failed: end.failed
   logging:
     use: activate-feature-logging
-    on: {ok: extract, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+    on: {ok: actor-evidence, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+  actor-evidence:
+    use: prepare-actor-evidence
+    on: {ok: authenticate, failed: end.failed}
+  authenticate:
+    call: authenticate-clarifications
+    on: {ok: extract, cancelled: cancellation, failed: end.failed}
+  cancellation:
+    call: publish-cancellation
+    on: {ok: end.ok, needs-user: end.needs-user, cancelled: end.cancelled, failed: end.failed}
   extract:
     call: extract-references
     on:
@@ -185,6 +194,7 @@ steps:
       ok: end.ok
       needs-user: end.needs-user
       blocked: end.blocked
+      cancelled: end.cancelled
       failed: end.failed
   source-gaps:
     call: authority-clarifications
@@ -192,6 +202,7 @@ steps:
       ok: end.ok
       needs-user: end.needs-user
       blocked: end.blocked
+      cancelled: end.cancelled
       failed: end.failed
   generation-gaps:
     call: generation-clarifications
@@ -199,8 +210,39 @@ steps:
       ok: end.ok
       needs-user: end.needs-user
       blocked: end.blocked
+      cancelled: end.cancelled
       failed: end.failed
 subgraphs:
+  authenticate-clarifications:
+    start: plan
+    steps:
+      plan:
+        use: plan-clarification-authentication
+        on: {ok: progress, failed: end.failed}
+      progress:
+        use: check-clarification-authentication
+        on: {ok: accept, more: observe, failed: end.failed}
+      observe:
+        use: authenticate-actor
+        on: {ok: advance, failed: end.failed}
+      advance:
+        use: advance-clarification-authentication
+        on: {ok: progress, failed: end.failed}
+      accept:
+        use: accept-clarification-responses
+        on: {ok: cancel-check, failed: end.failed}
+      cancel-check:
+        use: check-clarification-cancellation
+        on: {ok: end.ok, cancelled: end.cancelled, failed: end.failed}
+  publish-cancellation:
+    start: prepare
+    steps:
+      prepare:
+        use: prepare-cancelled-clarification-output
+        on: {ok: publish, failed: end.failed}
+      publish:
+        use: publish-workflow-output
+        on: {ok: end.ok, needs-user: end.needs-user, cancelled: end.cancelled, failed: end.failed}
   extract-references:
     start: initialize-requests
     steps:
@@ -837,10 +879,10 @@ subgraphs:
         on: {ok: publish-specification, failed: end.failed}
       publish-specification:
         use: publish-workflow-output
-        on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
+        on: {ok: end.ok, needs-user: end.needs-user, cancelled: end.cancelled, failed: end.failed}
       publish-pending-clarifications:
         call: publish-clarification-output
-        on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
+        on: {ok: end.ok, needs-user: end.needs-user, cancelled: end.cancelled, failed: end.failed}
   repair-source-extraction:
     start: input
     steps:
@@ -922,7 +964,7 @@ subgraphs:
         on: {ok: output, needs-user: output, blocked: end.blocked}
       output:
         call: publish-clarification-output
-        on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
+        on: {ok: end.ok, needs-user: end.needs-user, cancelled: end.cancelled, failed: end.failed}
   publish-clarification-output:
     start: render
     steps:
@@ -943,7 +985,7 @@ subgraphs:
         on: {ok: publish, failed: end.failed}
       publish:
         use: publish-workflow-output
-        on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
+        on: {ok: end.ok, needs-user: end.needs-user, cancelled: end.cancelled, failed: end.failed}
   authority-clarifications:
     start: needs
     steps:
@@ -955,7 +997,7 @@ subgraphs:
         on: {ok: output, blocked: end.blocked, failed: end.failed}
       output:
         call: clarification-output
-        on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
+        on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, cancelled: end.cancelled, failed: end.failed}
   generation-clarifications:
     start: build-clarification
     steps:
@@ -967,4 +1009,4 @@ subgraphs:
         on: {ok: publish-clarifications, blocked: end.blocked, failed: end.failed}
       publish-clarifications:
         call: clarification-output
-        on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
+        on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, cancelled: end.cancelled, failed: end.failed}

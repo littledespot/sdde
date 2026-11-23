@@ -110,6 +110,10 @@ pub const DataKey = enum {
     required_authority_observations,
     required_authority_result,
     required_authority_gate,
+    raw_actor_evidence,
+    actor_evidence_registry,
+    authentication_progress,
+    actor_observation,
 };
 
 pub const SideEffect = enum {
@@ -118,6 +122,9 @@ pub const SideEffect = enum {
     filesystem_write,
     workflow_publication,
     model_call,
+    /// Observes the invoking operating-system account through the authentication port, once, under a runner-issued
+    /// lease (ADR 0025).
+    actor_authentication,
 };
 
 pub const RunnerAccountingCapability = enum {

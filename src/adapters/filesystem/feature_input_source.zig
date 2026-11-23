@@ -23,6 +23,21 @@ pub const Adapter = struct {
     pub fn workflowStateCapturer(self: *Adapter) @import("../../ports/workflow_state_source.zig").Capturer {
         return .{ .context = self, .capture_fn = captureWorkflowState };
     }
+    /// The actor-evidence registry's bytes, or none when the feature has published none. It is captured like the workflow
+    /// state: one bounded state file beside the clarification state, read-only.
+    pub fn actorEvidenceCapturer(self: *Adapter) @import("../../ports/workflow_state_source.zig").Capturer {
+        return .{ .context = self, .capture_fn = captureActorEvidence };
+    }
+    fn captureActorEvidence(context: *anyopaque, capability: *const roots.FeatureInputReadCapability, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!?[]const u8 {
+        const self: *Adapter = @ptrCast(@alignCast(context));
+        return self.captureActorEvidenceBound(roots.bindFeatureInputAdapter(capability), allocator, observed, paths);
+    }
+    /// Adapter-local reuse for write-time rechecks, like `captureWorkflowStateBound`.
+    pub fn captureActorEvidenceBound(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!?[]const u8 {
+        const effective = try self.bindActive(binding, observed);
+        try validateBinding(effective.binding, allocator, effective.directory, paths);
+        return self.captureState(effective.binding, allocator, paths.get(.actor_evidence), @import("../../domain/actor_evidence.zig").max_bytes);
+    }
     fn captureWorkflowState(context: *anyopaque, capability: *const roots.FeatureInputReadCapability, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!?[]const u8 {
         const self: *Adapter = @ptrCast(@alignCast(context));
         return self.captureWorkflowStateBound(roots.bindFeatureInputAdapter(capability), allocator, observed, paths);

@@ -2,6 +2,9 @@
 //! No dynamic error names or payloads cross the runner boundary.
 const std = @import("std");
 pub const ProviderAuthorizationLease = error{ AuthorizationDenied, AuthorizationExpired, ClockUnavailable, Cancelled };
+/// An authentication that did not observe an account: a lease the runner did not issue or that was used before, an
+/// account or run identity the adapter cannot read, an operating system it does not support, or the trusted clock.
+pub const ActorAuthentication = std.mem.Allocator.Error || error{ AuthenticationDenied, AccountUnavailable, UnsupportedPlatform, ClockUnavailable, Cancelled };
 pub const FeatureInputSource = std.mem.Allocator.Error || error{ FeatureInputUnavailable, Cancelled };
 pub const ReferenceStateIdentity = error{ IdentityUnavailable, Cancelled };
 pub const ReferenceCorpusSource = std.mem.Allocator.Error || error{ ReferenceUnavailable, ReferenceInventoryChanged, ReferenceLimitExceeded, Cancelled };
@@ -25,6 +28,7 @@ pub const FeatureLogSink = error{
 };
 pub const LlmProviderInterface = std.mem.Allocator.Error || error{ Cancelled, ModelLoggingBlocked };
 pub const PortError = ProviderAuthorizationLease ||
+    ActorAuthentication ||
     FeatureInputSource ||
     ReferenceStateIdentity ||
     ReferenceCorpusSource ||
@@ -69,6 +73,7 @@ pub const Error = @import("pipeline_data.zig").ValueError ||
     @import("feature_directory.zig").Error ||
     @import("reference_selector.zig").Error ||
     @import("clarification_refresh.zig").Error ||
+    @import("actor_evidence.zig").Error ||
     @import("json_composition_runtime.zig").Error ||
     @import("model_request_handoff.zig").Error ||
     @import("model_attempt_accounting.zig").Error ||

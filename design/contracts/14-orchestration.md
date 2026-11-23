@@ -232,14 +232,16 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
 - On a new invocation, capture controlled submissions before preparing replacement forms.
 - Validate revisions, authentication and current applicability; §23.2 protects user-closed
   bytes.
-- Accepted answers and validated resolutions persist under the clarification exception, then the
-  owning workflow regenerates under
+- Accepted answers stay in memory and persist only with the run's own publication
+  ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)); validated resolutions
+  persist under the clarification exception. The owning workflow regenerates under
   [§25.2](25-publication.md#252-abandonment-and-reruns).
-- A deferred/open need retains its subject ID and receives a complete replacement form; a
-  consumed defer is recorded once, advances the revision and yields a blank open answer region.
+- A deferred/open need retains its subject ID and receives a complete replacement form with a blank
+  open answer region; a deferral takes no authentication and records nothing.
 - Old submissions become stale.
 - Resolved/cancelled forms expose no submittable region.
-- A valid cancel remains `cancelled`; an unresolved need ends `needs_user`.
+- A valid cancel ends the run `cancelled` and publishes the clarification state and its actor evidence
+  only; an unresolved need ends `needs_user`.
 
 The orchestrator branches only on typed child results; §23.2 owns write-time
 protection and §25 owns publication failure.

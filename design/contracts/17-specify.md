@@ -498,9 +498,13 @@ select a repair producer or turn candidate assertions into source requirements.
   accepts them. If any closed form is invalid, the run accepts none of them, makes no model
   call and reports a typed reason for each failing form: its handle and the rule it broke,
   printed with the outcome. The run ends `blocked`.
-- An empty close is invalid; `defer` remains open; `cancel` cancels the run.
-- Path-shaped answer text is scanned into the inert passive registry under the assigned response
-  ID, and that complete clarification response is published before refresh.
+- An empty close is invalid; `defer` remains open, takes no authentication and records nothing; a
+  `cancel` with its reason is accepted like a closed form and ends the run `cancelled` before any
+  model call.
+- Path-shaped answer text is scanned into the inert passive registry under the assigned response ID.
+  Accepted responses stay in memory through refresh and generation and are published only with the
+  run's own publication, so a run that fails, is blocked or is interrupted publishes none, and the
+  next run accepts the same closed forms again.
 
 - The engine then refreshes the selected reference directory and tests still-open `SNN` records
   against the new claims/citations.

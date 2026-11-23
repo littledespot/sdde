@@ -194,6 +194,8 @@ member's exact cases.
 | `authorization_evidence` | authorization | authorization evidence is unreadable, carries no bound deadline or disagrees with the deadline it bound |
 | `authorization_denied` | authorization | the authorization's preparation failed, or its lease is foreign, mismatched, stale or already consumed (a cancelled preparation is `cancelled`) |
 | `authorization_clock_unavailable` | authorization | the authorization clock is unavailable |
+| `authentication_lease_unavailable` | authentication | the runner cannot issue an authentication lease for an `actor_authentication` step: one is still outstanding or the execution's 297 are spent |
+| `authentication_unconsumed` | authentication | an `actor_authentication` step ended `ok` without consuming the lease the runner issued it |
 | `repair_permit_mismatch` | repair and retry | a retry-bearing step's repair permit or request assignment does not match |
 | `repair_transition` | repair and retry | a repair transition is missing, forbidden by the step's repair role or unchanged beyond its limit |
 | `retry_admission` | repair and retry | a retry allowance cannot be admitted or its exhaustion described |

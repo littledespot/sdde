@@ -40,6 +40,15 @@ pub fn binding(value: c.State, item: c.Record) forms.Binding {
     return .{ .state_ordinal = value.state_ordinal, .state_revision = value.revision, .record_revision = item.revision, .status = item.status };
 }
 
+/// The registry that holds the evidence of `closed`'s recorded response (`AE-1`): the account and time it names.
+pub fn registry(allocator: std.mem.Allocator) !@import("../domain/actor_evidence.zig").Registry {
+    const evidence = @import("../domain/actor_evidence.zig");
+    var time: [20]u8 = undefined;
+    @memcpy(&time, "2026-09-05T00:00:00Z");
+    const recorded = try evidence.record(allocator, evidence.empty(@import("../domain/feature_identity.zig").FeatureId.parse("Chosen/Café").?), &.{.{ .provider = .os_account, .actor_id = "fixture-user", .assurance = .invoking_account, .run_id = "RUN-1", .occurred_at = time }});
+    return recorded.registry;
+}
+
 /// Caller arena owns this fixture and its captured serialization.
 pub fn closed(allocator: std.mem.Allocator, id: []const u8, recorded: bool) !c.Captures {
     const records = try allocator.alloc(c.Record, 1);
@@ -57,7 +66,7 @@ pub fn closed(allocator: std.mem.Allocator, id: []const u8, recorded: bool) !c.C
             .submitted_form_bytes = bytes,
             .answer = .{ .business_text = "Approved Café theme." },
             .actor_id = "fixture-user",
-            .authentication_evidence_id = "fixture-auth-1",
+            .authentication_evidence_id = "AE-1",
             .answered_at = "2026-09-05T00:00:00Z",
         };
         records[0].status = .resolved_by_user;

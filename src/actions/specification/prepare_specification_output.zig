@@ -10,11 +10,11 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "prepare-specification-output",
         .kind = .action,
-        .requires = &.{ .activated_feature_directory, .feature_artifact_paths, .raw_clarification_inputs, .clarification_inputs, .refreshed_clarification_state, .clarification_views, .prior_specification_state, .specification_publication_state, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .rendered_specification, .validated_specification_rendering, .rendered_reference_context },
+        .requires = &.{ .activated_feature_directory, .feature_artifact_paths, .raw_clarification_inputs, .clarification_inputs, .raw_actor_evidence, .actor_evidence_registry, .refreshed_clarification_state, .clarification_views, .prior_specification_state, .specification_publication_state, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .rendered_specification, .validated_specification_rendering, .rendered_reference_context },
         .produces = &.{.prepared_workflow_output},
         .side_effect = .none,
     };
-    pub fn execute(self: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_directory.zig").Directory, paths: @import("../../domain/workflow_artifact_registry.zig").FeaturePaths, captured: c.Captures, inputs: c.Inputs, clarifications: @import("../../domain/clarification_refresh.zig").Result, views: []const @import("../../domain/clarification_views.zig").View, prior: state.Prior, value: state.State, context: @import("../../domain/specification_provenance.zig").Context, specification: []const u8, reference_context: []const u8) !output.Prepared {
+    pub fn execute(self: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_directory.zig").Directory, paths: @import("../../domain/workflow_artifact_registry.zig").FeaturePaths, captured: c.Captures, inputs: c.Inputs, clarifications: @import("../../domain/clarification_refresh.zig").Result, views: []const @import("../../domain/clarification_views.zig").View, prior: state.Prior, value: state.State, context: @import("../../domain/specification_provenance.zig").Context, specification: []const u8, reference_context: []const u8, registry: @import("../../domain/actor_evidence.zig").Registry, prior_registry: ?[]const u8) !output.Prepared {
         if (clarifications != .ready) return error.InvalidWorkflowOutput;
         try state.validate(allocator, value, feature.selector.feature_id, self.contracts, self.normalizer);
         const resolved = try state.checkClarifications(try clarifications.ready.validateFor(allocator, context.inputs));
@@ -25,7 +25,7 @@ pub const Action = struct {
         const rendered = try codec.render(allocator, document);
         if (!std.mem.eql(u8, specification, rendered) or
             !std.mem.eql(u8, reference_context, try @import("../../domain/reference_context.zig").render(allocator, value.reference, try projection.traceSnapshot(allocator, value.reference, value.content)))) return error.InvalidWorkflowOutput;
-        var prepared = try @import("../../domain/clarification_output.zig").prepare(allocator, feature, paths, captured, inputs, clarifications, views);
+        var prepared = try @import("../../domain/clarification_output.zig").prepare(allocator, feature, paths, captured, inputs, clarifications, views, registry, prior_registry);
         if (prepared.terminal_outcome != .ok) return error.InvalidWorkflowOutput;
         const canonical = try @import("../../domain/canonical_json.zig").encode(state.State, allocator, value);
         _ = try state.parse(allocator, canonical, feature.selector.feature_id, self.contracts, self.normalizer);

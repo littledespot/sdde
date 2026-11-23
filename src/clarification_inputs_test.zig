@@ -98,6 +98,39 @@ test "clarification refresh preserves closure history and never authenticates a 
     }
 }
 
+test "refresh leaves a deferred form open and still refuses any other submitted answer" {
+    const refresh = @import("domain/clarification_refresh.zig");
+    const views = @import("domain/clarification_views.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "S01", "P01", "T01" }) |name| {
+        const record = fixture.record(name);
+        const stored = fixture.state(&.{record});
+        const needs: refresh.Needs = .{ .feature = selected, .original_sources = &.{}, .entries = &.{} };
+        const form = struct {
+            fn bytes(allocator: std.mem.Allocator, item: c.Record, value: c.State, status: c.RequestedStatus, answer: []const u8) ![]const u8 {
+                return forms.render(allocator, item, fixture.binding(value, item), status, answer);
+            }
+        };
+        const state_bytes = try std.json.Stringify.valueAlloc(a, stored, .{});
+        // A deferral is submitted by the open form, takes no account, and leaves the record open for the next run's form.
+        const deferred = try load(a, .{ .state = state_bytes, .forms = &.{.{ .id = c.Id.parse(name).?, .bytes = try form.bytes(a, record, stored, .open, "defer: not yet decided") }} });
+        try std.testing.expectEqual(.defer_reason, std.meta.activeTag(deferred.submissions[0].answer));
+        const ready = try refresh.refresh(a, deferred, needs);
+        try std.testing.expectEqual(c.EngineStatus.open, ready.state.value.?.records[0].status);
+        try std.testing.expectEqual(@as(usize, 0), ready.state.value.?.responses.len);
+        try std.testing.expectEqual(refresh.Progress.needs_user, refresh.progress(.{ .ready = ready }));
+        const rendered = try views.render(a, ready, deferred.protected_forms);
+        try std.testing.expect(rendered[0].content == .replace);
+        // A closed answer and a cancel are each refused until they are accepted: only acceptance turns them into responses.
+        const closed = try load(a, .{ .state = state_bytes, .forms = &.{.{ .id = c.Id.parse(name).?, .bytes = try form.bytes(a, record, stored, .closed, "Approved Café theme.") }} });
+        try std.testing.expectError(error.AuthenticationRequired, refresh.refresh(a, closed, needs));
+        const cancelled = try load(a, .{ .state = state_bytes, .forms = &.{.{ .id = c.Id.parse(name).?, .bytes = try form.bytes(a, record, stored, .cancel, "cancel: no longer needed") }} });
+        try std.testing.expectError(error.AuthenticationRequired, refresh.refresh(a, cancelled, needs));
+    }
+}
+
 test "stored and untouched clarification questions revalidate against current original sources" {
     const refresh = @import("domain/clarification_refresh.zig");
     const views = @import("domain/clarification_views.zig");
@@ -224,18 +257,63 @@ test "clarification publication selects its terminal outcome before any write" {
     for ([_][]const u8{ "S01", "P01", "T01" }) |id| {
         const record = fixture.record(id);
         const state = try refresh.refresh(a, empty_inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{.{ .stage = c.Id.parse(id).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema }} });
-        const prepared = try output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = state }, try views.render(a, state, &.{}));
+        const none = @import("domain/actor_evidence.zig").empty(selected);
+        const prepared = try output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = state }, try views.render(a, state, &.{}), none, null);
         try std.testing.expectEqual(.needs_user, prepared.terminal_outcome);
         const closed_capture = try fixture.closed(a, id, true);
         const closed_inputs = try load(a, closed_capture);
         const resolved = try refresh.refresh(a, closed_inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{} });
-        const completed = try output.prepare(a, directory, paths, closed_capture, closed_inputs, .{ .ready = resolved }, try views.render(a, resolved, closed_inputs.protected_forms));
+        const completed = try output.prepare(a, directory, paths, closed_capture, closed_inputs, .{ .ready = resolved }, try views.render(a, resolved, closed_inputs.protected_forms), try fixture.registry(a), null);
         try std.testing.expectEqual(.ok, completed.terminal_outcome);
+        // The registry is written before the state that joins it, and a response whose evidence is missing publishes nothing.
+        try std.testing.expect(completed.files[completed.files.len - 2].target.artifact == .actor_evidence);
+        try std.testing.expect(completed.files[completed.files.len - 1].target.artifact == .clarification_state);
+        try std.testing.expectError(error.InvalidActorEvidence, output.prepare(a, directory, paths, closed_capture, closed_inputs, .{ .ready = resolved }, try views.render(a, resolved, closed_inputs.protected_forms), none, null));
     }
+    const none = @import("domain/actor_evidence.zig").empty(selected);
     inline for (.{ .authentication_required, .protected_clarification, .limit_exceeded }) |reason| {
-        try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .blocked = reason }, &.{}));
+        try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .blocked = reason }, &.{}, none, null));
     }
-    try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = .{ .state = .{ .value = null }, .original_sources = &.{} } }, &.{}));
+    try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = .{ .state = .{ .value = null }, .original_sources = &.{} } }, &.{}, none, null));
+}
+
+test "a cancelled run publishes the forms, the evidence and the state, and only for a cancel it accepted" {
+    const refresh = @import("domain/clarification_refresh.zig");
+    const output = @import("domain/clarification_output.zig");
+    const evidence = @import("domain/actor_evidence.zig");
+    const acceptance = @import("domain/clarification_acceptance.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const roots: artifacts.FeatureRoots = .{ .specs = "requirements", .archive = "archive", .workflows = "engine" };
+    const selector = try feature.validate(a, .{ .bytes = selected.bytes }, .{ .specs = roots.specs, .archive = roots.archive });
+    const directory: feature.Directory = .{ .selector = selector, .root_observation = .absent, .observation = .absent };
+    const paths = try artifacts.resolveFeaturePaths(a, roots, selector);
+    const record = fixture.record("S01");
+    const stored = fixture.state(&.{record});
+    const cancel: c.Submission = .{ .id = c.Id.parse("S01").?, .subject = record.subject, .authority = record.authority, .requested_status = .cancel, .answer = .{ .cancel_reason = "No longer needed." }, .origin = .submitted };
+    const inputs: c.Inputs = .{ .state = .{ .value = stored }, .submissions = &.{cancel}, .protected_forms = &.{} };
+    var time: [20]u8 = undefined;
+    @memcpy(&time, "2026-09-05T00:00:00Z");
+    const recorded = try evidence.record(a, evidence.empty(selected), &.{.{ .provider = .os_account, .actor_id = "fixture-user", .assurance = .invoking_account, .run_id = "RUN-1", .occurred_at = time }});
+    const cancelled = try acceptance.accept(a, inputs, &.{.{ .id = c.Id.parse("S01").?, .form_bytes = "the cancel form", .evidence = recorded.appended[0] }});
+    const ready: refresh.Ready = .{ .state = cancelled.state, .original_sources = &.{} };
+    const empty: c.Captures = .{ .state = null, .forms = &.{} };
+    const ids = [_]c.Id{c.Id.parse("S01").?};
+    const prepared = try output.prepareCancelled(a, directory, paths, empty, cancelled, &ids, ready, recorded.registry, null);
+    try std.testing.expectEqual(.cancelled, prepared.terminal_outcome);
+    // The cancelled audit form, the registry that its response joins and the state, in that order, and nothing else.
+    try std.testing.expectEqual(@as(usize, 3), prepared.files.len);
+    try std.testing.expect(prepared.files[0].target == .form);
+    try std.testing.expectEqualStrings("the cancel form", prepared.files[0].bytes);
+    try std.testing.expect(prepared.files[1].target.artifact == .actor_evidence);
+    try std.testing.expect(prepared.files[2].target.artifact == .clarification_state);
+    // No accepted cancel of this run, a registry that lacks the evidence, and a state with no record to cancel publish nothing.
+    try std.testing.expectError(error.InvalidWorkflowOutput, output.prepareCancelled(a, directory, paths, empty, cancelled, &.{}, ready, recorded.registry, null));
+    try std.testing.expectError(error.InvalidActorEvidence, output.prepareCancelled(a, directory, paths, empty, cancelled, &ids, ready, evidence.empty(selected), null));
+    const closed_only = try acceptance.accept(a, .{ .state = .{ .value = stored }, .submissions = &.{.{ .id = c.Id.parse("S01").?, .subject = record.subject, .authority = record.authority, .requested_status = .closed, .answer = .{ .business_text = "Approved." }, .origin = .submitted }}, .protected_forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = "the closed form" }} }, &.{.{ .id = c.Id.parse("S01").?, .form_bytes = "the closed form", .evidence = recorded.appended[0] }});
+    try std.testing.expectError(error.InvalidWorkflowOutput, output.prepareCancelled(a, directory, paths, empty, closed_only, &ids, .{ .state = closed_only.state, .original_sources = &.{} }, recorded.registry, null));
+    try std.testing.expectError(error.InvalidWorkflowOutput, output.prepareCancelled(a, directory, paths, empty, cancelled, &ids, .{ .state = .{ .value = null }, .original_sources = &.{} }, recorded.registry, null));
 }
 
 test "fixed paths use configured roots and preserve the selected feature key" {
@@ -382,8 +460,11 @@ test "strict state parser rejects unknown duplicate missing fields versions and 
         "{\"schema\":42}",
     }) |invalid| try std.testing.expectError(error.InvalidClarificationInput, load(allocator, .{ .state = invalid, .forms = &.{} }));
     var wrong = fixture.state(&.{});
-    wrong.schema = "clarification-state/v1";
-    try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = wrong }, selected));
+    // The previous version has no reader: its evidence IDs join no registry (ADR 0025).
+    for ([_][]const u8{ "clarification-state/v1", "clarification-state/v2" }) |older| {
+        wrong.schema = older;
+        try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = wrong }, selected));
+    }
     wrong = fixture.state(&.{});
     wrong.feature_id = "another-feature";
     try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = wrong }, selected));
@@ -396,7 +477,7 @@ test "a state string member is a JSON string, never an array of byte values" {
     const allocator = arena.allocator();
     const valid = try std.json.Stringify.valueAlloc(allocator, fixture.state(&.{}), .{});
     _ = try parser.stateParser().parse(allocator, valid);
-    const bytes = try std.mem.replaceOwned(u8, allocator, valid, "\"clarification-state/v2\"", "[99]");
+    const bytes = try std.mem.replaceOwned(u8, allocator, valid, "\"clarification-state/v3\"", "[99]");
     try std.testing.expectError(error.InvalidClarificationInput, parser.stateParser().parse(allocator, bytes));
 }
 

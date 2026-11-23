@@ -47,6 +47,26 @@ pub fn earlierOutranks(earlier: ?stream.Stop, released: bool) ?stream.Stop {
     return earlier orelse if (released) null else release_failure;
 }
 
+/// Whether a cancelled log leaves the run's outcome as it was: only a run that already ended cancelled, with no output to
+/// publish. The output of a run the user cancelled (ADR 0025) is published only after its log closed (§25.1), so a cancelled
+/// close stops it as it stops any other publication.
+pub fn keepsOutcome(stop: stream.Stop, publishing: bool, run_cancelled: bool) bool {
+    return stop == .cancelled and !publishing and run_cancelled;
+}
+
+test "a cancelled log keeps the outcome of a run that already ended cancelled, and never lets an output publish" {
+    const testing = @import("std").testing;
+    const failed: stream.Stop = .{ .blocked = .LOG_SINK_FAILURE };
+    try testing.expect(keepsOutcome(.cancelled, false, true));
+    // A run that ended any other way, a publication of any outcome (the cancelled one included), and a logging failure are
+    // each their own outcome.
+    try testing.expect(!keepsOutcome(.cancelled, false, false));
+    try testing.expect(!keepsOutcome(.cancelled, true, true));
+    try testing.expect(!keepsOutcome(.cancelled, true, false));
+    try testing.expect(!keepsOutcome(failed, false, true));
+    try testing.expect(!keepsOutcome(failed, true, true));
+}
+
 test "each port failure maps to the stop its kind has, and a cancellation is never a logging failure" {
     const testing = @import("std").testing;
     const lock_timeout: stream.Stop = .{ .blocked = .LOG_LOCK_TIMEOUT };

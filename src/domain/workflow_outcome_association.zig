@@ -270,11 +270,12 @@ pub const State = struct {
     }
 
     /// The native prepared output must carry each pending clarification. A
-    /// matching terminal tag alone cannot authorize a protected writer.
+    /// matching terminal tag alone cannot authorize a protected writer. A publisher ends the run `ok`, `needs_user` or,
+    /// when the user's own `cancel` was accepted (ADR 0025), `cancelled`.
     pub fn permitsPublication(self: *const State, current: NativeSubject, terminal: workflow.OutcomeTag) bool {
         const subject: Subject = .{ .native = current };
         if (!validSubject(subject) or current.kind != .clarification or
-            (terminal != .ok and terminal != .needs_user) or !self.compatible(terminal)) return false;
+            (terminal != .ok and terminal != .needs_user and terminal != .cancelled) or !self.compatible(terminal)) return false;
         for (self.entries.items) |entry| {
             if (entry.observation.subject != .native or entry.observation.subject.native.kind != .clarification or
                 !associated(self.associations.items, entry.observation.subject, subject)) return false;

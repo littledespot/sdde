@@ -52,7 +52,8 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 - **Does:** Open or update one record per need, keyed by stage and structural subject: an
   existing subject keeps its ID, a new one takes the next `SNN`, `PNN` or `TNN`, and a prior
   subject absent from the needs is retained, never inferred resolved.
-- **Rejects:** `AuthenticationRequired` for a newly submitted answer, `ProtectedClarification`
+- **Rejects:** `AuthenticationRequired` for a submitted answer that was not accepted before it (a
+  deferral is not one and leaves its record open), `ProtectedClarification`
   for reopening a user-closed or protected record, `ClarificationLimitExceeded` past 99, and
   `InvalidClarificationInput` for two needs with one stage and subject.
 
@@ -325,10 +326,11 @@ variants of the generic repair operations, specified once in
 ## `PrepareSpecificationOutputAction` (`prepare-specification-output`)
 
 - **Owner:** [`src/actions/specification/prepare_specification_output.zig`](../../../src/actions/specification/prepare_specification_output.zig)
-- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `specification_publication_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `rendered_specification`, `validated_specification_rendering`, `rendered_reference_context` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `raw_actor_evidence`, `actor_evidence_registry`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `specification_publication_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `rendered_specification`, `validated_specification_rendering`, `rendered_reference_context` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
 - **Does:** Revalidate the state, clarifications and revision, require `spec.md` and
   `reference-context.md` to re-render byte-identically, and assemble them with the clarification
-  files and workflow state as one output set.
+  files, the actor-evidence registry that the responses join and the workflow state as one output
+  set.
 - **Rejects:** `InvalidWorkflowOutput`.
 
 ## `BuildIncompleteSpecificationAction` (`build-incomplete-specification`)
@@ -347,55 +349,99 @@ variants of the generic repair operations, specified once in
 ## `PrepareIncompleteSpecificationOutputAction` (`prepare-incomplete-specification-output`)
 
 - **Owner:** [`src/actions/specification/prepare_incomplete_specification_output.zig`](../../../src/actions/specification/prepare_incomplete_specification_output.zig)
-- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `incomplete_specification_state`, `rendered_incomplete_specification` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `raw_actor_evidence`, `actor_evidence_registry`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `incomplete_specification_state`, `rendered_incomplete_specification` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
 - **Does:** Revalidate the incomplete state, require its view to re-render identically before and
-  after readback with the prior ID ledger unchanged, and assemble the output set with outcome
-  `needs_user`.
+  after readback with the prior ID ledger unchanged, and assemble the output set, including the
+  actor-evidence registry, with outcome `needs_user`.
 - **Rejects:** `InvalidWorkflowOutput`.
 
-## Proposed, no code: authentication chain and actor-evidence registry
+## Authentication chain and actor-evidence registry
 
 [ADR 0025](../../decisions/0025-clarification-answer-authentication.md) records evidence in
-this shared actor-evidence registry; no code implements it yet (SPEC01 E7). Today
-`refresh-clarifications` rejects every newly submitted answer with `AuthenticationRequired`.
+this shared actor-evidence registry, `actor-evidence-registry/v1`. The chain's per-step
+responsibilities that an earlier revision of this catalogue listed as actions of their own (validate
+the observation, assign, build, append and validate the evidence, bind the submission, assign the
+response ID, build the response, and the registry's initial state, serialization and parsing) are the
+internal steps and domain functions of the operations below, not operations of their own
+([ADR 0031](../../decisions/0031-stage-actions.md)). Only `authenticate-actor` reaches a port.
 
-## `AuthenticateActorAction`
+## `PrepareActorEvidenceAction` (`prepare-actor-evidence`)
 
-Proposed, no code: call `AuthenticationPort.authenticateAndConsume` once with a runner-issued
-single-use lease; the runner's lease table, never the envelope, holds the credential, and the
-port finalizes it on every terminal branch. ADR 0025's first provider is the operating-system
-account that runs the engine, for clarification responses only.
+- **Owner:** [`src/actions/specify/prepare_actor_evidence.zig`](../../../src/actions/specify/prepare_actor_evidence.zig)
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `clarification_inputs` · **Writes:** `raw_actor_evidence`, `actor_evidence_registry` · **Side effect:** `filesystem_read`
+- **Does:** A stage action of three steps: capture the feature's registry file through the
+  feature-input port (or report it absent), parse it through the registry parser, and validate it
+  against the feature and the responses of the clarification state. A feature with no registry has
+  the empty one, at revision 0 with the next ordinal 1. It runs after feature logging activates, so
+  its directory is the activated one.
+- **Rejects:** `FeatureInputUnavailable`, `InvalidActorEvidence` and `Cancelled`.
 
-## `ValidateAuthenticationObservationAction`
+## `PlanClarificationAuthenticationAction` (`plan-clarification-authentication`)
 
-Proposed, no code: before any evidence ID is allocated, reject a missing or unknown actor, a
-provider or policy mismatch, an impossible or expired time, any credential-shaped field and
-assurance incompatible with the event kind.
+- **Owner:** [`src/actions/clarification/plan_clarification_authentication.zig`](../../../src/actions/clarification/plan_clarification_authentication.zig)
+- **Reads:** `clarification_inputs` · **Writes:** `authentication_progress` · **Side effect:** `none`
+- **Does:** Initialize the loop's iteration: the submitted closed forms with an answer and the submitted
+  cancels with a reason, in the registry's order, each one pass. A deferral and a form already
+  recorded are not in it, and the population is frozen.
+- **Rejects:** none beyond allocation.
 
-## `AssignAuthenticationEvidenceIdAction`
+## `CheckClarificationAuthenticationAction` (`check-clarification-authentication`)
 
-Proposed, no code: assign one monotonic engine evidence ID as an allocation delta, without
-mutating the registry.
+- **Owner:** [`src/actions/clarification/check_clarification_authentication.zig`](../../../src/actions/clarification/check_clarification_authentication.zig)
+- **Reads:** `clarification_inputs`, `authentication_progress` · **Writes:** none · **Side effect:** `none`
+- **Does:** Report `more` while a form awaits its observation, else `ok`.
+- **Rejects:** none.
 
-## `BuildAuthenticatedActorEvidenceAction`
+## `AuthenticateActorAction` (`authenticate-actor`)
 
-Proposed, no code: bind that ID to public provider, actor, assurance and time metadata, with no
-credential material.
+- **Owner:** [`src/actions/clarification/authenticate_actor.zig`](../../../src/actions/clarification/authenticate_actor.zig)
+- **Reads:** `clarification_inputs`, `authentication_progress` · **Writes:** `actor_observation` · **Side effect:** `actor_authentication`
+- **Does:** Call `AuthenticationPort` once with the runner-issued single-use lease: the port consumes
+  the lease, then reads the operating-system account that runs the engine, with the feature log's run
+  and the trusted clock's UTC time. The runner's lease table, never the envelope, holds the lease and
+  ends it on every path; the observation is the step's own and nothing records it.
+- **Rejects:** `AuthenticationDenied` for a lease the runner did not issue or that was spent,
+  `AccountUnavailable`, `UnsupportedPlatform`, `ClockUnavailable` and `Cancelled`.
 
-## `ValidateAuthenticatedActorEvidenceAction`
+## `AdvanceClarificationAuthenticationAction` (`advance-clarification-authentication`)
 
-Proposed, no code: prove the evidence ID, actor, context, provider and policy, its freshness at
-the event's time and its compatibility with the event kind, without authenticating again.
+- **Owner:** [`src/actions/clarification/advance_clarification_authentication.zig`](../../../src/actions/clarification/advance_clarification_authentication.zig)
+- **Reads:** `clarification_inputs`, `authentication_progress`, `actor_observation` · **Writes:** none · **Replaces:** `authentication_progress` · **Invalidates:** `actor_observation` · **Side effect:** `none`
+- **Does:** Join the observation to the form just authenticated and advance the iteration by one.
+- **Rejects:** `InvalidClarificationInput` for an observation beyond the planned forms.
 
-## `BuildInitialActorEvidenceRegistryStateAction`
+## `AcceptClarificationResponsesAction` (`accept-clarification-responses`)
 
-Proposed, no code: create the activation-time registry at revision zero with the next evidence
-ordinal set to one; the registry is new persisted state (ADR 0025).
+- **Owner:** [`src/actions/clarification/accept_clarification_responses.zig`](../../../src/actions/clarification/accept_clarification_responses.zig)
+- **Reads:** `clarification_inputs`, `raw_clarification_inputs`, `actor_evidence_registry`, `authentication_progress` · **Replaces:** `clarification_inputs`, `actor_evidence_registry` · **Side effect:** `none`
+- **Does:** A stage action of four steps: pair each authenticated form with its captured bytes
+  (exactly the pending forms, each once, in order), append the run's evidence to the registry in one
+  revision (`AE-<ordinal>`), accept each form as a response and resolve its record (`resolved_by_user`,
+  or `cancelled_by_user` for a cancel) in a state one ordinal and one revision later, and check that
+  the responses join the registry. Nothing is written: the accepted state and the registry stay in
+  memory until the run publishes them.
+- **Rejects:** `InvalidClarificationInput` for progress that is not the pending forms or a form with no
+  captured bytes, `UnsupportedActorName` for an account name outside the stored-identifier syntax,
+  `InvalidActorEvidence` for responses that do not join the registry, and `Cancelled`.
 
-## `AppendAuthenticatedActorEvidenceAction`
+## `CheckClarificationCancellationAction` (`check-clarification-cancellation`)
 
-Proposed, no code: append one validated, non-duplicate evidence entry, consuming exactly the
-allocated ordinal; history is append-only and no credential is accepted.
+- **Owner:** [`src/actions/clarification/check_clarification_cancellation.zig`](../../../src/actions/clarification/check_clarification_cancellation.zig)
+- **Reads:** `clarification_inputs`, `authentication_progress` · **Writes:** none · **Side effect:** `none`
+- **Does:** Report `cancelled` when a form this run accepted cancelled its record, else `ok`. The
+  outcome stays associated with the accepted inputs, which lets the cancelled output's publisher end
+  the run `cancelled` ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md)).
+- **Rejects:** none.
+
+## `PrepareCancelledClarificationOutputAction` (`prepare-cancelled-clarification-output`)
+
+- **Owner:** [`src/actions/clarification/prepare_cancelled_clarification_output.zig`](../../../src/actions/clarification/prepare_cancelled_clarification_output.zig)
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `authentication_progress`, `raw_actor_evidence`, `actor_evidence_registry`, `citable_reference_inputs` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
+- **Does:** Assemble the output of a run the user cancelled: the canonical forms of the accepted state, the
+  registry and the clarification state, in that order, with terminal outcome `cancelled`, and no
+  specification, reference context or workflow state. It requires one of the forms this run accepted
+  to have cancelled its record.
+- **Rejects:** `InvalidWorkflowOutput`, `InvalidActorEvidence` and `InvalidClarificationInput`.
 
 ## `BuildActorEvidenceIdRetirementRegistryStateAction`
 
@@ -406,20 +452,12 @@ evidence.
 
 ## `ValidateActorEvidenceRegistryStateAction`
 
-Proposed, no code: prove unique monotonic IDs and append-only history; each revision holds
-either one actor-, context- and time-valid evidence append, with total joins to specification
-acknowledgements, clarification responses, reviews, reference feedback, reference-conflict
-decisions and manual evidence, or byte-equal entries plus exactly one unreferenced allocated-ID
-tombstone, never both.
-
-## `SerializeActorEvidenceRegistryStateAction`
-
-Proposed, no code: serialize public actor and evidence metadata only, never a credential or
-token.
-
-## `ParseActorEvidenceRegistryStateAction`
-
-Proposed, no code: parse one persisted registry revision into an unvalidated registry.
+Built for clarification responses only, as a step of `prepare-actor-evidence`: the registry is the
+feature's append-only sequence (unique monotonic `AE-<ordinal>` IDs, one revision for each run that
+appends all of its forms), every response joins an entry with the same account and time, and no entry
+is joined twice. Proposed, no code: the joins to specification acknowledgements, reviews,
+reference feedback, reference-conflict decisions and manual evidence, and a revision of byte-equal
+entries plus one unreferenced allocated-ID tombstone.
 
 ## `ValidateClarificationUserSubmissionAction`
 
@@ -430,22 +468,9 @@ submitted bytes; check the bounded defer and cancel reason shapes. Each rejected
 typed reason; one rejected closed form stops the run before any lease is consumed, and no
 answer in that run is accepted.
 
-## `BindAuthenticatedClarificationSubmissionAction`
-
-Proposed, no code: bind the validated fresh actor evidence to the already valid answer and its
-event kind, allocating no ID and changing no lifecycle.
-
-## `AssignClarificationResponseIdAction`
-
-Proposed, no code: choose one monotonic response ID only inside the complete output candidate;
-a failed pre-commit candidate exposes no ID, and a committed ordinal is never reused.
-
-## `BuildClarificationResponseAction`
-
-Proposed, no code: build the accepted response from the response identity, the bound
-submission, the current record and state and the trusted clock, binding the answer variant, the
-exact bounded submitted form bytes, actor and evidence equality and compare-and-swap revisions;
-it is the sole durable owner of the submitted bytes.
+The response is built by `accept-clarification-responses`: its ID is the next monotonic ordinal of
+the state it builds, exposed only in the complete output candidate, and it is the sole durable owner
+of the submitted bytes.
 
 ## Proposed, no code: other responsibilities named elsewhere
 

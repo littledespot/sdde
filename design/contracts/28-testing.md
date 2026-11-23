@@ -306,7 +306,8 @@ survive. The `specify` invocation cases become ADR 0031 stage-action tests.
 - open clarification prefix gates return nonzero `ERROR` before downstream model/write children (`S` blocks plan, `S/P` blocks tasks, and `S/P/T` blocks implement);
 - clarification reruns:
   - reuse exact subject identities and reconsider current allowed authorities/controlled answers;
-  - commit resolution before regeneration;
+  - accept authenticated answers before regeneration and publish them only with the run's own
+    publication, so a failed run publishes none and the next run accepts the same forms again;
   - invoke every owning-stage generation child again, retaining no partial candidates;
 - one invalid filename creates one repair request for one pointer;
 - valid sibling units are retained across repairs;

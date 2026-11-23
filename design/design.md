@@ -207,7 +207,9 @@ engine fixes them:
     copied into nodes.
 30. The whole workflow is validated before publication. [ADR 0017](decisions/0017-incomplete-specification-publication.md) permits a separately validated incomplete specification with clarification publication, never completion authority. [ADR 0041](decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold since 30 October 2026; not implemented) permits a Specify run that fails because model work couldn't be completed, or ends `blocked`, to publish its validated content as an incomplete specification, marked and logged; the run stays `failed` or `blocked` and gains no completion authority. Other non-success abandons unpublished candidates; a new execution starts at `start`. Publication failure may leave already-replaced files but never records new successful completion (Section 25). No transaction, durable checkpoint or provider-recovery subsystem may be introduced.
 31. Clarification persistence and rerun replacement:
-    - Clarification records and answers survive output replacement and abandoned executions.
+    - Clarification records survive output replacement and abandoned executions. A closed answer survives as the user's
+      protected form, and the next run accepts it again; accepted responses persist only when a run publishes them
+      ([ADR 0025](decisions/0025-clarification-answer-authentication.md)).
     - One stable target/owner/subject/slot has one clarification ID. A new execution, authority
       revision, question wording, or gap reason cannot mint a duplicate.
     - Relevant validated answers are input to each rerun.

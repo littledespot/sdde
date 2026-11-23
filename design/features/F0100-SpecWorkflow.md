@@ -168,22 +168,24 @@ Reruns replace outputs and protect user-closed forms under
 
 The shared artifact-path owner resolves the selected feature's `spec.md`,
 `reference-context.md`, `clarify/` and log paths under `paths.specs`, plus
-`state/workflow.json` and `state/clarifications.json` under
+`state/workflow.json`, `state/clarifications.json` and `state/actor-evidence.json` under
 `<paths.workflows>/features/<feature-directory>/`. These are derived paths,
 not configurable filenames, an ownership registry or write permission.
 
 The `prepare-inputs` stage resolves the paths and captures and validates the clarification
 inputs. Its binding carries `feature-input-read`; `core.feature-input-read@1` explicitly
 permits that capability alongside feature/reference inspection; the inspection-only
-`core.directory-read@1` does not. The executable test definition is
+`core.directory-read@1` does not. The `prepare-actor-evidence` stage, which runs after feature logging
+activates, captures and validates the actor-evidence registry the same way
+([ADR 0025](../decisions/0025-clarification-answer-authentication.md)). The executable test definition is
 [`reference-preflight.workflow.yaml`](../../src/test_fixtures/reference-preflight.workflow.yaml),
 not the complete Specify workflow.
 
 - The single native persisted schema is
   [`clarification_inputs.State`](../../src/domain/clarification_inputs.zig): strict JSON
-  tagged `clarification-state/v2`, bound to the selected feature, with registry/record
+  tagged `clarification-state/v3`, bound to the selected feature, with registry/record
   revisions, stage ID counters, stable subjects, authority bindings, bounded answer
-  schemas and recorded responses.
+  schemas and recorded responses, each of which joins an entry of the actor-evidence registry.
 - Reference authority uses the real reference state identity; other authorities use the
   shared canonical kind/ordinal/revision contract.
 - A response owns its original form bytes and revision binding.
@@ -192,7 +194,8 @@ not the complete Specify workflow.
   Markdown except `requestedStatus` and the answer region.
 
 - Capture reads only this state file and the registered `SNN.md`, `PNN.md` and `TNN.md`
-  forms: at most 297 forms of 16 KiB each and 8 MiB of state.
+  forms: at most 297 forms of 16 KiB each and 8 MiB of state. The registry is a separate capture of one file
+  of at most 2 MiB.
 - It does not create directories or read generated views, unrelated features or
   `workflow.json`.
 - Missing state with no forms represents fresh inputs.
@@ -915,9 +918,12 @@ validators:
 - The YAML's successful content branch projects the assembled, coverage-validated typed
   content through the existing Markdown codec and reparses it.
 - It renders `reference-context.md` from an accepted reference snapshot, refreshes the
-  clarification registry through the shared refresh operation, and prepares all four
-  registered outputs before the writer runs.
-- `workflow.json` is written last.
+  clarification registry through the shared refresh operation, and prepares all five
+  registered outputs (the specification, the reference context, the clarification state, the actor-evidence
+  registry and the workflow state) before the writer runs.
+- The registry is written before the clarification state, and `workflow.json` is written last. A run
+  that ends `cancelled` on the user's own `cancel` writes only the forms, the registry and the
+  clarification state.
 
 - Specify captures the current principle registry and runs no principle assessment
   ([ADR 0015](../decisions/0015-specification-principle-review.md)); only the records
@@ -933,7 +939,7 @@ validators:
   step that makes its request, with that step's own parameters), reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v28`). Neither variant holds review evidence.
+  registry identity (`specification-state/v29`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton

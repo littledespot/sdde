@@ -1548,15 +1548,16 @@ test "a finalizer that answers anything but a publishable outcome stops publicat
     const values = @import("application/pipeline_values.zig");
     const prepared_schema = @import("application/workflow_output_binding.zig").prepared_schema;
     const feature = try @import("domain/feature_directory.zig").validate(a, .{ .bytes = "example" }, .{ .specs = "specs", .archive = "archive" });
-    const prepared: output.Prepared = .{
+    var prepared: output.Prepared = .{
         .terminal_outcome = .needs_user,
         .feature = .{ .selector = feature, .root_observation = .absent, .observation = .absent },
         .paths = try @import("domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, .{ .specs = "specs", .archive = "archive", .workflows = "workflows" }, feature),
         .prior = .{ .state = null, .forms = &.{} },
         .files = &.{.{ .target = .{ .artifact = .specification }, .bytes = "incomplete" }},
     };
-    // The finalizer's own answer is the one that lets publication proceed (an `ok` or `needs_user` outcome)
-    // or does not; a logging failure of its own is a different rejection and stays one.
+    // The finalizer's own answer is the one that lets publication proceed (an `ok` or `needs_user` outcome, or `cancelled`
+    // for the output of a run the user cancelled) or does not; a logging failure of its own is a different rejection and
+    // stays one.
     const answers = [_]?run_outcome.Outcome{
         null,
         .{ .execution = .ok },
@@ -1566,7 +1567,8 @@ test "a finalizer that answers anything but a publishable outcome stops publicat
         .invocation_invalid,
         .{ .bootstrap_failed = .LLM_PROVIDER_MODEL_BINDING_INVALID },
     };
-    for (answers) |answer| {
+    for ([_]output.TerminalOutcome{ .needs_user, .cancelled }) |terminal| for (answers) |answer| {
+        prepared.terminal_outcome = terminal;
         var control: OperationControl = .{ .state = .{ .outcome = .ok } };
         var barrier: FakeBarrier = .{};
         var graph = try testGraph();
@@ -1590,7 +1592,7 @@ test "a finalizer that answers anything but a publishable outcome stops publicat
         try runner.envelope.apply(.{ .id = "test.prepare", .kind = .action, .requires = &.{}, .produces = &.{prepared_schema.key}, .side_effect = .none }, &delta, .ok);
         const result = runner.bindings().invokeStep(steps[0].id);
         try std.testing.expectEqual(@as(usize, 1), finalizer.calls);
-        const published = if (answer) |value| value == .execution and (value.execution == .ok or value.execution == .needs_user) else true;
+        const published = if (answer) |value| value == .execution and (value.execution == .ok or value.execution == .needs_user or (value.execution == .cancelled and terminal == .cancelled)) else true;
         if (published) {
             try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), result);
             try std.testing.expectEqual(@as(usize, 1), control.state.calls);
@@ -1598,7 +1600,7 @@ test "a finalizer that answers anything but a publishable outcome stops publicat
             try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = .{ .authority = .publication_finalizer } }), result);
             try std.testing.expectEqual(@as(usize, 0), control.state.calls);
         }
-    }
+    };
 }
 
 test "an allowance whose exhaustion the runner cannot name stops on its retry admission, and a nameable one is its own rejection" {
@@ -1723,6 +1725,158 @@ test "a step that authorizes a repair key past the execution's population stops 
             try std.testing.expectEqual(retry.maximum_repair_keys, runner.repair_retry.entries.items.len);
         }
     }
+}
+
+const actor_lease = @import("domain/actor_authentication_lease.zig");
+const actor_port = @import("ports/actor_authentication.zig");
+const actor_evidence = @import("domain/actor_evidence.zig");
+const workflow_capability = @import("domain/workflow_capability.zig");
+
+/// An operation that reaches the authentication port under the lease the runner issued for it.
+const AuthenticatingOperation = struct {
+    port: actor_port.Port,
+    use: enum { consume, ignore, consume_then_fail } = .consume,
+    outcome: workflow.OutcomeTag = .ok,
+    calls: usize = 0,
+    /// The lease of the latest invocation, kept to show that the runner ended it.
+    held: ?actor_lease.Lease = null,
+
+    fn invoke(context: ?*AuthenticatingOperation, input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        switch (input) {
+            .invocation => return .{ .outcome = .ok, .delta = .{} },
+            .step => |step_input| {
+                self.calls += 1;
+                self.held = step_input.actor_authentication;
+                const granted = step_input.actor_authentication orelse return error.InvocationFailureUnrecorded;
+                if (self.use != .ignore) _ = self.port.authenticate(std.testing.allocator, step_input.runtime, granted) catch return error.InvocationFailureUnrecorded;
+                if (self.use == .consume_then_fail) return error.InvocationFailureUnrecorded;
+                return .{ .outcome = self.outcome, .delta = .{} };
+            },
+        }
+    }
+
+    fn observe(_: *actor_port.Context, _: std.mem.Allocator) actor_port.Error!actor_evidence.Observation {
+        return .{ .provider = .os_account, .actor_id = "tester", .assurance = .invoking_account, .run_id = "RUN-1", .occurred_at = "2026-01-01T00:00:00Z".* };
+    }
+};
+
+var authentication_token: u8 = 0;
+
+/// A one-step workflow whose step authenticates, bound to `operation`.
+fn authenticatingWorkflow(control: *OperationControl, operation: *AuthenticatingOperation, steps: *[1]compilation.CompiledStep) !compilation.CompiledWorkflow {
+    steps.* = test_steps;
+    steps[0].side_effect = .actor_authentication;
+    steps[0].capabilities = &.{workflow_capability.actor_authentication};
+    var graph = try testGraph();
+    graph.authority.steps = steps;
+    graph.authority.maximum_step_executions = 2;
+    graph.authority.allowed_capabilities = &.{workflow_capability.actor_authentication};
+    operation.port = .{ .context = @ptrCast(&authentication_token), .observe_fn = AuthenticatingOperation.observe };
+    _ = control;
+    return graph;
+}
+
+fn authenticatingRegistry(control: *OperationControl, operation: *AuthenticatingOperation) operations.Registry {
+    var registry = testRegistry(control);
+    control.entries[1].binding = operation_bindings.bind(AuthenticatingOperation, operation, AuthenticatingOperation.invoke);
+    control.entries[1].contract.side_effect = .actor_authentication;
+    registry.policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{workflow_capability.actor_authentication}, .allowed_terminal_outcomes = test_outcomes }};
+    return registry;
+}
+
+test "the runner issues one lease for an authenticating step, and a step that consumes it succeeds and ends it" {
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+    var operation: AuthenticatingOperation = .{ .port = undefined };
+    var steps: [1]compilation.CompiledStep = undefined;
+    var graph = try authenticatingWorkflow(&control, &operation, &steps);
+    var registry = authenticatingRegistry(&control, &operation);
+    var barrier: FakeBarrier = .{};
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
+    defer runner.deinit();
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+    try std.testing.expectEqual(@as(u32, 0), runner.authentication_leases.issued);
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeStep(steps[0].id));
+    try std.testing.expectEqual(@as(usize, 1), operation.calls);
+    try std.testing.expectEqual(@as(u32, 1), runner.authentication_leases.issued);
+    // The lease ended with the step: nothing can consume it afterwards, and the next invocation is issued its own.
+    try std.testing.expect(runner.authentication_leases.active == null);
+    try std.testing.expectError(error.AuthenticationDenied, operation.held.?.consume());
+    const first = operation.held.?;
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeStep(steps[0].id));
+    try std.testing.expectEqual(@as(u32, 2), runner.authentication_leases.issued);
+    try std.testing.expect(operation.held.?.slot != first.slot);
+    try std.testing.expectError(error.AuthenticationDenied, first.consume());
+}
+
+test "an authenticating step that succeeds without consuming its lease is rejected, and every other path still ends the lease" {
+    const Case = struct { use: @FieldType(AuthenticatingOperation, "use"), outcome: workflow.OutcomeTag, expected: execution.Applied };
+    for ([_]Case{
+        .{ .use = .ignore, .outcome = .ok, .expected = .{ .rejected = .{ .authority = .authentication_unconsumed } } },
+        // Only a success must have consumed the lease: a failed step never reached the account, and says so.
+        .{ .use = .ignore, .outcome = .failed, .expected = .{ .outcome = .failed } },
+        .{ .use = .consume_then_fail, .outcome = .ok, .expected = .{ .rejected = .{ .operation_failed = error.InvocationFailureUnrecorded } } },
+    }) |case| {
+        var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+        var operation: AuthenticatingOperation = .{ .port = undefined, .use = case.use, .outcome = case.outcome };
+        var steps: [1]compilation.CompiledStep = undefined;
+        var graph = try authenticatingWorkflow(&control, &operation, &steps);
+        var registry = authenticatingRegistry(&control, &operation);
+        var barrier: FakeBarrier = .{};
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
+        defer runner.deinit();
+        try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+        try std.testing.expectEqualDeep(case.expected, runner.bindings().invokeStep(steps[0].id));
+        try std.testing.expectEqual(@as(usize, 1), operation.calls);
+        try std.testing.expect(runner.authentication_leases.active == null);
+        try std.testing.expectError(error.AuthenticationDenied, operation.held.?.consume());
+    }
+}
+
+test "a step that needs a lease the execution can no longer issue never runs" {
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+    var operation: AuthenticatingOperation = .{ .port = undefined };
+    var steps: [1]compilation.CompiledStep = undefined;
+    var graph = try authenticatingWorkflow(&control, &operation, &steps);
+    var registry = authenticatingRegistry(&control, &operation);
+    var barrier: FakeBarrier = .{};
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
+    defer runner.deinit();
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+    runner.authentication_leases.issued = actor_lease.max_leases;
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = .{ .authority = .authentication_lease_unavailable } }), runner.bindings().invokeStep(steps[0].id));
+    try std.testing.expectEqual(@as(usize, 0), operation.calls);
+}
+
+test "a step that does not authenticate is issued no lease" {
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+    var barrier: FakeBarrier = .{};
+    var graph = try testGraph();
+    var registry = testRegistry(&control);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
+    defer runner.deinit();
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeStep(test_steps[0].id));
+    try std.testing.expectEqual(@as(u32, 0), runner.authentication_leases.issued);
+}
+
+test "an authenticating step must declare the effect and the capability together and carry no accounting, retry or repair" {
+    var base = test_steps[0];
+    base.side_effect = .actor_authentication;
+    base.capabilities = &.{workflow_capability.actor_authentication};
+    try std.testing.expect(@import("domain/workflow_actor_authentication.zig").validProjection(base));
+    var without_capability = base;
+    without_capability.capabilities = &.{};
+    try std.testing.expect(!@import("domain/workflow_actor_authentication.zig").validProjection(without_capability));
+    var without_effect = test_steps[0];
+    without_effect.capabilities = &.{workflow_capability.actor_authentication};
+    try std.testing.expect(!@import("domain/workflow_actor_authentication.zig").validProjection(without_effect));
+    var retried = base;
+    retried.retry_authority = .{ .workflow_id = .{ .bytes = "arbitrary-workflow" }, .workflow_version = 1, .operation_instance_id = base.id, .limit = .{ .value = 1 }, .scope = .operation };
+    try std.testing.expect(!@import("domain/workflow_actor_authentication.zig").validProjection(retried));
+    var repairing = base;
+    repairing.repair_role = .authorize;
+    try std.testing.expect(!@import("domain/workflow_actor_authentication.zig").validProjection(repairing));
 }
 
 test "allocation failure cannot be disguised as an expected candidate rejection" {

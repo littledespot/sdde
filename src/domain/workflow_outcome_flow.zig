@@ -50,7 +50,7 @@ pub fn validate(_: std.mem.Allocator, authority: compilation.SemanticAuthority) 
                 const item = pending[cursor];
                 const step = authority.steps[item.index];
                 switch (step.side_effect) {
-                    .filesystem_read, .filesystem_write, .workflow_publication, .model_call => return error.WorkflowGraphCompileInvalid,
+                    .filesystem_read, .filesystem_write, .workflow_publication, .model_call, .actor_authentication => return error.WorkflowGraphCompileInvalid,
                     .none => {},
                 }
                 // A successor's admitted outcomes cannot erase the original

@@ -3183,8 +3183,8 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts, readback_normalizer);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v28", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v28", "specification-state/v27");
+    try std.testing.expectEqualStrings("specification-state/v29", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v29", "specification-state/v28");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
     try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts, readback_normalizer));
     const principles = @import("../../src/domain/principle_registry.zig");
@@ -3483,7 +3483,9 @@ test "clarification publication refreshes stable paths and protects concurrent c
             const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
             const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need}, .original_sources = &.{} });
             const views = try @import("../../src/domain/clarification_views.zig").render(a, next, inputs.protected_forms);
-            const prepared = try @import("../../src/domain/clarification_output.zig").prepare(a, observed, paths, captured, inputs, .{ .ready = next }, views);
+            var evidence_source = source_adapter.actorEvidenceCapturer();
+            evidence_source.capability = registry.featureInputRead();
+            const prepared = try @import("../../src/domain/clarification_output.zig").prepare(a, observed, paths, captured, inputs, .{ .ready = next }, views, @import("../../src/domain/actor_evidence.zig").empty(selected.feature_id), try evidence_source.capture(a, observed, paths));
             const form_path = try std.mem.concat(a, u8, &.{ selected.project_relative_path, "/clarify/", name, ".md" });
             var writer_adapter: @import("../../src/adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
             var writer = writer_adapter.port();
@@ -3561,7 +3563,9 @@ fn clarificationRound(io: std.Io, keep: std.mem.Allocator, project: std.Io.Dir, 
     const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
     const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need}, .original_sources = &.{} });
     const views = try @import("../../src/domain/clarification_views.zig").render(a, next, inputs.protected_forms);
-    const prepared = try @import("../../src/domain/clarification_output.zig").prepare(a, observed, paths, captured, inputs, .{ .ready = next }, views);
+    var evidence_source = source_adapter.actorEvidenceCapturer();
+    evidence_source.capability = registry.featureInputRead();
+    const prepared = try @import("../../src/domain/clarification_output.zig").prepare(a, observed, paths, captured, inputs, .{ .ready = next }, views, @import("../../src/domain/actor_evidence.zig").empty(selected.feature_id), try evidence_source.capture(a, observed, paths));
     files.* = .{
         .form = try std.mem.concat(keep, u8, &.{ selected.project_relative_path, "/clarify/", name, ".md" }),
         .registry = try keep.dupe(u8, paths.get(.clarification_state).project_relative),
@@ -3760,6 +3764,105 @@ test "registered output writer validates the complete set and never writes compl
     prepared.files = &.{.{ .target = view.target, .bytes = "x\n" }};
     try writer.publish(a, prepared);
     try std.testing.expectEqualStrings("x\n", try project.dir.readFileAlloc(io, paths.get(.reference_context).project_relative, a, .limited(128)));
+}
+
+test "the actor-evidence registry is written under its exact prior and before the state that joins it" {
+    const output = @import("../../src/domain/workflow_output.zig");
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+    var boot = runInProject(io, std.testing.allocator, project.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const selected = try @import("../../src/domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+    var inspector_adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var inspector = inspector_adapter.inspector();
+    inspector.capability = registry.featureDirectoryRead();
+    const observed = try inspector.inspect(a, selected);
+    const paths = try @import("../../src/domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+    const evidence_file: output.File = .{ .target = .{ .artifact = .actor_evidence }, .bytes = "registry\n" };
+    const state_file: output.File = .{ .target = .{ .artifact = .clarification_state }, .bytes = "state\n" };
+    const completion: output.File = .{ .target = .{ .artifact = .workflow_state }, .bytes = "completion\n" };
+    var prepared: output.Prepared = .{ .terminal_outcome = .ok, .feature = observed, .paths = paths, .prior = .{ .state = null, .forms = &.{} }, .prior_workflow_state = .{ .captured = null }, .prior_actor_evidence = .{ .captured = null }, .files = &.{ evidence_file, state_file, completion } };
+    var writer_adapter: @import("../../src/adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var writer = writer_adapter.port();
+    writer.capability = registry.featureOutputWrite();
+    const registry_path = paths.get(.actor_evidence).project_relative;
+    const state_path = paths.get(.clarification_state).project_relative;
+    // The shape: a registry names its prior, and no state that joins it is written before it. Nothing is written.
+    prepared.prior_actor_evidence = .unselected;
+    try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+    prepared.prior_actor_evidence = .{ .captured = null };
+    prepared.files = &.{ state_file, evidence_file, completion };
+    try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+    prepared.files = &.{ evidence_file, completion, state_file };
+    try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, registry_path, .{}));
+    // The precondition: a registry that is not the one captured stops the output before any file is written, whether it
+    // is absent when a registry was captured or present when none was.
+    prepared.files = &.{ evidence_file, state_file, completion };
+    prepared.prior_actor_evidence = .{ .captured = "a registry that is not on disk\n" };
+    try std.testing.expectError(error.OutputChanged, writer.publish(a, prepared));
+    try project.dir.createDirPath(io, std.fs.path.dirname(registry_path).?);
+    try project.dir.writeFile(io, .{ .sub_path = registry_path, .data = "written meanwhile\n" });
+    prepared.prior_actor_evidence = .{ .captured = null };
+    try std.testing.expectError(error.OutputChanged, writer.publish(a, prepared));
+    try std.testing.expectEqualStrings("written meanwhile\n", try project.dir.readFileAlloc(io, registry_path, a, .limited(128)));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, state_path, .{}));
+    // The exact prior publishes: the registry is replaced completely and the state follows it.
+    prepared.prior_actor_evidence = .{ .captured = "written meanwhile\n" };
+    try writer.publish(a, prepared);
+    try std.testing.expectEqualStrings("registry\n", try project.dir.readFileAlloc(io, registry_path, a, .limited(128)));
+    try std.testing.expectEqualStrings("state\n", try project.dir.readFileAlloc(io, state_path, a, .limited(128)));
+}
+
+test "a registry changed after the run's own write stops the files that follow it" {
+    const access = @import("../../src/adapters/filesystem/file_access.zig");
+    const output = @import("../../src/domain/workflow_output.zig");
+    const Interfering = struct {
+        /// A writer other than the run replaces the registry the moment the run has written it.
+        fn replace(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, name: []const u8, expected: access.Expected, bytes: []const u8) access.Error!void {
+            try access.replace(io, allocator, parent, name, expected, bytes);
+            if (std.mem.eql(u8, name, @import("../../src/domain/workflow_artifact_registry.zig").actor_evidence_filename)) parent.writeFile(io, .{ .sub_path = name, .data = "foreign\n" }) catch return error.FileUnavailable;
+        }
+    };
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+    var boot = runInProject(io, std.testing.allocator, project.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const selected = try @import("../../src/domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+    var inspector_adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var inspector = inspector_adapter.inspector();
+    inspector.capability = registry.featureDirectoryRead();
+    const observed = try inspector.inspect(a, selected);
+    const paths = try @import("../../src/domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+    const prepared: output.Prepared = .{ .terminal_outcome = .ok, .feature = observed, .paths = paths, .prior = .{ .state = null, .forms = &.{} }, .prior_workflow_state = .{ .captured = null }, .prior_actor_evidence = .{ .captured = null }, .files = &.{
+        .{ .target = .{ .artifact = .actor_evidence }, .bytes = "registry\n" },
+        .{ .target = .{ .artifact = .clarification_state }, .bytes = "state\n" },
+        .{ .target = .{ .artifact = .workflow_state }, .bytes = "completion\n" },
+    } };
+    var adapter: @import("../../src/adapters/filesystem/workflow_output.zig").Writer(Interfering.replace) = .{ .io = io, .project_root = project.dir };
+    var writer = adapter.port();
+    writer.capability = registry.featureOutputWrite();
+    try std.testing.expectError(error.OutputChanged, writer.publish(a, prepared));
+    // The registry is the foreign one, and neither the state that joins it nor the completion was written.
+    try std.testing.expectEqualStrings("foreign\n", try project.dir.readFileAlloc(io, paths.get(.actor_evidence).project_relative, a, .limited(128)));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.clarification_state).project_relative, .{}));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.workflow_state).project_relative, .{}));
 }
 
 // Writer tests need configured roots, not the native input-preflight graph.

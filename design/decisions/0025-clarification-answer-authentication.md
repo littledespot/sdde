@@ -1,6 +1,7 @@
 # ADR 0025: Accept valid clarification answers in the run that reads them
 
-- **Status:** Accepted amendment. Not yet implemented
+- **Status:** Accepted amendment. The authentication chain, the actor-evidence registry, acceptance, publication and the
+  valid cancel are implemented. Generation's use of accepted answers, and the response-owned passive literals, are not
   ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 - **Date:** 2026-10-20, rewritten and accepted 2026-10-21
 - **Decision authority:** The user's decisions of 21 October 2026. The user first
@@ -70,14 +71,27 @@ input state and record revisions, exact submitted form bytes, typed answer,
    - scans path-shaped answer text into the inert passive registry under the
      response ID, which gives passive literals a response-owned origin.
 
-   It publishes the complete responses before refresh (§17.4), then refreshes, and
-   generation cites current resolved response IDs as authority. The run's report
-   lists each accepted answer as the engine read it, with its response ID.
-6. **A form left open**, unanswered or deferred, is not a failure. It stays open,
-   and if a required record is still open after refresh, the run pauses again under
-   the existing residual open-registry pause. `cancel` cancels the run, as now.
-7. **If the run fails after acceptance**, the published responses remain. The next
-   run reuses them without accepting them again (§24).
+   The responses stay in memory through refresh and generation, and the run
+   publishes them with its own publication (§25, ADR 0009): the complete output, the
+   incomplete publication, or a cancel's. Generation cites current resolved response
+   IDs as authority. The run's report lists each accepted answer as the engine read
+   it, with its response ID.
+6. **A form left open**, unanswered or deferred, is not a failure. A deferral takes
+   no account and records nothing; the record stays open and its form is rendered
+   afresh. If a required record is still open after refresh, the run pauses again
+   under the existing residual open-registry pause.
+7. **A `cancel` with its reason** is a form of the run like a closed one: it is
+   authenticated, its response is recorded and its record becomes
+   `cancelled_by_user`, and the other valid forms are accepted with it. The run then
+   ends `cancelled` before any model call, having published the forms, the actor
+   evidence and the clarification state, and no specification, reference context or
+   workflow state. An invalid form beside it blocks the run with nothing accepted
+   (Decision 2).
+8. **If the run fails, is blocked or is interrupted after acceptance**, it publishes
+   nothing. The closed forms still name the current revisions, so the next run
+   authenticates and accepts them again: running is the act of acceptance, and the
+   user never answers twice. Responses that an earlier run published are reused
+   without a second authentication (§24).
 
 ### The actor and the act of acceptance
 
@@ -95,13 +109,45 @@ input state and record revisions, exact submitted form bytes, typed answer,
   already the sole durable owner of the exact submitted bytes, and §23.2 forbids a
   second byte authority or fingerprint.
 
+### The authentication contract
+
+- **Where it runs.** After feature logging activates and before extraction, so the
+  input checks and their `blocked` outcome come first and no model call has run.
+  The chain loads the registry, plans the forms that await an account, observes the
+  account once for each, then accepts them all in one stage that records the
+  evidence and the responses together, so the registry and the responses cannot
+  diverge.
+- **The lease.** The runner alone issues a lease, one for each invocation of a step
+  that declares the `actor_authentication` side effect and the `actor-authentication`
+  capability, which come together. It issues it before the step runs, the port
+  consumes it once before reading the account, and the runner ends it on every path
+  of the step. A step that reports `ok` without having consumed it is rejected
+  (`authentication_unconsumed`), and an execution issues at most one lease for each
+  form it can accept (`authentication_lease_unavailable`). The step takes no
+  retry, repair or accounting, and it runs on success paths only.
+- **The observation.** The account is the operating-system account the process runs
+  as, read behind `AuthenticationPort` by a narrow system adapter on Linux, macOS and
+  the BSDs. Any other platform, an unreadable account or a failing clock is a typed
+  failure that ends the run `failed`, since the user cannot fix it by editing
+  forms. The time is the trusted log clock's UTC reading, which becomes the
+  response's `answered_at`, and the run is the feature log's run.
+- **The account name.** It must fit the one stored-identifier syntax: ASCII
+  letters, digits and `-_.@`, at most 128 bytes. A name outside it is rejected with a
+  typed outcome, never widened.
+
 ### Persistence
 
 - Evidence goes in the catalogue's actor-evidence registry, not in a store local to
-  clarifications. Each response's `authentication_evidence_id` references its
-  registry entry. The registry validator already expects clarification-response
-  joins, and specification edits (§18), user review (§14.5) and reference feedback
-  use the same registry.
+  clarifications: `actor-evidence-registry/v1` at
+  `<paths.workflows>/features/<feature>/state/actor-evidence.json`, beside the
+  clarification state. Each response's `authentication_evidence_id` (`AE-<ordinal>`)
+  references its registry entry, and the clarification state (`clarification-state/v3`)
+  is valid only when every response joins an entry with the same account and time,
+  each entry joined once. An entry no response names is tolerated: the registry is
+  written before the state, so a run that stops between them leaves evidence and
+  never a response without it. One revision appends all of a run's accepted forms.
+  Specification edits (§18), user review (§14.5) and reference feedback use the same
+  registry.
 - After acceptance, the closed form is protected byte-for-byte. A later edit to it,
   or its removal, blocks (§23.2).
 - Upstream changes invalidate dependent responses through the ordinary rework
@@ -163,7 +209,9 @@ input state and record revisions, exact submitted form bytes, typed answer,
   - a protected form edited or removed after acceptance;
   - forged, duplicate or missing evidence;
   - a response that references evidence absent from the registry;
-  - a run that fails after acceptance, followed by a run that reuses the responses.
+  - a run that fails after acceptance and publishes nothing, followed by a run that
+    accepts the same forms again, and a run that reuses published responses;
+  - a `cancel` beside an answered form, and a deferral.
 - `specification-state` and the clarification state version advance, and the
   actor-evidence registry is a new persisted state, with no compatibility readers.
 - E2E coverage needs a clarification-expected case run twice, with the forms

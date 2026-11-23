@@ -80,6 +80,7 @@ fn validateStep(graph: compilation.CompiledWorkflow, step: compilation.CompiledS
         if (!@import("workflow_model_request_lifecycle.zig").validProjection(step)) return invalid();
         if (!@import("workflow_provider_operation.zig").validProjection(step)) return invalid();
         if (!@import("workflow_provider_authorization.zig").validProjection(step)) return invalid();
+        if (!@import("workflow_actor_authentication.zig").validProjection(step)) return invalid();
         if (!@import("workflow_model_invocation.zig").validProjection(step)) return invalid();
     }
     const retry_parameter = findParameter(step.parameters, workflow_retry.parameter_id);
@@ -295,7 +296,7 @@ test "publication ends every outcome directly without a later pure or effectful 
     var accepted = testGraph(&.{publication}, &terminal);
     accepted.authority.maximum_step_executions = compilation.calculateExecutionLimit(accepted.authority.steps).?;
     _ = try validate(a, &.{accepted}, &no_operations, null);
-    for ([_]pipeline.SideEffect{ .none, .filesystem_read, .filesystem_write, .model_call, .workflow_publication }) |effect| {
+    for ([_]pipeline.SideEffect{ .none, .filesystem_read, .filesystem_write, .model_call, .workflow_publication, .actor_authentication }) |effect| {
         var after = testStep("later", null);
         after.side_effect = effect;
         for (0..terminal.len) |redirected| {

@@ -863,10 +863,11 @@ test "the production registry holds the four generic repair operations with thei
     var reference_contents: @import("adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = root };
     var markdown_reader: @import("adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
     var reference_ids: @import("adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+    var accounts: @import("adapters/system/os_account.zig").Adapter = .{ .clock = undefined };
     const inputs = @import("adapters/parsers/clarification_inputs.zig");
     const normalization = @import("unicode_normalization");
     var assembly: native.Assembly = undefined;
-    assembly.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), @import("composition/toolchain_policy_registry.zig").registry, .{ .normalize_fn = normalization.nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), inputs.stateParser(), inputs.formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = normalization.caseFold }, reference_ids.source(), .{ .boundary_fn = normalization.lexicalBoundary });
+    assembly.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), @import("composition/toolchain_policy_registry.zig").registry, .{ .normalize_fn = normalization.nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), inputs.stateParser(), inputs.formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = normalization.caseFold }, reference_ids.source(), .{ .boundary_fn = normalization.lexicalBoundary }, @import("adapters/parsers/actor_evidence.zig").parser(), accounts.authenticator());
     try std.testing.expect(assembly.registry.validate());
     // Each generic operation is one registered shell whose variants are the owners it serves: 9, 6, 6 and 7.
     const counts = [operation_count]usize{ 9, 6, 6, 7 };

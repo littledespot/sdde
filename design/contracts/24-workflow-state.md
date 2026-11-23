@@ -16,6 +16,10 @@ Part of the [proposed design](../design.md#24-state-sequence-and-recovery-withou
   `canonicalEngineStateRoot` (equivalently feature-relative `state/workflow.json`).
 - The exact result is `<paths.workflows>/features/<featureId>/state/workflow.json`; logs remain
   beneath `<paths.specs>/<featureId>/logs/`.
+- The clarification state and the actor-evidence registry
+  ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)) are its siblings,
+  `state/clarifications.json` and `state/actor-evidence.json`. A run that writes the registry writes it
+  before the clarification state, and `workflow.json` stays last.
 - These paths are neither optional nor ad hoc and cannot be independently configured, supplied
   by a model/workflow definition, or replaced by another state layout:
 
@@ -27,11 +31,13 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v28,
+`specification-state` contract (currently v29,
 [ADR 0015](../decisions/0015-specification-principle-review.md),
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md),
-[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 3 and 7 and
-[ADR 0048](../decisions/0048-engine-derived-specification-title.md); v29 is
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 3 and 7,
+[ADR 0048](../decisions/0048-engine-derived-specification-title.md) and
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md), whose `clarification-state/v3` joins each
+response to the actor-evidence registry; v30 is
 reserved for the `spec_incomplete` variant of
 [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
 since 30 October 2026, not implemented) over canonical `specification/v8` content, in which
@@ -93,9 +99,9 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
   are non-failure pauses with a committed clarification-registry revision and no newly accepted
   stage IR.
 - A current validated authority resolution or authenticated response to the current record
-  revision returns to `specifying`, `planning`, or `tasking`; the clarification response
-  publication commits first, then every generation unit in the owning stage is regenerated from
-  its current complete authority set.
+  revision returns to `specifying`, `planning`, or `tasking`; the accepted response is held in
+  memory, then every generation unit in the owning stage is regenerated from its current complete
+  authority set, and the response is published with the run's own publication.
 - Nothing from the paused execution is reused
   ([§25.2](25-publication.md#252-abandonment-and-reruns)).
 - If the user explicitly chooses `defer` while the answer is required, the same record remains

@@ -524,7 +524,8 @@ fn appendOptionalSigned(
     return appendOptional(allocator, row, first, null);
 }
 
-fn validUtcTimestamp(value: []const u8) bool {
+/// The one syntax and range check of a UTC reading (`2026-11-23T08:15:00Z`): the log's own, and the actor evidence's.
+pub fn validUtcTimestamp(value: []const u8) bool {
     return parseUtcMs(value) != null;
 }
 

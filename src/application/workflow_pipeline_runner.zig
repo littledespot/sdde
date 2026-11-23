@@ -23,6 +23,8 @@ const values = @import("pipeline_values.zig");
 const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
 const operation_selection = @import("../domain/workflow_provider_operation.zig");
 const authorization_selection = @import("../domain/workflow_provider_authorization.zig");
+const actor_selection = @import("../domain/workflow_actor_authentication.zig");
+const actor_lease = @import("../domain/actor_authentication_lease.zig");
 const authorization_binding = @import("workflow_provider_authorization.zig");
 const authorization_workflow = @import("provider_authorization_workflow.zig");
 const authorization_result = @import("../domain/provider_authorization_result.zig");
@@ -65,6 +67,9 @@ pub const Runner = struct {
     token_accounting: workflow_token_runner.Runner,
     model_accounting: ?model_accounting.State = null,
     provider_clock: ?lease.Clock = null,
+    /// The execution's authentication leases (ADR 0025): the runner alone issues one before an `actor_authentication`
+    /// step runs and ends it after, on every path.
+    authentication_leases: actor_lease.Table = .{},
     publication_finalizer: ?@import("../ports/feature_log_activation.zig").Finalizer = null,
     retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
     repair_retry: retry.State,
@@ -346,12 +351,13 @@ pub const Runner = struct {
         if (!@import("../domain/workflow_model_invocation.zig").validProjection(step.*) or
             !operation_selection.validProjection(step.*) or
             !request_lifecycle_selection.validProjection(step.*) or
-            !authorization_selection.validProjection(step.*)) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
+            !authorization_selection.validProjection(step.*) or
+            !actor_selection.validProjection(step.*)) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         if (!compilation.matchesContract(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
             !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         switch (step.side_effect) {
-            .filesystem_read, .filesystem_write => if (self.envelope.outcomes.firstUnresolved() != null) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } },
+            .filesystem_read, .filesystem_write, .actor_authentication => if (self.envelope.outcomes.firstUnresolved() != null) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } },
             .none, .model_call, .workflow_publication => {},
         }
         for (step.gates) |gate| {
@@ -557,6 +563,11 @@ pub const Runner = struct {
                 else => |failure| authorizationRejected(failure),
             };
         }
+        var authentication_lease: ?actor_lease.Lease = null;
+        defer if (authentication_lease) |issued| self.authentication_leases.finalize(issued);
+        if (step.side_effect == .actor_authentication) {
+            authentication_lease = self.authentication_leases.issue() catch return .{ .rejected = .{ .authority = .authentication_lease_unavailable } };
+        }
         const occurrence = self.envelope.beginOccurrence(step.operation_id.bytes) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
         if (calls_model) {
             const invoked = call.?;
@@ -603,7 +614,8 @@ pub const Runner = struct {
             if (!outcome_binding.permitsPublication(&self.envelope, prepared_output)) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } };
             self.events_closed = true;
             if (self.publication_finalizer) |finalizer| switch (finalizer.beforePublication(prepared_output.terminal_outcome)) {
-                .execution => |outcome| if (outcome != .ok and outcome != .needs_user) return .{ .rejected = .{ .authority = .publication_finalizer } },
+                // A finalizer ends the run `cancelled` only for the output of a run the user cancelled (ADR 0025).
+                .execution => |outcome| if (outcome != .ok and outcome != .needs_user and !(outcome == .cancelled and prepared_output.terminal_outcome == .cancelled)) return .{ .rejected = .{ .authority = .publication_finalizer } },
                 .execution_rejected => |reason| return .{ .rejected = reason },
                 .bootstrap_failed, .invocation_invalid => return .{ .rejected = .{ .authority = .publication_finalizer } },
             };
@@ -624,6 +636,7 @@ pub const Runner = struct {
             .provider_invocation = if (validates_observation) call else null,
             .provider_operation = provider_input,
             .provider_authorization = if (authorization) |bound| .{ .facts = bound.facts, .slot = bound.slot, .runtime = bound.runtime } else null,
+            .actor_authentication = authentication_lease,
         } }) catch |err| {
             if (calls_model) {
                 const invoked = call.?;
@@ -665,6 +678,8 @@ pub const Runner = struct {
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .rejected = .{ .authority = .outcome_undeclared } };
+        // An authentication that reports `ok` consumed its lease: the evidence it hands on observed the account.
+        if (authentication_lease) |issued| if (candidate.outcome == .ok and !issued.consumed()) return .{ .rejected = .{ .authority = .authentication_unconsumed } };
         if (advances_request and !completes_request) {
             const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .{ .authority = .authorization_evidence } };
             const assigned = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };

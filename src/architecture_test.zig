@@ -1693,6 +1693,161 @@ test "provider authorization exposes only non-operational references and narrow 
     try std.testing.expect(std.mem.indexOf(u8, prepare_action, "delta.data_writes[") != null);
 }
 
+test "actor authentication has one runner-issued lease, one action that observes the account and one capability-bound port" {
+    const pipeline = @import("domain/pipeline.zig");
+    const native_binding = @import("application/workflow_operation_binding.zig");
+    const port = @import("ports/actor_authentication.zig");
+    // The port grants the authentication capability and no other.
+    const capability = native_binding.inspect(port.Port, &.{});
+    try std.testing.expect(capability.valid and capability.actor_authentication);
+    try std.testing.expect(!capability.model_provider and !capability.provider_authorization and !capability.feature_logging and !capability.feature_input_read and !capability.feature_output_write and !capability.feature_read and !capability.reference_read);
+    // The runner alone issues and ends a lease: it ends first on every path (a `defer`), issues before the step runs, and
+    // checks after the step that an `ok` one consumed it.
+    const runner = @embedFile("application/workflow_pipeline_runner.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, "authentication_leases.issue("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, "authentication_leases.finalize("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, ".actor_authentication = authentication_lease"));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, ".authentication_unconsumed"));
+    const finalize_at = std.mem.indexOf(u8, runner, "authentication_leases.finalize(").?;
+    const issue_at = std.mem.indexOf(u8, runner, "authentication_leases.issue(").?;
+    const invoke_at = std.mem.indexOf(u8, runner, "var candidate = entry.invoke(.{ .step").?;
+    const unconsumed_at = std.mem.indexOf(u8, runner, ".authentication_unconsumed").?;
+    try std.testing.expect(finalize_at < issue_at and issue_at < invoke_at and invoke_at < unconsumed_at);
+    try std.testing.expect(std.mem.lastIndexOf(u8, runner[0..finalize_at], "defer ") != null);
+    // Nothing else holds the table: the port consumes a lease it was given, and the chain's own files name neither the table
+    // nor the slot (the next test walks every layer for the table).
+    inline for (.{
+        "actions/clarification/authenticate_actor.zig",
+        "actions/clarification/plan_clarification_authentication.zig",
+        "actions/clarification/check_clarification_authentication.zig",
+        "actions/clarification/advance_clarification_authentication.zig",
+        "actions/clarification/accept_clarification_responses.zig",
+        "actions/clarification/check_clarification_cancellation.zig",
+        "actions/clarification/prepare_cancelled_clarification_output.zig",
+        "actions/specify/prepare_actor_evidence.zig",
+        "application/actor_evidence_workflow.zig",
+        "composition/native_workflow_operations.zig",
+        "ports/actor_authentication.zig",
+    }) |path| {
+        const source = @embedFile(path);
+        try expectAbsent(source, "authentication_leases");
+        try expectAbsent(source, "lease.Table");
+        try expectAbsent(source, ".issue(");
+        try expectAbsent(source, ".finalize(");
+        try expectAbsent(source, "std.Io");
+        try expectAbsent(source, "anyopaque");
+        try expectAbsent(source, "@constCast");
+    }
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("ports/actor_authentication.zig"), ".consume("));
+    inline for (.{ "actions/clarification/authenticate_actor.zig", "application/actor_evidence_workflow.zig", "adapters/system/os_account.zig" }) |path| {
+        const source = @embedFile(path);
+        const production = source[0 .. std.mem.indexOf(u8, source, "\ntest \"") orelse source.len];
+        try expectAbsent(production, ".consume(");
+        try expectAbsent(production, "lease.Table");
+    }
+    // The action observes the account only through the port, once, and passes the lease it was given.
+    const observing = @embedFile("actions/clarification/authenticate_actor.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(observing, ".authenticate("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("application/actor_evidence_workflow.zig"), "self.action.execute(scratch.allocator(), input.step.runtime, granted)"));
+    // Exactly one action declares the effect, and it is the one that takes the port.
+    const io = std.testing.io;
+    var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
+    defer actions.close(io);
+    var walker = try actions.walk(std.testing.allocator);
+    defer walker.deinit();
+    var declaring: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        if (std.mem.indexOf(u8, source, ".side_effect = .actor_authentication") != null) {
+            declaring += 1;
+            try std.testing.expectEqualStrings("authenticate_actor.zig", entry.basename);
+        }
+        if (std.mem.indexOf(u8, source, "ports/actor_authentication.zig") != null) try std.testing.expectEqualStrings("authenticate_actor.zig", entry.basename);
+    }
+    try std.testing.expectEqual(@as(usize, 1), declaring);
+    const contract = @import("actions/clarification/authenticate_actor.zig").Action.contract;
+    try std.testing.expectEqual(pipeline.SideEffect.actor_authentication, contract.side_effect);
+    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
+    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.actor_observation}, contract.produces);
+    // The chain's other actions are pure, and the two stage actions are capability-free stages (ADR 0031).
+    inline for (.{
+        @import("actions/clarification/plan_clarification_authentication.zig").Action.contract,
+        @import("actions/clarification/check_clarification_authentication.zig").Action.contract,
+        @import("actions/clarification/advance_clarification_authentication.zig").Action.contract,
+        @import("actions/clarification/accept_clarification_responses.zig").Action.contract,
+        @import("actions/clarification/check_clarification_cancellation.zig").Action.contract,
+        @import("actions/clarification/prepare_cancelled_clarification_output.zig").Action.contract,
+    }) |pure| try std.testing.expectEqual(pipeline.SideEffect.none, pure.side_effect);
+    inline for (.{
+        .{ @embedFile("actions/specify/prepare_actor_evidence.zig"), @import("actions/specify/prepare_actor_evidence.zig").Action.contract, pipeline.SideEffect.filesystem_read },
+        .{ @embedFile("actions/clarification/accept_clarification_responses.zig"), @import("actions/clarification/accept_clarification_responses.zig").Action.contract, pipeline.SideEffect.none },
+    }) |stage| {
+        try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(stage[0]));
+        try expectAllowedActionImports(stage[0]);
+        try expectSingleActionContract(stage[0]);
+        try std.testing.expectEqual(stage[2], stage[1].side_effect);
+        try std.testing.expectEqual(pipeline.NodeKind.action, stage[1].kind);
+        try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, stage[1].repair_role);
+        try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, stage[1].runner_accounting);
+    }
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{ .raw_actor_evidence, .actor_evidence_registry }, @import("actions/specify/prepare_actor_evidence.zig").Action.contract.produces);
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{ .clarification_inputs, .actor_evidence_registry }, @import("actions/clarification/accept_clarification_responses.zig").Action.contract.replaces);
+    // The Spec workflow loads the registry after logging and authenticates before it extracts; the subgraph plans, checks,
+    // observes, advances and then accepts.
+    const spec_workflow = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(spec_workflow);
+    const logging_at = std.mem.indexOf(u8, spec_workflow, "  logging:\n").?;
+    const evidence_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-actor-evidence").?;
+    const call_at = std.mem.indexOf(u8, spec_workflow, "call: authenticate-clarifications").?;
+    const extract_at = std.mem.indexOf(u8, spec_workflow, "  extract:\n").?;
+    try std.testing.expect(logging_at < evidence_at and evidence_at < call_at and call_at < extract_at);
+    var cursor: usize = std.mem.indexOf(u8, spec_workflow, "\nsubgraphs:\n  authenticate-clarifications:\n").?;
+    inline for (.{ "use: plan-clarification-authentication", "use: check-clarification-authentication", "use: authenticate-actor", "use: advance-clarification-authentication", "use: accept-clarification-responses", "use: check-clarification-cancellation" }) |operation| {
+        cursor = std.mem.indexOfPos(u8, spec_workflow, cursor, operation) orelse return error.MissingAuthenticationStep;
+        try std.testing.expectEqual(@as(usize, 1), countOccurrences(spec_workflow, operation));
+    }
+    // A cancel the run accepted is published by its own subgraph, which prepares the cancelled output and then publishes it,
+    // with no other operation between the two (ADR 0025).
+    const cancellation_at = std.mem.indexOf(u8, spec_workflow, "  cancellation:\n    call: publish-cancellation\n").?;
+    try std.testing.expect(call_at < cancellation_at and cancellation_at < extract_at);
+    const prepare_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-cancelled-clarification-output").?;
+    const publisher_at = std.mem.indexOfPos(u8, spec_workflow, prepare_at, "use: publish-workflow-output").?;
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(spec_workflow, "use: prepare-cancelled-clarification-output"));
+    try std.testing.expect(cursor < prepare_at);
+    // The slice from the preparation up to the publisher holds the preparation's own `use:` and no other.
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(spec_workflow[prepare_at..publisher_at], "use: "));
+    try std.testing.expect(std.mem.indexOf(u8, spec_workflow[prepare_at..publisher_at], "on: {ok: publish, failed: end.failed}") != null);
+}
+
+test "only the runner names the authentication lease table, and only the listed modules take a lease" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    // The modules that may import the lease type: the runner issues it, the step's action and the port take it, the adapter's
+    // tests spend it, and the registry's step input carries it. None of them but the runner names the table in production.
+    const lease_modules = [_][]const u8{ "workflow_pipeline_runner.zig", "authenticate_actor.zig", "actor_authentication.zig", "os_account.zig", "workflow_operation_registry.zig" };
+    for ([_][]const u8{ "src/actions", "src/ports", "src/adapters", "src/application", "src/composition" }) |root| {
+        var directory = try std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
+        defer directory.close(io);
+        var walker = try directory.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next(io)) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+            const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+            defer allocator.free(source);
+            const production = source[0 .. std.mem.indexOf(u8, source, "\ntest \"") orelse source.len];
+            if (std.mem.indexOf(u8, production, "authentication_leases") != null) try std.testing.expectEqualStrings("workflow_pipeline_runner.zig", entry.basename);
+            if (std.mem.indexOf(u8, production, "actor_authentication_lease.zig") != null) {
+                var listed = false;
+                for (lease_modules) |name| listed = listed or std.mem.eql(u8, name, entry.basename);
+                try std.testing.expect(listed);
+            }
+        }
+    }
+}
+
 test "model attempt accounting has one runner-applied transition authority" {
     switch (@typeInfo(model_attempt_accounting.RunnerModelAttemptAccounting)) {
         .@"opaque" => {},
@@ -2634,6 +2789,19 @@ test "no absorbed reference preparation operation remains registered, bound or p
     const naming_at = std.mem.indexOf(u8, spec_workflow, "use: compile-naming-policy") orelse return error.MissingNamingStep;
     const tokens_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-reference-tokens") orelse return error.MissingTokenStage;
     try std.testing.expect(evidence_at < naming_at and naming_at < tokens_at);
+}
+
+test "the actor-evidence stage steps hand each next step the type the step before it produced" {
+    const prepare = @import("actions/specify/prepare_actor_evidence.zig");
+    const accept = @import("actions/clarification/accept_clarification_responses.zig");
+    // Preparing: the registry as read is a distinct type from the validated one the stage hands on.
+    try std.testing.expect(ReturnPayload(prepare.steps.parseRegistry) == ParameterType(prepare.steps.validateRegistry, 0));
+    try std.testing.expect(validatedHandoff(ParameterType(prepare.steps.validateRegistry, 0), ReturnPayload(prepare.steps.validateRegistry), @FieldType(prepare.Outputs, "registry")));
+    // Accepting: each step takes what an earlier one returned, and the join check reads the state the acceptance built.
+    try std.testing.expect(ReturnPayload(accept.steps.bindForms) == ParameterType(accept.steps.acceptResponses, 3));
+    try std.testing.expect(ReturnPayload(accept.steps.recordEvidence) == ParameterType(accept.steps.acceptResponses, 4));
+    try std.testing.expect(ReturnPayload(accept.steps.acceptResponses) == ParameterType(accept.steps.validateResponses, 1));
+    try std.testing.expect(ReturnPayload(accept.steps.acceptResponses) == @FieldType(accept.Outputs, "inputs"));
 }
 
 test "the prepare-inputs stage steps that validate hand the next step a distinct validated type" {

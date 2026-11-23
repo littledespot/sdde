@@ -4,9 +4,9 @@ const fixture = @import("../e2e/fixture.zig");
 const oracle = @import("../e2e/oracle.zig");
 const run_directory = @import("../e2e/run_directory.zig");
 const artifacts = @import("../../../src/domain/workflow_artifact_registry.zig");
-const expected = [_]c.Artifact{ .specification, .reference_context, .clarification_state, .workflow_state };
+const expected = [_]c.Artifact{ .specification, .reference_context, .clarification_state, .workflow_state, .actor_evidence };
 const selected: c.Case = .{
-    .schema = "spec-e2e-case/v3",
+    .schema = "spec-e2e-case/v4",
     .id = "one-reference",
     .workflow_id = "spec-generation",
     .expected_outcome = .publication,
@@ -43,7 +43,7 @@ test "E2E case is closed and cannot preseed arbitrary destination collisions" {
     const valid = try std.json.Stringify.valueAlloc(a, selected, .{});
     _ = try c.parse(a, valid);
     for ([_][2][]const u8{
-        .{ "\"spec-e2e-case/v3\"", "\"spec-e2e-case/v2\"" },
+        .{ "\"spec-e2e-case/v4\"", "\"spec-e2e-case/v3\"" },
         // A retired judge configuration is not accepted case content.
         .{ "\"id\":", "\"evaluation_config\":\"evaluation.json\",\"id\":" },
         .{ "\"expected_outcome\":\"publication\",", "" },
@@ -2547,6 +2547,8 @@ const OfflineRun = struct {
     captured: fixture.Capture,
     report: c.Report,
     specification: ?[]const u8,
+    /// The account the engine authenticates; the operating-system account when none is set.
+    authenticator: ?@import("../../../src/ports/actor_authentication.zig").Port = null,
 
     const hello_world = @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json");
     const loan_renewal = @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json");
@@ -2564,6 +2566,7 @@ const OfflineRun = struct {
         self.evidence = std.testing.tmpDir(.{});
         self.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
         self.specification = null;
+        self.authenticator = null;
     }
 
     fn deinit(self: *OfflineRun) void {
@@ -2594,7 +2597,7 @@ const OfflineRun = struct {
         var keys: @import("../environment.zig").GenerationKeys = .initFill(null);
         keys.set(.anthropic, credential);
         const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = self.evidence.dir, .secrets = &.{credential} };
-        self.specification = try @import("../e2e/invoke.zig").run(io, a, self.project.dir, self.choice, self.captured, keys, store, &self.report, .{ .purpose = .whole_workflow, .transport = wire.port(), .runner_view = &wire.runner });
+        self.specification = try @import("../e2e/invoke.zig").run(io, a, self.project.dir, self.choice, self.captured, keys, store, &self.report, .{ .purpose = .whole_workflow, .transport = wire.port(), .runner_view = &wire.runner, .authenticator = self.authenticator });
         if (wire.failure) |failure| std.debug.print("scripted answer unavailable: {s}\n", .{@errorName(failure)});
         try std.testing.expect(wire.failure == null);
     }
@@ -2677,6 +2680,280 @@ test "an invalid closed clarification form blocks the Spec workflow before its f
         try offline.expectNothingPublished(io);
         try std.testing.expectEqualStrings(bytes, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(16 * 1024)));
     }
+}
+
+/// The account the engine authenticates in these scenarios, in place of the operating system's: the host's own name may be
+/// outside the stored-identifier syntax, and a test must not depend on it. It counts each observation, one for each lease.
+const FakeAccount = struct {
+    actor: []const u8 = "tester",
+    failure: ?@import("../../../src/ports/actor_authentication.zig").Error = null,
+    observations: usize = 0,
+
+    fn port(self: *FakeAccount) @import("../../../src/ports/actor_authentication.zig").Port {
+        return .{ .context = @ptrCast(self), .observe_fn = observe };
+    }
+
+    fn observe(context: *@import("../../../src/ports/actor_authentication.zig").Context, allocator: std.mem.Allocator) @import("../../../src/ports/actor_authentication.zig").Error!@import("../../../src/domain/actor_evidence.zig").Observation {
+        const self: *FakeAccount = @ptrCast(@alignCast(context));
+        self.observations += 1;
+        if (self.failure) |failure| return failure;
+        return .{ .provider = .os_account, .actor_id = try allocator.dupe(u8, self.actor), .assurance = .invoking_account, .run_id = "RUN-fake", .occurred_at = "2026-11-23T08:15:00Z".* };
+    }
+};
+
+test "an authenticated closed clarification form is accepted, published with its evidence, and reused by the rerun" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const fixtures = @import("../../../src/test_fixtures/clarification_inputs.zig");
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const evidence = @import("../../../src/domain/actor_evidence.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.hello_world);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // One open record and the closed form a user answered it with.
+    const record = fixtures.record("S01");
+    const records = [_]cl.Record{record};
+    var seeded = fixtures.state(&records);
+    seeded.feature_id = feature;
+    const form_directory = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify" });
+    const state_directory = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state" });
+    try offline.project.dir.createDirPath(io, form_directory);
+    try offline.project.dir.createDirPath(io, state_directory);
+    const form_path = try std.fs.path.join(a, &.{ form_directory, "S01.md" });
+    const state_path = try std.fs.path.join(a, &.{ state_directory, artifacts.clarification_state_filename });
+    const registry_path = try std.fs.path.join(a, &.{ state_directory, artifacts.actor_evidence_filename });
+    const form = try forms.render(a, record, fixtures.binding(seeded, record), .closed, "Approved theme.");
+    try offline.project.dir.writeFile(io, .{ .sub_path = form_path, .data = form });
+    try offline.project.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, seeded, .{}) });
+
+    var wire: ScriptedWire = .{};
+    errdefer std.debug.print("accepting run of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &wire);
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(.passed, offline.report.publication_check);
+    // The published state holds the response and the registry the evidence it joins, naming the observed account.
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqualStrings(cl.schema_version, published.schema);
+    try std.testing.expectEqual(@as(usize, 1), published.responses.len);
+    try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, published.records[0].status);
+    try std.testing.expectEqualStrings("AE-1", published.responses[0].authentication_evidence_id);
+    try std.testing.expectEqualStrings(account.actor, published.responses[0].actor_id);
+    // One lease, so one observation, for the one form.
+    try std.testing.expectEqual(@as(usize, 1), account.observations);
+    try std.testing.expectEqualStrings(form, published.responses[0].submitted_form_bytes);
+    const registry_limits: strict_json.Limits = .{ .maximum_bytes = evidence.max_bytes, .maximum_depth = evidence.max_depth };
+    const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
+    try std.testing.expectEqual(@as(u64, 1), registry.revision);
+    try std.testing.expectEqual(@as(usize, 1), registry.entries.len);
+    try std.testing.expectEqualStrings(account.actor, registry.entries[0].actor_id);
+    try std.testing.expectEqualStrings(published.responses[0].answered_at, registry.entries[0].occurred_at);
+    try evidence.validateJoin(registry, published);
+    // The user's closed form is preserved byte for byte.
+    try std.testing.expectEqualStrings(form, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+
+    // The rerun reuses the response: nothing awaits an account, no entry is appended, and the form is still protected.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var rerun: ScriptedWire = .{};
+    try offline.execute(io, &rerun);
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .ok), offline.report.workflow_outcome);
+    const reused = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
+    try std.testing.expectEqual(@as(u64, 1), reused.revision);
+    try std.testing.expectEqual(@as(usize, 1), reused.entries.len);
+    try std.testing.expectEqualStrings(form, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+}
+
+test "a valid cancel beside an answered form ends the run cancelled before its first request and publishes only the clarification state and its evidence" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const fixtures = @import("../../../src/test_fixtures/clarification_inputs.zig");
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const evidence = @import("../../../src/domain/actor_evidence.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.hello_world);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // Three open records: the first answered, the second cancelled, and the third left as it was.
+    const records = [_]cl.Record{ fixtures.record("S01"), fixtures.record("S02"), fixtures.record("S03") };
+    var seeded_records = records;
+    for (&seeded_records, 1..) |*record, index| record.subject.slot = ([_][]const u8{ "appearance", "colour", "layout" })[index - 1];
+    var seeded = fixtures.state(&seeded_records);
+    seeded.feature_id = feature;
+    const form_directory = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify" });
+    const state_directory = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state" });
+    try offline.project.dir.createDirPath(io, form_directory);
+    try offline.project.dir.createDirPath(io, state_directory);
+    const state_path = try std.fs.path.join(a, &.{ state_directory, artifacts.clarification_state_filename });
+    const registry_path = try std.fs.path.join(a, &.{ state_directory, artifacts.actor_evidence_filename });
+    const answered = try forms.render(a, seeded_records[0], fixtures.binding(seeded, seeded_records[0]), .closed, "Approved theme.");
+    const withdrawn = try forms.render(a, seeded_records[1], fixtures.binding(seeded, seeded_records[1]), .cancel, "cancel: No longer needed.");
+    const waiting = try forms.render(a, seeded_records[2], fixtures.binding(seeded, seeded_records[2]), .open, "");
+    const names = [_][]const u8{ "S01.md", "S02.md", "S03.md" };
+    for (names, [_][]const u8{ answered, withdrawn, waiting }) |name, bytes| {
+        try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ form_directory, name }), .data = bytes });
+    }
+    try offline.project.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, seeded, .{}) });
+
+    var wire: ScriptedWire = .{};
+    errdefer std.debug.print("cancelling run of {s}\n", .{offline.choice.id});
+    try offline.executeWithoutModel(io, &wire);
+    // The run is cancelled, distinct from blocked and failed, and the harness read no specification.
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .cancelled), offline.report.workflow_outcome);
+    try std.testing.expectEqual(c.Status.workflow_cancelled, offline.report.status);
+    try std.testing.expect(offline.specification == null);
+    try std.testing.expectEqual(.not_run, offline.report.publication_check);
+    // Its output is the clarification state and its evidence; no specification, reference context or workflow state exists.
+    for ([_][]const u8{ artifacts.specification_filename, artifacts.reference_context_filename }) |name| {
+        try std.testing.expectError(error.FileNotFound, offline.project.dir.access(io, try std.fs.path.join(a, &.{ paths.specs, feature, name }), .{}));
+    }
+    try std.testing.expectError(error.FileNotFound, offline.project.dir.access(io, try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", artifacts.workflow_state_filename }), .{}));
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqual(@as(usize, 2), published.responses.len);
+    try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, published.records[0].status);
+    try std.testing.expectEqual(cl.EngineStatus.cancelled_by_user, published.records[1].status);
+    try std.testing.expectEqual(cl.EngineStatus.open, published.records[2].status);
+    try std.testing.expectEqualStrings(answered, published.responses[0].submitted_form_bytes);
+    try std.testing.expectEqualStrings(withdrawn, published.responses[1].submitted_form_bytes);
+    try std.testing.expectEqualStrings("No longer needed.", published.responses[1].answer.cancel_reason);
+    for (published.responses) |response| try std.testing.expectEqualStrings(account.actor, response.actor_id);
+    // The loop ran two passes under two leases: one observation for each form that awaited an account, none for the form left open.
+    try std.testing.expectEqual(@as(usize, 2), account.observations);
+    const registry_limits: strict_json.Limits = .{ .maximum_bytes = evidence.max_bytes, .maximum_depth = evidence.max_depth };
+    const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
+    try std.testing.expectEqual(@as(usize, 2), registry.entries.len);
+    try evidence.validateJoin(registry, published);
+    // The user's closed form is preserved byte for byte.
+    try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ form_directory, names[0] }), a, .limited(cl.max_form_bytes)));
+    // The run logged its publication, as any run that publishes does, and no failure.
+    const rows = try offline.terminalRows(io);
+    try std.testing.expectEqual(@as(usize, 1), rows.published);
+    try std.testing.expectEqual(@as(usize, 0), rows.failed + rows.cancelled);
+}
+
+/// One open record with the closed form a user answered it with, and the state that names it, written where the feature's
+/// inputs are read. Returns the form's bytes and the paths of the state and the registry.
+const SeededAnswer = struct { form: []const u8, form_path: []const u8, state_path: []const u8, registry_path: []const u8, state_bytes: []const u8 };
+
+fn seedAnsweredForm(io: std.Io, offline: *OfflineRun) !SeededAnswer {
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const fixtures = @import("../../../src/test_fixtures/clarification_inputs.zig");
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    const record = fixtures.record("S01");
+    const records = [_]cl.Record{record};
+    var seeded = fixtures.state(&records);
+    seeded.feature_id = feature;
+    const form_directory = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify" });
+    const state_directory = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state" });
+    try offline.project.dir.createDirPath(io, form_directory);
+    try offline.project.dir.createDirPath(io, state_directory);
+    const result: SeededAnswer = .{
+        .form = try forms.render(a, record, fixtures.binding(seeded, record), .closed, "Approved theme."),
+        .form_path = try std.fs.path.join(a, &.{ form_directory, "S01.md" }),
+        .state_path = try std.fs.path.join(a, &.{ state_directory, artifacts.clarification_state_filename }),
+        .registry_path = try std.fs.path.join(a, &.{ state_directory, artifacts.actor_evidence_filename }),
+        .state_bytes = try std.json.Stringify.valueAlloc(a, seeded, .{}),
+    };
+    try offline.project.dir.writeFile(io, .{ .sub_path = result.form_path, .data = result.form });
+    try offline.project.dir.writeFile(io, .{ .sub_path = result.state_path, .data = result.state_bytes });
+    return result;
+}
+
+test "an account the engine cannot read or cannot name ends the run failed before its first request and accepts nothing" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const OutcomeTag = @import("../../../src/domain/workflow.zig").OutcomeTag;
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    // An unreadable account, an unsupported platform, a failing clock and a name outside the stored-identifier syntax are
+    // each typed: the user cannot fix them by editing forms, so the run ends failed, never blocked and never accepted.
+    for ([_]FakeAccount{
+        .{ .failure = error.AccountUnavailable },
+        .{ .failure = error.UnsupportedPlatform },
+        .{ .failure = error.ClockUnavailable },
+        .{ .actor = "ada lovelace" },
+    }) |scenario| {
+        var account = scenario;
+        var offline: OfflineRun = undefined;
+        try offline.init(io, OfflineRun.hello_world);
+        defer offline.deinit();
+        offline.authenticator = account.port();
+        const a = offline.arena.allocator();
+        const seeded = try seedAnsweredForm(io, &offline);
+        var wire: ScriptedWire = .{};
+        errdefer std.debug.print("unauthenticated run with {any} / {s}\n", .{ account.failure, account.actor });
+        try offline.executeWithoutModel(io, &wire);
+        try std.testing.expectEqual(@as(?OutcomeTag, .failed), offline.report.workflow_outcome);
+        try std.testing.expectEqual(c.Status.workflow_failed, offline.report.status);
+        try std.testing.expectEqual(@as(usize, 1), account.observations);
+        // Nothing was published: the user's form and the state are as they were, and no registry was written.
+        try std.testing.expectEqualStrings(seeded.form, try offline.project.dir.readFileAlloc(io, seeded.form_path, a, .limited(cl.max_form_bytes)));
+        try std.testing.expectEqualStrings(seeded.state_bytes, try offline.project.dir.readFileAlloc(io, seeded.state_path, a, .limited(cl.max_state_bytes)));
+        try std.testing.expectError(error.FileNotFound, offline.project.dir.access(io, seeded.registry_path, .{}));
+        try offline.expectNothingPublished(io);
+    }
+}
+
+test "a run that fails after accepting a form publishes nothing, and the next run accepts the same form again" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const OutcomeTag = @import("../../../src/domain/workflow.zig").OutcomeTag;
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const evidence = @import("../../../src/domain/actor_evidence.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.hello_world);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    const seeded = try seedAnsweredForm(io, &offline);
+    // Run 1 authenticates and accepts the form, then fails in generation: a repair that never converges.
+    var failing: ScriptedWire = .{ .options = .{ .repair = true, .failed_repair = true, .repeated_provenance_fault = true } };
+    errdefer std.debug.print("failing run of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &failing);
+    try std.testing.expectEqual(@as(?OutcomeTag, .failed), offline.report.workflow_outcome);
+    try std.testing.expectEqual(@as(usize, 1), account.observations);
+    try std.testing.expectEqualStrings(seeded.form, try offline.project.dir.readFileAlloc(io, seeded.form_path, a, .limited(cl.max_form_bytes)));
+    try std.testing.expectEqualStrings(seeded.state_bytes, try offline.project.dir.readFileAlloc(io, seeded.state_path, a, .limited(cl.max_state_bytes)));
+    try std.testing.expectError(error.FileNotFound, offline.project.dir.access(io, seeded.registry_path, .{}));
+    // Run 2 finds the form as the user left it, authenticates it again and publishes it with one entry of evidence.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var succeeding: ScriptedWire = .{};
+    try offline.execute(io, &succeeding);
+    try std.testing.expectEqual(@as(?OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(@as(usize, 2), account.observations);
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, seeded.state_path, a, .limited(cl.max_state_bytes)), .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth });
+    try std.testing.expectEqual(@as(usize, 1), published.responses.len);
+    const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, seeded.registry_path, a, .limited(evidence.max_bytes)), .{ .maximum_bytes = evidence.max_bytes, .maximum_depth = evidence.max_depth });
+    try std.testing.expectEqual(@as(u64, 1), registry.revision);
+    try std.testing.expectEqual(@as(usize, 1), registry.entries.len);
+    try evidence.validateJoin(registry, published);
 }
 
 test "an operator interrupt raised while a request is in flight cancels the harness run and publishes nothing" {

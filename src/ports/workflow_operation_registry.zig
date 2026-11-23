@@ -53,6 +53,8 @@ pub const StepInput = struct {
         slot: @import("provider_operation_authorization.zig").AllocatedSlot,
         runtime: pipeline.NodeRuntime,
     } = null,
+    /// The single-use lease the runner issued for this invocation of an `actor_authentication` step (ADR 0025).
+    actor_authentication: ?@import("../domain/actor_authentication_lease.zig").Lease = null,
 };
 
 pub const Input = union(enum) {
@@ -366,6 +368,7 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
     if (!@import("../domain/workflow_model_invocation.zig").validContract(contract, capabilities)) return false;
     if (!@import("../domain/workflow_model_request_lifecycle.zig").validContract(contract, capabilities)) return false;
     if (!@import("../domain/workflow_provider_authorization.zig").validContract(contract, capabilities)) return false;
+    if (!@import("../domain/workflow_actor_authentication.zig").validContract(contract, capabilities)) return false;
     if (!operation.validAccounting(contract.runner_accounting, contract.requires, contract.produces, contract.side_effect, contract.retry_limit != null)) return false;
     if (!@import("../domain/workflow_provider_operation.zig").validContract(contract, capabilities)) return false;
     if (contract.outcomes.len == 0 or !uniqueOutcomes(contract.outcomes) or

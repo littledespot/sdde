@@ -296,10 +296,10 @@ const measures_test_config =
     \\"toolchainPreset":".sddtoolkit/toolchainPreset","principles":".sddtoolkit/principles","templates":".sddtoolkit/templates","providers":".sddproviders.json"}}
 ;
 const measures_test_case =
-    \\{"schema":"spec-e2e-case/v3","id":"loan","workflow_id":"spec-generation","expected_outcome":"publication","feature":"loan","reference":"loan",
+    \\{"schema":"spec-e2e-case/v4","id":"loan","workflow_id":"spec-generation","expected_outcome":"publication","feature":"loan","reference":"loan",
     \\"config":"cases/loan/.sddtoolkit.json","evaluation_case":"cases/loan/evaluation.json","directories":[],
     \\"files":[{"source":"cases/loan/stories.md","destination":"references/loan/stories.md"}],
-    \\"expected_artifacts":["specification","reference_context","clarification_state","workflow_state"]}
+    \\"expected_artifacts":["specification","reference_context","clarification_state","workflow_state","actor_evidence"]}
 ;
 const measures_test_log = "project/specs/loan/logs/events/RUN-1/LOGBIND-1/0001.log";
 

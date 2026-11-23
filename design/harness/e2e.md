@@ -337,8 +337,8 @@ credentials. No model answer means no evidence yet about schema conformance.
 
 ## Case and publication contract
 
-- The closed `spec-e2e-case/v3` declares workflow/feature/reference selection,
-  configuration, explicit file mappings, empty directories, all four expected artifact
+- The closed `spec-e2e-case/v4` declares workflow/feature/reference selection,
+  configuration, explicit file mappings, empty directories, all five expected artifact
   kinds, `expected_outcome` and `evaluation_case`.
 - The evaluation case names source documents and a rubric.
 - Every selected reference must map exactly once to an evaluation source.
@@ -347,8 +347,11 @@ credentials. No model answer means no evidence yet about schema conformance.
 - Scripted provider responses and expected specifications are not case inputs.
 
 - The harness requires an `ok` workflow outcome, runner-observed publication and all
-  four readable, nonempty artifacts: specification, reference context, clarification
-  state and workflow state.
+  five readable, nonempty artifacts: specification, reference context, clarification
+  state, actor-evidence registry and workflow state.
+- A run the user's own `cancel` ended publishes the clarification state and the registry only
+  ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)). The oracle reports it as
+  `workflow_cancelled` and inspects no publication, as for any cancelled run.
 - Each file must match the bytes prepared for that publication.
 - This checks artifact identity, not semantic quality.
 - A stale file, partial publication or in-memory candidate cannot satisfy the check.
@@ -359,7 +362,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v25`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v26`; it stays null until ADR 0041 is
   implemented (SPEC01 E0).
 
 ### Rubric assessment
@@ -611,7 +614,7 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v25`,
+The current closed formats are `spec-e2e-case/v4`, `spec-e2e-report/v26`,
 `e2e-step-event/v8`, `baseline-freeze/v3`, `baseline-acquisition/v17`,
 `baseline-score/v9`, `baseline-budget-feasibility/v2`, the evaluator packets'
 `baseline-assessment-inputs/v2` and `provider-compatibility-report/v4`; assessor

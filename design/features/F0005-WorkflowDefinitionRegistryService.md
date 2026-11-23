@@ -711,7 +711,10 @@ transitions and their existing native authority.
 - Registered operational ports include `LLMProviderInterface` (`model-provider`), the
   preloaded authorization preparation port (`provider-authorization`), the three
   root-bound toolchain source ports (`toolchain-read`), the toolchain document parser
-  (`toolchain-parser`), and reference directory inspection (`reference-read`).
+  (`toolchain-parser`), reference directory inspection (`reference-read`), and the invoking-account
+  authentication port (`actor-authentication`, [ADR 0025](../decisions/0025-clarification-answer-authentication.md)),
+  which a step declares together with the `actor_authentication` side effect and which only the
+  runner's single-use lease lets it use.
 - The pure bounded Unicode normalizer grants no operational capability.
 - Further port types require explicit native registration; unknown erased contexts or
   callback fields are rejected, not inferred as pure.

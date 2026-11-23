@@ -53,6 +53,8 @@ pub const Runtime = struct {
     providers: model_provider_bootstrap.Assembly,
     clock: @import("../adapters/system/provider_operation_clock.zig").Adapter,
     provider_runtime: @import("model_provider_runtime.zig").Assembly,
+    log_clock: @import("../adapters/system/trusted_log_clock.zig").Adapter,
+    accounts: @import("../adapters/system/os_account.zig").Adapter,
 
     logging: ?@import("feature_logging_runtime.zig").Assembly = null,
     invocation_created: bool = false,
@@ -103,17 +105,21 @@ pub const Runtime = struct {
             .providers = model_provider_bootstrap.Assembly.init(io, allocator, project, .{}, &@import("provider_model_contracts.zig").registry),
             .clock = .{ .io = io },
             .provider_runtime = undefined,
+            .log_clock = .{ .io = io },
+            .accounts = .{ .clock = undefined },
         };
-        self.native.init(allocator, self.toolchain_source.projectCapturer(), self.toolchain_source.presetEnumerator(), self.toolchain_source.presetCapturer(), self.toolchain_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, self.reference.inspector(), self.feature.inspector(), self.inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), self.corpus.enumerator(), self.corpus.capturer(), self.markdown.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, self.identities.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
+        self.accounts.clock = self.log_clock.clock();
+        self.native.init(allocator, self.toolchain_source.projectCapturer(), self.toolchain_source.presetEnumerator(), self.toolchain_source.presetCapturer(), self.toolchain_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, self.reference.inspector(), self.feature.inspector(), self.inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), self.corpus.enumerator(), self.corpus.capturer(), self.markdown.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, self.identities.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary }, @import("../adapters/parsers/actor_evidence.zig").parser(), self.accounts.authenticator());
         self.native.ops.publish_output.action.writer = self.outputs.port();
         self.native.ops.prepare_inputs.action.state_source = self.inputs.workflowStateCapturer();
+        self.native.ops.prepare_actor_evidence.action.source = self.inputs.actorEvidenceCapturer();
     }
 
     /// Startup validates the registry and binds the roots, workflows, configuration, principles and logging.
     fn startup(self: *Runtime, io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, control: pipeline.NodeRuntime) void {
         self.boot = runInProjectWithRegistry(io, allocator, project, control, &self.native.registry, &self.boot_diagnostic);
         if (self.boot == .ready) {
-            self.logging = .{ .allocator = allocator, .io = io, .project = project, .roots = self.boot.ready.roots.registry(), .logs = &self.boot.ready.logs, .inputs = &self.inputs, .outputs = &self.outputs };
+            self.logging = .{ .allocator = allocator, .io = io, .project = project, .roots = self.boot.ready.roots.registry(), .logs = &self.boot.ready.logs, .inputs = &self.inputs, .outputs = &self.outputs, .accounts = &self.accounts };
             self.native.ops.activate_feature_logging.activator = self.logging.?.activator();
             self.native.bindRoots(self.boot.ready.roots.registry());
             self.native.bindWorkflows(self.boot.ready.workflows.registry());

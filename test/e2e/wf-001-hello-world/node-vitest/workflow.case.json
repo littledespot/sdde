@@ -1,5 +1,5 @@
 {
-  "schema": "spec-e2e-case/v3",
+  "schema": "spec-e2e-case/v4",
   "id": "wf-001-hello-world-node-vitest-spec",
   "workflow_id": "spec-generation",
   "expected_outcome": "publication",
@@ -160,7 +160,8 @@
     "specification",
     "reference_context",
     "clarification_state",
-    "workflow_state"
+    "workflow_state",
+    "actor_evidence"
   ],
   "evaluation_case": "test/e2e/wf-001-hello-world/node-vitest/spec.case.json"
 }
