@@ -3,7 +3,7 @@
     "level": "debug",
     "console": true
   },
-  "workflowTokenBudget": 125000,
+  "workflowTokenBudget": 200000,
   "temperature": 0.1,
   "temperatureRunawayRetry": 1,
   "models": {
