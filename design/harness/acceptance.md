@@ -15,7 +15,13 @@ case rubrics, never native defaults.
 Both source-complete cases expect `publication`. A clarification fails their
 expected outcome. Future cases may explicitly expect `clarification`; success
 then requires native `needs_user`, validated partial publication and actual
-registered open clarification handles.
+registered open clarification handles. A case may expect `clarification_then_publication`
+([e2e.md](e2e.md#case-and-publication-contract)): each leg's report states its own outcome, never the combined one.
+The first leg passes as a `clarification` run, mechanically and with no adjudication, and the second is a `publication`
+run that awaits adjudication like any publication, scored on the case rubric with the declared answer counted as
+source. The adjudication record covers the second leg only, since the first publishes an incomplete specification that
+stays ungraded (ADR 0017). A first leg that paused with nothing to answer (`answer_unavailable`) fails as an unexpected
+outcome.
 
 Raw model grades cannot authoritatively accept or reject a published specification.
 This policy changes no cost policy and authorizes no alternate model, calibration
@@ -147,9 +153,10 @@ and qualification. No real grader is currently qualified by these pending record
   and diagnostic, the resolved `evaluation-config/v2` judge configuration with its
   Bedrock family, and explicit grader/acceptance evidence with an always-unresolved
   decision.
-- `spec-e2e-case/v4`: required expected outcome; no judge configuration; the actor-evidence registry
-  among its five expected artifacts.
-- `spec-e2e-report/v26` (v18, with the admission audit's field member `edge_given` in place of
+- `spec-e2e-case/v5`: required expected outcome and answers; no judge configuration; the actor-evidence registry
+  among its five expected artifacts. A report's `continued_from` (`spec-e2e-report/v27`) names the first leg a second leg
+  continues.
+- `spec-e2e-report/v27` (v27 adds `continued_from` and the status `answer_unavailable`; v18, with the admission audit's field member `edge_given` in place of
   `edge_condition` ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
   Decision 7), plus the closed `reason` of an `authority` terminal rejection,
   which includes the repair-key and request-assignment population bounds and the

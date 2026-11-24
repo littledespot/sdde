@@ -137,6 +137,7 @@ pub const PipelineEnvelope = struct {
         }
         const generation = std.math.add(u64, self.generation, 1) catch return error.DataGenerationExhausted;
         var origin: data.Origin = .{ .generation = generation, .occurrence = occurrence.ordinal, .producer = contract.id, .outcome = outcome, .inputs = @splat(null) };
+        for (contract.replaces) |key| origin.replaced.insert(key);
         inline for (.{ contract.requires, contract.optional }) |keys| {
             for (keys) |key| if (self.origins[@intFromEnum(key)]) |input| {
                 origin.inputs[@intFromEnum(key)] = input.generation;
@@ -245,9 +246,15 @@ pub const PipelineEnvelope = struct {
         for (origin.lineage, 0..) |generation, index| {
             const expected = generation orelse continue;
             // Only a directly consumed prior revision is a replacement's
-            // self-input. A captured dependency cannot turn stale authority into
-            // a self-input merely because a later projection reuses its key.
+            // self-input. So is the prior revision of another key the same step
+            // replaced, for as long as that key still holds what the step wrote:
+            // a later change to it is a change to a dependency. A captured
+            // dependency cannot turn stale authority into a self-input merely
+            // because a later projection reuses its key.
             if (index == @intFromEnum(key) and origin.inputs[index] == expected) continue;
+            if (origin.replaced.contains(@enumFromInt(index)) and origin.inputs[index] == expected) {
+                if (self.origins[index]) |peer| if (peer.generation == origin.generation) continue;
+            }
             const current = self.origins[index] orelse return .missing_authority;
             if (current.generation != expected) return .stale_authority;
             if (self.checkAuthorityLineage(@enumFromInt(index), checked)) |rejection| return rejection;

@@ -11,6 +11,8 @@ const kinds = [_]a.Kind{ .feature_intent, .entity_applicability, .design_decisio
 
 test {
     _ = @import("required_authority_workflow_test.zig");
+    _ = @import("clarification_resolution_test.zig");
+    _ = @import("answered_reconciliation_test.zig");
 }
 
 fn id(kind: a.Kind) a.Id {
@@ -818,6 +820,76 @@ test "gaps over the same lines become one need and one form, and gaps over other
         try std.testing.expect(c.sameSubject(before.subject, after.subject));
         try std.testing.expectEqualStrings(before.id, after.id);
     }
+}
+
+test "a conflict's need offers its claims as options and every other need takes text" {
+    const conversion = @import("domain/required_authority_clarifications.zig");
+    const refresh = @import("domain/clarification_refresh.zig");
+    const c = @import("domain/clarification_inputs.zig");
+    const support = @import("domain/reference_support.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const f = @import("test_fixtures/reference_reconciliation.zig");
+    const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{ "Confirm immediately.\n", "Request approval first.\n" });
+    defer reference.deinit();
+    const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+    const accounted = (try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context())).valid;
+    const held = support.records(accounted);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, accounted);
+    const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
+    for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
+    for (evidence) |*entry| {
+        if (entry.requirement.unit != .conflict) continue;
+        entry.finding = .conflicting;
+        entry.review = .{ .question = "Which behavior applies?", .detail = "The sources disagree.", .provenance = .{ .claim_ids = held.conflicts[0].value.claim_ids, .citation_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{} };
+    }
+    inputs.evidence = evidence;
+    const needs = try conversion.build(allocator, reference.inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
+    try std.testing.expectEqual(@as(usize, 1), needs.entries.len);
+    const offered = needs.entries[0].answer_schema.select_one;
+    try std.testing.expectEqual(@as(usize, 2), offered.len);
+    try std.testing.expectEqualStrings("Confirm immediately.", offered[0].label);
+    try std.testing.expectEqualStrings("Request approval first.", offered[1].label);
+    // The refresh opens a selection form that holds the same options, and a rerun reuses it.
+    const opened = try refresh.refresh(allocator, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, needs);
+    try std.testing.expectEqual(@as(usize, 1), opened.state.value.?.records.len);
+    try std.testing.expectEqual(@as(usize, 2), opened.state.value.?.records[0].answer_schema.select_one.len);
+    // A gap that is not a conflict is answered in text.
+    const text = try conversion.consolidate(allocator, &.{}, &.{.{ .stage = .spec, .subject = needs.entries[0].subject, .authority = needs.entries[0].authority, .question = "Which applies?", .reason = "Open.", .citations = &.{}, .sources = &.{} }});
+    try std.testing.expectEqual(c.max_text_bytes, text[0].answer_schema.bounded_business_text);
+}
+
+test "the parts of one subject share one way to answer, and a conflict's options are merged once each" {
+    const conversion = @import("domain/required_authority_clarifications.zig");
+    const c = @import("domain/clarification_inputs.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const first: []const c.Option = &.{ .{ .key = "a.md.1", .label = "One." }, .{ .key = "a.md.2", .label = "Two." } };
+    const second: []const c.Option = &.{ .{ .key = "a.md.2", .label = "Two." }, .{ .key = "a.md.3", .label = "Three." } };
+    const part = struct {
+        fn make(answer: c.AnswerSchema) conversion.Part {
+            return .{ .stage = .spec, .subject = .{ .requirement = "reference_meaning", .unit = "conflict", .slot = "disposition", .sources = &.{.{ .path = "a.md", .lines = .{ .first = 1, .last = 2 } }} }, .answer = answer, .authority = &.{.{ .canonical = .{ .kind = .specification, .ordinal = 1, .revision = 1 } }}, .question = "Which applies?", .reason = "Open.", .citations = &.{}, .sources = &.{} };
+        }
+    };
+    // Overlapping options are offered once, in the order named.
+    const merged = try conversion.consolidate(allocator, &.{}, &.{ part.make(.{ .select_one = first }), part.make(.{ .select_one = second }) });
+    try std.testing.expectEqual(@as(usize, 1), merged.len);
+    const options = merged[0].answer_schema.select_one;
+    try std.testing.expectEqual(@as(usize, 3), options.len);
+    for (options, [_][]const u8{ "a.md.1", "a.md.2", "a.md.3" }) |option, key| try std.testing.expectEqualStrings(key, option.key);
+    // The same key under another label, a mixture of kinds, a selection of many and more options than a form offers fail.
+    const relabelled: []const c.Option = &.{.{ .key = "a.md.1", .label = "Another." }};
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{ part.make(.{ .select_one = first }), part.make(.{ .select_one = relabelled }) }));
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{ part.make(.{ .select_one = first }), part.make(.{ .bounded_business_text = c.max_text_bytes }) }));
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{ part.make(.{ .bounded_business_text = c.max_text_bytes }), part.make(.{ .bounded_business_text = 100 }) }));
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{part.make(.{ .select_many = .{ .minimum = 1, .maximum = 1, .options = first } })}));
+    const many = try allocator.alloc(c.Option, c.max_options);
+    for (many, 0..) |*option, index| option.* = .{ .key = try std.fmt.allocPrint(allocator, "k{d}", .{index}), .label = "Label." };
+    _ = try conversion.consolidate(allocator, &.{}, &.{part.make(.{ .select_one = many })});
+    const more: []const c.Option = &.{.{ .key = "extra", .label = "Extra." }};
+    try std.testing.expectError(error.InvalidRequiredAuthority, conversion.consolidate(allocator, &.{}, &.{ part.make(.{ .select_one = many }), part.make(.{ .select_one = more }) }));
 }
 
 test "consolidation merges the parts of one stage and subject, never another subject or stage, and fails rather than truncates" {

@@ -15,7 +15,7 @@ Evaluation is automatic. `--no-evaluate`, or the user saying not to evaluate, sk
 then this skill assesses no run. The evaluation is offline and makes no model call.
 
 1. **The set.** The arguments are cases, `--repeat <n>` and `--no-evaluate`. A case is a
-   `workflow.case.json` path under `test/e2e/`, or a name, such as `loan-renewal`, that
+   `workflow.case.json` path under `test/e2e/`, or a name, such as `hello-world`, that
    appears in exactly one such path. There is no default. `--repeat <n>` runs each case
    n times; without it, each runs once, and a case listed twice runs twice. Plan the runs
    in rounds, each running every case once in the order given.
@@ -28,7 +28,8 @@ then this skill assesses no run. The evaluation is offline and makes no model ca
 2. **Procedure.** Read the "Launcher behavior" and "Environment setup" sections of
    [design/harness/e2e.md](../../../design/harness/e2e.md). From each case and its
    referenced configuration, note each generation slot's provider, model and Region,
-   then state the planned runs with them. The launcher's preflight rejects any selection
+   then state the planned runs with them, stating a launch of a case that expects
+   `clarification_then_publication` as two legs (step 5). The launcher's preflight rejects any selection
    outside the live-test cost policy, so don't check that yourself. If credentials need
    checking, refer the user to `.env.e2e.example` and the "Environment setup" section.
 3. **Offline build first.** Run `zig build build-e2e-harness` once for the set. It makes
@@ -45,6 +46,14 @@ then this skill assesses no run. The evaluation is offline and makes no model ca
    `Details:` line, when it disagrees with the listing, or when stderr reports
    `E2E report finalization failed`, because `report.json` may then be missing or
    incomplete.
+
+   A case that expects `clarification_then_publication` runs two legs in one launch
+   (e2e.md "Case and publication contract"): it prints two `Details:` lines and adds
+   two directories, and one approval covers both. The first leg's report is
+   `awaiting_clarification` and is never evaluated; the second names it in
+   `continued_from` and is the run steps 6 and 7 report and evaluate. When the first
+   leg ends otherwise, including `answer_unavailable`, the launch made one run and has
+   no second; report it as the unmet criterion it is, with no retry.
 6. **Report the run,** then go to step 7, or to the next run when evaluation is skipped.
    Write nothing yourself; step 7's skill owns what an evaluation writes:
    - the outcome: `generated` (published, unadjudicated), `awaiting_clarification` or
@@ -65,7 +74,8 @@ then this skill assesses no run. The evaluation is offline and makes no model ca
    run, and the set goes on.
 9. **Set report,** when the set has more than one run:
    - a row per run: case, run directory, outcome, calls, tokens, and, when evaluated, the
-     adjudication outcome and accuracy defect counts;
+     adjudication outcome and accuracy defect counts (a two-leg launch is one row for its
+     second leg, with both legs' calls and tokens);
    - per case, the runs attempted, published and accepted;
    - each run's `build.source` `revision`, `modified` and `source_sha256`, flagging any
      run whose `source_sha256` differs from the others, since repeated runs decide a

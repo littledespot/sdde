@@ -66,7 +66,7 @@ captured schema against the changed one, 10 concurrent replays per arm and case,
 **Retained runs:** `zig-out/e2e-spec/` keeps the newest twelve runs: set B of 22 November 2026 (`2026-11-22T06-36-44Z`
 to `06-54-55Z`) and the Q26 follow-up's set (`08-35-52Z` to `08-39-02Z`, [Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set").
 A new set removes the oldest runs past twelve (the Q26 sets' directories were removed that way); their evaluations and
-measures stay under `evaluations/`. The current build decodes only `spec-e2e-report/v26` (`report_schema` in
+measures stay under `evaluations/`. The current build decodes only `spec-e2e-report/v27` (`report_schema` in
 `test/harness/e2e/contracts.zig`), and these reports carry v25 (§2 rule 12): the measures tool records them as an earlier
 version, unavailable (`measures_cli.zig:171-172`, e2e.md "Retained results"), and their evaluations and measures stand.
 The drift screen's `e2e-call` names no report schema (nothing in `test/harness/call` matches `spec-e2e-report`), so it is
@@ -192,10 +192,10 @@ batch and live set needs its own approval (AGENTS.md).
 **Output track:** Q26's follow-up (§4 Q26, decided 22 November 2026) was built, screened and run to eight per case,
 and its edge-case entry reverted ([Z_SPEC01](Z_SPEC01.md) "Q26 follow-up set"); nothing awaits a set.
 
-**Engine track, in gaps:** E7 stages 6–8 (decided 22 and 23 November 2026; stage 2 folded into stage 6 and stage 3
-into stage 4 on 23 November, §5 E7), in order; stages 4, 5 and 5b are built, and stage 5's set, which changes
-development-case request bytes, ran on 23 November 2026 as a rule 6 hygiene set (its keep is the user's call, under the
-decisions of §1 and E7). E0 is on
+**Engine track, in gaps:** E7 stages 6b and 8 (decided 22 and 23 November 2026; stage 2 dropped with the response-ID
+citation and stage 3 folded into stage 4, §5 E7), in order; stages 4, 5, 5b, 6a and 7 are built, and stage 5's set, which changes
+development-case request bytes, ran on 23 November 2026 as a rule 6 hygiene set and is **kept** (24 November 2026, user: "keep
+stage 5"). E0 is on
 hold.
 **Byte-neutral, sharing the next set's build** (§2 rule 1): C22's remainder (§10.3; built 22 November 2026, its request
 projection equal to Q26's, [Z_SPEC01](Z_SPEC01.md) "C22 remainder"). **Tests:** T4.
@@ -359,10 +359,10 @@ clarification-expected case shows whether an answered subject matches on a rerun
 a multi-claim signal. What is left: provenance rejects nonempty
 response-ID sets (`specification_provenance.zig:93`, `specification_support_evidence.zig:171`); resolved needs are empty
 (`src/actions/clarification/build_resolved_clarification_needs.zig`); passive literal origins are source-only
-(`passive_literals.zig:16`), so answer text can't get ADR 0025's response-owned origin; generation doesn't consume answers
-(it binds empty response-ID sets, `specification_source_binding.zig:136`, `:196`), and a re-raised need for an accepted
-subject ends `blocked` with `ProtectedClarification` (`clarification_refresh.zig:107-108`), so stages 4, 5 and 5b show no
-benefit before stage 6 (likely, not run). Complete the
+(`passive_literals.zig:16`), so answer text can't get ADR 0025's response-owned origin; generation consumes only the answer
+to a reference conflict (stage 6a), so every other accepted answer is unused and a re-raised need for its subject ends
+`blocked` with `ProtectedClarification` (`clarification_refresh.zig:107-108`). Stages 4, 5, 5b and 6a show no benefit before
+stage 7's case (likely, not run). Complete the
 [§17.4 lifecycle](../design/contracts/17-specify.md#174-specification-clarification-behavior) under ADR 0025. §10 C8 adds
 record-lifecycle gaps and C49 the clarification subject.
 
@@ -372,26 +372,29 @@ asks each distinct question, gives each distinct reason, binds the union of the 
 evidence. ADR 0025's second limit, 14-orchestration.md:341-345, 13-05 and §12.7's consolidation line carry it. Its results are
 in [Z_SPEC01](Z_SPEC01.md) "E7 stage 5b".
 
+Stage 6a is built (24 November 2026; offline, no model request changes): the answer to a reference conflict. The need of a
+conflict is a select-one form (one option per claim, keyed by the lines it cites); the engine applies a resolved choice to the
+validated reconciliation (`apply-clarification-answers`, `answered_reconciliation.zig`), which leaves an ordinary
+reconciliation, so generation, review, scenarios, rendering and the persisted snapshot read the chosen claim as any retained
+claim. It was approved on 24 November 2026 (user: "approved A, implement it") after the planned design, claims that stay
+conflicting with records citing a response ID, was found unrepresentable on readback: the snapshot is checked against the
+reconciliation rules and the specification state binds the clarification state by ordinal and revision only. No record cites
+a response. Its results are in [Z_SPEC01](Z_SPEC01.md) "E7 stage 6a". **Decided** 24 November 2026 (user: "update
+documentation with the above 3 recommendations"; ADR 0025 Decision 8): a conflict whose options cannot be built ends the run
+`blocked`; the runner's replacement self-input generalization and the `execution_control` authentication progress stand;
+and an offline scenario that runs run 1, run 2 with the accepted choice, the gate, generation, publication and snapshot
+readback is built before stage 7's live case. The scenario is built (24 November 2026; Z_SPEC01 "E7 stage 6a").
+
 Remaining stages, each landable alone (offline unless stated); stage 2, response-ID admission from a resolved set, is
-folded into stage 6: 6 generation consumes answers, with the response-ID admission and the answer-derived literals (request
-bytes change only for runs that have responses); 7 the harness two-leg flow; 8 live runs.
+dropped with the response-ID citation (ADR 0025 Decision 7): 6b answers to every other gap and the answer-derived literals,
+which have no consumer until an answer contains path-shaped text or generation is to use a text answer (request bytes change
+only for runs that have responses); 8 live runs. Stage 7, the harness two-leg flow, is built (below).
 
 **Decided** 22 and 23 November 2026 (user: "update the documentation with the recommendations", "action recommendations");
 the stage 4 and 5 decisions are built and recorded in Z_SPEC01, and the ones below are unbuilt. Each design amendment below
 lands with its stage's code, in ADR 0025 and the contracts it names:
 
-- **Resolved responses** (stage 6, folded from stage 2; decided 23 November 2026, user: "action recommendations", then
-  "actions recommendations" to drop stage 2). A record may cite a response ID only if it is in the resolved set: the
-  `response_id` of each `resolved_by_user` record in the validated clarification state, so `cancelled_by_user` records
-  and `defer_reason` responses grant none (`clarification_inputs.zig:158-167`, `:179`). One closed typed set of
-  `spec.ResponseId`, the raw `u64` converted in the one builder. ADR 0025:74 says "current resolved response IDs" without
-  defining them; the definition lands in ADR 0025 with the code. Until then every current rejection stays
-  (`specification_provenance.zig:93`, `specification_support_evidence.zig:171`; pinned by
-  `specification_generation_test.zig:2819` and `:4683`). It was folded because the set is empty until stage 4 and its only
-  consumer is stage 6's binder, which fixes the carrier: the provenance `Context` is built in one place (`readContext`,
-  `specification_workflow.zig:248`) but read at 25 call sites in 8 workflow files, and a step's data view holds only its
-  declared inputs (`pipeline_data.zig:68`), so a new `Context` input is a key in each of at least 18 action contracts.
-- **Answer-derived literals** (stage 6, moved from stage 4; decided 23 November 2026, user: "action recommendations").
+- **Answer-derived literals** (stage 6b, deferred 24 November 2026; moved from stage 4; decided 23 November 2026, user: "action recommendations").
   ADR 0025:65-71 scans path-shaped answer text at acceptance, but nothing consumes answer-derived literals until
   generation uses answers, and no clarification code reads passive literals. Re-derived each run from the published
   response, the sole durable owner of the submitted bytes (ADR 0025:94-96, §23.2). Four points stay open until stage 6
@@ -406,20 +409,31 @@ lands with its stage's code, in ADR 0025 and the contracts it names:
   **Decided** 23 November 2026 (user: "update documents with recommendations"): that rate needs stage 7's case, and the
   development cases raise no clarification, so stage 5's set has no defect class to target. It is judged as a rule 6 hygiene
   set, on its guards and keep-if measures (§2 rule 6), with no benefit claimed before stage 6.
-  Stage 7's `answers` member is also a closed case member, so it takes the case version after stage 4's (`spec-e2e-case/v4`).
+  Stage 7's `answers` member is also a closed case member, so it took the next case version, `spec-e2e-case/v5`.
 - **Clarification-expected case** (stage 7). A loan-renewal derivative with exactly one pair of contradictory bullets, so
   run 1 should raise one form; neither a reserved qualification feature nor a tuning target. No form, or more than one,
   is reported as an unmet criterion (a model limitation), with no retry or rewording.
-- **Authoring answers between runs** (stage 7). An `answers` member in the case version after stage 4's holding one bounded text, since every Spec
-  clarification takes one (`build_specification_clarification_need.zig:33`, `required_authority_clarifications.zig:159`).
-  One launch runs run 1 and, only when it ends `needs_user` with exactly one open form, writes the text into the answer
-  region, sets `requestedStatus: closed` and runs run 2; anything else is reported. No answer is matched to a form by its
-  wording. The answer is the user's input, which ADR 0025 makes authority, not a project standard, so the principle-file
+- **Authoring answers between runs** (stage 7; amended 24 November 2026). An `answers` member in the case version after
+  stage 4's holding one option key, since the form of a reference conflict is a selection and only its answer is applied
+  (ADR 0025 Decision 7). The key names the lines of the claim to keep, so the case author states the source line, not a
+  per-run claim number. One launch runs run 1 and, only when it ends `needs_user` with exactly one open form that offers
+  that key, writes the key into the answer region, sets `requestedStatus: closed` and runs run 2; anything else is
+  reported. No answer is matched to a form by its wording. The answer is the user's input, which ADR 0025 makes authority, not a project standard, so the principle-file
   rule (AGENTS.md "Testing expectations") is untouched.
-- **Adjudication basis** (stage 7; the evaluate-e2e skill states it). Run 1 publishes the incomplete specification and
-  its form (17-specify.md:483-486) and is adjudicated as a correct pause: one form naming the contradiction, and an
-  incomplete specification that settles neither bullet. Run 2 is scored on the case rubric with the declared answer
-  counted as source: the chosen bullet kept, the other dropped, the response ID cited.
+- **Adjudication basis** (stage 7, amended 24 November 2026 with D1 to D5 below). Leg 1 publishes the incomplete
+  specification and its form (17-specify.md:483-486) and passes mechanically as a `clarification` run, with no adjudication,
+  as the oracle already decides; it is never evaluated. Leg 2 is scored on the case rubric (`conflict-resolution`: the
+  chosen bullet kept, the other absent, no invented resolution), with the declared answer counted as source. No record cites
+  the response (ADR 0025 Decision 7), so that criterion is out; the response is in the published clarification state.
+- **Stage 7 built** (24 November 2026; user: "action with recommendations" on D1 to D5; ADR 0025 Decision 8). D1: a launch of
+  the case is two legs, two run directories and two reports, the second from a copy of the first's project and naming it in
+  `continued_from` (`spec-e2e-report/v27`). D2: the case's `expected_outcome` is `clarification_then_publication` and each leg's
+  report states its own (`clarification`, `publication`); the adjudication record covers leg 2 only. D3: the case's `answers`
+  is the user's input, written by the launcher; running leg 2 is the act of accepting it. D4: `spec-e2e-case/v5`. D5: one
+  approval covers both legs, and a launch is one attempted workload. The case is `test/e2e/wf-003-loan-renewal-conflict/`: the
+  loan-renewal stories with the bullets "only once" and "up to twice" contradicting each other, the answer `stories.md.8`, and a
+  rubric with a `conflict-resolution` criterion. Its calibration members point at the loan-renewal files, since no panel exists
+  for the derivative. No live run has been made.
 
 **Not decided here:** the gate re-run after E7 is the user's (ADR 0034:91-95, which recommends re-running after a
 structural change lands). Of the E7 stages, only stage 5's set changes development-case requests.
@@ -635,7 +649,7 @@ scenario's repetition), the scripted-fault counts of `repeated_provenance_fault`
   `{specification, record_kind, content}` with `record_kind` picked by the model, so a rerun that picked another kind
   minted another form. It is now `{specification, records, content}` with the source lines cited by the bound signal's
   claims, and the model's kind, which it still names and the engine validates, is not part of it. An answered group is
-  authored by E7 (answers are not consumed yet), so until stage 6 a rerun asks again.
+  authored by E7 (only the answer to a conflict is applied, stage 6a), so a rerun asks again for every other gap.
 
 **C50. A workflow definition can route past the configured preservation review: closed as by design** (user, 22
 November 2026, after the test below). `check-source-preservation-policy` routes `ok` (the source preservation check is

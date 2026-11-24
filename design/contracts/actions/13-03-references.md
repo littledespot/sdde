@@ -299,9 +299,23 @@ merges) are variants of the generic repair operations, specified once in
 ## `ValidateReferenceReconciliationCompletenessAction` (`validate-reference-reconciliation-completeness`)
 
 - **Owner:** [`src/actions/reference/validate_reference_reconciliation_completeness.zig`](../../../src/actions/reference/validate_reference_reconciliation_completeness.zig)
-- **Reads:** `reference_reconciliation_records` · **Writes:** `accounted_reference_reconciliation` · **Side effect:** `none`
+- **Reads:** `answered_reference_reconciliation_records` · **Writes:** `accounted_reference_reconciliation` · **Side effect:** `none`
 - **Does:** Revalidates the partition history and requires the global result to follow the last partition with one disposition per item.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
+
+## `ApplyClarificationAnswersAction` (`apply-clarification-answers`)
+
+- **Owner:** [`src/actions/reference/apply_clarification_answers.zig`](../../../src/actions/reference/apply_clarification_answers.zig)
+- **Reads:** `reference_reconciliation_records`, `citable_reference_inputs`, `clarification_inputs` · **Writes:** `answered_reference_reconciliation_records` · **Side effect:** `none`
+- **Does:** Resolves the choices of the `resolved_by_user` Specify forms that offered one option for each claim of a reference
+  conflict, and applies each to the validated reconciliation: the chosen claim is retained and given a signal, the other claims of
+  the conflict are superseded by it and the conflict is dropped, so the result is an ordinary reconciliation that every later
+  reader and the persisted snapshot's validation accept ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md),
+  "The answer to a conflict"). A conflict is answered only when every claim is a model claim of one kind and none is in another
+  conflict, and a choice is matched by the conflict's subject, so an answer whose option no claim offers any more, an answer of
+  another kind and an answer to any other gap apply nothing. With no choice it returns the records unchanged.
+- **Rejects:** `InvalidClarificationInput` for a resolved conflict form whose answer is not one of its options or has no
+  response, and `InvalidReferenceReconciliation` for a conflict whose subject or claims the evidence does not hold.
 
 ## `BuildReferenceSnapshotAction` (`build-reference-snapshot`)
 

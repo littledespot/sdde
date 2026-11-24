@@ -1,0 +1,16 @@
+{
+  "schema": "evaluation-case/v2",
+  "id": "wf-003-loan-renewal-conflict-spec",
+  "sources": [
+    {
+      "id": "stories",
+      "path": "test/e2e/wf-003-loan-renewal-conflict/stories.md"
+    }
+  ],
+  "rubric": "test/e2e/wf-003-loan-renewal-conflict/rubric.json",
+  "grading_qualification": {
+    "panel": "test/integration/fixtures/wf-002-loan-renewal/calibration/panel.json",
+    "review": "test/integration/fixtures/wf-002-loan-renewal/calibration/human-review.json",
+    "qualification": "test/integration/fixtures/wf-002-loan-renewal/calibration/qualification.json"
+  }
+}

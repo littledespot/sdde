@@ -1,9 +1,9 @@
 # ADR 0025: Accept valid clarification answers in the run that reads them
 
 - **Status:** Accepted amendment. The authentication chain, the actor-evidence registry, acceptance, publication, the
-  valid cancel and the source-derived clarification subject are implemented. Generation's use of accepted answers, and
-  the response-owned passive literals, are not
-  ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
+  valid cancel and the source-derived clarification subject are implemented, and so is generation's use of the answer
+  to a reference conflict (Decision 7). Generation's use of every other answer, and the response-owned passive literals,
+  are not ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 - **Date:** 2026-10-20, rewritten and accepted 2026-10-21
 - **Decision authority:** The user's decisions of 21 October 2026. The user first
   asked for the proposal to be rewritten around this flow: run 1 generates
@@ -22,7 +22,9 @@
     report a typed reason for each rejected form;
   - F0100 §3.2, by selecting its authentication mechanism;
   - [ADR 0006](0006-minimal-model-response.md)'s rule that only data the model must supply is in its response, by one
-    exception: the records clarification's `record_kind` (Decision 6).
+    exception: the records clarification's `record_kind` (Decision 6);
+  - the §13.03 catalogue, by `ApplyClarificationAnswersAction`, and [§13.05](../contracts/actions/13-05-artifacts-rendering-traceability.md)'s
+    authority need builder, by the selection form of a conflict (Decision 7).
 
   It leaves §23.2's protection of user-closed forms, ADR 0017's incomplete
   publication and ADR 0009's fresh-invocation rule unchanged. The overall design
@@ -76,9 +78,10 @@ input state and record revisions, exact submitted form bytes, typed answer,
 
    The responses stay in memory through refresh and generation, and the run
    publishes them with its own publication (§25, ADR 0009): the complete output, the
-   incomplete publication, or a cancel's. Generation cites current resolved response
-   IDs as authority. The run's report lists each accepted answer as the engine read
-   it, with its response ID.
+   incomplete publication, or a cancel's. Generation reads the answer to a reference
+   conflict through the answered reconciliation below, and no record cites a response
+   ID. The run's report lists each accepted answer as the engine read it, with its
+   response ID.
 6. **A form left open**, unanswered or deferred, is not a failure. A deferral takes
    no account and records nothing; the record stays open and its form is rendered
    afresh. If a required record is still open after refresh, the run pauses again
@@ -179,6 +182,40 @@ is stable only while they are (Limits this accepts).
   match no current need, is rejected without a reader. The specification state binds the clarification state by ordinal
   and revision only, so it does not change.
 
+### The answer to a conflict
+
+A reference conflict is a gap that only the user can close, and the user closes it by choosing among its claims.
+
+- **The form.** The need of a reference conflict is a select-one form with one option for each claim of the conflict. An
+  option's key names the lines its claim cites (the source path with `/` as `.`, then `.<line>` or `.<first>-<last>`), so it
+  is the same on every run over the same sources and no per-run ordinal names a claim. Its label is the claim's quotation.
+  Two claims that cite the same lines, a key or label the form cannot hold, or more than 32 options are not a form: the run
+  ends `blocked` with `InvalidRequiredAuthority`, and nothing is shortened or renamed. A conflict that before this change
+  paused for a text answer (`needs_user`) now ends `blocked` in those cases, and only editing the sources recovers it, which
+  the user accepted on 24 November 2026 (Decision 8). Every other gap is still answered in bounded text.
+- **The answered reconciliation.** After the reconciliation is validated and before anything reads it, the engine applies
+  each resolved choice. The chosen claim becomes retained and is given a signal of its own, the other claims of the conflict
+  become superseded by it, and the conflict is dropped. The result is an ordinary reconciliation: every reconciliation rule
+  holds for it, the persisted reference snapshot validates on readback, and generation, review, scenarios and rendering read
+  the chosen claim as they read any retained claim. The engine applies the choice by its option key. No model reads the
+  answer and no code judges its prose.
+- **What it applies to.** A conflict is answered only when every claim is a model claim of one kind and none is in another
+  conflict. The choice is matched by the conflict's subject (the lines) and by the option the form showed, its key and its
+  label, so the text under the lines is the text the user chose. An answer whose option no claim of the conflict offers any
+  more or offers under another quotation (the sources changed under a protected form), a key that two claims carry, an answer
+  of another kind and an answer to any other gap apply nothing: the form stays protected and unused, and a rerun that raises
+  the need again ends `blocked` with `ProtectedClarification` as before. If a rerun finds no such conflict at all (the model
+  grouped the claims differently, which Limits this accepts), the choice is unused and the report does not say so.
+- **Tested.** The persisted reference snapshot of an answered reconciliation builds and validates
+  (`answered_reconciliation_test.zig`). One offline scenario runs the chain through the production composition with a fake
+  account and a scripted transport (`test/harness/integration/tests.zig`, "a conflict's form is answered by option key"): run 1
+  raises the one select form, run 2 authenticates, applies the choice and publishes the chosen claim without the superseded
+  one, and run 3 reads the published state back and reuses the response. It scripts the model, so it proves the engine's
+  chain and not the model's behavior.
+- **What is not recorded.** No record cites the response. The published specification cites the chosen claim's lines, and
+  the clarification state, published beside it, holds the response and its option key. A user who rejects every option
+  cancels the form, which ends the run `cancelled` (flow, step 7).
+
 ### Persistence
 
 - Evidence goes in the catalogue's actor-evidence registry, not in a store local to
@@ -198,7 +235,8 @@ is stable only while they are (Limits this accepts).
   contract. If a required subject can no longer use its answer, the engine
   preserves the form and response and blocks for explicit user direction (§23.2).
 - Review treats a response as authority and never as a reference citation. A user
-  answer never receives fabricated reference citations (§17.4).
+  answer never receives fabricated reference citations (§17.4). The answer to a conflict reaches review and generation as
+  the answered reconciliation, not as a cited response.
 
 ### Limits this accepts
 
@@ -222,7 +260,9 @@ is stable only while they are (Limits this accepts).
   builder consolidates them into one need, which §12.7 allows, and adds no new blocked reason. The need asks every
   distinct question, gives every distinct reason, binds the union of the gaps' authorities and cites the union of their
   evidence; the refresh still rejects two needs of one subject. One form therefore carries several questions and takes one
-  answer, and what that answer decides for each gap is stage 6's open decision. A merged question or reason beyond the
+  answer. Two conflicts over the same lines offer the union of their options, once each, and a choice applies to the
+  conflict whose claims carry its key; what an answer decides for each gap of any other merged form is open, since only a
+  conflict's answer is applied (the answer to a conflict). A merged question or reason beyond the
   form's text bound, or authorities beyond a record's, ends the run `blocked` with `InvalidRequiredAuthority`, the
   builder's existing mapping (`clarification_refresh_workflow.zig:116`); nothing is truncated. The regrouping limit stays
   until stage 7's case shows whether an answered subject matches on a rerun.
@@ -269,9 +309,12 @@ is stable only while they are (Limits this accepts).
     its `InvalidClarificationInput` cause and one line for each form. Every workflow that
     uses `prepare-inputs` routes `blocked` to a blocked end, which `core.feature-input-read@1`
     now allows;
-  - response-owned passive literals.
+  - response-owned passive literals;
+  - the answered reconciliation (`ApplyClarificationAnswersAction`), which the pipeline reads through
+    `answered_reference_reconciliation_records`.
 - Changed: refresh, provenance, the resolved-needs action, generation inputs,
-  review authority and readback.
+  review authority and readback. The answered reconciliation replaces the changes to provenance, generation inputs and
+  review authority for a conflict (Decision 7); they remain open for every other answer.
 - Each change needs accepted and rejected tests, including:
   - every rejection reason;
   - valid and invalid forms together, which accepts none;
@@ -303,3 +346,27 @@ The user approved decisions 1 to 4 on 21 October 2026.
 6. The model's `record_kind` stays in the records response schema as a validated field the subject does not use, an
    exception recorded above (approved 23 November 2026, user: "action", on the recommendation to restore it after the
    replay).
+7. The answer to a reference conflict is a choice among its claims, applied by the engine as an answered reconciliation, and
+   no record cites a response (approved 24 November 2026, user: "approved A, implement it", on the recommendation to apply
+   the answer to the reconciliation: a chosen claim that stays conflicting, or a record that cites a response, cannot be
+   validated on readback, because the persisted reference snapshot is checked against the reconciliation rules and the
+   specification state binds the clarification state by ordinal and revision only). Answers to every other gap, and
+   answer-derived passive literals, wait for later stages.
+8. Three decisions on stage 6a (user, 24 November 2026: "update documentation with the above 3 recommendations", on the
+   review's open findings):
+   - A conflict whose options cannot be built (two claims citing the same lines, a path character a key cannot hold, a key
+     over 128 bytes) ends the run `blocked` with `InvalidRequiredAuthority`, where it used to pause for a text answer. No
+     fallback to free text, which the project rules prohibit.
+   - The runner's rule for a replacement's self-input covers the prior revision of any other key the same step replaced,
+     while that key still holds what the step wrote, and the authentication progress is `execution_control`
+     ([§12.8](../contracts/12-model-boundary.md#128-closed-authority-reconciliation-boundary)). Both exist so that a value
+     derived from the accepted clarification inputs is current authority.
+   - An offline scenario is built that runs run 1 (the form), run 2 (the accepted choice), the authority gate, generation,
+     publication and, in a rerun, the readback of the published state through the production composition, before stage 7's
+     live case. It is built.
+9. Stage 7, the harness answers a conflict form (user: "action with recommendations", 24 November 2026). The harness answers
+   the form of a case that declares an answer: the case's `answers` is the user's input, written by the launcher as the user
+   would, and the second leg's run is the act of accepting it under the invoking account. A launch of such a case is two
+   legs, two run directories and two reports, under one approval and one attempted workload; its case version is
+   `spec-e2e-case/v5` and its report `spec-e2e-report/v27`
+   ([e2e.md](../harness/e2e.md#case-and-publication-contract)).

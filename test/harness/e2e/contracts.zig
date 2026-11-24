@@ -4,13 +4,19 @@ const relative = @import("../../../src/domain/relative_directory_path.zig");
 const execution = @import("../../../src/domain/workflow_execution.zig");
 const workflow_retry = @import("../../../src/domain/workflow_retry.zig");
 pub const Artifact = enum { specification, reference_context, clarification_state, workflow_state, actor_evidence };
-pub const ExpectedOutcome = enum { publication, clarification };
+/// What a run is expected to end as. A case may declare `clarification_then_publication`: its launch runs a first leg that
+/// must pause on one form, answers it with the case's `answers`, and runs a second leg that must publish. Each leg's own
+/// report states the outcome that leg is expected to reach, `clarification` and `publication`, never the combined one.
+pub const ExpectedOutcome = enum { publication, clarification, clarification_then_publication };
 pub const Copy = struct { source: []const u8, destination: []const u8 };
+/// The user's answer to the one form the first leg is expected to raise: the key of the option to choose.
+pub const Answer = struct { key: []const u8 };
 pub const Case = struct {
     schema: []const u8,
     id: []const u8,
     workflow_id: []const u8,
     expected_outcome: ExpectedOutcome,
+    answers: []const Answer,
     feature: []const u8,
     reference: []const u8,
     config: []const u8,
@@ -22,10 +28,13 @@ pub const Case = struct {
 
 pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) !Case {
     const value = try evaluator.decode(Case, allocator, bytes);
-    if (!std.mem.eql(u8, value.schema, "spec-e2e-case/v4") or value.id.len == 0 or value.id.len > 128 or
+    if (!std.mem.eql(u8, value.schema, "spec-e2e-case/v5") or value.id.len == 0 or value.id.len > 128 or
         @import("../../../src/domain/workflow.zig").WorkflowId.parse(value.workflow_id) == null or
         value.files.len == 0 or value.files.len > 128 or value.directories.len > 32 or
         value.expected_artifacts.len != @typeInfo(Artifact).@"enum".fields.len) return error.InvalidE2ECase;
+    // Only a case that answers a form declares an answer, and it declares exactly one, a key the form can carry.
+    if (value.answers.len != @as(usize, if (value.expected_outcome == .clarification_then_publication) 1 else 0)) return error.InvalidE2ECase;
+    for (value.answers) |answer| if (!@import("../../../src/domain/clarification_inputs.zig").validToken(answer.key)) return error.InvalidE2ECase;
     try evaluator.path(value.feature);
     try evaluator.path(value.reference);
     try evaluator.path(value.config);
@@ -66,6 +75,8 @@ pub const Status = enum {
     artifact_changed,
     generated,
     threshold_unconfigured,
+    /// A first leg paused as expected, but not on exactly one form that offers the case's answer, so there was nothing to answer.
+    answer_unavailable,
 };
 
 /// What a rejection adds to its tag in a report: the same for every projection of one, so each is said once.
@@ -221,8 +232,8 @@ pub const ExchangeEvidence = struct {
 };
 /// The one current report version, which a report builds with by default. A closed-member change advances
 /// it here alone (SPEC01 §2 rule 12); decoding still requires the member in every document.
-pub const report_schema: ReportSchema = .@"spec-e2e-report/v26";
-const ReportSchema = enum { @"spec-e2e-report/v26" };
+pub const report_schema: ReportSchema = .@"spec-e2e-report/v27";
+const ReportSchema = enum { @"spec-e2e-report/v27" };
 pub const Report = struct {
     schema: ReportSchema = report_schema,
     origin: enum { live } = .live,
@@ -236,6 +247,9 @@ pub const Report = struct {
         reconstruction: enum { not_captured, captured, incomplete, redacted } = .not_captured,
     } = null,
     execution_id: ?[]const u8 = null,
+    /// The run directory of the first leg this run continues: its project, with the form answered, is this run's project.
+    /// Null for every run that is not a case's second leg.
+    continued_from: ?[]const u8 = null,
     case_source: ?[]const u8 = null,
     case_id: ?[]const u8 = null,
     evaluation_case_id: ?[]const u8 = null,

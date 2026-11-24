@@ -120,7 +120,7 @@ fn measure(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, path: []const u8)
     return .{
         .run = std.fs.path.basename(path),
         .case_id = case.id,
-        .measurement = if (measureRecords(io, a, run)) |measured| .{ .measured = measured } else |err| .{ .unmeasurable = .{ .reason = try unmeasurable(err) } },
+        .measurement = if (measureRecords(io, a, run, root, path)) |measured| .{ .measured = measured } else |err| .{ .unmeasurable = .{ .reason = try unmeasurable(err) } },
     };
 }
 
@@ -142,7 +142,7 @@ fn unmeasurable(err: RecordError) RecordError!measures.Unmeasurable.Reason {
 
 /// The run's measures. Its report may be missing or of a known older version; a
 /// missing call output or feature event log leaves its measures empty.
-fn measureRecords(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) !measures.Measured {
+fn measureRecords(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, root: std.Io.Dir, path: []const u8) !measures.Measured {
     var configured = try @import("../../../src/domain/engine_config_decode.zig").decode(a, try files.read(io, a, run, "project/" ++ config.engine_config_basename));
     defer configured.deinit();
     const reported: ?c.Report = report: {
@@ -155,12 +155,35 @@ fn measureRecords(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) !measures.M
             .older => null,
         };
     };
+    // A case's second leg starts from a copy of its first leg's project, so its project holds the first leg's engine run
+    // beside its own. The leg owns the engine run it added: the first leg's, named by `continued_from`, is not its own.
+    const earlier: []const []const u8 = if (reported) |value| if (value.continued_from) |first| try engineRuns(io, a, root, path, first) else &.{} else &.{};
     return .{
         .log_threshold = (try @import("../../../src/domain/log_policy.zig").canonicalizeConfiguredLevel(configured.value().logs.level)).threshold,
         .report = if (reported) |value| .{ .measured = try measures.fromReport(a, value) } else .unavailable,
         .responses = try responses(io, a, run),
-        .events = try featureEvents(io, a, run),
+        .events = try featureEvents(io, a, run, earlier),
     };
+}
+
+/// The names of the engine runs whose feature logs the retained project of run `name` holds. `name` is a run directory beside
+/// the measured run, whose path under `root` is `measured`.
+fn engineRuns(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, measured: []const u8, name: []const u8) ![]const []const u8 {
+    if (std.mem.indexOfScalar(u8, name, '/') != null) return error.InvalidReport;
+    const beside = if (std.fs.path.dirname(measured)) |parent| try std.fs.path.join(a, &.{ parent, name }) else name;
+    var first = try directories.open(io, root, beside);
+    defer first.close(io);
+    var segments: std.ArrayList([]const u8) = .empty;
+    try collectEventLogs(io, a, first, "project", &segments);
+    var owners: std.ArrayList([]const u8) = .empty;
+    for (segments.items) |segment| {
+        const owner = std.fs.path.basename(std.fs.path.dirname(std.fs.path.dirname(segment).?).?);
+        const known = for (owners.items) |held| {
+            if (std.mem.eql(u8, held, owner)) break true;
+        } else false;
+        if (!known) try owners.append(a, owner);
+    }
+    return owners.toOwnedSlice(a);
 }
 
 /// The report's version, from its `schema` member alone: the one this harness writes,
@@ -213,9 +236,17 @@ fn responses(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) ![]const measure
 
 /// The single feature event log under the retained project, segments in order; null
 /// when the run left none.
-fn featureEvents(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) !?measures.Events {
+fn featureEvents(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, earlier: []const []const u8) !?measures.Events {
+    var all: std.ArrayList([]const u8) = .empty;
+    try collectEventLogs(io, a, run, "project", &all);
     var segments: std.ArrayList([]const u8) = .empty;
-    try collectEventLogs(io, a, run, "project", &segments);
+    for (all.items) |segment| {
+        const owner = std.fs.path.basename(std.fs.path.dirname(std.fs.path.dirname(segment).?).?);
+        const first_leg = for (earlier) |prior| {
+            if (std.mem.eql(u8, prior, owner)) break true;
+        } else false;
+        if (!first_leg) try segments.append(a, segment);
+    }
     if (segments.items.len == 0) return null;
     std.mem.sort([]const u8, segments.items, {}, lessThan);
     // Segments live in `<run id>/<binding>/`; one workflow run per retained project.
@@ -296,7 +327,7 @@ const measures_test_config =
     \\"toolchainPreset":".sddtoolkit/toolchainPreset","principles":".sddtoolkit/principles","templates":".sddtoolkit/templates","providers":".sddproviders.json"}}
 ;
 const measures_test_case =
-    \\{"schema":"spec-e2e-case/v4","id":"loan","workflow_id":"spec-generation","expected_outcome":"publication","feature":"loan","reference":"loan",
+    \\{"schema":"spec-e2e-case/v5","id":"loan","workflow_id":"spec-generation","expected_outcome":"publication","answers":[],"feature":"loan","reference":"loan",
     \\"config":"cases/loan/.sddtoolkit.json","evaluation_case":"cases/loan/evaluation.json","directories":[],
     \\"files":[{"source":"cases/loan/stories.md","destination":"references/loan/stories.md"}],
     \\"expected_artifacts":["specification","reference_context","clarification_state","workflow_state","actor_evidence"]}
@@ -424,6 +455,30 @@ test "a retained run measures its configured threshold and one feature log, and 
     try putTestRun(io, a, root.dir, "ambiguous", null);
     try putTestFile(io, root.dir, "ambiguous/project/specs/loan/logs/events/RUN-2/LOGBIND-1/0001.log", try measures.testSegment(a, 1, &.{.{ .offset = 1, .event_type = .run_started }}, true));
     try std.testing.expectEqual(.ambiguous_feature_log, try reason(io, a, root.dir, "ambiguous"));
+    // A case's second leg holds its first leg's engine run beside its own, and owns only the one it added. Without the first
+    // leg's directory the split is unknown, so the run is unreadable; without `continued_from` the two runs stay ambiguous.
+    // The first leg is the measured run's sibling, wherever the pair sits under the root. Its run is the one holding a runaway.
+    try putTestRun(io, a, root.dir, "legs/one", null);
+    try putTestRun(io, a, root.dir, "legs/two", try continuedReport(a, "one"));
+    try putTestFile(io, root.dir, "legs/two/project/specs/loan/logs/events/RUN-2/LOGBIND-1/0001.log", try measures.testSegment(a, 1, &.{
+        .{ .offset = 10, .event_type = .run_started },
+        .{ .offset = 50, .event_type = .run_started },
+        .{ .offset = 90, .event_type = .run_started },
+    }, true));
+    const owned = (try measure(io, a, root.dir, "legs/two")).measurement.measured;
+    try std.testing.expectEqual(@as(?u64, 80), owned.events.?.latency_ms);
+    try std.testing.expectEqual(@as(u64, 0), owned.events.?.runaways);
+    // A first leg that exists only at the top of the root is not beside the measured run, and a name that is a path is no run name.
+    try putTestRun(io, a, root.dir, "orphan", null);
+    try putTestRun(io, a, root.dir, "legs/stray", try continuedReport(a, "orphan"));
+    try std.testing.expectEqual(.unreadable, try reason(io, a, root.dir, "legs/stray"));
+    try putTestRun(io, a, root.dir, "legs/pathed", try continuedReport(a, "../orphan"));
+    try std.testing.expectEqual(.report, try reason(io, a, root.dir, "legs/pathed"));
+    try putTestRun(io, a, root.dir, "legs/missing", try continuedReport(a, "no-such-leg"));
+    try std.testing.expectEqual(.unreadable, try reason(io, a, root.dir, "legs/missing"));
+    try putTestRun(io, a, root.dir, "unnamed", try currentReport(a));
+    try putTestFile(io, root.dir, "unnamed/project/specs/loan/logs/events/RUN-2/LOGBIND-1/0001.log", try measures.testSegment(a, 1, &.{.{ .offset = 1, .event_type = .run_started }}, true));
+    try std.testing.expectEqual(.ambiguous_feature_log, try reason(io, a, root.dir, "unnamed"));
     // A malformed feature log, and one whose last row was cut off mid-write, are untrusted.
     try putTestRun(io, a, root.dir, "malformed", null);
     try putTestFile(io, root.dir, try std.fs.path.join(a, &.{ "malformed", measures_test_log }), "event|1|2\n");
@@ -443,6 +498,12 @@ test "a retained run measures its configured threshold and one feature log, and 
     for ([_]RecordError{ error.OutOfMemory, error.Canceled, error.Cancelled, error.SystemResources, error.Unexpected }) |operational| {
         try std.testing.expectError(operational, unmeasurable(operational));
     }
+}
+
+/// A decodable current report of a second leg.
+fn continuedReport(a: std.mem.Allocator, first: []const u8) ![]const u8 {
+    const report: c.Report = .{ .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .continued_from = first };
+    return std.json.Stringify.valueAlloc(a, report, .{});
 }
 
 /// A decodable current report with one repair send.

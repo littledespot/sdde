@@ -755,7 +755,11 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 - The runner checks both direct authority generations and their source lineage; replacing a
   source requires rebuilding its affected projection and gate.
 - Only a directly consumed prior revision is a replacement's self-input. Reusing
-  an output key cannot turn an inherited stale dependency into that exception.
+  an output key cannot turn an inherited stale dependency into that exception. So is the prior revision
+  of another key the same step replaced with it, but only while that key still holds what the step wrote: a later change to
+  it is a change to a dependency. A step that replaces two keys (the acceptance of clarification responses replaces the
+  clarification inputs and the actor-evidence registry) therefore leaves neither stale through the other's superseded
+  revision. Iteration bookkeeping (the authentication progress) is `execution_control`, not authority.
 - Native data schemas distinguish current authorities from captured immutable evidence.
 - A captured value carries its complete current-authority frontier into every successor;
   retiring or replacing its transport slot does not invalidate that evidence.

@@ -685,7 +685,8 @@ transitions and their existing native authority.
   execution of its exact issuer, bound to the still-present, unchanged authority
   generations and their recorded source lineage.
 - A replaced or removed ancestor invalidates derived evidence; a replacement's
-  self-input identifies its superseded revision, not a dependency on itself.
+  self-input identifies its superseded revision, not a dependency on itself. So does its prior revision of another key the
+  same step replaced, while that key still holds what the step wrote ([§12.8](../contracts/12-model-boundary.md#128-closed-authority-reconciliation-boundary)).
 - Native omission merges use [§12.8's renewal contract](../contracts/12-model-boundary.md#128-closed-authority-reconciliation-boundary):
   retain historical inputs, invalidate the complete declared dependency set and
   require fresh source/policy authority before rebuilding dependent evidence.

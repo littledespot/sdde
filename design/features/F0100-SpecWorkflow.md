@@ -560,7 +560,7 @@ All operations are pure and individually registered in the generic YAML registry
 | Summary reuse | `check-reference-summary-reuse`, `reuse-reference-reconciliation-summary`; otherwise summary collection and parsing |
 | Non-final summaries | `validate-reference-reconciliation-summary`, `assign-reference-summary-identities`, `build-reference-reconciliation-summary` |
 | Global phases | Build and collect dispositions, signals and conflicts assignments; `check-reference-reconciliation-phase`; the disposition, signal and conflict validators |
-| Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `validate-reference-reconciliation-completeness` |
+| Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `apply-clarification-answers` (the user's choice among the claims of a conflict, [ADR 0025](../decisions/0025-clarification-answer-authentication.md)), `validate-reference-reconciliation-completeness` |
 
 - The engine selects the current partition's summary or named phase schema.
 - [§16.4](../contracts/16-reference-ingestion.md#164-semantic-extraction-flow) owns

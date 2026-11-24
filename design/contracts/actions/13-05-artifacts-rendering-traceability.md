@@ -41,12 +41,16 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
   ordinal are not part of it (ADR 0025, the clarification subject). Gaps of one stage and one
   subject are one need: it asks each distinct question and gives each distinct reason, in the
   ledger's order, binds the union of the gaps' authorities and cites the union of their evidence.
-  A gap over other text, or of another stage, stays its own need.
+  A gap over other text, or of another stage, stays its own need. The need of a reference conflict is a select-one form
+  with one option for each claim of the conflict (a key naming the lines the claim cites, labelled with its quotation); two
+  conflicts of one subject offer the union of their options once each, and every other need is answered in bounded text
+  ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md), "The answer to a conflict").
 - **Rejects:** `InvalidRequiredAuthority` for an invalid ledger, a candidate defect, an
   administrative block, an upstream-rework entry, an owner mismatch, a semantic gap with no
   review question, a unit the accounted evidence or the corpus does not hold, a subject whose
   merged question or reason exceeds the form's text bound, whose authorities exceed a record's,
-  or that names one canonical record at two revisions. Nothing is truncated or dropped to fit.
+  or that names one canonical record at two revisions, and for a conflict whose claims cannot be options (two claims citing
+  the same lines, a key or label the form cannot hold, or more than 32 options). Nothing is truncated or dropped to fit.
 
 ## `BuildResolvedClarificationNeedsAction` (`build-resolved-clarification-needs`)
 

@@ -115,6 +115,36 @@ test "E2E publication and clarification have distinct explicit expected outcomes
     try std.testing.expectEqual(.invalid_clarifications, (try gate.evaluate(a, report)).unresolved);
 }
 
+test "a case that answers a form states each leg's own outcome, and a first leg with nothing to answer is an unmet outcome" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // The first leg is a clarification run: it passes without adjudication, and the launch goes on to the second.
+    var first = try pause(a);
+    first.expected_outcome = .clarification;
+    try std.testing.expect(try gate.commandSucceeded(a, first));
+    // The second leg is a publication run: it awaits adjudication like any publication, and names the first it continues.
+    var second = try completed(a);
+    second.continued_from = "2026-11-24T00-00-00Z-0123456789abcdef0123456789abcdef";
+    try std.testing.expectEqual(.adjudication_required, (try gate.evaluate(a, second)).unresolved);
+    // The case's combined outcome is not a leg's: a report that carries it is not accepted as either.
+    for ([_]c.Report{ try pause(a), try completed(a) }) |leg| {
+        var combined = leg;
+        combined.expected_outcome = .clarification_then_publication;
+        try std.testing.expectEqual(.unexpected_outcome, (try gate.evaluate(a, combined)).failed);
+    }
+    // A first leg that paused on no single form that offers the answer is reported, never accepted, and never answered.
+    var unanswered = try pause(a);
+    unanswered.status = .answer_unavailable;
+    unanswered.diagnostic = "ANSWER_FORM_COUNT";
+    try std.testing.expectEqual(.unexpected_outcome, (try gate.evaluate(a, unanswered)).failed);
+    try std.testing.expect(!try gate.commandSucceeded(a, unanswered));
+    // A first leg that published without pausing is not the pause the case expects.
+    var published = try completed(a);
+    published.expected_outcome = .clarification;
+    try std.testing.expectEqual(.unexpected_outcome, (try gate.evaluate(a, published)).failed);
+}
+
 test "E2E acceptance replays complete admission evidence and requires measured zero" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

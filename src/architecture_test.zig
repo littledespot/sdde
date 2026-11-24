@@ -3453,7 +3453,7 @@ test "reconciliation is YAML visible capability free and preserves closed candid
     try std.testing.expect(!@hasField(r.SummaryProposal, "partition_id"));
     try std.testing.expect(@FieldType(r.ContentProposal, "model") == @import("domain/reference_extraction.zig").ProposalContent);
     try std.testing.expect(@FieldType(r.Item, "claim") == @import("domain/reference_extraction.zig").Claim);
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.reference_reconciliation_records}, native.Account.Action.contract.requires);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.answered_reference_reconciliation_records}, native.Account.Action.contract.requires);
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "reconciliation");
     try expectAbsent(@embedFile("domain/reference_reconciliation.zig"), "precedenceRule");
 }

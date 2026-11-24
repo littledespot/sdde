@@ -1,8 +1,9 @@
 {
-  "schema": "spec-e2e-case/v4",
+  "schema": "spec-e2e-case/v5",
   "id": "wf-001-hello-world-node-vitest-spec",
   "workflow_id": "spec-generation",
   "expected_outcome": "publication",
+  "answers": [],
   "feature": "hello-world",
   "reference": "hello-world",
   "config": "test/integration/fixtures/baseline/protocol.sddtoolkit.json",

@@ -2,7 +2,7 @@ const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
 const r = @import("../../domain/reference_reconciliation.zig");
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "validate-reference-reconciliation-completeness", .kind = .action, .requires = &.{.reference_reconciliation_records}, .produces = &.{.accounted_reference_reconciliation}, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "validate-reference-reconciliation-completeness", .kind = .action, .requires = &.{.answered_reference_reconciliation_records}, .produces = &.{.accounted_reference_reconciliation}, .side_effect = .none };
     pub fn execute(_: Action, allocator: std.mem.Allocator, records: r.Records) r.Error!r.Accounted {
         const assigned = records.assignments;
         const global = assigned.global();

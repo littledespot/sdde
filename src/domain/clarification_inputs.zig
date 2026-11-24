@@ -19,6 +19,8 @@ pub const max_text_bytes = 2000;
 pub const schema_version = "clarification-state/v4";
 /// The most source spans one subject names.
 pub const max_subject_spans = 128;
+/// The most options a selection form offers.
+pub const max_options = 32;
 /// The most authorities one record names.
 pub const max_record_authorities = 64;
 pub const Error = std.mem.Allocator.Error || error{InvalidClarificationInput};
@@ -196,7 +198,7 @@ pub fn validate(parsed: ParsedState, selected: feature.FeatureId) Error!Validate
             .business_text, .defer_reason, .cancel_reason => |text| if (!validText(text, max_text_bytes)) return error.InvalidClarificationInput,
             .selected_option => |key| if (!validToken(key)) return error.InvalidClarificationInput,
             .selected_options => |keys| {
-                if (keys.len == 0 or keys.len > 32) return error.InvalidClarificationInput;
+                if (keys.len == 0 or keys.len > max_options) return error.InvalidClarificationInput;
                 for (keys, 0..) |key, key_index| {
                     if (!validToken(key)) return error.InvalidClarificationInput;
                     for (keys[0..key_index]) |other| if (std.mem.eql(u8, key, other)) return error.InvalidClarificationInput;
@@ -292,7 +294,7 @@ pub fn validText(bytes: []const u8, maximum: usize) bool {
     return true;
 }
 fn validateOptions(options: []const Option) Error!void {
-    if (options.len == 0 or options.len > 32) return error.InvalidClarificationInput;
+    if (options.len == 0 or options.len > max_options) return error.InvalidClarificationInput;
     for (options, 0..) |option, index| {
         if (!validToken(option.key) or !validText(option.label, max_text_bytes)) return error.InvalidClarificationInput;
         for (options[0..index]) |other| if (std.mem.eql(u8, option.key, other.key)) return error.InvalidClarificationInput;

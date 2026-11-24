@@ -548,3 +548,30 @@ fn allocationExercise(allocator: std.mem.Allocator) !void {
     try std.testing.expectEqualStrings("three", result.choice.text);
     try std.testing.expectEqualStrings("four", result.context.?.text);
 }
+
+test "a step that replaces two keys is not stale through the other's superseded revision, until that key changes again" {
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ context_schema, count_schema });
+    defer envelope.deinit();
+    var delta: pipeline.NodeDelta = .{};
+    defer envelope.discard(&delta);
+    delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "source meaning", .attempts = 1 });
+    try envelope.apply(produce, &delta, .ok);
+    const project: pipeline.NodeContract = .{ .id = "test.project", .kind = .action, .requires = &.{context_schema.key}, .produces = &.{count_schema.key}, .side_effect = .none };
+    delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
+    try envelope.apply(project, &delta, .ok);
+    // One step reads both keys and replaces both.
+    const both: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{ context_schema.key, count_schema.key }, .produces = &.{}, .replaces = &.{ context_schema.key, count_schema.key }, .side_effect = .none };
+    delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "source meaning", .attempts = 2 });
+    delta.data_replacements[count_index] = try values.create(std.testing.allocator, count_schema, u32, 2);
+    try envelope.apply(both, &delta, .ok);
+    try std.testing.expect(envelope.checkCurrentAuthority(count_schema.key) == null);
+    try std.testing.expect(envelope.checkCurrentAuthority(context_schema.key) == null);
+    // A later change to one of them is a change to a dependency of the other.
+    var refresh = produce;
+    refresh.requires = produce.produces;
+    refresh.replaces = produce.produces;
+    refresh.produces = &.{};
+    delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "source meaning", .attempts = 3 });
+    try envelope.apply(refresh, &delta, .ok);
+    try std.testing.expectEqual(.stale_authority, envelope.checkCurrentAuthority(count_schema.key).?);
+}

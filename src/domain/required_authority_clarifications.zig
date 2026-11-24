@@ -64,6 +64,7 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
         try parts.append(allocator, .{
             .stage = gap.owner,
             .subject = subject,
+            .answer = try answerFor(allocator, source_inputs, inputs.references, entry.requirement),
             .authority = entry.input_authorities,
             .question = if (questions.items.len != 0) try questions.toOwnedSlice(allocator) else try @import("required_authority_description.zig").question(allocator, guidance, entry.requirement),
             .reason = reason,
@@ -80,6 +81,8 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
 pub const Part = struct {
     stage: c.Stage,
     subject: c.Subject,
+    /// What the user answers with: one option for each claim of a conflict, otherwise bounded business text.
+    answer: c.AnswerSchema = .{ .bounded_business_text = c.max_text_bytes },
     authority: []const c.Authority,
     question: []const u8,
     reason: []const u8,
@@ -156,8 +159,55 @@ fn merged(allocator: std.mem.Allocator, items: []const @import("reference_reconc
         .authority = try authority.toOwnedSlice(allocator),
         .question = prepared.question,
         .why_required = prepared.why_required,
-        .answer_schema = .{ .bounded_business_text = c.max_text_bytes },
+        .answer_schema = try mergeAnswers(allocator, members),
     };
+}
+/// The user chooses among the claims of a conflict, and answers every other gap in text. The options come from the
+/// conflict's own claims, so the form offers exactly what the sources say.
+fn answerFor(allocator: std.mem.Allocator, source_inputs: @import("reference_evidence.zig").Inputs, references: ?@import("reference_support.zig").Records, id: a.Id) a.Error!c.AnswerSchema {
+    const conflict = switch (id.unit) {
+        .conflict => |value| value,
+        else => return .{ .bounded_business_text = c.max_text_bytes },
+    };
+    const held = references orelse return error.InvalidRequiredAuthority;
+    for (held.conflicts) |candidate| {
+        if (candidate.id.ordinal != conflict.ordinal) continue;
+        return .{ .select_one = @import("clarification_resolution.zig").conflictOptions(allocator, source_inputs.corpus.sources, held, candidate) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority };
+    }
+    return error.InvalidRequiredAuthority;
+}
+/// The members of one subject answer one way: text of one bound, or the options of their conflicts once each. A key the
+/// members label differently, a mixture of answer kinds and more options than a form offers fail.
+fn mergeAnswers(allocator: std.mem.Allocator, members: []const Part) a.Error!c.AnswerSchema {
+    const lead = members[0].answer;
+    switch (lead) {
+        .bounded_business_text => |bound| {
+            for (members[1..]) |member| switch (member.answer) {
+                .bounded_business_text => |other| if (other != bound) return error.InvalidRequiredAuthority,
+                else => return error.InvalidRequiredAuthority,
+            };
+            return lead;
+        },
+        .select_many => return error.InvalidRequiredAuthority,
+        .select_one => {},
+    }
+    var options: std.ArrayList(c.Option) = .empty;
+    defer options.deinit(allocator);
+    for (members) |member| {
+        const offered = switch (member.answer) {
+            .select_one => |value| value,
+            else => return error.InvalidRequiredAuthority,
+        };
+        next: for (offered) |option| {
+            for (options.items) |prior| if (std.mem.eql(u8, prior.key, option.key)) {
+                if (!std.mem.eql(u8, prior.label, option.label)) return error.InvalidRequiredAuthority;
+                continue :next;
+            };
+            try options.append(allocator, option);
+        }
+    }
+    if (options.items.len > c.max_options) return error.InvalidRequiredAuthority;
+    return .{ .select_one = try options.toOwnedSlice(allocator) };
 }
 fn containsText(haystack: []const []const u8, text: []const u8) bool {
     for (haystack) |held| if (std.mem.eql(u8, held, text)) return true;

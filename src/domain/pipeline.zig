@@ -83,6 +83,7 @@ pub const DataKey = enum {
     validated_reference_conflicts,
     reference_reconciliation_identities,
     reference_reconciliation_records,
+    answered_reference_reconciliation_records,
     accounted_reference_reconciliation,
     identified_specification_content,
     specification_generation_session,

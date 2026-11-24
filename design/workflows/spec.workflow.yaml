@@ -94,7 +94,10 @@ steps:
       cancelled: end.cancelled
   validate:
     call: validate-reconciliation
-    on: {ok: check-references, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+    on: {ok: apply-answers, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+  apply-answers:
+    use: apply-clarification-answers
+    on: {ok: check-references, failed: end.failed}
   check-references:
     use: validate-reference-reconciliation-completeness
     on:

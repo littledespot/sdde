@@ -3474,7 +3474,7 @@ model and effort are the same (`claude-haiku-5-5`, low): `zig-out/e2e-call/2026-
 gave 3, 5 and 2. The grouping is not deterministic for this request, and the two screens do not show a shift between
 them (10 trials each). Protocol checks only; the semantic quality of the signals was not assessed.
 
-## E7 stage 5. Source-derived clarification subjects (23 November 2026)
+## E7 stage 5. Source-derived clarification subjects (23 November 2026; kept 24 November 2026)
 
 User: "action the preconditions for stage 5", then "approved A, B, D and implement stage 5" on the preflight's decisions A
 (the selector), B (what changes with it) and D (the amendments). C, the measure of stage 5's set, and the recommendations the
@@ -3538,8 +3538,8 @@ same gap), not a published-output class: the development cases raise no clarific
   hello-world one signal in all three runs; loan-renewal `[1,4,5]` and `[2,3]`, then `[1,4]`, `[2]`, `[3]` and `[5]`, then
   `[1,4,5]`, `[2]` and `[3]`, so three groupings in three runs. Calls: hello-world 9 each (38,129 to 40,391 tokens),
   loan-renewal 12, 17 and 15 (66,931 to 105,896). Against the §2 rule 6 guards the set shows no lost source requirement under
-  that ruling and a publication rate of 6 of 6; whether the set is kept is the user's call, and nothing here attributes a
-  difference from the earlier set to stage 5 (one set each, on different builds, with the signals drifting).
+  that ruling and a publication rate of 6 of 6, and nothing here attributes a difference from the earlier set to stage 5
+  (one set each, on different builds, with the signals drifting). **Kept** 24 November 2026 (user: "keep stage 5").
 - **Reported separately.** Implementation complete: yes. Mechanical checks passed: yes. Semantic benefit: not demonstrated
   (nothing consumes an accepted answer before stage 6, and the development cases raise no clarification). Brittleness
   reduced: the model-picked record family, the per-run ordinals and the contract version leave the key, and the subject is
@@ -3626,6 +3626,126 @@ changes.
   specification. A merged form asks several questions and takes one answer; what that answer decides for each gap is stage
   6's open decision (ADR 0025). A merged text beyond the form's bound ends the run `blocked` on every rerun of those sources,
   which no run has shown: a review detail may be 2000 bytes, so two or three long details over one subject reach it (likely).
+
+## E7 stage 6a: the answer to a conflict (24 November 2026)
+
+User: "implement stage 6", then, after the preflight and a recommendation I corrected twice, "approved A, implement it".
+Offline; no model request changes.
+
+- **Defect class.** An accepted answer had no consumer: the form of a conflict took free text, nothing read it, and a rerun
+  raised the same need again and ended `blocked` with `ProtectedClarification`, so a conflict could never be closed.
+- **Decision history.** The first recommendation (D1 to D6, approved with "continue") had records cite response IDs and
+  generation receive the answer. Reading the code showed that a claim is usable only if its disposition is `retained`, that
+  contradictory bullets are `conflicting` and sit in no signal, and that records are authored per signal, so an answer needed
+  a claim made usable. The second recommendation (D7) made the chosen claim eligible while the others stayed `conflicting`
+  and records cite the response; it was withdrawn when the persisted reference snapshot proved unable to hold it:
+  `reference_snapshot.zig` `validateRecords` checks dispositions, signals and conflicts against the reconciliation rules, and
+  `specification_state.zig` binds the clarification state by ordinal and revision only, so a readback cannot know the
+  answers. Option A, approved, applies the answer to the reconciliation. It amends approved D4 (no `Authority` variant, no
+  deterministic evidence, no review-loop change), D7, and D2 (no response ID on a record), and drops "response ID cited"
+  from stage 7's adjudication.
+- **Change.**
+  - `clarification_resolution.zig`: the option of each claim of a conflict (a key naming the cited lines, labelled with the
+    quotation), the claim a key selects, and the choices of the resolved Specify conflict forms.
+  - The authority need builder gives a conflict's gap a select-one form; two conflicts of one subject offer their options
+    once each, and a mixture of answer kinds, a relabelled key or more than `max_options` fails.
+  - `answered_reconciliation.zig` and `apply-clarification-answers` (a step between `validate` and `check-references`,
+    writing `answered_reference_reconciliation_records`, which the completeness check now reads): the chosen claim is
+    retained with a signal of its own, the others are superseded by it, the conflict is dropped and the later ones are
+    renumbered. The chain is rebuilt in its owner (`RecordAssignments.rebuilt`). A conflict with a preserved-token claim,
+    claims of two kinds, or a claim in another conflict is not answered.
+  - The runner: `Origin.replaced` and one generalization of the replacement self-input rule, because
+    `accept-clarification-responses` replaces two keys in one step and the new `clarification_inputs` recorded the old
+    `actor_evidence_registry` as a stale input. A step's prior revision of another key it replaced is exempt only while that
+    key still holds what the step wrote. The authentication progress, iteration bookkeeping, is now `execution_control`.
+- **Tests.** `clarification_resolution_test.zig`, `answered_reconciliation_test.zig` (the result passes the completeness
+  check, the disposition graph, `contentIssue`, `signalCoverage` and `conflictCoverage`; the conflict seed is gone; an answer
+  that cannot be applied, and a conflict that shares a claim, leave the conflict; every allocation failure),
+  `required_authority_test.zig` (a conflict's need and the merge rules, accepted and rejected) and `pipeline_data_test.zig`
+  (a step replacing two keys, and a later change to one making the other stale). Three pins changed deliberately: the
+  completeness action's `requires` (`architecture_test.zig`) and the two frozen dependents lists
+  (`repair_operations_test.zig`), which now name the new key.
+- **Records.** ADR 0025 ("The answer to a conflict", Decision 7, status, limits), 13-03, 13-05, 14-orchestration, 12-model-boundary
+  (the self-input bullet), F0005, SPEC01 (stage 6a, stage 7's answer is an option key).
+- **Contract review.** One blocker, three major, six minor. Blocker, fixed: `apply` wrote the proposal copy by claim ordinal,
+  but the proposal lists the model's dispositions in its own order with the preserved tokens after them, so a token below a
+  conflicting claim, or an out-of-order proposal, made the completeness check fail and the run `failed` (it is now found by
+  claim; tested with the proposal reversed). Major, fixed: a choice was matched by key only, so a text edited in place under
+  the same lines would have been applied to text the user never saw (the stored label must now equal the claim's current
+  quotation); and the snapshot's readback validation was claimed, not run (the test now builds the snapshot of the answered
+  reconciliation and validates it). Major, decided 24 November 2026 (user: "update documentation with the above 3
+  recommendations"; ADR 0025 Decision 8): a conflict whose options cannot be built (two claims citing the same lines, a path
+  character a key cannot hold, a key over 128 bytes) now ends `blocked` where it used to pause for a text answer, which is
+  accepted; the runner change stands; and the offline scenario that joins run 1, run 2, the gate, generation and publication
+  is built (below). Minor, fixed: a key two claims carry selects none; the literal 32 in `selected_options`; the label
+  fallback (a claim with no quotation is not an option); the arena requirement in `apply`'s comment; stale SPEC01 lines;
+  the superseded "Resolved responses" bullet, deleted; F0100's operation table. Tests added: the three-claim conflict, two
+  conflicts with one answered (the other renumbered and still conflicting), the reversed proposal, a stale label.
+- **Evidence.** Lint clean; `zig build verify` 146 of 146 steps and 2518 of 2518 tests (the 2506 of stage 5b and twelve new
+  tests); the request projection of the final tree (`SDDE_REQUEST_PROJECTION`, integration 156 of 156) is identical to
+  `q26-reverted-after`, so rule 10 holds.
+- **Scenario.** `test/harness/integration/tests.zig` "a conflict's form is answered by option key, the next run applies the
+  choice and publishes, and a rerun reuses it" runs the production composition with a fake account and the scripted
+  transport (new option `conflict` in `spec_generation_responses.zig`: a conflict between the first two business claims, the
+  source review raising it and no other requirement). Two source files give two claims, since the scripted extraction answers
+  one claim per chunk. Run 1 ends `needs_user` with one form offering both claims; the user's key goes into the closed form;
+  run 2 authenticates once, applies the choice and publishes, and the specification holds the chosen claim and not the
+  superseded one; run 3 reads the published state back and reuses the response with no second observation and no new registry
+  entry. It passes through the runner change without a lineage rejection, which the unit test alone did not show.
+- **Not shown.** No live run was made. The scenario scripts the model, so it does not show how a model extracts, reconciles
+  or reviews a real contradiction, or whether the form's reviewer question suits a selection. A preserved-token claim never
+  reaches `apply` in the tests (such a conflict is not answered). The development cases raise no clarification, so none of this changes a published
+  specification. The question a conflict's form carries is the reviewer's free-text question, which may ask for text where
+  the form asks for an option key (not measured).
+- **Limits.** An answer applies to a conflict only (every other answer stays protected and unused, so a re-raised need
+  still ends `blocked`); a conflict with a token claim, a claim in two conflicts or mixed claim kinds is not answered; a
+  user who accepts none of the options can only cancel; and no record cites the response.
+
+## E7 stage 7: the harness two-leg flow (24 November 2026)
+
+User: "implement" the offline scenario and stage 7, then "action with recommendations" on stage 7's D1 to D5 (SPEC01 E7, ADR 0025
+Decision 8). Offline; no live run was made.
+
+- **Defect class.** The harness could run a case once. A case that pauses on a form could not be answered and continued, so
+  the first run that joins the form, the answer, the gate and publication would have been a billed, unanswered one.
+- **Change.** `spec-e2e-case/v5` adds a closed `answers` (empty, or exactly one option key for a case that expects
+  `clarification_then_publication`); `spec-e2e-report/v27` adds `continued_from` and the status `answer_unavailable`. The CLI
+  runs a launch as legs (`cli.zig` `leg`): leg 1 is an ordinary run that expects `clarification`; `answer.zig` `prepare` reads
+  its retained project (never writing it) and, only for exactly one open select-one form that offers the key, renders the closed
+  form with the key in its answer region; leg 2 starts from a copy of leg 1's project with that form written over the form
+  (`continueProject`), expects `publication`, and names leg 1. Anything else ends the launch with leg 1's report
+  (`answer_unavailable` plus a diagnostic code, or the ordinary unexpected outcome). Acceptance changed only to say that a
+  leg's report never carries the combined outcome and that `answer_unavailable` fails.
+- **The case.** `test/e2e/wf-003-loan-renewal-conflict/`: the loan-renewal stories with the limit bullets "only once" (line 8)
+  and "up to twice" (line 9) contradicting each other and the refusal bullet reworded to name neither limit; the answer
+  `stories.md.8`; a rubric with a `conflict-resolution` criterion (chosen bullet kept, the other and any invented resolution
+  absent, minimum 3) beside the loan-renewal criteria. It is neither a reserved qualification feature nor a tuning target. Its
+  grading-qualification members point at the loan-renewal calibration files, since no panel exists for the derivative.
+- **Tests.** Closed-case rows (the v4 case rejected; an answer on a case that answers none, a missing `answers`, a combined case
+  with none, two, an empty or a malformed key rejected; one accepted), a test that parses the new case and checks its answer
+  against its stories, the acceptance cases for each leg, and the conflict scenario now writing the answer through
+  `answer.zig` with its rejected cases (a key the form does not offer, a project with no state, no open form after the form is
+  resolved, a project entry that is neither a file nor a directory) and its copy, which keeps every entry's permissions (the
+  engine reads feature log history only while it is owner-only).
+- **Measures of a second leg.** A second leg's copied project holds both engine runs' feature logs, which `e2e-measures`
+  rightly treats as ambiguous. A report that names `continued_from` now measures only the engine run the leg added, by dropping
+  the owners the named first-leg directory holds, which is the measured run's sibling wherever the pair sits (the review caught
+  a first version that looked beside the root); a missing first leg is unreadable, a name that is a path is an invalid report, and a run with two engine runs and no
+  `continued_from` stays ambiguous. Tests: the accepted second leg, an orphan and an unnamed run.
+- **Records.** e2e.md ("Case and publication contract", the one-project line, the formats), acceptance.md (the outcome, the
+  versions), ADR 0025 Decisions 8 and 9, the live-e2e skill (steps 2, 5 and 9; its name example is `hello-world`, since
+  `loan-renewal` now matches two cases), SPEC01 E7. The evaluate-e2e skill is unchanged, so its hash and the comparability of its
+  evaluations stand: leg 1 is `awaiting_clarification`, which the skill already leaves ungraded, and the answer is counted as
+  source in the rubric.
+- **Evidence.** Lint and `test-architecture` clean; `zig build verify` 146 of 146 steps and 2521 of 2521 tests, and integration
+  158 of 158; `build-e2e-harness` and the harness smoke pass. The request projection of `test-integration` is identical to
+  `evaluations/request-projection/q26-reverted-after`.
+- **Open.** The approval hook matches a case name by substring, so `/live-e2e loan-renewal` now fails closed as ambiguous; name
+  the case path or `loan-renewal-conflict`. The hook is policy and was not changed. A second leg re-captures the case and rubric
+  without cross-checking them against the first leg's.
+- **Not shown.** No live run, so nothing shows whether a model extracts the two bullets as two claims that each cite their own
+  line (the key `stories.md.8` needs the claim of line 8 to cite exactly that line), raises one form for the conflict, or
+  carries the answer through to a publication that keeps "only once". Any other result is reported as an unmet criterion.
 
 ## Decisions that changed nothing (15 November 2026)
 

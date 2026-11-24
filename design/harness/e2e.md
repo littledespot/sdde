@@ -284,7 +284,7 @@ Authentication/authorization failures are terminal; JSON correction cannot repai
 credentials. No model answer means no evidence yet about schema conformance.
 
 - The harness captures the case's declared inputs and copies them into one new, isolated
-  project.
+  project (a case's second leg starts from a copy of its first leg's project instead).
 - It shares `composition/root.zig.Runtime` with the CLI for adapter construction,
   bindings and cleanup, then runs one ordinary invocation through production bootstrap,
   provider catalogue validation, request preparation, authorization, HTTPS transport, YAML
@@ -337,9 +337,23 @@ credentials. No model answer means no evidence yet about schema conformance.
 
 ## Case and publication contract
 
-- The closed `spec-e2e-case/v4` declares workflow/feature/reference selection,
+- The closed `spec-e2e-case/v5` declares workflow/feature/reference selection,
   configuration, explicit file mappings, empty directories, all five expected artifact
-  kinds, `expected_outcome` and `evaluation_case`.
+  kinds, `expected_outcome`, `answers` and `evaluation_case`.
+- `expected_outcome` is `publication`, `clarification` or `clarification_then_publication`. `answers` is
+  empty except for a case that expects `clarification_then_publication`, which declares exactly one answer: the key of the
+  option the user chooses on the one form its first leg raises.
+- A case that answers a form runs two legs in one launch, each its own run directory and report. The first leg is an
+  ordinary run that must end `needs_user` (its report expects `clarification`) on exactly one open form that offers the
+  answer's key. The second starts only then, from a copy of the first's retained project with the closed form (its key in the
+  answer region and `requestedStatus: closed`) written over the form; it is an ordinary run that must publish (its report
+  expects `publication` and names the first in `continued_from`). The first leg's project stays unchanged evidence. The
+  answer is the user's input, written by the launcher as the user would, and running the second leg is the act of accepting it
+  under the invoking account ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)); it is no model
+  output and no scripted provider response. A first leg that paused on no single form that offers the key ends the launch with
+  its report `answer_unavailable` and a diagnostic (`NO_CLARIFICATION_STATE`, `ANSWER_FORM_COUNT` or `ANSWER_NOT_OFFERED`),
+  an unmet criterion that is reported with no retry, no rewording and no other form chosen. One approval covers both legs of
+  one launch, and a launch is one attempted workload for the Spec quality gate, judged on its last leg.
 - The evaluation case names source documents and a rubric.
 - Every selected reference must map exactly once to an evaluation source.
 - Unknown or duplicate fields, unsafe paths, symlinks, destination collisions and
@@ -362,7 +376,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v26`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v27`; it stays null until ADR 0041 is
   implemented (SPEC01 E0).
 
 ### Rubric assessment
@@ -614,7 +628,7 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v4`, `spec-e2e-report/v26`,
+The current closed formats are `spec-e2e-case/v5`, `spec-e2e-report/v27`,
 `e2e-step-event/v8`, `baseline-freeze/v3`, `baseline-acquisition/v17`,
 `baseline-score/v9`, `baseline-budget-feasibility/v2`, the evaluator packets'
 `baseline-assessment-inputs/v2` and `provider-compatibility-report/v4`; assessor

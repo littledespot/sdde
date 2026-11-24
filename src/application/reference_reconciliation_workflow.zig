@@ -22,8 +22,9 @@ pub const signals_schema = values.schema(.validated_reference_signals, owned.Val
 pub const conflicts_schema = values.schema(.validated_reference_conflicts, owned.Value, 1, null).captured();
 pub const identities_schema = values.schema(.reference_reconciliation_identities, owned.Value, 1, null);
 pub const records_schema = values.schema(.reference_reconciliation_records, owned.Value, 1, null);
+pub const answered_schema = values.schema(.answered_reference_reconciliation_records, owned.Value, 1, null);
 pub const accounted_schema = values.schema(.accounted_reference_reconciliation, owned.Value, 1, null);
-pub const schemas = [_]data.Schema{ items_schema, layout_schema, plan_schema, progress_schema, input_schema, raw_schema, parsed_schema, summary_schema, summary_ids_schema, dispositions_schema, signals_schema, conflicts_schema, identities_schema, records_schema, accounted_schema };
+pub const schemas = [_]data.Schema{ items_schema, layout_schema, plan_schema, progress_schema, input_schema, raw_schema, parsed_schema, summary_schema, summary_ids_schema, dispositions_schema, signals_schema, conflicts_schema, identities_schema, records_schema, answered_schema, accounted_schema };
 
 pub const BuildItems = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .accounted_reference_extraction, .evidence = .accounted_reference_extraction, .result = .reference_reconciliation_items } };
@@ -150,15 +151,34 @@ pub const BuildSummary = struct {
         } };
     }
 };
+/// The user's answers to the conflicts the references hold are applied once, to the reconciliation the model proposed
+/// and the engine validated, before anything reads it.
+pub const ApplyAnswers = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .reference_reconciliation_records, .evidence = .reference_reconciliation_records, .result = .answered_reference_reconciliation_records } };
+    pub const Action = @import("../actions/reference/apply_clarification_answers.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .failed };
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const prior = try extraction.read(&input.step.data, records_schema, .reconciliation_records);
+        const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch |operation_error| return operation_error;
+        const answers = values.read(&input.step.data, @import("clarification_input_workflow.zig").inputs_schema, @import("../domain/clarification_inputs.zig").Inputs) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .reconciliation_records = self.action.execute(owner.arena.allocator(), source.*, answers.*, prior.payload().reconciliation_records) catch |operation_error| return operation_error };
+        return extraction.publish(self.allocator, answered_schema, owner, .ok);
+    }
+};
 pub const Account = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .reference_reconciliation_records, .evidence = .accounted_reference_reconciliation, .result = .accounted_reference_reconciliation } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .answered_reference_reconciliation_records, .evidence = .accounted_reference_reconciliation, .result = .accounted_reference_reconciliation } };
     pub const Action = @import("../actions/reference/validate_reference_reconciliation_completeness.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const prior = try extraction.read(&input.step.data, records_schema, .reconciliation_records);
+        const prior = try extraction.read(&input.step.data, answered_schema, .reconciliation_records);
         const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const result = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_records) catch |operation_error| return operation_error;

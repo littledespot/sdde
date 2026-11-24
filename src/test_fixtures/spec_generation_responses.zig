@@ -46,6 +46,9 @@ fn falseConflict(mode: ?SourceLoss) bool {
 pub const RestatingKind = enum { business_rule, non_goal };
 
 pub const Options = struct {
+    /// The reconciliation holds one conflict between the first two business claims, and the source review raises it
+    /// and no other requirement. A rerun with the claims retained reconciles them again: the engine applies any answer.
+    conflict: bool = false,
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     disposition_sequence: ?enum { recover, exhaust } = null,
@@ -252,7 +255,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const accepted = if (view.contains(.validated_reference_dispositions)) (try native.read(&view, reconciliation.dispositions_schema, .reconciliation_dispositions)).payload().reconciliation_dispositions else null;
             // Later phase responses follow accepted repairs, rather than
             // reintroducing the initial scripted relationship defect.
-            if (falseConflict(options.source_loss) and (accepted == null or accepted.?.proposal.conflict_groups.len != 0)) {
+            if ((falseConflict(options.source_loss) or options.conflict) and (accepted == null or accepted.?.proposal.conflict_groups.len != 0)) {
                 const claims = try allocator.alloc(r.ClaimId, 2);
                 var count: usize = 0;
                 for (input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model and count < 2) {
@@ -559,7 +562,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const source_positive = source_only and required.eligible_source_ids.len != 0;
                 if (source_only) selected = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} };
                 const unbound = (source_only and !source_positive) or (!source_only and eligible.len != 0 and (requirement.seed.id.unit == .feature or requirement.seed.id.unit == .record));
-                const conflict = requirement.seed.id.unit == .conflict or ((eligible.len == 0 or unbound) and context.references.records.conflicts.len != 0);
+                const conflict = requirement.seed.id.unit == .conflict or (!options.conflict and (eligible.len == 0 or unbound) and context.references.records.conflicts.len != 0);
                 finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
                 if (source_positive and finding.value.kind == .supported) {
                     finding.value.source_ids = required.eligible_source_ids[0..1];

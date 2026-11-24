@@ -139,6 +139,17 @@ pub const RecordAssignments = struct {
     pub fn global(self: RecordAssignments) CheckedDispositions {
         return self.checked.prior.prior;
     }
+
+    /// The same chain over other dispositions, proposal, signals and conflicts, with their identities: the one place the
+    /// checked chain is rebuilt, as `global` is the one place it is unwound. The caller owns the validity of what it passes.
+    pub fn rebuilt(self: RecordAssignments, dispositions: []const ClaimDisposition, proposal: Proposal, signals: []const ValidatedSignal, signal_ids: []const SignalId, conflicts: []const ValidatedConflict, conflict_ids: []const ConflictId) RecordAssignments {
+        var checked = self.checked;
+        checked.prior.prior.dispositions = dispositions;
+        checked.prior.prior.proposal = proposal;
+        checked.prior.signals = signals;
+        checked.conflicts = conflicts;
+        return .{ .checked = checked, .signal_ids = signal_ids, .conflict_ids = conflict_ids };
+    }
 };
 pub const Signal = struct { id: SignalId, value: ValidatedSignal };
 pub const Conflict = struct { id: ConflictId, value: ValidatedConflict };

@@ -24,7 +24,7 @@ pub const Capture = struct { bytes: ?[]const u8 };
 
 pub const capture_schema = values.schema(.raw_actor_evidence, Capture, 1, evidence.max_bytes * 2);
 pub const registry_schema = values.schema(.actor_evidence_registry, evidence.Registry, 1, evidence.max_bytes * 4);
-pub const progress_schema = values.schema(.authentication_progress, authentication.Progress, 1, 2 * 1024 * 1024);
+pub const progress_schema = values.schema(.authentication_progress, authentication.Progress, 1, 2 * 1024 * 1024).executionControl();
 /// Each pass's observation is consumed and invalidated by the step that advances the loop, so its successor keeps its
 /// evidence and not its slot: a later pass must not find the progress dependent on an observation that is no longer there.
 pub const observation_schema = values.schema(.actor_observation, evidence.Observation, 1, 4096).captured();
