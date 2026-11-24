@@ -20,7 +20,6 @@ pub const Record = struct {
         return values.valueSchema(self.value).key;
     }
 };
-pub const Placement = union(enum) { inserted: *const Record, already_present: *const Record };
 
 /// One immutable origin is shared by every current output of an application.
 /// Slot replacement and invalidation release their own references.
@@ -68,19 +67,6 @@ pub const PipelineEnvelope = struct {
         if (self.scope == null) self.scope = try reference.create(self.allocator);
         self.occurrence_count = ordinal;
         return .{ .scope = self.scope.?, .ordinal = ordinal, .producer = producer };
-    }
-
-    /// Same sealed value and origin for the same occurrence is a no-op. The
-    /// canonical immutable value owner supplies identity, not serialized text.
-    pub fn place(self: *PipelineEnvelope, occurrence: Occurrence, value: *data.Value, origin: data.Origin) Error!Placement {
-        if (try self.existing(occurrence, value, origin)) |record| return .{ .already_present = record };
-        const index = @intFromEnum(values.valueSchema(value).key);
-        const current_origin = self.origins[index] orelse return error.InvalidInformationOccurrence;
-        if (self.slots[index] != value or !sameOrigin(current_origin.*, origin)) return error.InvalidInformationOccurrence;
-        const record = try self.prepareRecord(occurrence, value, origin);
-        errdefer self.releaseRecord(record);
-        try self.records.append(self.allocator, record);
-        return .{ .inserted = record };
     }
 
     /// Historical information is available only through the requested native
@@ -151,6 +137,7 @@ pub const PipelineEnvelope = struct {
         }
         const generation = std.math.add(u64, self.generation, 1) catch return error.DataGenerationExhausted;
         var origin: data.Origin = .{ .generation = generation, .occurrence = occurrence.ordinal, .producer = contract.id, .outcome = outcome, .inputs = @splat(null) };
+        for (contract.replaces) |key| origin.replaced.insert(key);
         inline for (.{ contract.requires, contract.optional }) |keys| {
             for (keys) |key| if (self.origins[@intFromEnum(key)]) |input| {
                 origin.inputs[@intFromEnum(key)] = input.generation;
@@ -188,7 +175,7 @@ pub const PipelineEnvelope = struct {
         inline for (.{ delta.data_writes, delta.data_replacements }) |slots| for (slots) |slot| {
             const value = slot orelse continue;
             if (values.valueSchema(value).history != .execution) continue;
-            if (try self.existing(occurrence, value, origin) != null) return error.InformationConflict;
+            if (self.recorded(occurrence, values.valueSchema(value).key)) return error.InformationConflict;
             const record = try self.prepareRecord(occurrence, value, origin);
             prepared_records.append(self.allocator, record) catch |err| {
                 self.releaseRecord(record);
@@ -259,9 +246,15 @@ pub const PipelineEnvelope = struct {
         for (origin.lineage, 0..) |generation, index| {
             const expected = generation orelse continue;
             // Only a directly consumed prior revision is a replacement's
-            // self-input. A captured dependency cannot turn stale authority into
-            // a self-input merely because a later projection reuses its key.
+            // self-input. So is the prior revision of another key the same step
+            // replaced, for as long as that key still holds what the step wrote:
+            // a later change to it is a change to a dependency. A captured
+            // dependency cannot turn stale authority into a self-input merely
+            // because a later projection reuses its key.
             if (index == @intFromEnum(key) and origin.inputs[index] == expected) continue;
+            if (origin.replaced.contains(@enumFromInt(index)) and origin.inputs[index] == expected) {
+                if (self.origins[index]) |peer| if (peer.generation == origin.generation) continue;
+            }
             const current = self.origins[index] orelse return .missing_authority;
             if (current.generation != expected) return .stale_authority;
             if (self.checkAuthorityLineage(@enumFromInt(index), checked)) |rejection| return rejection;
@@ -330,18 +323,10 @@ pub const PipelineEnvelope = struct {
             return error.InvalidInformationOccurrence;
     }
 
-    fn existing(self: *const PipelineEnvelope, occurrence: Occurrence, value: *data.Value, origin: data.Origin) Error!?*const Record {
-        try self.checkOccurrence(occurrence);
-        const schema = values.valueSchema(value);
-        const expected = data.find(self.schemas, schema.key) orelse return error.UnregisteredDataSchema;
-        if (!expected.eql(schema) or schema.history != .execution) return error.DataSchemaMismatch;
-        if (origin.occurrence != occurrence.ordinal or !std.mem.eql(u8, occurrence.producer, origin.producer)) return error.InvalidInformationOccurrence;
-        for (self.records.items) |record| {
-            if (record.occurrence.ordinal != occurrence.ordinal or record.key() != schema.key) continue;
-            if (record.value != value or !sameOrigin(record.origin, origin)) return error.InformationConflict;
-            return record;
-        }
-        return null;
+    /// One occurrence records each execution-history key once; a second recording of it is a conflict.
+    fn recorded(self: *const PipelineEnvelope, occurrence: Occurrence, key: pipeline.DataKey) bool {
+        for (self.records.items) |record| if (record.occurrence.ordinal == occurrence.ordinal and record.key() == key) return true;
+        return false;
     }
 
     fn prepareRecord(self: *PipelineEnvelope, occurrence: Occurrence, value: *data.Value, origin: data.Origin) Error!*const Record {
@@ -366,11 +351,6 @@ pub const PipelineEnvelope = struct {
         if (owner.references == 0) self.allocator.destroy(owner);
     }
 };
-
-fn sameOrigin(left: data.Origin, right: data.Origin) bool {
-    return left.generation == right.generation and left.occurrence == right.occurrence and std.mem.eql(u8, left.producer, right.producer) and left.outcome == right.outcome and
-        std.meta.eql(left.inputs, right.inputs) and std.meta.eql(left.lineage, right.lineage) and left.lineage_conflicts.eql(right.lineage_conflicts);
-}
 
 fn mergeGeneration(origin: *data.Origin, index: usize, generation: u64) void {
     if (origin.lineage[index]) |prior| {

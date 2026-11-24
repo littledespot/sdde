@@ -1,7 +1,8 @@
-//! The closed request behind an edge case's outcome link (ADR 0038 Decision 7). An edge case
+//! The closed request behind an edge case's scenario link (ADR 0038 Decision 7). An edge case
 //! whose records batch holds two or more acceptance criteria naming one of its claims asks the
-//! model which of them states its outcome. The packet offers those criteria; the answer is the
-//! id of one, so the response schema admits no other value and no text.
+//! model which of them it narrows: the engine prints that criterion's Given, When and Then around
+//! the edge case's own given. The packet offers those criteria; the answer is the id of one, so
+//! the response schema admits no other value and no text.
 const std = @import("std");
 const g = @import("specification_generation.zig");
 const p = @import("specification_provenance.zig");
@@ -26,7 +27,8 @@ pub const CriterionId = struct {
 /// The answer: one offered criterion.
 pub const Answer = struct { criterion: CriterionId };
 
-const Offered = struct { id: CriterionId, given: []const u8, when: []const u8, then: []const u8 };
+/// A criterion with no Given is offered without one, as the encoding omits an absent optional.
+const Offered = struct { id: CriterionId, given: ?[]const u8 = null, when: []const u8, then: []const u8 };
 
 /// The records of the completed records unit, in authoring order.
 pub fn unitRecords(current: session.Session) Error![]const g.spec.RecordProposal {
@@ -49,7 +51,7 @@ pub fn limit(allocator: std.mem.Allocator, current: session.Session) Error!usize
 /// Whether the completed records unit can be linked, and how many edge cases need a model choice.
 pub const Planned = union(enum) { ready: usize, blocked: binding.Rejection };
 
-/// An edge case no criterion of its records batch serves blocks the run: it has no outcome to
+/// An edge case no criterion of its records batch serves blocks the run: it has no scenario to
 /// print, and neither the engine nor the model supplies one. The rejection names its source
 /// group and claims.
 pub fn begin(allocator: std.mem.Allocator, current: session.Session, context: p.Context) Error!Planned {
@@ -80,19 +82,19 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     if (plan.unlinkable != null or chosen >= plan.pending.len) return error.InvalidScenarioLink;
     const pending = plan.pending[chosen];
     const edge = records[pending.edge_case];
-    const condition = try projection.recordScalar(a, context, edge, edge.content.edge_case.condition);
+    const own_given = try projection.recordScalar(a, context, edge, edge.content.edge_case.given);
     const offered = try a.alloc(Offered, pending.candidates.len);
     for (pending.candidates, offered, 1..) |position, *entry, id| {
         const criterion = records[position];
         const scenario = criterion.content.acceptance_criterion;
         entry.* = .{
             .id = .{ .ordinal = std.math.cast(u32, id) orelse return error.InvalidScenarioLink },
-            .given = (try projection.recordScalar(a, context, criterion, scenario.given)).bytes,
+            .given = if (scenario.given) |held| (try projection.recordScalar(a, context, criterion, held)).bytes else null,
             .when = (try projection.recordScalar(a, context, criterion, scenario.when)).bytes,
             .then = (try projection.recordScalar(a, context, criterion, scenario.then)).bytes,
         };
     }
-    const payload = .{ .edge_case = condition.bytes, .acceptance_criteria = @as([]const Offered, offered) };
+    const payload = .{ .edge_case = own_given.bytes, .acceptance_criteria = @as([]const Offered, offered) };
     const body = try json.encodeEvidence(@TypeOf(payload), a, payload);
     const ids = try a.alloc(i64, offered.len);
     for (offered, ids) |entry, *id| id.* = entry.id.ordinal;

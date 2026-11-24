@@ -66,21 +66,23 @@ fn Capabilities(comptime derived: Inspection) type {
             (if (derived.feature_output_write) [_][]const u8{@import("../domain/workflow_capability.zig").feature_output_write} else [_][]const u8{}) ++
             (if (derived.reference_content_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_content_read} else [_][]const u8{}) ++
             (if (derived.reference_decode) [_][]const u8{@import("../domain/workflow_capability.zig").reference_decode} else [_][]const u8{}) ++
-            (if (derived.reference_identity) [_][]const u8{@import("../domain/workflow_capability.zig").reference_identity} else [_][]const u8{});
+            (if (derived.reference_identity) [_][]const u8{@import("../domain/workflow_capability.zig").reference_identity} else [_][]const u8{}) ++
+            (if (derived.actor_authentication) [_][]const u8{@import("../domain/workflow_capability.zig").actor_authentication} else [_][]const u8{});
     };
 }
 
-pub const Inspection = struct { valid: bool = true, feature_logging: bool = false, principle_read: bool = false, model_provider: bool = false, provider_authorization: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, feature_output_write: bool = false, reference_content_read: bool = false, reference_decode: bool = false, reference_identity: bool = false };
+pub const Inspection = struct { valid: bool = true, actor_authentication: bool = false, feature_logging: bool = false, principle_read: bool = false, model_provider: bool = false, provider_authorization: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, feature_output_write: bool = false, reference_content_read: bool = false, reference_decode: bool = false, reference_identity: bool = false };
 
 pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
     if (T == @import("../ports/feature_log_activation.zig").Activator) return .{ .feature_logging = true };
     if (T == provider.LLMProviderInterface) return .{ .model_provider = true };
     if (T == @import("../ports/provider_operation_authorization.zig").Port) return .{ .provider_authorization = true };
+    if (T == @import("../ports/actor_authentication.zig").Port) return .{ .actor_authentication = true };
     if (T == @import("../ports/unicode_normalizer.zig").Normalizer) return .{};
     if (T == @import("../ports/unicode_normalizer.zig").CaseFolder) return .{};
     if (T == @import("../ports/unicode_normalizer.zig").LexicalClassifier) return .{};
     const principle_source = @import("../ports/principle_source.zig");
-    if (T == principle_source.Reader or T == principle_source.Enumerator or T == principle_source.Capturer) return .{ .principle_read = true };
+    if (T == principle_source.Reader) return .{ .principle_read = true };
     const reference_source = @import("../ports/reference_corpus_source.zig");
     if (T == reference_source.Enumerator or T == reference_source.Capturer) return .{ .reference_content_read = true };
     if (T == @import("../ports/reference_decoder.zig").Decoder) return .{ .reference_decode = true };
@@ -92,6 +94,7 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
     if (T == @import("../ports/workflow_output.zig").Port) return .{ .feature_output_write = true };
     const clarification_parser = @import("../ports/clarification_input_parser.zig");
     if (T == clarification_parser.StateParser or T == clarification_parser.FormParser) return .{};
+    if (T == @import("../ports/actor_evidence_parser.zig").Parser) return .{};
     const toolchain_source = @import("../ports/toolchain_authority_source.zig");
     if (T == toolchain_source.ProjectCapturer or T == toolchain_source.PresetEnumerator or T == toolchain_source.PresetCapturer) return .{ .toolchain_read = true };
     if (T == @import("../ports/toolchain_document_parser.zig").Parser) return .{ .toolchain_parser = true };
@@ -112,6 +115,7 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
                 result.principle_read = result.principle_read or child.principle_read;
                 result.model_provider = result.model_provider or child.model_provider;
                 result.provider_authorization = result.provider_authorization or child.provider_authorization;
+                result.actor_authentication = result.actor_authentication or child.actor_authentication;
                 result.toolchain_read = result.toolchain_read or child.toolchain_read;
                 result.toolchain_parser = result.toolchain_parser or child.toolchain_parser;
                 result.reference_read = result.reference_read or child.reference_read;

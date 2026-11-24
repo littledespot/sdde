@@ -2,14 +2,14 @@ const std = @import("std");
 const extraction = @import("reference_extraction.zig");
 const evidence = @import("reference_evidence.zig");
 const text = @import("typed_text.zig");
-pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, parsed: extraction.Parsed) extraction.Error!extraction.TextResult {
-    // Even empty/blocked candidate sets must bind current source/policy data.
-    try @import("path_token_grammar.zig").validateBinding(allocator, registry.grammar, current, inputs, validator.normalizer, validator.folder);
+pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registry: @import("passive_literals.zig").Registry, inputs: evidence.Inputs, parsed: extraction.Parsed) extraction.Error!extraction.TextResult {
+    // Even empty/blocked candidate sets must bind current source data.
+    try @import("path_token_grammar.zig").validateInputs(registry.grammar, inputs);
     if (parsed.revision == 0) return error.InvalidReferenceExtraction;
     const entries = try allocator.alloc(extraction.TextValidatedResult, parsed.entries.len);
     var structure: Structure = try .init(allocator, inputs);
     for (parsed.entries, entries) |candidate, *entry| {
-        const context: text.ScopeSetContext = .{ .registry = registry, .current = current, .inputs = inputs, .scopes = &.{candidate.scope}, .field = .extraction_reason };
+        const context: text.ScopeSetContext = .{ .registry = registry, .inputs = inputs, .scopes = &.{candidate.scope}, .field = .extraction_reason };
         _ = try evidence.resolve(inputs, candidate.scope);
         entry.scope = candidate.scope;
         entry.origin = candidate.origin;
@@ -22,7 +22,7 @@ pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registr
             .blocked => |reason| .{ .blocked = reason },
             .no_feature_claim => |reason| .{ .no_feature_claim = switch (try validator.checkReferenceIn(allocator, context, reason)) {
                 .valid => |value| value,
-                .invalid => |issue| return reject(allocator, inputs, registry, current, parsed, candidate, .reason, issue, .{ .reason = reason }),
+                .invalid => |issue| return reject(allocator, inputs, registry, parsed, candidate, .reason, issue, .{ .reason = reason }),
             } },
             .claims => |proposals| claims: {
                 const origin = if (candidate.producers) |producers| producers.content else candidate.origin;
@@ -84,12 +84,12 @@ fn checkContent(validator: text.Validator, a: std.mem.Allocator, context: text.S
 
 /// Observe the authorized field with the same text rules as complete extraction.
 /// Unrelated invalid claims cannot conceal this field's validation result.
-pub fn validTarget(validator: text.Validator, a: std.mem.Allocator, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, parsed: extraction.Parsed, scope: evidence.Scope, target: extraction.TextTarget) extraction.Error!bool {
-    try @import("path_token_grammar.zig").validateBinding(a, registry.grammar, current, inputs, validator.normalizer, validator.folder);
+pub fn validTarget(validator: text.Validator, a: std.mem.Allocator, registry: @import("passive_literals.zig").Registry, inputs: evidence.Inputs, parsed: extraction.Parsed, scope: evidence.Scope, target: extraction.TextTarget) extraction.Error!bool {
+    try @import("path_token_grammar.zig").validateInputs(registry.grammar, inputs);
     _ = try evidence.resolve(inputs, scope);
     for (parsed.entries) |entry| if (entry.scope.chunk_id.eql(scope.chunk_id)) {
         if (!entry.scope.state_id.eql(scope.state_id)) return error.InvalidReferenceExtraction;
-        const context: text.ScopeSetContext = .{ .registry = registry, .current = current, .inputs = inputs, .scopes = &.{scope}, .field = .extraction_reason };
+        const context: text.ScopeSetContext = .{ .registry = registry, .inputs = inputs, .scopes = &.{scope}, .field = .extraction_reason };
         return switch (target) {
             .reason => if (entry.outcome == .no_feature_claim)
                 (try validator.checkReferenceIn(a, context, entry.outcome.no_feature_claim)) == .valid
@@ -100,10 +100,66 @@ pub fn validTarget(validator: text.Validator, a: std.mem.Allocator, registry: @i
     return error.InvalidReferenceExtraction;
 }
 
-fn reject(a: std.mem.Allocator, inputs: evidence.Inputs, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, parsed: extraction.Parsed, entry: extraction.ParsedResult, target: extraction.TextTarget, issue: text.Issue, observed: @FieldType(extraction.TextRejection, "observed")) extraction.Error!extraction.TextResult {
+fn reject(a: std.mem.Allocator, inputs: evidence.Inputs, registry: @import("passive_literals.zig").Registry, parsed: extraction.Parsed, entry: extraction.ParsedResult, target: extraction.TextTarget, issue: text.Issue, observed: @FieldType(extraction.TextRejection, "observed")) extraction.Error!extraction.TextResult {
     const context = @import("reference_extraction_context.zig");
-    return .{ .invalid = .{ .scope = entry.scope, .revision = parsed.revision, .target = target, .origin = extraction.textOrigin(entry, target), .issue = issue, .observed = observed, .dependencies = try @import("atomic_repair.zig").snapshot(context.TextFacts, a, try context.textFacts(inputs, registry, current, parsed)) } };
+    return .{ .invalid = .{ .scope = entry.scope, .revision = parsed.revision, .target = target, .origin = extraction.textOrigin(entry, target), .issue = issue, .observed = observed, .dependencies = try @import("atomic_repair.zig").snapshot(context.TextFacts, a, context.textFacts(inputs, registry, parsed)) } };
 }
+
+pub const RequoteError = extraction.Error || @import("naming_policy.zig").Error;
+
+/// ADR 0036: a stored model claim's wording is the engine's quote of the source lines its citations span, in canonical
+/// text. Readback derives that quote again with the code that admitted it, so a stored claim that no longer quotes its
+/// own citations is rejected before any later check relies on it. A preserved token quotes nothing, and a no-claim
+/// reason is model text, so neither is checked here.
+pub const Requote = struct {
+    inputs: evidence.Inputs,
+    canonical: text.CanonicalText,
+    structure: Structure,
+
+    pub fn init(a: std.mem.Allocator, inputs: evidence.Inputs, normalizer: @import("../ports/unicode_normalizer.zig").Normalizer) std.mem.Allocator.Error!Requote {
+        return .{ .inputs = inputs, .canonical = try text.CanonicalText.fromInputs(a, normalizer, inputs), .structure = try .init(a, inputs) };
+    }
+
+    /// `citations` is the ledger's citation list, which `claim.citation_ids` index by ordinal. Every allocation is
+    /// from `a`, with no release of its own, so `a` must be a scratch arena.
+    pub fn check(self: *Requote, a: std.mem.Allocator, claim: extraction.Claim, citations: []const extraction.Citation) RequoteError!void {
+        const stored = switch (claim.content) {
+            .model => |content| content,
+            .preserved_token => return,
+        };
+        const layout = try Layout.init(a, self.inputs, .{ .state_id = self.inputs.corpus.state_id, .chunk_id = claim.chunk_id }, &self.structure);
+        // The lines each stored citation spans; a run quotes every line from its first to its last.
+        const cited = try a.alloc(bool, layout.lines.len);
+        @memset(cited, false);
+        for (claim.citation_ids) |id| {
+            if (id.ordinal == 0 or id.ordinal > citations.len) return error.InvalidReferenceExtraction;
+            const span = citations[id.ordinal - 1].value.location;
+            const first = layout.lineStartingAt(span.start.byte) orelse return error.InvalidReferenceExtraction;
+            const last = layout.lineEndingAt(span.end.byte) orelse return error.InvalidReferenceExtraction;
+            if (last < first) return error.InvalidReferenceExtraction;
+            @memset(cited[first .. last + 1], true);
+        }
+        // Admission makes one claim of each top-level list item (ADR 0038), so one stored claim never spans two.
+        if (layout.spansItems(cited)) return error.InvalidReferenceExtraction;
+        const quoted = try layout.quote(a, std.meta.activeTag(stored), cited);
+        // Admission stores one citation per run, in source order.
+        if (quoted.citations.len != claim.citation_ids.len) return error.InvalidReferenceExtraction;
+        for (quoted.citations, claim.citation_ids) |run, id| {
+            const span = citations[id.ordinal - 1].value.location;
+            if (layout.lines[run.first.ordinal - 1].span.start.byte != span.start.byte or layout.lines[run.last.ordinal - 1].span.end.byte != span.end.byte) return error.InvalidReferenceExtraction;
+        }
+        switch (stored) {
+            inline .business, .scope_guard => |value, tag| {
+                const wanted = try text.canonicalNodes(text.BusinessSegment, a, self.canonical, @field(quoted.content, @tagName(tag)).segments);
+                if (!text.equivalentBusiness(.{ .value = .{ .segments = wanted } }, value)) return error.InvalidReferenceExtraction;
+            },
+            inline else => |value, tag| {
+                const wanted = try text.canonicalNodes(text.ReferenceNode, a, self.canonical, @field(quoted.content, @tagName(tag)).nodes);
+                if (!text.equivalentReference(.{ .value = .{ .nodes = wanted } }, value)) return error.InvalidReferenceExtraction;
+            },
+        }
+    }
+};
 
 const selections = @import("source_selections.zig");
 const markdown = @import("markdown_code_spans.zig");
@@ -160,6 +216,27 @@ const Layout = struct {
         return .{ .bytes = view.source.bytes, .lines = lines, .list = list };
     }
 
+    /// The index of the line that starts at source byte `byte`, if the chunk supplies one.
+    fn lineStartingAt(self: Layout, byte: usize) ?usize {
+        for (self.lines, 0..) |line, index| if (line.span.start.byte == byte) return index;
+        return null;
+    }
+
+    /// The index of the line that ends at source byte `byte`, if the chunk supplies one.
+    fn lineEndingAt(self: Layout, byte: usize) ?usize {
+        for (self.lines, 0..) |line, index| if (line.span.end.byte == byte) return index;
+        return null;
+    }
+
+    /// Whether the cited lines belong to two or more top-level list items, which admission quotes as separate claims.
+    fn spansItems(self: Layout, cited: []const bool) bool {
+        var first: ?u32 = null;
+        for (cited, self.list) |selected, line| if (selected and line.inItem()) {
+            if (first == null) first = line.segment else if (first.? != line.segment) return true;
+        };
+        return false;
+    }
+
     /// A claim quotes the lines it cites. When they belong to two or more
     /// top-level list items, each item becomes its own claim, and the cited
     /// lines in each gap between items become one claim.
@@ -174,11 +251,7 @@ const Layout = struct {
             if (!selections.citable(self.lines[index].text)) return error.InvalidReferenceExtraction;
             cited[index] = true;
         }
-        var first: ?u32 = null;
-        var split = false;
-        for (cited, self.list) |selected, line| if (selected and line.inItem()) {
-            if (first == null) first = line.segment else if (first.? != line.segment) split = true;
-        };
+        const split = self.spansItems(cited);
         var result: std.ArrayList(Quote) = .empty;
         const group = try a.alloc(bool, self.lines.len);
         var start: usize = 0;

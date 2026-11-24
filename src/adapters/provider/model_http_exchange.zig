@@ -12,6 +12,11 @@ const pipeline = @import("../../domain/pipeline.zig");
 const native = @import("native_model_http.zig");
 pub const Adapter = HttpAdapter(native.request);
 
+/// How often the deadline timer reads the run's status and the deadline clock. It is polling granularity, not a
+/// limit: a cancellation that arrives mid-exchange is observed within one slice, and a deadline is judged against
+/// a fresh clock read, never against the length of one sleep.
+pub const default_slice_ms: u64 = 250;
+
 // Connection establishment is selected at compile time. Production always uses
 // the standard HTTPS opener; tests can supply an in-memory connected stream
 // without replacing HTTP serialization, response reads, or task ownership.
@@ -21,6 +26,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
         io: std.Io,
         clock: lease.Clock,
         runtime: pipeline.NodeRuntime,
+        slice_ms: u64 = default_slice_ms,
 
         pub fn port(self: *Self) transport.Port {
             return .{ .context = @ptrCast(self), .exchange_fn = exchange };
@@ -54,17 +60,16 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
         fn perform(self: *Self, allocator: std.mem.Allocator, request: transport.Request, state: *Exchange) transport.Error!transport.Response {
             switch (self.runtime.status()) {
                 .cancelled => return error.Cancelled,
-                .deadline_exhausted => return failed(.timeout, false, .preparing, .timeout),
                 .active => {},
             }
             const now = self.clock.now() catch return failed(.transport_failed, false, .preparing, .unknown);
             if (now >= request.deadline_monotonic_ms) return failed(.timeout, false, .preparing, .timeout);
-            const Event = union(enum) { network: transport.Error!void, timer: std.Io.Cancelable!void };
+            const Event = union(enum) { network: transport.Error!void, timer: std.Io.Cancelable!TimerEnd };
             var buffer: [2]Event = undefined;
             var tasks: std.Io.Select(Event) = .init(self.io, &buffer);
             defer tasks.cancelDiscard();
             tasks.concurrent(.network, fetch, .{ self, allocator, request, state }) catch return failed(.transport_failed, false, .preparing, .unknown);
-            tasks.concurrent(.timer, sleep, .{ self.io, request.deadline_monotonic_ms - now }) catch {
+            tasks.concurrent(.timer, watch, .{ self, request.deadline_monotonic_ms }) catch {
                 tasks.cancelDiscard();
                 return failed(.transport_failed, state.sent, state.phase, .unknown);
             };
@@ -72,16 +77,33 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             switch (event) {
                 .network => |finished| try finished,
                 .timer => |finished| {
-                    finished catch return error.Cancelled;
+                    const ended = finished catch return error.Cancelled;
+                    // The network task is joined before any failure is built from what it wrote.
                     tasks.cancelDiscard();
-                    return if (state.header_failure) |failure| .{ .failed = failure } else failed(.timeout, state.sent, state.phase, .timeout);
+                    return switch (ended) {
+                        .interrupted => error.Cancelled,
+                        .clock_unavailable => failed(.transport_failed, state.sent, state.phase, .unknown),
+                        .expired => if (state.header_failure) |failure| .{ .failed = failure } else failed(.timeout, state.sent, state.phase, .timeout),
+                    };
                 },
             }
             return state.response;
         }
 
-        fn sleep(io: std.Io, milliseconds: u64) std.Io.Cancelable!void {
-            try io.sleep(.fromNanoseconds(@as(i96, milliseconds) * std.time.ns_per_ms), .awake);
+        const TimerEnd = enum { expired, interrupted, clock_unavailable };
+
+        /// Sleeps the remainder of the deadline one slice at a time. Each slice reads the run's status first, so a
+        /// cancellation wins over a deadline reached in the same slice, then the deadline clock, so the time the
+        /// machine is suspended counts even where a relative sleep (macOS's `nanosleep` takes no clock) undercounts
+        /// it. It never touches the exchange state, which the network task owns until it is joined.
+        fn watch(self: *Self, deadline: u64) std.Io.Cancelable!TimerEnd {
+            while (true) {
+                if (self.runtime.status() == .cancelled) return .interrupted;
+                const now = self.clock.now() catch return .clock_unavailable;
+                if (now >= deadline) return .expired;
+                const slice = @max(1, @min(self.slice_ms, deadline - now));
+                try self.io.sleep(.fromNanoseconds(@as(i96, slice) * std.time.ns_per_ms), .boot);
+            }
         }
 
         fn fetch(self: *Self, allocator: std.mem.Allocator, request: transport.Request, state: *Exchange) transport.Error!void {

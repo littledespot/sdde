@@ -21,7 +21,8 @@ Renderers own:
 - `AC/UO/EC/FR/BR/AS/NG/PB/EN-*` specification and `TNNN` task identifiers;
 - the exact F0100 §5.1 heading tree, including `### Acceptance Criteria`
   beneath `## User Scenarios & Testing _(mandatory)_`, and compact title-case
-  `Given`, `When`, `Then` labels in that order for every `AC-*` record;
+  `Given`, `When`, `Then` labels in that order for every `AC-*` record, the `Given` label
+  only where the criterion holds a Given;
 - checkboxes and phase/gate status;
 - Markdown table columns and escaping;
 - code fences around structured contracts where applicable;
@@ -131,8 +132,11 @@ Renderers own:
 - A user may edit semantic fields and add, remove, or reorder semantic records, but engine-owned
   headings, status/checklist fields, acceptance-criterion labels/order, and existing ID syntax
   remain protected by validation.
-- Each acceptance criterion must remain an explicit compact `Given`/`When`/`Then` triplet;
-  free-form or partially labeled criteria do not normalize into authority.
+- Each acceptance criterion must remain an explicit compact `Given`/`When`/`Then` triplet,
+  or the `When`/`Then` pair of a criterion that holds no Given
+  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3); the pair
+  prints no `Given` label and no empty Given, and a `Given` label with no text, a `Then`
+  before a `When`, free-form or partially labeled criteria do not normalize into authority.
 - The renderer joins a clause to the next label with ", " unless the clause already ends in
   terminal punctuation, when a single space joins them, so no clause's own bytes change.
   Terminal punctuation is the closed policy of the
@@ -159,15 +163,26 @@ Renderers own:
   derived from the groups the entity selected and is no model text. Like the source line
   it is a display, never provenance: readback compares it with the line the projection
   derives. An entity that shares a group with no such statement shows none.
-- Each edge case also shows one engine-rendered outcome line, `- **EXPECTED OUTCOME** <text>`,
-  after its condition: the `then` of the acceptance criterion it links to, as that
-  criterion's own display, exact-value spans included
-  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7). The
-  link is the criterion's ID, held in the stored record (§24), and a candidate only when the
-  criterion is of the edge case's records batch and shares a claim with it. The line is no
-  model text and, like the source line, a display, never provenance: readback compares it
-  with the line the projection derives, so an edited outcome re-renders differently and
-  publication's byte comparison rejects it. Every edge case shows one.
+- Each edge case is printed as the Given/When/Then scenario of the acceptance criterion it
+  links to, in three lines labelled `- **GIVEN**`, `- **WHEN**` and `- **THEN**` and no other
+  label ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7).
+  `GIVEN` is the criterion's Given, the separator above (derived from the criterion's Given,
+  applied between the two texts), then the edge case's own given, so no text's bytes change;
+  for a criterion with no Given it is the edge case's own given alone, with no separator;
+  `WHEN` and `THEN` are the criterion's When and Then. The copied parts are the criterion's
+  own display, exact-value spans included. The link is the criterion's ID, held in the stored
+  record (§24), and a candidate only when the criterion is of the edge case's records batch
+  and shares a claim with it. Like the source line, the copied parts are a display, never
+  provenance, and the edge case's own given is its only content. Readback takes the own
+  given as the text after the copied Given and the separator, and the first earlier criterion
+  whose When and Then equal the lines and whose Given and separator begin the `GIVEN` line is
+  the copy. A criterion with no Given is the copy, and the whole line the own given, only when
+  no criterion that holds a Given is; either choice re-renders the same line. Lines whose When
+  and Then no criterion holds (an edited When or Then), a `GIVEN` line that begins with no
+  copying criterion's Given, and a `CONDITION` or `EXPECTED OUTCOME` line reject. A copy edited into
+  another criterion's own text still reads back, yet it re-renders differently from the
+  projection, so publication's byte comparison rejects it. Every edge case shows its three
+  lines.
 - On reparse, the engine joins the persisted `SpecificationProvenanceState` only when the
   fixed/allocated record key and `BusinessContentIdentity` still equal the entry: ordered
   literal segment bytes plus self-contained passive `(ID, kind, bytes)` identities for
@@ -260,8 +275,23 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
   submitted file; canonical answer normalization never changes those file bytes.
 - Pending, stale, or invalid close submissions are not permission to regenerate the form:
   reject/block without overwriting them.
-- Malformed or unrecognized clarification files also block rather than being removed during
-  output replacement.
+- A regular file in `clarify/` whose name is not form-shaped is left alone (approved by the user
+  on 15 November 2026, as ADR 0026 does for log folders): it is never opened, counted, changed or
+  deleted, so a file browser's `.DS_Store` does not fail a run. A name is form-shaped when it is
+  the stage letter `S`, `P` or `T`, two digits and `.md`, matched ignoring ASCII case, so `s01.md`,
+  `S01.MD` and `S00.md` are form-shaped and fail like any other unrecognized form. A directory, a
+  symlink and every other kind of entry still fail whatever its name. The cost: a misnamed answer
+  such as `S1.md` or `S01.md.bak` is ignored, a name that only a Unicode case fold ties to a form's
+  is ignored by the capture and refused by the writer when it would replace that form, and the
+  number of ignored files is not bounded.
+- Malformed or unrecognized form-shaped files also block rather than being removed during
+  output replacement. A form that verifiably holds no submission (`requestedStatus: open`, with an
+  answer region that is empty or does not begin `defer: `; `clarification_form.holding`) is neither
+  malformed nor protected (approved by the user on 20 November 2026). When a record names it, the
+  rerun overwrites it whether or not it matches the registry (ADR 0009), which is how a publication
+  that failed after its forms is replaced. When no record names it, or there is no registry, the
+  rerun leaves it in place and ignores it, and a later close of it stops every run, because no record
+  can take its submission.
 
 - Complete clarification view sets include retained user-closed forms; every unprotected member
   is rendered and completely overwritten on rerun.

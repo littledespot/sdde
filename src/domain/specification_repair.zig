@@ -131,12 +131,13 @@ fn checkEvidenceBound(expected: candidates.EvidenceBound, actual: candidates.Evi
     r.sameSet(r.CitationId, expected.citations, actual.citations) catch return error.InvalidSpecificationRepair;
 }
 
+/// The repair requirements of an entity-membership group: one inserts a missing record, the other corrects an existing one.
+pub const insertion_requirement = "Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records.";
+pub const correction_requirement = "Return the complete corrected entity record and all siblings.";
+
 fn authorizeGroup(a: std.mem.Allocator, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
     const requirement = switch (policy) {
-        .membership => if (insert)
-            "Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records."
-        else
-            "Return the complete corrected entity record and all siblings.",
+        .membership => if (insert) insertion_requirement else correction_requirement,
     };
     const rule: Rule = .{ .requirement = requirement, .text_issue = rejection.issue.text_issue, .value_choices = null, .group = policy };
     var authorization = if (insert)
@@ -202,8 +203,10 @@ fn targetBound(response: g.Response) Error!u32 {
             for (records) |record| {
                 count = std.math.add(usize, count, 3) catch return error.InvalidSpecificationRepair;
                 switch (record.content) {
-                    inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |_| {
-                        count = std.math.add(usize, count, 1) catch return error.InvalidSpecificationRepair;
+                    // Each held value is a target; an absent one is not.
+                    inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+                        const held: ?g.spec.BusinessValue = @field(fields, field.name);
+                        if (held != null) count = std.math.add(usize, count, 1) catch return error.InvalidSpecificationRepair;
                     },
                 }
             }
@@ -216,10 +219,10 @@ fn targetBound(response: g.Response) Error!u32 {
 /// even when a different sibling is now the unit validator's first rejection.
 pub fn retryValidation(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: session.Session, context: p.Context, candidate: Candidate) Error!?retry.Transition {
     const pending = candidate.pending_repair orelse return null;
-    if (candidate.response != .content or @intFromEnum(std.meta.activeTag(try session.unit(current.completed))) != @intFromEnum(std.meta.activeTag(candidate.response.content))) return error.InvalidSpecificationRepair;
+    if (candidate.response != .content or std.meta.activeTag(try session.unit(current.completed)) != std.meta.activeTag(candidate.response.content.unit())) return error.InvalidSpecificationRepair;
     const merged = candidate.last_repair orelse return error.InvalidSpecificationRepair;
     if (candidate.revision != merged.revision_after or !std.meta.eql(merged.retry orelse return error.InvalidSpecificationRepair, pending.permit)) return error.InvalidSpecificationRepair;
-    try p.bind(a, validator, context);
+    try p.bind(a, context);
     const target = try candidate.origins.currentTarget(pending.target, recordCount(candidate.response));
     const accepted = if (target) |selected| try targetValid(a, validator, context, current, candidate, selected) else merged.operation == .delete;
     return .{ .validated = .{ .permit = pending.permit, .revision = candidate.revision, .result = if (accepted) .resolved else .recurring } };
@@ -281,8 +284,8 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     const definitions = @import("specification_result_definitions.zig").Generation;
     const definition: definitions = switch (kind) {
         .provenance => return error.InvalidSpecificationRepair,
-        .value => .value,
-        .attributed => .attributed_value,
+        // A plain value and an attributed one are repaired through the one `value` definition.
+        .value, .attributed => .value,
         .record => switch (authorization.rule.group.?) {
             .membership => .repair_record_entity,
         },

@@ -16,6 +16,7 @@ const definition_schema = @import("domain/workflow_definition_schema.zig");
 const resource_binding = @import("domain/workflow_resource_binding.zig");
 const graph_compilation = @import("domain/workflow_graph_compilation.zig");
 const graph_validation = @import("domain/workflow_graph_validation.zig");
+const rejection = @import("domain/definition_rejection.zig");
 const repair_owner = @import("domain/repair_owner.zig");
 const retry = @import("domain/workflow_retry.zig");
 const result_schema_parser = @import("adapters/parsers/model_result_schemas.zig");
@@ -46,13 +47,16 @@ const operation_count = @typeInfo(Operation).@"enum".fields.len;
 const Key = pipeline.DataKey;
 
 /// The facts one per-owner repair operation stated before ADR 0033 replaced it: its data effects,
-/// outcomes, role, outcome association, retry rule and parameters. The 29 rows were taken from the 29
+/// outcomes, role, outcome association, retry rule and parameters. The 28 rows were taken from the
 /// registered per-owner operations on 14 November 2026, immediately before those operations and their
 /// action files were deleted (E4 step 5), so the evidence that every variant states what its operation
-/// stated survives the deletion. `outcomes` is the former operation's, with the dispositions
-/// authorizer's `more`; the variant drops that one outcome (DE4 7). The retry row names the scope only:
+/// stated survives the deletion. Their `requires` omit `valid_toolchain`, which the per-owner operations
+/// required and the variants do not, because only `compile-naming-policy` and `prepare-reference-tokens`
+/// read it. `outcomes` is the former operation's, with the dispositions authorizer's `more`; the variant
+/// drops that one outcome (DE4 7). The retry row names the scope only:
 /// the former maximum was `maxInt(u32)` for every merge, and each variant's maximum is the owner's
-/// (DE4 6).
+/// (DE4 6). The authorizers that declare `blocked` also carry the reader of that decision, which ADR 0033
+/// "Blocked authorizers" added and no former operation stated.
 const Fact = struct {
     op: Operation,
     owner: RepairOwner,
@@ -71,35 +75,34 @@ const Fact = struct {
 };
 
 const frozen = [_]Fact{
-    .{ .op = .authorize, .owner = .reference_text, .requires = &.{ .valid_toolchain, .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .text_validated_reference_extraction }, .optional = &.{}, .produces = &.{.reference_text_repair_authorization}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .invalid, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .text_validated_reference_extraction, .result = .reference_text_repair_authorization } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .reference_extraction, .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .validated_reference_selections }, .optional = &.{}, .produces = &.{.reference_extraction_repair_authorization}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .invalid, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_reference_selections, .result = .reference_extraction_repair_authorization } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .reference_summary, .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_summary }, .optional = &.{}, .produces = &.{.reference_reconciliation_repair}, .replaces = &.{}, .invalidates = &.{.validated_reference_summary}, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .validated_reference_summary, .result = .reference_reconciliation_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .reference_dispositions, .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_dispositions }, .optional = &.{}, .produces = &.{.reference_reconciliation_repair}, .replaces = &.{}, .invalidates = &.{.validated_reference_dispositions}, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .validated_reference_dispositions, .result = .reference_reconciliation_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .reference_signals, .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_signals }, .optional = &.{}, .produces = &.{.reference_reconciliation_repair}, .replaces = &.{}, .invalidates = &.{ .validated_reference_dispositions, .validated_reference_signals }, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .validated_reference_signals, .result = .reference_reconciliation_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .reference_conflicts, .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_conflicts }, .optional = &.{}, .produces = &.{.reference_reconciliation_repair}, .replaces = &.{}, .invalidates = &.{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts }, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .validated_reference_conflicts, .result = .reference_reconciliation_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .source_omission, .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .parsed_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review }, .optional = &.{ .specification_generation_session, .identified_specification_content }, .produces = &.{.source_omission_repair}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .more, .invalid, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_result, .result = .source_omission_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .specification_unit, .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_generation_session, .parsed_specification_unit, .validated_specification_unit, .packet_guidance }, .optional = &.{}, .produces = &.{.specification_repair_authorization}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .more, .invalid, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .specification_repair_authorization } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .specification_support, .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .packet_guidance }, .optional = &.{}, .produces = &.{.specification_support_repair}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .authorize, .owner = .specification_coverage, .requires = &.{ .specification_generation_session, .accounted_reference_reconciliation, .identified_specification_content, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .specification_coverage }, .optional = &.{}, .produces = &.{.specification_coverage_repair}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage, .result = .specification_coverage_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .build_input, .owner = .reference_text, .requires = &.{ .valid_toolchain, .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .structured_token_candidates, .reference_text_repair_authorization }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .reference_text, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .text_validated_reference_extraction }, .optional = &.{}, .produces = &.{.reference_text_repair_authorization}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .invalid, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .text_validated_reference_extraction, .result = .reference_text_repair_authorization } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .reference_extraction, .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .validated_token_classifications }, .optional = &.{}, .produces = &.{.reference_extraction_repair_authorization}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .invalid, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_token_classifications, .result = .reference_extraction_repair_authorization } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .reference_summary, .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_summary }, .optional = &.{}, .produces = &.{.reference_reconciliation_repair}, .replaces = &.{}, .invalidates = &.{.validated_reference_summary}, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .validated_reference_summary, .result = .reference_reconciliation_repair, .blocked_reader = .reference_reconciliation } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .reference_dispositions, .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_dispositions }, .optional = &.{}, .produces = &.{.reference_reconciliation_repair}, .replaces = &.{}, .invalidates = &.{.validated_reference_dispositions}, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .validated_reference_dispositions, .result = .reference_reconciliation_repair, .blocked_reader = .reference_reconciliation } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .reference_signals, .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_signals }, .optional = &.{}, .produces = &.{.reference_reconciliation_repair}, .replaces = &.{}, .invalidates = &.{ .validated_reference_dispositions, .validated_reference_signals }, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .validated_reference_signals, .result = .reference_reconciliation_repair, .blocked_reader = .reference_reconciliation } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .reference_conflicts, .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_conflicts }, .optional = &.{}, .produces = &.{.reference_reconciliation_repair}, .replaces = &.{}, .invalidates = &.{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts }, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .validated_reference_conflicts, .result = .reference_reconciliation_repair, .blocked_reader = .reference_reconciliation } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .source_omission, .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .parsed_reference_reconciliation, .reference_passive_literals, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review }, .optional = &.{ .specification_generation_session, .identified_specification_content }, .produces = &.{.source_omission_repair}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .more, .invalid, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_result, .result = .source_omission_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .specification_unit, .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_generation_session, .parsed_specification_unit, .validated_specification_unit, .packet_guidance }, .optional = &.{}, .produces = &.{.specification_repair_authorization}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .more, .invalid, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .specification_repair_authorization, .blocked_reader = .specification_unit } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .authorize, .owner = .specification_support, .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .packet_guidance }, .optional = &.{}, .produces = &.{.specification_support_repair}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .more, .blocked, .failed }, .role = .authorize, .association = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_repair, .blocked_reader = .specification_support } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .build_input, .owner = .reference_text, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .structured_token_candidates, .reference_text_repair_authorization }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
     .{ .op = .build_input, .owner = .reference_extraction, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .structured_token_candidates, .text_validated_reference_extraction, .reference_extraction_repair_authorization }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .build_input, .owner = .reference_reconciliation, .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .packet_guidance }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .build_input, .owner = .source_omission, .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .parsed_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair, .packet_guidance }, .optional = &.{ .specification_generation_session, .identified_specification_content }, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .build_input, .owner = .specification_unit, .requires = &.{ .specification_generation_session, .specification_repair_authorization, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .packet_guidance }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .build_input, .owner = .specification_support, .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_support_repair, .packet_guidance }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .build_input, .owner = .reference_reconciliation, .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .packet_guidance }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .build_input, .owner = .source_omission, .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .parsed_reference_reconciliation, .reference_passive_literals, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair, .packet_guidance }, .optional = &.{ .specification_generation_session, .identified_specification_content }, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .build_input, .owner = .specification_unit, .requires = &.{ .specification_generation_session, .specification_repair_authorization, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .packet_guidance }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .build_input, .owner = .specification_support, .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_support_repair, .packet_guidance }, .optional = &.{}, .produces = &.{.model_input_packet}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .independent, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
     .{ .op = .parse, .owner = .reference_text, .requires = &.{ .reference_text_repair_authorization, .model_input_packet, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result }, .optional = &.{}, .produces = &.{.reference_text_repair_result}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .invalid, .failed }, .role = .none, .association = .{ .preserve = .{ .kind = .candidate, .subject = .reference_text_repair_authorization, .evidence = .reference_text_repair_authorization, .result = .reference_text_repair_result } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
     .{ .op = .parse, .owner = .reference_extraction, .requires = &.{ .reference_extraction_repair_authorization, .model_input_packet, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result }, .optional = &.{}, .produces = &.{.reference_extraction_repair_result}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .invalid, .failed }, .role = .none, .association = .{ .preserve = .{ .kind = .candidate, .subject = .reference_extraction_repair_authorization, .evidence = .reference_extraction_repair_authorization, .result = .reference_extraction_repair_result } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
     .{ .op = .parse, .owner = .reference_reconciliation, .requires = &.{ .reference_reconciliation_repair, .model_input_packet, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result }, .optional = &.{}, .produces = &.{}, .replaces = &.{.reference_reconciliation_repair}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .{ .preserve = .{ .kind = .candidate, .subject = .reference_reconciliation_repair, .evidence = .reference_reconciliation_repair, .result = .reference_reconciliation_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
     .{ .op = .parse, .owner = .source_omission, .requires = &.{ .source_omission_repair, .model_input_packet, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result }, .optional = &.{}, .produces = &.{}, .replaces = &.{.source_omission_repair}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .{ .preserve = .{ .kind = .authority, .subject = .source_omission_repair, .evidence = .source_omission_repair, .result = .source_omission_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
     .{ .op = .parse, .owner = .specification_unit, .requires = &.{ .specification_repair_authorization, .model_input_packet, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result }, .optional = &.{}, .produces = &.{}, .replaces = &.{.specification_repair_authorization}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .{ .preserve = .{ .kind = .candidate, .subject = .specification_repair_authorization, .evidence = .specification_repair_authorization, .result = .specification_repair_authorization } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
     .{ .op = .parse, .owner = .specification_support, .requires = &.{ .specification_support_repair, .model_request_identity_ledger, .prepared_model_request, .model_input_packet, .model_payload_schema_result }, .optional = &.{}, .produces = &.{}, .replaces = &.{.specification_support_repair}, .invalidates = &.{}, .outcomes = &.{ .ok, .failed }, .role = .none, .association = .{ .preserve = .{ .kind = .candidate, .subject = .specification_support_repair, .evidence = .specification_support_repair, .result = .specification_support_repair } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .merge, .owner = .reference_text, .requires = &.{ .valid_toolchain, .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .reference_text_repair_authorization, .reference_text_repair_result }, .optional = &.{}, .produces = &.{}, .replaces = &.{.parsed_reference_extraction}, .invalidates = &.{ .text_validated_reference_extraction, .reference_text_repair_authorization, .reference_text_repair_result }, .outcomes = &.{ .ok, .invalid, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .reference_text_repair_authorization, .result = .parsed_reference_extraction } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .merge, .owner = .reference_extraction, .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .reference_extraction_repair_authorization, .reference_extraction_repair_result }, .optional = &.{}, .produces = &.{}, .replaces = &.{.text_validated_reference_extraction}, .invalidates = &.{ .validated_reference_selections, .reference_extraction_repair_authorization, .reference_extraction_repair_result }, .outcomes = &.{ .ok, .invalid, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .reference_extraction_repair_authorization, .result = .text_validated_reference_extraction } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
-    .{ .op = .merge, .owner = .reference_reconciliation, .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain }, .optional = &.{}, .produces = &.{}, .replaces = &.{.parsed_reference_reconciliation}, .invalidates = &.{.reference_reconciliation_repair}, .outcomes = &.{ .ok, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .reference_reconciliation_repair, .result = .parsed_reference_reconciliation } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
-    .{ .op = .merge, .owner = .source_omission_extraction, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair, .structured_token_candidates, .text_validated_reference_extraction }, .optional = &.{ .specification_generation_session, .identified_specification_content }, .produces = &.{}, .replaces = &.{.text_validated_reference_extraction}, .invalidates = &.{ .validated_reference_selections, .preserved_token_identities, .prepared_reference_claims, .validated_reference_claims, .reference_claim_identities, .reference_extraction_ledger, .accounted_reference_extraction, .reference_reconciliation_items, .reference_reconciliation_layout, .reference_reconciliation_plan, .reference_reconciliation_progress, .reference_reconciliation_input, .parsed_reference_reconciliation, .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair }, .outcomes = &.{ .ok, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .source_omission_repair, .result = .text_validated_reference_extraction } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
-    .{ .op = .merge, .owner = .source_omission_reconciliation, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair, .parsed_reference_reconciliation }, .optional = &.{ .specification_generation_session, .identified_specification_content }, .produces = &.{}, .replaces = &.{.parsed_reference_reconciliation}, .invalidates = &.{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair }, .outcomes = &.{ .ok, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .source_omission_repair, .result = .parsed_reference_reconciliation } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
-    .{ .op = .merge, .owner = .specification_unit, .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_generation_session, .parsed_specification_unit, .specification_repair_authorization }, .optional = &.{}, .produces = &.{}, .replaces = &.{.parsed_specification_unit}, .invalidates = &.{ .validated_specification_unit, .specification_repair_authorization }, .outcomes = &.{ .ok, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .specification_repair_authorization, .result = .parsed_specification_unit } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
-    .{ .op = .merge, .owner = .specification_support, .requires = &.{ .required_authority_inputs, .specification_support_review, .model_request_identity_ledger, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_support_repair, .packet_guidance }, .optional = &.{}, .produces = &.{}, .replaces = &.{.specification_support_review}, .invalidates = &.{.specification_support_repair}, .outcomes = &.{ .ok, .more, .invalid, .failed }, .role = .merge_validate, .association = .{ .repair_validate = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_repair, .result = .specification_support_review } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
+    .{ .op = .merge, .owner = .reference_text, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .reference_text_repair_authorization, .reference_text_repair_result }, .optional = &.{}, .produces = &.{}, .replaces = &.{.parsed_reference_extraction}, .invalidates = &.{ .text_validated_reference_extraction, .reference_text_repair_authorization, .reference_text_repair_result }, .outcomes = &.{ .ok, .invalid, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .reference_text_repair_authorization, .result = .parsed_reference_extraction } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .merge, .owner = .reference_extraction, .requires = &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction, .reference_extraction_repair_authorization, .reference_extraction_repair_result }, .optional = &.{}, .produces = &.{}, .replaces = &.{.text_validated_reference_extraction}, .invalidates = &.{ .validated_token_classifications, .reference_extraction_repair_authorization, .reference_extraction_repair_result }, .outcomes = &.{ .ok, .invalid, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .reference_extraction_repair_authorization, .result = .text_validated_reference_extraction } }, .retry = null, .parameters = &.{}, .gates = 0, .side_effect = .none },
+    .{ .op = .merge, .owner = .reference_reconciliation, .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals }, .optional = &.{}, .produces = &.{}, .replaces = &.{.parsed_reference_reconciliation}, .invalidates = &.{.reference_reconciliation_repair}, .outcomes = &.{ .ok, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .reference_reconciliation_repair, .result = .parsed_reference_reconciliation } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
+    .{ .op = .merge, .owner = .source_omission_extraction, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair, .structured_token_candidates, .text_validated_reference_extraction }, .optional = &.{ .specification_generation_session, .identified_specification_content }, .produces = &.{}, .replaces = &.{.text_validated_reference_extraction}, .invalidates = &.{ .validated_token_classifications, .preserved_token_identities, .prepared_reference_claims, .validated_reference_claims, .reference_claim_identities, .reference_extraction_ledger, .accounted_reference_extraction, .reference_reconciliation_items, .reference_reconciliation_layout, .reference_reconciliation_plan, .reference_reconciliation_progress, .reference_reconciliation_input, .parsed_reference_reconciliation, .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .answered_reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair }, .outcomes = &.{ .ok, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .source_omission_repair, .result = .text_validated_reference_extraction } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
+    .{ .op = .merge, .owner = .source_omission_reconciliation, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair, .parsed_reference_reconciliation }, .optional = &.{ .specification_generation_session, .identified_specification_content }, .produces = &.{}, .replaces = &.{.parsed_reference_reconciliation}, .invalidates = &.{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .answered_reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair }, .outcomes = &.{ .ok, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .source_omission_repair, .result = .parsed_reference_reconciliation } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
+    .{ .op = .merge, .owner = .specification_unit, .requires = &.{ .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_generation_session, .parsed_specification_unit, .specification_repair_authorization }, .optional = &.{}, .produces = &.{}, .replaces = &.{.parsed_specification_unit}, .invalidates = &.{ .validated_specification_unit, .specification_repair_authorization }, .outcomes = &.{ .ok, .failed }, .role = .merge, .association = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .specification_repair_authorization, .result = .parsed_specification_unit } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
+    .{ .op = .merge, .owner = .specification_support, .requires = &.{ .required_authority_inputs, .specification_support_review, .model_request_identity_ledger, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_support_repair, .packet_guidance }, .optional = &.{}, .produces = &.{}, .replaces = &.{.specification_support_review}, .invalidates = &.{.specification_support_repair}, .outcomes = &.{ .ok, .more, .invalid, .failed }, .role = .merge_validate, .association = .{ .repair_validate = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_repair, .result = .specification_support_review } }, .retry = .{ .scope = .repair }, .parameters = &.{.{ "retry-limit", .integer, true, 0 }}, .gates = 0, .side_effect = .none },
 };
 
 fn factOf(op: Operation, owner: RepairOwner) !Fact {
@@ -111,9 +114,9 @@ fn factOf(op: Operation, owner: RepairOwner) !Fact {
     return found orelse error.MissingFrozenFact;
 }
 
-test "the owners are a closed set of 13 with 29 variants over four operations" {
-    try std.testing.expectEqual(@as(usize, 13), @typeInfo(RepairOwner).@"enum".fields.len);
-    try std.testing.expectEqual(@as(usize, 10), repair_owner.served(.authorize).len);
+test "the owners are a closed set of 12 with 28 variants over four operations" {
+    try std.testing.expectEqual(@as(usize, 12), @typeInfo(RepairOwner).@"enum".fields.len);
+    try std.testing.expectEqual(@as(usize, 9), repair_owner.served(.authorize).len);
     try std.testing.expectEqual(@as(usize, 6), repair_owner.served(.build_input).len);
     try std.testing.expectEqual(@as(usize, 6), repair_owner.served(.parse).len);
     try std.testing.expectEqual(@as(usize, 7), repair_owner.served(.merge).len);
@@ -209,9 +212,9 @@ test "every variant states what the per-owner operation it replaced stated, but 
             }
         }
     }
-    // The frozen table is one row per served (operation, owner) pair: 29, no pair twice, none missing.
-    try std.testing.expectEqual(@as(usize, 29), variant_count);
-    try std.testing.expectEqual(@as(usize, 29), frozen.len);
+    // The frozen table is one row per served (operation, owner) pair: 28, no pair twice, none missing.
+    try std.testing.expectEqual(@as(usize, 28), variant_count);
+    try std.testing.expectEqual(@as(usize, 28), frozen.len);
     for (frozen) |fact| try std.testing.expect(fact.owner.serves(fact.op));
 }
 
@@ -272,9 +275,9 @@ fn compileYaml(a: std.mem.Allocator, registry: *const Registry, yaml: []const u8
     var parser: parser_adapter.Adapter = .{};
     var result_schema: result_schema_parser.Adapter = .{};
     const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
-    const definitions = try definition_schema.validate(a, raw);
-    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions);
-    return graph_compilation.compile(registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{});
+    const definitions = try definition_schema.validate(a, raw, null);
+    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions, null);
+    return graph_compilation.compile(registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{}, null);
 }
 
 const head =
@@ -319,7 +322,7 @@ fn withText(a: std.mem.Allocator, owner: RepairOwner, limit: ?u32) ![]const u8 {
     return if (limit) |value| std.fmt.allocPrint(a, "owner: {s}, retry-limit: {d}", .{ owner.id(), value }) else std.fmt.allocPrint(a, "owner: {s}", .{owner.id()});
 }
 
-test "each of the 29 variants compiles and is the step's one checked contract" {
+test "each of the 28 variants compiles and is the step's one checked contract" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -342,11 +345,11 @@ test "each of the 29 variants compiles and is the step's one checked contract" {
             try std.testing.expect(registry.stepsMatchVariants(graphs[0].authority.steps));
             // The data-flow check needs the evidence the runner's accounting creates after a model call, which
             // a test invocation cannot provide: those variants are checked by the compile and variant match.
-            if (!requiresRunnerEvidence(variant)) _ = try graph_validation.validate(a, graphs, &registry);
+            if (!requiresRunnerEvidence(variant)) _ = try graph_validation.validate(a, graphs, &registry, null);
             accepted += 1;
         }
     }
-    try std.testing.expectEqual(@as(usize, 29), accepted);
+    try std.testing.expectEqual(@as(usize, 28), accepted);
 }
 
 test "a step names an owner with no variant of the operation, an unknown owner or none, and compilation rejects it" {
@@ -374,8 +377,8 @@ test "a step names an owner with no variant of the operation, an unknown owner o
             rejected += 1;
         }
     }
-    // 23 owners without a variant (13 x 4 - 29) and 8 malformed selectors for each of four operations.
-    try std.testing.expectEqual(@as(usize, 23 + 8 * operation_count), rejected);
+    // 20 owners without a variant (12 x 4 - 28) and 8 malformed selectors for each of four operations.
+    try std.testing.expectEqual(@as(usize, 20 + 8 * operation_count), rejected);
 }
 
 test "compilation rejects an outcome the variant does not declare and a declared outcome left unmapped" {
@@ -408,7 +411,6 @@ test "compilation rejects an outcome the variant does not declare and a declared
     for ([_]RepairOwner{ .reference_summary, .reference_signals, .reference_conflicts }) |kept| {
         try std.testing.expect(std.mem.indexOfScalar(workflow.OutcomeTag, GenericOf(.authorize).contract.resolve(kept.id()).?.outcomes, .more) != null);
     }
-    try std.testing.expectEqualSlices(workflow.OutcomeTag, &.{ .blocked, .failed }, GenericOf(.authorize).contract.resolve(RepairOwner.specification_coverage.id()).?.outcomes);
 }
 
 test "a merge takes a retry-limit within its owner's maximum, and no other variant or owner takes one" {
@@ -466,10 +468,15 @@ test "registry admission rejects a repair variant whose role, association or ret
         .{ .merge = false, .fault = 1 },
         // Two authorize variants with the same selector value.
         .{ .merge = false, .fault = 2 },
+        // The reference-summary authorizer declares `blocked` and names the reader of that decision:
+        // without the reader, with a reader but no `blocked`, and with another result's reader.
+        .{ .merge = false, .fault = 4 },
+        .{ .merge = false, .fault = 5 },
+        .{ .merge = false, .fault = 6 },
     };
     for (faults) |case| {
         const variants = try a.dupe(operation.Variant, if (case.merge) base_merge else base_authorize);
-        const target = &variants[if (case.merge) 5 else 0];
+        const target = &variants[if (case.merge) 5 else if (case.fault >= 4) 2 else 0];
         switch (case.fault) {
             0 => if (case.merge) {
                 target.repair_role = .none;
@@ -489,6 +496,17 @@ test "registry admission rejects a repair variant whose role, association or ret
                 target.value = variants[1].value;
             },
             3 => target.retry_limit = .{ .maximum = 2, .scope = .operation },
+            4, 5, 6 => {
+                try std.testing.expect(std.mem.indexOfScalar(workflow.OutcomeTag, target.outcomes, .blocked) != null);
+                var binding = target.outcome_association.repair_authorize;
+                switch (case.fault) {
+                    4 => binding.blocked_reader = null,
+                    5 => target.outcomes = &.{ .ok, .more, .failed },
+                    6 => binding.blocked_reader = .specification_unit,
+                    else => unreachable,
+                }
+                target.outcome_association = .{ .repair_authorize = binding };
+            },
             else => unreachable,
         }
         var changed = if (case.merge) merge_entry else authorize_entry;
@@ -501,6 +519,42 @@ test "registry admission rejects a repair variant whose role, association or ret
         const registry: Registry = .{ .operations = try a.dupe(Entry, &.{ input, entry }), .data_schemas = &native.schemas, .policies = &core.profiles, .gates = &.{} };
         try std.testing.expect(registry.validate());
     }
+}
+
+test "graph validation rejects a compiled authorizer step that declares blocked without its reader" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const unit = GenericOf(.authorize).contract.resolve(RepairOwner.specification_unit.id()).?;
+    const registry = try registryFor(a, .authorize, try inputKeys(a, &.{unit}));
+    const graph = (try compileYaml(a, &registry, try singleStep(a, Operation.authorize.id(), try withText(a, .specification_unit, null), unit.outcomes)))[0];
+    try std.testing.expect(std.mem.indexOfScalar(workflow.OutcomeTag, graph.authority.steps[0].outcomes, .blocked) != null);
+    _ = try graph_validation.validate(a, &.{graph}, &registry, null);
+    // The registered variant and the compiled step both lose the reader, so they still match each other
+    // and only the step's own descriptor check can refuse it.
+    const variants = try a.dupe(operation.Variant, GenericOf(.authorize).contract.variants);
+    for (variants) |*variant| if (std.mem.eql(u8, variant.value, RepairOwner.specification_unit.id())) {
+        var binding = variant.outcome_association.repair_authorize;
+        binding.blocked_reader = null;
+        variant.outcome_association = .{ .repair_authorize = binding };
+    };
+    const entries = try a.dupe(Entry, registry.operations);
+    for (entries) |*entry| if (std.mem.eql(u8, entry.contract.id, Operation.authorize.id())) {
+        entry.contract.variants = variants;
+    };
+    const changed_registry: Registry = .{ .operations = entries, .data_schemas = registry.data_schemas, .policies = registry.policies, .gates = registry.gates };
+    const steps = try a.dupe(compilation.CompiledStep, graph.authority.steps);
+    var changed = graph;
+    changed.authority.steps = steps;
+    // Control: the copied graph, reader intact, is accepted.
+    _ = try graph_validation.validate(a, &.{changed}, &registry, null);
+    var binding = steps[0].outcome_association.repair_authorize;
+    binding.blocked_reader = null;
+    steps[0].outcome_association = .{ .repair_authorize = binding };
+    try std.testing.expect(changed_registry.stepsMatchVariants(changed.authority.steps));
+    var evidence: rejection.Slot = .{};
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(a, &.{changed}, &changed_registry, &evidence));
+    try std.testing.expectEqual(rejection.Rule.step_contract, evidence.evidence.rule.?);
 }
 
 test "a compiled step whose effects belong to another owner's variant is rejected by validation and publication" {
@@ -528,7 +582,7 @@ test "a compiled step whose effects belong to another owner's variant is rejecte
         try std.testing.expect(!registry.stepsMatchVariants(steps));
         var changed = graph;
         changed.authority.steps = steps;
-        try std.testing.expect(if (graph_validation.validate(a, &.{changed}, &registry)) |_| false else |_| true);
+        try std.testing.expect(if (graph_validation.validate(a, &.{changed}, &registry, null)) |_| false else |_| true);
     }
 }
 
@@ -601,7 +655,7 @@ test "steps that use one generic operation keep their own retry authority" {
     try std.testing.expect(compilation.matchesContract(unit, left.?));
     try std.testing.expect(compilation.matchesContract(unit, right.?));
     try std.testing.expect(compilation.matchesContract(support, after.?));
-    _ = try graph_validation.validate(a, &.{graph}, &registry);
+    _ = try graph_validation.validate(a, &.{graph}, &registry, null);
 }
 
 // ---- running a step: the owner's binding, selected by `owner` ----
@@ -625,7 +679,7 @@ fn stepFor(comptime op: Operation, owner_value: ?[]const u8, storage: *[1]compil
 }
 
 fn inputFor(step: *const compilation.CompiledStep) operations.Input {
-    return .{ .step = .{ .data = .{}, .step = step, .resources = &.{}, .model_binding = null, .log = .init(.{ .bytes = "TEST".* }) } };
+    return .{ .step = .{ .data = .{}, .step = step, .resources = &.{}, .model_binding = null } };
 }
 
 /// A generic operation whose owner bindings hold only an allocator: with none of the owner's native
@@ -661,7 +715,7 @@ test "a generic operation runs the selected owner's binding and fails as that bi
             covered += 1;
         }
     }
-    try std.testing.expectEqual(@as(usize, 29), covered);
+    try std.testing.expectEqual(@as(usize, 28), covered);
 }
 
 test "a tampered step is never run: a missing selector, an unknown owner or one with no variant fails terminally" {
@@ -809,13 +863,14 @@ test "the production registry holds the four generic repair operations with thei
     var reference_contents: @import("adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = root };
     var markdown_reader: @import("adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
     var reference_ids: @import("adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+    var accounts: @import("adapters/system/os_account.zig").Adapter = .{ .clock = undefined };
     const inputs = @import("adapters/parsers/clarification_inputs.zig");
     const normalization = @import("unicode_normalization");
     var assembly: native.Assembly = undefined;
-    assembly.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), @import("composition/toolchain_policy_registry.zig").registry, .{ .normalize_fn = normalization.nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), inputs.stateParser(), inputs.formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = normalization.caseFold }, reference_ids.source(), .{ .boundary_fn = normalization.lexicalBoundary });
+    assembly.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), @import("composition/toolchain_policy_registry.zig").registry, .{ .normalize_fn = normalization.nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), inputs.stateParser(), inputs.formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = normalization.caseFold }, reference_ids.source(), .{ .boundary_fn = normalization.lexicalBoundary }, @import("adapters/parsers/actor_evidence.zig").parser(), accounts.authenticator());
     try std.testing.expect(assembly.registry.validate());
-    // Each generic operation is one registered shell whose variants are the owners it serves: 10, 6, 6 and 7.
-    const counts = [operation_count]usize{ 10, 6, 6, 7 };
+    // Each generic operation is one registered shell whose variants are the owners it serves: 9, 6, 6 and 7.
+    const counts = [operation_count]usize{ 9, 6, 6, 7 };
     inline for (@typeInfo(Operation).@"enum".fields, counts) |field, expected| {
         const op: Operation = @enumFromInt(field.value);
         const entry = assembly.registry.resolveOperation(workflow.OperationId.parse(op.id()).?).?;

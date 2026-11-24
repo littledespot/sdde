@@ -1,5 +1,6 @@
 const std = @import("std");
 const contracts = @import("../../domain/llm_provider_contracts.zig");
+const operation = @import("../../domain/llm_provider_operation.zig");
 
 /// Provider families that authenticate with one API key (ADR 0028).
 pub const Family = enum {
@@ -26,16 +27,24 @@ pub const Family = enum {
 /// Keys a harness supplies directly, one optional snapshot per family.
 pub const Supplied = std.EnumArray(Family, ?Snapshot);
 
+/// The one rule for a key's bytes: why they cannot be used, or null when they can. Unset and empty
+/// are `missing`; a space, control or non-ASCII byte (such as a CR from CRLF line endings) is
+/// `malformed`. Only the class is reported, never a byte or a length.
+pub fn defect(raw: ?[]const u8) ?operation.ProviderCredentialDiagnostic {
+    const value = raw orelse return .missing;
+    if (value.len == 0) return .missing;
+    for (value) |byte| if (byte <= 32 or byte >= 127) return .malformed;
+    return null;
+}
+
 /// One owned, validated copy of a key, zeroed on release.
 pub const Snapshot = struct {
     allocator: std.mem.Allocator,
     bytes: []u8,
 
     pub fn capture(allocator: std.mem.Allocator, raw: ?[]const u8) std.mem.Allocator.Error!?Snapshot {
-        const value = raw orelse return null;
-        if (value.len == 0) return null;
-        for (value) |byte| if (byte <= 32 or byte >= 127) return null;
-        return .{ .allocator = allocator, .bytes = try allocator.dupe(u8, value) };
+        if (defect(raw) != null) return null;
+        return .{ .allocator = allocator, .bytes = try allocator.dupe(u8, raw.?) };
     }
 
     pub fn deinit(self: *Snapshot) void {
@@ -46,7 +55,10 @@ pub const Snapshot = struct {
 };
 
 pub const Material = union(enum) {
+    /// No key was supplied: unset or empty.
     unavailable,
+    /// A key was supplied but its bytes are unusable.
+    malformed,
     allocation_failed,
     ready: Snapshot,
 

@@ -4,6 +4,27 @@ const output = @import("output.zig");
 
 pub const Phase = enum { generation, evaluation };
 pub const Artifact = enum { request, response, context, model_output, outcome };
+
+/// The layout of a run's call evidence: `evidence/<phase>/call-<ordinal>/<artifact file>`. `Store.path` and
+/// the offline readers share these names, so a moved path fails to compile rather than reading as no calls.
+pub const root_directory = "evidence";
+pub const call_prefix = "call-";
+
+/// The directory that holds one phase's calls.
+pub fn phaseDirectory(comptime phase: Phase) []const u8 {
+    return root_directory ++ "/" ++ @tagName(phase);
+}
+
+pub fn artifactFile(artifact: Artifact) []const u8 {
+    return switch (artifact) {
+        .request => "request.json",
+        .response => "response.json",
+        .context => "context.json",
+        .model_output => "model_output.txt",
+        .outcome => "outcome.json",
+    };
+}
+
 pub const Store = struct {
     io: std.Io,
     allocator: std.mem.Allocator,
@@ -11,9 +32,7 @@ pub const Store = struct {
     secrets: []const []const u8,
 
     pub fn path(a: std.mem.Allocator, phase: Phase, ordinal: usize, artifact: Artifact) ![]const u8 {
-        return std.fmt.allocPrint(a, "evidence/{s}/call-{d:0>6}/{s}.{s}", .{
-            @tagName(phase), ordinal, @tagName(artifact), if (artifact == .model_output) "txt" else "json",
-        });
+        return std.fmt.allocPrint(a, "{s}/{s}/{s}{d:0>6}/{s}", .{ root_directory, @tagName(phase), call_prefix, ordinal, artifactFile(artifact) });
     }
 
     pub fn write(self: Store, phase: Phase, ordinal: usize, artifact: Artifact, bytes: []const u8) !void {

@@ -30,6 +30,7 @@ pub const Finalizer = struct {
                 .publication => |value| .{ .execution = switch (value) {
                     .ok => .ok,
                     .needs_user => .needs_user,
+                    .cancelled => .cancelled,
                 } },
             };
         }

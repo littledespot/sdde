@@ -4,6 +4,7 @@ pub const clarification_directory_name = "clarify";
 pub const reference_context_filename = "reference-context.md";
 pub const clarification_state_filename = "clarifications.json";
 pub const workflow_state_filename = "workflow.json";
+pub const actor_evidence_filename = "actor-evidence.json";
 const bootstrap = @import("bootstrap_root_registry.zig");
 const log_binding = @import("feature_log_binding.zig");
 const feature_identity = @import("feature_identity.zig");
@@ -11,7 +12,7 @@ const relative = @import("relative_directory_path.zig");
 const directory = @import("feature_directory.zig");
 
 pub const FeatureRoots = struct { specs: []const u8, archive: []const u8, workflows: []const u8 };
-pub const Artifact = enum { specification, reference_context, clarification_forms, clarification_state, workflow_state, event_logs, prompt_logs };
+pub const Artifact = enum { specification, reference_context, clarification_forms, clarification_state, workflow_state, event_logs, prompt_logs, actor_evidence };
 pub const Root = enum { specs, workflows };
 pub const ArtifactPath = struct { root: Root, root_relative: []const u8, project_relative: []const u8 };
 /// A deterministic path projection, not an ownership registry or write grant.
@@ -47,6 +48,7 @@ pub fn resolveFeaturePaths(allocator: std.mem.Allocator, configured: FeatureRoot
         .{ Artifact.workflow_state, Root.workflows, "state/" ++ workflow_state_filename },
         .{ Artifact.event_logs, Root.specs, "logs/events" },
         .{ Artifact.prompt_logs, Root.specs, "logs/prompts" },
+        .{ Artifact.actor_evidence, Root.workflows, "state/" ++ actor_evidence_filename },
     }) |item| {
         const root = if (item[1] == .specs) configured.specs else configured.workflows;
         const prefix = if (item[1] == .specs) "" else "features/";

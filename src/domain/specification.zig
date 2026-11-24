@@ -4,7 +4,7 @@ const std = @import("std");
 const text = @import("typed_text.zig");
 const reference = @import("reference_extraction.zig");
 
-pub const version = "specification/v6";
+pub const version = "specification/v8";
 pub const Error = error{InvalidSpecification};
 /// A record kind's part in ADR 0038's cross-record rules.
 pub const RecordRole = enum { requirement, behaviour, scope, scenario, entity };
@@ -57,6 +57,14 @@ pub const Kind = enum {
         };
     }
 
+    /// The families a document prints under its scope subsection: their headings are the level-four ones.
+    pub fn isScopeSection(self: Kind) bool {
+        return switch (self) {
+            .assumption, .non_goal, .prohibited_behavior => true,
+            .acceptance_criterion, .user_visible_outcome, .edge_case, .functional_requirement, .business_rule, .entity => false,
+        };
+    }
+
     /// The families whose records show the source lines their claims cite (§23).
     pub fn showsSources(self: Kind) bool {
         return switch (self) {
@@ -65,10 +73,13 @@ pub const Kind = enum {
         };
     }
 
-    /// The families whose records show an outcome the engine derives from another record: an
-    /// edge case prints the Then of the acceptance criterion it links to (§23).
-    pub fn showsOutcome(self: Kind) bool {
-        return self == .edge_case;
+    /// The families whose records show a scenario the engine derives from another record: an
+    /// edge case prints the Given, When and Then of the acceptance criterion it links to (§23).
+    pub fn showsScenario(self: Kind) bool {
+        return switch (self) {
+            .edge_case => true,
+            .acceptance_criterion, .user_visible_outcome, .functional_requirement, .business_rule, .assumption, .non_goal, .prohibited_behavior, .entity => false,
+        };
     }
 
     /// The requirement and behaviour statements: the families an entity's related-statements
@@ -195,7 +206,8 @@ pub fn Content(comptime Value: type) type {
     return union(Kind) {
         acceptance_criterion: struct {
             pub const model_fields = .{ .given = text.field_policy.Field.ac_given, .when = text.field_policy.Field.ac_when, .then = text.field_policy.Field.ac_then };
-            given: Value,
+            /// Written only where the sources state a starting situation; a criterion without one has no Given.
+            given: ?Value = null,
             when: Value,
             then: Value,
         },
@@ -204,8 +216,8 @@ pub fn Content(comptime Value: type) type {
             text: Value,
         },
         edge_case: struct {
-            pub const model_fields = .{ .condition = text.field_policy.Field.edge_condition };
-            condition: Value,
+            pub const model_fields = .{ .given = text.field_policy.Field.edge_given };
+            given: Value,
         },
         functional_requirement: struct {
             pub const model_fields = .{ .text = text.field_policy.Field.functional_requirement };
@@ -232,6 +244,14 @@ pub fn Content(comptime Value: type) type {
             name: Value,
         },
     };
+}
+
+/// Whether a content field may be omitted: only an acceptance criterion's Given may. This is the one
+/// statement of the rule. A walker over a content's fields asks it at compile time, handles a held value
+/// as it handles any other, and carries an absent one through unchanged; an absent field is never a
+/// text, a repair target or a part of a duplicate comparison.
+pub fn mayOmit(comptime Field: type) bool {
+    return @typeInfo(Field) == .optional;
 }
 
 /// The declared field shape owns its exhaustive composition-policy mapping.
@@ -263,7 +283,8 @@ pub const ContentProposal = struct {
 };
 
 /// `outcome_of` is an edge case's one link: the acceptance criterion of its own records batch
-/// whose Then it prints (`scenario_link.zig`). It is the display's only canonical source.
+/// whose Given, When and Then it prints (`scenario_link.zig`). It is the display's only canonical
+/// source.
 pub const IdentifiedRecord = struct { id: Id, proposal: RecordProposal, outcome_of: ?Id = null };
 pub const IdentifiedContent = struct {
     display_name: DisplayName,
@@ -294,9 +315,11 @@ pub const LineRange = struct { first: u32, last: u32 };
 /// of the record's lineage, never provenance authority.
 pub const SourceLines = struct { path: []const u8, ranges: []const LineRange };
 /// `related` is an entity's engine-derived display of the statements that share one of its
-/// source groups, in document order; `outcome` is an edge case's engine-derived display of the
-/// linked acceptance criterion's Then: neither is provenance authority.
-pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar), sources: []const SourceLines = &.{}, related: []const Id = &.{}, outcome: ?Scalar = null };
+/// source groups, in document order; `scenario` is an edge case's engine-derived display of the
+/// linked acceptance criterion's Given, When and Then, which its own given follows on the `GIVEN`
+/// line: neither is provenance authority. It has no Given where the criterion has none.
+pub const Scenario = struct { given: ?Scalar, when: Scalar, then: Scalar };
+pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar), sources: []const SourceLines = &.{}, related: []const Id = &.{}, scenario: ?Scenario = null };
 pub const CapturedDocument = struct {
     display_name: Scalar,
     primary_user_story: Scalar,
@@ -324,11 +347,19 @@ pub fn validateDocument(document: CapturedDocument, require_ids: bool) Error!voi
         } else if (require_ids) return error.InvalidSpecification;
         try sources(kind, record.sources);
         switch (record.content) {
-            inline else => |content| inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |field| try scalar(@field(content, field.name)),
+            inline else => |content| inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |field| {
+                if (comptime mayOmit(field.type)) {
+                    if (@field(content, field.name)) |held| try scalar(held);
+                } else try scalar(@field(content, field.name));
+            },
         }
-        // Only an edge case shows an outcome, and it always does.
-        if (kind.showsOutcome() != (record.outcome != null)) return error.InvalidSpecification;
-        if (record.outcome) |outcome| try scalar(outcome);
+        // Only an edge case shows a scenario, and it always does.
+        if (kind.showsScenario() != (record.scenario != null)) return error.InvalidSpecification;
+        if (record.scenario) |shown| {
+            if (shown.given) |held| try scalar(held);
+            try scalar(shown.when);
+            try scalar(shown.then);
+        }
     }
 }
 

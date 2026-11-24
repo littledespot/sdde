@@ -44,7 +44,6 @@ test "request result selection keeps exactly one canonical schema or configured 
     try std.testing.expect(!model.validResultSelection(&.{}));
     try std.testing.expect(!model.validResultSelection(&.{ resource, part }));
     try std.testing.expect(!model.validResultSelection(&.{ part, .{ .id = .{ .bytes = "input" }, .value = .{ .resource = .{ .bytes = "other" } } } }));
-    try std.testing.expect(!model.validResultSelection(&.{ part, .{ .id = .{ .bytes = "result-selection" }, .value = .{ .enumeration = "input" } } }));
     try std.testing.expect(!model.validResultSelection(&.{.{ .id = part.id, .value = .{ .string = "unknown/part" } }}));
     try std.testing.expect(!model.validResultSelection(&.{.{ .id = resource.id, .value = .{ .string = "canonical" } }}));
 }

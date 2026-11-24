@@ -21,7 +21,7 @@ const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid,
 
 pub const Authorize = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .valid_toolchain, .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .text_validated_reference_extraction },
+        .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .text_validated_reference_extraction },
         .produces = &.{.reference_text_repair_authorization},
     };
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .text_validated_reference_extraction, .result = .reference_text_repair_authorization } };
@@ -44,7 +44,7 @@ pub const Authorize = struct {
 };
 pub const BuildInput = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .valid_toolchain, .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .structured_token_candidates, .reference_text_repair_authorization },
+        .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .structured_token_candidates, .reference_text_repair_authorization },
         .produces = &.{.model_input_packet},
     };
     allocator: std.mem.Allocator,
@@ -54,8 +54,7 @@ pub const BuildInput = struct {
         const prior = try extraction.readNative(&input.step.data, extraction.parsed_schema, .parsed);
         const candidates = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
         const literals = values.read(&input.step.data, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
-        const current = values.read(&input.step.data, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch |operation_error| return operation_error;
-        const packet = repair.packet(self.allocator, try facts(&input.step.data, prior.payload().parsed), literals.*, current, candidates.*, authorization) catch |operation_error| return operation_error;
+        const packet = repair.packet(self.allocator, try facts(&input.step.data, prior.payload().parsed), literals.*, candidates.*, authorization) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };
@@ -80,7 +79,7 @@ pub const Parse = struct {
 };
 pub const Merge = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .valid_toolchain, .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .reference_text_repair_authorization, .reference_text_repair_result },
+        .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .parsed_reference_extraction, .reference_text_repair_authorization, .reference_text_repair_result },
         .replaces = &.{.parsed_reference_extraction},
         .invalidates = &.{ .text_validated_reference_extraction, .reference_text_repair_authorization, .reference_text_repair_result },
     };
@@ -118,6 +117,5 @@ fn reject(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner
 fn facts(view: *const data.View, candidate: @import("../domain/reference_extraction.zig").Parsed) operations.Error!repair.Facts {
     const source = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
     const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
-    const current = values.read(view, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch |operation_error| return operation_error;
-    return @import("../domain/reference_extraction_context.zig").textFacts(source.*, registry.*, current, candidate) catch |operation_error| return operation_error;
+    return @import("../domain/reference_extraction_context.zig").textFacts(source.*, registry.*, candidate);
 }

@@ -23,7 +23,7 @@ fn command(init: std.process.Init) !bool {
     var arguments: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |argument| try arguments.append(allocator, argument);
     if (arguments.items.len == 1 and std.mem.eql(u8, arguments.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json and captures its published specification with the case's sources and rubric for adjudication by /evaluate-e2e, which starts only when the user triggers it or explicitly approves it for named runs. The harness makes no judge call. This command makes live API calls. Live generation permits only Bedrock openai.gpt-oss-20b-1:0 or au.anthropic.claude-haiku-5-5 from ap-southeast-2. Set TEST_AWS_BEARER_TOKEN_BEDROCK; load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json and captures its published specification with the case's sources and rubric for adjudication by /evaluate-e2e, which starts only when the user triggers it or explicitly approves it for named runs. The harness makes no judge call. This command makes live API calls. Live generation permits only the cost policy's tuples (" ++ @import("../model_cost_policy.zig").generation_tuples ++ "). Each configured slot's provider needs its test key: " ++ @import("../environment.zig").generation_key_help ++ "; load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
         return true;
     }
     const case_path = parse(arguments.items) catch {
@@ -32,22 +32,39 @@ fn command(init: std.process.Init) !bool {
     };
     const parent = try @import("../../../src/adapters/filesystem/directory_access.zig").ensure(io, .cwd(), output_root);
     defer parent.close(io);
+    // A case that answers a form runs two legs in one launch, each its own run directory and report. The second starts only
+    // from a first leg that paused as the case expects, and is the act of accepting the answer (ADR 0025). Anything else
+    // ends the launch with the first leg's report.
+    const first = try leg(init, allocator, parent, case_path, null);
+    const answered = first.next orelse return first.succeeded;
+    return (try leg(init, allocator, parent, case_path, answered)).succeeded;
+}
+
+/// What the second leg continues: the first leg's run directory and the form that answers it.
+const Continuation = struct { from: []const u8, answered: @import("answer.zig").Form };
+const Leg = struct { succeeded: bool, next: ?Continuation };
+
+fn leg(init: std.process.Init, allocator: std.mem.Allocator, parent: std.Io.Dir, case_path: []const u8, continuation: ?Continuation) !Leg {
+    const io = init.io;
     const run = try @import("run_directory.zig").Run.create(io, parent);
     defer run.close(io);
     const output = try reports.Output.reserve(io, run.dir);
     defer output.close(io);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
+    var report: c.Report = .{ .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
+    report.continued_from = if (continuation) |step| step.from else null;
     report.build = .{
         .source = (try @import("../contracts.zig").decode(@import("../../../build/provenance.zig").Bundle, allocator, @embedFile("build_provenance"))).identity,
         .zig_version = @import("builtin").zig_version_string,
         .target = @tagName(@import("builtin").cpu.arch) ++ "-" ++ @tagName(@import("builtin").os.tag) ++ "-" ++ @tagName(@import("builtin").abi),
         .optimize = @tagName(@import("builtin").mode),
     };
-    execute(io, allocator, init.environ_map, case_path, run.dir, run.project, &run.name, &report) catch |err| {
+    var next: ?Continuation = null;
+    execute(io, allocator, init.environ_map, case_path, run.dir, run.project, &run.name, &report, continuation, &next) catch |err| {
         if (report.status != .input_invalid) report.status = .harness_error;
         report.diagnostic = @errorName(err);
     };
-    return finish(io, allocator, output, report, output_root, &run.name, .stdout(), .stderr());
+    const succeeded = try finish(io, allocator, output, report, output_root, &run.name, .stdout(), .stderr());
+    return .{ .succeeded = succeeded, .next = if (succeeded) next else null };
 }
 
 /// Final reporting cannot replace the workflow outcome or authorize a successful
@@ -75,17 +92,24 @@ pub fn finish(io: std.Io, allocator: std.mem.Allocator, output: reports.Output, 
     return report_error == null and try @import("acceptance.zig").commandSucceeded(allocator, final);
 }
 
-fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.process.Environ.Map, case_path: []const u8, run: std.Io.Dir, project: std.Io.Dir, execution_id: []const u8, report: *c.Report) !void {
+fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.process.Environ.Map, case_path: []const u8, run: std.Io.Dir, project: std.Io.Dir, execution_id: []const u8, report: *c.Report, continuation: ?Continuation, next: *?Continuation) !void {
     const case_bytes = try @import("../files.zig").read(io, allocator, .cwd(), case_path);
     try @import("../output.zig").write(io, run, "case.json", case_bytes);
     const selected = try c.parse(allocator, case_bytes);
     report.case_id = selected.id;
     report.workflow_id = selected.workflow_id;
-    report.expected_outcome = selected.expected_outcome;
+    // A leg states the outcome it is expected to reach; the case's combined one is two legs' outcomes.
+    const answers_a_form = selected.expected_outcome == .clarification_then_publication;
+    report.expected_outcome = if (!answers_a_form) selected.expected_outcome else if (continuation != null) .publication else .clarification;
     const captured = try fixture.capture(io, allocator, .cwd(), selected);
     report.evaluation_case_id = captured.evaluation.case.id;
     try @import("../output.zig").write(io, run, "inputs.json", try std.json.Stringify.valueAlloc(allocator, captured, .{ .whitespace = .indent_2 }));
-    try fixture.materialize(io, project, captured);
+    if (continuation) |step| {
+        // The second leg starts from a copy of what the first published, the answered form over its form.
+        const first = try std.Io.Dir.cwd().openDir(io, try std.fs.path.join(allocator, &.{ output_root, step.from, "project" }), .{ .iterate = true });
+        defer first.close(io);
+        try @import("answer.zig").continueProject(io, allocator, first, project, step.answered);
+    } else try fixture.materialize(io, project, captured);
     var generation_config = try @import("../../../src/domain/engine_config_decode.zig").decode(allocator, captured.config);
     defer generation_config.deinit();
     try @import("../model_cost_policy.zig").requireConfiguredSlots(&generation_config.value().models);
@@ -106,7 +130,20 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_keys, store, report, .{ .purpose = .whole_workflow });
     if (!try verifySources(io, allocator, case_path, case_bytes, captured, report)) return;
     const published = specification orelse return;
-    if (selected.expected_outcome != .publication) return;
+    if (report.expected_outcome != .publication) {
+        // A first leg that paused is answered only when it raised exactly one form that offers the case's key.
+        if (answers_a_form and report.status == .awaiting_clarification) {
+            const paths = generation_config.value().paths;
+            switch (try @import("answer.zig").prepare(io, allocator, project, paths.specs, paths.workflows, selected.feature, selected.answers[0].key)) {
+                .ready => |form| next.* = .{ .from = try allocator.dupe(u8, execution_id), .answered = form },
+                .unavailable => |why| {
+                    report.status = .answer_unavailable;
+                    report.diagnostic = why.diagnostic();
+                },
+            }
+        }
+        return;
+    }
     report.evaluation_inputs = try @import("evaluation.zig").inputs(allocator, report.*, captured.evaluation, published, execution_id);
 }
 

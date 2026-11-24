@@ -7,7 +7,7 @@ const ingest = @import("reference_ingestion_test.zig").read;
 const evidence = @import("domain/reference_evidence.zig");
 
 fn context(prepared: fixture.Prepared, inputs: evidence.Inputs, index: usize) text.Context {
-    return .{ .registry = prepared.registry, .current = fixture.safety.value(prepared.owner), .inputs = inputs, .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id }, .field = .spec_story };
+    return .{ .registry = prepared.registry, .inputs = inputs, .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id }, .field = .spec_story };
 }
 
 test "prose punctuation never manufactures a reference and exact selections retain scope" {
@@ -19,7 +19,7 @@ test "prose punctuation never manufactures a reference and exact selections reta
     const prepared = try fixture.prepare(a, inputs);
     defer prepared.deinit();
     const ctx = context(prepared, inputs, 0);
-    var scoped: text.ScopeSetContext = .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story };
+    var scoped: text.ScopeSetContext = .{ .registry = ctx.registry, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story };
     for ([_][]const u8{ "Display the UTC date/time.", "Support input/output.", "Read src/ledger.zig.", "See https://example.test" }) |value| {
         const checked = (try fixture.validator.checkBusinessIn(a, scoped, .{ .segments = &.{.{ .literal = .{ .value = value } }} })).valid;
         try std.testing.expectEqual(@as(usize, 1), checked.value.segments.len);
@@ -107,11 +107,6 @@ test "display literal IDs and source nodes are limited to their exact extraction
     source_context.field = .extraction_technical;
     _ = try fixture.validator.reference(allocator, source_context, source);
     try std.testing.expectError(error.InvalidTypedText, fixture.validator.reference(allocator, context(prepared, inputs, 0), .{ .nodes = &.{.{ .source = .{ .source_id = .{ .ordinal = 99 } } }} }));
-    const successor = try fixture.prepare(allocator, inputs);
-    defer successor.deinit();
-    var stale = context(prepared, inputs, 0);
-    stale.current = fixture.safety.value(successor.owner);
-    try std.testing.expectError(error.StaleNamingPolicy, fixture.validator.business(allocator, stale, local));
 }
 
 test "one shared text validator normalizes inert prose without promoting inline or split path lexemes" {
@@ -182,7 +177,7 @@ test "all extraction content kinds and no-claim reasons pass through the shared 
         // ADR 0036: each category's wording is quoted from its cited line.
         const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"category\":\"{s}\",\"citations\":[1]}}],\"token_classifications\":[]}}", .{kind});
         const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = bytes } }} });
-        const checked = (try fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed)).valid;
+        const checked = (try fixture.validate_text.execute(allocator, prepared.registry, inputs, parsed)).valid;
         const content = checked.entries[0].outcome.claims[0].content;
         try std.testing.expectEqualStrings(kind, @tagName(content));
         try std.testing.expectEqualStrings("A supported statement.", switch (content) {
@@ -192,7 +187,7 @@ test "all extraction content kinds and no-claim reasons pass through the shared 
     }
     const reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"Read source.md\"},\"token_classifications\":[]}";
     const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = reason } }} });
-    try std.testing.expect((try fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed)) == .valid);
+    try std.testing.expect((try fixture.validate_text.execute(allocator, prepared.registry, inputs, parsed)) == .valid);
 }
 
 test "source-backed literal and typed-text allocations clean up on every failure" {
@@ -297,7 +292,7 @@ test "native admission and stored readback reject encoded insertion prose across
         defer prepared.deinit();
         const ctx = context(prepared, inputs, 0);
         const segments: []const text.BusinessSegment = &.{ .{ .literal = .{ .value = "The user sees " ++ encoded[0..12] } }, .{ .literal = .{ .value = encoded[12..] } } };
-        const result = try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = segments });
+        const result = try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = segments });
         const captured: literals.Captured = .{ .records = ctx.registry.records, .occurrences = ctx.registry.occurrences };
         const stored_context: text.StoredContext = .{ .inputs = inputs, .passive = captured, .scopes = &.{ctx.scope}, .field = .spec_story };
         if (std.mem.indexOf(u8, source, encoded) != null) {
@@ -313,7 +308,7 @@ test "native admission and stored readback reject encoded insertion prose across
         const question_issue = try questions.questionIssueIn(a, inputs, .ambiguous, "Which value follows " ++ encoded ++ "?");
         if (std.mem.indexOf(u8, source, encoded) != null) try std.testing.expect(question_issue == null) else try std.testing.expectEqual(.invalid_question, question_issue.?);
         const forged: []const text.BusinessSegment = &.{.{ .literal = .{ .value = "The user sees {\"kind\":\"exact_copy\",\"claim_id\":8}" } }};
-        try std.testing.expectEqual(.embedded_insertion_syntax, (try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = forged })).invalid.reason);
+        try std.testing.expectEqual(.embedded_insertion_syntax, (try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = forged })).invalid.reason);
         try std.testing.expectError(error.InvalidTypedText, text.stored(text.BusinessSegment, a, stored_context, forged));
     }
 }
@@ -340,7 +335,7 @@ test "NFC preserves exact source-backed wire quotations through admission and st
     try std.testing.expectEqualStrings(canonical, revalidated.value.segments[0].literal.value);
     try std.testing.expectEqualStrings(stored_bytes, try std.json.Stringify.valueAlloc(a, revalidated.value, .{}));
     const changed = "Café displays {\"fragments\":[\"café\"]} beside café.";
-    const issue = (try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = &.{.{ .literal = .{ .value = changed } }} })).invalid;
+    const issue = (try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = &.{.{ .literal = .{ .value = changed } }} })).invalid;
     try std.testing.expectEqual(.embedded_insertion_syntax, issue.reason);
     // Canonical comparison also handles old rejected values. It does not turn
     // its normalization operation into an additional admission gate.

@@ -16,16 +16,21 @@
   2026): response admission binds one disposition to every assigned semantic claim, so
   an omitted or repeated disposition is corrected with the whole assignment and is not
   a phase repair; disposition repair only replaces one disposition.
+- **Amended 20 November 2026** (C10 in `fixes/Z_SPEC01.md`, decided 15 November 2026; user: "preflight and
+  implement C10: skip the conflicts call when the only valid answer is empty. This lands with
+  the ADR 0022 amendment."): the conflicts phase has no request when no conflict group
+  exists. See "Forced conflicts answer".
 
 Semantic decisions remain model candidates. YAML explicitly requests, collects,
-validates and repairs each reconciliation phase before requesting its descendants.
+validates and repairs each reconciliation phase before requesting its descendants,
+except a conflicts phase with no group to explain ("Forced conflicts answer").
 Native typed phase facts, rather than schema-admitted JSON prerequisites, supply
 accepted dispositions and signal selections. Pending phases cannot be accounted
 as complete. Checked phase facts retire resolved repair receipts in the same
 runner-applied delta; receipts owned by a later validator remain pending.
 The generic JSON composer remains structural; it receives no domain
 validation policy or hidden scheduler. Named definitions in one response schema
-own the phase shapes. Summary composition continues using that schema.
+own the phase shapes, and the summary request selects its `summary` definition natively.
 
 Signal selections reuse the existing execution-local repair occurrence IDs. They
 are distinct from final canonical signal IDs and stay with surviving groups after
@@ -63,7 +68,7 @@ child from canonical execution history, checks the supplied child against it and
 revalidates the proof binding its projection, source evidence and text dependencies.
 Stale or altered history fails. Leaf, empty and multiple-child partitions retain
 their existing model path; final global reconciliation still performs its semantic
-phase sequence.
+phase sequence, a conflicts phase with no group excepted ("Forced conflicts answer").
 
 The native iteration cycle uses the shared finite-iteration contract in
 [§6.3](../contracts/06-pipeline-nodes.md#63-reordering-and-composition-rules).
@@ -106,7 +111,8 @@ strength. Complete duplicate member sets reject; different sets may overlap.
 Summary and signal schema views derive available model-content categories from
 the canonical selected-kind validator and membership cardinality from eligible
 IDs through §12's generic unique-subset restriction. Empty eligible catalogues
-admit only an empty authored collection. Atomic selection repairs use their
+admit only an empty authored collection; the conflicts catalogue is the exception,
+which is not requested at all when empty ("Forced conflicts answer"). Atomic selection repairs use their
 authorized compatible IDs and target-specific guidance, not initial-assignment
 or whole-result coverage instructions. Content repairs retain their existing
 selected-kind schema. Reference repair guidance labels the original candidate's
@@ -139,6 +145,33 @@ model call. Native projections have no fabricated provider origin. An authorized
 outcome-changing repair retires forced classifications and returns through the
 classification gate; positive token-only extraction remains distinct from
 no-feature extraction.
+
+**Forced conflicts answer** (20 November 2026). When the validated dispositions declare no
+conflict group, the only admissible conflicts answer is the empty collection: the schema
+owner already narrows it to `maxItems 0`, and with no group there is nothing to cover.
+It is computable structure, so the engine makes no request for it. This is a closed
+policy for the conflicts phase alone; the dispositions, signals and summary requests are
+always sent, even where their catalogue is empty.
+- **Predicate and owner.** The declared conflict groups are empty, read by the stage module
+  (`reference_reconciliation_stage.zig`) when it collects the signals. A group makes the
+  answer a model choice, as before.
+- **Effect.** The signals collection leaves the phase complete, so the YAML phase check
+  routes to `validate-conflicts` and no conflicts packet is built, sent, collected or
+  released; the stage module refuses to build or collect one for a prior with no group.
+  Every validator and gate still runs on the candidate, in order.
+- **A phase fact, not a step.** The completion is a typed phase fact that the YAML phase
+  check routes on, as the collected conflicts answer already is. A native construct step
+  would return through `validate-dispositions`, forming a cycle with no retry guard, which
+  graph validation refuses; and `validate-conflicts` reads the phase from the re-validated
+  signals.
+- **Origin and repair.** The empty conflicts collection has no provider origin, as native
+  projections have none, so the conflicts record carries none. It has nothing to repair. A
+  repair that changes dispositions returns the phase to dispositions, so the predicate is
+  read again at the next signals collection.
+- **Accounting.** No request exists, so there is no ledger entry, token or step event for
+  it; tokens are reported, never the reason. The class is successful completion, by removing
+  a request whose only valid answer was fixed. No failure had been observed, so no benefit is
+  demonstrated.
 
 Preservation comparisons bind current accepted claims, dispositions, groups and
 admitted authored associations.

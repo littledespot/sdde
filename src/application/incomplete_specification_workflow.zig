@@ -16,7 +16,7 @@ pub const Build = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .refreshed_clarification_state, .evidence = .refreshed_clarification_state, .result = .incomplete_specification_state } };
     pub const Action = @import("../actions/specification/build_incomplete_specification.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;
@@ -48,7 +48,7 @@ pub const Prepare = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .incomplete_specification_state, .evidence = .refreshed_clarification_state, .result = .prepared_workflow_output } };
     pub const Action = @import("../actions/specification/prepare_incomplete_specification_output.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;
@@ -56,6 +56,9 @@ pub const Prepare = struct {
         const paths = values.read(view, ci.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch |operation_error| return operation_error;
         const captured = values.read(view, ci.captures_schema, c.Captures) catch |operation_error| return operation_error;
         const inputs = values.read(view, ci.inputs_schema, c.Inputs) catch |operation_error| return operation_error;
+        const evidence_workflow = @import("actor_evidence_workflow.zig");
+        const prior_registry = values.read(view, evidence_workflow.capture_schema, evidence_workflow.Capture) catch |operation_error| return operation_error;
+        const registry = values.read(view, evidence_workflow.registry_schema, @import("../domain/actor_evidence.zig").Registry) catch |operation_error| return operation_error;
         const clarifications = values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch |operation_error| return operation_error;
         const forms = values.read(view, refresh.views_schema, []const @import("../domain/clarification_views.zig").View) catch |operation_error| return operation_error;
         const prior = owned.read(view, publication.prior_schema, .prior_state) catch |operation_error| return operation_error;
@@ -63,7 +66,7 @@ pub const Prepare = struct {
         const rendered = owned.read(view, rendered_schema, .rendered) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const prepared = self.action.execute(arena.allocator(), feature.*, paths.*, captured.*, inputs.*, clarifications.*, forms.*, prior, current, rendered) catch |cause| return cause;
+        const prepared = self.action.execute(arena.allocator(), feature.*, paths.*, captured.*, inputs.*, clarifications.*, forms.*, prior, current, rendered, registry.*, prior_registry.bytes) catch |cause| return cause;
         return @import("workflow_candidate.zig").publish(self.allocator, @import("workflow_output_binding.zig").prepared_schema, @import("../domain/workflow_output.zig").Prepared, prepared);
     }
 };

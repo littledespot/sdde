@@ -13,6 +13,44 @@ pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|l
 
 pub const prompt_column_count = std.mem.countScalar(u8, prompt_heading, '|') + 1;
 
+/// The heading row that opens every segment of a stream.
+pub fn segmentHeading(stream: log_stream.Stream) []const u8 {
+    return switch (stream) {
+        .event => event_heading,
+        .prompt => prompt_heading,
+    };
+}
+
+/// Evaluated at compile time only (`eventColumn`, `promptColumn`, `sharedColumn`).
+fn columnIn(comptime heading: []const u8, comptime name: []const u8) usize {
+    @setEvalBranchQuota(100_000);
+    var index: usize = 0;
+    var names = std.mem.splitScalar(u8, std.mem.trimEnd(u8, heading, "\n"), '|');
+    while (names.next()) |candidate| : (index += 1) if (std.mem.eql(u8, candidate, name)) return index;
+    @compileError("the heading has no column " ++ name);
+}
+
+/// A column's index in the event heading, resolved at compile time: a misspelt or removed column fails to
+/// compile instead of reading another column.
+pub fn eventColumn(comptime name: []const u8) usize {
+    return comptime columnIn(event_heading, name);
+}
+
+/// A column's index in the prompt heading, resolved at compile time.
+pub fn promptColumn(comptime name: []const u8) usize {
+    return comptime columnIn(prompt_heading, name);
+}
+
+/// A column both headings hold at one index, such as the control columns every row begins with. A heading that
+/// moves it in only one stream fails to compile.
+pub fn sharedColumn(comptime name: []const u8) usize {
+    return comptime shared: {
+        const index = columnIn(event_heading, name);
+        if (index != columnIn(prompt_heading, name)) @compileError("the headings place the column " ++ name ++ " differently");
+        break :shared index;
+    };
+}
+
 pub const Error = error{ InvalidFeatureLogRecord, OutOfMemory };
 
 pub const EventRecord = struct {
@@ -32,6 +70,12 @@ pub const EventRecord = struct {
 pub fn eventId(buffer: *[32]u8, sequence: u64) ?telemetry.Identifier {
     if (sequence == 0) return null;
     return telemetry.Identifier.validate(std.fmt.bufPrint(buffer, "EVENT-{d}", .{sequence}) catch return null);
+}
+
+/// The one bounded canonical emergency record of a logging failure (F0002, ADR 0032): a fixed template over the
+/// workflow's shortcode and the failure's closed code, which cannot exceed its bound. Null only if it would.
+pub fn emergencyLine(buffer: *[log_limits.emergency_max_ascii_bytes]u8, shortcode: telemetry.WorkflowShortcode, code: log_stream.FailureCode) ?[]const u8 {
+    return std.fmt.bufPrint(buffer, "SDDE_LOG_FAILURE workflow={s} level=fatal code={s}\n", .{ shortcode.slice(), @tagName(code) }) catch null;
 }
 
 pub const PromptRecord = struct {
@@ -142,10 +186,10 @@ fn encodeControl(encoder: *ControlEncoder, stream: log_stream.Stream, record: Co
     try encoder.optional(null);
     try encoder.unsigned(record.final_sequence);
     try encoder.cell(record.occurred_at_utc);
-    for (0..4) |_| try encoder.optional(null);
+    for (0..sharedColumn("run_id") - sharedColumn("occurred_at_utc") - 1) |_| try encoder.optional(null);
     try encoder.cell(record.run_id.bytes);
     try encoder.cell(record.feature_id.bytes);
-    for (0..controlColumnCount(stream) - 17) |_| try encoder.optional(null);
+    for (0..controlColumnCount(stream) - (sharedColumn("feature_id") + 1)) |_| try encoder.optional(null);
     try encoder.finish();
 }
 
@@ -220,7 +264,7 @@ pub fn serializeEvent(
     var number_buffer: [32]u8 = undefined;
     var template_buffer: [96]u8 = undefined;
     const template_id = definition.templateId(&template_buffer) catch return error.InvalidFeatureLogRecord;
-    const fields = record.fact.fields;
+    const common = telemetry.commonOf(record.fact);
 
     try appendCell(allocator, &row, &first, "event");
     try appendCell(allocator, &row, &first, log_limits.schema_version);
@@ -235,31 +279,31 @@ pub fn serializeEvent(
     try appendCell(allocator, &row, &first, record.occurred_at_utc);
     try appendUnsigned(allocator, &row, &first, record.monotonic_offset, &number_buffer);
     try appendCell(allocator, &row, &first, definition.level.text());
-    try appendCell(allocator, &row, &first, record.fact.event_type.text());
+    try appendCell(allocator, &row, &first, telemetry.eventOf(record.fact).text());
     try appendCell(allocator, &row, &first, template_id);
     try appendCell(allocator, &row, &first, record.run_id.bytes);
     try appendCell(allocator, &row, &first, record.feature_id.bytes);
-    try appendOptional(allocator, &row, &first, if (record.fact.stage) |value| stageText(value) else null);
-    try appendOptionalId(allocator, &row, &first, record.fact.node_id);
-    try appendOptionalId(allocator, &row, &first, record.fact.parent_event_id);
-    try appendOptionalId(allocator, &row, &first, record.fact.correlation_id);
-    try appendOptionalUnsigned(allocator, &row, &first, record.fact.attempt, &number_buffer);
-    try appendOptionalId(allocator, &row, &first, fields.task_id);
-    try appendOptionalUnsigned(allocator, &row, &first, fields.duration_ms, &number_buffer);
-    try appendOptional(allocator, &row, &first, if (fields.diagnostic_code) |value| value.bytes else null);
-    try appendOptionalId(allocator, &row, &first, fields.validator_id);
-    try appendOptionalId(allocator, &row, &first, fields.rule_id);
-    try appendOptionalId(allocator, &row, &first, fields.step_id);
-    try appendOptionalId(allocator, &row, &first, fields.model_route_id);
-    try appendOptionalId(allocator, &row, &first, fields.model_profile_id);
-    try appendOptionalUnsigned(allocator, &row, &first, fields.input_tokens, &number_buffer);
-    try appendOptionalUnsigned(allocator, &row, &first, fields.output_tokens, &number_buffer);
-    try appendOptional(allocator, &row, &first, if (fields.repair_unit_kind) |value| @tagName(value) else null);
-    try appendOptionalId(allocator, &row, &first, fields.command_id);
-    try appendOptionalSigned(allocator, &row, &first, fields.exit_code, &number_buffer);
-    try appendOptional(allocator, &row, &first, if (fields.evidence_status) |value| @tagName(value) else null);
-    try appendOptional(allocator, &row, &first, if (fields.outcome) |value| @tagName(value) else null);
-    try appendOptionalUnsigned(allocator, &row, &first, fields.count, &number_buffer);
+    try appendOptional(allocator, &row, &first, if (common.stage) |value| stageText(value) else null);
+    try appendOptionalId(allocator, &row, &first, common.node_id);
+    try appendOptionalId(allocator, &row, &first, common.parent_event_id);
+    try appendOptionalId(allocator, &row, &first, common.correlation_id);
+    try appendOptionalUnsigned(allocator, &row, &first, common.attempt, &number_buffer);
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .task_id));
+    try appendOptionalUnsigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .duration_ms), &number_buffer);
+    try appendOptional(allocator, &row, &first, if (telemetry.fieldOf(record.fact, .diagnostic_code)) |value| value.bytes else null);
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .validator_id));
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .rule_id));
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .step_id));
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .model_route_id));
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .model_profile_id));
+    try appendOptionalUnsigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .input_tokens), &number_buffer);
+    try appendOptionalUnsigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .output_tokens), &number_buffer);
+    try appendOptional(allocator, &row, &first, if (telemetry.fieldOf(record.fact, .repair_unit_kind)) |value| @tagName(value) else null);
+    try appendOptionalId(allocator, &row, &first, telemetry.fieldOf(record.fact, .command_id));
+    try appendOptionalSigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .exit_code), &number_buffer);
+    try appendOptional(allocator, &row, &first, if (common.evidence_status) |value| @tagName(value) else null);
+    try appendOptional(allocator, &row, &first, if (telemetry.fieldOf(record.fact, .outcome)) |value| @tagName(value) else null);
+    try appendOptionalUnsigned(allocator, &row, &first, telemetry.fieldOf(record.fact, .count), &number_buffer);
     row.append(allocator, '\n') catch return error.OutOfMemory;
     if (row.items.len > log_limits.max_record_bytes) return error.InvalidFeatureLogRecord;
     return row.toOwnedSlice(allocator) catch return error.OutOfMemory;
@@ -303,14 +347,14 @@ pub fn validatePersistedIdentityRow(
     ordinal: u16,
     stream: log_stream.Stream,
 ) Error!void {
-    if (!std.mem.eql(u8, cellAt(line, 1) orelse return error.InvalidFeatureLogRecord, log_limits.schema_version) or
-        !std.mem.eql(u8, cellAt(line, 2) orelse return error.InvalidFeatureLogRecord, @tagName(stream)) or
-        !std.mem.eql(u8, cellAt(line, 3) orelse return error.InvalidFeatureLogRecord, if (stream == .event) log_limits.event_column_schema_id else log_limits.prompt_column_schema_id) or
+    if (!std.mem.eql(u8, cellAt(line, sharedColumn("schema_version")) orelse return error.InvalidFeatureLogRecord, log_limits.schema_version) or
+        !std.mem.eql(u8, cellAt(line, sharedColumn("stream")) orelse return error.InvalidFeatureLogRecord, @tagName(stream)) or
+        !std.mem.eql(u8, cellAt(line, sharedColumn("column_schema_id")) orelse return error.InvalidFeatureLogRecord, if (stream == .event) log_limits.event_column_schema_id else log_limits.prompt_column_schema_id) or
         !std.mem.eql(u8, logPolicyCell(line) orelse return error.InvalidFeatureLogRecord, binding.logPolicyId().bytes) or
-        !std.mem.eql(u8, cellAt(line, 5) orelse return error.InvalidFeatureLogRecord, binding.bindingId().bytes) or
-        (std.fmt.parseInt(u16, cellAt(line, 6) orelse return error.InvalidFeatureLogRecord, 10) catch return error.InvalidFeatureLogRecord) != ordinal or
-        !std.mem.eql(u8, cellAt(line, 15) orelse return error.InvalidFeatureLogRecord, binding.runId().bytes) or
-        !std.mem.eql(u8, cellAt(line, 16) orelse return error.InvalidFeatureLogRecord, binding.featureId().bytes))
+        !std.mem.eql(u8, cellAt(line, sharedColumn("feature_log_binding_id")) orelse return error.InvalidFeatureLogRecord, binding.bindingId().bytes) or
+        (std.fmt.parseInt(u16, cellAt(line, sharedColumn("segment_ordinal")) orelse return error.InvalidFeatureLogRecord, 10) catch return error.InvalidFeatureLogRecord) != ordinal or
+        !std.mem.eql(u8, cellAt(line, sharedColumn("run_id")) orelse return error.InvalidFeatureLogRecord, binding.runId().bytes) or
+        !std.mem.eql(u8, cellAt(line, sharedColumn("feature_id")) orelse return error.InvalidFeatureLogRecord, binding.featureId().bytes))
     {
         return error.InvalidFeatureLogRecord;
     }
@@ -322,17 +366,15 @@ pub fn validatePersistedControlRow(
     stream: log_stream.Stream,
     final_sequence: ?u64,
 ) Error!void {
-    if (!std.mem.eql(u8, cellAt(line, 0) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or
-        parseUtcMs(cellAt(line, 10) orelse return error.InvalidFeatureLogRecord) == null) return error.InvalidFeatureLogRecord;
-    const event_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37 };
-    const prompt_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
-    const null_columns: []const usize = if (stream == .event) &event_nulls else &prompt_nulls;
+    if (!std.mem.eql(u8, cellAt(line, sharedColumn("record_kind")) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or
+        parseUtcMs(cellAt(line, sharedColumn("occurred_at_utc")) orelse return error.InvalidFeatureLogRecord) == null) return error.InvalidFeatureLogRecord;
+    const null_columns: []const usize = if (stream == .event) event_control_nulls else prompt_control_nulls;
     for (null_columns) |column| {
         if (!std.mem.eql(u8, cellAt(line, column) orelse return error.InvalidFeatureLogRecord, "\\N")) {
             return error.InvalidFeatureLogRecord;
         }
     }
-    const sequence = cellAt(line, 9) orelse return error.InvalidFeatureLogRecord;
+    const sequence = cellAt(line, sharedColumn("sequence")) orelse return error.InvalidFeatureLogRecord;
     if (final_sequence) |expected| {
         const actual = std.fmt.parseInt(u64, sequence, 10) catch return error.InvalidFeatureLogRecord;
         if (actual != expected) return error.InvalidFeatureLogRecord;
@@ -361,7 +403,40 @@ pub fn cellAt(line: []const u8, expected: usize) ?[]const u8 {
 
 /// The log policy ID cell of a persisted identity row.
 pub fn logPolicyCell(row: []const u8) ?[]const u8 {
-    return cellAt(row, 4);
+    return cellAt(row, sharedColumn("log_policy_id"));
+}
+
+const event_control_nulls = controlNulls(event_column_count);
+const prompt_control_nulls = controlNulls(prompt_column_count);
+
+/// The columns a control row (a segment header or trailer) leaves null: every column but its identity, its
+/// sequence and its time. Evaluated at compile time, for the two constants above.
+fn controlNulls(comptime count: usize) []const usize {
+    comptime {
+        @setEvalBranchQuota(100_000);
+        const held = [_]usize{
+            sharedColumn("record_kind"),
+            sharedColumn("schema_version"),
+            sharedColumn("stream"),
+            sharedColumn("column_schema_id"),
+            sharedColumn("log_policy_id"),
+            sharedColumn("feature_log_binding_id"),
+            sharedColumn("segment_ordinal"),
+            sharedColumn("sequence"),
+            sharedColumn("occurred_at_utc"),
+            sharedColumn("run_id"),
+            sharedColumn("feature_id"),
+        };
+        var result: [count - held.len]usize = undefined;
+        var next: usize = 0;
+        for (0..count) |column| {
+            if (std.mem.indexOfScalar(usize, &held, column) != null) continue;
+            result[next] = column;
+            next += 1;
+        }
+        const final = result;
+        return &final;
+    }
 }
 
 pub fn trailerUnixMs(bytes: []const u8) ?u64 {
@@ -369,8 +444,8 @@ pub fn trailerUnixMs(bytes: []const u8) ?u64 {
     const without_lf = bytes[0 .. bytes.len - 1];
     const start = (std.mem.lastIndexOfScalar(u8, without_lf, '\n') orelse return null) + 1;
     const line = without_lf[start..];
-    if (!std.mem.eql(u8, cellAt(line, 0) orelse return null, "segment_trailer")) return null;
-    return parseUtcMs(cellAt(line, 10) orelse return null);
+    if (!std.mem.eql(u8, cellAt(line, sharedColumn("record_kind")) orelse return null, "segment_trailer")) return null;
+    return parseUtcMs(cellAt(line, sharedColumn("occurred_at_utc")) orelse return null);
 }
 
 fn appendCell(
@@ -449,7 +524,8 @@ fn appendOptionalSigned(
     return appendOptional(allocator, row, first, null);
 }
 
-fn validUtcTimestamp(value: []const u8) bool {
+/// The one syntax and range check of a UTC reading (`2026-11-23T08:15:00Z`): the log's own, and the actor evidence's.
+pub fn validUtcTimestamp(value: []const u8) bool {
     return parseUtcMs(value) != null;
 }
 
@@ -517,10 +593,7 @@ test "event rows use fixed columns escaping and reserved nulls" {
         .monotonic_offset = 42,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
         .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
-        .fact = .{
-            .event_type = .task_started,
-            .fields = .{ .task_id = telemetry.Identifier.validate("TASK-1").? },
-        },
+        .fact = .{ .task_started = .{ .task_id = telemetry.Identifier.validate("TASK-1").? } },
     });
     defer allocator.free(row);
     try validateEncodedRow(allocator, row, event_column_count);
@@ -528,7 +601,7 @@ test "event rows use fixed columns escaping and reserved nulls" {
     try std.testing.expect(std.mem.indexOf(u8, row, "|info|task.started|task.started/v1|") != null);
 }
 
-test "a failed action's row carries its stage step in the step_id column and no other row does" {
+test "a failed action's row carries its stage step in the step_id column and a row without one leaves it null" {
     const allocator = std.testing.allocator;
     const base: EventRecord = .{
         .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
@@ -541,14 +614,11 @@ test "a failed action's row carries its stage step in the step_id column and no 
         .monotonic_offset = 42,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
         .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
-        .fact = .{
-            .event_type = .action_failed,
-            .fields = .{
-                .diagnostic_code = telemetry.DiagnosticCode.validate("INVALIDTOOLCHAIN").?,
-                .outcome = .failed,
-                .step_id = telemetry.Identifier.validate("validate_registry").?,
-            },
-        },
+        .fact = .{ .action_failed = .{
+            .diagnostic_code = telemetry.DiagnosticCode.validate("INVALIDTOOLCHAIN").?,
+            .outcome = .failed,
+            .step_id = telemetry.Identifier.validate("validate_registry").?,
+        } },
     };
     const row = try serializeEvent(allocator, base);
     defer allocator.free(row);
@@ -557,10 +627,16 @@ test "a failed action's row carries its stage step in the step_id column and no 
     var cells = std.mem.splitScalar(u8, std.mem.trimEnd(u8, event_heading, "\n"), '|');
     while (cells.next()) |name| : (column += 1) if (std.mem.eql(u8, name, "step_id")) break;
     try std.testing.expectEqualStrings("validate_registry", cellAt(row, column).?);
-    // Only a failed action names a step: the same field on a completed action is not a registered row.
-    var completed = base;
-    completed.fact.event_type = .action_completed;
-    try std.testing.expectError(error.InvalidFeatureLogRecord, serializeEvent(allocator, completed));
+    // A completed action that names no step, and a row that has no step field at all, leave the column null.
+    var unnamed = base;
+    unnamed.fact = .{ .action_completed = .{ .outcome = .completed } };
+    const unnamed_row = try serializeEvent(allocator, unnamed);
+    defer allocator.free(unnamed_row);
+    try std.testing.expectEqualStrings("\\N", cellAt(unnamed_row, column).?);
+    unnamed.fact = .{ .task_started = .{ .task_id = telemetry.Identifier.validate("TASK-1").? } };
+    const task_row = try serializeEvent(allocator, unnamed);
+    defer allocator.free(task_row);
+    try std.testing.expectEqualStrings("\\N", cellAt(task_row, column).?);
 }
 
 test "dialect rejects unknown dangling escapes and wrong width" {

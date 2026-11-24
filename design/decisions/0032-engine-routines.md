@@ -1,8 +1,7 @@
 # ADR 0032: Typed engine routines for fixed engine sequences
 
-- **Status:** Accepted amendment. **Partly implemented:** startup and provider bootstrap are
-  engine routines. Feature logging still runs through child bindings until its conversion
-  lands, and documents that describe those orchestrators carry a pointer to this ADR until then.
+- **Status:** Accepted amendment. **Implemented:** startup, provider bootstrap and feature
+  logging are engine routines.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the docs
   around yes, form b". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A3 as
@@ -11,6 +10,9 @@
   the criteria for this proof of concept: "refactoring to best possible outcomes is the
   most important". The user confirmed the choices under "Derived under existing rules" on
   12 November 2026 (DE3), including that offline evidence replaces a live run for startup.
+  The user decided on 8 November 2026 ("recommendations accepted for 1 to 6") that
+  cancellation under a log lock ends the run `cancelled`, and on 19 November 2026 approved
+  its build with the amendments to this ADR and ADR 0026.
 - **Amends:**
   - AGENTS.md "Actions, orchestrators, and runner" (the startup-graph line), "Testing
     expectations" and the capability-leak review rule;
@@ -22,7 +24,7 @@
   - [ADR 0018](0018-debug-model-exchange-logging.md): "retain the fixed logging
     orchestration under §13.9";
   - [ADR 0026](0026-header-identity-log-retention.md): the retention coordinator's
-    step-order test;
+    step-order test, and its cancellation decision (see "Cancellation mapping");
   - [ADR 0030](0030-engine-owned-model-request.md): its precedent sentence;
   - [ADR 0031](0031-stage-actions.md): its scope exclusion of the invocation operation,
     its stage-action definition (the `invoke:` exception) and its data rules (validated
@@ -93,8 +95,10 @@ and produces no `NodeDelta`.
   error. Zig catches misordering only where adjacent types differ, so this rule is what
   makes it hold.
 - **The entry function** calls steps in order and calls no port itself. It checks
-  cancellation and deadline between steps through the capability-free `NodeRuntime`. It
-  owns cleanup through `defer` and `errdefer` on every path.
+  cancellation between steps through the capability-free `NodeRuntime`, except a
+  feature-logging routine, which polls none: cancellation reaches it only as the sink's
+  `Cancelled` (see "Cancellation mapping"), so a finalization after a cancelled run still
+  closes the streams. It owns cleanup through `defer` and `errdefer` on every path.
 - **Branches.** A routine may branch on a typed fact its own steps produce, such as
   whether a provider is required, or whether a log event is dropped. It has no retry,
   backoff or loop beyond what its existing contracts already specify. The lock acquire
@@ -115,8 +119,11 @@ and produces no `NodeDelta`.
   composition root builds the binding and the binding holds the ports. The
   workflow-engine orchestrator sees only the binding and the routine's typed outcome, so
   it gains no capability.
-- **The existing logging lifecycle owners** invoke the feature-logging routines: the log
-  service, the runtime logging lifecycle and the runner's finalization path (ADR 0018).
+- **The runtime logging lifecycle** invokes the six feature-logging routines (persist,
+  prepare, close, retention, prior-run finalization and failure); the log service reaches
+  them through it, and the composition root constructs their ports (ADR 0018). The one other caller is
+  composition's `Assembly.fail`, which invokes the failure routine directly to report a failure that has no
+  active lifecycle to report it.
 - **No action, orchestrator or model-facing code** calls a routine directly.
 
 ### What doesn't change
@@ -126,8 +133,8 @@ and produces no `NodeDelta`.
 - **Service construction.** Each service is still built only after its complete
   validation (F0001, F0004, F0005 and F0008).
 - **Public error codes** stay identical. Failure, cancellation and success stay distinct,
-  except for a tracked gap: cancellation under a log lock is still reported as a logging
-  failure (see Scope).
+  including under the feature log: a cancellation under a log lock, or while a segment is
+  read, is the run's `cancelled`, not a logging failure (see Scope).
 - **Failure mapping.** Each step keeps its current failure mapping.
   - Startup and provider steps today map every error to their fixed public code,
     including allocation failure and deadline exhaustion, and they keep doing so.
@@ -135,6 +142,12 @@ and produces no `NodeDelta`.
   - Each routine defines a closed enum of its steps, and every failure records the failing
     step. A mapped failure carries it in its diagnostic. A propagated error leaves it in a
     routine-owned diagnostic slot, as ADR 0031 does.
+  - The startup slot also carries a workflow definition's rejection evidence: a closed rule
+    class, the definition's source ordinal and, where scoped, a step or resource ID, recorded by
+    the owner of the check that rejected it, and the display path the routine copies from the
+    inventory by ordinal (approved by the user on 20 November 2026;
+    [F0005](../features/F0005-WorkflowDefinitionRegistryService.md) §9). The public code and its
+    `code(step)` mapping are unchanged, and the evidence is neither a code nor a branch.
 - **Provider bootstrap** still branches only on the typed requirement and gains no
   credential read (ADR 0028). It is no longer capability-free: its locate and read steps
   hold the provider-config port. On `not_required` it makes no provider-config call.
@@ -149,11 +162,23 @@ and produces no `NodeDelta`.
    - the provider-bootstrap sequence after selection.
 
    This first conversion is measured before the next.
-2. **Feature logging, second.** That covers `feature_log_orchestrator.zig` and its
-   finalization, retention and policy-transition coordinators. It writes, locks and
+2. **Feature logging, second (implemented).** That covers `feature_log_orchestrator.zig` and its
+   finalization and retention coordinators. It writes, locks and
    prunes, so it converts only after its own preconditions are met:
+   - **Routines.** Six, in `src/application/feature_log_*_routine.zig`: persist (one fact or
+     prompt fragment), prepare, close, retention, prior-run finalization and failure (the
+     emergency write). The runtime logging lifecycle runs them on the run's runner, which holds
+     only the run's typed state and ports, and reports each routine's stop: a logging failure
+     through the failure routine's one write, a cancellation not at all.
+   - **Prior-run crash finalization** is a routine, run by the same lifecycle. For one crashed
+     prior run's open tail of one stream it reads the trusted clock, takes that run's own stream
+     lock, proves the group still ends in an active tail, recovers the tail by truncating it to
+     its last complete row, writes one trailer stamped with the clock's reading, proves the group
+     closed, and releases the lock on every path. The composition root finds the tails and
+     opens the sibling adapter for each. It runs after the current run's activation and before
+     retention, so retention finds the group closed ([ADR 0026](0026-header-identity-log-retention.md)).
    - **Baseline tests first.** Tests for cancellation under a lock, and for the number of
-     emergency lines, exist and pass before conversion (ADR 0026 records neither).
+     emergency lines, exist and pass before conversion.
    - **Locks.** Every lock is released on every success, error and cancellation path
      (§26.5, 13-09).
    - **Emergency diagnostic.** It stays exactly once and is never recursive or observed
@@ -162,21 +187,46 @@ and produces no `NodeDelta`.
      (ADR 0018).
    - **Retention** keeps its five-step order, and pruning stays its only deletion path
      (ADR 0026).
-   - **Cancellation mapping.** Cancellation under a lock is still reported as a logging
-     failure; fixing that is separate known work. A cancellation check between steps
-     never skips a lock release.
-   - **The policy-transition coordinator.** Prior-run crash finalization's authority is
-     [ADR 0026](0026-header-identity-log-retention.md)'s (amended 14 November 2026). The
-     same-run transition's authority is decided (user, 14 November 2026, approving the
-     recommendation): its successor is execution-local, as §9.4 keeps every changed candidate,
-     so no committed bootstrap authority, durable lineage or pointer commit precedes the
-     switch ([ADR 0009](0009-atomic-workflow-execution.md)). The validator's checks (same
-     feature and run, new binding and policy IDs, a transition-compatible policy) are the
-     whole authority for it. No production code switches policy mid-run today, and no text
-     says which event would produce a changed logging candidate during a run.
-   - **Logging-internal pipeline data.** The logging envelope and its compiler-locked
-     `DataKey`s (§6) are replaced by function-local values only in the logging change
-     itself.
+   - **Cancellation mapping** (user decision, 21 November 2026). The run's cancellation source is the operator's interrupt
+     (SIGINT), installed at the composition root and read through `NodeRuntime` at the run's
+     own boundaries and at each timer slice of a model request, never inside a sink call.
+     The feature-log sink port carries `Cancelled`, and a log
+     outcome is `cancelled` beside `dropped`, `persisted` and `blocked`. A cancellation
+     during a directory check, a segment read, creation, rotation, append, close, prune or
+     any step under the lock stops the run as `cancelled`, never as a logging failure. It has
+     no `LOG_*` code and emits no emergency line, and its lock is released. The logging
+     routines poll no `NodeRuntime`, so no check between their steps can skip a lock release. A cancellation can land after a row's
+     or trailer's bytes were written, so a cancelled persist or close drops the runner's cached
+     stream state. The next persist, and finalization before it closes the stream, recover that
+     state from the bytes, as after a crash.
+     - **Precedence.** A lock that cannot be released after a cancelled step is a logging
+       failure of its own and outranks the cancellation, as a release failure outranks any step
+       before it. Retention keeps its first stop. In finalization a cancellation never replaces
+       a logging failure, and a later logging failure replaces an earlier cancellation.
+     - **Finalization.** When its own log step is cancelled, a rejection the run already had is
+       kept beside the `cancelled` outcome as its first cause, a run that was already cancelled
+       stays as it was, and a capture failure stays whole. Finalization closes every stream,
+       the second even when the first stopped, and reports the first stop. An activation whose
+       prompt prepare stops closes the event stream it opened, since that run is never
+       finalized.
+     - **Accepted limit** (user, 19 November 2026: "apply recommendation"). A cancellation
+       between creating a segment and writing its header leaves a torn segment, which
+       current-run recovery refuses, so that run's finalization fails and it ends `blocked`. It
+       is the crash shape ADR 0026 names. Recovery does not rewrite a torn last segment of the
+       current run: the cancellation source is read only at boundaries and timer slices, never
+       inside a sink call, so a user interrupt does not produce the shape, and the repair
+       would extend what recovery may do to a retained log file.
+   - **No mid-run policy transition.** The run's feature log keeps one binding and policy from
+     activation to finalization. A policy change during a run has no producer: §9.4 keeps every
+     changed candidate for the next run, so no committed bootstrap authority, durable lineage
+     or pointer commit precedes a switch ([ADR 0009](0009-atomic-workflow-execution.md)). The
+     policy-transition coordinator, its child bindings, its validator and the finalization of a
+     historical stream were deleted with the action channel that no production code used.
+     Prior-run crash finalization's authority is [ADR 0026](0026-header-identity-log-retention.md)'s,
+    and its routine is the sixth above.
+   - **Logging-internal pipeline data.** The logging envelope's `DataKey`s (§6) are replaced
+     by function-local values only in the logging change itself. A key with no producer,
+     consumer or schema, left by a removed operation, is deleted when found, not with that change.
 
 Out of scope:
 
@@ -236,7 +286,7 @@ from the user's words. The user confirmed them on 12 November 2026 (DE3):
 3. **Callers:**
    - the composition root for startup, matching today's code and amending §14.0 step 1;
    - a runner-owned binding for provider bootstrap;
-   - the existing logging lifecycle owners for logging.
+   - the runtime logging lifecycle for logging.
 
    Capability-free orchestrators therefore stay capability-free.
 4. **Logging second,** under the preconditions above.
@@ -283,7 +333,7 @@ All offline, for each conversion:
   - step order;
   - every branch;
   - failure propagation with the exact public code;
-  - cancellation and deadline between each pair of steps;
+  - cancellation between each pair of steps;
   - cleanup on every path.
   For logging, also lock release on every path, exactly one emergency line, and
   finalization idempotence.
@@ -302,20 +352,13 @@ All offline, for each conversion:
     `anyopaque`;
   - the entry function calls no port method;
   - no `*anyopaque` child-binding context remains for a converted sequence;
-  - only `src/composition/`, the provider-bootstrap binding and the named logging
-    lifecycle owners import a `*_routine.zig`, with rejected fixtures for an action and an
-    orchestrator that import one;
+  - only `src/composition/`, the provider-bootstrap binding and the runtime logging
+    lifecycle import a `*_routine.zig`, and the lifecycle only a logging one, with rejected
+    fixtures for an action, an orchestrator, a runner, the log service and the wrong routine
+    that import one;
   - orchestrators stay capability-free and reach routines only through runner-owned
     bindings;
   - each rule has rejected fixtures.
 - **Build checks:** `zig build verify` and the clean packaged-executable smoke test pass.
 - **Measures**, recorded before and after: files touched per representative change,
   lines, and `anyopaque` count.
-
-## Not decided here
-
-- The order of prior-run crash finalization against the current activation
-  ([ADR 0026](0026-header-identity-log-retention.md)).
-- Reporting cancellation under a log lock as cancellation instead of a logging failure.
-  That is separate known work, and it changes the shared sink contract.
-- The order of the remaining logging conversions after startup has been measured.

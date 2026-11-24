@@ -17,6 +17,9 @@
     names the edge case's group and claims in place of a catalogue.
   - Corrected 9 November 2026 (user decision: "Yes, keep it"): Decision 5's rationale and the
     first consequence state only what native composition establishes. No decision changes.
+  - Amended 20 November 2026 (SPEC01 C49; user: "update the docs with the above
+    recommendations", then "preflight and implement"): Decision 1's paragraph also drops a
+    Setext heading's text and the Markdown structure lines that have no wording.
 - **Amends:**
   - design.md §1 and §4: the story is no longer LLM-owned content (the Spec structure row);
   - [17-specify.md](../contracts/17-specify.md) §17.3: four model task types (brief,
@@ -54,7 +57,11 @@ claims, but it can't paraphrase them.
    business claims (`business` category) of the groups in its catalogue, in source order:
    - each quote becomes one paragraph: its blank and Markdown heading lines are dropped, and
      each other line loses its indentation and leading list marker, the lines joined by one
-     space (user, 3 November 2026: "yes"); a quote of headings alone is skipped;
+     space (user, 3 November 2026: "yes"); a quote of headings alone is skipped. A Setext
+     heading's text is a heading, and the lines that are Markdown structure with no wording
+     (a code fence's opening and closing line, a table delimiter row, a thematic break, a
+     Setext underline) are dropped too, while every line with words stays (20 November 2026,
+     SPEC01 C49; [ADR 0036](0036-source-quoted-claims.md) Decision 2);
    - the quotes are joined with one space, in one paragraph;
    - exact values are recognised by the same native recognizer as model text, so they render
      as engine code spans;

@@ -79,33 +79,51 @@ the Specify workflow.
   3. `inspectFeature`: through the bound read capability, observes only the selected directory and
      its specs root: absent, or a readable directory with its identity. No other feature is
      scanned. Rejects `FeatureDirectoryUnavailable` for a missing capability, a selector that no
-     longer revalidates, or an unreadable or unsafe node.
+     longer revalidates, or an unreadable or unsafe node, and `Cancelled` for a cancelled call.
   4. `normalizeReference`: NFC-normalizes the raw `--reference` value within the selector byte
      limit, then normalizes it as a relative directory path. Rejects the Unicode port's errors.
   5. `validateReference`: requires a safe relative selector. Rejects `InvalidReferenceSelector`.
   6. `inspectReference`: observes the selected reference directory through the read-only
-     inspector. Rejects `ReferenceDirectoryUnavailable`.
+     inspector. Rejects `ReferenceDirectoryUnavailable`, and `Cancelled` for a cancelled call.
   7. `resolvePaths`: derives every registered artifact path for the feature (specification,
-     reference context, clarification forms and state, workflow state, event and prompt logs)
+     reference context, clarification forms and state, actor-evidence registry, workflow state, event and prompt logs)
      from the configured roots; no model or user supplies a path. Rejects
      `InvalidFeatureArtifactPath` when roots are unbound or the selector no longer revalidates.
   8. `captureState`: reads the feature's canonical workflow-state file through the state-source
-     port, or reports it absent; it never parses the bytes. Rejects `FeatureInputUnavailable`.
+     port, or reports it absent; it never parses the bytes. Rejects `FeatureInputUnavailable`,
+     and `Cancelled` for a cancelled call.
   9. `parseState`: parses the feature's prior `specification-state` or incomplete state; a first
      run has none. Rejects `specification_state.Error`, including `InvalidSpecificationState`.
   10. `captureClarifications`: captures the feature's clarification-state bytes and every
-      `clarify/` form through the feature-input port. Rejects the port's typed errors.
+      `clarify/` form through the feature-input port, leaving alone a regular file whose name is
+      not form-shaped ([§23.2](../23-rendering.md)). Rejects the port's typed errors.
   11. `parseClarificationState`: parses the captured state bytes through the state-parser port;
       no bytes give no state. Rejects `InvalidClarificationInput` from the parser.
   12. `validateClarificationState`: checks the schema and feature, then each record: stage IDs in
       order with no gap, revisions within the state's, nonempty bounded question and reason, at
       most 64 distinct authorities, and one record per stage and subject. Rejects
       `InvalidClarificationInput`.
-  13. `validateClarificationForms`: pairs each record with exactly one captured form and parses
-      it against the record's binding. An authority-resolved form must equal its re-rendered
+  13. `validateClarificationForms`: pairs each record with exactly one captured form by ID and
+      parses it against the record's binding. An authority-resolved form must equal its re-rendered
       audit bytes, and a recorded response's form must equal its saved bytes and answer. A
-      `closed` form becomes protected. Rejects `InvalidClarificationInput` for a form-count or ID
-      mismatch, changed audit or saved bytes, or a requested status that contradicts the record.
+      `closed` form becomes protected. A form that verifiably holds no submission
+      (`clarification_form.holding`) is set aside, not rejected, when it does not parse against its
+      record, belongs to no record, or has no registry to match
+      ([§23.2](../23-rendering.md)). A form that breaks a rule is no error: the step returns every
+      such form with the typed reason of the rule it broke (`clarification_form_rejection.Reason`),
+      and none of the answers is accepted. The reasons are a record without a form
+      (`form_missing`), a form of no record that holds a submission (`form_without_record`), a form
+      that is not one UTF-8 form with one answer region (`form_structure`), changed engine text
+      (`engine_text_changed`), an unknown or unterminated requested status
+      (`requested_status_invalid`), an answer that is not valid bounded text
+      (`answer_text_invalid`), a `cancel` without its reason (`cancel_reason_missing`), an option the
+      record does not offer, named twice, or selected in the wrong number (`option_unknown`,
+      `option_duplicate`, `selection_count`), changed audit bytes (`audit_changed`), changed saved
+      bytes (`saved_form_changed`), a changed answer (`answer_changed`) and a requested status the
+      record contradicts (`status_contradicts_record`). The stage ends with them and the binding
+      returns the `blocked` outcome with the `InvalidClarificationInput` diagnostic, before any
+      model call; the CLI prints each form's handle and reason after the outcome. A form that
+      cannot be rendered for its record is still the failed `InvalidClarificationInput`.
 
 Feature-log identities ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)): one
 adapter builds the policy ID (`LOGPOL-` and the SHA-256 of the compiled policy), a fresh random
@@ -113,22 +131,6 @@ adapter builds the policy ID (`LOGPOL-` and the SHA-256 of the compiled policy),
 ([`feature_log_identity.zig`](../../../src/adapters/system/feature_log_identity.zig)); no
 registered action builds them, and nothing recomputes the policy ID. Feature-log operations are
 in [13.9](13-09-logging.md).
-
-## `ActivateFeatureLogPolicyTransitionAction`
-
-Proposed, no code: swap the run-local logging observer to the validated successor sink once
-every enabled stream is safe ([§14.10](../14-orchestration.md#1410-featurelogpolicytransitionorchestrator)).
-
-## `BuildHistoricalFeatureLogStreamFinalizationEvidenceAction`
-
-Proposed, no code (deferred by [ADR 0009](../../decisions/0009-atomic-workflow-execution.md)):
-join one historical log group to its terminal close observation and released lock
-([§14](../14-orchestration.md)).
-
-## `ValidateHistoricalFeatureLogRunFinalizationAction`
-
-Proposed, no code (deferred by ADR 0009): prove every prior-run log group is finalized before
-the current run's sink starts ([§14](../14-orchestration.md)).
 
 ## `ValidateWorkflowMetadataAction`
 

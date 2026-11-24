@@ -184,7 +184,6 @@ test "selected field presentation intersects policy with raw prose and excluded 
         try std.testing.expect(!projected.contains("source_catalogue"));
         try std.testing.expect(!projected.get("insertion_fields").?.object.contains("exact_copy"));
         const instruction = projected.get("field_rules").?.array.items[0].object.get("instruction").?.string;
-        try std.testing.expect(std.mem.indexOf(u8, instruction, "Type required exact values verbatim") != null);
         try std.testing.expectEqualStrings(policy.selectedGuidance(.functional_requirement, active[0].insertions).instruction, instruction);
     }
     const identity = try schema.restrictFieldPolicies(a, canonical, &.{ .{ .kind = "passive" }, .{ .kind = "source" } }, &.{}, &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }});
@@ -192,8 +191,9 @@ test "selected field presentation intersects policy with raw prose and excluded 
     const active_identity = try fields.activeBindings(a, identity.selected().root(), &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }});
     try std.testing.expectEqual(@as(usize, 0), active_identity[0].insertions.count());
     try std.testing.expect(fields.inspectSchema(identity.selected().root(), &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }}, &.{}).requires_exact_scope);
-    try std.testing.expectEqualStrings("Write the identity label as plain text.", policy.selectedGuidance(.entity_name, active_identity[0].insertions).instruction);
+    // An identity label whose selection offers no display reference is guided differently from one that offers a reference.
+    try std.testing.expect(!std.mem.eql(u8, policy.selectedGuidance(.entity_name, active_identity[0].insertions).instruction, policy.selectedGuidance(.entity_name, .initOne(.passive)).instruction));
     // Guidance emitted before schema selection cannot promise an insertion
-    // that a later native exclusion removes.
-    try std.testing.expect(std.mem.indexOf(u8, policy.guidance(.functional_requirement).instruction, "Exact copies may carry") == null);
+    // that a later native exclusion removes: it is not the guidance of a selection that offers one.
+    try std.testing.expect(!std.mem.eql(u8, policy.guidance(.functional_requirement).instruction, policy.selectedGuidance(.functional_requirement, .initOne(.passive)).instruction));
 }

@@ -35,7 +35,7 @@ emits no placeholder, and readback accepts only its closed grammar.
 | Citation | Source ID and bounds exist; an extraction claim cites supplied nonblank line IDs, whose text the engine quotes ([ADR 0036](../decisions/0036-source-quoted-claims.md)) | Whether citation proves claim |
 | Required sections | Typed required fields and renderer contract | Whether prose is adequate |
 | Requirement IDs | Engine-assigned type/uniqueness; stable surviving IDs and monotonic new IDs | Whether the requirement is substantively correct |
-| Acceptance form | Exactly one nonempty typed `given`/`when`/`then` value; `spec.md` uses only the canonical compact `Given`/`When`/`Then` labels in that order | Whether scenario is truly testable |
+| Acceptance form | Exactly one nonempty typed `when` and `then` value and at most one nonempty typed `given`, omitted where the sources state no starting situation (ADR 0038 Decision 3); `spec.md` uses only the canonical compact `Given`/`When`/`Then` labels in that order, without `Given` for a criterion that holds none | Whether scenario is truly testable |
 | Clarification state | Only admitted needs reach forms; no unresolved typed clarification at success | Whether a proposed decision is genuinely absent and every ambiguity was discovered |
 | Exact-copy propagation | Byte-for-byte value from source ledger | Whether source copy is actually required |
 | Field composition | Shared field policy requires nonblank prose, permits insertion kinds and restricts exact-copy coverage; encoded insertion syntax in prose rejects unless its exact bytes occur in original captured sources | Whether admitted prose expresses the correct meaning and uses its insertions correctly |

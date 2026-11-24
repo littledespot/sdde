@@ -60,13 +60,23 @@ the engine, its prompts or its deterministic code.
      | `contradiction` | Two parts of the specification, or the specification and the source, conflict |
      | `unsupported_addition` | Content the source doesn't support, including an assumption, non-goal, prohibition, invented condition, error case or format |
      | `invented_or_restating_entity` | An entity the source doesn't need, or one whose meaning or relationships restate requirements |
-     | `restatement` | A requirement stated again in another record or section; a primary story that restates its source's requirements in one paragraph, adding nothing, is not one (ADR 0047) |
+     | `restatement` | A requirement stated again outside its designed shape (the first ruling below) |
      | `ambiguity` | Wording with materially different readings, or that can't be tested |
      | `placeholder` | Template filler or unresolved placeholder text |
      | `rendering_artefact` | Escaping, joining, punctuation or formatting the engine introduced |
      | `engine_vocabulary_leak` | Engine or schema vocabulary in published text |
 
      The user's rulings settle these boundaries:
+     - A requirement's designed shape isn't `restatement`: its quote in the primary story,
+       which restates the source's requirements in one paragraph (ADR 0047), the one record
+       naming its claim, and the one acceptance criterion the engine binds to that claim
+       (ADR 0038 Decisions 2, 3 and 5). A second record naming the claim, or an edge case or
+       entity meaning repeating it, is `restatement`. For example, loan-renewal's display
+       requirement in the story, a user-visible outcome and its criterion costs nothing; an
+       edge case repeating that criterion costs `organization`. The engine-printed first part of an
+       edge case's `GIVEN` line, the Given copied from its acceptance criterion before the edge
+       case's own given, isn't `restatement`: the engine prints it, not the model (ADR 0038
+       Decision 7). Only the edge case's own content is scored for repetition.
      - A required ability restated as permission ("must be able to renew" as "may renew")
        is `weakened_obligation`.
      - An edge case that applies the source's stated conditions to a boundary or a
@@ -74,9 +84,8 @@ the engine, its prompts or its deterministic code.
        now overdue) is not `unsupported_addition`.
      - An entity meaning that describes the entity through the source's stated behaviour is
        not an invention.
-     - Repetition alone is not an accuracy defect: an accurate repeat of a requirement in an
-       edge case, entity meaning or other section is `restatement`, scored only against
-       `organization`. A repeat that drops, weakens or adds a condition or obligation is a
+     - Repetition alone is not an accuracy defect: an accurate repeat of a requirement outside
+       its designed shape is `restatement`, scored only against `organization`. A repeat that drops, weakens or adds a condition or obligation is a
        defect under that class instead (`weakened_obligation`, `lost_source_requirement`,
        `unsupported_addition` or `ambiguity`); for example, an edge case that drops
        "calendar" from "fourteen calendar days".
@@ -100,6 +109,9 @@ the engine, its prompts or its deterministic code.
        `unsupported_addition`.
      - "Notification" or "notified" naming the displayed message is a minor
        `unsupported_addition`.
+     - A Given that states a precondition the source doesn't, however generic ("installed and
+       available to run", "with a known existing due date"), is a minor `unsupported_addition`.
+       A Given that states the source's own starting situation is not.
      - A generic trigger naming who starts the application ("The user launches the
        application") is not an invented step.
      - Judge the specification as rendered. Escapes, quotes around code spans and sentences

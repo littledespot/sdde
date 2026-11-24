@@ -8,7 +8,8 @@ python or python3. A command shaped
 
 is approved when Python can parse everything it runs, every module it imports is in the
 standard library or a readable local module, and none of it reaches the network, starts
-another program, loads code dynamically or names .env.e2e. Python found doing any of those
+another program, loads code dynamically, or names .env.e2e or the live-e2e approval
+records. Python found doing any of those
 is put to the user, with the reason. Every other command, and code this check can't read,
 gets no decision here, so the session's permission mode decides it.
 """
@@ -37,6 +38,7 @@ FILTERS = frozenset({"head", "tail", "sort", "uniq", "wc", "cut", "grep", "jq"})
 FLAGS = frozenset("bBdEIOPqRsSuvx")
 HEREDOC = re.compile(r"<<(-?)[ \t]*(?:'(\w+)'|\"(\w+)\"|(\w+))")
 CREDENTIALS = re.compile(r"\.env\.e2e(?![.\w-])")
+APPROVALS = re.compile(r"live-e2e-approvals")
 
 
 def segments(text):
@@ -186,6 +188,8 @@ def external(source, directory, seen, unread):
     can't read is added to `unread`."""
     if CREDENTIALS.search(source):
         return "it names .env.e2e, which holds live provider credentials"
+    if APPROVALS.search(source):
+        return "it names the live-e2e approval records, which only the hooks write"
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", SyntaxWarning)

@@ -2,39 +2,12 @@ const std = @import("std");
 const layout = @import("adapters/filesystem/feature_log_layout.zig");
 const active = @import("domain/active_feature_directory.zig");
 const roots = @import("domain/bootstrap_root_registry.zig");
-const root_contract = @import("domain/bootstrap_roots.zig");
 const artifacts = @import("domain/workflow_artifact_registry.zig");
 const log_binding = @import("domain/feature_log_binding.zig");
 const feature = @import("domain/feature_directory.zig");
 const directories = @import("adapters/filesystem/directory_access.zig");
 
-fn rootOwner(allocator: std.mem.Allocator, project: std.Io.Dir) !*roots.Owner {
-    var arena: std.heap.ArenaAllocator = .init(allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const names = [_][]const u8{ "requirements/current", "references", "archive", "workflows", "presets", "principles", "templates" };
-    var inspector = @import("adapters/filesystem/bootstrap_root_inspector.zig").Adapter.init(std.testing.io, project);
-    var configured: [root_contract.PathKey.count]root_contract.ValidatedConfiguredRoot = undefined;
-    for (&configured, names, 0..) |*entry, name, index| {
-        const key: root_contract.PathKey = @enumFromInt(index);
-        entry.* = .{
-            .path_key = key,
-            .root_role = key.role(),
-            .canonical_project_root = "/project",
-            .configured_relative_path = name,
-            .canonical_path = try std.mem.concat(a, u8, &.{ "/project/", name }),
-            .access_class = key.accessClass(),
-            .existence_policy = key.existencePolicy(),
-            .observation = try inspector.inspector().inspect(name),
-        };
-    }
-    return roots.createValidated(allocator, .{
-        .id = .{ .canonical_project_root = "/project", .contract_version = root_contract.bootstrap_root_contract_version },
-        .config_location = .{ .canonical_project_root = "/project", .canonical_config_path = "/project/.sddtoolkit.json", .no_follow_file_identity = .{ .filesystem_id = 1, .file_id = 1 } },
-        .configured_roots = configured,
-        .llm_provider_config_path = .{ .relative_path = ".sddproviders.json", .canonical_project_root = "/project", .canonical_path = "/project/.sddproviders.json" },
-    });
-}
+const rootOwner = @import("test_fixtures/project_roots.zig").owner;
 
 fn logOwner(allocator: std.mem.Allocator, selected: []const u8) !*log_binding.BindingOwner {
     return log_binding.createValidated(allocator, .{
@@ -57,14 +30,70 @@ fn observe(allocator: std.mem.Allocator, project: std.Io.Dir, registry: *const r
 const CloseFault = struct {
     original: @import("ports/feature_log_sink.zig").StreamCloser,
     fail: bool,
+    /// The close observes a cancellation, which is no logging failure.
+    cancel: bool = false,
     calls: usize = 0,
     fn close(context: *anyopaque, selected: *const log_binding.ValidatedFeatureLogBinding, stream: @import("domain/feature_log_stream.zig").Stream, state: @import("domain/feature_log_stream.zig").StreamState, trailer: []const u8) @import("ports/feature_log_sink.zig").Error!void {
         const self: *@This() = @ptrCast(@alignCast(context));
         self.calls += 1;
+        if (self.cancel) return error.Cancelled;
         if (self.fail) return error.FlushFailure;
         return self.original.close(selected, stream, state, trailer);
     }
 };
+
+/// A record append that passes, cancels or fails on request, so finalization's terminal event meets a stop of its own.
+const AppendFault = struct {
+    original: @import("ports/feature_log_sink.zig").RecordAppender,
+    mode: enum { pass, cancel, fail },
+    fn append(context: *anyopaque, selected: *const log_binding.ValidatedFeatureLogBinding, stream: @import("domain/feature_log_stream.zig").Stream, state: @import("domain/feature_log_stream.zig").StreamState, row: []const u8, flush: bool) @import("ports/feature_log_sink.zig").Error!@import("domain/feature_log_stream.zig").PersistedEvidence {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        return switch (self.mode) {
+            .pass => self.original.append(selected, stream, state, row, flush),
+            .cancel => error.Cancelled,
+            .fail => error.SinkFailure,
+        };
+    }
+};
+
+test "finalization keeps a logging failure over a cancellation, and a later failure over an earlier cancellation" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const Stop = enum { none, cancel, fail };
+    const Failure = @import("domain/feature_log_stream.zig").FailureCode;
+    // The terminal event's append fails with a sink fault and the close with a flush fault, so the code names which won.
+    const cases = [_]struct { event: Stop, close: Stop, expected: ?Failure }{
+        .{ .event = .cancel, .close = .none, .expected = null },
+        .{ .event = .cancel, .close = .cancel, .expected = null },
+        .{ .event = .cancel, .close = .fail, .expected = .LOG_FLUSH_FAILURE },
+        .{ .event = .fail, .close = .cancel, .expected = .LOG_SINK_FAILURE },
+        .{ .event = .fail, .close = .fail, .expected = .LOG_FLUSH_FAILURE },
+    };
+    for (cases) |case| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var run: Run = undefined;
+        try std.testing.expectEqual(.ready, std.meta.activeTag(try run.start(a, io, project.dir)));
+        const log_runner = @import("composition/active_feature_log_runtime.zig").runner(run.assembly.runtime_owner.?);
+        var append_fault: AppendFault = .{ .original = log_runner.ports.appender, .mode = switch (case.event) {
+            .none => .pass,
+            .cancel => .cancel,
+            .fail => .fail,
+        } };
+        log_runner.ports.appender = .{ .context = &append_fault, .append_fn = AppendFault.append };
+        var close_fault: CloseFault = .{ .original = log_runner.ports.closer, .fail = case.close == .fail, .cancel = case.close == .cancel };
+        log_runner.ports.closer = .{ .context = &close_fault, .close_fn = CloseFault.close };
+        const finished = run.finishWith(.{ .execution = .ok });
+        if (case.expected) |code| {
+            try std.testing.expectEqual(code, finished.execution_rejected.logging);
+            try std.testing.expectEqual(.blocked, finished.executionStatus().?);
+        } else {
+            try std.testing.expect(finished.execution_rejected == .cancelled);
+            try std.testing.expectEqual(.cancelled, finished.executionStatus().?);
+        }
+    }
+}
 
 test "production finalization preserves capture cause through close failure and repeated cleanup" {
     const io = std.testing.io;
@@ -88,8 +117,8 @@ test "production finalization preserves capture cause through close failure and 
         const shortcode = try @import("domain/telemetry.zig").WorkflowShortcode.parse("TEST");
         try std.testing.expectEqual(.ready, std.meta.activeTag(assembly.activator().activate(prior, shortcode)));
         const log_runner = @import("composition/active_feature_log_runtime.zig").runner(assembly.runtime_owner.?);
-        var close_fault: CloseFault = .{ .original = log_runner.actions.close_stream.sink, .fail = fail_close };
-        log_runner.actions.close_stream.sink = .{ .context = &close_fault, .close_fn = CloseFault.close };
+        var close_fault: CloseFault = .{ .original = log_runner.ports.closer, .fail = fail_close };
+        log_runner.ports.closer = .{ .context = &close_fault, .close_fn = CloseFault.close };
         var capture: @import("application/model_exchange_capture.zig").Capture = .{ .allocator = a, .logs = logs.barrier() };
         defer capture.deinit();
         capture.begin(.{
@@ -105,7 +134,7 @@ test "production finalization preserves capture cause through close failure and 
         });
         defer capture.end();
         try std.testing.expectEqual(.blocked, capture.port().capture(.request, .{ .provider_body = "must not be dispatched" }, &.{}));
-        const original = capture.failure.?;
+        const original = capture.failure().?;
         try std.testing.expectEqual(.missing_source, original.cause.lineage);
         const reason: @import("domain/run_outcome.zig").Outcome = .{ .execution_rejected = .{ .model_capture = original } };
         const finalized = assembly.finalizer().finish(reason);
@@ -136,8 +165,8 @@ test "production finalization keeps the rejection its own logging failure replac
         try std.testing.expectEqual(.ready, std.meta.activeTag(try run.start(a, io, project.dir)));
         defer run.finish();
         const log_runner = @import("composition/active_feature_log_runtime.zig").runner(run.assembly.runtime_owner.?);
-        var close_fault: CloseFault = .{ .original = log_runner.actions.close_stream.sink, .fail = fail_close };
-        log_runner.actions.close_stream.sink = .{ .context = &close_fault, .close_fn = CloseFault.close };
+        var close_fault: CloseFault = .{ .original = log_runner.ports.closer, .fail = fail_close };
+        log_runner.ports.closer = .{ .context = &close_fault, .close_fn = CloseFault.close };
         const finalizer = run.assembly.finalizer();
         const finished = finalizer.finish(input);
         if (!fail_close) {
@@ -159,6 +188,189 @@ test "production finalization keeps the rejection its own logging failure replac
         try std.testing.expectEqualDeep(finished, finalizer.finish(finished));
         try std.testing.expectEqualDeep(replaced, finalizer.replaced());
     };
+}
+
+test "production finalization ends cancelled when its own log is cancelled, and keeps what it replaces" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const run_outcome = @import("domain/run_outcome.zig");
+    const capture_failure: @import("domain/model_capture_failure.zig").Failure = .{ .code = .LOG_SERIALIZATION_FAILURE, .stage = .lineage, .cause = .{ .lineage = .missing_source }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .direction = .request };
+    const rejected: run_outcome.Outcome = .{ .execution_rejected = .{ .operation_failed = error.InvalidCandidatePayload } };
+    const inputs = [_]run_outcome.Outcome{ rejected, .{ .execution = .ok }, .{ .execution = .cancelled }, .{ .execution_rejected = .{ .model_capture = capture_failure } } };
+    for (inputs) |input| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var run: Run = undefined;
+        try std.testing.expectEqual(.ready, std.meta.activeTag(try run.start(a, io, project.dir)));
+        defer run.finish();
+        const log_runner = @import("composition/active_feature_log_runtime.zig").runner(run.assembly.runtime_owner.?);
+        var close_fault: CloseFault = .{ .original = log_runner.ports.closer, .fail = false, .cancel = true };
+        log_runner.ports.closer = .{ .context = &close_fault, .close_fn = CloseFault.close };
+        const finalizer = run.assembly.finalizer();
+        const finished = finalizer.finish(input);
+        // Both streams are closed, the prompt stream even though the event stream's close was cancelled.
+        try std.testing.expectEqual(@as(usize, 2), close_fault.calls);
+        try std.testing.expect(run.logs.lifecycle.active == null);
+        switch (input) {
+            // A run that was already cancelled stays the outcome it was, and nothing was replaced.
+            .execution => |status| if (status == .cancelled) {
+                try std.testing.expectEqualDeep(input, finished);
+                try std.testing.expect(finalizer.replaced() == null);
+            } else {
+                // An outcome that was no rejection ends cancelled, not blocked on a logging failure.
+                try std.testing.expect(finished.execution_rejected == .cancelled);
+                try std.testing.expectEqual(.cancelled, finished.executionStatus().?);
+                try std.testing.expect(finalizer.replaced() == null);
+            },
+            .execution_rejected => |reason| if (reason == .model_capture) {
+                // A cancellation is no logging failure: the capture failure stays whole, with none recorded beside it.
+                try std.testing.expectEqualDeep(capture_failure, finished.execution_rejected.model_capture);
+                try std.testing.expectEqual(.blocked, finished.executionStatus().?);
+            } else {
+                // A rejection is replaced by the cancellation and kept beside it as the first cause.
+                try std.testing.expect(finished.execution_rejected == .cancelled);
+                try std.testing.expectEqual(.cancelled, finished.executionStatus().?);
+                try std.testing.expectEqual(reason.operation_failed, finalizer.replaced().?.operation_failed);
+            },
+            .bootstrap_failed, .invocation_invalid => unreachable,
+        }
+        // Finishing the finished outcome again replaces nothing and keeps the same first cause.
+        const replaced = finalizer.replaced();
+        try std.testing.expectEqualDeep(finished, finalizer.finish(finished));
+        try std.testing.expectEqualDeep(replaced, finalizer.replaced());
+    }
+}
+
+test "a cancelled directory check is a cancellation and any other storage fault is not" {
+    const boundary = @import("adapters/filesystem/feature_log_directory.zig");
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    var directory = std.testing.tmpDir(.{ .iterate = true });
+    defer directory.cleanup();
+    var cancel: cancelling.CancellingIo = undefined;
+    cancel.init(.dir_stat, 0);
+    defer cancel.deinit();
+    try std.testing.expectError(error.Cancelled, boundary.validateOwner(cancel.io(), directory.dir));
+    try std.testing.expect(cancel.fired);
+    // The mapping owner: a cancellation is its own outcome, and every other fault stays the one it was.
+    try std.testing.expectEqual(error.Cancelled, boundary.storageFault(error.Canceled));
+    try std.testing.expectEqual(error.Cancelled, boundary.storageFault(error.Cancelled));
+    try std.testing.expectEqual(error.ArtifactStorageUnavailable, boundary.storageFault(error.AccessDenied));
+}
+
+test "activation cancelled under the log lock or during retention ends cancelled and deletes nothing" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    // Retention: a prior run's expired segments are due, and the first delete observes the cancellation.
+    {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        const expired = try completedRun(a, io, project.dir);
+        defer expired.deinit(a);
+        try ageRun(a, io, project.dir, expired);
+        var cancel: cancelling.CancellingIo = undefined;
+        cancel.init(.delete_file, 0);
+        defer cancel.deinit();
+        var run: Run = undefined;
+        try std.testing.expectEqual(.cancelled, std.meta.activeTag(try run.start(a, cancel.io(), project.dir)));
+        run.finish();
+        try std.testing.expect(cancel.fired);
+        try expectKept(io, project.dir, expired);
+    }
+    // Recovery and creation under the stream lock, each the first of its kind in a fresh activation.
+    for ([_]cancelling.Op{ .try_lock, .write_streaming, .sync }) |op| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var cancel: cancelling.CancellingIo = undefined;
+        cancel.init(op, 0);
+        defer cancel.deinit();
+        var run: Run = undefined;
+        try std.testing.expectEqual(.cancelled, std.meta.activeTag(try run.start(a, cancel.io(), project.dir)));
+        try std.testing.expect(cancel.fired);
+        // A cancellation is no logging failure: none was recorded, and no stream is left active.
+        try std.testing.expect(run.assembly.failure == null);
+        try std.testing.expect(run.logs.lifecycle.active == null);
+        run.finish();
+    }
+}
+
+test "a cancellation at any directory or file read call of activation ends it cancelled, never blocked" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    // A prior closed run makes retention and discovery open and read its directories and segments too.
+    for ([_]cancelling.Op{ .open_dir, .create_dir, .real_path_file, .dir_access, .dir_read, .dir_stat, .open_file, .stat, .read_positional }) |op| {
+        var cancelled_calls: usize = 0;
+        var pass: usize = 0;
+        while (true) : (pass += 1) {
+            var project = std.testing.tmpDir(.{});
+            defer project.cleanup();
+            try project.dir.createDir(io, "workflows", .default_dir);
+            const prior = try completedRun(a, io, project.dir);
+            defer prior.deinit(a);
+            var cancel: cancelling.CancellingIo = undefined;
+            cancel.init(op, pass);
+            defer cancel.deinit();
+            var run: Run = undefined;
+            const started = try run.start(a, cancel.io(), project.dir);
+            // A cancellation ends activation as `cancelled`; any other call finishes it as it would have been.
+            try std.testing.expectEqual(cancel.fired, started == .cancelled);
+            if (!cancel.fired) try std.testing.expectEqual(.ready, std.meta.activeTag(started));
+            run.finish();
+            if (!cancel.fired) break;
+            cancelled_calls += 1;
+        }
+        // Every operation class is reached by activation at least once.
+        try std.testing.expect(cancelled_calls >= 1);
+    }
+}
+
+test "a cancellation after bytes were written still ends the run cancelled, never blocked on the state it left behind" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    const run_outcome = @import("domain/run_outcome.zig");
+    const Capture = @import("application/workflow_event_capture.zig").Capture;
+    // The nth durable flush is cancelled. A flush follows its bytes, so the row or trailer is already on disk
+    // when the cancellation lands; a later event or the close then meets a file ahead of the runner's state.
+    var cancelled_runs: usize = 0;
+    var pass: usize = 0;
+    while (true) : (pass += 1) {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        var cancel: cancelling.CancellingIo = undefined;
+        cancel.init(.sync, pass);
+        defer cancel.deinit();
+        var run: Run = undefined;
+        const started = try run.start(a, cancel.io(), project.dir);
+        var outcome: run_outcome.Outcome = .{ .execution = .ok };
+        if (started == .cancelled) {
+            outcome = .{ .execution = .cancelled };
+        } else {
+            try std.testing.expectEqual(.ready, std.meta.activeTag(started));
+            const events: Capture = .{ .barrier = run.logs.barrier(), .shortcode = try @import("domain/telemetry.zig").WorkflowShortcode.parse("TEST") };
+            // Terminal stage events are always flushed.
+            for (0..3) |_| if (events.emit(.{ .stage_completed = .{ .outcome = .completed } })) |stop| {
+                try std.testing.expect(stop == .cancelled);
+                outcome = .{ .execution_rejected = .cancelled };
+                break;
+            };
+        }
+        const finished = run.finishWith(outcome);
+        if (!cancel.fired) {
+            // Past the last flush of a run: nothing was cancelled, and the run finishes as it began.
+            try std.testing.expectEqualDeep(run_outcome.Outcome{ .execution = .ok }, finished);
+            break;
+        }
+        cancelled_runs += 1;
+        try std.testing.expectEqual(.cancelled, finished.executionStatus().?);
+    }
+    // Activation, appended events and the close each flush: more than one place was reached.
+    try std.testing.expect(cancelled_runs >= 3);
 }
 
 test "feature log layout activates absent and present directories without changing bootstrap observations" {
@@ -281,9 +493,15 @@ const Run = struct {
     assembly: LoggingAssembly = undefined,
 
     fn start(self: *Run, a: std.mem.Allocator, io: std.Io, project: std.Io.Dir) !@import("ports/feature_log_activation.zig").Outcome {
+        return self.startAt(a, io, project, "debug");
+    }
+
+    /// As `start`, under the logging level named: a level that captures no prompts opens no prompt stream, and its
+    /// policy has an identity of its own.
+    fn startAt(self: *Run, a: std.mem.Allocator, io: std.Io, project: std.Io.Dir, level: []const u8) !@import("ports/feature_log_activation.zig").Outcome {
         self.root_owner = try rootOwner(a, project);
         const policy = @import("domain/log_policy.zig");
-        self.logs = LogService.init(try policy.createValidated(a, .{ .level = "debug", .console = false }, try policy.canonicalizeConfiguredLevel("debug")));
+        self.logs = LogService.init(try policy.createValidated(a, .{ .level = level, .console = false }, try policy.canonicalizeConfiguredLevel(level)));
         self.inputs = .{ .io = io, .project_root = project };
         self.outputs = .{ .io = io, .project_root = project };
         const registry = roots.registry(self.root_owner);
@@ -292,10 +510,16 @@ const Run = struct {
     }
 
     fn finish(self: *Run) void {
-        _ = self.assembly.finalizer().finish(.{ .execution = .ok });
+        _ = self.finishWith(.{ .execution = .ok });
+    }
+
+    /// Finalize with the run's terminal outcome, release everything and return the finished outcome.
+    fn finishWith(self: *Run, outcome: @import("domain/run_outcome.zig").Outcome) @import("domain/run_outcome.zig").Outcome {
+        const finished = self.assembly.finalizer().finish(outcome);
         self.assembly.deinit();
         self.logs.deinit();
         roots.deinitOwner(self.root_owner);
+        return finished;
     }
 };
 
@@ -328,8 +552,12 @@ fn completedRun(a: std.mem.Allocator, io: std.Io, project: std.Io.Dir) !Segments
 
 /// Start the next run and return its activation outcome, finishing it.
 fn nextRun(a: std.mem.Allocator, io: std.Io, project: std.Io.Dir) !@import("ports/feature_log_activation.zig").Outcome {
+    return nextRunAt(a, io, project, "debug");
+}
+
+fn nextRunAt(a: std.mem.Allocator, io: std.Io, project: std.Io.Dir, level: []const u8) !@import("ports/feature_log_activation.zig").Outcome {
     var run: Run = undefined;
-    const outcome = try run.start(a, io, project);
+    const outcome = try run.startAt(a, io, project, level);
     run.finish();
     return outcome;
 }
@@ -443,7 +671,7 @@ fn expectPruned(io: std.Io, project: std.Io.Dir, run: Segments) !void {
     try std.testing.expectError(error.FileNotFound, project.access(io, run.prompt, .{}));
 }
 
-test "fresh activation prunes expired closed prior runs in both streams and keeps recent, crashed and current runs" {
+test "fresh activation prunes expired closed prior runs in both streams, closes a crashed run's tail and keeps recent and current runs" {
     const io = std.testing.io;
     const a = std.testing.allocator;
     var project = std.testing.tmpDir(.{});
@@ -453,18 +681,27 @@ test "fresh activation prunes expired closed prior runs in both streams and keep
     defer expired.deinit(a);
     const recent = try completedRun(a, io, project.dir);
     defer recent.deinit(a);
-    // A crash after the event stream closed leaves only the prompt tail active;
-    // the run is kept whole, including its closed, expired event segment.
+    // A crash after the event stream closed leaves only the prompt tail active.
     const crashed = try completedRun(a, io, project.dir);
     defer crashed.deinit(a);
     try ageRun(a, io, project.dir, expired);
     try ageRun(a, io, project.dir, crashed);
     try dropTrailer(a, io, project.dir, crashed.prompt);
-    // The next run's activation applies retention before it starts.
+    // The next run's activation closes that tail, then applies retention before it starts: the run is no longer kept
+    // whole, so its closed, expired event segment is pruned by the normal rule, and its prompt segment, closed now,
+    // stays for the retention period.
     const current = try completedRun(a, io, project.dir);
     defer current.deinit(a);
     try expectPruned(io, project.dir, expired);
-    for ([_]Segments{ recent, crashed, current }) |kept| try expectKept(io, project.dir, kept);
+    for ([_]Segments{ recent, current }) |kept| try expectKept(io, project.dir, kept);
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, crashed.event, .{}));
+    const finalized = try project.dir.readFileAlloc(io, crashed.prompt, a, .limited(1 << 24));
+    defer a.free(finalized);
+    try std.testing.expect(std.mem.startsWith(u8, rowsOf(finalized).trailer, "segment_trailer|"));
+    // Once its own trailer is as old as the period, the finalized segment prunes like any other closed one.
+    try ageTrailer(a, io, project.dir, crashed.prompt);
+    try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, crashed.prompt, .{}));
     // Empty directories stay, and a later run validates them as empty groups.
     try project.dir.access(io, std.fs.path.dirname(expired.event).?, .{});
     try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
@@ -698,7 +935,7 @@ test "regular files the engine never names are left alone by discovery and reten
     try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
 }
 
-test "a last segment torn or left open by a crash keeps its whole run" {
+test "a last segment torn before its header row keeps its whole run, and one left open after it is closed" {
     const io = std.testing.io;
     const a = std.testing.allocator;
     const Shape = enum { empty, heading_only, partial_header, partial_row };
@@ -728,14 +965,31 @@ test "a last segment torn or left open by a crash keeps its whole run" {
                 try file.writePositionalAll(io, "event|torn", (try file.stat(io)).size);
             },
         }
+        // A tail whose header row is complete names an identity finalization can close. One torn before its header
+        // row was complete names none: it is left whole, in a lone first segment and behind closed ones alike.
+        const closable = shape == .partial_row;
+        const before = try project.dir.readFileAlloc(io, torn, a, .limited(1 << 24));
+        defer a.free(before);
         const found = try discoverHistory(a, io, project.dir);
         defer found.deinit(a);
         try std.testing.expectEqual(@as(usize, 1), found.retained_runs);
         try std.testing.expectEqual(@as(usize, 0), found.groups.len);
+        try std.testing.expectEqual(@as(usize, if (closable) 1 else 0), found.tails.len);
         try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
-        // The closed, expired segments of the crashed run are kept too.
-        try expectKept(io, project.dir, crashed);
         try project.dir.access(io, torn, .{});
+        const after = try project.dir.readFileAlloc(io, torn, a, .limited(1 << 24));
+        defer a.free(after);
+        if (closable) {
+            // The partial row is cut, one trailer follows the last complete row, and the run, closed now, no longer
+            // keeps its expired prompt segment.
+            try std.testing.expect(std.mem.indexOf(u8, after, "event|torn") == null);
+            try std.testing.expect(std.mem.startsWith(u8, rowsOf(after).trailer, "segment_trailer|"));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, crashed.prompt, .{}));
+        } else {
+            // Left whole: not written, not deleted, not blocking, and the closed, expired segments are kept too.
+            try std.testing.expectEqualStrings(before, after);
+            try expectKept(io, project.dir, crashed);
+        }
     };
 }
 
@@ -940,4 +1194,368 @@ test "historical stream paths require the current feature and a different run" {
     const foreign = try log_binding.createValidated(a, .{ .log_policy_id = .{ .bytes = "LOGPOL-OLD" }, .binding_id = .{ .bytes = "BINDING-OLD" }, .run_id = .{ .bytes = "RUN-OLD" }, .feature_id = .{ .bytes = "other" } });
     defer log_binding.deinitOwner(foreign);
     try std.testing.expect(try artifacts.bindHistoricalFeatureLogStream(arena.allocator(), current, log_binding.binding(foreign), .event) == null);
+}
+
+fn appendBytes(io: std.Io, project: std.Io.Dir, path: []const u8, bytes: []const u8) !void {
+    var file = try project.openFile(io, path, .{ .mode = .read_write });
+    defer file.close(io);
+    try file.writePositionalAll(io, bytes, (try file.stat(io)).size);
+}
+
+fn readAll(a: std.mem.Allocator, io: std.Io, project: std.Io.Dir, path: []const u8) ![]u8 {
+    return project.readFileAlloc(io, path, a, .limited(1 << 24));
+}
+
+/// The bytes through the last complete row: what recovery keeps of a tail that ends mid-row.
+fn throughLastRow(bytes: []const u8) []const u8 {
+    return bytes[0 .. (std.mem.lastIndexOfScalar(u8, bytes, '\n') orelse 0) + 1];
+}
+
+fn trailerCount(bytes: []const u8) usize {
+    return std.mem.count(u8, bytes, "\nsegment_trailer|");
+}
+
+/// A tail the next activation closed: every complete row kept, one trailer after them, and the file ending on a row.
+fn expectClosedAfter(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, path: []const u8, prefix: []const u8) ![]u8 {
+    const after = try readAll(a, io, project, path);
+    errdefer a.free(after);
+    try std.testing.expect(std.mem.startsWith(u8, after, prefix));
+    try std.testing.expect(after.len > prefix.len);
+    try std.testing.expectEqual(@as(usize, 1), trailerCount(after));
+    try std.testing.expectEqual(@as(u8, '\n'), after[after.len - 1]);
+    try std.testing.expect(std.mem.startsWith(u8, rowsOf(after).trailer, "segment_trailer|"));
+    return after;
+}
+
+test "activation closes each crashed prior tail in either stream or both, and a second activation writes nothing more" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const Shape = enum { event_tail, prompt_tail, both_tails, partial_row, partial_trailer, rotated };
+    for (std.enums.values(Shape)) |shape| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        const crashed = try completedRun(a, io, project.dir);
+        defer crashed.deinit(a);
+        // The tails a crash left, and the stream it left whole.
+        var tails: [2][]const u8 = undefined;
+        var count: usize = 0;
+        const second = try siblingSegment(a, crashed.event, "0002.log");
+        defer a.free(second);
+        switch (shape) {
+            .event_tail, .partial_row, .partial_trailer => {
+                try dropTrailer(a, io, project.dir, crashed.event);
+                tails[0] = crashed.event;
+                count = 1;
+                // A tail that ends mid-row, as a crash during an append or during finalization's own trailer leaves.
+                if (shape == .partial_row) try appendBytes(io, project.dir, crashed.event, "event|torn");
+                if (shape == .partial_trailer) try appendBytes(io, project.dir, crashed.event, "segment_trailer|feature-log/v2|ev");
+            },
+            .prompt_tail => {
+                try dropTrailer(a, io, project.dir, crashed.prompt);
+                tails[0] = crashed.prompt;
+                count = 1;
+            },
+            .both_tails => {
+                try dropTrailer(a, io, project.dir, crashed.event);
+                try dropTrailer(a, io, project.dir, crashed.prompt);
+                tails = .{ crashed.event, crashed.prompt };
+                count = 2;
+            },
+            // A rotation crash after the second segment's header: the open tail sits behind a closed segment.
+            .rotated => {
+                try writeEmptySegment(a, io, project.dir, crashed.event, second, "2", null);
+                try dropTrailer(a, io, project.dir, second);
+                tails[0] = second;
+                count = 1;
+            },
+        }
+        var before: [2][]u8 = undefined;
+        for (tails[0..count], before[0..count]) |path, *bytes| bytes.* = try readAll(a, io, project.dir, path);
+        defer for (before[0..count]) |bytes| a.free(bytes);
+        const whole: []const u8 = if (shape == .event_tail or shape == .partial_row or shape == .partial_trailer or shape == .rotated) crashed.prompt else crashed.event;
+        const whole_before = if (count == 1) try readAll(a, io, project.dir, whole) else try a.dupe(u8, "");
+        defer a.free(whole_before);
+        {
+            const found = try discoverHistory(a, io, project.dir);
+            defer found.deinit(a);
+            try std.testing.expectEqual(count, found.tails.len);
+        }
+        try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
+        var closed: [2][]u8 = undefined;
+        for (tails[0..count], before[0..count], closed[0..count]) |path, original, *bytes| bytes.* = try expectClosedAfter(io, a, project.dir, path, throughLastRow(original));
+        defer for (closed[0..count]) |bytes| a.free(bytes);
+        // The stream the crash left closed is not written.
+        if (count == 1) {
+            const untouched = try readAll(a, io, project.dir, whole);
+            defer a.free(untouched);
+            try std.testing.expectEqualStrings(whole_before, untouched);
+        }
+        // Nothing is left to finalize, so a second activation writes none of the closed files again.
+        try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
+        for (tails[0..count], closed[0..count]) |path, bytes| {
+            const again = try readAll(a, io, project.dir, path);
+            defer a.free(again);
+            try std.testing.expectEqualStrings(bytes, again);
+        }
+    }
+}
+
+test "a crashed run's tails are closed whatever the current run's logging policy captures" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try project.dir.createDir(io, "workflows", .default_dir);
+    const crashed = try completedRun(a, io, project.dir);
+    defer crashed.deinit(a);
+    try dropTrailer(a, io, project.dir, crashed.event);
+    try dropTrailer(a, io, project.dir, crashed.prompt);
+    const event_before = try readAll(a, io, project.dir, crashed.event);
+    defer a.free(event_before);
+    const prompt_before = try readAll(a, io, project.dir, crashed.prompt);
+    defer a.free(prompt_before);
+    // A level that captures no prompts has its own policy identity and opens no prompt stream, yet the crashed run's
+    // prompt tail, written under the debug policy, is closed by the identity its own header names.
+    try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRunAt(a, io, project.dir, "info")));
+    const event_closed = try expectClosedAfter(io, a, project.dir, crashed.event, event_before);
+    defer a.free(event_closed);
+    const prompt_closed = try expectClosedAfter(io, a, project.dir, crashed.prompt, prompt_before);
+    defer a.free(prompt_closed);
+}
+
+test "a crashed tail that cannot be closed blocks activation, leaves every byte as it was and releases its lock" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const FailureCode = @import("domain/feature_log_stream.zig").FailureCode;
+    const Case = enum { held_lock, read_only_segment, insecure_run_directory, earlier_segment_open, identity_mismatch };
+    for (std.enums.values(Case)) |case| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        const crashed = try completedRun(a, io, project.dir);
+        defer crashed.deinit(a);
+        const binding_dir = std.fs.path.dirname(crashed.event).?;
+        const run_dir = std.fs.path.dirname(binding_dir).?;
+        // A second segment is written while the first still has its trailer to copy from; the first is then left open.
+        if (case == .earlier_segment_open) {
+            const second = try siblingSegment(a, crashed.event, "0002.log");
+            defer a.free(second);
+            try writeEmptySegment(a, io, project.dir, crashed.event, second, "2", null);
+        }
+        try dropTrailer(a, io, project.dir, crashed.event);
+        switch (case) {
+            // Every row of the segment names another feature.
+            .identity_mismatch => {
+                const bytes = try readAll(a, io, project.dir, crashed.event);
+                defer a.free(bytes);
+                const replaced = try std.mem.replaceOwned(u8, a, bytes, "|Group/Café|", "|Group/Cafe|");
+                defer a.free(replaced);
+                try std.testing.expect(!std.mem.eql(u8, bytes, replaced));
+                try writeOwned(io, project.dir, crashed.event, replaced);
+            },
+            else => {},
+        }
+        const before = try readAll(a, io, project.dir, crashed.event);
+        defer a.free(before);
+        const lock_path = try std.fmt.allocPrint(a, "{s}/.stream.lock", .{run_dir});
+        defer a.free(lock_path);
+        var held: ?std.Io.File = null;
+        defer if (held) |file| {
+            file.unlock(io);
+            file.close(io);
+        };
+        switch (case) {
+            // Another holder keeps the crashed run's event stream lock.
+            .held_lock => {
+                held = try project.dir.openFile(io, lock_path, .{ .mode = .read_write });
+                try std.testing.expect(try held.?.tryLock(io, .exclusive));
+            },
+            // A segment recovery cannot open for writing.
+            .read_only_segment => {
+                var file = try project.dir.openFile(io, crashed.event, .{ .mode = .read_only });
+                defer file.close(io);
+                try file.setPermissions(io, std.Io.File.Permissions.fromMode(0o400));
+            },
+            .insecure_run_directory => try setMode(io, project.dir, run_dir, 0o755),
+            .earlier_segment_open, .identity_mismatch => {},
+        }
+        const outcome = try nextRun(a, io, project.dir);
+        try std.testing.expectEqual(if (case == .held_lock) FailureCode.LOG_LOCK_TIMEOUT else FailureCode.LOG_SINK_FAILURE, outcome.blocked);
+        const after = try readAll(a, io, project.dir, crashed.event);
+        defer a.free(after);
+        try std.testing.expectEqualStrings(before, after);
+        try std.testing.expectEqual(@as(usize, 0), trailerCount(after));
+        try project.dir.access(io, crashed.prompt, .{});
+        // The routine's lock is not left held: the next holder takes it at once.
+        if (case != .held_lock) {
+            var file = try project.dir.openFile(io, lock_path, .{ .mode = .read_write });
+            defer file.close(io);
+            try std.testing.expect(try file.tryLock(io, .exclusive));
+            file.unlock(io);
+        }
+    }
+}
+
+test "a cancellation at any lock, truncate, trailer or flush call ends activation cancelled, and the next activation closes the tail once" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const cancelling = @import("test_fixtures/cancelling_io.zig");
+    // A tail with a partial row reaches the truncation, the trailer write and its flush; each is cancelled in turn, at
+    // every call of its kind in activation, so the interruption lands before, between and after the destructive writes.
+    for ([_]cancelling.Op{ .try_lock, .set_length, .write_positional, .sync }) |op| {
+        var cancelled_calls: usize = 0;
+        var pass: usize = 0;
+        while (true) : (pass += 1) {
+            var project = std.testing.tmpDir(.{});
+            defer project.cleanup();
+            try project.dir.createDir(io, "workflows", .default_dir);
+            const crashed = try completedRun(a, io, project.dir);
+            defer crashed.deinit(a);
+            try dropTrailer(a, io, project.dir, crashed.event);
+            try appendBytes(io, project.dir, crashed.event, "event|torn");
+            const original = try readAll(a, io, project.dir, crashed.event);
+            defer a.free(original);
+            var cancel: cancelling.CancellingIo = undefined;
+            cancel.init(op, pass);
+            defer cancel.deinit();
+            var run: Run = undefined;
+            const started = try run.start(a, cancel.io(), project.dir);
+            // A cancellation ends activation as `cancelled`, never blocked; any other call finishes it as it would have.
+            const interrupted = cancel.fired;
+            try std.testing.expectEqual(interrupted, started == .cancelled);
+            if (!interrupted) try std.testing.expectEqual(.ready, std.meta.activeTag(started));
+            run.finish();
+            if (interrupted) {
+                cancelled_calls += 1;
+                // Whatever the interrupted run wrote, the next activation takes the lock again and ends with one trailer.
+                try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
+            }
+            const closed = try expectClosedAfter(io, a, project.dir, crashed.event, throughLastRow(original));
+            defer a.free(closed);
+            // A pass whose cancellation fell after activation, in the run's own close, has nothing further to cancel.
+            if (!cancel.fired) break;
+        }
+        try std.testing.expect(cancelled_calls >= 1);
+    }
+}
+
+test "the prior-run tail adapter serves one stream under the lock and writes only the truncation and one trailer" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const Tail = @import("adapters/filesystem/feature_log_historical_tail.zig").Adapter;
+    const limits = @import("domain/feature_log_limits.zig");
+    const log_format = @import("domain/feature_log_format.zig");
+    const log_rows = @import("domain/feature_log_rows.zig");
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try project.dir.createDir(io, "workflows", .default_dir);
+    const crashed = try completedRun(a, io, project.dir);
+    defer crashed.deinit(a);
+    try dropTrailer(a, io, project.dir, crashed.event);
+    try appendBytes(io, project.dir, crashed.event, "event|torn");
+    const root_owner = try rootOwner(a, project.dir);
+    defer roots.deinitOwner(root_owner);
+    const registry = roots.registry(root_owner);
+    const prior = try observe(a, project.dir, registry);
+    const log_owner = try logOwner(a, prior.selector.feature_id.bytes);
+    defer log_binding.deinitOwner(log_owner);
+    var layout_adapter: layout.Adapter = .{ .io = io, .project_root = project.dir };
+    const activated = try layout_adapter.port().activate(a, registry.featureOutputWrite(), prior, log_binding.binding(log_owner));
+    defer active.deinitOwner(activated);
+    const artifact_owner = try artifacts.createForActive(a, registry.featureOutputWrite(), log_binding.binding(log_owner), active.capability(activated));
+    defer artifacts.deinitOwner(artifact_owner);
+    const current = artifacts.registry(artifact_owner);
+    var history: @import("adapters/filesystem/feature_log_history.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    const found = try history.discoverer().discover(a, current);
+    defer found.deinit(a);
+    try std.testing.expectEqual(@as(usize, 1), found.tails.len);
+    try std.testing.expectEqual(.event, found.tails[0].stream);
+    const owner = try log_binding.createValidated(a, found.tails[0].binding);
+    defer log_binding.deinitOwner(owner);
+    const historical = log_binding.binding(owner);
+    var tail = try Tail.init(a, io, project.dir, current, historical, .event);
+    defer tail.deinit();
+    // Nothing is read or written without the lock, and only for the stream and binding the adapter was opened for.
+    // Recovery's segment bytes stay allocated, as its contract says, so it gets an arena.
+    var scratch: std.heap.ArenaAllocator = .init(a);
+    defer scratch.deinit();
+    try std.testing.expectError(error.InvalidBinding, tail.tailInspector().inspect(historical, .event));
+    try std.testing.expectError(error.InvalidBinding, tail.streamRecoverer().recover(historical, .event, log_format.segmentHeading(.event), scratch.allocator()));
+    try std.testing.expectError(error.InvalidBinding, tail.lockAcquirer().acquire(historical, .prompt, limits.stream_lock_deadline_ms));
+    try tail.lockAcquirer().acquire(historical, .event, limits.stream_lock_deadline_ms);
+    try std.testing.expectError(error.InvalidBinding, tail.tailInspector().inspect(historical, .prompt));
+    try std.testing.expectEqual(.active, try tail.tailInspector().inspect(historical, .event));
+    // Recovery cuts the partial row, the one write besides the trailer, and states the tail it leaves.
+    const before = try readAll(a, io, project.dir, crashed.event);
+    defer a.free(before);
+    const recovered = (try tail.streamRecoverer().recover(historical, .event, log_format.segmentHeading(.event), scratch.allocator())).active;
+    const cut = try readAll(a, io, project.dir, crashed.event);
+    defer a.free(cut);
+    try std.testing.expectEqualStrings(throughLastRow(before), cut);
+    const trailer = try log_rows.serializeControl(a, .event, .segment_trailer, historical, recovered.segment_ordinal, recovered.next_sequence - 1, "2026-08-30T10:15:30Z");
+    defer a.free(trailer);
+    try tail.streamCloser().close(historical, .event, recovered, trailer);
+    try std.testing.expectEqual(.closed, try tail.tailInspector().inspect(historical, .event));
+    try tail.lockReleaser().release();
+    const closed = try readAll(a, io, project.dir, crashed.event);
+    defer a.free(closed);
+    try std.testing.expectEqual(@as(usize, 1), trailerCount(closed));
+    // The current run is never a historical stream.
+    try std.testing.expectError(error.InvalidArtifactRegistry, Tail.init(a, io, project.dir, current, log_binding.binding(log_owner), .event));
+}
+
+test "a tail torn after discovery is refused under its lock and left as it was" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    const Tail = @import("adapters/filesystem/feature_log_historical_tail.zig").Adapter;
+    const limits = @import("domain/feature_log_limits.zig");
+    const log_format = @import("domain/feature_log_format.zig");
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try project.dir.createDir(io, "workflows", .default_dir);
+    const crashed = try completedRun(a, io, project.dir);
+    defer crashed.deinit(a);
+    try dropTrailer(a, io, project.dir, crashed.event);
+    const root_owner = try rootOwner(a, project.dir);
+    defer roots.deinitOwner(root_owner);
+    const registry = roots.registry(root_owner);
+    const prior = try observe(a, project.dir, registry);
+    const log_owner = try logOwner(a, prior.selector.feature_id.bytes);
+    defer log_binding.deinitOwner(log_owner);
+    var layout_adapter: layout.Adapter = .{ .io = io, .project_root = project.dir };
+    const activated = try layout_adapter.port().activate(a, registry.featureOutputWrite(), prior, log_binding.binding(log_owner));
+    defer active.deinitOwner(activated);
+    const artifact_owner = try artifacts.createForActive(a, registry.featureOutputWrite(), log_binding.binding(log_owner), active.capability(activated));
+    defer artifacts.deinitOwner(artifact_owner);
+    const current = artifacts.registry(artifact_owner);
+    var history: @import("adapters/filesystem/feature_log_history.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    const found = try history.discoverer().discover(a, current);
+    defer found.deinit(a);
+    try std.testing.expectEqual(@as(usize, 1), found.tails.len);
+    const owner = try log_binding.createValidated(a, found.tails[0].binding);
+    defer log_binding.deinitOwner(owner);
+    const historical = log_binding.binding(owner);
+    // After discovery the segment is replaced by one torn before its header row is complete (empty, the heading alone,
+    // or the heading and part of the header row): it names no identity to close, so recovery refuses it before any write,
+    // truncation included, and the lock is released.
+    const bytes = try readAll(a, io, project.dir, crashed.event);
+    defer a.free(bytes);
+    const rows = rowsOf(bytes);
+    for ([_][]const u8{ "", rows.heading, bytes[0 .. rows.heading.len + rows.header.len / 2] }) |torn| {
+        try writeOwned(io, project.dir, crashed.event, torn);
+        var tail = try Tail.init(a, io, project.dir, current, historical, .event);
+        defer tail.deinit();
+        var scratch: std.heap.ArenaAllocator = .init(a);
+        defer scratch.deinit();
+        try tail.lockAcquirer().acquire(historical, .event, limits.stream_lock_deadline_ms);
+        try std.testing.expectError(error.CorruptStream, tail.streamRecoverer().recover(historical, .event, log_format.segmentHeading(.event), scratch.allocator()));
+        try tail.lockReleaser().release();
+        const after = try readAll(a, io, project.dir, crashed.event);
+        defer a.free(after);
+        try std.testing.expectEqualStrings(torn, after);
+        // The lock is free again: the same adapter can take it a second time.
+        try tail.lockAcquirer().acquire(historical, .event, limits.stream_lock_deadline_ms);
+        try tail.lockReleaser().release();
+    }
 }

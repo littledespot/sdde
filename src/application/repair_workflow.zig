@@ -23,7 +23,6 @@ const reconciliation_repair = @import("reference_reconciliation_repair_workflow.
 const source_omission = @import("source_omission_repair_workflow.zig");
 const specification_repair = @import("specification_repair_workflow.zig");
 const support_repair = @import("specification_support_repair_workflow.zig");
-const coverage_repair = @import("specification_coverage_repair_workflow.zig");
 const text_repair = @import("reference_text_repair_workflow.zig");
 
 const Operation = repair_owner.Operation;
@@ -47,7 +46,6 @@ pub fn OwnerBinding(comptime op: Operation, comptime owner: RepairOwner) type {
             .source_omission => source_omission.Authorize,
             .specification_unit => specification_repair.Authorize,
             .specification_support => support_repair.Authorize,
-            .specification_coverage => coverage_repair.Authorize,
             .reference_reconciliation, .source_omission_extraction, .source_omission_reconciliation => void,
         },
         .build_input => switch (owner) {
@@ -57,7 +55,7 @@ pub fn OwnerBinding(comptime op: Operation, comptime owner: RepairOwner) type {
             .source_omission => source_omission.BuildInput,
             .specification_unit => specification_repair.BuildInput,
             .specification_support => support_repair.BuildInput,
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => void,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation => void,
         },
         .parse => switch (owner) {
             .reference_text => text_repair.Parse,
@@ -66,7 +64,7 @@ pub fn OwnerBinding(comptime op: Operation, comptime owner: RepairOwner) type {
             .source_omission => source_omission.Parse,
             .specification_unit => specification_repair.Parse,
             .specification_support => support_repair.Parse,
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => void,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation => void,
         },
         .merge => switch (owner) {
             .reference_text => text_repair.Merge,
@@ -76,7 +74,7 @@ pub fn OwnerBinding(comptime op: Operation, comptime owner: RepairOwner) type {
             .source_omission_reconciliation => source_omission.Merge(.reconciliation),
             .specification_unit => specification_repair.Merge,
             .specification_support => support_repair.Merge,
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission, .specification_coverage => void,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission => void,
         },
     };
 }
@@ -120,7 +118,7 @@ fn variantOf(comptime op: Operation, comptime owner: RepairOwner, comptime T: ty
         const final = list;
         break :blk final;
     };
-    return .{
+    const variant: operation.Variant = .{
         .value = owner.id(),
         .parameters = &parameters,
         .requires = effects.requires,
@@ -137,6 +135,11 @@ fn variantOf(comptime op: Operation, comptime owner: RepairOwner, comptime T: ty
         .retry_limit = if (maximum) |limit| .{ .maximum = limit, .scope = .repair } else null,
         .iteration = null,
     };
+    // Registry admission and graph validation hold the descriptor to this same check, so a variant that
+    // would be refused there, such as a `blocked` outcome with no reader, stops the build instead.
+    comptime if (!variant.validAssociation())
+        @compileError("the " ++ @tagName(owner) ++ " variant of " ++ @tagName(op) ++ " declares an outcome association its own outcomes, data effects and role do not support");
+    return variant;
 }
 
 /// The variants of `op`, one per owner it serves, in the owners' declaration order.
@@ -175,7 +178,6 @@ pub const AuthorizeRepair = struct {
     source_omission: source_omission.Authorize,
     specification_unit: specification_repair.Authorize,
     specification_support: support_repair.Authorize,
-    specification_coverage: coverage_repair.Authorize,
 
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
@@ -189,7 +191,6 @@ pub const AuthorizeRepair = struct {
             .source_omission => source_omission.Authorize.invoke(&self.source_omission, input),
             .specification_unit => specification_repair.Authorize.invoke(&self.specification_unit, input),
             .specification_support => support_repair.Authorize.invoke(&self.specification_support, input),
-            .specification_coverage => coverage_repair.Authorize.invoke(&self.specification_coverage, input),
             .reference_reconciliation, .source_omission_extraction, .source_omission_reconciliation => error.RepairOwnerMismatch,
         };
     }
@@ -214,7 +215,7 @@ pub const BuildRepairInput = struct {
             .source_omission => source_omission.BuildInput.invoke(&self.source_omission, input),
             .specification_unit => specification_repair.BuildInput.invoke(&self.specification_unit, input),
             .specification_support => support_repair.BuildInput.invoke(&self.specification_support, input),
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => error.RepairOwnerMismatch,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation => error.RepairOwnerMismatch,
         };
     }
 };
@@ -238,7 +239,7 @@ pub const ParseRepair = struct {
             .source_omission => source_omission.Parse.invoke(&self.source_omission, input),
             .specification_unit => specification_repair.Parse.invoke(&self.specification_unit, input),
             .specification_support => support_repair.Parse.invoke(&self.specification_support, input),
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => error.RepairOwnerMismatch,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation => error.RepairOwnerMismatch,
         };
     }
 };
@@ -264,7 +265,7 @@ pub const MergeRepair = struct {
             .source_omission_reconciliation => source_omission.Merge(.reconciliation).invoke(&self.source_omission_reconciliation, input),
             .specification_unit => specification_repair.Merge.invoke(&self.specification_unit, input),
             .specification_support => support_repair.Merge.invoke(&self.specification_support, input),
-            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission, .specification_coverage => error.RepairOwnerMismatch,
+            .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission => error.RepairOwnerMismatch,
         };
     }
 };

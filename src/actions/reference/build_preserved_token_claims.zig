@@ -35,6 +35,6 @@ pub const Action = struct {
                 .blocked => |reason| .{ .blocked = reason },
             } };
         }
-        return .{ .dependencies = assigned.classified.dependencies, .revision = assigned.classified.text_validated.revision, .entries = entries };
+        return .{ .revision = assigned.classified.text_validated.revision, .entries = entries };
     }
 };

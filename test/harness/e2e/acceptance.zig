@@ -86,6 +86,9 @@ fn mechanical(a: std.mem.Allocator, report: c.Report) Error!Result {
         .input_invalid, .harness_error, .bootstrap_failed, .fixture_changed => return .{ .failed = .harness_failed },
         .artifact_missing, .artifact_unreadable, .artifact_changed => return .{ .failed = .artifact_failed },
         .publication_missing => return .{ .failed = .publication_failed },
+        // The first leg paused, but there was no one form to answer: the case's second leg cannot run, and the launch
+        // reports it as the unmet criterion it is (a model limitation), with no retry or rewording.
+        .answer_unavailable => return .{ .failed = .unexpected_outcome },
         else => {},
     }
     const outcome = report.workflow_outcome orelse return .{ .unresolved = .not_evaluated };
@@ -102,6 +105,8 @@ fn mechanical(a: std.mem.Allocator, report: c.Report) Error!Result {
     return switch (expected) {
         .publication => publication(a, report),
         .clarification => clarification(report),
+        // A leg's report states its own outcome, never the case's combined one.
+        .clarification_then_publication => .{ .failed = .unexpected_outcome },
     };
 }
 

@@ -91,18 +91,12 @@ requirement or become a post-assembly semantic repair policy. No resource suppli
 callbacks, model dispatch, defaults, conditional business policy or capabilities.
 
 The existing resource compiler admits only the closed `json-composition/v1`
-object above: `schema`, `result` and `parts` are required; optional `definition`
-selects an existing `DefinitionId` through the referenced schema's `Schema.select`.
-Without `definition`, the resource root is the complete schema. Unknown or malformed
-definitions reject before inference. The resource and selection remain bound through
-registry cloning, request preparation/admission, assembly and complete validation;
-cloning resolves the selection against the destination resource owner. Captured
-composition bytes include the selection. No copied schema or second registry is
-introduced. This focused §12.9 amendment was approved on 19 September 2026.
+object above: `schema`, `result` and `parts` are required, and the resource root is the
+complete schema. The resource remains bound through registry cloning, request
+preparation/admission, assembly and complete validation; cloning resolves it against the
+destination resource owner. No copied schema or second registry is introduced.
 Each part has nonempty
-`paths`, optional `requires`, and optional `input-context`; unknown fields reject.
-`input-context` is a resource-ID-shaped name in the native packet's immutable
-assignment-context catalogue, not a file, selector expression or replacement input.
+`paths` and optional `requires`; unknown fields reject.
 Part IDs and the result
 alias use the existing resource-ID contract. The existing schema-profile bound
 limits parts/selectors; dependencies and paths validate before inference.
@@ -110,7 +104,7 @@ limits parts/selectors; dependencies and paths validate before inference.
 | Registered operation | Configuration / handoff |
 | --- | --- |
 | `initialize-json-composition` | `composition` resource; binds the current packet and execution epoch. |
-| `request-model` (and its `prepare-model-request` stage) | Select `composition-part`, or the existing `result-schema` path, exclusively. A part cannot override schema, result selection or the native evidence packet. |
+| `request-model` (and its `prepare-model-request` stage) | Select `composition-part`, or the existing `result-schema` path, exclusively. A part cannot override schema or the native evidence packet. |
 | `retain-json-part` | Retains the exact schema-admitted, terminal-accepted request result and prerequisite placements. |
 | `assemble-json` | Retires staging and installs the complete, unvalidated JSON candidate in one runner delta. |
 | `validate-assembled-json` | Reuses complete schema validation; native consumers require its associated evidence. |
@@ -118,30 +112,29 @@ limits parts/selectors; dependencies and paths validate before inference.
 Dependent requests add configured prerequisite values to the original packet's
 `prerequisites` object. Each explicit call site keeps its own assignment identity.
 
-**Assignment-context amendment (user-approved, 3 October 2026):** native input
-owners may contribute typed read-only assignment contexts beside one complete
-evidence packet. A compiled part's `input-context` selects exactly one of those
-contexts into `assignment`. Unknown contexts reject before inference; no context
-is selected implicitly. The common composition/request owner performs selection,
-preserving the base packet, epoch, prerequisite origins, restrictions and native
-repair authority. Protocol corrections retain that exact selected input.
-Contexts may present applicable rules and field purposes; they cannot filter
-evidence, alter identities, choose roles, weaken coverage or create continuation
-policy. Canonical native validators remain the sole rule owners; semantic purposes
-come from the workflow's packet guidance (amendment below). Reconciliation uses
-this mechanism for summary, disposition, signal and conflict assignments, not a
-call-number-specific path. Atomic repairs keep their existing authorized scope and
-projection owner.
+**Assignment contexts:** native input owners contribute typed read-only assignment
+contexts beside one complete evidence packet, and the packet's owner selects exactly one
+of them into `assignment`. No context is selected implicitly. The selection preserves
+the base packet, epoch, restrictions and native repair authority, and protocol
+corrections retain that exact selected input. Contexts may present applicable rules and
+field purposes; they cannot filter evidence, alter identities, choose roles, weaken
+coverage or create continuation policy. Canonical native validators remain the sole rule
+owners; semantic purposes come from the workflow's packet guidance (amendment below).
+Reconciliation selects its summary, disposition, signal and conflict assignments in its
+native packet builders, and a composition part selects none. Atomic repairs keep their
+existing authorized scope and projection owner.
 
 **Packet-guidance amendment (user-approved, 30 October 2026, SPEC01 D3.1, record in
 `fixes/Z_FIX06.md` at git `194e29a`; amended 1 November 2026 by
 SPEC01 D13.1, 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
 Decision 5, 8 November 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)
 Decisions 6 and 7, which removed the entity meaning and relationship entries and the entity
-repair tail, and then the edge case's outcome entry, and 11 November 2026 by
+repair tail, and then the edge case's outcome entry, 11 November 2026 by
 [ADR 0048](0048-engine-derived-specification-title.md), which removed the `display_name`
-purpose):** workflow resources own the semantic
-guidance that native packet builders present. One closed `packet-guidance/v6` resource holds exactly one text for each
+purpose, and 13 November 2026 by ADR 0038 Decision 7, implemented 21 November 2026, which
+removed the `condition` entry: an edge case's one authored field is its `given`, which shares
+the acceptance criterion's `given` entry):** workflow resources own the semantic
+guidance that native packet builders present. One closed `packet-guidance/v7` resource holds exactly one text for each
 registered key: feature and record purposes, source-review scopes, the reconciliation
 summary purpose, support-evidence guidance and the semantic tails of native repair
 requirements. The removed post-generation review's scopes and the engine-derived
@@ -246,9 +239,9 @@ required. New part revisions or schema selections cannot replenish retry attempt
 
 ### Graph capacity
 
-Global reconciliation requests each phase separately (ADR 0022). Summaries use one
-part selected from `summary`, sharing assembled-candidate collection. All requests
-reuse the lifecycle body; retention and complete assembly/validation use shared
+Global reconciliation requests each phase separately (ADR 0022), and a summary is a
+plain request over the `summary` definition like the others (user decision, 21 November 2026). All requests reuse the
+lifecycle body; extraction's retention and complete assembly/validation use shared
 subgraphs with independent compiled call sites.
 
 The step bound is **1,024**, defined once by `workflow_definition.max_steps`; schema validation,
@@ -294,8 +287,9 @@ correction/assembly/repair of that same candidate, and retain the required nativ
 parent binding during rebuilding. Per-field origins name the calls that produced
 those values; they cannot reset recurrence history. No new retry ledger is needed.
 
-Retain the existing idempotent occurrence rule: replaying the same sealed placement
-has no additional effect; conflicting placement rejects. Equal JSON from another
+Retain the composition runtime's own idempotent occurrence rule: replaying the same sealed placement
+has no additional effect; conflicting placement rejects. The pipeline envelope has no such rule: it rejects
+a second recording of one occurrence and key. Equal JSON from another
 invocation is not proof of the same occurrence. Missing, foreign, stale or
 unadmitted parts cannot assemble. Recording historical evidence never makes it current.
 

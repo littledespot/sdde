@@ -21,9 +21,8 @@ pub const Adapter = struct {
     expected_binding: log_binding.BindingCandidate,
     lock_file: ?Io.File = null,
     owns_directories: bool,
-    scans_run_history: bool,
 
-    pub const InitError = error{ InvalidArtifactRegistry, ArtifactStorageUnavailable, InsecurePermissions };
+    pub const InitError = error{ InvalidArtifactRegistry, ArtifactStorageUnavailable, InsecurePermissions, Cancelled };
 
     pub fn init(
         io: Io,
@@ -35,18 +34,18 @@ pub const Adapter = struct {
         var specs_root = project_root.openDir(io, authority.specs_root_path, .{
             .access_sub_paths = true,
             .follow_symlinks = false,
-        }) catch return error.ArtifactStorageUnavailable;
+        }) catch |err| return directory_boundary.storageFault(err);
         defer specs_root.close(io);
         if (!(file_identity.inspect(specs_root.handle) catch return error.ArtifactStorageUnavailable).eql(authority.specs_root_identity)) {
             return error.InvalidArtifactRegistry;
         }
-        var event_run = directory_boundary.openOwner(io, specs_root, authority.event_run_path) catch return error.ArtifactStorageUnavailable;
+        var event_run = directory_boundary.openOwner(io, specs_root, authority.event_run_path) catch |err| return directory_boundary.storageFault(err);
         errdefer event_run.close(io);
-        var event_binding = directory_boundary.openOwner(io, specs_root, authority.event_binding_path) catch return error.ArtifactStorageUnavailable;
+        var event_binding = directory_boundary.openOwner(io, specs_root, authority.event_binding_path) catch |err| return directory_boundary.storageFault(err);
         errdefer event_binding.close(io);
-        var prompt_run = directory_boundary.openOwner(io, specs_root, authority.prompt_run_path) catch return error.ArtifactStorageUnavailable;
+        var prompt_run = directory_boundary.openOwner(io, specs_root, authority.prompt_run_path) catch |err| return directory_boundary.storageFault(err);
         errdefer prompt_run.close(io);
-        var prompt_binding = directory_boundary.openOwner(io, specs_root, authority.prompt_binding_path) catch return error.ArtifactStorageUnavailable;
+        var prompt_binding = directory_boundary.openOwner(io, specs_root, authority.prompt_binding_path) catch |err| return directory_boundary.storageFault(err);
         errdefer prompt_binding.close(io);
         try directory_boundary.validateOwner(io, event_run);
         try directory_boundary.validateOwner(io, event_binding);
@@ -60,7 +59,6 @@ pub const Adapter = struct {
             .prompt_directory = prompt_binding,
             .expected_binding = authority.expected_binding,
             .owns_directories = true,
-            .scans_run_history = true,
         };
     }
 
@@ -74,7 +72,6 @@ pub const Adapter = struct {
             .prompt_directory = test_directory,
             .expected_binding = expected_binding,
             .owns_directories = false,
-            .scans_run_history = false,
         };
     }
 
@@ -93,7 +90,6 @@ pub const Adapter = struct {
             .prompt_directory = binding_directory,
             .expected_binding = expected_binding,
             .owns_directories = false,
-            .scans_run_history = true,
         };
     }
 
@@ -233,9 +229,6 @@ pub const Adapter = struct {
         return .{
             .io = self.io,
             .directory = self.directory(stream),
-            .run_directory = self.runDirectory(stream),
-            .expected_binding = self.expected_binding,
-            .scans_run_history = self.scans_run_history,
         };
     }
 };

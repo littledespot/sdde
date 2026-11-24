@@ -115,7 +115,7 @@ fn select(current: extraction.TextValidated, scope: evidence.Scope) Error!Replac
 /// Source-backed loss uses the same CAS algebra and canonical extraction
 /// validator; it cannot replace an entire partly-correct chunk.
 pub const Omission = struct {
-    const loss = @import("source_omission.zig");
+    const loss = @import("source_omission_authority.zig");
     pub const OmissionTarget = union(enum) { claim: usize, outcome, classification: usize };
     pub const OmissionReplacement = union(enum) {
         claim: extraction.Proposal,
@@ -181,7 +181,7 @@ pub const Omission = struct {
         const result = try Atomic.packetPresenting(a, auth, guidance, base, @as(@import("specification_result_definitions.zig").Extraction, if (auth.target == .classification) .classification else .claim).id(), try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
         if (auth.target == .classification) return result;
         defer packets.release(result);
-        return input.withCitationChoices(a, result, facts.extraction.inputs, scope, &.{.{ .property = "citations" }});
+        return input.withCitationChoices(a, result, facts.extraction.inputs, scope, &.{.{ .property = "citations" }}, null);
     }
     fn sourceOrigin(facts: OmissionFacts, auth: OmissionAuthorization) OmissionError!?@import("model_candidate_origin.zig").Origin {
         const entry = try entryAt(facts.extraction.candidate, try Omission.scopeOf(auth));
@@ -199,7 +199,7 @@ pub const Omission = struct {
             .outcome => .{ .outcome = .{ .claim = try json.decode(extraction.Proposal, a, bytes) } },
         };
     }
-    pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
+    pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
         try loss.requireRepairPhase(facts.support.repair_phase);
         if (!canonical.matchesInputs(facts.extraction.inputs)) return error.InvalidAtomicRepair;
         const replacement = try Atomic.copyReplacement(a, proposed);
@@ -222,7 +222,7 @@ pub const Omission = struct {
                 changed.classification_origins = origins;
             } else {
                 const claim = if (replacement == .claim) replacement.claim else if (replacement.outcome == .claim) replacement.outcome.claim else return error.InvalidAtomicRepair;
-                const checked = try @import("reference_extraction_text.zig").validate(validator, a, literals, current, facts.extraction.inputs, .{ .entries = &.{.{ .scope = scope, .origin = origin, .token_classifications = &.{}, .outcome = .{ .claims = &.{claim} } }} });
+                const checked = try @import("reference_extraction_text.zig").validate(validator, a, literals, facts.extraction.inputs, .{ .entries = &.{.{ .scope = scope, .origin = origin, .token_classifications = &.{}, .outcome = .{ .claims = &.{claim} } }} });
                 if (checked != .valid) return error.InvalidAtomicRepair;
                 var claims: std.ArrayList(extraction.TextValidatedProposal) = .empty;
                 if (entry.outcome == .claims) try claims.appendSlice(a, entry.outcome.claims);

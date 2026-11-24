@@ -13,9 +13,10 @@ pub const feature_output_write = "feature-output-write";
 pub const reference_content_read = "reference-content-read";
 pub const reference_decode = "reference-decode";
 pub const reference_identity = "reference-identity";
+pub const actor_authentication = "actor-authentication";
 
 pub fn known(id: []const u8) bool {
-    inline for (.{ feature_logging, principle_read, model_provider, provider_authorization, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, feature_output_write, reference_content_read, reference_decode, reference_identity }) |known_id| {
+    inline for (.{ feature_logging, principle_read, model_provider, provider_authorization, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, feature_output_write, reference_content_read, reference_decode, reference_identity, actor_authentication }) |known_id| {
         if (std.mem.eql(u8, id, known_id)) return true;
     }
     return false;

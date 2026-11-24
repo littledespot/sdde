@@ -92,23 +92,40 @@ pub const Adapter = struct {
         const status_failure = statusFailure(@intFromEnum(response.head.status));
         result.failure = status_failure;
         if (response.head.content_encoding != .identity) return error.InvalidEvaluationContract;
-        var bytes: std.Io.Writer.Allocating = .init(a);
-        defer bytes.deinit();
         var transfer_buffer: [4096]u8 = undefined;
-        const reader = response.reader(&transfer_buffer);
-        _ = reader.streamRemaining(&bytes.writer) catch |err| switch (err) {
-            error.ReadFailed => return response.bodyErr().?,
-            else => return err,
-        };
-        const response_body = try a.dupe(u8, bytes.written());
-        result.response_body = response_body;
+        const received = try drain(a, response.reader(&transfer_buffer), &request.reader.state);
+        result.response_body = received;
+        // A body that is not complete keeps the bytes that arrived; the failure is the framing's or the
+        // connection's, and an EOF the framing didn't expect is an end of stream, as in the engine's exchange.
+        if (!received.complete) {
+            if (response.bodyErr()) |framing_error| return framing_error;
+            if (request.connection.?.getReadError()) |read_error| return read_error;
+            return error.EndOfStream;
+        }
         if (status_failure != null) return;
         const request_id = result.request_id;
-        result.* = try wire.response(a, bytes.written());
-        result.response_body = response_body;
+        result.* = try wire.response(a, received.bytes);
+        result.response_body = received;
         result.request_id = request_id;
     }
 };
+/// Reads a response body to its end, with the bytes that did arrive. It is complete only if the read ended and the
+/// HTTP framing ended with it: the standard content-length reader reports an underlying EOF as an ordinary end of
+/// stream, so only its terminal state `framing` proves the body arrived whole (the engine's exchange does the same).
+pub fn drain(a: std.mem.Allocator, reader: *std.Io.Reader, framing: *const std.http.Reader.State) error{OutOfMemory}!provider.Body {
+    var bytes: std.Io.Writer.Allocating = .init(a);
+    defer bytes.deinit();
+    const ended = if (reader.streamRemaining(&bytes.writer)) |_| true else |err| switch (err) {
+        error.ReadFailed => false,
+        // The allocating writer fails only for lack of memory.
+        error.WriteFailed => return error.OutOfMemory,
+    };
+    const framed = switch (framing.*) {
+        .ready, .body_none => true,
+        else => false,
+    };
+    return .{ .bytes = try a.dupe(u8, bytes.written()), .complete = ended and framed };
+}
 pub fn statusFailure(status: u16) ?provider.Failure {
     return switch (status) {
         200 => null,

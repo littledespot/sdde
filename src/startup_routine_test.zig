@@ -56,6 +56,8 @@ const World = struct {
     enumerate: Behaviour = .ok,
     capture: Behaviour = .ok,
     parse: Behaviour = .ok,
+    /// The parser rejects any list holding the capture of this inventory ordinal.
+    parse_rejects: ?u16 = null,
     workflows_present: bool = true,
     descriptors: []const inventory.InventoryDescriptor = &.{},
     observed_read_limit: usize = 0,
@@ -171,10 +173,12 @@ const World = struct {
         return allocator.dupe(u8, "abc") catch error.DefinitionReadError;
     }
 
-    fn parseFn(context: *anyopaque, allocator: std.mem.Allocator, _: []const inventory.Capture) parser_port.Error![]const definition.RawDefinition {
+    fn parseFn(context: *anyopaque, allocator: std.mem.Allocator, captures: []const inventory.Capture) parser_port.Error![]const definition.RawDefinition {
         const self = of(context);
         self.record(.parse);
         if (self.parse == .reject) return error.InvalidWorkflowDefinition;
+        // One definition at a time: a list that holds the capture of this ordinal fails, whatever else it holds.
+        if (self.parse_rejects) |ordinal| for (captures) |capture| if (capture.ordinal == ordinal) return error.InvalidWorkflowDefinition;
         return allocator.alloc(definition.RawDefinition, 0) catch error.InvalidWorkflowDefinition;
     }
 };
@@ -306,6 +310,66 @@ test "each failing step reports itself with its fixed public code and stops late
     }
 }
 
+test "a failed workflow definition names its file by inventory ordinal, and a failure elsewhere names none" {
+    const definition_entry = [_]inventory.InventoryDescriptor{.{
+        .path = "flow.workflow.yaml",
+        .kind = .file,
+        .identity = file_identity.FileIdentity{ .filesystem_id = 1, .file_id = 9 },
+        .size = 3,
+    }};
+    // Two definitions, the second malformed: the file named is the second, not the first or the only one.
+    const two_entries = [_]inventory.InventoryDescriptor{
+        .{ .path = "first.workflow.yaml", .kind = .file, .identity = file_identity.FileIdentity{ .filesystem_id = 1, .file_id = 8 }, .size = 3 },
+        .{ .path = "second.workflow.yaml", .kind = .file, .identity = file_identity.FileIdentity{ .filesystem_id = 1, .file_id = 9 }, .size = 3 },
+    };
+    // A definition the capture cannot read, and one the parser rejects: each names the file, and neither a rule,
+    // since no owner's section applied.
+    for ([_]struct { world: World, step: startup.Step, code: bootstrap_error.PublicError, ordinal: u16, path: []const u8 }{
+        .{ .world = .{ .descriptors = &definition_entry, .capture = .reject }, .step = .capture_workflows, .code = .WORKFLOW_DEFINITION_READ_ERROR, .ordinal = 1, .path = "flow.workflow.yaml" },
+        .{ .world = .{ .descriptors = &definition_entry, .parse = .reject }, .step = .parse_workflows, .code = .WORKFLOW_DEFINITION_PARSE_ERROR, .ordinal = 1, .path = "flow.workflow.yaml" },
+        .{ .world = .{ .descriptors = &two_entries, .parse_rejects = 2 }, .step = .parse_workflows, .code = .WORKFLOW_DEFINITION_PARSE_ERROR, .ordinal = 2, .path = "second.workflow.yaml" },
+        .{ .world = .{ .descriptors = &two_entries, .parse_rejects = 1 }, .step = .parse_workflows, .code = .WORKFLOW_DEFINITION_PARSE_ERROR, .ordinal = 1, .path = "first.workflow.yaml" },
+    }) |case| {
+        var world = case.world;
+        var diagnostic: startup.Diagnostic = .{};
+        var outcome = world.run(std.testing.allocator, .{}, &diagnostic);
+        defer outcome.deinit();
+        try std.testing.expectEqual(case.code, outcome.failed);
+        const detail = diagnostic.detail().?;
+        try std.testing.expectEqualStrings(@tagName(case.step), detail.step);
+        try std.testing.expectEqual(@as(?u16, case.ordinal), detail.evidence.ordinal);
+        try std.testing.expectEqualStrings(case.path, detail.evidence.path.?.text());
+        try std.testing.expect(detail.evidence.rule == null);
+        // The inventory belongs to the routine's scratch space: nothing of it outlives the run.
+        try std.testing.expectEqual(@as(usize, 0), diagnostic.descriptors.len);
+    }
+    // A failure before the workflow authority has no definition detail, and a successful run has none.
+    {
+        var world: World = .{ .locate = .reject };
+        var diagnostic: startup.Diagnostic = .{};
+        var outcome = world.run(std.testing.allocator, .{}, &diagnostic);
+        defer outcome.deinit();
+        try std.testing.expect(diagnostic.detail() == null);
+    }
+    {
+        var world: World = .{};
+        var diagnostic: startup.Diagnostic = .{};
+        var outcome = world.run(std.testing.allocator, .{}, &diagnostic);
+        defer outcome.deinit();
+        try std.testing.expect(diagnostic.detail() == null);
+    }
+    // A failing step with no definition at fault, the enumeration, reports its step alone.
+    {
+        var world: World = .{ .enumerate = .reject };
+        var diagnostic: startup.Diagnostic = .{};
+        var outcome = world.run(std.testing.allocator, .{}, &diagnostic);
+        defer outcome.deinit();
+        const detail = diagnostic.detail().?;
+        try std.testing.expectEqualStrings("enumerate_workflow_resources", detail.step);
+        try std.testing.expect(detail.evidence.ordinal == null and detail.evidence.path == null and detail.evidence.rule == null);
+    }
+}
+
 test "explicit cancellation from a port stays distinct from failure" {
     {
         var world: World = .{ .inspect = .cancel };
@@ -327,7 +391,7 @@ test "explicit cancellation from a port stays distinct from failure" {
     }
 }
 
-test "cancellation or deadline between any two steps stops with that step's report" {
+test "cancellation between any two steps stops with that step's report" {
     // The routine checks the runtime before the first step and after each step, so one more check
     // than there are steps; check k follows step k - 1, and check 0 belongs to the first step.
     for (0..step_count + 1) |check| {
@@ -339,15 +403,6 @@ test "cancellation or deadline between any two steps stops with that step's repo
             var outcome = world.run(std.testing.allocator, gate.runtime(), &diagnostic);
             defer outcome.deinit();
             try std.testing.expect(outcome == .cancelled);
-            try std.testing.expectEqual(@as(?startup.Step, expected), diagnostic.step);
-        }
-        {
-            var world: World = .{};
-            var gate: Gate = .{ .remaining = check, .stop = .deadline_exhausted };
-            var diagnostic: startup.Diagnostic = .{};
-            var outcome = world.run(std.testing.allocator, gate.runtime(), &diagnostic);
-            defer outcome.deinit();
-            try std.testing.expectEqual(startup.code(expected), outcome.failed);
             try std.testing.expectEqual(@as(?startup.Step, expected), diagnostic.step);
         }
     }
@@ -525,11 +580,11 @@ test "resource capture reads only the validated declared manifest" {
     var world: World = .{};
     try std.testing.expectError(
         error.WorkflowResourceReadError,
-        startup.steps.captureWorkflowResources(world.capturer(), arena.allocator(), validated, .{ .bindings = &.{}, .resource_ordinals = &.{} }, .{}),
+        startup.steps.captureWorkflowResources(world.capturer(), arena.allocator(), validated, .{ .bindings = &.{}, .resource_ordinals = &.{} }, .{}, null),
     );
     try std.testing.expectEqual(@as(usize, 0), world.trace_len);
 
-    const captured = try startup.steps.captureWorkflowResources(world.capturer(), arena.allocator(), validated, .{ .bindings = &.{}, .resource_ordinals = &.{1} }, .{});
+    const captured = try startup.steps.captureWorkflowResources(world.capturer(), arena.allocator(), validated, .{ .bindings = &.{}, .resource_ordinals = &.{1} }, .{}, null);
     try std.testing.expectEqual(@as(usize, 1), world.trace_len);
     try std.testing.expectEqualStrings("abc", captured[0].bytes);
 }
@@ -552,7 +607,7 @@ test "definition capture reads only the budgeted definition ordinals" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var world: World = .{};
-    const captured = try startup.steps.captureWorkflows(world.capturer(), arena.allocator(), validated, .{});
+    const captured = try startup.steps.captureWorkflows(world.capturer(), arena.allocator(), validated, .{}, null);
     try std.testing.expectEqual(@as(usize, 1), captured.len);
     try std.testing.expectEqualStrings("abc", captured[0].bytes);
     try std.testing.expectEqualSlices(Call, &.{.capture}, world.calls());

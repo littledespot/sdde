@@ -3,17 +3,16 @@
 Part of the [proposed design](../design.md#27-observability), as amended by the
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
-- The runner constructs one pure `WorkflowLog` binding from the selected compiled workflow's
-  registry-validated four-character shortcode.
-- Actions call `workflowLog.log(&delta, fact)` to append attributed telemetry without performing
-  I/O; runner lifecycle facts use the same active binding.
-- The resulting `NodeDelta.telemetryFactsAdded` values pass through the discrete logging actions
-  described in Section 13.9. Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet
-  implemented), those actions become the steps of a feature-logging engine routine, once its
-  logging preconditions hold.
+- The runner is the only producer of telemetry: it attributes each fact to the selected compiled
+  workflow's registry-validated four-character shortcode and emits runner lifecycle facts without
+  performing I/O. No action and no `NodeDelta` carries a fact.
+- The emitted `WorkflowTelemetryFact` values pass through the feature-logging engine routines
+  described in Section 13.9, which [ADR 0032](../decisions/0032-engine-routines.md) makes the
+  steps of one routine per sequence and the runtime logging lifecycle their only caller.
   - The event outcomes, emergency diagnostic and finalization rules here are unchanged.
-  - Cancellation under a log lock is reported as a logging failure; ADR 0032 leaves
-    changing that shared sink contract undecided.
+  - Cancellation under a log lock, or while a segment is read, is the run's `cancelled`, not a
+    logging failure: it has no `LOG_*` code and emits no emergency diagnostic (ADR 0032,
+    "Cancellation mapping").
 
 [View the Observability events sample](../code.md#observability-events).
 
@@ -99,7 +98,10 @@ as a first cause (its terminal carries a later logging failure), and one failure
 sink that stays broken, replaced nothing. The
 E2E report (`first_cause`), the step event of the rejected step and the offline step trace
 (`:first=`) carry both; the feature log's terminal event keeps the terminal code only and
-gains no event, column or code.
+gains no event, column or code. A failed model call's provider failure reaches the run
+report and the CLI only ([§8](08-diagnostics-evidence.md)): `model.completed` gains no
+cause field. A failing reference entry's display path reaches the run report and the CLI
+only (§8): the feature log, step events and E2E report carry none.
 
 Reuse the closed event registry and shared logging lifecycle. The runner owns
 execution/transition facts, validators supply typed diagnostics, and the existing
@@ -156,7 +158,7 @@ re-send is logged:
   carrying the diagnostic `RunawayRepeated`.
 
 Logging rejection prevents the re-send. The temperature each attempt sent is recorded in
-its request description (`model-request-debug/v19`), not in a log field. A re-send that
+its request description (`model-request-debug/v21`), not in a log field. A re-send that
 succeeds removes neither event.
 
 At `debug` or `trace`, ADR 0018's capture logs every runaway in full in the prompt

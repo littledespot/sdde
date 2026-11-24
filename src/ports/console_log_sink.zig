@@ -1,4 +1,4 @@
-pub const Error = error{ConsoleWriteFailure};
+pub const Error = error{ ConsoleWriteFailure, Cancelled };
 pub const Sink = struct {
     context: *anyopaque,
     write_fn: *const fn (*anyopaque, []const u8) Error!void,

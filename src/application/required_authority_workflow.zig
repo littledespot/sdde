@@ -10,13 +10,11 @@ const gate = @import("../domain/workflow_gate.zig");
 const generation_facts = @import("specification_generation_facts.zig");
 pub const inputs_schema = values.schema(.required_authority_inputs, owned.Value, 1, null);
 pub const ledger_schema = values.schema(.required_authority_ledger, owned.Value, 1, null);
-pub const raw_schema = values.schema(.raw_required_authority_observations, owned.Value, 1, null);
 pub const observations_schema = values.schema(.required_authority_observations, owned.Value, 1, null);
 pub const result_schema = values.schema(.required_authority_result, owned.Value, 1, null);
 pub const content_schema = values.schema(.identified_specification_content, owned.Value, 1, null);
 pub const gate_schema = values.schema(.required_authority_gate, gate.Decision, 1, @sizeOf(gate.Decision));
-pub const schemas = [_]data.Schema{ inputs_schema, ledger_schema, raw_schema, observations_schema, result_schema, content_schema, gate_schema };
-pub const gate_contract: gate.Contract = .{ .id = .{ .bytes = "required-authority@1" }, .issuer = .{ .bytes = "validate-required-authority-reconciliation" }, .evidence = .required_authority_gate, .authority = &.{ .required_authority_inputs, .required_authority_observations, .required_authority_result } };
+pub const schemas = [_]data.Schema{ inputs_schema, ledger_schema, observations_schema, result_schema, content_schema, gate_schema };
 const operation_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .needs_user, .blocked };
 const structural_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked };
 
@@ -34,7 +32,7 @@ pub const SourcePreservationPolicy = struct {
             const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
             var arena: std.heap.ArenaAllocator = .init(self.allocator);
             defer arena.deinit();
-            const pending = @import("../domain/source_omission.zig").pendingReview(arena.allocator(), permit, sources.corpus.feature_id, sources.corpus.state_id) catch |err| switch (err) {
+            const pending = @import("../domain/source_omission_authority.zig").pendingReview(arena.allocator(), permit, sources.corpus.feature_id, sources.corpus.state_id) catch |err| switch (err) {
                 error.OutOfMemory => return error.OutOfMemory,
                 error.InvalidRequiredAuthority => return .{ .outcome = .invalid, .delta = .{}, .diagnostic = error.InvalidRequiredAuthority },
             };
@@ -118,21 +116,6 @@ pub const Build = struct {
         errdefer owned.destroy(owner);
         owner.payload = .{ .ledger = self.action.execute(owner.arena.allocator(), source) catch |err| return reject(self.allocator, ledger_schema, owner, err) };
         return owned.publish(self.allocator, ledger_schema, owner, .ok) catch |operation_error| return operation_error;
-    }
-};
-pub const Parse = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .raw_required_authority_observations, .evidence = .raw_required_authority_observations, .result = .required_authority_observations } };
-    pub const Action = @import("../actions/authority/parse_required_authority_observations.zig").Action;
-    pub const outcomes = structural_outcomes;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const raw = owned.read(&input.step.data, raw_schema, .raw) catch |operation_error| return operation_error;
-        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
-        errdefer owned.destroy(owner);
-        owner.payload = .{ .observations = self.action.execute(owner.arena.allocator(), raw) catch |err| return reject(self.allocator, observations_schema, owner, err) };
-        return owned.publish(self.allocator, observations_schema, owner, .ok) catch |operation_error| return operation_error;
     }
 };
 pub const Reconcile = struct {

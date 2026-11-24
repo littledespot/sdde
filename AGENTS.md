@@ -135,6 +135,28 @@ Section *N* is detailed in `design/contracts/NN-*.md`; the §13 catalogue is in
   recorded build state is reported as a fact.
 - Preserve existing user changes; make no unrelated edits in a dirty worktree.
 
+## Recommendations
+
+Before you recommend a change, a run or a process step, or choose a change or process
+step yourself while acting on a request:
+
+- **Need:** name what it improves (a published-output defect class, an invariant or
+  contract breach, tech debt or brittleness) and, unless it repairs an invariant or
+  contract breach, which pending work needs it now. If you can't, don't recommend or
+  choose it.
+- **Authority:** check it against this file, the sources "Project authority" ranks,
+  and the rules and decisions in the governing open-work record.
+- **Evidence:** state as fact only what the code or recorded evidence shows. Give the
+  rest a confidence (likely or speculative) and the evidence against it. Use
+  absolutes ("cannot", "nothing", "the only") only for what the code or recorded
+  evidence shows.
+- **Decision value:** for a run, screen or set, say which result would change the
+  decision. Recommend none whose result can't.
+- **Stability:** change a recommendation you gave only on evidence you hadn't weighed
+  when you gave it (a run, a screen, a review finding, a source you hadn't read), and
+  name that evidence. If you find it wrong without new evidence, say it was wrong and
+  why, and correct it.
+
 ## Before editing
 
 For a code, schema, configuration, test or architecture change, state:

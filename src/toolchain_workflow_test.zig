@@ -15,6 +15,8 @@ const steps = stage.steps;
 // at its edge: its contract, every failing step, cancellation between steps and cleanup.
 
 const no_policies: toolchain.PolicyRegistry = .{ .contracts = &.{} };
+const locked_policy: toolchain.PolicyRegistry = .{ .contracts = &.{.{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} }} };
+const selectable_policy: toolchain.PolicyRegistry = .{ .contracts = &.{.{ .id = "base.policy@1", .project_selectable = true, .locked_required = false, .naming = &.{} }} };
 
 const key_schema: toolchain.RawNode = .{ .scalar = "schema" };
 const key_presets: toolchain.RawNode = .{ .scalar = "presets" };
@@ -34,6 +36,8 @@ const base_sequence: toolchain.RawNode = .{ .sequence = &.{&base_ref} };
 const absent_sequence: toolchain.RawNode = .{ .sequence = &.{&absent_ref} };
 const missing_sequence: toolchain.RawNode = .{ .sequence = &.{&missing_ref} };
 const unknown_policy_sequence: toolchain.RawNode = .{ .sequence = &.{&unknown_policy_ref} };
+const selected_policy_ref: toolchain.RawNode = .{ .scalar = "base.policy@1" };
+const selected_policy_sequence: toolchain.RawNode = .{ .sequence = &.{&selected_policy_ref} };
 
 fn projectRoot(presets: *const toolchain.RawNode, policies: *const toolchain.RawNode) toolchain.RawNode {
     return .{ .mapping = &.{
@@ -54,11 +58,13 @@ fn presetRoot(extends: *const toolchain.RawNode) toolchain.RawNode {
 const project_root = projectRoot(&base_sequence, &empty_sequence);
 const missing_preset_project_root = projectRoot(&missing_sequence, &empty_sequence);
 const unknown_policy_project_root = projectRoot(&base_sequence, &unknown_policy_sequence);
+const selected_policy_project_root = projectRoot(&base_sequence, &selected_policy_sequence);
 const preset_root = presetRoot(&empty_sequence);
 const orphan_preset_root = presetRoot(&absent_sequence);
 const project_document: toolchain.RawDocument = .{ .name = toolchain.project_filename, .root = &project_root };
 const missing_preset_project_document: toolchain.RawDocument = .{ .name = toolchain.project_filename, .root = &missing_preset_project_root };
 const unknown_policy_project_document: toolchain.RawDocument = .{ .name = toolchain.project_filename, .root = &unknown_policy_project_root };
+const selected_policy_project_document: toolchain.RawDocument = .{ .name = toolchain.project_filename, .root = &selected_policy_project_root };
 const preset_document: toolchain.RawDocument = .{ .name = "base.toolchain-preset.yaml", .root = &preset_root };
 const orphan_preset_document: toolchain.RawDocument = .{ .name = "base.toolchain-preset.yaml", .root = &orphan_preset_root };
 
@@ -75,6 +81,8 @@ const Fake = struct {
     documents: []const toolchain.RawDocument = &.{ project_document, preset_document },
     entries: []const toolchain.Entry = &.{entry_a},
     fail: ?stage.Step = null,
+    /// The failing source step reports a cancellation instead of an invalid source.
+    cancel: bool = false,
     project_reads: usize = 0,
     inventories: usize = 0,
     preset_reads: usize = 0,
@@ -94,20 +102,23 @@ const Fake = struct {
     fn captureProject(context: *anyopaque, _: *const roots.ConfiguredBaseRootCapability, allocator: std.mem.Allocator) @import("ports/toolchain_authority_source.zig").Error!toolchain.Capture {
         const self: *Fake = @ptrCast(@alignCast(context));
         self.project_reads += 1;
-        if (self.fail == .capture_project) return error.InvalidToolchainSource;
+        if (self.fail == .capture_project) return self.sourceFault();
         return .{ .name = toolchain.project_filename, .bytes = allocator.dupe(u8, "project") catch return error.InvalidToolchainSource };
     }
     fn inventory(context: *anyopaque, _: *const roots.ConfiguredBaseRootCapability, allocator: std.mem.Allocator) @import("ports/toolchain_authority_source.zig").Error![]const toolchain.Entry {
         const self: *Fake = @ptrCast(@alignCast(context));
         self.inventories += 1;
-        if (self.fail == .inventory_presets) return error.InvalidToolchainSource;
+        if (self.fail == .inventory_presets) return self.sourceFault();
         return allocator.dupe(toolchain.Entry, self.entries) catch error.InvalidToolchainSource;
     }
     fn capturePreset(context: *anyopaque, _: *const roots.ConfiguredBaseRootCapability, entry: toolchain.Entry, allocator: std.mem.Allocator) @import("ports/toolchain_authority_source.zig").Error!toolchain.Capture {
         const self: *Fake = @ptrCast(@alignCast(context));
         self.preset_reads += 1;
-        if (self.fail == .capture_presets) return error.InvalidToolchainSource;
+        if (self.fail == .capture_presets) return self.sourceFault();
         return .{ .name = entry.name, .bytes = allocator.dupe(u8, "preset") catch return error.InvalidToolchainSource };
+    }
+    fn sourceFault(self: *const Fake) @import("ports/toolchain_authority_source.zig").Error {
+        return if (self.cancel) error.Cancelled else error.InvalidToolchainSource;
     }
     fn parse(context: *anyopaque, _: std.mem.Allocator, captures: []const toolchain.Capture) @import("ports/toolchain_document_parser.zig").Error![]const toolchain.RawDocument {
         const self: *Fake = @ptrCast(@alignCast(context));
@@ -154,13 +165,13 @@ test "the stage runs the nine steps in order and returns one safety-valid toolch
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     var fake: Fake = .{};
     var diagnostic: stage.Diagnostic = .{};
-    const owner = try fake.action(no_policies).execute(arena.allocator(), std.testing.allocator, .{}, &diagnostic);
+    const owner = try fake.action(locked_policy).execute(arena.allocator(), std.testing.allocator, .{}, &diagnostic);
     // Every intermediate lived in the scratch space; the owner must not point into it.
     arena.deinit();
     defer safety.deinitOwner(owner);
-    const packages = safety.value(owner).packages();
-    try std.testing.expectEqual(@as(usize, 1), packages.len);
-    try std.testing.expectEqualStrings("base@1.0.0", packages[0]);
+    const policies = safety.value(owner).policies();
+    try std.testing.expectEqual(@as(usize, 1), policies.len);
+    try std.testing.expectEqualStrings("core.safety@1", policies[0].id);
     try std.testing.expectEqual(@as(?stage.Step, null), diagnostic.step);
     try std.testing.expectEqual(@as(usize, 1), fake.project_reads);
     try std.testing.expectEqual(@as(usize, 1), fake.inventories);
@@ -202,6 +213,16 @@ test "a failure in each internal step names that step and propagates the step's 
     try expectStops(&validate_safety, no_policies, .validate_safety, error.InvalidToolchain);
 }
 
+test "a source that reports a cancellation stops its step cancelled, and one that fails stays an invalid toolchain" {
+    // The same three steps as above, each failing once as a cancellation: the step is named, the error is the cancellation.
+    var capture_project: Fake = .{ .fail = .capture_project, .cancel = true };
+    try expectStops(&capture_project, no_policies, .capture_project, error.Cancelled);
+    var inventory_presets: Fake = .{ .fail = .inventory_presets, .cancel = true };
+    try expectStops(&inventory_presets, no_policies, .inventory_presets, error.Cancelled);
+    var capture_presets: Fake = .{ .fail = .capture_presets, .cancel = true };
+    try expectStops(&capture_presets, no_policies, .capture_presets, error.Cancelled);
+}
+
 test "a parser result that is not one document per capture fails the parse step" {
     // One capture for the project and one for the preset: none, too few and too many all reject.
     var none: Fake = .{ .documents = &.{} };
@@ -238,9 +259,10 @@ test "an allocation failure in an internal step reports that step and propagates
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         var failing: std.testing.FailingAllocator = .init(arena.allocator(), .{ .fail_index = fail_index });
-        var fake: Fake = .{};
+        // The project selects a policy, so composition allocates its policy union.
+        var fake: Fake = .{ .documents = &.{ selected_policy_project_document, preset_document } };
         var diagnostic: stage.Diagnostic = .{};
-        if (fake.action(no_policies).execute(failing.allocator(), std.testing.allocator, .{}, &diagnostic)) |owner| {
+        if (fake.action(selectable_policy).execute(failing.allocator(), std.testing.allocator, .{}, &diagnostic)) |owner| {
             safety.deinitOwner(owner);
             break;
         } else |err| {
@@ -335,12 +357,12 @@ test "resolution, composition and safety validation chain, and only safety const
     const registry = try steps.validateRegistry(allocator, &documents);
     const resolved = try steps.resolveInheritance(allocator, project, registry);
     try std.testing.expectEqual(@as(usize, 1), resolved.packages.len);
-    const composed = try steps.compose(allocator, project, resolved);
-    const owner = try steps.validateSafety(std.testing.allocator, composed, no_policies);
+    const selected = try steps.compose(allocator, project, resolved);
+    try std.testing.expectEqual(@as(usize, 0), selected.len);
+    const owner = try steps.validateSafety(std.testing.allocator, selected, locked_policy);
     defer safety.deinitOwner(owner);
-    try std.testing.expectEqualStrings("base@1.0.0", safety.value(owner).packages()[0]);
-    const unknown: toolchain.Composed = .{ .packages = composed.packages, .policies = &.{"unknown.policy@1"} };
-    try std.testing.expectError(error.InvalidToolchain, steps.validateSafety(std.testing.allocator, unknown, no_policies));
+    try std.testing.expectEqualStrings("core.safety@1", safety.value(owner).policies()[0].id);
+    try std.testing.expectError(error.InvalidToolchain, steps.validateSafety(std.testing.allocator, &.{"unknown.policy@1"}, no_policies));
 }
 
 fn bindingStep() compilation.CompiledStep {
@@ -367,7 +389,6 @@ fn invokeBinding(runner: *runners.PrepareToolchain, runtime: pipeline.NodeRuntim
         .step = &step,
         .resources = &.{},
         .model_binding = null,
-        .log = pipeline.WorkflowLog.init(.{ .bytes = "TEST".* }),
         .runtime = runtime,
         .stage_step = slot,
     } });
@@ -407,22 +428,25 @@ test "a failed action's event records the stage step, and no other action event 
     const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "toolchain" };
     const rejected: execution.Applied = .{ .rejected = .{ .operation_failed = error.InvalidToolchain } };
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").FailureCode, null), capture.action(node, rejected, null, "validate_registry"));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, rejected, null, "validate_registry"));
     const failed = recorder.last.?.fact;
-    try std.testing.expectEqual(telemetry.EventType.action_failed, failed.event_type);
-    try std.testing.expectEqualStrings("validate_registry", failed.fields.step_id.?.bytes);
+    try std.testing.expectEqual(telemetry.EventType.action_failed, telemetry.eventOf(failed));
+    try std.testing.expectEqualStrings("validate_registry", telemetry.fieldOf(failed, .step_id).?.bytes);
     _ = try registry.validateFact(failed);
     // A failure with no stage step, and a completed action given one, record none.
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").FailureCode, null), capture.action(node, rejected, null, null));
-    try std.testing.expectEqual(@as(?telemetry.Identifier, null), recorder.last.?.fact.fields.step_id);
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").FailureCode, null), capture.action(node, .{ .outcome = .ok }, null, "validate_registry"));
-    try std.testing.expectEqual(telemetry.EventType.action_completed, recorder.last.?.fact.event_type);
-    try std.testing.expectEqual(@as(?telemetry.Identifier, null), recorder.last.?.fact.fields.step_id);
-    // The field is for action events only: no other event type admits it.
-    var misplaced: telemetry.TelemetryFact = .{ .event_type = .run_completed, .fields = .{ .outcome = .completed, .step_id = failed.fields.step_id } };
-    try std.testing.expectError(error.InvalidLogEventFact, registry.validateFact(misplaced));
-    misplaced.event_type = .stage_completed;
-    try std.testing.expectError(error.InvalidLogEventFact, registry.validateFact(misplaced));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, rejected, null, null));
+    try std.testing.expectEqual(@as(?telemetry.Identifier, null), telemetry.fieldOf(recorder.last.?.fact, .step_id));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, .{ .outcome = .ok }, null, "validate_registry"));
+    try std.testing.expectEqual(telemetry.EventType.action_completed, telemetry.eventOf(recorder.last.?.fact));
+    try std.testing.expectEqual(@as(?telemetry.Identifier, null), telemetry.fieldOf(recorder.last.?.fact, .step_id));
+    // The field is for action events only: no other event's row names it.
+    inline for (std.enums.values(telemetry.EventType)) |event| {
+        const action_event = comptime switch (event) {
+            .action_started, .action_completed, .action_invalid, .action_failed => true,
+            else => false,
+        };
+        try std.testing.expectEqual(action_event, @hasField(telemetry.Payload(event), "step_id"));
+    }
 }
 
 test "every event of a request stage names the stage, and a stage action's other events do not" {
@@ -432,7 +456,7 @@ test "every event of a request stage names the stage, and a stage action's other
     var recorder: Recorder = .{};
     const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "request" };
-    const failure: ?@import("domain/feature_log_stream.zig").FailureCode = null;
+    const failure: ?@import("domain/feature_log_stream.zig").Stop = null;
     // A stage's start and each kind of end name the stage, and the registry admits each fact.
     const ends = [_]struct { result: ?execution.Applied, event: telemetry.EventType }{
         .{ .result = null, .event = .action_started },
@@ -445,14 +469,14 @@ test "every event of a request stage names the stage, and a stage action's other
     for (std.enums.values(@import("domain/model_request_stage.zig").Stage)) |request_stage| for (ends) |end| {
         try std.testing.expectEqual(failure, capture.requestStage(node, request_stage.name(), end.result, null));
         const fact = recorder.last.?.fact;
-        try std.testing.expectEqual(end.event, fact.event_type);
-        try std.testing.expectEqualStrings(request_stage.name(), fact.fields.step_id.?.bytes);
+        try std.testing.expectEqual(end.event, telemetry.eventOf(fact));
+        try std.testing.expectEqualStrings(request_stage.name(), telemetry.fieldOf(fact, .step_id).?.bytes);
         _ = try registry.validateFact(fact);
     };
     // The same events of a step that is no stage name nothing unless a stage action failed (ADR 0031).
     for (ends) |end| {
         try std.testing.expectEqual(failure, capture.action(node, end.result, null, null));
-        try std.testing.expectEqual(@as(?telemetry.Identifier, null), recorder.last.?.fact.fields.step_id);
+        try std.testing.expectEqual(@as(?telemetry.Identifier, null), telemetry.fieldOf(recorder.last.?.fact, .step_id));
         _ = try registry.validateFact(recorder.last.?.fact);
     }
 }
@@ -470,8 +494,9 @@ const CodeRecorder = struct {
     fn process(context: *anyopaque, fact: @import("domain/telemetry.zig").WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
         const self: *CodeRecorder = @ptrCast(@alignCast(context));
         _ = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
-        const bytes = (fact.fact.fields.diagnostic_code orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE }).bytes;
-        self.event = fact.fact.event_type;
+        const telemetry = @import("domain/telemetry.zig");
+        const bytes = (telemetry.fieldOf(fact.fact, .diagnostic_code) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE }).bytes;
+        self.event = telemetry.eventOf(fact.fact);
         @memcpy(self.code[0..bytes.len], bytes);
         self.code_len = bytes.len;
         return .{ .persisted = .{ .segment_ordinal = 1, .sequence = 1, .bytes_written = 1, .flushed = true } };
@@ -487,7 +512,7 @@ test "an authority rejection's events carry its reason as their diagnostic code"
     var recorder: CodeRecorder = .{};
     const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "request" };
-    const accepted: ?@import("domain/feature_log_stream.zig").FailureCode = null;
+    const accepted: ?@import("domain/feature_log_stream.zig").Stop = null;
     for (std.enums.values(execution.AuthorityReason)) |reason| {
         // The existing token rule upper-cases the reason: no new code family, and each reason is its own code.
         var upper: [64]u8 = undefined;

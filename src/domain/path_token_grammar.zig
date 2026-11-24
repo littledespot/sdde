@@ -4,7 +4,7 @@ const naming = @import("naming_policy.zig");
 const evidence = @import("reference_evidence.zig");
 const safety = @import("toolchain_safety.zig");
 const unicode = @import("../ports/unicode_normalizer.zig");
-pub const Error = naming.Error || error{InvalidPathTokenGrammar};
+pub const Error = naming.BindingError || error{InvalidPathTokenGrammar};
 pub const ReferenceName = struct { source_id: evidence.identity.SourceId, basename: []const u8 };
 pub const Grammar = struct {
     contract: enum { path_token_grammar_v1 },
@@ -31,8 +31,15 @@ pub fn build(allocator: std.mem.Allocator, compiled: naming.Compiled, current: *
     };
 }
 
+/// The grammar's naming policy against the current toolchain, then its inputs: the check the stage that builds
+/// the grammar makes.
 pub fn validateBinding(allocator: std.mem.Allocator, grammar: Grammar, current: *const safety.ValidToolchain, inputs: evidence.Inputs, normalizer: unicode.Normalizer, folder: unicode.CaseFolder) Error!void {
     try naming.validateBinding(allocator, grammar.policy, current, normalizer, folder);
+    try validateInputs(grammar, inputs);
+}
+
+/// A grammar built by the toolchain-reading stage against the inputs it was built for; every later stage holds it.
+pub fn validateInputs(grammar: Grammar, inputs: evidence.Inputs) Error!void {
     if (!grammar.reference_state_id.eql(inputs.corpus.state_id) or !grammar.reference_state_id.eql(inputs.chunks.state_id) or
         !std.mem.eql(u8, grammar.feature_id.bytes, inputs.corpus.feature_id.bytes) or grammar.reference_names.len != inputs.corpus.sources.len) return error.InvalidPathTokenGrammar;
     for (grammar.reference_names, inputs.corpus.sources) |name, source| {

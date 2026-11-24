@@ -18,13 +18,22 @@ pub const Options = struct {
     capture: ?*trace_module.CaptureLog = null,
     /// Only offline tests may replace the transport; the live CLI never supplies it.
     transport: ?@import("../../../src/adapters/provider/model_http_transport.zig").Port = null,
+    /// Only offline tests read the invocation's runner while it runs, to answer each request from the state
+    /// the engine holds. Set to the runner's slot before the first step, which is empty until the run prepares
+    /// it, and dangling once `run` returns: read it only while the run is in flight.
+    runner_view: ?*?*const ?@import("../../../src/application/workflow_pipeline_runner.zig").Runner = null,
+    /// Only offline tests may replace the account the engine authenticates; the live CLI reads the operating-system account.
+    authenticator: ?@import("../../../src/ports/actor_authentication.zig").Port = null,
 };
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, generation_keys: @import("../environment.zig").GenerationKeys, store: @import("../evidence.zig").Store, report: *c.Report, options: Options) !?[]const u8 {
-    if (!@import("builtin").is_test and options.transport != null) return error.TestTransportForbidden;
+    if (!@import("builtin").is_test and (options.transport != null or options.runner_view != null or options.authenticator != null)) return error.TestTransportForbidden;
+    var interrupt = root.Interrupt.install();
+    defer interrupt.restore();
     var runtime: root.Runtime = undefined;
-    runtime.init(io, allocator, project, .{});
+    runtime.init(io, allocator, project, interrupt.runtime());
     defer runtime.deinit();
+    if (options.authenticator) |account| runtime.native.ops.authenticate_actor.action.port = account;
     switch (runtime.boot) {
         .ready => {},
         .failed => |reason| {
@@ -54,6 +63,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     }
     var invocation = runtime.invocation(&.{ selected.workflow_id, "--feature", selected.feature, "--reference", selected.reference }, .{ .snapshots = supplied });
     defer invocation.deinit();
+    if (options.runner_view) |view| view.* = &invocation.pipeline_runner;
     var expected_config = try @import("../../../src/domain/engine_config_decode.zig").decode(allocator, captured.config);
     defer expected_config.deinit();
 
@@ -116,6 +126,8 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     if (invocation.pipeline_runner) |*runner| {
         if (outcome == .needs_user) report.clarifications = try @import("../../../src/application/workflow_clarification_report.zig").capture(allocator, &.{ .slots = runner.envelope.slots });
         try @import("observation.zig").capture(allocator, runner, report);
+        // Right after the capture, so no later failure leaves a report with only each candidate's last merge.
+        try trace.projectRepairs(allocator, report);
         try trace.last_rejection.project(allocator, trace.calls, report);
         try trace.correlate(allocator, report);
         try trace.progress.project(allocator, report);

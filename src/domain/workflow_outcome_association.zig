@@ -8,11 +8,63 @@ const retry = @import("workflow_retry.zig");
 const provider = @import("llm_provider_operation.zig");
 
 pub const Kind = enum { request, candidate, authority, clarification };
+
+/// The native owner whose retained decision an authorizer's `blocked` outcome is read from. The set is
+/// closed so the binding's `switch` over it is exhaustive, and each reader names the one result key it
+/// reads, which `validDescriptor` holds the binding's `result` to.
+pub const BlockedReader = enum {
+    reference_reconciliation,
+    specification_unit,
+    specification_support,
+
+    pub fn result(self: BlockedReader) pipeline.DataKey {
+        return switch (self) {
+            .reference_reconciliation => .reference_reconciliation_repair,
+            .specification_unit => .specification_repair_authorization,
+            .specification_support => .specification_support_repair,
+        };
+    }
+};
+
+/// The native owner whose retained decision a diagnostic admission is read from. The set is closed so
+/// the binding's `switch` over it is exhaustive, and each reader names the one evidence key it reads,
+/// which `validDescriptor` holds the binding's `evidence` to.
+pub const AdmissionReader = enum {
+    specification_support_review,
+
+    pub fn evidence(self: AdmissionReader) pipeline.DataKey {
+        return switch (self) {
+            .specification_support_review => .specification_support_review,
+        };
+    }
+};
+
+/// The native owner whose retained decision a clarification route is read from. The set is closed so the
+/// binding's `switch` over it is exhaustive, and each reader names the one evidence key it reads, which
+/// `validDescriptor` holds the binding's `evidence` to.
+pub const RouteReader = enum {
+    specification_unit,
+    required_authority,
+
+    pub fn evidence(self: RouteReader) pipeline.DataKey {
+        return switch (self) {
+            .specification_unit => .validated_specification_unit,
+            .required_authority => .required_authority_result,
+        };
+    }
+};
+
 pub const Binding = struct {
     kind: Kind,
     subject: pipeline.DataKey,
     evidence: pipeline.DataKey,
     result: ?pipeline.DataKey = null,
+    /// Set exactly on an authorizer whose contract declares `blocked`.
+    blocked_reader: ?BlockedReader = null,
+    /// Set exactly on a diagnostic admission.
+    admission_reader: ?AdmissionReader = null,
+    /// Set exactly on a clarification route.
+    route_reader: ?RouteReader = null,
 };
 
 /// Engine-owned native associations, never workflow parameters or model facts.
@@ -99,6 +151,20 @@ pub const Resolution = union(enum) {
     diagnostic_admitted: struct { subject: Subject, evidence: DiagnosticAdmission },
     clarification_routed: struct { subject: Subject, needs: Subject },
 };
+/// The outcomes a native owner's sealed result can name for a step it rejected.
+pub const ResultOutcome = enum {
+    invalid,
+    needs_user,
+    blocked,
+
+    pub fn tag(self: ResultOutcome) workflow.OutcomeTag {
+        return switch (self) {
+            .invalid => .invalid,
+            .needs_user => .needs_user,
+            .blocked => .blocked,
+        };
+    }
+};
 pub const Change = union(enum) {
     observe: Observation,
     preserve: Subject,
@@ -108,8 +174,11 @@ pub const Change = union(enum) {
         missing_final_text: *const @import("provider_invocation_validation.zig").Evidence,
         /// A first runaway takes its one re-send (ADR 0039), like a missing answer.
         runaway: *const @import("provider_invocation_validation.zig").Evidence,
-        authority_result: struct { subject: Subject, result: *const @import("required_authority.zig").Result },
-        clarification_result: struct { subject: Subject, result: *const @import("clarification_refresh.zig").Result },
+        /// The owner's sealed result, read by its binding, names the outcome the step takes; the association checks
+        /// it against the step's outcome and the observation it reclassifies, and holds no owner result type.
+        authority_result: struct { subject: Subject, canonical: ResultOutcome },
+        /// The owner's sealed result is blocked, as its binding read it.
+        clarification_result: struct { subject: Subject },
         repair_blocked: BlockedRepairEvidence,
     },
     seal: Observation,
@@ -201,11 +270,12 @@ pub const State = struct {
     }
 
     /// The native prepared output must carry each pending clarification. A
-    /// matching terminal tag alone cannot authorize a protected writer.
+    /// matching terminal tag alone cannot authorize a protected writer. A publisher ends the run `ok`, `needs_user` or,
+    /// when the user's own `cancel` was accepted (ADR 0025), `cancelled`.
     pub fn permitsPublication(self: *const State, current: NativeSubject, terminal: workflow.OutcomeTag) bool {
         const subject: Subject = .{ .native = current };
         if (!validSubject(subject) or current.kind != .clarification or
-            (terminal != .ok and terminal != .needs_user) or !self.compatible(terminal)) return false;
+            (terminal != .ok and terminal != .needs_user and terminal != .cancelled) or !self.compatible(terminal)) return false;
         for (self.entries.items) |entry| {
             if (entry.observation.subject != .native or entry.observation.subject.native.kind != .clarification or
                 !associated(self.associations.items, entry.observation.subject, subject)) return false;
@@ -410,20 +480,14 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
             },
             .authority_result => |value| {
                 if (descriptor != .authority_reconcile or value.subject != .native or value.subject.native.kind != .authority or !validSubject(value.subject)) return error.InvalidOutcomeAssociation;
-                const canonical: workflow.OutcomeTag = switch (value.result.continuation) {
-                    .all_resolved => return error.InvalidOutcomeAssociation,
-                    .invalid => .invalid,
-                    .needs_user => .needs_user,
-                    .blocked => .blocked,
-                };
-                if (outcome != canonical) return error.InvalidOutcomeAssociation;
+                if (outcome != value.canonical.tag()) return error.InvalidOutcomeAssociation;
                 for (entries.items) |*entry| if (associated(aliases.items, entry.observation.subject, value.subject)) {
                     if (entry.irreversible or entry.observation.outcome == .failed or entry.observation.outcome == .cancelled) return error.InvalidOutcomeAssociation;
-                    entry.observation.outcome = canonical;
+                    entry.observation.outcome = value.canonical.tag();
                 };
             },
             .clarification_result => |value| {
-                if (descriptor != .clarification_refresh or outcome != .blocked or value.result.* != .blocked or value.subject != .native or value.subject.native.kind != .clarification or !validSubject(value.subject)) return error.InvalidOutcomeAssociation;
+                if (descriptor != .clarification_refresh or outcome != .blocked or value.subject != .native or value.subject.native.kind != .clarification or !validSubject(value.subject)) return error.InvalidOutcomeAssociation;
                 for (entries.items) |*entry| if (associated(aliases.items, entry.observation.subject, value.subject)) {
                     if (entry.irreversible or (entry.observation.outcome != .needs_user and entry.observation.outcome != .blocked)) return error.InvalidOutcomeAssociation;
                     entry.observation.outcome = .blocked;
@@ -582,11 +646,27 @@ fn walkAssociations(aliases: []const Association, left: Subject, right: Subject,
     return false;
 }
 
-pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKey, optional: []const pipeline.DataKey, produces: []const pipeline.DataKey, replaces: []const pipeline.DataKey, repair_role: retry.Role) bool {
+/// What registry admission and graph validation both hold a contract's descriptor to. An authorizer
+/// that declares `blocked` names the reader of that decision, a diagnostic admission names the reader
+/// of its evidence, a clarification route names the reader of its evidence, and nothing else names
+/// one, so the binding can serve every descriptor that is admitted.
+pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKey, optional: []const pipeline.DataKey, produces: []const pipeline.DataKey, replaces: []const pipeline.DataKey, repair_role: retry.Role, outcomes: []const workflow.OutcomeTag) bool {
     const binding = descriptor.binding() orelse return true;
     if (!declared(binding.subject, requires, optional, produces, replaces) or
         !declared(binding.evidence, requires, optional, produces, replaces)) return false;
     if (binding.result) |result| if (!contains(produces, result) and !contains(replaces, result)) return false;
+    const blockable = descriptor == .repair_authorize and std.mem.indexOfScalar(workflow.OutcomeTag, outcomes, .blocked) != null;
+    if (binding.blocked_reader) |reader| {
+        if (!blockable or (binding.result orelse return false) != reader.result()) return false;
+    } else if (blockable) return false;
+    const admits = descriptor == .diagnostic_admission;
+    if (binding.admission_reader) |reader| {
+        if (!admits or binding.evidence != reader.evidence()) return false;
+    } else if (admits) return false;
+    const routes = descriptor == .clarification_route;
+    if (binding.route_reader) |reader| {
+        if (!routes or binding.evidence != reader.evidence()) return false;
+    } else if (routes) return false;
     return switch (descriptor) {
         .request_admission, .request_protocol, .request_resend, .request_closure => binding.kind == .request and binding.subject == .prepared_model_request,
         .repair_authorize => (binding.kind == .candidate or binding.kind == .authority) and repair_role == .authorize,
@@ -605,6 +685,76 @@ fn declared(key: pipeline.DataKey, requires: []const pipeline.DataKey, optional:
 }
 fn contains(keys: []const pipeline.DataKey, key: pipeline.DataKey) bool {
     return std.mem.indexOfScalar(pipeline.DataKey, keys, key) != null;
+}
+
+test "an authorizer names its blocked reader exactly when its contract declares blocked" {
+    const requires = [_]pipeline.DataKey{.parsed_reference_extraction};
+    const blocking = [_]workflow.OutcomeTag{ .ok, .blocked, .failed };
+    const plain = [_]workflow.OutcomeTag{ .ok, .failed };
+    inline for (@typeInfo(BlockedReader).@"enum".fields) |field| {
+        const reader: BlockedReader = @enumFromInt(field.value);
+        const produces = [_]pipeline.DataKey{reader.result()};
+        const read: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .result = reader.result(), .blocked_reader = reader };
+        var unread = read;
+        unread.blocked_reader = null;
+        var resultless = read;
+        resultless.result = null;
+        // Accepted: a reader where `blocked` is declared, none where it is not.
+        try std.testing.expect(validDescriptor(.{ .repair_authorize = read }, &requires, &.{}, &produces, &.{}, .authorize, &blocking));
+        try std.testing.expect(validDescriptor(.{ .repair_authorize = unread }, &requires, &.{}, &produces, &.{}, .authorize, &plain));
+        try std.testing.expect(validDescriptor(.{ .repair_merge = unread }, &requires, &.{}, &produces, &.{}, .merge, &blocking));
+        // Rejected, each differing from an accepted case in exactly one respect.
+        try std.testing.expect(!validDescriptor(.{ .repair_authorize = unread }, &requires, &.{}, &produces, &.{}, .authorize, &blocking));
+        try std.testing.expect(!validDescriptor(.{ .repair_authorize = read }, &requires, &.{}, &produces, &.{}, .authorize, &plain));
+        try std.testing.expect(!validDescriptor(.{ .repair_authorize = resultless }, &requires, &.{}, &produces, &.{}, .authorize, &blocking));
+        try std.testing.expect(!validDescriptor(.{ .repair_merge = read }, &requires, &.{}, &produces, &.{}, .merge, &blocking));
+    }
+    // A reader reads one result key: naming another reader's key is rejected.
+    const foreign = [_]pipeline.DataKey{BlockedReader.reference_reconciliation.result()};
+    const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .result = foreign[0], .blocked_reader = .specification_unit };
+    try std.testing.expect(!validDescriptor(.{ .repair_authorize = mismatched }, &requires, &.{}, &foreign, &.{}, .authorize, &blocking));
+}
+
+test "a diagnostic admission names the reader of its own evidence and no other descriptor names one" {
+    const outcomes = [_]workflow.OutcomeTag{ .ok, .invalid };
+    inline for (@typeInfo(AdmissionReader).@"enum".fields) |field| {
+        const reader: AdmissionReader = @enumFromInt(field.value);
+        const keys = [_]pipeline.DataKey{reader.evidence()};
+        const read: Binding = .{ .kind = .candidate, .subject = reader.evidence(), .evidence = reader.evidence(), .admission_reader = reader };
+        var unread = read;
+        unread.admission_reader = null;
+        // Accepted: a reader on a diagnostic admission, none on any other descriptor.
+        try std.testing.expect(validDescriptor(.{ .diagnostic_admission = read }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        try std.testing.expect(validDescriptor(.{ .observe = unread }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        // Rejected, each differing from an accepted case in exactly one respect.
+        try std.testing.expect(!validDescriptor(.{ .diagnostic_admission = unread }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        try std.testing.expect(!validDescriptor(.{ .observe = read }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+    }
+    // A reader reads one evidence key: another key is rejected.
+    const other = [_]pipeline.DataKey{.parsed_reference_extraction};
+    const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .admission_reader = .specification_support_review };
+    try std.testing.expect(!validDescriptor(.{ .diagnostic_admission = mismatched }, &other, &.{}, &.{}, &.{}, .none, &outcomes));
+}
+
+test "a clarification route names the reader of its own evidence and no other descriptor names one" {
+    const outcomes = [_]workflow.OutcomeTag{ .ok, .needs_user };
+    inline for (@typeInfo(RouteReader).@"enum".fields) |field| {
+        const reader: RouteReader = @enumFromInt(field.value);
+        const keys = [_]pipeline.DataKey{reader.evidence()};
+        const read: Binding = .{ .kind = .candidate, .subject = reader.evidence(), .evidence = reader.evidence(), .route_reader = reader };
+        var unread = read;
+        unread.route_reader = null;
+        // Accepted: a reader on a clarification route, none on any other descriptor.
+        try std.testing.expect(validDescriptor(.{ .clarification_route = read }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        try std.testing.expect(validDescriptor(.{ .observe = unread }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        // Rejected, each differing from an accepted case in exactly one respect.
+        try std.testing.expect(!validDescriptor(.{ .clarification_route = unread }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+        try std.testing.expect(!validDescriptor(.{ .observe = read }, &keys, &.{}, &.{}, &.{}, .none, &outcomes));
+    }
+    // A reader reads one evidence key: another key is rejected.
+    const other = [_]pipeline.DataKey{.parsed_reference_extraction};
+    const mismatched: Binding = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .parsed_reference_extraction, .route_reader = .specification_unit };
+    try std.testing.expect(!validDescriptor(.{ .clarification_route = mismatched }, &other, &.{}, &.{}, &.{}, .none, &outcomes));
 }
 
 test "sealed blocked repair preserves its exact rejection and cannot relabel other outcome classes" {
@@ -683,8 +833,8 @@ test "ordinary success and unrelated native resolution retain opaque failures" {
 test "only exact validated repair resolution removes its associated failure" {
     var state = State.init(std.testing.allocator);
     defer state.deinit();
-    const binding: Binding = .{ .kind = .candidate, .subject = .raw_engine_config, .evidence = .engine_config };
-    const subject: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 1, .occurrence = 1 } };
+    const binding: Binding = .{ .kind = .candidate, .subject = .workflow_operation_registry, .evidence = .workflow_definition_registry };
+    const subject: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 1, .occurrence = 1 } };
     const key: retry.Key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) };
     const permit: retry.Permit = .{ .key = key, .authorization = @splat(4), .revision = 1, .maximum_targets = 2 };
     var observed = try state.prepare(.{ .observe = binding }, .invalid, &.{.{ .observe = .{ .subject = subject, .outcome = .invalid } }});
@@ -694,8 +844,8 @@ test "only exact validated repair resolution removes its associated failure" {
     var authorized = try state.prepare(.{ .repair_authorize = binding }, .ok, &.{.{ .authorize = .{ .subject = subject, .transition = .{ .authorized = permit } } }});
     defer authorized.deinit();
     try state.commit(&authorized);
-    const captured: Subject = .{ .native = .{ .kind = .candidate, .key = .engine_config, .generation = 2, .occurrence = 2 } };
-    const replacement: Subject = .{ .native = .{ .kind = .candidate, .key = .engine_config, .generation = 3, .occurrence = 3 } };
+    const captured: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_definition_registry, .generation = 2, .occurrence = 2 } };
+    const replacement: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_definition_registry, .generation = 3, .occurrence = 3 } };
     var retained = try state.prepare(.{ .preserve = binding }, .ok, &.{
         .{ .associate = .{ .source = subject, .target = captured } },
         .{ .associate = .{ .source = captured, .target = replacement } },
@@ -726,9 +876,9 @@ test "only exact validated repair resolution removes its associated failure" {
 test "native generations and exact permit keys separate parent and child failures" {
     var state = State.init(std.testing.allocator);
     defer state.deinit();
-    const binding: Binding = .{ .kind = .candidate, .subject = .raw_engine_config, .evidence = .engine_config };
-    const parent: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 1, .occurrence = 1 } };
-    const child: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 2, .occurrence = 2 } };
+    const binding: Binding = .{ .kind = .candidate, .subject = .workflow_operation_registry, .evidence = .workflow_definition_registry };
+    const parent: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 1, .occurrence = 1 } };
+    const child: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 2, .occurrence = 2 } };
     const parent_permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 2 };
     const child_permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(5), .family = @splat(6) }, .authorization = @splat(7), .revision = 2, .maximum_targets = 2 };
     var observed = try state.prepare(.{ .observe = binding }, .invalid, &.{
@@ -772,10 +922,10 @@ test "joined native carriers retain parent and foreign repair obligations" {
     defer state.deinit();
     var native = retry.State.init(std.testing.allocator);
     defer native.deinit();
-    const binding: Binding = .{ .kind = .candidate, .subject = .raw_engine_config, .evidence = .engine_config };
-    const parent: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 1, .occurrence = 1 } };
-    const child: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 2, .occurrence = 2 } };
-    const foreign: Subject = .{ .native = .{ .kind = .candidate, .key = .engine_config, .generation = 3, .occurrence = 3 } };
+    const binding: Binding = .{ .kind = .candidate, .subject = .workflow_operation_registry, .evidence = .workflow_definition_registry };
+    const parent: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 1, .occurrence = 1 } };
+    const child: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 2, .occurrence = 2 } };
+    const foreign: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_definition_registry, .generation = 3, .occurrence = 3 } };
     const parent_permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 3 };
     const child_permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(5), .family = @splat(6) }, .authorization = @splat(7), .revision = 2, .maximum_targets = 3 };
     const foreign_permit: retry.Permit = .{ .key = .{ .scope = @splat(8), .target = @splat(9), .family = @splat(10) }, .authorization = @splat(11), .revision = 1, .maximum_targets = 1 };
@@ -880,7 +1030,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
             try std.testing.expect(!blocked_state.compatible(.ok));
         }
     }
-    var authority = try state.prepare(.{ .authority_reconcile = .{ .kind = .authority, .subject = .raw_engine_config, .evidence = .engine_config } }, .ok, &.{.{ .resolve = .{ .authority_reconciled = .{ .native = .{ .kind = .authority, .key = .raw_engine_config, .generation = 2, .occurrence = 2 } } } }});
+    var authority = try state.prepare(.{ .authority_reconcile = .{ .kind = .authority, .subject = .workflow_operation_registry, .evidence = .workflow_definition_registry } }, .ok, &.{.{ .resolve = .{ .authority_reconciled = .{ .native = .{ .kind = .authority, .key = .workflow_operation_registry, .generation = 2, .occurrence = 2 } } } }});
     defer authority.deinit();
     try std.testing.expectEqual(@as(usize, 2), authority.entries.items.len);
     var foreign_failure = try state.prepare(.{ .observe = binding }, .invalid, &.{.{ .observe = .{ .subject = foreign, .outcome = .invalid } }});
@@ -894,7 +1044,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
     try state.commit(&fan_in);
     try std.testing.expect(!state.permitsRequest(request.model_request_id, null, dependent, &.{child.native}));
     try std.testing.expect(!state.permitsRequest(review_request.model_request_id, null, dependent, &.{child.native}));
-    const successor: Subject = .{ .native = .{ .kind = .candidate, .key = .raw_engine_config, .generation = 4, .occurrence = 4 } };
+    const successor: Subject = .{ .native = .{ .kind = .candidate, .key = .workflow_operation_registry, .generation = 4, .occurrence = 4 } };
     var recurring = try state.prepare(.{ .repair_validate = binding }, .invalid, &.{
         .{ .associate = .{ .source = child, .target = successor } },
         .{ .observe = .{ .subject = successor, .outcome = .invalid, .repair_progress = .{ .validated = .{ .permit = child_permit, .revision = 3, .result = .recurring } } } },

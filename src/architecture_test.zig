@@ -43,6 +43,138 @@ test "unit import routing accepts internal tests and rejects each integration ro
     try std.testing.expectError(error.IntegrationTestImport, validateUnitImportPath("/repo/integration.zig"));
 }
 
+// Zig compiles a test only when a compilation root's import graph reaches its file, so a test file that nothing imports
+// never runs and nothing fails. The graph is read from `@import` tokens. Reaching a file by text is necessary for its
+// tests to run, not sufficient: Zig analyzes a reached file only where a declaration refers to it.
+fn isTestFileName(path: []const u8) bool {
+    const name = std.fs.path.basename(path);
+    return std.mem.endsWith(u8, name, "_test.zig") or std.mem.endsWith(u8, name, "_tests.zig") or std.mem.eql(u8, name, "tests.zig");
+}
+
+fn pathLessThan(_: void, left: []const u8, right: []const u8) bool {
+    return std.mem.lessThan(u8, left, right);
+}
+
+/// The test files of `sources` (absolute-style path to bytes) that no root reaches through relative `@import`s, in
+/// path order. A root is a file by itself, reached or not by any other.
+fn unreachableTestFiles(allocator: std.mem.Allocator, sources: *const std.StringHashMap([]const u8), roots: []const []const u8) ![]const []const u8 {
+    var reached: std.StringHashMap(void) = .init(allocator);
+    var pending: std.ArrayList([]const u8) = .empty;
+    for (roots) |root| try pending.append(allocator, root);
+    while (pending.pop()) |path| {
+        if ((try reached.getOrPut(path)).found_existing) continue;
+        const source = sources.get(path) orelse continue;
+        for (try importsOf(allocator, source)) |imported| {
+            if (!std.mem.endsWith(u8, imported, ".zig")) continue;
+            try pending.append(allocator, try std.fs.path.resolve(allocator, &.{ std.fs.path.dirname(path).?, imported }));
+        }
+    }
+    var missing: std.ArrayList([]const u8) = .empty;
+    var iterator = sources.keyIterator();
+    while (iterator.next()) |path| {
+        if (isTestFileName(path.*) and !reached.contains(path.*)) try missing.append(allocator, path.*);
+    }
+    std.mem.sort([]const u8, missing.items, {}, pathLessThan);
+    return missing.toOwnedSlice(allocator);
+}
+
+/// Every `.zig` path that `build.zig` spells as a string, as an absolute-style path: each is a compilation root, so
+/// the roots come from the build and not from a list kept here. The set is an upper bound: a path named only as a
+/// lint or copy argument also counts, so the check cannot see a test file the build merely names.
+fn buildRoots(allocator: std.mem.Allocator, build_source: []const u8) ![]const []const u8 {
+    const terminated = try allocator.dupeZ(u8, build_source);
+    var roots: std.ArrayList([]const u8) = .empty;
+    var tokens = std.zig.Tokenizer.init(terminated);
+    while (true) {
+        const token = tokens.next();
+        if (token.tag == .eof) break;
+        if (token.tag != .string_literal) continue;
+        const literal = try std.zig.string_literal.parseAlloc(allocator, terminated[token.loc.start..token.loc.end]);
+        if (!std.mem.endsWith(u8, literal, ".zig")) continue;
+        try roots.append(allocator, try std.fs.path.resolve(allocator, &.{ "/", literal }));
+    }
+    return roots.toOwnedSlice(allocator);
+}
+
+test "every test file in the repository is reachable from a build root" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var sources: std.StringHashMap([]const u8) = .init(allocator);
+    var project = try std.Io.Dir.cwd().openDir(io, ".", .{ .iterate = true });
+    defer project.close(io);
+    var top = project.iterate();
+    while (try top.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".zig")) continue;
+        try sources.put(try std.fmt.allocPrint(allocator, "/{s}", .{entry.name}), try project.readFileAlloc(io, entry.name, allocator, .limited(4 * 1024 * 1024)));
+    }
+    for ([_][]const u8{ "src", "test", "build" }) |name| {
+        var directory = try project.openDir(io, name, .{ .iterate = true });
+        defer directory.close(io);
+        var walker = try directory.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next(io)) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+            try sources.put(try std.fmt.allocPrint(allocator, "/{s}/{s}", .{ name, entry.path }), try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024)));
+        }
+    }
+    const roots = try buildRoots(allocator, sources.get("/build.zig").?);
+    try std.testing.expect(roots.len != 0);
+    const missing = try unreachableTestFiles(allocator, &sources, roots);
+    for (missing) |path| std.debug.print("a test file no build root reaches: {s}\n", .{path});
+    try std.testing.expectEqual(@as(usize, 0), missing.len);
+}
+
+test "test reachability follows imports from every root and reports an orphaned test file" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var sources: std.StringHashMap([]const u8) = .init(allocator);
+    try sources.put("/root.zig", "comptime { _ = @import(\"a_test.zig\"); _ = @import(\"std\"); }");
+    try sources.put("/a_test.zig", "const b = @import(\"sub/b_tests.zig\");");
+    try sources.put("/sub/b_tests.zig", "const helper = @import(\"../helper.zig\");");
+    try sources.put("/helper.zig", "");
+    // Reached by nothing, but a helper rather than a test file, so it is not reported.
+    try sources.put("/unused_helper.zig", "");
+    try std.testing.expectEqual(@as(usize, 0), (try unreachableTestFiles(allocator, &sources, &.{"/root.zig"})).len);
+
+    // A test file no root imports, one named `tests.zig` in a directory, and two that a comment or a string spells.
+    try sources.put("/orphan_test.zig", "");
+    try sources.put("/sub/tests.zig", "");
+    try sources.put("/commented_test.zig", "");
+    try sources.put("/stringy_test.zig", "");
+    try sources.put("/mentions.zig", "// _ = @import(\"commented_test.zig\");\nconst text = \"@import(\\\"stringy_test.zig\\\")\";");
+    const roots = [_][]const u8{ "/root.zig", "/mentions.zig" };
+    const missing = try unreachableTestFiles(allocator, &sources, &roots);
+    try std.testing.expectEqual(@as(usize, 4), missing.len);
+    try std.testing.expectEqualStrings("/commented_test.zig", missing[0]);
+    try std.testing.expectEqualStrings("/orphan_test.zig", missing[1]);
+    try std.testing.expectEqualStrings("/stringy_test.zig", missing[2]);
+    try std.testing.expectEqualStrings("/sub/tests.zig", missing[3]);
+
+    // A second root that imports the orphan reaches it, and a root that is itself a test file is not reported.
+    try sources.put("/second_root.zig", "const orphan = @import(\"orphan_test.zig\");");
+    const rooted = try unreachableTestFiles(allocator, &sources, &.{ "/root.zig", "/mentions.zig", "/second_root.zig", "/stringy_test.zig" });
+    try std.testing.expectEqual(@as(usize, 2), rooted.len);
+    try std.testing.expectEqualStrings("/commented_test.zig", rooted[0]);
+    try std.testing.expectEqualStrings("/sub/tests.zig", rooted[1]);
+}
+
+test "build roots are the zig paths build.zig spells in code" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const roots = try buildRoots(allocator,
+        \\const a = b.path("src/root.zig"); // b.path("commented.zig")
+        \\const names = [_][]const u8{ "tests.zig", "case.json", "src/main.zig" };
+    );
+    try std.testing.expectEqual(@as(usize, 3), roots.len);
+    try std.testing.expectEqualStrings("/src/root.zig", roots[0]);
+    try std.testing.expectEqualStrings("/tests.zig", roots[1]);
+    try std.testing.expectEqualStrings("/src/main.zig", roots[2]);
+}
+
 test "production sources exclude internal evaluation tooling and test environment configuration" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
@@ -72,6 +204,66 @@ test "CLI and E2E invocation reuse production composition without harness assemb
     const composition = @embedFile("composition/root.zig");
     try std.testing.expect(std.mem.indexOf(u8, composition, "var assembly: Runtime") != null);
     try std.testing.expect(std.mem.indexOf(u8, composition, "assembly.invocation(") != null);
+}
+
+test "the scripted matrix builds its runtime only through the production composition root" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    const matrix = try std.Io.Dir.cwd().readFileAlloc(io, "test/integration/workflow_tests.zig", allocator, .limited(8 * 1024 * 1024));
+    defer allocator.free(matrix);
+    // Every scenario builds `composition.Runtime`; the file assembles no native operations and binds no roots of its own.
+    try std.testing.expect(std.mem.indexOf(u8, matrix, "composition.Runtime") != null);
+    inline for (.{ "native_workflow_operations", ".bindRoots(", ".bindWorkflows(", ".bindConfiguration(", ".bindPrinciples(" }) |forbidden| try expectAbsent(matrix, forbidden);
+    // The one seam is a test-only guarded entry: `init` supplies no hook, and `initWith` cannot compile outside a test.
+    try std.testing.expectEqual(@as(?[]const u8, null), runtimeSeamViolation(@embedFile("composition/root.zig")));
+    // A source that names the assembly module in code is rejected; one that mentions it in a comment is not.
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const native = @import(\"../../src/composition/native_workflow_operations.zig\");", "native_workflow_operations"));
+    try expectAbsent("// native_workflow_operations builds the assembly\nconst runtime = 1;", "native_workflow_operations");
+    // The seam checker rejects a missing guard, a third caller of either phase, a second hook call and an optional hook.
+    const guard = "if (!builtin.is_test) @compileError(\"Runtime.initWith is a test seam\");";
+    const calls = "self.assemble(a);\nself.startup(a);\nself.assemble(a);\nself.startup(a);\nbefore_startup.run(c, n);\n";
+    try std.testing.expectEqual(@as(?[]const u8, null), runtimeSeamViolation(guard ++ calls));
+    try std.testing.expect(runtimeSeamViolation(calls) != null);
+    try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "self.startup(a);\n") != null);
+    try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "self.assemble(a);\n") != null);
+    try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "before_startup.run(c, n);\n") != null);
+    try std.testing.expect(runtimeSeamViolation(guard ++ calls ++ "hook: ?BeforeStartup,\n") != null);
+}
+
+test "the scripted driver names no unreachable, @panic or std.debug.panic, so a failed check there is returned" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    const driver = try std.Io.Dir.cwd().readFileAlloc(io, "src/test_fixtures/spec_generation_driver.zig", allocator, .limited(2 * 1024 * 1024));
+    defer allocator.free(driver);
+    // An operation error, an unscripted request or a failed check in a hook is returned through `hookFailed`, which keeps
+    // the first failure and fails its scenario; `unreachable` (after `catch`, after `orelse`, or as a switch arm) and a
+    // panic would abort the test binary, and every scenario after it with it. A `.?` unwrap and `std.debug.assert` also
+    // abort and are not covered by this pin, which guards these spellings only.
+    for (aborting_spellings) |spelling| try expectAbsent(driver, spelling);
+    // Code that aborts is rejected, whichever way it spells it; a comment that mentions it is not.
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = parse(bytes) catch unreachable;", "unreachable"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = first(bytes) orelse unreachable;", "unreachable"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = switch (kind) { .known => 1, else => unreachable };", "unreachable"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = @panic(\"invalid\");", "@panic("));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const value = std.debug.panic(\"invalid\", .{});", "std.debug.panic("));
+    try expectAbsent("// parse(bytes) catch unreachable, an else => unreachable arm, @panic(\"x\") and std.debug.panic(\"x\", .{}) would abort the run\nconst value = 1;", "unreachable");
+    try expectAbsent("// @panic(\"x\") and std.debug.panic(\"x\", .{}) would abort the run\nconst value = 1;", "@panic(");
+    try expectAbsent("// @panic(\"x\") and std.debug.panic(\"x\", .{}) would abort the run\nconst value = 1;", "std.debug.panic(");
+}
+
+/// What aborts the test binary where the scripted driver would fail its scenario.
+const aborting_spellings = [_][]const u8{ "unreachable", "@panic(", "std.debug.panic(" };
+
+/// The test seam in `composition/root.zig`: `initWith` is behind a compile-time test guard, `init` and `initWith` are the
+/// only callers of the two construction phases (two each: assembly, then startup), and the hook runs once, between them,
+/// so no production path holds an optional hook. Returns the failing condition, or null.
+fn runtimeSeamViolation(source: []const u8) ?[]const u8 {
+    if (countOccurrences(source, "if (!builtin.is_test) @compileError(\"Runtime.initWith is a test seam\");") != 1) return "the test guard";
+    if (callCount(source, "self.assemble(") != 2) return "assemble callers";
+    if (callCount(source, "self.startup(") != 2) return "startup callers";
+    if (callCount(source, "before_startup.run(") != 1) return "hook calls";
+    if (std.mem.indexOf(u8, source, "?BeforeStartup") != null) return "an optional hook";
+    return null;
 }
 
 test "production provider wiring retains fact-only authority and no-I/O lease preparation" {
@@ -159,11 +351,46 @@ test "atomic execution exposes no transaction logging or stabilization capabilit
     inline for (.{ "transaction_prepared", "transaction_applying", "transaction_committed", "transaction_rolled_back", "transaction_recovered" }) |name| {
         try std.testing.expect(std.meta.stringToEnum(telemetry.EventType, name) == null);
     }
-    try std.testing.expect(!@hasField(telemetry.TelemetryFields, "transaction_id"));
-    try std.testing.expect(!@hasField(@import("application/feature_log_actions.zig").Set, "stabilize_failure"));
-    try expectAbsent(@embedFile("composition/active_feature_log_runtime.zig"), "stabilizer");
-    try expectAbsent(@embedFile("application/feature_log_runner.zig"), "stabiliz");
+    try std.testing.expect(!@hasField(telemetry.Field, "transaction_id"));
     try expectAbsent(@import("domain/feature_log_format.zig").event_heading, "transaction_id");
+}
+
+/// Whether a Zig source's code, not its comments, names stabilization. ADR 0009 keeps the atomic run free of any
+/// stabilizer, so no engine module carries one: the rule the logging runner's and action set's own pins stood for.
+fn namesStabilization(allocator: std.mem.Allocator, source: []const u8) !bool {
+    const code = try codeOf(allocator, source);
+    defer allocator.free(code);
+    return std.mem.indexOf(u8, code, "stabiliz") != null;
+}
+
+test "no engine module names stabilization" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.endsWith(u8, entry.basename, "_test.zig") or
+            std.mem.endsWith(u8, entry.basename, "_test_fixture.zig") or
+            std.mem.eql(u8, entry.basename, "runtime_tests.zig") or
+            std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        if (try namesStabilization(allocator, source)) {
+            std.debug.print("{s} names stabilization\n", .{entry.path});
+            return error.StabilizationNamed;
+        }
+    }
+}
+
+test "stabilization is read from code and not from a comment" {
+    const allocator = std.testing.allocator;
+    try std.testing.expect(!try namesStabilization(allocator, "// a stabilizer would go here\nconst x = 1;\n"));
+    try std.testing.expect(!try namesStabilization(allocator, "pub fn run() void {}\n"));
+    try std.testing.expect(try namesStabilization(allocator, "const stabilizer = @import(\"transaction_stabilizer.zig\");\n"));
+    try std.testing.expect(try namesStabilization(allocator, "pub fn stabilizeFailure() void {}\n"));
 }
 
 test "result schema authority is opaque and compilation remains a kernel concern" {
@@ -304,9 +531,7 @@ test "every orchestrator and coordinator is capability free" {
             .limited(1024 * 1024),
         );
         defer allocator.free(source);
-        try expectAbsent(source, "/actions/");
-        try expectAbsent(source, "/adapters/");
-        try expectAbsent(source, "/ports/");
+        try expectNoImportPathHolding(source, &.{ "/actions/", "/adapters/", "/ports/" });
         try expectAbsent(source, "std.Io");
     }
 }
@@ -322,7 +547,7 @@ test "every application runner is infrastructure independent" {
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, "_runner.zig")) continue;
         const source = try application.readFileAlloc(io, entry.name, allocator, .limited(1024 * 1024));
         defer allocator.free(source);
-        try expectAbsent(source, "/adapters/");
+        try expectNoImportPathHolding(source, &.{"/adapters/"});
         try expectAbsent(source, "std.Io");
     }
 }
@@ -339,13 +564,150 @@ test "domain and port dependency direction is enforced repository wide" {
             if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
             const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
             defer allocator.free(source);
-            try expectAbsent(source, "/actions/");
-            try expectAbsent(source, "/application/");
-            try expectAbsent(source, "/adapters/");
-            try expectAbsent(source, "../actions/");
-            try expectAbsent(source, "../application/");
-            try expectAbsent(source, "../adapters/");
+            // Domain and port modules sit below actions, the application and adapters: they import none of them.
+            try expectNoImportPathHolding(source, &.{ "/actions/", "/application/", "/adapters/", "../actions/", "../application/", "../adapters/" });
         }
+    }
+}
+
+/// Domain modules the generic workflow engine is made of, and the modules only the Spec stages own. Judged by file
+/// name, which the package structure fixes (29-package-structure.md); a rule over imports, not over file contents.
+const generic_core_prefixes = [_][]const u8{ "pipeline", "workflow_", "model_request_", "model_attempt_", "provider_", "llm_provider_", "operation_error", "model_envelope", "model_payload_schema", "model_result_schema", "strict_json", "telemetry", "feature_log_", "log_" };
+const spec_stage_prefixes = [_][]const u8{ "reference_", "specification", "required_authority", "clarification_", "source_omission", "source_preservation", "scenario_", "incomplete_specification", "specify_invocation" };
+
+fn startsWithAny(name: []const u8, prefixes: []const []const u8) bool {
+    for (prefixes) |prefix| if (std.mem.startsWith(u8, name, prefix)) return true;
+    return false;
+}
+
+/// The generic engine's domain modules that import a Spec stage module (ADR 0003: the four workflows are not
+/// special cases in the generic engine). Each is a recorded dependency of the engine's closed error set or
+/// registry on a stage's contract. A new importer fails the test; a file that drops its last Spec import must leave
+/// the list, so the list only shrinks.
+const generic_importers_of_spec_stages = [_][]const u8{ "model_request_identity.zig", "operation_error.zig", "workflow_output.zig" };
+
+test "the generic engine's domain modules import no Spec stage module beyond the recorded ones" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var directory = try std.Io.Dir.cwd().openDir(io, "src/domain", .{ .iterate = true });
+    defer directory.close(io);
+    var found: std.ArrayList([]const u8) = .empty;
+    var iterator = directory.iterate();
+    while (try iterator.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".zig") or std.mem.endsWith(u8, entry.name, "_test.zig")) continue;
+        if (!startsWithAny(entry.name, &generic_core_prefixes) or startsWithAny(entry.name, &spec_stage_prefixes)) continue;
+        const source = try directory.readFileAlloc(io, entry.name, allocator, .limited(1024 * 1024));
+        for (try importsOf(allocator, source)) |path| {
+            if (!startsWithAny(std.fs.path.basename(path), &spec_stage_prefixes)) continue;
+            try found.append(allocator, try allocator.dupe(u8, entry.name));
+            break;
+        }
+    }
+    std.mem.sort([]const u8, found.items, {}, struct {
+        fn less(_: void, left: []const u8, right: []const u8) bool {
+            return std.mem.lessThan(u8, left, right);
+        }
+    }.less);
+    try std.testing.expectEqual(generic_importers_of_spec_stages.len, found.items.len);
+    for (generic_importers_of_spec_stages, found.items) |expected, actual| try std.testing.expectEqualStrings(expected, actual);
+}
+
+test "the outcome association holds no Spec result type and the reference core does not import its dependents" {
+    // C21: the association names an owner's outcome, never the owner's result type.
+    try expectNoImportOfFile(@embedFile("domain/workflow_outcome_association.zig"), &.{ "required_authority.zig", "clarification_refresh.zig" });
+    // C25: the reconciliation core does not depend on the repair, omission or support modules built on it.
+    for ([_][]const u8{ @embedFile("domain/reference_reconciliation.zig"), @embedFile("domain/reference_reconciliation_diagnostic.zig") }) |core| {
+        try expectNoImportOfFile(core, &.{ "reference_reconciliation_repair.zig", "source_omission.zig", "specification_support.zig" });
+    }
+}
+
+/// C25: the omission modules import in one direction. This pins the direct imports among the six named modules; it
+/// does not claim that the domain is acyclic, because a wider cycle group still runs through some of them. A module
+/// imports only listed modules of a strictly lower rank.
+const omission_import_ranks = [_]struct { file: []const u8, rank: u8 }{
+    .{ .file = "source_omission.zig", .rank = 0 },
+    .{ .file = "specification_support.zig", .rank = 1 },
+    .{ .file = "source_omission_authority.zig", .rank = 2 },
+    .{ .file = "reference_extraction_repair.zig", .rank = 3 },
+    .{ .file = "reference_reconciliation_repair.zig", .rank = 3 },
+    .{ .file = "source_omission_repair.zig", .rank = 4 },
+};
+
+fn omissionRank(file: []const u8) ?u8 {
+    for (omission_import_ranks) |entry| if (std.mem.eql(u8, entry.file, file)) return entry.rank;
+    return null;
+}
+
+/// The first listed module that `source`, the text of listed module `file`, imports at its own rank or a higher one.
+/// A module outside the list is not constrained.
+fn misorderedOmissionImport(allocator: std.mem.Allocator, file: []const u8, source: []const u8) !?[]const u8 {
+    const rank = omissionRank(file) orelse return null;
+    for (try importsOf(allocator, source)) |path| {
+        const imported = std.fs.path.basename(path);
+        if ((omissionRank(imported) orelse continue) >= rank) return imported;
+    }
+    return null;
+}
+
+test "the omission modules import in rank order" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    inline for (omission_import_ranks) |entry| {
+        if (try misorderedOmissionImport(arena.allocator(), entry.file, @embedFile("domain/" ++ entry.file))) |imported| {
+            std.debug.print("{s} imports {s}, which is not of a lower rank\n", .{ entry.file, imported });
+            return error.OmissionImportOrder;
+        }
+    }
+}
+
+test "the omission import order accepts lower-ranked and unlisted imports and rejects an equal or higher rank" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    // Accepted: lower-ranked and unlisted imports, and names that only a comment or a string spells.
+    try std.testing.expectEqual(@as(?[]const u8, null), try misorderedOmissionImport(allocator, "source_omission_authority.zig",
+        \\const loss = @import("source_omission.zig");
+        \\const support = @import("../domain/specification_support.zig");
+        \\const atomic = @import("atomic_repair.zig");
+        \\// const repair = @import("source_omission_repair.zig");
+        \\const text = "@import(\"source_omission_repair.zig\")";
+    ));
+    try std.testing.expectEqual(@as(?[]const u8, null), try misorderedOmissionImport(allocator, "unlisted.zig", "const a = @import(\"source_omission_repair.zig\");"));
+    // Rejected: a lower rank importing a higher one, siblings of one rank importing each other, and the top rank
+    // imported from below.
+    const Case = struct { file: []const u8, source: []const u8, offender: []const u8 };
+    for ([_]Case{
+        .{ .file = "source_omission.zig", .source = "const x = @import(\"reference_reconciliation_repair.zig\");", .offender = "reference_reconciliation_repair.zig" },
+        .{ .file = "source_omission.zig", .source = "const x = @import(\"specification_support.zig\");", .offender = "specification_support.zig" },
+        .{ .file = "reference_extraction_repair.zig", .source = "const x = @import(\"reference_reconciliation_repair.zig\");", .offender = "reference_reconciliation_repair.zig" },
+        .{ .file = "reference_reconciliation_repair.zig", .source = "const x = @import(\"reference_extraction_repair.zig\");", .offender = "reference_extraction_repair.zig" },
+        .{ .file = "reference_extraction_repair.zig", .source = "const x = @import(\"source_omission_repair.zig\");", .offender = "source_omission_repair.zig" },
+        .{ .file = "source_omission_authority.zig", .source = "const x = @import(\"../domain/source_omission_repair.zig\");", .offender = "source_omission_repair.zig" },
+    }) |case| {
+        const found = (try misorderedOmissionImport(allocator, case.file, case.source)) orelse return error.TestExpectedEqual;
+        try std.testing.expectEqualStrings(case.offender, found);
+    }
+    // Two modules that import each other cannot both pass: the edge from the lower rank is the one rejected.
+    try std.testing.expect((try misorderedOmissionImport(allocator, "source_omission.zig", "const a = @import(\"source_omission_authority.zig\");")) != null);
+    try std.testing.expectEqual(@as(?[]const u8, null), try misorderedOmissionImport(allocator, "source_omission_authority.zig", "const a = @import(\"source_omission.zig\");"));
+}
+
+test "the checked reconciliation chain is unwound in its owner alone" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var directory = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer directory.close(io);
+    var walker = try directory.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or std.mem.endsWith(u8, entry.basename, "_test.zig") or
+            std.mem.startsWith(u8, entry.path, "test_fixtures/") or std.mem.eql(u8, entry.basename, "reference_reconciliation.zig") or
+            std.mem.eql(u8, entry.basename, "architecture_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(2 * 1024 * 1024));
+        defer allocator.free(source);
+        try expectAbsent(source, "checked.prior.prior");
     }
 }
 
@@ -404,11 +766,14 @@ fn routineViolation(source: []const u8) ?RoutineViolation {
 }
 
 /// Whether the file at `path` (relative to `src/`) imports a `*_routine.zig` it may not. ADR 0032
-/// names the callers: the composition root, the provider-bootstrap binding for its own routine, and
-/// the logging lifecycle owners (not yet converted, so none is named here). Tests and test fixtures
-/// may import any routine. An action, an orchestrator, a runner or any other application module never does.
+/// names the callers: the composition root for the startup and provider-bootstrap routines, the provider-bootstrap
+/// binding for its own routine, the runtime logging lifecycle for the six feature-logging routines, and composition's
+/// feature-logging runtime, which builds their ports and calls the failure routine for a failure no lifecycle reports.
+/// Tests and test fixtures may import any routine. An action, an orchestrator, a runner, the log service or any other
+/// application or composition module never imports a logging routine.
 fn importsRoutineIllegally(path: []const u8, source: []const u8) bool {
-    if (std.mem.endsWith(u8, path, "_test.zig") or std.mem.startsWith(u8, path, "test_fixtures/") or std.mem.startsWith(u8, path, "composition/")) return false;
+    if (std.mem.endsWith(u8, path, "_test.zig") or std.mem.startsWith(u8, path, "test_fixtures/")) return false;
+    const in_composition = std.mem.startsWith(u8, path, "composition/");
     var rest = source;
     while (std.mem.indexOf(u8, rest, "_routine.zig\")")) |at| {
         var start = at;
@@ -416,8 +781,19 @@ fn importsRoutineIllegally(path: []const u8, source: []const u8) bool {
         const routine = rest[start..at];
         const own_binding = std.mem.eql(u8, path, "application/model_provider_bootstrap_binding.zig") and
             std.mem.eql(u8, routine, "model_provider_bootstrap");
-        if (!own_binding) return true;
+        const logging_lifecycle = std.mem.eql(u8, path, "application/feature_log_runtime_lifecycle.zig") and isLoggingRoutine(routine);
+        const composition_caller = in_composition and (!isLoggingRoutine(routine) or std.mem.eql(u8, path, "composition/feature_logging_runtime.zig"));
+        if (!own_binding and !logging_lifecycle and !composition_caller) return true;
         rest = rest[at + "_routine.zig\")".len ..];
+    }
+    return false;
+}
+
+/// The six feature-logging routines (ADR 0032): the stream's persist, prepare, close and retention, the close of a
+/// crashed prior run's open tail, and the failure report.
+fn isLoggingRoutine(routine: []const u8) bool {
+    for ([_][]const u8{ "feature_log_persist", "feature_log_prepare", "feature_log_close", "feature_log_retention", "feature_log_prior_finalization", "feature_log_failure" }) |name| {
+        if (std.mem.eql(u8, routine, name)) return true;
     }
     return false;
 }
@@ -484,6 +860,30 @@ test "routine rules reject a routine that imports an action or adapter, uses I/O
     try std.testing.expect(importsRoutineIllegally("application/some_runner.zig", import_startup));
     try std.testing.expect(importsRoutineIllegally("application/model_provider_bootstrap_binding.zig", import_startup));
     try std.testing.expect(importsRoutineIllegally("application/workflow_engine_orchestrator.zig", import_provider));
+    // Who may import a feature-logging routine: the runtime logging lifecycle, for each of the six, and composition
+    // and tests; never an action, an orchestrator, a runner, the log service, or the lifecycle for another routine.
+    for ([_][]const u8{ "persist", "prepare", "close", "retention", "prior_finalization", "failure" }) |name| {
+        var buffer: [96]u8 = undefined;
+        const import_logging = try std.fmt.bufPrint(&buffer, "const r = @import(\"feature_log_{s}_routine.zig\");\n", .{name});
+        try std.testing.expect(!importsRoutineIllegally("application/feature_log_runtime_lifecycle.zig", import_logging));
+        try std.testing.expect(!importsRoutineIllegally("composition/feature_logging_runtime.zig", import_logging));
+        try std.testing.expect(!importsRoutineIllegally("feature_log_persist_routine_test.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("actions/log/some_action.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/some_orchestrator.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/feature_log_runner.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/log_service.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/feature_log_persist_routine.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("application/model_provider_bootstrap_binding.zig", import_logging));
+        // Composition reaches a logging routine only in its feature-logging runtime: no other composition module does.
+        try std.testing.expect(importsRoutineIllegally("composition/root.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("composition/active_feature_log_runtime.zig", import_logging));
+        try std.testing.expect(importsRoutineIllegally("composition/native_workflow_operations.zig", import_logging));
+    }
+    try std.testing.expect(importsRoutineIllegally("application/feature_log_runtime_lifecycle.zig", import_startup));
+    try std.testing.expect(importsRoutineIllegally("application/feature_log_runtime_lifecycle.zig", import_provider));
+    try std.testing.expect(isLoggingRoutine("feature_log_close"));
+    try std.testing.expect(!isLoggingRoutine("startup"));
+    try std.testing.expect(!isLoggingRoutine("feature_log_history"));
 }
 
 test "public root does not re-export ports or infrastructure adapters" {
@@ -828,6 +1228,18 @@ test "model-binding requirement is immutable data not a provider-call capability
     try std.testing.expect(!@hasField(operation.Contract, "model_capacity"));
     try std.testing.expect(@FieldType(registry.StepInput, "model_binding") == ?*const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
     try std.testing.expect(!@hasField(registry.StepInput, "provider"));
+    // The runner is the only producer of log facts: no action channel carries one in a node delta, and a step knows
+    // only its workflow's shortcode.
+    try std.testing.expect(!@hasField(registry.StepInput, "log"));
+    try std.testing.expect(!@hasDecl(@import("domain/pipeline.zig"), "WorkflowLog"));
+    try std.testing.expect(!@hasField(@import("domain/pipeline.zig").NodeDelta, "telemetry_facts"));
+    // One cancellation source: the status is active or cancelled, and no run-level deadline status exists. Request
+    // deadlines are the lease's and the exchange timer's.
+    try std.testing.expectEqual(@as(usize, 2), @typeInfo(@import("domain/pipeline.zig").RuntimeStatus).@"enum".fields.len);
+    // The composition entry installs the operator interrupt around the run, and restores the prior action after it.
+    const root_source = @embedFile("composition/root.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(root_source, "Interrupt.install()"));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(root_source, "interrupt.restore()"));
     const derive = @embedFile("domain/provider_requirement_derivation.zig");
     try std.testing.expect(std.mem.indexOf(u8, derive, "step.model != null") != null);
     try expectAbsent(derive, "step.parameters");
@@ -940,7 +1352,7 @@ test "the contract-variant mechanism has no operation-specific branch and one ow
         "application/workflow_pipeline_runner.zig",
     };
     // The selector is data: a contract names its parameter, and nothing in the mechanism names a
-    // selector value, an owner or an operation (ADR 0030, ADR 0033's 13 owners).
+    // selector value, an owner or an operation (ADR 0030, ADR 0033's 12 owners).
     const names = [_][]const u8{
         "\"owner\"",
         "\"reference-text\"",
@@ -955,7 +1367,6 @@ test "the contract-variant mechanism has no operation-specific branch and one ow
         "\"source-omission-reconciliation\"",
         "\"specification-unit\"",
         "\"specification-support\"",
-        "\"specification-coverage\"",
         // The kernel operation: the ceiling and the runner key on the stage marker, never on the name.
         "\"request-model\"",
         "authorize-repair",
@@ -992,7 +1403,7 @@ test "the contract-variant mechanism has no operation-specific branch and one ow
 
 test "compiled-step checks have one owner: graph validation, never registry publication" {
     const graph = @embedFile("domain/workflow_graph_validation.zig");
-    try std.testing.expect(std.mem.indexOf(u8, graph, "for (step.request_stages) |stage| try validateStep(graph, stage.step);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, graph, "for (step.request_stages) |stage| validateStep(graph, stage.step) catch return reject(evidence, .step_contract, graph, step.id.bytes);") != null);
     // Publication imports no module whose only use to it would be a step check, and calls none of
     // the step checks the modules it does import also hold.
     const publication = @embedFile("domain/workflow_registry.zig");
@@ -1280,6 +1691,161 @@ test "provider authorization exposes only non-operational references and narrow 
     try expectAbsent(prepare_action, "llm_provider_interface");
     try expectAbsent(prepare_action, "lifecycle.apply");
     try std.testing.expect(std.mem.indexOf(u8, prepare_action, "delta.data_writes[") != null);
+}
+
+test "actor authentication has one runner-issued lease, one action that observes the account and one capability-bound port" {
+    const pipeline = @import("domain/pipeline.zig");
+    const native_binding = @import("application/workflow_operation_binding.zig");
+    const port = @import("ports/actor_authentication.zig");
+    // The port grants the authentication capability and no other.
+    const capability = native_binding.inspect(port.Port, &.{});
+    try std.testing.expect(capability.valid and capability.actor_authentication);
+    try std.testing.expect(!capability.model_provider and !capability.provider_authorization and !capability.feature_logging and !capability.feature_input_read and !capability.feature_output_write and !capability.feature_read and !capability.reference_read);
+    // The runner alone issues and ends a lease: it ends first on every path (a `defer`), issues before the step runs, and
+    // checks after the step that an `ok` one consumed it.
+    const runner = @embedFile("application/workflow_pipeline_runner.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, "authentication_leases.issue("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, "authentication_leases.finalize("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, ".actor_authentication = authentication_lease"));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runner, ".authentication_unconsumed"));
+    const finalize_at = std.mem.indexOf(u8, runner, "authentication_leases.finalize(").?;
+    const issue_at = std.mem.indexOf(u8, runner, "authentication_leases.issue(").?;
+    const invoke_at = std.mem.indexOf(u8, runner, "var candidate = entry.invoke(.{ .step").?;
+    const unconsumed_at = std.mem.indexOf(u8, runner, ".authentication_unconsumed").?;
+    try std.testing.expect(finalize_at < issue_at and issue_at < invoke_at and invoke_at < unconsumed_at);
+    try std.testing.expect(std.mem.lastIndexOf(u8, runner[0..finalize_at], "defer ") != null);
+    // Nothing else holds the table: the port consumes a lease it was given, and the chain's own files name neither the table
+    // nor the slot (the next test walks every layer for the table).
+    inline for (.{
+        "actions/clarification/authenticate_actor.zig",
+        "actions/clarification/plan_clarification_authentication.zig",
+        "actions/clarification/check_clarification_authentication.zig",
+        "actions/clarification/advance_clarification_authentication.zig",
+        "actions/clarification/accept_clarification_responses.zig",
+        "actions/clarification/check_clarification_cancellation.zig",
+        "actions/clarification/prepare_cancelled_clarification_output.zig",
+        "actions/specify/prepare_actor_evidence.zig",
+        "application/actor_evidence_workflow.zig",
+        "composition/native_workflow_operations.zig",
+        "ports/actor_authentication.zig",
+    }) |path| {
+        const source = @embedFile(path);
+        try expectAbsent(source, "authentication_leases");
+        try expectAbsent(source, "lease.Table");
+        try expectAbsent(source, ".issue(");
+        try expectAbsent(source, ".finalize(");
+        try expectAbsent(source, "std.Io");
+        try expectAbsent(source, "anyopaque");
+        try expectAbsent(source, "@constCast");
+    }
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("ports/actor_authentication.zig"), ".consume("));
+    inline for (.{ "actions/clarification/authenticate_actor.zig", "application/actor_evidence_workflow.zig", "adapters/system/os_account.zig" }) |path| {
+        const source = @embedFile(path);
+        const production = source[0 .. std.mem.indexOf(u8, source, "\ntest \"") orelse source.len];
+        try expectAbsent(production, ".consume(");
+        try expectAbsent(production, "lease.Table");
+    }
+    // The action observes the account only through the port, once, and passes the lease it was given.
+    const observing = @embedFile("actions/clarification/authenticate_actor.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(observing, ".authenticate("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("application/actor_evidence_workflow.zig"), "self.action.execute(scratch.allocator(), input.step.runtime, granted)"));
+    // Exactly one action declares the effect, and it is the one that takes the port.
+    const io = std.testing.io;
+    var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
+    defer actions.close(io);
+    var walker = try actions.walk(std.testing.allocator);
+    defer walker.deinit();
+    var declaring: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        if (std.mem.indexOf(u8, source, ".side_effect = .actor_authentication") != null) {
+            declaring += 1;
+            try std.testing.expectEqualStrings("authenticate_actor.zig", entry.basename);
+        }
+        if (std.mem.indexOf(u8, source, "ports/actor_authentication.zig") != null) try std.testing.expectEqualStrings("authenticate_actor.zig", entry.basename);
+    }
+    try std.testing.expectEqual(@as(usize, 1), declaring);
+    const contract = @import("actions/clarification/authenticate_actor.zig").Action.contract;
+    try std.testing.expectEqual(pipeline.SideEffect.actor_authentication, contract.side_effect);
+    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
+    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.actor_observation}, contract.produces);
+    // The chain's other actions are pure, and the two stage actions are capability-free stages (ADR 0031).
+    inline for (.{
+        @import("actions/clarification/plan_clarification_authentication.zig").Action.contract,
+        @import("actions/clarification/check_clarification_authentication.zig").Action.contract,
+        @import("actions/clarification/advance_clarification_authentication.zig").Action.contract,
+        @import("actions/clarification/accept_clarification_responses.zig").Action.contract,
+        @import("actions/clarification/check_clarification_cancellation.zig").Action.contract,
+        @import("actions/clarification/prepare_cancelled_clarification_output.zig").Action.contract,
+    }) |pure| try std.testing.expectEqual(pipeline.SideEffect.none, pure.side_effect);
+    inline for (.{
+        .{ @embedFile("actions/specify/prepare_actor_evidence.zig"), @import("actions/specify/prepare_actor_evidence.zig").Action.contract, pipeline.SideEffect.filesystem_read },
+        .{ @embedFile("actions/clarification/accept_clarification_responses.zig"), @import("actions/clarification/accept_clarification_responses.zig").Action.contract, pipeline.SideEffect.none },
+    }) |stage| {
+        try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(stage[0]));
+        try expectAllowedActionImports(stage[0]);
+        try expectSingleActionContract(stage[0]);
+        try std.testing.expectEqual(stage[2], stage[1].side_effect);
+        try std.testing.expectEqual(pipeline.NodeKind.action, stage[1].kind);
+        try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, stage[1].repair_role);
+        try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, stage[1].runner_accounting);
+    }
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{ .raw_actor_evidence, .actor_evidence_registry }, @import("actions/specify/prepare_actor_evidence.zig").Action.contract.produces);
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{ .clarification_inputs, .actor_evidence_registry }, @import("actions/clarification/accept_clarification_responses.zig").Action.contract.replaces);
+    // The Spec workflow loads the registry after logging and authenticates before it extracts; the subgraph plans, checks,
+    // observes, advances and then accepts.
+    const spec_workflow = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(spec_workflow);
+    const logging_at = std.mem.indexOf(u8, spec_workflow, "  logging:\n").?;
+    const evidence_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-actor-evidence").?;
+    const call_at = std.mem.indexOf(u8, spec_workflow, "call: authenticate-clarifications").?;
+    const extract_at = std.mem.indexOf(u8, spec_workflow, "  extract:\n").?;
+    try std.testing.expect(logging_at < evidence_at and evidence_at < call_at and call_at < extract_at);
+    var cursor: usize = std.mem.indexOf(u8, spec_workflow, "\nsubgraphs:\n  authenticate-clarifications:\n").?;
+    inline for (.{ "use: plan-clarification-authentication", "use: check-clarification-authentication", "use: authenticate-actor", "use: advance-clarification-authentication", "use: accept-clarification-responses", "use: check-clarification-cancellation" }) |operation| {
+        cursor = std.mem.indexOfPos(u8, spec_workflow, cursor, operation) orelse return error.MissingAuthenticationStep;
+        try std.testing.expectEqual(@as(usize, 1), countOccurrences(spec_workflow, operation));
+    }
+    // A cancel the run accepted is published by its own subgraph, which prepares the cancelled output and then publishes it,
+    // with no other operation between the two (ADR 0025).
+    const cancellation_at = std.mem.indexOf(u8, spec_workflow, "  cancellation:\n    call: publish-cancellation\n").?;
+    try std.testing.expect(call_at < cancellation_at and cancellation_at < extract_at);
+    const prepare_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-cancelled-clarification-output").?;
+    const publisher_at = std.mem.indexOfPos(u8, spec_workflow, prepare_at, "use: publish-workflow-output").?;
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(spec_workflow, "use: prepare-cancelled-clarification-output"));
+    try std.testing.expect(cursor < prepare_at);
+    // The slice from the preparation up to the publisher holds the preparation's own `use:` and no other.
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(spec_workflow[prepare_at..publisher_at], "use: "));
+    try std.testing.expect(std.mem.indexOf(u8, spec_workflow[prepare_at..publisher_at], "on: {ok: publish, failed: end.failed}") != null);
+}
+
+test "only the runner names the authentication lease table, and only the listed modules take a lease" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    // The modules that may import the lease type: the runner issues it, the step's action and the port take it, the adapter's
+    // tests spend it, and the registry's step input carries it. None of them but the runner names the table in production.
+    const lease_modules = [_][]const u8{ "workflow_pipeline_runner.zig", "authenticate_actor.zig", "actor_authentication.zig", "os_account.zig", "workflow_operation_registry.zig" };
+    for ([_][]const u8{ "src/actions", "src/ports", "src/adapters", "src/application", "src/composition" }) |root| {
+        var directory = try std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
+        defer directory.close(io);
+        var walker = try directory.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next(io)) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+            const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+            defer allocator.free(source);
+            const production = source[0 .. std.mem.indexOf(u8, source, "\ntest \"") orelse source.len];
+            if (std.mem.indexOf(u8, production, "authentication_leases") != null) try std.testing.expectEqualStrings("workflow_pipeline_runner.zig", entry.basename);
+            if (std.mem.indexOf(u8, production, "actor_authentication_lease.zig") != null) {
+                var listed = false;
+                for (lease_modules) |name| listed = listed or std.mem.eql(u8, name, entry.basename);
+                try std.testing.expect(listed);
+            }
+        }
+    }
 }
 
 test "model attempt accounting has one runner-applied transition authority" {
@@ -1773,9 +2339,6 @@ test "toolchain safety authority is opaque and path handoff has one adapter cons
     const adapter = @embedFile("adapters/filesystem/toolchain_authority_source.zig");
     try std.testing.expect(std.mem.indexOf(u8, domain, "bindToolchainAuthorityAdapter") != null);
     try std.testing.expectEqual(@as(usize, 3), countOccurrences(adapter, "bindToolchainAuthorityAdapter"));
-    const service = @embedFile("application/toolchain_service.zig");
-    try expectAbsent(service, "RawDocument");
-    try expectAbsent(service, "std.Io");
     const startup = @embedFile("application/startup_routine.zig");
     try expectAbsent(startup, "invokeBootstrapToolchain");
     const stage = @embedFile("actions/toolchain/prepare_toolchain.zig");
@@ -2106,6 +2669,75 @@ test "the reference preparation stage actions obey ADR 0031's stage rules" {
     try std.testing.expectEqualSlices(key, &.{ .path_token_grammar, .reference_passive_literals, .structured_token_candidates }, tokens.produces);
 }
 
+fn namesDataKey(keys: []const @import("domain/pipeline.zig").DataKey, wanted: @import("domain/pipeline.zig").DataKey) bool {
+    for (keys) |key| if (key == wanted) return true;
+    return false;
+}
+
+test "the valid toolchain has one producer and is required only by the two stages that read the toolchain" {
+    const wanted: @import("domain/pipeline.zig").DataKey = .valid_toolchain;
+    // The toolchain stage produces it and neither requires, replaces nor invalidates it.
+    const producer = @import("actions/toolchain/prepare_toolchain.zig").Action.contract;
+    try std.testing.expect(namesDataKey(producer.produces, wanted));
+    try std.testing.expect(!namesDataKey(producer.requires, wanted) and !namesDataKey(producer.optional, wanted) and !namesDataKey(producer.replaces, wanted) and !namesDataKey(producer.invalidates, wanted));
+    // The naming-policy compiler and the reference token stage require it and write nothing to it. No downstream
+    // stage re-checks the toolchain: nothing replaces or invalidates it, so nothing downstream can find it stale.
+    inline for (.{ @import("actions/toolchain/compile_naming_policy.zig").Action.contract, @import("actions/reference/prepare_reference_tokens.zig").Action.contract }) |reader| {
+        try std.testing.expect(namesDataKey(reader.requires, wanted));
+        try std.testing.expect(!namesDataKey(reader.optional, wanted) and !namesDataKey(reader.produces, wanted) and !namesDataKey(reader.replaces, wanted) and !namesDataKey(reader.invalidates, wanted));
+    }
+    // No variant of the four generic repair operations names it.
+    const generic = @import("application/repair_workflow.zig");
+    inline for (.{ generic.AuthorizeRepair, generic.BuildRepairInput, generic.ParseRepair, generic.MergeRepair }) |G| {
+        for (G.contract.variants) |variant| {
+            try std.testing.expect(!namesDataKey(variant.requires, wanted) and !namesDataKey(variant.optional, wanted) and !namesDataKey(variant.produces, wanted));
+            try std.testing.expect(!namesDataKey(variant.replaces, wanted) and !namesDataKey(variant.invalidates, wanted));
+        }
+    }
+    // No other production file names the key: those four are every file that does, so no other contract,
+    // repair owner effect or binding can require, optionally read, produce, replace or invalidate it.
+    const named = [_][]const u8{
+        "actions/toolchain/prepare_toolchain.zig",
+        "actions/toolchain/compile_naming_policy.zig",
+        "actions/reference/prepare_reference_tokens.zig",
+        "application/toolchain_workflow_values.zig",
+    };
+    // The schema alias `valid` of `toolchain_workflow_values.zig` names the key too, so a contract could
+    // reach it without the literal: exactly these files import that module.
+    const importers = [_][]const u8{
+        "application/path_token_workflow.zig",
+        "application/reference_token_preparation_workflow.zig",
+        "application/toolchain_workflow_runner.zig",
+        "composition/native_workflow_operations.zig",
+    };
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    var reached: usize = 0;
+    var importing: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        if (std.mem.indexOf(u8, entry.basename, "_test") != null or std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        const expected: usize = for (named) |path| {
+            if (std.mem.eql(u8, entry.path, path)) break 1;
+        } else 0;
+        try std.testing.expectEqual(expected, countOccurrences(source, ".valid_toolchain"));
+        reached += expected;
+        const imports: usize = for (importers) |path| {
+            if (std.mem.eql(u8, entry.path, path)) break 1;
+        } else 0;
+        try std.testing.expectEqual(imports, countOccurrences(source, "toolchain_workflow_values.zig"));
+        importing += imports;
+    }
+    try std.testing.expectEqual(named.len, reached);
+    try std.testing.expectEqual(importers.len, importing);
+}
+
 test "the reference preparation steps that validate hand the next step a distinct validated type" {
     const evidence_steps = @import("actions/reference/prepare_reference_evidence.zig").steps;
     const token_steps = @import("actions/reference/prepare_reference_tokens.zig").steps;
@@ -2159,6 +2791,19 @@ test "no absorbed reference preparation operation remains registered, bound or p
     try std.testing.expect(evidence_at < naming_at and naming_at < tokens_at);
 }
 
+test "the actor-evidence stage steps hand each next step the type the step before it produced" {
+    const prepare = @import("actions/specify/prepare_actor_evidence.zig");
+    const accept = @import("actions/clarification/accept_clarification_responses.zig");
+    // Preparing: the registry as read is a distinct type from the validated one the stage hands on.
+    try std.testing.expect(ReturnPayload(prepare.steps.parseRegistry) == ParameterType(prepare.steps.validateRegistry, 0));
+    try std.testing.expect(validatedHandoff(ParameterType(prepare.steps.validateRegistry, 0), ReturnPayload(prepare.steps.validateRegistry), @FieldType(prepare.Outputs, "registry")));
+    // Accepting: each step takes what an earlier one returned, and the join check reads the state the acceptance built.
+    try std.testing.expect(ReturnPayload(accept.steps.bindForms) == ParameterType(accept.steps.acceptResponses, 3));
+    try std.testing.expect(ReturnPayload(accept.steps.recordEvidence) == ParameterType(accept.steps.acceptResponses, 4));
+    try std.testing.expect(ReturnPayload(accept.steps.acceptResponses) == ParameterType(accept.steps.validateResponses, 1));
+    try std.testing.expect(ReturnPayload(accept.steps.acceptResponses) == @FieldType(accept.Outputs, "inputs"));
+}
+
 test "the prepare-inputs stage steps that validate hand the next step a distinct validated type" {
     const steps = @import("actions/specify/prepare_inputs.zig").steps;
     try std.testing.expect(validatedHandoff(ParameterType(steps.validateFeature, 1), ReturnPayload(steps.validateFeature), ParameterType(steps.inspectFeature, 2)));
@@ -2166,7 +2811,7 @@ test "the prepare-inputs stage steps that validate hand the next step a distinct
     try std.testing.expect(validatedHandoff(ParameterType(steps.validateClarificationState, 0), ReturnPayload(steps.validateClarificationState), ParameterType(steps.validateClarificationForms, 2)));
     // Observation precedes path resolution and the prior state is parsed from bytes the capture read.
     try std.testing.expect(ReturnPayload(steps.inspectFeature) == ParameterType(steps.resolvePaths, 2));
-    try std.testing.expect(ReturnPayload(steps.captureState) == ?[]const u8 and ParameterType(steps.parseState, 3) == ?[]const u8);
+    try std.testing.expect(ReturnPayload(steps.captureState) == ?[]const u8 and ParameterType(steps.parseState, 4) == ?[]const u8);
 }
 
 test "no absorbed input-preparation operation remains registered, bound or placed in a workflow" {
@@ -2233,9 +2878,10 @@ test "feature log paths have one opaque artifact authority and one sink consumer
     try expectAbsent(root_domain, "physical_identity: ?roots.PhysicalDirectoryIdentity");
     try expectAbsent(sink, "createDirPathOpen");
     // Prior-run paths come only from the registry, one stream at a time, and
-    // only the retention adapter receives them.
+    // only the retention adapter and the prior-run tail adapter receive them (ADR 0026).
     const historical = @embedFile("adapters/filesystem/feature_log_historical_stream.zig");
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(historical, "bindHistoricalFeatureLogStream("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(@embedFile("adapters/filesystem/feature_log_historical_tail.zig"), "bindHistoricalFeatureLogStream("));
     try expectAbsent(sink, "bindHistoricalFeatureLogStream");
     try expectAbsent(@embedFile("adapters/filesystem/feature_log_history.zig"), "bindHistoricalFeatureLogStream");
 }
@@ -2267,11 +2913,47 @@ test "feature log activation owns only registered target write authority" {
     try expectAbsent(@embedFile("application/feature_logging_workflow.zig"), "/adapters/");
 }
 
-test "feature logging lifecycle coordinates bindings without filesystem authority" {
-    const lifecycle = @embedFile("application/feature_log_runtime_lifecycle.zig");
-    try expectAbsent(lifecycle, "/adapters/");
-    try expectAbsent(lifecycle, "std.Io");
-    try expectAbsent(lifecycle, "createDir");
+const ApplicationViolation = enum { imports_an_adapter, uses_io, creates_a_directory };
+
+/// ADR 0026, ADR 0032: an application module (the runtime logging lifecycle and the log service included) reaches the
+/// filesystem only through ports its composition root supplies, so it imports no adapter, names no `std.Io` and creates
+/// no directory. Read from code, not from comments.
+fn applicationViolation(allocator: std.mem.Allocator, source: []const u8) !?ApplicationViolation {
+    const code = try codeOf(allocator, source);
+    defer allocator.free(code);
+    if (std.mem.indexOf(u8, code, "/adapters/") != null) return .imports_an_adapter;
+    if (std.mem.indexOf(u8, code, "std.Io") != null) return .uses_io;
+    if (std.mem.indexOf(u8, code, "createDir") != null) return .creates_a_directory;
+    return null;
+}
+
+test "no application module holds adapter or filesystem authority" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var application = try std.Io.Dir.cwd().openDir(io, "src/application", .{ .iterate = true });
+    defer application.close(io);
+    var walker = try application.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or std.mem.endsWith(u8, entry.basename, "_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(4 * 1024 * 1024));
+        defer allocator.free(source);
+        if (try applicationViolation(allocator, source)) |violation| {
+            std.debug.print("application/{s}: {s}\n", .{ entry.path, @tagName(violation) });
+            return error.ApplicationFilesystemAuthority;
+        }
+    }
+}
+
+test "application modules are held to no adapter, no std.Io and no directory creation" {
+    const allocator = std.testing.allocator;
+    try std.testing.expectEqual(@as(?ApplicationViolation, null), try applicationViolation(allocator, "const port = @import(\"../ports/feature_log_sink.zig\");\n// std.Io and createDir in a comment\n"));
+    try std.testing.expectEqual(@as(?ApplicationViolation, .imports_an_adapter), try applicationViolation(allocator, "const sink = @import(\"../adapters/filesystem/feature_log_sink.zig\");\n"));
+    try std.testing.expectEqual(@as(?ApplicationViolation, .uses_io), try applicationViolation(allocator, "pub fn open(io: std.Io) void {}\n"));
+    try std.testing.expectEqual(@as(?ApplicationViolation, .creates_a_directory), try applicationViolation(allocator, "fn prepare(dir: Dir) void { dir.createDirPath(); }\n"));
+}
+
+test "the active logger is installed by composition and the pipeline reaches it through the barrier" {
     const invocation_assembly = @embedFile("composition/engine_invocation.zig");
     try std.testing.expect(std.mem.indexOf(u8, invocation_assembly, "services.logs.barrier()") != null);
     const composition = @embedFile("composition/root.zig");
@@ -2284,27 +2966,13 @@ test "feature logging policy execution and filesystem operations have focused ow
     try expectAbsent(port, "pub const Sink");
     try expectAbsent(port, "pub const VTable");
 
+    // The logging runner is the run's typed state and ports and calls nothing: the runtime logging lifecycle runs the
+    // routines on it (ADR 0032), so it declares no function and imports no routine. Reaching infrastructure only
+    // through the ports a routine's step takes is the routine rules' and the runner glob rule's, which the sink, clock,
+    // console and emergency import absences this test once held stood for.
     const runner = @embedFile("application/feature_log_runner.zig");
-    try expectAbsent(runner, "feature_log_sink.zig");
-    try expectAbsent(runner, "trusted_log_clock.zig");
-    try expectAbsent(runner, "console_log_sink.zig");
-    try expectAbsent(runner, "emergency_log_sink.zig");
-    try expectAbsent(runner, "transaction_stabilizer.zig");
-    try expectAbsent(runner, "serialize_feature_log_record.zig");
-    try expectAbsent(runner, "fn terminalEvent");
-    try expectAbsent(runner, "fn promptSelected");
-    try expectAbsent(runner, "fn updateState");
-    try std.testing.expect(std.mem.indexOf(u8, runner, "feature_log_child_bindings.zig") != null);
-    const orchestrator = @embedFile("application/feature_log_orchestrator.zig");
-    try expectAbsent(orchestrator, "/actions/");
-    try expectAbsent(orchestrator, "/adapters/");
-    try expectAbsent(orchestrator, "/ports/");
-    const transition = @embedFile("application/feature_log_policy_transition_coordinator.zig");
-    try expectAbsent(transition, "feature_log_runner.zig");
-    const finalization = @embedFile("application/feature_log_finalization_coordinator.zig");
-    try expectAbsent(finalization, "feature_log_runner.zig");
-    const retention = @embedFile("application/feature_log_retention_coordinator.zig");
-    try expectAbsent(retention, "feature_log_runner.zig");
+    try expectAbsent(runner, "fn ");
+    try expectAbsent(runner, "_routine.zig");
 
     const domain_modules = [_][]const u8{
         @embedFile("domain/feature_log_binding.zig"),
@@ -2341,11 +3009,89 @@ test "feature logging policy execution and filesystem operations have focused ow
     const historical = @embedFile("adapters/filesystem/feature_log_historical_stream.zig");
     for ([_][]const u8{ "feature_log_segment_store.zig", "segmentCreator", "segmentRotator", "streamCloser", "recordAppender", "streamRecoverer", "recovery.recover(", ".truncate" }) |forbidden| try expectAbsent(historical, forbidden);
     try std.testing.expect(std.mem.indexOf(u8, historical, "recovery.inspectGroup(") != null);
+    try std.testing.expectEqual(@as(?[]const u8, null), try tailAdapterViolation(std.testing.allocator, @embedFile("adapters/filesystem/feature_log_historical_tail.zig")));
 
     const recovery = @embedFile("adapters/filesystem/feature_log_recovery.zig");
     try std.testing.expect(std.mem.indexOf(u8, recovery, "domain/feature_log_format.zig") != null);
     try expectAbsent(recovery, "fn cellAt");
     try expectAbsent(recovery, "fn parseUtc");
+}
+
+/// ADR 0026: the prior-run tail adapter closes the active tail a crash left. It reads the group, recovers the tail,
+/// writes one trailer and holds the prior run's lock. It creates, rotates, appends and prunes nothing and deletes
+/// nothing, so retention's adapter stays the only prior-run adapter that removes a file. Read from code, not comments;
+/// the result is the first forbidden text the source holds, or the first required text it lacks.
+fn tailAdapterViolation(allocator: std.mem.Allocator, source: []const u8) !?[]const u8 {
+    const code = try codeOf(allocator, source);
+    defer allocator.free(code);
+    for ([_][]const u8{ "segmentCreator", "segmentRotator", "recordAppender", "segmentPruner", "feature_log_retention_store.zig", "segment_store.create(", "segment_store.rotate(", "segment_store.append(", "deleteFile", "deleteTree", "createFile", "createDir" }) |forbidden| {
+        if (std.mem.indexOf(u8, code, forbidden) != null) return forbidden;
+    }
+    for ([_][]const u8{ "recovery.recover(", "recovery.inspectGroup(", "segment_store.close(", "lock.acquire(", "lock.release(" }) |required| {
+        if (std.mem.indexOf(u8, code, required) == null) return required;
+    }
+    return null;
+}
+
+test "the prior-run tail adapter's capability accepts what closes a tail and rejects a create, rotate, append, prune or delete" {
+    const allocator = std.testing.allocator;
+    // Sources are Zig, so that comments are masked as in the real file.
+    const holds = "pub const held = .{ recovery.recover(), recovery.inspectGroup(), segment_store.close(), lock.acquire(), lock.release() };\n";
+    try std.testing.expectEqual(@as(?[]const u8, null), try tailAdapterViolation(allocator, holds));
+    // A forbidden capability named only in a comment is no capability.
+    try std.testing.expectEqual(@as(?[]const u8, null), try tailAdapterViolation(allocator, "// segment_store.append( deleteFile\n" ++ holds));
+    for ([_][]const u8{ "segmentCreator", "segmentRotator", "recordAppender", "segmentPruner", "feature_log_retention_store.zig", "segment_store.create(", "segment_store.rotate(", "segment_store.append(", "deleteFile", "deleteTree", "createFile", "createDir" }) |forbidden| {
+        const source = try std.fmt.allocPrint(allocator, "{s}pub const forbidden = \"{s}\";\n", .{ holds, forbidden });
+        defer allocator.free(source);
+        try std.testing.expectEqualStrings(forbidden, (try tailAdapterViolation(allocator, source)).?);
+    }
+    // An adapter that no longer closes, recovers, reads or locks is no tail adapter.
+    try std.testing.expectEqualStrings("segment_store.close(", (try tailAdapterViolation(allocator, "pub const held = .{ recovery.recover(), recovery.inspectGroup(), lock.acquire(), lock.release() };\n")).?);
+    try std.testing.expectEqualStrings("recovery.recover(", (try tailAdapterViolation(allocator, "pub const held = .{ recovery.inspectGroup(), segment_store.close(), lock.acquire(), lock.release() };\n")).?);
+}
+
+/// The orchestrations that coordinate runner-owned child bindings through a `*_child_bindings.zig` (AGENTS.md "Actions,
+/// orchestrators, and runner"). Feature logging is no longer one: its sequences are ADR 0032 routines, so a logging
+/// child-bindings file is a regression, and a new orchestration adds its name here with its own change.
+const child_bindings_files = [_][]const u8{
+    "workflow_engine_child_bindings.zig",
+    "model_request_child_bindings.zig",
+    "specify_invocation_child_bindings.zig",
+    "workflow_pipeline_child_bindings.zig",
+};
+
+fn isUnlistedChildBindings(basename: []const u8) bool {
+    if (!std.mem.endsWith(u8, basename, "_child_bindings.zig")) return false;
+    for (child_bindings_files) |listed| if (std.mem.eql(u8, basename, listed)) return false;
+    return true;
+}
+
+test "only the four listed orchestrations carry a child-bindings file, and feature logging carries none" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    var seen: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file) continue;
+        if (isUnlistedChildBindings(entry.basename)) {
+            std.debug.print("unlisted child bindings: {s}\n", .{entry.path});
+            return error.UnlistedChildBindings;
+        }
+        if (std.mem.endsWith(u8, entry.basename, "_child_bindings.zig")) seen += 1;
+    }
+    // A row for a file that no longer exists is stale.
+    try std.testing.expectEqual(child_bindings_files.len, seen);
+}
+
+test "child-bindings files are held to the listed orchestrations" {
+    try std.testing.expect(!isUnlistedChildBindings("workflow_pipeline_child_bindings.zig"));
+    try std.testing.expect(!isUnlistedChildBindings("feature_log_runner.zig"));
+    try std.testing.expect(isUnlistedChildBindings("feature_log_child_bindings.zig"));
+    try std.testing.expect(isUnlistedChildBindings("feature_log_retention_child_bindings.zig"));
+    try std.testing.expect(isUnlistedChildBindings("another_child_bindings.zig"));
 }
 
 test "workflow engine selection is workflow-name agnostic while composition binds focused runners" {
@@ -2367,9 +3113,6 @@ test "workflow engine selection is workflow-name agnostic while composition bind
 test "active feature logging concrete assembly remains in composition" {
     const assembly = @embedFile("composition/active_feature_log_runtime.zig");
     try std.testing.expect(std.mem.indexOf(u8, assembly, "adapters/filesystem/feature_log_sink.zig") != null);
-    const service = @embedFile("application/log_service.zig");
-    try expectAbsent(service, "/adapters/");
-    try expectAbsent(service, "std.Io");
 }
 
 test "workflow values have one runner-owned store and no key-only candidate API" {
@@ -2413,9 +3156,6 @@ test "toolchain setup has no unconditional startup path or second result owner" 
     try std.testing.expect(!@hasField(@import("application/bootstrap_services.zig").BootstrapServices, "toolchain"));
     try expectAbsent(@embedFile("application/startup_routine.zig"), "Toolchain");
     try expectAbsent(@embedFile("application/startup_routine.zig"), "prepare_toolchain");
-    const service = @import("application/toolchain_service.zig").ToolChainService;
-    try std.testing.expect(!@hasField(service, "owner"));
-    try std.testing.expect(!@hasDecl(service, "deinit"));
     const bindings = @embedFile("application/toolchain_workflow_runner.zig");
     try expectAbsent(bindings, "successor");
     try expectAbsent(bindings, "bootstrap_root_registry");
@@ -2586,19 +3326,13 @@ test "reference evidence has shared identity types and pure chunk citation bound
     try std.testing.expect(model.ReferenceStateId == evidence.identity.StateId);
     try std.testing.expect(model.ReferenceChunkId == evidence.identity.ChunkId);
     const binding = @import("application/workflow_operation_binding.zig");
-    const operations = @import("application/reference_evidence_workflow.zig");
     // The stage reads the reference content and draws identities, and nothing else.
     const preparing = comptime binding.inspect(@import("application/reference_evidence_preparation_workflow.zig").PrepareReferenceEvidence, &.{});
     try std.testing.expect(preparing.valid and preparing.reference_identity and preparing.reference_content_read);
     try std.testing.expect(!preparing.reference_read and !preparing.model_provider and !preparing.feature_input_read and !preparing.feature_output_write);
-    inline for (.{operations.ValidateCitations}) |T| {
-        const pure = comptime binding.inspect(T, &.{});
-        try std.testing.expectEqual(@import("application/workflow_operation_binding.zig").Inspection{}, pure);
-    }
     inline for (.{
         @embedFile("domain/reference_evidence.zig"),
         @embedFile("actions/reference/prepare_reference_evidence.zig"),
-        @embedFile("actions/reference/validate_source_citations.zig"),
         @embedFile("application/reference_evidence_workflow.zig"),
     }) |source| {
         try expectAbsent(source, "std.Io");
@@ -2618,7 +3352,7 @@ test "extraction candidates reuse citation and identity owners without gaining c
     const binding = @import("application/workflow_operation_binding.zig");
     try std.testing.expect(extraction.ClaimId == identity.ClaimId);
     try std.testing.expect(extraction.CitationId == identity.CitationId);
-    inline for (.{ operations.Parse, operations.ValidateSelections, operations.Validate, operations.Assign, operations.Build, operations.Account }) |T| {
+    inline for (.{ operations.Parse, operations.ValidateTokenClassifications, operations.Validate, operations.Assign, operations.Build, operations.Account }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(@as(usize, 0), @typeInfo(T.Action).@"struct".fields.len);
         try std.testing.expect(T.Action.contract.side_effect == .none);
@@ -2629,17 +3363,17 @@ test "extraction candidates reuse citation and identity owners without gaining c
     for ([_][]const u8{ "state_id", "chunk_id", "claim_id", "citation_id", "disposition", "content" }) |field| {
         inline for (@typeInfo(extraction.Proposal).@"struct".fields) |proposal_field| try std.testing.expect(!std.mem.eql(u8, field, proposal_field.name));
     }
-    inline for (.{ @embedFile("actions/reference/validate_source_citations.zig"), @embedFile("actions/reference/validate_reference_claims.zig") }) |source| {
+    inline for (.{@embedFile("actions/reference/validate_reference_claims.zig")}) |source| {
         try std.testing.expect(std.mem.indexOf(u8, source, "domain/source_citations.zig") != null);
         try expectAbsent(source, "reference.advance");
     }
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "reference_extraction");
 }
 
-test "path-token rules share toolchain authority and scanner bindings are capability free" {
+test "path-token rules share toolchain authority and their bindings are capability free" {
     const bindings = @import("application/workflow_operation_binding.zig");
     const operations = @import("application/path_token_workflow.zig");
-    inline for (.{ operations.Compile, operations.Scan, @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens }) |T| {
+    inline for (.{ operations.Compile, @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens }) |T| {
         try std.testing.expectEqual(bindings.Inspection{}, comptime bindings.inspect(T, &.{}));
         try std.testing.expect(T.Action.contract.side_effect == .none);
     }
@@ -2648,7 +3382,6 @@ test "path-token rules share toolchain authority and scanner bindings are capabi
     const scanner = @embedFile("domain/path_token_scan.zig");
     try expectAbsent(scanner, "\".zig\""); // No extension allowlist belongs in the scanner.
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "path_token");
-    try std.testing.expect(operations.scan_schema.maximum_bytes == null);
     inline for (.{ @embedFile("domain/path_token_grammar.zig"), scanner, @embedFile("domain/naming_rule.zig"), @embedFile("domain/naming_policy.zig") }) |source| {
         try expectAbsent(source, "std.Io.Dir");
         try expectAbsent(source, "/adapters/");
@@ -2683,7 +3416,7 @@ test "typed content has one shared boundary and no passive or exact operational 
 
 test "preservation is a generic YAML boundary with source-only scalars and mandatory accounting" {
     const native = @import("application/structured_token_workflow.zig");
-    const selection = @import("application/reference_extraction_workflow.zig").ValidateSelections;
+    const selection = @import("application/reference_extraction_workflow.zig").ValidateTokenClassifications;
     const binding = @import("application/workflow_operation_binding.zig");
     const key = @import("domain/pipeline.zig").DataKey;
     inline for (.{ @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens, selection, native.AssignTokens, native.BuildClaims }) |T| {
@@ -2693,7 +3426,7 @@ test "preservation is a generic YAML boundary with source-only scalars and manda
     try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction }, selection.Action.contract.requires);
     try std.testing.expectEqualSlices(key, &.{.preserved_token_identities}, native.BuildClaims.Action.contract.requires);
     try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .preserved_token_identities, .reference_extraction_ledger }, @import("actions/reference/validate_reference_extraction_accounting.zig").Action.contract.requires);
-    try std.testing.expect(@import("application/reference_extraction_workflow.zig").selections_schema.maximum_bytes == null);
+    try std.testing.expect(@import("application/reference_extraction_workflow.zig").classifications_schema.maximum_bytes == null);
     const classification = @import("domain/structured_tokens.zig").Classification;
     try std.testing.expect(!@hasField(@FieldType(classification, "preserve"), "raw_value"));
     try std.testing.expect(!@hasField(@FieldType(classification, "preserve"), "citation_id"));
@@ -2720,7 +3453,7 @@ test "reconciliation is YAML visible capability free and preserves closed candid
     try std.testing.expect(!@hasField(r.SummaryProposal, "partition_id"));
     try std.testing.expect(@FieldType(r.ContentProposal, "model") == @import("domain/reference_extraction.zig").ProposalContent);
     try std.testing.expect(@FieldType(r.Item, "claim") == @import("domain/reference_extraction.zig").Claim);
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.reference_reconciliation_records}, native.Account.Action.contract.requires);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.answered_reference_reconciliation_records}, native.Account.Action.contract.requires);
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "reconciliation");
     try expectAbsent(@embedFile("domain/reference_reconciliation.zig"), "precedenceRule");
 }
@@ -2729,7 +3462,7 @@ test "required authority has capability-free registered bindings and no model co
     const native = @import("application/required_authority_workflow.zig");
     const binding = @import("application/workflow_operation_binding.zig");
     const authority = @import("domain/required_authority.zig");
-    inline for (.{ native.ProjectSpecification, native.Build, native.Parse, native.Reconcile, native.Validate }) |T| {
+    inline for (.{ native.ProjectSpecification, native.Build, native.Reconcile, native.Validate }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
@@ -2781,44 +3514,149 @@ test "feature document filenames and headings agree" {
     }
 }
 
+/// The source with every comment overwritten by spaces, so a rule about code never reads a comment: a comment that
+/// names a forbidden word changes no boundary. Strings stay, because an import path or a literal is code. A source
+/// that is not Zig (a heading, a document) has no comments to mask and is judged as it is.
+fn codeOf(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
+    const terminated = try allocator.dupeZ(u8, source);
+    defer allocator.free(terminated);
+    var ast = try std.zig.Ast.parse(allocator, terminated, .zig);
+    defer ast.deinit(allocator);
+    const masked = try allocator.dupe(u8, source);
+    errdefer allocator.free(masked);
+    if (ast.errors.len != 0) return masked;
+    var tokens = std.zig.Tokenizer.init(terminated);
+    var gap_start: usize = 0;
+    while (true) {
+        const token = tokens.next();
+        blankLineComments(masked, gap_start, token.loc.start);
+        switch (token.tag) {
+            .doc_comment, .container_doc_comment => @memset(masked[token.loc.start..token.loc.end], ' '),
+            else => {},
+        }
+        if (token.tag == .eof) return masked;
+        gap_start = token.loc.end;
+    }
+}
+
+/// Between two tokens there is only white space and `//` comments, so a `//` there starts a comment.
+fn blankLineComments(masked: []u8, start: usize, end: usize) void {
+    var index = start;
+    while (index + 1 < end) : (index += 1) {
+        if (masked[index] != '/' or masked[index + 1] != '/') continue;
+        while (index < end and masked[index] != '\n') : (index += 1) masked[index] = ' ';
+    }
+}
+
 fn expectAbsent(source: []const u8, forbidden: []const u8) !void {
-    try std.testing.expect(std.mem.indexOf(u8, source, forbidden) == null);
+    const code = try codeOf(std.testing.allocator, source);
+    defer std.testing.allocator.free(code);
+    try std.testing.expect(std.mem.indexOf(u8, code, forbidden) == null);
+}
+
+/// The path of every `@import` in a Zig source, read from its tokens, so a comment or a string that spells an import
+/// is not one. The caller owns the result (an arena is the usual owner).
+fn importsOf(allocator: std.mem.Allocator, source: []const u8) ![]const []const u8 {
+    const terminated = try allocator.dupeZ(u8, source);
+    defer allocator.free(terminated);
+    var paths: std.ArrayList([]const u8) = .empty;
+    errdefer paths.deinit(allocator);
+    var tokens = std.zig.Tokenizer.init(terminated);
+    while (true) {
+        const token = tokens.next();
+        if (token.tag == .eof) break;
+        if (token.tag != .builtin or !std.mem.eql(u8, terminated[token.loc.start..token.loc.end], "@import")) continue;
+        if (tokens.next().tag != .l_paren) continue;
+        const literal = tokens.next();
+        if (literal.tag != .string_literal) continue;
+        const text = terminated[literal.loc.start..literal.loc.end];
+        try paths.append(allocator, try allocator.dupe(u8, text[1 .. text.len - 1]));
+    }
+    return paths.toOwnedSlice(allocator);
 }
 
 fn expectAllowedActionImports(source: []const u8) !void {
-    const prefix = "@import(\"";
-    var remaining = source;
-    while (std.mem.indexOf(u8, remaining, prefix)) |import_start| {
-        const path_start = import_start + prefix.len;
-        const path_end = std.mem.indexOfScalarPos(u8, remaining, path_start, '"') orelse {
-            return error.UnterminatedImport;
-        };
-        const path = remaining[path_start..path_end];
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    for (try importsOf(arena.allocator(), source)) |path| {
         try std.testing.expect(
             std.mem.eql(u8, path, "std") or
                 std.mem.eql(u8, path, "builtin") or
                 std.mem.startsWith(u8, path, "../../domain/") or
                 std.mem.startsWith(u8, path, "../../ports/"),
         );
-        remaining = remaining[path_end + 1 ..];
     }
 }
 
 fn expectImportsOnly(source: []const u8, allowed: []const []const u8) !void {
-    const prefix = "@import(\"";
-    var remaining = source;
-    while (std.mem.indexOf(u8, remaining, prefix)) |import_start| {
-        const path_start = import_start + prefix.len;
-        const path_end = std.mem.indexOfScalarPos(u8, remaining, path_start, '"') orelse return error.UnterminatedImport;
-        const path = remaining[path_start..path_end];
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    for (try importsOf(arena.allocator(), source)) |path| {
         for (allowed) |candidate| {
             if (std.mem.eql(u8, candidate, path)) break;
         } else {
             std.debug.print("import not allowed: {s}\n", .{path});
             return error.TestUnexpectedResult;
         }
-        remaining = remaining[path_end + 1 ..];
     }
+}
+
+/// The first import of the source whose path holds one of the fragments (`/adapters/`, `../actions/`), or null.
+fn importHolding(allocator: std.mem.Allocator, source: []const u8, fragments: []const []const u8) !?[]const u8 {
+    for (try importsOf(allocator, source)) |path| {
+        for (fragments) |fragment| if (std.mem.indexOf(u8, path, fragment) != null) return path;
+    }
+    return null;
+}
+
+/// The first import of the source that names one of the files, whatever directory it is reached through, or null.
+fn importOfFile(allocator: std.mem.Allocator, source: []const u8, files: []const []const u8) !?[]const u8 {
+    for (try importsOf(allocator, source)) |path| {
+        for (files) |file| if (std.mem.eql(u8, std.fs.path.basename(path), file)) return path;
+    }
+    return null;
+}
+
+/// No import of the source names a path that holds one of the fragments.
+fn expectNoImportPathHolding(source: []const u8, fragments: []const []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    if (try importHolding(arena.allocator(), source, fragments)) |path| {
+        std.debug.print("import {s} crosses a layer\n", .{path});
+        return error.TestUnexpectedResult;
+    }
+}
+
+/// No import of the source names one of the files.
+fn expectNoImportOfFile(source: []const u8, files: []const []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    if (try importOfFile(arena.allocator(), source, files)) |path| {
+        std.debug.print("import {s} reaches a module this file must not depend on\n", .{path});
+        return error.TestUnexpectedResult;
+    }
+}
+
+test "a comment never trips a rule about code, and an import is read from its tokens" {
+    // Rejected: the word in code, in a string, or in an import.
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const plan = 1;", "plan"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const text = \"hard limit\";", "hard"));
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("const x = @import(\"../adapters/file.zig\");", "/adapters/"));
+    // Accepted: the word only in a line comment, a doc comment or a container doc comment.
+    try expectAbsent("// the plan is hard\nconst a = 1;\n", "plan");
+    try expectAbsent("/// hard reference\nconst a = 1; // plan\n", "hard");
+    try expectAbsent("//! reference\nconst a = 1;\n", "reference");
+    // Text that is not Zig is judged as it is: a URL's slashes start no comment there.
+    try std.testing.expectError(error.TestUnexpectedResult, expectAbsent("see https://x.example/plan for the plan", "plan"));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const imports = try importsOf(arena.allocator(), "// @import(\"../adapters/a.zig\")\nconst s = \"@import(\\\"b.zig\\\")\";\nconst c = @import(\"../ports/c.zig\");\n");
+    try std.testing.expectEqual(@as(usize, 1), imports.len);
+    try std.testing.expectEqualStrings("../ports/c.zig", imports[0]);
+    try std.testing.expect(try importHolding(arena.allocator(), "const c = @import(\"../ports/c.zig\");", &.{ "/adapters/", "/actions/" }) == null);
+    try std.testing.expectEqualStrings("../adapters/c.zig", (try importHolding(arena.allocator(), "const c = @import(\"../adapters/c.zig\");", &.{"/adapters/"})).?);
+    try std.testing.expect(try importOfFile(arena.allocator(), "const c = @import(\"a/specification.zig\");", &.{"required_authority.zig"}) == null);
+    try std.testing.expectEqualStrings("../domain/required_authority.zig", (try importOfFile(arena.allocator(), "const c = @import(\"../domain/required_authority.zig\");", &.{"required_authority.zig"})).?);
 }
 
 fn expectSingleActionContract(source: []const u8) !void {
@@ -2836,16 +3674,82 @@ fn countOccurrences(source: []const u8, needle: []const u8) usize {
     return count;
 }
 
+/// The occurrences of `needle` that are calls, not definitions: a `fn ` before it makes it the definition.
+fn callCount(source: []const u8, needle: []const u8) usize {
+    var count: usize = 0;
+    var from: usize = 0;
+    while (std.mem.indexOfPos(u8, source, from, needle)) |at| : (from = at + needle.len) {
+        if (at >= 3 and std.mem.eql(u8, source[at - 3 .. at], "fn ")) continue;
+        count += 1;
+    }
+    return count;
+}
+
+const EmergencySites = struct { path: []const u8, writers: usize, reporters: usize };
+
+/// ADR 0032 and F0002: the emergency line is written exactly once per logging failure, and only by a fixed set of
+/// sites. A writer runs the failure routine (`failure_routine.run(`); a reporter calls `reportFailure` or
+/// `invokeReportFailure`, which reach a writer through the active logger. The table is every non-test source file
+/// with a site; a file not in it has none: the runtime logging lifecycle and composition's `Assembly.fail` are the two
+/// writers, and a site in a new file, or a second writer, fails it.
+const emergency_sites = [_]EmergencySites{
+    .{ .path = "application/feature_log_runtime_lifecycle.zig", .writers = 1, .reporters = 0 },
+    .{ .path = "application/log_service.zig", .writers = 0, .reporters = 1 },
+    .{ .path = "application/model_exchange_capture.zig", .writers = 0, .reporters = 1 },
+    .{ .path = "composition/feature_logging_runtime.zig", .writers = 1, .reporters = 1 },
+};
+
+test "call counting counts a call and skips a definition" {
+    try std.testing.expectEqual(@as(usize, 1), callCount("pub fn invokeReportFailure(a: u8) void {}\nx.invokeReportFailure(a);\n", "invokeReportFailure("));
+    try std.testing.expectEqual(@as(usize, 2), callCount("a.reportFailure(x);\nb.reportFailure(y);\n", ".reportFailure("));
+    try std.testing.expectEqual(@as(usize, 0), callCount("pub fn reportFailure(x: u8) void {}\n", "reportFailure("));
+}
+
+test "the emergency line has a fixed set of writer and reporter sites" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    var seen: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.endsWith(u8, entry.basename, "_test.zig") or
+            std.mem.endsWith(u8, entry.basename, "_test_fixture.zig") or
+            std.mem.eql(u8, entry.basename, "runtime_tests.zig") or
+            std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+        const code = try codeOf(allocator, source);
+        const writers = callCount(code, "failure_routine.run(");
+        const reporters = callCount(code, ".reportFailure(") + callCount(code, "invokeReportFailure(");
+        var expected_writers: usize = 0;
+        var expected_reporters: usize = 0;
+        for (emergency_sites) |site| if (std.mem.eql(u8, site.path, entry.path)) {
+            expected_writers = site.writers;
+            expected_reporters = site.reporters;
+            seen += 1;
+        };
+        if (writers != expected_writers or reporters != expected_reporters) {
+            std.debug.print("emergency sites in {s}: {d} writers and {d} reporters, expected {d} and {d}\n", .{ entry.path, writers, reporters, expected_writers, expected_reporters });
+            return error.UnexpectedEmergencySites;
+        }
+    }
+    // A row for a file that no longer exists is stale.
+    try std.testing.expectEqual(emergency_sites.len, seen);
+}
+
 test "candidate repairs share authority and expose only native scoped operations" {
     const binding = @import("application/workflow_operation_binding.zig");
     const tokens = @import("application/reference_extraction_repair_workflow.zig");
     const spec = @import("application/specification_repair_workflow.zig");
     const lexical = @import("application/reference_text_repair_workflow.zig");
     const reconciliation = @import("application/reference_reconciliation_repair_workflow.zig");
-    const coverage = @import("application/specification_coverage_repair_workflow.zig");
     const support = @import("application/specification_support_repair_workflow.zig");
     const source_omission = @import("application/source_omission_repair_workflow.zig");
-    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, coverage.Authorize, support.Authorize, support.BuildInput, support.Parse, support.Merge, source_omission.Authorize, source_omission.BuildInput, source_omission.Parse, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
+    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, support.Authorize, support.BuildInput, support.Parse, support.Merge, source_omission.Authorize, source_omission.BuildInput, source_omission.Parse, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         // An owner's step is capability-free and carries its data effects once, in its own binding.
         try std.testing.expect(@TypeOf(T.effects) == @import("domain/repair_owner.zig").Effects);
@@ -2859,9 +3763,6 @@ test "candidate repairs share authority and expose only native scoped operations
     inline for (.{ source_omission.Authorize, source_omission.BuildInput, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
         try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &@import("domain/specification_generation_phase.zig").optional, T.effects.optional);
     }
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.effects.replaces);
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.effects.invalidates);
-    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .blocked, .failed }, &coverage.Authorize.outcomes);
     inline for (.{ @embedFile("domain/reference_extraction_repair.zig"), @embedFile("domain/specification_repair.zig"), @embedFile("domain/reference_extraction_text_repair.zig"), @embedFile("domain/reference_reconciliation_repair.zig"), @embedFile("domain/specification_support_repair.zig") }) |source| {
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic_repair.zig"));
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic.checkMerge("));
@@ -2872,7 +3773,7 @@ test "candidate repairs share authority and expose only native scoped operations
     const specification_facts = @embedFile("domain/specification_candidate_context.zig");
     try expectAbsent(specification_facts, "session.packet");
     try expectAbsent(specification_facts, "input: []const u8");
-    inline for (.{ specification_facts, @embedFile("domain/specification_coverage_repair.zig"), @embedFile("domain/reference_extraction_context.zig"), @embedFile("domain/reference_reconciliation_context.zig") }) |source| {
+    inline for (.{ specification_facts, @embedFile("domain/reference_extraction_context.zig"), @embedFile("domain/reference_reconciliation_context.zig") }) |source| {
         try expectAbsent(source, "policy_ids:");
         try expectAbsent(source, "passive_records:");
     }
@@ -2881,7 +3782,7 @@ test "candidate repairs share authority and expose only native scoped operations
     try expectAbsent(reconciliation_owner, "checkBusinessIn");
     try expectAbsent(reconciliation_owner, "checkReferenceIn");
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.text_validated_reference_extraction}, tokens.Merge.effects.replaces);
-    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/reference_extraction_workflow.zig").ValidateSelections.outcomes);
+    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/reference_extraction_workflow.zig").ValidateTokenClassifications.outcomes);
 }
 
 test "the generic repair operations select owner rules through one exhaustive switch and hold none themselves" {
@@ -2925,10 +3826,13 @@ test "the generic repair operations select owner rules through one exhaustive sw
         try std.testing.expectEqualStrings(tag, field);
         arms += 1;
     }
-    try std.testing.expectEqual(@as(usize, 29), arms);
-    // Its imports are exactly the contract types and the seven owner bindings.
-    try std.testing.expectEqual(@as(usize, 7), countOccurrences(generic, "_workflow.zig\")"));
-    try std.testing.expectEqual(@as(usize, 13), countOccurrences(generic, "@import(\""));
+    try std.testing.expectEqual(@as(usize, 28), arms);
+    // Its imports are exactly the contract types and the six owner bindings.
+    try std.testing.expectEqual(@as(usize, 6), countOccurrences(generic, "_workflow.zig\")"));
+    try std.testing.expectEqual(@as(usize, 12), countOccurrences(generic, "@import(\""));
+    // Each variant is held to the descriptor check registry admission and graph validation apply, so a
+    // `blocked` outcome with no reader stops the build (ADR 0033 "Blocked authorizers").
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(generic, "variant.validAssociation()"));
     // An owner function has one definition: each owner binding's `invoke` is declared once in its own file,
     // so the generic operation holds it once and no second path to it exists.
     inline for (.{
@@ -2938,7 +3842,6 @@ test "the generic repair operations select owner rules through one exhaustive sw
         .{ @embedFile("application/source_omission_repair_workflow.zig"), 4 },
         .{ @embedFile("application/specification_repair_workflow.zig"), 4 },
         .{ @embedFile("application/specification_support_repair_workflow.zig"), 4 },
-        .{ @embedFile("application/specification_coverage_repair_workflow.zig"), 1 },
     }) |pair| try std.testing.expectEqual(@as(usize, pair[1]), countOccurrences(pair[0], "pub fn invoke("));
     // The owner enum's rules are exhaustive switches too: only `id` may use an inline-else prong.
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(owners, "else =>"));
@@ -2950,12 +3853,64 @@ test "the generic repair operations select owner rules through one exhaustive sw
     }
 }
 
+test "an operation type registers by what it declares: its action, closed variants or its own contract, never neither" {
+    const native = @import("composition/native_workflow_operations.zig");
+    const invocation = @import("application/specify_invocation_runner.zig");
+    const generic_repair = @import("application/repair_workflow.zig");
+    try std.testing.expect(comptime native.shapeOf(invocation.ValidateArguments) == .action);
+    try std.testing.expect(comptime native.shapeOf(generic_repair.AuthorizeRepair) == .shell);
+    try std.testing.expect(comptime native.shapeOf(invocation.Invocation) == .direct);
+    // A type with neither an action nor a contract is not an operation; registering one does not compile.
+    try std.testing.expect(comptime native.shapeOf(struct { allocator: u8 }) == null);
+    // The invocation parse is the invocation step by its own declarations, not by a branch in the table; an
+    // ordinary action keeps the step kind and the default outcomes.
+    var parse: invocation.ParseInvocation = .{ .allocator = std.testing.allocator };
+    const invoked = native.entry(invocation.ParseInvocation, &parse);
+    try std.testing.expectEqual(.invocation, invoked.contract.kind);
+    try std.testing.expectEqual(@as(usize, 1), invoked.contract.outcomes.len);
+    try std.testing.expectEqual(.ok, invoked.contract.outcomes[0]);
+    var validate: invocation.ValidateArguments = .{ .allocator = std.testing.allocator };
+    const ordinary = native.entry(invocation.ValidateArguments, &validate);
+    try std.testing.expectEqual(.step, ordinary.contract.kind);
+    try std.testing.expectEqual(@as(usize, 2), ordinary.contract.outcomes.len);
+}
+
+test "the request assembly holds its two context structs and the two tables derived from them, and no context of its own" {
+    // The compiler already requires a context for each stage and a contract for each operation. What it leaves to a
+    // person is a context field returning to the assembly beside the structs it derives from.
+    const assembly = @import("composition/model_request_operations.zig");
+    try std.testing.expectEqual(@as(usize, 4), std.meta.fieldNames(assembly.Assembly).len);
+    inline for (.{ "selectable", "stages", "request_stages", "entries" }) |name| try std.testing.expect(@hasField(assembly.Assembly, name));
+}
+
 test "no per-owner repair operation remains: the four generic operations are the only registered repair operations" {
-    // The registry registers the four generic operations and no per-owner one (ADR 0033).
-    const composition = @embedFile("composition/native_workflow_operations.zig");
-    try std.testing.expectEqual(@as(usize, 4), countOccurrences(composition, "variantEntry(generic_repair."));
-    for ([_][]const u8{ "entry(text_repair.", "entry(extraction_repair.", "entry(reconciliation_repair.", "entry(source_omission.", "entry(specification_repair.", "entry(support_repair.", "entry(coverage_repair." }) |forbidden| {
-        try expectAbsent(composition, forbidden);
+    // The registry registers the four generic operations and no per-owner one (ADR 0033): the operations table
+    // holds each generic repair type once, and no other field declares closed variants.
+    @setEvalBranchQuota(100_000);
+    const native = @import("composition/native_workflow_operations.zig");
+    const generic_repair = @import("application/repair_workflow.zig");
+    inline for (.{ generic_repair.AuthorizeRepair, generic_repair.BuildRepairInput, generic_repair.ParseRepair, generic_repair.MergeRepair }) |generic| {
+        var fields: usize = 0;
+        inline for (std.meta.fields(native.Operations)) |field| fields += @intFromBool(field.type == generic);
+        try std.testing.expectEqual(@as(usize, 1), fields);
+    }
+    var shells: usize = 0;
+    inline for (std.meta.fields(native.Operations)) |field| shells += @intFromBool(comptime native.shapeOf(field.type) == .shell);
+    try std.testing.expectEqual(@as(usize, 4), shells);
+    // No owner binding is an operation: no type an owner module declares is a field of the table.
+    inline for (.{
+        @import("application/reference_text_repair_workflow.zig"),
+        @import("application/reference_extraction_repair_workflow.zig"),
+        @import("application/reference_reconciliation_repair_workflow.zig"),
+        @import("application/source_omission_repair_workflow.zig"),
+        @import("application/specification_repair_workflow.zig"),
+        @import("application/specification_support_repair_workflow.zig"),
+    }) |owner_module| {
+        inline for (@typeInfo(owner_module).@"struct".decls) |decl| {
+            const member = @field(owner_module, decl.name);
+            if (@TypeOf(member) != type) continue;
+            inline for (std.meta.fields(native.Operations)) |field| try std.testing.expect(field.type != member);
+        }
     }
     // Each owner's binding is an owner module: it declares its data effects and rules, imports no action
     // and registers no contract of its own.
@@ -2966,7 +3921,6 @@ test "no per-owner repair operation remains: the four generic operations are the
         @embedFile("application/source_omission_repair_workflow.zig"),
         @embedFile("application/specification_repair_workflow.zig"),
         @embedFile("application/specification_support_repair_workflow.zig"),
-        @embedFile("application/specification_coverage_repair_workflow.zig"),
     }) |source| {
         try expectAbsent(source, "@import(\"../actions/");
         try expectAbsent(source, "Action.contract");
@@ -3036,8 +3990,12 @@ test "the engine binds each acceptance criterion to its slot, and the scenarios 
     // the operations the unit steps run (each appears in both subgraphs), so no second model path
     // exists. Collection and validation run on the group's batch unchanged; building the request and
     // parsing the answer switch on the session's scenarios phase.
-    const native = @embedFile("composition/native_workflow_operations.zig");
-    try std.testing.expectEqual(@as(usize, 4), countOccurrences(native, "entry(scenario_generation."));
+    const scenario_generation = @import("application/scenario_generation_workflow.zig");
+    inline for (.{ scenario_generation.Plan, scenario_generation.Check, scenario_generation.Advance, scenario_generation.Complete }) |operation| {
+        var fields: usize = 0;
+        inline for (std.meta.fields(@import("composition/native_workflow_operations.zig").Operations)) |field| fields += @intFromBool(field.type == operation);
+        try std.testing.expectEqual(@as(usize, 1), fields);
+    }
     // One transition completes the records unit: the completion operation is the only caller of
     // `completeScenarios`. The plan only measures the population, the admission only joins a group's
     // criteria, and the progress check only reads, so none of them completes it.
@@ -3094,7 +4052,7 @@ test "the scenarios context repeats the generation context's shared rules and of
 }
 
 test "principle root access stays in its narrow source adapter and shares physical traversal" {
-    inline for (.{ @import("actions/principle/inventory_principle_sources.zig").Action, @import("actions/principle/capture_principle_sources.zig").Action, @import("actions/principle/capture_principle_registry.zig").Action }) |Action| {
+    inline for (.{@import("actions/principle/capture_principle_registry.zig").Action}) |Action| {
         try std.testing.expectEqual(.filesystem_read, Action.contract.side_effect);
         try std.testing.expect(@import("application/workflow_operation_binding.zig").inspect(Action, &.{}).principle_read);
     }

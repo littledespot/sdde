@@ -122,7 +122,7 @@ test "diagnostic authorization accepts content edits and rejects binding drift b
 test "diagnostic authorization derives the family from each validated registered tuple" {
     const registered = @import("../../src/composition/provider_model_contracts.zig");
     for (registered.registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family.
+        // This loop derives each Bedrock family; the Anthropic replay test follows.
         if (entry.facts != .aws_bedrock) continue;
         for (@import("../../src/model_contract_test_fixture.zig").bedrock_model_ids) |model| {
             var selected = captured;
@@ -140,4 +140,48 @@ test "diagnostic authorization derives the family from each validated registered
             try std.testing.expectError(error.ReplayUnauthorized, binding.Authorization.authorize(context, authority.binding));
         }
     }
+}
+
+const anthropic_catalogue =
+    \\{"providers":[{"provider":"anthropic","models":[{"model":"claude-haiku-5-5","json":true,"config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}}]}]}
+;
+const anthropic_captured: debug.Description = .{
+    .provider = "anthropic",
+    .model = "claude-haiku-5-5",
+    .provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 }, .request_timeout = .{ .milliseconds = 180000 } } },
+    .model_slot = "MOCK-generation",
+    .workflow_id = "MOCK-workflow",
+    .workflow_version = 1,
+    .request_step = "MOCK-prepare",
+    .content = &.{.{ .user = "MOCK captured input" }},
+    .protocol_prompt = @import("../../src/domain/model_controls.zig").response_format_guidance,
+    .schema = "MOCK captured schema",
+    .response_mode = .native_schema,
+    // A Claude model takes no temperature, so its controls carry none.
+    .controls = .{},
+    .reasoning_effort = "medium",
+    .operation_kind = .inference,
+};
+
+test "diagnostic binding replays a captured Anthropic call within its own family" {
+    for ([_]?[]const u8{ "low", "high", null }) |effort| {
+        const selected = try binding.rebind(std.testing.allocator, anthropic_captured, anthropic_catalogue, anthropic_captured.model, effort);
+        var expected = anthropic_captured;
+        expected.reasoning_effort = effort;
+        try std.testing.expectEqualDeep(expected, selected);
+    }
+    // Neither an unregistered model, an unsupported effort nor another provider's name
+    // carries an Anthropic configuration.
+    try std.testing.expectError(error.InvalidEvaluationContract, binding.rebind(std.testing.allocator, anthropic_captured, anthropic_catalogue, "claude-unlisted", "low"));
+    try std.testing.expectError(error.InvalidEvaluationContract, binding.rebind(std.testing.allocator, anthropic_captured, anthropic_catalogue, anthropic_captured.model, "minimal"));
+    var foreign = anthropic_captured;
+    foreign.provider = "aws-bedrock";
+    try std.testing.expectError(error.InvalidEvaluationContract, binding.rebind(std.testing.allocator, foreign, anthropic_catalogue, anthropic_captured.model, "low"));
+    var authority: binding.Authorization = .{ .binding = anthropic_captured };
+    const context: *@import("../../src/ports/request_replay.zig").Context = @ptrCast(&authority);
+    try std.testing.expectEqualDeep(@import("../../src/domain/llm_provider_contracts.zig").ProviderFacts.anthropic, try binding.Authorization.authorize(context, anthropic_captured));
+    // A replay carries the maximum its catalogue entry recorded and no other.
+    var drifted = anthropic_captured;
+    drifted.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 4096 }, .request_timeout = .{ .milliseconds = 180000 } } };
+    try std.testing.expectError(error.ReplayUnauthorized, binding.Authorization.authorize(context, drifted));
 }

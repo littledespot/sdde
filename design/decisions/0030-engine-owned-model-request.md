@@ -118,8 +118,8 @@ A workflow makes one model request with one step that uses the registered operat
 
 - `slot`;
 - `protocol-prompt` and `prompt`;
-- exactly one of `result-schema`, with the optional `result-selection` of ADR 0013, or
-  `composition-part` (ADR 0016);
+- exactly one of `result-schema` (a native packet input selects its result definition within
+  it, ADR 0013) or `composition-part` (ADR 0016);
 - optional `context`, which may accompany either schema form;
 - `retry-limit`, bounded by the operation contract as today (`0` permits only the
   initial attempt).
@@ -254,6 +254,13 @@ return its documented maximum output (`maxOutputTokens`, ADR 0011).
 - **How it applies.** The authorization stage binds the deadline of the catalogue entry
   that the step's slot selects to every provider operation of that request, including
   protocol corrections. YAML carries no deadline.
+- **Enforcement** (user decision, 21 November 2026). The exchange races the network task against
+  a timer that polls in slices: each slice reads the run's cancellation status, then the deadline clock, then
+  sleeps the smaller of one slice and the time left. A slice is polling granularity, not a
+  limit. A cancellation is therefore observed within one slice and the network task is
+  joined before the request returns, and a deadline is judged against a fresh clock read,
+  so the time a machine is suspended counts. A sent request may still finish and incur
+  cost ([ADR 0009](0009-atomic-workflow-execution.md)).
 - **Values.** GPT-OSS-20B keeps 180,000 ms; its slowest observed call, a 16,384-token
   runaway, took 74.1 s. Every other entry, including both Claude Haiku 5.5 entries
   (128,000 maximum output tokens), also starts at 180,000 ms, the former shared deadline.

@@ -34,9 +34,13 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                 if (comptime kind == .acceptance_criterion) {
                     try write(w, "- **");
                     try identity(w, record.id.?);
-                    try write(w, "**: **Given** ");
-                    try scalar(w, content.given, .inline_text, .text);
-                    try write(w, clauseSeparator(content.given));
+                    try write(w, "**: ");
+                    // A criterion whose sources state no starting situation has no Given, and no label for one.
+                    if (content.given) |given| {
+                        try write(w, "**Given** ");
+                        try scalar(w, given, .inline_text, .text);
+                        try write(w, clauseSeparator(given));
+                    }
                     try write(w, "**When** ");
                     try scalar(w, content.when, .inline_text, .text);
                     try write(w, clauseSeparator(content.when));
@@ -54,8 +58,21 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                     try write(w, "**");
                     try identity(w, record.id.?);
                     try write(w, "**\n");
-                    inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |f| try inlineField(w, label(f.name), @field(content, f.name));
-                    if (record.outcome) |outcome| try inlineField(w, outcome_label, outcome);
+                    if (comptime kind.showsScenario()) {
+                        // One `GIVEN` line holds the linked criterion's Given, the separator
+                        // the criterion's own rule derives, then the edge case's own given; a
+                        // criterion without a Given contributes neither, and the line is the own given.
+                        const shown = record.scenario.?;
+                        try write(w, given_label);
+                        if (shown.given) |copied| {
+                            try scalar(w, copied, .inline_text, .text);
+                            try write(w, clauseSeparator(copied));
+                        }
+                        try scalar(w, content.given, .inline_text, .text);
+                        try write(w, "\n");
+                        try inlineField(w, when_label, shown.when);
+                        try inlineField(w, then_label, shown.then);
+                    } else inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |f| try inlineField(w, label(f.name), @field(content, f.name));
                     if (record.related.len != 0) {
                         try write(w, related_label);
                         for (record.related, 0..) |id, at| {
@@ -99,7 +116,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
             scope_present = true;
         }
         if (mandatory(kind) or cursor.is(kind.heading())) {
-            if (isScope(kind) and !scope_present) return error.InvalidSpecification;
+            if (kind.isScopeSection() and !scope_present) return error.InvalidSpecification;
             try cursor.expect(kind.heading());
             if (kind == .entity) entity_section = .present;
             const Body = @FieldType(spec.Content(spec.Scalar), @tagName(kind));
@@ -109,7 +126,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                 const header = try cursor.take();
                 var body: Body = undefined;
                 var related: []const spec.Id = &.{};
-                var outcome: ?spec.Scalar = null;
+                var scenario: ?spec.Scenario = null;
                 const id: ?spec.Id = if (comptime kind == .acceptance_criterion or @hasField(Body, "text")) blk: {
                     if (!std.mem.startsWith(u8, header, "- **")) return error.InvalidSpecification;
                     const end = std.mem.indexOf(u8, header[4..], "**: ") orelse return error.InvalidSpecification;
@@ -121,8 +138,14 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                 } else blk: {
                     if (!std.mem.startsWith(u8, header, "**") or !std.mem.endsWith(u8, header, "**") or header.len <= 4) return error.InvalidSpecification;
                     const key = try readId(header[2 .. header.len - 2], kind);
-                    inline for (@typeInfo(Body).@"struct".fields) |f| @field(body, f.name) = try readField(allocator, &cursor, label(f.name));
-                    if (comptime kind.showsOutcome()) outcome = try readField(allocator, &cursor, outcome_label);
+                    if (comptime kind.showsScenario()) {
+                        const joined = try readField(allocator, &cursor, given_label);
+                        const when = try readField(allocator, &cursor, when_label);
+                        const then = try readField(allocator, &cursor, then_label);
+                        const split = try splitGiven(allocator, records.items, joined, when, then);
+                        body = .{ .given = split.own };
+                        scenario = split.scenario;
+                    } else inline for (@typeInfo(Body).@"struct".fields) |f| @field(body, f.name) = try readField(allocator, &cursor, label(f.name));
                     if (comptime kind == .entity) related = try readRelated(allocator, &cursor);
                     break :blk key;
                 };
@@ -130,10 +153,10 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                     try readSources(allocator, &cursor, if (comptime kind == .entity) field_source else nested_source)
                 else
                     &.{};
-                try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .sources = sources, .related = related, .outcome = outcome });
+                try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .sources = sources, .related = related, .scenario = scenario });
             }
             if (!mandatory(kind) and kind != .entity and records.items.len == start) return error.InvalidSpecification;
-            if (isScope(kind)) scope_records += records.items.len - start;
+            if (kind.isScopeSection()) scope_records += records.items.len - start;
         }
     }
     if (scope_present and scope_records == 0) return error.InvalidSpecification;
@@ -151,9 +174,6 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
 fn mandatory(kind: spec.Kind) bool {
     return spec.requiresRecords(kind);
 }
-fn isScope(kind: spec.Kind) bool {
-    return kind == .assumption or kind == .non_goal or kind == .prohibited_behavior;
-}
 fn sectionPresent(document: spec.CapturedDocument, kind: spec.Kind) bool {
     if (mandatory(kind)) return true;
     if (kind == .entity) return document.entity_section == .present;
@@ -161,13 +181,15 @@ fn sectionPresent(document: spec.CapturedDocument, kind: spec.Kind) bool {
     return false;
 }
 fn hasScope(document: spec.CapturedDocument) bool {
-    for (document.records) |record| if (isScope(record.content)) return true;
+    for (document.records) |record| if (std.meta.activeTag(record.content).isScopeSection()) return true;
     return false;
 }
 
 fn acceptance(allocator: std.mem.Allocator, input: []const u8) Error!@FieldType(spec.Content(spec.Scalar), "acceptance_criterion") {
     const labels = [_][]const u8{ "**Given** ", "**When** ", "**Then** " };
-    if (!std.mem.startsWith(u8, input, labels[0])) return error.InvalidSpecification;
+    // The two forms a criterion reads back as: the Given, When, Then triplet, and the When, Then pair of a
+    // criterion with no Given. Any other order, repeat or omission rejects.
+    const sequence: []const usize = if (std.mem.startsWith(u8, input, labels[0])) &.{ 0, 1, 2 } else if (std.mem.startsWith(u8, input, labels[1])) &.{ 1, 2 } else return error.InvalidSpecification;
     // Exact copy spans may themselves contain label-shaped text. The shared
     // Markdown scanner, not a substring split, determines those boundaries.
     const frame = "field ";
@@ -182,21 +204,27 @@ fn acceptance(allocator: std.mem.Allocator, input: []const u8) Error!@FieldType(
         while (span_index < spans.len and spans[span_index].end <= offset + frame.len) span_index += 1;
         if (span_index < spans.len and spans[span_index].start <= offset + frame.len) continue;
         for (labels, 0..) |marker, index| if (std.mem.startsWith(u8, input[offset..], marker)) {
-            if (index != found) return error.InvalidSpecification;
+            if (found == sequence.len or index != sequence[found]) return error.InvalidSpecification;
             // An escaped comma ends the clause's own text, so only an unescaped ", " separates.
-            if (index != 0) separators[index] = if (offset >= 2 and std.mem.eql(u8, input[offset - 2 .. offset], ", ") and !escaped(input, offset - 2)) 2 else if (offset >= 1 and input[offset - 1] == ' ') 1 else return error.InvalidSpecification;
-            positions[index] = offset;
+            if (found != 0) separators[found] = if (offset >= 2 and std.mem.eql(u8, input[offset - 2 .. offset], ", ") and !escaped(input, offset - 2)) 2 else if (offset >= 1 and input[offset - 1] == ' ') 1 else return error.InvalidSpecification;
+            positions[found] = offset;
             found += 1;
         };
     }
-    if (found != labels.len) return error.InvalidSpecification;
-    if (positions[1] - separators[1] < labels[0].len or positions[2] - separators[2] < positions[1] + labels[1].len) return error.InvalidSpecification;
-    const given = try unescape(allocator, input[labels[0].len .. positions[1] - separators[1]]);
-    const when = try unescape(allocator, input[positions[1] + labels[1].len .. positions[2] - separators[2]]);
-    // Only the separator the renderer derives from each clause round-trips.
-    if (!std.mem.eql(u8, clauseSeparator(given), input[positions[1] - separators[1] .. positions[1]]) or
-        !std.mem.eql(u8, clauseSeparator(when), input[positions[2] - separators[2] .. positions[2]])) return error.InvalidSpecification;
-    return .{ .given = given, .when = when, .then = try unescape(allocator, input[positions[2] + labels[2].len ..]) };
+    if (found != sequence.len) return error.InvalidSpecification;
+    var clauses: [3]spec.Scalar = undefined;
+    for (sequence, 0..) |which, at| {
+        const start = positions[at] + labels[which].len;
+        const end = if (at + 1 < sequence.len) positions[at + 1] - separators[at + 1] else input.len;
+        if (end < start) return error.InvalidSpecification;
+        clauses[at] = try unescape(allocator, input[start..end]);
+        // Only the separator the renderer derives from each clause round-trips.
+        if (at + 1 < sequence.len and !std.mem.eql(u8, clauseSeparator(clauses[at]), input[end .. end + separators[at + 1]])) return error.InvalidSpecification;
+    }
+    return if (sequence.len == 3)
+        .{ .given = clauses[0], .when = clauses[1], .then = clauses[2] }
+    else
+        .{ .given = null, .when = clauses[0], .then = clauses[1] };
 }
 
 /// Whether the byte at `index` follows an odd run of backslashes, so it is escaped text.
@@ -243,10 +271,59 @@ fn singleLine(file: spec.SourceLines) bool {
     return file.ranges.len == 1 and file.ranges[0].first == file.ranges[0].last;
 }
 
-/// An edge case's outcome line, after its condition: the Then of the acceptance criterion it
-/// links to, derived by the projection. Like the source line it is a display that never becomes
-/// provenance, so publication's byte comparison with the projection owns its content.
-const outcome_label = "- **EXPECTED OUTCOME** ";
+/// An edge case's three lines (ADR 0038 Decision 7). `GIVEN` holds the linked acceptance
+/// criterion's Given, the separator its own rule derives, then the edge case's own given; `WHEN`
+/// and `THEN` are the criterion's. The copied parts are a display that never becomes provenance,
+/// so publication's byte comparison with the projection owns their content.
+const given_label = "- **GIVEN** ";
+const when_label = "- **WHEN** ";
+const then_label = "- **THEN** ";
+
+const Split = struct { own: spec.Scalar, scenario: spec.Scenario };
+
+/// Readback of an edge case: the own given is the text after the copied Given and its separator.
+/// The first earlier criterion whose When and Then equal the lines and whose Given and separator
+/// begin the `GIVEN` line is the copy; no such criterion rejects, so an edited copy of a Given,
+/// When or Then, or a `GIVEN` line that does not begin with the copied Given, never reads back.
+/// A criterion with no Given copies nothing, so the whole line is the own given; it is the copy only when
+/// no criterion that holds a Given is. Either choice re-renders the same line.
+fn splitGiven(allocator: std.mem.Allocator, records: []const spec.CapturedRecord, joined: spec.Scalar, when: spec.Scalar, then: spec.Scalar) Error!Split {
+    for ([_]bool{ true, false }) |holding| for (records) |record| {
+        if (record.content != .acceptance_criterion) continue;
+        const criterion = record.content.acceptance_criterion;
+        if ((criterion.given != null) != holding) continue;
+        if (!sameScalar(criterion.when, when) or !sameScalar(criterion.then, then)) continue;
+        const copied_given: spec.Scalar = criterion.given orelse .{ .bytes = "" };
+        const copied = copied_given.bytes.len;
+        const separator = if (criterion.given == null) "" else clauseSeparator(copied_given);
+        const start = copied + separator.len;
+        if (joined.bytes.len <= start or !std.mem.startsWith(u8, joined.bytes, copied_given.bytes) or
+            !std.mem.eql(u8, joined.bytes[copied..start], separator)) continue;
+        var own_spans: std.ArrayList(spec.CodeSpan) = .empty;
+        var copied_spans: usize = 0;
+        var matches = true;
+        for (joined.code_spans) |span| {
+            if (span.end <= copied) {
+                if (copied_spans == copied_given.code_spans.len or !std.meta.eql(span, copied_given.code_spans[copied_spans])) matches = false;
+                copied_spans += 1;
+            } else if (span.start >= start) {
+                try own_spans.append(allocator, .{ .start = span.start - start, .end = span.end - start });
+            } else matches = false;
+        }
+        if (!matches or copied_spans != copied_given.code_spans.len) continue;
+        return .{
+            .own = .{ .bytes = joined.bytes[start..], .code_spans = try own_spans.toOwnedSlice(allocator) },
+            .scenario = .{ .given = criterion.given, .when = when, .then = then },
+        };
+    };
+    return error.InvalidSpecification;
+}
+
+fn sameScalar(left: spec.Scalar, right: spec.Scalar) bool {
+    if (!std.mem.eql(u8, left.bytes, right.bytes) or left.code_spans.len != right.code_spans.len) return false;
+    for (left.code_spans, right.code_spans) |a, b| if (!std.meta.eql(a, b)) return false;
+    return true;
+}
 
 /// An entity's related-statements line, between its fields and its source line. It lists
 /// statement IDs only: like the source line it is a display that never becomes provenance,
@@ -315,7 +392,6 @@ fn lineNumber(digits: []const u8) Error!u32 {
 }
 
 fn label(comptime name: []const u8) []const u8 {
-    if (comptime std.mem.eql(u8, name, "condition")) return "- **CONDITION** ";
     if (comptime std.mem.eql(u8, name, "name")) return "- **NAME** ";
     @compileError("Unregistered specification field label");
 }

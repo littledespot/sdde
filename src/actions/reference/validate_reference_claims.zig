@@ -29,9 +29,9 @@ pub const Action = struct {
                     const values = try allocator.alloc(extraction.ValidatedClaim, proposals.len);
                     for (proposals, values) |proposal, *value| {
                         const checked = switch (proposal) {
-                            .model => |claim| switch (try @import("../../domain/source_selections.zig").validate(allocator, inputs, candidate.scope, claim.citations)) {
-                                .valid => |result| result,
-                                .invalid => return error.InvalidReferenceExtraction,
+                            .model => |claim| @import("../../domain/source_selections.zig").validate(allocator, inputs, candidate.scope, claim.citations) catch |err| return switch (err) {
+                                error.InvalidSelection => error.InvalidReferenceExtraction,
+                                else => |other| other,
                             },
                             .preserved_token => |token| try citations.validate(allocator, inputs, .{ .scope = candidate.scope, .entries = &.{.{ .source_id = token.citation.source_id, .block_id = token.citation.block_id, .location = token.citation.location, .verbatim = token.citation.verbatim }} }),
                         };

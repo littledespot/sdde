@@ -30,8 +30,8 @@ const runner_module = @import("application/workflow_pipeline_runner.zig");
 const Registry = operation_registry.Registry;
 const Entry = operation_registry.Entry;
 
-const raw_schema = values.schema(.raw_engine_config, u32, 1, 64);
-const engine_schema = values.schema(.engine_config, u32, 1, 64);
+const raw_schema = values.schema(.workflow_operation_registry, u32, 1, 64);
+const engine_schema = values.schema(.workflow_definition_registry, u32, 1, 64);
 const evidence_schema = values.schema(.workflow_operation_registry_evidence, gate.Decision, 1, 32);
 const schemas = [_]data.Schema{ raw_schema, engine_schema, evidence_schema };
 const policies = [_]operation.PolicyProfile{.{ .id = "variant.policy@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{ .ok, .failed, .invalid } }};
@@ -55,9 +55,9 @@ fn variantFor(a: std.mem.Allocator, shape: Shape, values_in_use: []const []const
         .plain => .{
             .value = "plain",
             .parameters = try a.dupe(operation.ParameterDescriptor, &.{mode}),
-            .requires = &.{.raw_engine_config},
+            .requires = &.{.workflow_operation_registry},
             .optional = &.{},
-            .produces = &.{.engine_config},
+            .produces = &.{.workflow_definition_registry},
             .replaces = &.{},
             .invalidates = &.{},
             .outcomes = &.{.ok},
@@ -73,9 +73,9 @@ fn variantFor(a: std.mem.Allocator, shape: Shape, values_in_use: []const []const
         .retrying => .{
             .value = "retrying",
             .parameters = try a.dupe(operation.ParameterDescriptor, &.{ mode, limit.descriptor(3) }),
-            .requires = &.{.raw_engine_config},
+            .requires = &.{.workflow_operation_registry},
             .optional = &.{},
-            .produces = &.{.engine_config},
+            .produces = &.{.workflow_definition_registry},
             .replaces = &.{},
             .invalidates = &.{},
             .outcomes = &.{ .ok, .failed },
@@ -91,7 +91,7 @@ fn variantFor(a: std.mem.Allocator, shape: Shape, values_in_use: []const []const
         .validating => .{
             .value = "validating",
             .parameters = try a.dupe(operation.ParameterDescriptor, &.{mode}),
-            .requires = &.{ .raw_engine_config, .engine_config },
+            .requires = &.{ .workflow_operation_registry, .workflow_definition_registry },
             .optional = &.{},
             .produces = &.{},
             .replaces = &.{},
@@ -109,10 +109,10 @@ fn variantFor(a: std.mem.Allocator, shape: Shape, values_in_use: []const []const
         .merging => .{
             .value = "merging",
             .parameters = try a.dupe(operation.ParameterDescriptor, &.{ mode, limit.descriptor(5) }),
-            .requires = &.{ .raw_engine_config, .engine_config },
+            .requires = &.{ .workflow_operation_registry, .workflow_definition_registry },
             .optional = &.{},
             .produces = &.{},
-            .replaces = &.{.engine_config},
+            .replaces = &.{.workflow_definition_registry},
             .invalidates = &.{},
             .outcomes = &.{ .ok, .invalid, .failed },
             .side_effect = .none,
@@ -142,7 +142,7 @@ fn shell(variants: []const operation.Variant) operation.Contract {
 }
 
 const input_entry: Entry = .{
-    .contract = .{ .id = "variant.input", .kind = .invocation, .produces = &.{.raw_engine_config}, .outcomes = &.{.ok}, .side_effect = .none },
+    .contract = .{ .id = "variant.input", .kind = .invocation, .produces = &.{.workflow_operation_registry}, .outcomes = &.{.ok}, .side_effect = .none },
     .binding = bindings.bind(void, null, unused),
 };
 
@@ -179,7 +179,7 @@ test "a variant resolves to its own flat contract and never to a union" {
     const merging = contract.resolve("merging").?;
     try std.testing.expectEqual(@import("domain/workflow_retry.zig").Scope.repair, merging.retry_limit.?.scope);
     try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.merge, merging.repair_role);
-    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.engine_config}, merging.replaces);
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.workflow_definition_registry}, merging.replaces);
     try std.testing.expect(contract.resolve("plain").?.retry_limit == null);
     // No selector, or a selector no variant has, resolves nothing: no variant is selected by absence.
     try std.testing.expect(contract.resolve(null) == null);
@@ -265,7 +265,7 @@ test "registry admission rejects an ambiguous, unselectable or shapeless contrac
             // Variants without a selector.
             6 => contract.selector = null,
             // The contract states a shape of its own beside its variants.
-            7 => contract.requires = &.{.raw_engine_config},
+            7 => contract.requires = &.{.workflow_operation_registry},
             // A contract with a selector and no variant to select.
             8 => {
                 contract.variants = &.{};
@@ -308,7 +308,7 @@ const gate_contract: gate.Contract = .{
 };
 
 const issuer_entry: Entry = .{
-    .contract = .{ .id = "variant.issuer", .kind = .step, .requires = &.{.raw_engine_config}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{.ok}, .side_effect = .none },
+    .contract = .{ .id = "variant.issuer", .kind = .step, .requires = &.{.workflow_operation_registry}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{.ok}, .side_effect = .none },
     .binding = bindings.bind(void, null, unused),
 };
 
@@ -438,9 +438,9 @@ fn compileYaml(a: std.mem.Allocator, registry: *const Registry, yaml: []const u8
     var parser: parser_adapter.Adapter = .{};
     var result_schema: result_schema_parser.Adapter = .{};
     const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
-    const definitions = try definition_schema.validate(a, raw);
-    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions);
-    return graph_compilation.compile(registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{});
+    const definitions = try definition_schema.validate(a, raw, null);
+    const manifest = try resource_binding.resolve(a, emptyInventory(), definitions, null);
+    return graph_compilation.compile(registry, result_schema.compiler(), a, definitions, emptyInventory(), manifest, &.{}, null);
 }
 
 fn stepNamed(graph: compilation.CompiledWorkflow, call_site_suffix: []const u8) compilation.CompiledStep {
@@ -483,7 +483,7 @@ test "a step whose selector picks a variant compiles against that variant alone"
     try std.testing.expectEqual(@as(u32, 4), fix.retry_authority.?.limit.value);
     try std.testing.expect(compilation.matchesContract(entry.contract.resolve("validating").?, check));
     try std.testing.expect(compilation.matchesContract(entry.contract.resolve("merging").?, fix));
-    _ = try graph_validation.validate(a, &.{graph}, &registry);
+    _ = try graph_validation.validate(a, &.{graph}, &registry, null);
 }
 
 test "a selector forwarded through a subgraph parameter selects the same variant" {
@@ -497,7 +497,7 @@ test "a selector forwarded through a subgraph parameter selects the same variant
     try std.testing.expectEqualStrings("retrying", compilation.selectorValue(entry.contract, step.parameters).?);
     try std.testing.expectEqual(@as(u32, 3), step.retry_authority.?.limit.value);
     try std.testing.expect(compilation.matchesContract(entry.contract.resolve("retrying").?, step));
-    _ = try graph_validation.validate(a, &.{graph}, &registry);
+    _ = try graph_validation.validate(a, &.{graph}, &registry, null);
     // The forwarded value is checked as a declared one is: an unknown mode rejects.
     const unknown = try std.mem.replaceOwned(u8, a, forwarded_workflow, "kind: retrying", "kind: nope");
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, compileYaml(a, &registry, unknown));
@@ -538,7 +538,7 @@ test "compilation rejects every step the selected variant does not allow" {
         // Every change here is well-formed YAML the definition schema accepts: only the compiler,
         // reading the registered contract's variants, rejects it.
         const raw = try startup.steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
-        _ = try definition_schema.validate(a, raw);
+        _ = try definition_schema.validate(a, raw, null);
         try std.testing.expectError(error.WorkflowGraphCompileInvalid, compileYaml(a, &registry, yaml));
     }
     // The same limit 4 that `retrying` rejects is within `merging`'s maximum: the bound is the variant's.
@@ -552,7 +552,7 @@ test "graph validation and publication recheck each step against its own variant
     const registry = try registryWithVariants(a, &all_shapes);
     const compiled = (try compileYaml(a, &registry, plain_workflow))[0];
     try std.testing.expect(registry.stepsMatchVariants(compiled.authority.steps));
-    _ = try graph_validation.validate(a, &.{compiled}, &registry);
+    _ = try graph_validation.validate(a, &.{compiled}, &registry, null);
 
     const retrying_effects = (try compileYaml(a, &registry, retrying_workflow))[0].authority.steps[0];
     for (0..6) |fault| {
@@ -567,7 +567,7 @@ test "graph validation and publication recheck each step against its own variant
             // The repair role of another variant.
             2 => steps[0].repair_role = .validate,
             // A data effect of another variant.
-            3 => steps[0].replaces = &.{.engine_config},
+            3 => steps[0].replaces = &.{.workflow_definition_registry},
             // The selector switched to another variant while the effects stay.
             4 => steps[0].parameters = retrying_effects.parameters,
             // The selector removed.
@@ -575,7 +575,7 @@ test "graph validation and publication recheck each step against its own variant
             else => unreachable,
         }
         try std.testing.expect(!registry.stepsMatchVariants(steps));
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(a, &.{tampered}, &registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(a, &.{tampered}, &registry, null));
     }
 }
 
@@ -653,7 +653,7 @@ test "the runner checks every delta, outcome and retry authority against the com
         .{ .graph = &plain[0], .outcome = .failed, .write = true, .replace = false, .expected = undeclared },
         // An outcome no variant declares for it.
         .{ .graph = &retrying[0], .outcome = .invalid, .write = true, .replace = false, .expected = undeclared },
-        // A delta that fits another variant (`merging` replaces `engine_config`) but not the compiled one.
+        // A delta that fits another variant (`merging` replaces `workflow_definition_registry`) but not the compiled one.
         .{ .graph = &plain[0], .outcome = .ok, .write = false, .replace = true, .expected = rejected },
         .{ .graph = &retrying[0], .outcome = .ok, .write = true, .replace = true, .expected = rejected },
     };

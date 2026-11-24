@@ -4,7 +4,7 @@ const inspection = @import("inspection.zig");
 const c = @import("../e2e/contracts.zig");
 
 pub const Report = struct {
-    schema: enum { @"provider-compatibility-report/v3" } = .@"provider-compatibility-report/v3",
+    schema: enum { @"provider-compatibility-report/v4" } = .@"provider-compatibility-report/v4",
     origin: enum { live, offline } = .live,
     started_at_utc: []const u8,
     case_source: []const u8,

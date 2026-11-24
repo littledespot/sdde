@@ -33,7 +33,7 @@ pub fn authorizationBlocked(view: *const data.View) values.Error!bool {
 }
 
 const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .blocked, .failed };
-const Stage = enum { summary, dispositions, signals, conflicts };
+const Stage = r.diagnostic.Stage;
 pub fn Authorize(comptime stage: Stage) type {
     return struct {
         pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = switch (stage) {
@@ -41,16 +41,16 @@ pub fn Authorize(comptime stage: Stage) type {
             .dispositions => .validated_reference_dispositions,
             .signals => .validated_reference_signals,
             .conflicts => .validated_reference_conflicts,
-        }, .result = .reference_reconciliation_repair } };
+        }, .result = .reference_reconciliation_repair, .blocked_reader = .reference_reconciliation } };
         pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
         /// Each phase's authorizer reads the phase's own rejected validation and invalidates it and
         /// every later phase that depended on it.
         pub const effects: repair_owner.Effects = .{
             .requires = switch (stage) {
-                .summary => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_summary },
-                .dispositions => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_dispositions },
-                .signals => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_signals },
-                .conflicts => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_conflicts },
+                .summary => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_summary },
+                .dispositions => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_dispositions },
+                .signals => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_signals },
+                .conflicts => &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .validated_reference_conflicts },
             },
             .produces = &.{.reference_reconciliation_repair},
             .invalidates = switch (stage) {
@@ -98,7 +98,7 @@ pub fn Authorize(comptime stage: Stage) type {
 }
 pub const BuildInput = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .packet_guidance },
+        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .packet_guidance },
         .produces = &.{.model_input_packet},
     };
     allocator: std.mem.Allocator,
@@ -134,7 +134,7 @@ pub const Parse = struct {
 };
 pub const Merge = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain },
+        .requires = &.{ .parsed_reference_reconciliation, .reference_reconciliation_repair, .citable_reference_inputs, .reference_passive_literals },
         .replaces = &.{.parsed_reference_reconciliation},
         .invalidates = &.{.reference_reconciliation_repair},
     };
@@ -217,6 +217,10 @@ test "a blocked authorization of any phase stays decided though it retires the e
         var prepared = try binding.prepare(&envelope, occurrence, descriptor, &decided);
         defer prepared.deinit();
         try std.testing.expect(prepared.compatible(.blocked));
+        // The same decision through a descriptor that names no reader is refused: the reader is the one difference.
+        var unread = descriptor.repair_authorize;
+        unread.blocked_reader = null;
+        try std.testing.expectError(error.InvalidOutcomeAssociation, binding.prepare(&envelope, occurrence, .{ .repair_authorize = unread }, &decided));
         // A decision made against other evidence than the run holds is still stale.
         const other = try values.create(std.testing.allocator, evidence_schema, u8, 9);
         defer values.destroy(other);

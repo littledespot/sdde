@@ -25,10 +25,9 @@ pub const Rejection = struct {
     claim_id: r.ClaimId,
     issue: Issue,
     targets: []const Key,
-    revision: u64 = 0,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
-    dependencies: ?@import("atomic_repair.zig").Snapshot = null,
-    blocked: ?enum { no_independent_supported_target } = null,
+    /// A coverage defect has no independently supported repair target, so every rejection blocks (22-repair.md §22).
+    blocked: enum { no_independent_supported_target } = .no_independent_supported_target,
 };
 pub const Result = union(enum) { valid: Coverage, invalid: Rejection };
 pub fn validate(a: std.mem.Allocator, references: r.Accounted, brief: g.Brief, candidate: spec.IdentifiedContent) Error!Coverage {
@@ -118,7 +117,9 @@ fn copies(value: spec.BusinessValue, field: text.field_policy.Field, claim_id: r
 fn recordCopies(content: spec.Content(spec.BusinessValue), claim_id: r.ClaimId) bool {
     switch (content) {
         inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-            if (copies(@field(fields, field.name), spec.textField(kind, field.name), claim_id)) return true;
+            // An absent field copies nothing.
+            const held: ?spec.BusinessValue = @field(fields, field.name);
+            if (held) |value| if (copies(value, spec.textField(kind, field.name), claim_id)) return true;
         },
     }
     return false;

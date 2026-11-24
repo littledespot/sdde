@@ -9,10 +9,12 @@ pub const Error = std.mem.Allocator.Error || error{InvalidRequiredAuthority};
 /// 7 November 2026). 3: an entity's only authored field is its name (ADR 0038, amended
 /// 8 November 2026), so a record slot has no member index. 4: an edge case's outcome is the
 /// Then of its linked acceptance criterion, so it has no slot (ADR 0038 Decision 7). 5: the
-/// engine takes the display name from the sources, so it has no slot (ADR 0048).
-pub const version: u32 = 5;
+/// engine takes the display name from the sources, so it has no slot (ADR 0048). 6: an edge
+/// case's one authored field is its `given`, so the `condition` slot is gone (ADR 0038 Decision 7,
+/// amended 13 November 2026).
+pub const version: u32 = 6;
 pub const Kind = enum { feature_intent, reference_meaning, entity_applicability, preservation, design_decision, executable_decomposition, policy_predicate };
-pub const Slot = enum { description, primary_goal, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, condition, name, entities, disposition, value, decision, compliance };
+pub const Slot = enum { description, primary_goal, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, name, entities, disposition, value, decision, compliance };
 pub const Unit = union(enum) {
     feature: enum { singleton },
     record: @import("specification.zig").Id,
@@ -185,7 +187,7 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     for (inputs.authorities, 0..) |authority, index| {
         if (!authority.valid()) return error.InvalidRequiredAuthority;
         for (inputs.authorities[0..index]) |other| {
-            if (other == .canonical and authority == .canonical and other.canonical.kind == authority.canonical.kind and other.canonical.ordinal == authority.canonical.ordinal) return error.InvalidRequiredAuthority;
+            if (other.sameRecord(authority)) return error.InvalidRequiredAuthority;
         }
     }
     const requirements = try allocator.alloc(Requirement, inputs.seeds.len);
@@ -218,13 +220,6 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
         for (inputs.forced_gaps[0..index]) |other| if (std.meta.eql(other.requirement, gap.requirement)) return error.InvalidRequiredAuthority;
     }
     return .{ .inputs = inputs, .requirements = requirements };
-}
-
-pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!Observations {
-    return @import("strict_json.zig").decode(Observations, allocator, bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => error.InvalidRequiredAuthority,
-    };
 }
 
 pub fn buildObservations(allocator: std.mem.Allocator, ledger: Ledger) Error!Observations {
@@ -356,8 +351,25 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
 
 pub fn route(stage: DetectionStage, owner: Stage, reason: GapReason) Outcome {
     if (reason == .unregistered_ownership_or_policy) return .{ .administrative_block = .unregistered_ownership_or_policy };
-    if (stage == .recovery or @intFromEnum(stage) > @intFromEnum(owner)) return .{ .upstream_rework_required = .{ .owner = owner, .detected_at = stage, .reason = reason } };
+    if (detectedAfter(stage, owner)) return .{ .upstream_rework_required = .{ .owner = owner, .detected_at = stage, .reason = reason } };
     return .{ .clarification_required = .{ .owner = owner, .reason = reason } };
+}
+
+/// Whether the gap was found in a stage after the one that owns it, or in recovery, so that the owner's
+/// work must be redone rather than clarified.
+fn detectedAfter(stage: DetectionStage, owner: Stage) bool {
+    return switch (stage) {
+        .spec => false,
+        .plan => switch (owner) {
+            .spec => true,
+            .plan, .tasks => false,
+        },
+        .tasks => switch (owner) {
+            .spec, .plan => true,
+            .tasks => false,
+        },
+        .implement, .recovery => true,
+    };
 }
 
 /// Rebuild from current native inputs; a prior ledger/result cannot certify a

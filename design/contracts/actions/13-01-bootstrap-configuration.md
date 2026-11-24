@@ -8,7 +8,7 @@ One entry per registered operation or engine-routine step. A registered operatio
 **Writes** and **Side effect** are its `NodeContract`; a routine step states what it takes and
 returns as typed values, and its **Side effect**. Entries marked "Proposed, no code" name a
 responsibility no code registers.
-[F0003](../../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+[F0003](../../features/F0003-Toolchain.md#3-closed-loading-and-publication-contract)
 owns the current toolchain shapes.
 
 > **ADR 0032.** The engine-startup and provider-bootstrap operations are the typed steps of two
@@ -17,8 +17,11 @@ owns the current toolchain shapes.
 > reached only from the composition root, and
 > [`model_provider_bootstrap_routine.zig`](../../../src/application/model_provider_bootstrap_routine.zig),
 > reached only through the runner-owned provider-bootstrap binding. Each step's failure maps to
-> its fixed public code (`code(step)`), including allocation failure and deadline exhaustion;
-> explicit cancellation stays distinct. A failed run records the step it stopped at.
+> its fixed public code (`code(step)`), including allocation failure and, for a step whose
+> adapter owns a clock, deadline exhaustion; explicit cancellation stays distinct. A failed run records the step it stopped at. A
+> workflow-definition step also leaves the rejection evidence its owner recorded (rule class,
+> definition ordinal and display path, step or resource ID), which the CLI prints after the code
+> ([F0005](../../features/F0005-WorkflowDefinitionRegistryService.md) §9).
 
 ## Engine configuration
 
@@ -129,16 +132,15 @@ the steps of the provider-bootstrap routine.
 - **Takes:** the provider-config locator port and the root registry's provider-document path capability · **Returns:** the exact provider-config file · **Side effect:** `filesystem_read`
 - **Does:** Opens only the configured no-follow regular `.sddproviders.json`; reads no bytes and
   searches for no other file.
-- **Rejects:** `LLMProviderConfigReadError` (`LLM_PROVIDER_CONFIG_READ_ERROR`), which also covers
-  deadline exhaustion; `Cancelled`; reports step `locate_config`.
+- **Rejects:** `LLMProviderConfigReadError` (`LLM_PROVIDER_CONFIG_READ_ERROR`); `Cancelled`;
+  reports step `locate_config`.
 
 ## `readConfig` (provider routine step `read_config`)
 
 - **Owner:** [`src/application/model_provider_bootstrap_routine.zig`](../../../src/application/model_provider_bootstrap_routine.zig)
 - **Takes:** the exact provider-config file · **Returns:** the raw provider-config bytes · **Side effect:** `filesystem_read`
 - **Does:** Captures the opened file once under F0008's 1,048,576-byte limit.
-- **Rejects:** `LLMProviderConfigReadError`, which also covers deadline exhaustion; `Cancelled`;
-  reports step `read_config`.
+- **Rejects:** `LLMProviderConfigReadError`; `Cancelled`; reports step `read_config`.
 
 ## `decodeConfig` (provider routine step `decode_config`)
 
@@ -187,8 +189,7 @@ the steps of the provider-bootstrap routine.
 - **Takes:** the validated root registry · **Returns:** the workflow authority layout · **Side effect:** `none`
 - **Does:** Derives the `paths.workflows` inventory scope and the reserved `features/` child,
   whose root entry is accounted while its descendants are excluded; reads nothing.
-- **Rejects:** none; only a deadline stop after it reports step `build_workflow_layout`
-  (`WORKFLOW_AUTHORITY_INVENTORY_INVALID`).
+- **Rejects:** none; only a cancellation stop after it reports step `build_workflow_layout`.
 
 ## `enumerateWorkflowResources` (startup step `enumerate_workflow_resources`)
 
@@ -366,11 +367,12 @@ the steps of the provider-bootstrap routine.
 - **Reads:** `prepared_workflow_output` · **Writes:** `published_workflow_output` · **Side effect:** `workflow_publication`
 - **Does:** Writes the prepared whole-workflow output through the output port
   ([§25](../25-publication.md)).
-- **Rejects:** `InvalidWorkflowOutput`, `OutputChanged`, `OutputWriteFailed`.
+- **Rejects:** `InvalidWorkflowOutput`, `OutputChanged`, `OutputWriteFailed`, `Cancelled`. A
+  cancelled write leaves what a failed write leaves: the files already replaced stay.
 
 ## Toolchain
 
-[F0003](../../features/F0003-ToolChainService.md#workflow-bindings) owns the order and keys.
+[F0003](../../features/F0003-Toolchain.md#workflow-bindings) owns the order and keys.
 [ADR 0031](../../decisions/0031-stage-actions.md) made the nine former operations the internal
 steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays separate.
 
@@ -381,11 +383,12 @@ steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays sep
 - **Ports:** the toolchain source ports (project capture, preset inventory, preset capture) and the
   toolchain-parser port, so the binding derives `toolchain-read` and `toolchain-parser` only.
 - **Outcomes:** `ok`, `failed`. Each internal step's success continues to the next and every
-  failure ends the stage with the step's own error (`InvalidToolchain`). The stage records the
+  failure ends the stage with the step's own error (`InvalidToolchain`), except that a source
+  port's `Cancelled` ends the stage `Cancelled`. The stage records the
   step it stopped at in its diagnostic slot, which the binding hands the runner's step slot, and
   the runner records it as `step_id` in the failed action's event ([§27](../27-observability.md)).
   It checks the runtime between steps, so a cancelled run stops before the next step and the
-  runner reports the runtime's own stop.
+  runner reports the runtime's own stop, or the cancellation the stage returned.
 - **Does:** Runs these functions in order. Each keeps its former action's responsibility, input,
   output and rejection rules; intermediates are function-local values, and only the last step
   constructs `ValidToolchain`.
@@ -406,8 +409,8 @@ steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays sep
   7. `resolveInheritance`: resolves the project layer's complete preset inheritance closure from
      `paths.toolchainPreset`. Rejects `InvalidToolchain` for a missing, conflicting, duplicate or
      cyclic reference.
-  8. `compose`: keeps the inherited packages in resolved order and forms the stable union of their
-     policies, then the project layer's, without duplicates. Rejects `InvalidToolchain`.
+  8. `compose`: forms the stable union of the resolved packages' policies, in resolved order,
+     then the project layer's, without duplicates. Rejects `InvalidToolchain`.
   9. `validateSafety`: proves the merged policy keeps every locked rule; the only constructor of
      `ValidToolchain`. Rejects `InvalidToolchain`.
 
@@ -417,43 +420,16 @@ steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays sep
 - **Reads:** `valid_toolchain` · **Writes:** `compiled_naming_policy` · **Side effect:** `none`
 - **Does:** Normalizes the toolchain's explicit naming rules for the shared lexical detector;
   infers no rule from package names or examples.
-- **Rejects:** `InvalidNamingPolicy`, `StaleNamingPolicy`.
+- **Rejects:** `InvalidNamingPolicy`. `StaleNamingPolicy` belongs to the binding check of
+  `prepare-reference-tokens`, not to this action.
 
 ## Principles
 
 [§9.4](../09-configuration.md#94-project-principle-resolution) owns principle capture. The
-shipped Spec workflow runs the consolidated `capture-principle-registry`; the other four are
-its detailed steps through the same source port. Capture reads no alternate root, excludes
-`toolchain.yaml`, and is bounded to 1,024 entries, depth 16, five seconds, 1 MiB per source and
-8 MiB in total; deterministic UTF-8 chunks cover every byte.
-
-## `InventoryPrincipleSourcesAction` (`inventory-principle-sources`)
-
-- **Owner:** [`src/actions/principle/inventory_principle_sources.zig`](../../../src/actions/principle/inventory_principle_sources.zig)
-- **Reads:** none · **Writes:** `raw_principle_inventory` · **Side effect:** `filesystem_read`
-- **Rejects:** `PrincipleSourceUnavailable`.
-
-## `ValidatePrincipleInventoryAction` (`validate-principle-inventory`)
-
-- **Owner:** [`src/actions/principle/validate_principle_inventory.zig`](../../../src/actions/principle/validate_principle_inventory.zig)
-- **Reads:** `raw_principle_inventory` · **Writes:** `principle_inventory` · **Side effect:** `none`
-- **Does:** Normalizes paths, rejects collisions and classifies semantic sources.
-- **Rejects:** `InvalidPrincipleRegistry`.
-
-## `CapturePrincipleSourcesAction` (`capture-principle-sources`)
-
-- **Owner:** [`src/actions/principle/capture_principle_sources.zig`](../../../src/actions/principle/capture_principle_sources.zig)
-- **Reads:** `principle_inventory` · **Writes:** `captured_principles` · **Side effect:** `filesystem_read`
-- **Does:** Captures each semantic source once, within the bounds above.
-- **Rejects:** `PrincipleSourceUnavailable`.
-
-## `BuildPrincipleRegistryAction` (`build-principle-registry`)
-
-- **Owner:** [`src/actions/principle/build_principle_registry.zig`](../../../src/actions/principle/build_principle_registry.zig)
-- **Reads:** `captured_principles` (optional: `prior_principle_registry`) · **Writes:** `principle_registry` · **Side effect:** `none`
-- **Does:** Assigns source and chunk identities, keeping a prior source's ID when its root,
-  path, file observation and bytes are equal, and allocating the next ordinal otherwise.
-- **Rejects:** `InvalidPrincipleRegistry`.
+Spec workflow runs the one registered operation, `capture-principle-registry`, through the
+principle source port. Capture reads no alternate root, excludes `toolchain.yaml`, and is
+bounded to 1,024 entries, depth 16, five seconds, 1 MiB per source and 8 MiB in total;
+deterministic UTF-8 chunks cover every byte.
 
 ## `CapturePrincipleRegistryAction` (`capture-principle-registry`)
 
@@ -461,7 +437,7 @@ its detailed steps through the same source port. Capture reads no alternate root
 - **Reads:** none (optional: `prior_principle_registry`) · **Writes:** `principle_registry` · **Side effect:** `filesystem_read`
 - **Does:** Runs inventory, validation, capture and registry construction in one operation
   through the same port and functions; invokes no other action.
-- **Rejects:** `PrincipleSourceUnavailable`, `InvalidPrincipleRegistry`.
+- **Rejects:** `PrincipleSourceUnavailable`, `InvalidPrincipleRegistry`, `Cancelled`.
 
 ## Proposals named elsewhere
 

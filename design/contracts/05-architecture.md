@@ -38,8 +38,8 @@ Application and domain code depend on interfaces, never provider implementations
   validator ports.
 - This makes the rule “orchestrators organize; actions do” mechanically enforceable and prevents
   child execution from bypassing the runner.
-- [ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup and provider
-  bootstrap; feature logging not yet) adds a third
+- [ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup, provider
+  bootstrap and feature logging) adds a third
   category, the **engine routine**, for fixed engine sequences: startup, provider bootstrap
   and feature logging.
   - It is neither a node nor an orchestrator.

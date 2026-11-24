@@ -798,13 +798,22 @@ ProviderFailure {
   retryClass: ProviderRetryClass,
   delivery: ProviderDeliveryDisposition,
   transport?: TransportDiagnostic,
-  content?: invalid_content | missing_final_text
+  content?: invalid_content | missing_final_text,
+  credential?: missing | malformed,
+  decode?: body_not_json | body_refused | content_not_utf8 | error_unrecognized
 }
 ```
 
+- `credential` is present only on an `authentication_failed` raised by the key authorization
+  before any send; `decode` only on a `response_invalid` that carries no `transport` or
+  `content`. Both are diagnostic only and never affect `cause`, `retryClass` or `delivery`.
+  Neither carries a key byte, a length, a JSON path or provider text.
+
 - `transport` is present only for a failure the shared HTTP exchange reports; it records
   where and how that exchange failed. It is diagnostic only and never affects `cause`,
-  `retryClass` or `delivery`; the E2E report records it with the exchange evidence.
+  `retryClass` or `delivery`; the E2E report records it with the exchange evidence, and the
+  run report and the CLI print it with the cause (approved by the user on 20 November 2026;
+  [contract 08](../contracts/08-diagnostics-evidence.md)).
 
 `ProviderInvocationObservation.completed` means the provider operation returned
 a complete recognized terminal response; it does not mean candidate or

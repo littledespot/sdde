@@ -14,6 +14,7 @@ pub const registry: toolchain.PolicyRegistry = .{ .contracts = &.{
         .{ .id = .{ .bytes = "core.reference-context" }, .kind = .reserved, .value = artifacts.reference_context_filename, .case_sensitive = true },
         .{ .id = .{ .bytes = "core.clarification-state" }, .kind = .reserved, .value = artifacts.clarification_state_filename, .case_sensitive = true },
         .{ .id = .{ .bytes = "core.workflow-state" }, .kind = .reserved, .value = artifacts.workflow_state_filename, .case_sensitive = true },
+        .{ .id = .{ .bytes = "core.actor-evidence" }, .kind = .reserved, .value = artifacts.actor_evidence_filename, .case_sensitive = true },
     } },
     .{ .id = "project.zig@1", .project_selectable = true, .locked_required = false, .naming = &.{
         .{ .id = .{ .bytes = "zig.source" }, .kind = .extension, .value = ".zig", .case_sensitive = true },

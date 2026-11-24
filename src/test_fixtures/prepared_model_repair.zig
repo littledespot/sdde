@@ -20,7 +20,7 @@ fn prepared(a: std.mem.Allocator, packet: *const @import("../domain/model_input_
     try base.init(std.testing.allocator);
     defer base.deinit();
     const original = try a.dupe(u8, packet.body());
-    const selection: handoff.Selection = .{ .binding = base.provider_binding, .prompt = .{ .id = .{ .bytes = "repair-prompt" }, .content = .{ .prompt = "Repair the assigned native field." } }, .protocol_prompt = .{ .id = .{ .bytes = "protocol-prompt" }, .content = .{ .prompt = "Correct the complete response within its original assignment." } }, .result = .{ .id = .{ .bytes = "repair-result" }, .content = .{ .result_schema = schema } }, .input = .{ .packet = packet }, .result_selection = .input };
+    const selection: handoff.Selection = .{ .binding = base.provider_binding, .prompt = .{ .id = .{ .bytes = "repair-prompt" }, .content = .{ .prompt = "Repair the assigned native field." } }, .protocol_prompt = .{ .id = .{ .bytes = "protocol-prompt" }, .content = .{ .prompt = "Correct the complete response within its original assignment." } }, .result = .{ .id = .{ .bytes = "repair-result" }, .content = .{ .result_schema = schema } }, .input = .{ .packet = packet } };
     const id = try base.requests.assign(base.requests.ledger().?.revision(), packet.unit(), base.provider_binding.operation_id, packet.purpose());
     const assigned = try handoff.assign(std.testing.allocator, base.requests.current_owner.?, id, selection);
     defer handoff.destroy(assigned);

@@ -17,25 +17,40 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `BuildSpecificationClarificationNeedAction` (`build-specification-clarification-need`)
 
 - **Owner:** [`src/actions/clarification/build_specification_clarification_need.zig`](../../../src/actions/clarification/build_specification_clarification_need.zig)
-- **Reads:** `validated_specification_unit`, `relative_feature_directory`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `clarification_needs` · **Side effect:** `none`
+- **Reads:** `validated_specification_unit`, `relative_feature_directory`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `clarification_needs` · **Side effect:** `none`
 - **Does:** Turn a generation unit's clarification response into one `spec`-stage need: the
   model's question prepared under [§12.7](../12-model-boundary.md#127-workflow-defined-model-operations),
-  a fixed reason for `missing`, `ambiguous` or `conflicting`, the reference authority and a
-  bounded business-text answer.
+  a fixed reason for `missing`, `ambiguous` or `conflicting`, the reference authority, a
+  bounded business-text answer and the subject. A records need's subject names the source
+  lines cited by its bound signal's claims, and the brief's and entities' name their unit
+  ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md), the clarification subject).
 - **Rejects:** `InvalidSpecification` when the unit holds no clarification, the feature differs,
-  or a records unit names no record kind.
+  a records unit names no record kind (which the subject does not use), or the question's
+  citations name no line of a source the corpus holds.
 
 ## `BuildRequiredAuthorityClarificationNeedsAction` (`build-required-authority-clarification-needs`)
 
 - **Owner:** [`src/actions/clarification/build_required_authority_clarification_needs.zig`](../../../src/actions/clarification/build_required_authority_clarification_needs.zig)
 - **Reads:** `citable_reference_inputs`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `packet_guidance` · **Writes:** `clarification_needs` · **Side effect:** `none`
-- **Does:** Convert every `clarification_required` gap into one need for its requirement's
+- **Does:** Convert every `clarification_required` gap into a need for its requirement's
   registered owner stage ([§14.14](../14-orchestration.md#1414-authorityreconciliationorchestrator)).
   Admitted review questions and details are carried under §12.7; a descriptor question serves
-  only a `missing` or `stale` gap.
+  only a `missing` or `stale` gap. The need's subject names the requirement's kind and slot and
+  the unit's kind, with the source text the unit concerns: the whole source, or the lines cited
+  by a signal's, a conflict's or a token's claims. The contract version and a generated unit's
+  ordinal are not part of it (ADR 0025, the clarification subject). Gaps of one stage and one
+  subject are one need: it asks each distinct question and gives each distinct reason, in the
+  ledger's order, binds the union of the gaps' authorities and cites the union of their evidence.
+  A gap over other text, or of another stage, stays its own need. The need of a reference conflict is a select-one form
+  with one option for each claim of the conflict (a key naming the lines the claim cites, labelled with its quotation); two
+  conflicts of one subject offer the union of their options once each, and every other need is answered in bounded text
+  ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md), "The answer to a conflict").
 - **Rejects:** `InvalidRequiredAuthority` for an invalid ledger, a candidate defect, an
-  administrative block, an upstream-rework entry, an owner mismatch, or a semantic gap with no
-  review question.
+  administrative block, an upstream-rework entry, an owner mismatch, a semantic gap with no
+  review question, a unit the accounted evidence or the corpus does not hold, a subject whose
+  merged question or reason exceeds the form's text bound, whose authorities exceed a record's,
+  or that names one canonical record at two revisions, and for a conflict whose claims cannot be options (two claims citing
+  the same lines, a key or label the form cannot hold, or more than 32 options). Nothing is truncated or dropped to fit.
 
 ## `BuildResolvedClarificationNeedsAction` (`build-resolved-clarification-needs`)
 
@@ -52,7 +67,8 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 - **Does:** Open or update one record per need, keyed by stage and structural subject: an
   existing subject keeps its ID, a new one takes the next `SNN`, `PNN` or `TNN`, and a prior
   subject absent from the needs is retained, never inferred resolved.
-- **Rejects:** `AuthenticationRequired` for a newly submitted answer, `ProtectedClarification`
+- **Rejects:** `AuthenticationRequired` for a submitted answer that was not accepted before it (a
+  deferral is not one and leaves its record open), `ProtectedClarification`
   for reopening a user-closed or protected record, `ClarificationLimitExceeded` past 99, and
   `InvalidClarificationInput` for two needs with one stage and subject.
 
@@ -72,12 +88,6 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
   byte-for-byte ([§23.2](../23-rendering.md#232-workflow-reruns-and-protected-clarification-files)).
 - **Rejects:** `clarification_inputs.Error`.
 
-## `PrepareClarificationOutputAction` (`prepare-clarification-output`)
-
-- **Owner:** [`src/actions/clarification/prepare_clarification_output.zig`](../../../src/actions/clarification/prepare_clarification_output.zig)
-- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `refreshed_clarification_state`, `clarification_views` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
-- **Rejects:** the output-preparation errors of `clarification_output.prepare`.
-
 ## Specification generation
 
 ## `CheckSpecificationSourceReadinessAction` (`check-specification-source-readiness`)
@@ -91,7 +101,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `InitializeSpecificationGenerationAction` (`initialize-specification-generation`)
 
 - **Owner:** [`src/actions/specification/initialize_specification_generation.zig`](../../../src/actions/specification/initialize_specification_generation.zig)
-- **Reads:** `relative_feature_directory`, `prior_specification_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` (optional: `specification_support_review`, `required_authority_inputs`, `required_authority_ledger`, `required_authority_observations`, `required_authority_result`, `required_authority_gate`) · **Writes:** `specification_generation_session` · **Side effect:** `none`
+- **Reads:** `relative_feature_directory`, `prior_specification_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` (optional: `specification_support_review`, `required_authority_inputs`, `required_authority_ledger`, `required_authority_observations`, `required_authority_result`, `required_authority_gate`) · **Writes:** `specification_generation_session` · **Side effect:** `none`
 - **Does:** Start the generation session from the reconciled references and carry the prior ID
   ledger.
 - **Rejects:** `blocked` with a typed rejection when no claim group supports a record.
@@ -99,7 +109,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `BuildSpecificationModelInputAction` (`build-specification-model-input`)
 
 - **Owner:** [`src/actions/specification/build_specification_model_input.zig`](../../../src/actions/specification/build_specification_model_input.zig)
-- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance`, `principle_registry` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `packet_guidance`, `principle_registry` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Does:** Build the request of the unit in flight: the brief, entities or records packet or, while
   scenarios are written ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md)
   Decision 3), the next group's requirements, numbered from one, each with its claim's meaning and
@@ -119,7 +129,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `ParseSpecificationUnitAction` (`parse-specification-unit`)
 
 - **Owner:** [`src/actions/specification/parse_specification_unit.zig`](../../../src/actions/specification/parse_specification_unit.zig)
-- **Reads:** `raw_specification_unit`, `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `parsed_specification_unit` · **Side effect:** `none`
+- **Reads:** `raw_specification_unit`, `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `parsed_specification_unit` · **Side effect:** `none`
 - **Does:** Parse the unit's response. While scenarios are written, the answer's numbered scenarios
   become the acceptance criteria of the group's batch, each bound to its slot's claim.
 - **Rejects:** an unparsable body (`invalid`); `scenario_request.Error` (`specification_session.Error`,
@@ -128,7 +138,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `ValidateSpecificationUnitAction` (`validate-specification-unit`)
 
 - **Owner:** [`src/actions/specification/validate_specification_unit.zig`](../../../src/actions/specification/validate_specification_unit.zig)
-- **Reads:** `specification_generation_session`, `parsed_specification_unit`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_specification_unit` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `parsed_specification_unit`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `validated_specification_unit` · **Side effect:** `none`
 - **Does:** Validate the unit's fields and composition and its consistency with the units already
   admitted, then admit it. An invalid unit carries its issue, field origin and owner for repair.
 - **Rejects:** `InvalidSpecificationUnit` for a stale reference state or revision 0; `invalid`
@@ -137,7 +147,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `ComposeSpecificationStoryAction` (`compose-specification-story`)
 
 - **Owner:** [`src/actions/specification/compose_specification_story.zig`](../../../src/actions/specification/compose_specification_story.zig)
-- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** replaces `specification_generation_session` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** replaces `specification_generation_session` · **Side effect:** `none`
 - **Does:** Compose the primary story natively, validate it as any unit and append it
   ([ADR 0047](../../decisions/0047-engine-composed-primary-story.md)).
 - **Rejects:** `blocked` with `no_story_requirements` or `story_not_admissible`; never repaired.
@@ -192,7 +202,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `PlanScenarioLinksAction` (`plan-scenario-links`)
 
 - **Owner:** [`src/actions/specification/plan_scenario_links.zig`](../../../src/actions/specification/plan_scenario_links.zig)
-- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `scenario_link_progress` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `scenario_link_progress` · **Side effect:** `none`
 - **Does:** Plan each edge case's outcome link
   ([ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7): one
   candidate criterion links natively, several wait for a model choice.
@@ -209,14 +219,14 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `BuildScenarioLinkInputAction` (`build-scenario-link-input`)
 
 - **Owner:** [`src/actions/specification/build_scenario_link_input.zig`](../../../src/actions/specification/build_scenario_link_input.zig)
-- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Does:** Build the closed choice request for the first pending edge case.
 - **Rejects:** `scenario_link_request.Error`.
 
 ## `AdmitScenarioLinkChoiceAction` (`admit-scenario-link-choice`)
 
 - **Owner:** [`src/actions/specification/admit_scenario_link_choice.zig`](../../../src/actions/specification/admit_scenario_link_choice.zig)
-- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `scenario_link_progress` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `scenario_link_progress` · **Side effect:** `none`
 - **Does:** Admit the model's choice only when it names a criterion offered for the edge case next
   in the plan, and append it.
 - **Rejects:** `scenario_link_request.Error`, including `InvalidScenarioLink`.
@@ -224,7 +234,7 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `AssembleSpecificationContentAction` (`assemble-specification-content`)
 
 - **Owner:** [`src/actions/specification/assemble_specification_content.zig`](../../../src/actions/specification/assemble_specification_content.zig)
-- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `identified_specification_content`, `specification_id_ledger` · **Side effect:** `none`
+- **Reads:** `specification_generation_session`, `scenario_link_progress`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `identified_specification_content`, `specification_id_ledger` · **Side effect:** `none`
 - **Does:** Assemble the admitted units and their edge-case links into identified content,
   allocating record IDs from the prior ledger.
 - **Rejects:** `specification_session.Error`.
@@ -232,14 +242,15 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `ValidateSpecificationCoverageAction` (`validate-specification-coverage`)
 
 - **Owner:** [`src/actions/specification/validate_specification_coverage.zig`](../../../src/actions/specification/validate_specification_coverage.zig)
-- **Reads:** `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `specification_coverage` · **Side effect:** `none`
-- **Does:** Check the content's coverage of every reconciled claim; an invalid result carries the
-  revision and repair dependencies.
-- **Rejects:** `invalid` with the coverage issue; `InvalidSpecificationCoverage`.
+- **Reads:** `specification_generation_session`, `accounted_reference_reconciliation`, `identified_specification_content`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `specification_coverage` · **Side effect:** `none`
+- **Does:** Check the content's coverage of every reconciled claim. A coverage defect has no
+  independently supported repair target, so the step returns `blocked` itself, with the coverage
+  issue and `no_independent_supported_target`.
+- **Rejects:** `blocked` with the coverage issue; `InvalidSpecificationCoverage`.
 
 ## Specification repair ([§22](../22-repair.md))
 
-The specification unit, specification support and specification coverage repair operations are
+The specification unit and specification support repair operations are
 variants of the generic repair operations, specified once in
 [13-04](13-04-model.md#generic-repair-operations).
 
@@ -249,20 +260,20 @@ variants of the generic repair operations, specified once in
 
 - **Owner:** [`src/actions/specification/initialize_specification_review.zig`](../../../src/actions/specification/initialize_specification_review.zig)
 - **Reads:** `required_authority_inputs` · **Writes:** `specification_support_review` · **Side effect:** `none`
-- **Does:** Start source review on a fresh source-readiness projection.
-- **Rejects:** `InvalidRequiredAuthority` when the projection isn't source readiness or already
-  holds evidence or candidates.
+- **Does:** Start source review on a fresh source-readiness or source-preservation projection.
+- **Rejects:** `InvalidRequiredAuthority` when the projection is neither source readiness nor
+  source preservation, or already holds evidence or candidates.
 
 ## `BuildSpecificationSupportInputAction` (`build-specification-support-input`)
 
 - **Owner:** [`src/actions/specification/build_specification_support_input.zig`](../../../src/actions/specification/build_specification_support_input.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Rejects:** `specification_support` errors.
 
 ## `CollectSpecificationSupportAction` (`collect-specification-support`)
 
 - **Owner:** [`src/actions/specification/collect_specification_support.zig`](../../../src/actions/specification/collect_specification_support.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
+- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
 - **Rejects:** `specification_support` errors; outcome `invalid`.
 
 ## `CheckSpecificationSupportLocalizationAction` (`check-specification-support-localization`)
@@ -276,13 +287,13 @@ variants of the generic repair operations, specified once in
 ## `BuildSpecificationSupportLossInputAction` (`build-specification-support-loss-input`)
 
 - **Owner:** [`src/actions/specification/build_specification_support_loss_input.zig`](../../../src/actions/specification/build_specification_support_loss_input.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
 - **Rejects:** `InvalidRequiredAuthority` for a rejected review.
 
 ## `CollectSpecificationSupportLossAction` (`collect-specification-support-loss`)
 
 - **Owner:** [`src/actions/specification/collect_specification_support_loss.zig`](../../../src/actions/specification/collect_specification_support_loss.zig)
-- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
+- **Reads:** `required_authority_inputs`, `specification_support_review`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result`, `packet_guidance` · **Writes:** replaces `specification_support_review` · **Side effect:** `none`
 - **Rejects:** `specification_support` errors; outcome `invalid`.
 
 ## `ApplySpecificationSupportAction` (`apply-specification-support`)
@@ -297,7 +308,7 @@ variants of the generic repair operations, specified once in
 ## `ProjectSpecificationDocumentAction` (`project-specification-document`)
 
 - **Owner:** [`src/actions/specification/project_specification_document.zig`](../../../src/actions/specification/project_specification_document.zig)
-- **Reads:** `identified_specification_content`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `specification_coverage`, `reference_directory` · **Writes:** `specification_document` · **Side effect:** `none`
+- **Reads:** `identified_specification_content`, `accounted_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `specification_coverage`, `reference_directory` · **Writes:** `specification_document` · **Side effect:** `none`
 - **Does:** Project the identified content into the `spec.md` document, resolving exact copies,
   passive literals and `Source:` lines only from bound authorities.
 - **Rejects:** `specification_projection.Error`.
@@ -320,19 +331,21 @@ variants of the generic repair operations, specified once in
 ## `BuildSpecificationStateAction` (`build-specification-state`)
 
 - **Owner:** [`src/actions/specification/build_specification_state.zig`](../../../src/actions/specification/build_specification_state.zig)
-- **Reads:** `prior_specification_state`, `reference_snapshot`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `specification_generation_session`, `identified_specification_content`, `specification_id_ledger`, `specification_coverage`, `principle_registry`, `refreshed_clarification_state`, `validated_specification_rendering` · **Writes:** `specification_publication_state` · **Side effect:** `none`
-- **Does:** Build and validate the next `specification-state` revision after checking a valid
-  rendering, resolved clarifications, the same reference state, and recomputed coverage equal to
-  the accounted coverage.
+- **Reads:** `prior_specification_state`, `reference_snapshot`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `specification_generation_session`, `identified_specification_content`, `specification_id_ledger`, `specification_coverage`, `principle_registry`, `refreshed_clarification_state`, `validated_specification_rendering` · **Writes:** `specification_publication_state` · **Side effect:** `none`
+- **Does:** Build and validate the next `specification-state` revision once the rendering has
+  validated (the `validated_specification_rendering` key orders this step after that validation, and
+  carries no value), after checking resolved clarifications, the same reference state, and
+  recomputed coverage equal to the accounted coverage.
 - **Rejects:** `InvalidSpecificationState`.
 
 ## `PrepareSpecificationOutputAction` (`prepare-specification-output`)
 
 - **Owner:** [`src/actions/specification/prepare_specification_output.zig`](../../../src/actions/specification/prepare_specification_output.zig)
-- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `specification_publication_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `rendered_specification`, `validated_specification_rendering`, `rendered_reference_context` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `raw_actor_evidence`, `actor_evidence_registry`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `specification_publication_state`, `citable_reference_inputs`, `accounted_reference_reconciliation`, `reference_passive_literals`, `rendered_specification`, `validated_specification_rendering`, `rendered_reference_context` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
 - **Does:** Revalidate the state, clarifications and revision, require `spec.md` and
   `reference-context.md` to re-render byte-identically, and assemble them with the clarification
-  files and workflow state as one output set.
+  files, the actor-evidence registry that the responses join and the workflow state as one output
+  set.
 - **Rejects:** `InvalidWorkflowOutput`.
 
 ## `BuildIncompleteSpecificationAction` (`build-incomplete-specification`)
@@ -351,55 +364,99 @@ variants of the generic repair operations, specified once in
 ## `PrepareIncompleteSpecificationOutputAction` (`prepare-incomplete-specification-output`)
 
 - **Owner:** [`src/actions/specification/prepare_incomplete_specification_output.zig`](../../../src/actions/specification/prepare_incomplete_specification_output.zig)
-- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `incomplete_specification_state`, `rendered_incomplete_specification` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `raw_actor_evidence`, `actor_evidence_registry`, `refreshed_clarification_state`, `clarification_views`, `prior_specification_state`, `incomplete_specification_state`, `rendered_incomplete_specification` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
 - **Does:** Revalidate the incomplete state, require its view to re-render identically before and
-  after readback with the prior ID ledger unchanged, and assemble the output set with outcome
-  `needs_user`.
+  after readback with the prior ID ledger unchanged, and assemble the output set, including the
+  actor-evidence registry, with outcome `needs_user`.
 - **Rejects:** `InvalidWorkflowOutput`.
 
-## Proposed, no code: authentication chain and actor-evidence registry
+## Authentication chain and actor-evidence registry
 
 [ADR 0025](../../decisions/0025-clarification-answer-authentication.md) records evidence in
-this shared actor-evidence registry; no code implements it yet (SPEC01 E7). Today
-`refresh-clarifications` rejects every newly submitted answer with `AuthenticationRequired`.
+this shared actor-evidence registry, `actor-evidence-registry/v1`. The chain's per-step
+responsibilities that an earlier revision of this catalogue listed as actions of their own (validate
+the observation, assign, build, append and validate the evidence, bind the submission, assign the
+response ID, build the response, and the registry's initial state, serialization and parsing) are the
+internal steps and domain functions of the operations below, not operations of their own
+([ADR 0031](../../decisions/0031-stage-actions.md)). Only `authenticate-actor` reaches a port.
 
-## `AuthenticateActorAction`
+## `PrepareActorEvidenceAction` (`prepare-actor-evidence`)
 
-Proposed, no code: call `AuthenticationPort.authenticateAndConsume` once with a runner-issued
-single-use lease; the runner's lease table, never the envelope, holds the credential, and the
-port finalizes it on every terminal branch. ADR 0025's first provider is the operating-system
-account that runs the engine, for clarification responses only.
+- **Owner:** [`src/actions/specify/prepare_actor_evidence.zig`](../../../src/actions/specify/prepare_actor_evidence.zig)
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `clarification_inputs` · **Writes:** `raw_actor_evidence`, `actor_evidence_registry` · **Side effect:** `filesystem_read`
+- **Does:** A stage action of three steps: capture the feature's registry file through the
+  feature-input port (or report it absent), parse it through the registry parser, and validate it
+  against the feature and the responses of the clarification state. A feature with no registry has
+  the empty one, at revision 0 with the next ordinal 1. It runs after feature logging activates, so
+  its directory is the activated one.
+- **Rejects:** `FeatureInputUnavailable`, `InvalidActorEvidence` and `Cancelled`.
 
-## `ValidateAuthenticationObservationAction`
+## `PlanClarificationAuthenticationAction` (`plan-clarification-authentication`)
 
-Proposed, no code: before any evidence ID is allocated, reject a missing or unknown actor, a
-provider or policy mismatch, an impossible or expired time, any credential-shaped field and
-assurance incompatible with the event kind.
+- **Owner:** [`src/actions/clarification/plan_clarification_authentication.zig`](../../../src/actions/clarification/plan_clarification_authentication.zig)
+- **Reads:** `clarification_inputs` · **Writes:** `authentication_progress` · **Side effect:** `none`
+- **Does:** Initialize the loop's iteration: the submitted closed forms with an answer and the submitted
+  cancels with a reason, in the registry's order, each one pass. A deferral and a form already
+  recorded are not in it, and the population is frozen.
+- **Rejects:** none beyond allocation.
 
-## `AssignAuthenticationEvidenceIdAction`
+## `CheckClarificationAuthenticationAction` (`check-clarification-authentication`)
 
-Proposed, no code: assign one monotonic engine evidence ID as an allocation delta, without
-mutating the registry.
+- **Owner:** [`src/actions/clarification/check_clarification_authentication.zig`](../../../src/actions/clarification/check_clarification_authentication.zig)
+- **Reads:** `clarification_inputs`, `authentication_progress` · **Writes:** none · **Side effect:** `none`
+- **Does:** Report `more` while a form awaits its observation, else `ok`.
+- **Rejects:** none.
 
-## `BuildAuthenticatedActorEvidenceAction`
+## `AuthenticateActorAction` (`authenticate-actor`)
 
-Proposed, no code: bind that ID to public provider, actor, assurance and time metadata, with no
-credential material.
+- **Owner:** [`src/actions/clarification/authenticate_actor.zig`](../../../src/actions/clarification/authenticate_actor.zig)
+- **Reads:** `clarification_inputs`, `authentication_progress` · **Writes:** `actor_observation` · **Side effect:** `actor_authentication`
+- **Does:** Call `AuthenticationPort` once with the runner-issued single-use lease: the port consumes
+  the lease, then reads the operating-system account that runs the engine, with the feature log's run
+  and the trusted clock's UTC time. The runner's lease table, never the envelope, holds the lease and
+  ends it on every path; the observation is the step's own and nothing records it.
+- **Rejects:** `AuthenticationDenied` for a lease the runner did not issue or that was spent,
+  `AccountUnavailable`, `UnsupportedPlatform`, `ClockUnavailable` and `Cancelled`.
 
-## `ValidateAuthenticatedActorEvidenceAction`
+## `AdvanceClarificationAuthenticationAction` (`advance-clarification-authentication`)
 
-Proposed, no code: prove the evidence ID, actor, context, provider and policy, its freshness at
-the event's time and its compatibility with the event kind, without authenticating again.
+- **Owner:** [`src/actions/clarification/advance_clarification_authentication.zig`](../../../src/actions/clarification/advance_clarification_authentication.zig)
+- **Reads:** `clarification_inputs`, `authentication_progress`, `actor_observation` · **Writes:** none · **Replaces:** `authentication_progress` · **Invalidates:** `actor_observation` · **Side effect:** `none`
+- **Does:** Join the observation to the form just authenticated and advance the iteration by one.
+- **Rejects:** `InvalidClarificationInput` for an observation beyond the planned forms.
 
-## `BuildInitialActorEvidenceRegistryStateAction`
+## `AcceptClarificationResponsesAction` (`accept-clarification-responses`)
 
-Proposed, no code: create the activation-time registry at revision zero with the next evidence
-ordinal set to one; the registry is new persisted state (ADR 0025).
+- **Owner:** [`src/actions/clarification/accept_clarification_responses.zig`](../../../src/actions/clarification/accept_clarification_responses.zig)
+- **Reads:** `clarification_inputs`, `raw_clarification_inputs`, `actor_evidence_registry`, `authentication_progress` · **Replaces:** `clarification_inputs`, `actor_evidence_registry` · **Side effect:** `none`
+- **Does:** A stage action of four steps: pair each authenticated form with its captured bytes
+  (exactly the pending forms, each once, in order), append the run's evidence to the registry in one
+  revision (`AE-<ordinal>`), accept each form as a response and resolve its record (`resolved_by_user`,
+  or `cancelled_by_user` for a cancel) in a state one ordinal and one revision later, and check that
+  the responses join the registry. Nothing is written: the accepted state and the registry stay in
+  memory until the run publishes them.
+- **Rejects:** `InvalidClarificationInput` for progress that is not the pending forms or a form with no
+  captured bytes, `UnsupportedActorName` for an account name outside the stored-identifier syntax,
+  `InvalidActorEvidence` for responses that do not join the registry, and `Cancelled`.
 
-## `AppendAuthenticatedActorEvidenceAction`
+## `CheckClarificationCancellationAction` (`check-clarification-cancellation`)
 
-Proposed, no code: append one validated, non-duplicate evidence entry, consuming exactly the
-allocated ordinal; history is append-only and no credential is accepted.
+- **Owner:** [`src/actions/clarification/check_clarification_cancellation.zig`](../../../src/actions/clarification/check_clarification_cancellation.zig)
+- **Reads:** `clarification_inputs`, `authentication_progress` · **Writes:** none · **Side effect:** `none`
+- **Does:** Report `cancelled` when a form this run accepted cancelled its record, else `ok`. The
+  outcome stays associated with the accepted inputs, which lets the cancelled output's publisher end
+  the run `cancelled` ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md)).
+- **Rejects:** none.
+
+## `PrepareCancelledClarificationOutputAction` (`prepare-cancelled-clarification-output`)
+
+- **Owner:** [`src/actions/clarification/prepare_cancelled_clarification_output.zig`](../../../src/actions/clarification/prepare_cancelled_clarification_output.zig)
+- **Reads:** `activated_feature_directory`, `feature_artifact_paths`, `raw_clarification_inputs`, `clarification_inputs`, `authentication_progress`, `raw_actor_evidence`, `actor_evidence_registry`, `citable_reference_inputs` · **Writes:** `prepared_workflow_output` · **Side effect:** `none`
+- **Does:** Assemble the output of a run the user cancelled: the canonical forms of the accepted state, the
+  registry and the clarification state, in that order, with terminal outcome `cancelled`, and no
+  specification, reference context or workflow state. It requires one of the forms this run accepted
+  to have cancelled its record.
+- **Rejects:** `InvalidWorkflowOutput`, `InvalidActorEvidence` and `InvalidClarificationInput`.
 
 ## `BuildActorEvidenceIdRetirementRegistryStateAction`
 
@@ -410,20 +467,12 @@ evidence.
 
 ## `ValidateActorEvidenceRegistryStateAction`
 
-Proposed, no code: prove unique monotonic IDs and append-only history; each revision holds
-either one actor-, context- and time-valid evidence append, with total joins to specification
-acknowledgements, clarification responses, reviews, reference feedback, reference-conflict
-decisions and manual evidence, or byte-equal entries plus exactly one unreferenced allocated-ID
-tombstone, never both.
-
-## `SerializeActorEvidenceRegistryStateAction`
-
-Proposed, no code: serialize public actor and evidence metadata only, never a credential or
-token.
-
-## `ParseActorEvidenceRegistryStateAction`
-
-Proposed, no code: parse one persisted registry revision into an unvalidated registry.
+Built for clarification responses only, as a step of `prepare-actor-evidence`: the registry is the
+feature's append-only sequence (unique monotonic `AE-<ordinal>` IDs, one revision for each run that
+appends all of its forms), every response joins an entry with the same account and time, and no entry
+is joined twice. Proposed, no code: the joins to specification acknowledgements, reviews,
+reference feedback, reference-conflict decisions and manual evidence, and a revision of byte-equal
+entries plus one unreferenced allocated-ID tombstone.
 
 ## `ValidateClarificationUserSubmissionAction`
 
@@ -434,22 +483,9 @@ submitted bytes; check the bounded defer and cancel reason shapes. Each rejected
 typed reason; one rejected closed form stops the run before any lease is consumed, and no
 answer in that run is accepted.
 
-## `BindAuthenticatedClarificationSubmissionAction`
-
-Proposed, no code: bind the validated fresh actor evidence to the already valid answer and its
-event kind, allocating no ID and changing no lifecycle.
-
-## `AssignClarificationResponseIdAction`
-
-Proposed, no code: choose one monotonic response ID only inside the complete output candidate;
-a failed pre-commit candidate exposes no ID, and a committed ordinal is never reused.
-
-## `BuildClarificationResponseAction`
-
-Proposed, no code: build the accepted response from the response identity, the bound
-submission, the current record and state and the trusted clock, binding the answer variant, the
-exact bounded submitted form bytes, actor and evidence equality and compare-and-swap revisions;
-it is the sole durable owner of the submitted bytes.
+The response is built by `accept-clarification-responses`: its ID is the next monotonic ordinal of
+the state it builds, exposed only in the complete output candidate, and it is the sole durable owner
+of the submitted bytes.
 
 ## Proposed, no code: other responsibilities named elsewhere
 

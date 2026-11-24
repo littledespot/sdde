@@ -6,20 +6,23 @@ const compilation = @import("workflow_compilation.zig");
 const workflow_retry = @import("workflow_retry.zig");
 const kernel = @import("model_request_kernel.zig");
 const operation_registry = @import("../ports/workflow_operation_registry.zig");
+const rejection = @import("definition_rejection.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
 /// Validates every compiled graph, including that each step of a contract with variants carries
 /// exactly the variant its selector picks (ADR 0030 "Contract variants"): the compiler's output is
-/// rechecked against the registry's contracts, not trusted.
+/// rechecked against the registry's contracts, not trusted. A rejection records its stage, the graph's
+/// source ordinal and, for a step's own checks, the step in `evidence`, when one is supplied.
 pub fn validate(
     allocator: std.mem.Allocator,
     graphs: []const compilation.CompiledWorkflow,
     operations: *const operation_registry.Registry,
+    evidence: ?*rejection.Slot,
 ) Error!compilation.ValidatedGraphs {
     for (graphs) |graph| {
-        if (!operations.stepsMatchVariants(graph.authority.steps)) return invalid();
-        try validateGraph(allocator, graph);
+        if (!operations.stepsMatchVariants(graph.authority.steps)) return reject(evidence, .operation_variants, graph, null);
+        try validateGraph(allocator, graph, evidence);
     }
     return .{ .values = graphs };
 }
@@ -27,32 +30,38 @@ pub fn validate(
 const key_count = @typeInfo(pipeline.DataKey).@"enum".fields.len;
 const KeyState = [key_count]bool;
 
-fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow) Error!void {
+fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow, evidence: ?*rejection.Slot) Error!void {
     const steps = graph.authority.steps;
-    for (graph.authority.transitions) |transition| if (transition.target == .terminal and transition.target.terminal == .more) return invalid();
-    if (workflow.OperationId.parse(graph.authority.invocation_operation_id.bytes) == null) return invalid();
-    try validateDataSchemas(graph.authority);
+    for (graph.authority.transitions) |transition| if (transition.target == .terminal and transition.target.terminal == .more) return reject(evidence, .graph_shape, graph, null);
+    if (workflow.OperationId.parse(graph.authority.invocation_operation_id.bytes) == null) return reject(evidence, .graph_shape, graph, null);
+    validateDataSchemas(graph.authority) catch return reject(evidence, .data_schemas, graph, null);
     if (steps.len == 0 or steps.len > definition.max_steps or
         !compilation.publicationTerminates(graph.authority) or
         !compilation.validResourceBindings(graph.authority.resources) or
-        graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
+        graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return reject(evidence, .graph_shape, graph, null))) return reject(evidence, .graph_shape, graph, null);
     for (steps) |step| {
         if (kernel.isKernel(step)) {
             // The kernel step's own contract is fixed by the domain; its stages are the steps
             // the stage-level checks below apply to (ADR 0030).
-            if (!kernel.validProjection(step)) return invalid();
-            for (step.request_stages) |stage| try validateStep(graph, stage.step);
+            if (!kernel.validProjection(step)) return reject(evidence, .step_contract, graph, step.id.bytes);
+            for (step.request_stages) |stage| validateStep(graph, stage.step) catch return reject(evidence, .step_contract, graph, step.id.bytes);
         }
-        try validateStep(graph, step);
+        validateStep(graph, step) catch return reject(evidence, .step_contract, graph, step.id.bytes);
     }
-    const start = stepIndex(steps, graph.authority.start_step_id.bytes) orelse return invalid();
-    try validateReachability(allocator, steps, graph.authority.transitions, start);
-    try validateTerminalReachability(allocator, steps, graph.authority.transitions);
-    try validateBoundedCycles(allocator, steps, graph.authority.transitions);
-    try validateIterationResets(allocator, steps, graph.authority.transitions);
-    @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
-    const flow = @import("workflow_data_flow.zig").analyze(allocator, graph.authority) catch return invalid();
+    const start = stepIndex(steps, graph.authority.start_step_id.bytes) orelse return reject(evidence, .graph_shape, graph, null);
+    validateReachability(allocator, steps, graph.authority.transitions, start) catch return reject(evidence, .unreachable_step, graph, null);
+    validateTerminalReachability(allocator, steps, graph.authority.transitions) catch return reject(evidence, .no_terminal_path, graph, null);
+    validateBoundedCycles(allocator, steps, graph.authority.transitions) catch return reject(evidence, .unbounded_cycle, graph, null);
+    validateIterationResets(allocator, steps, graph.authority.transitions) catch return reject(evidence, .iteration_reset, graph, null);
+    @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return reject(evidence, .outcome_flow, graph, null);
+    const flow = @import("workflow_data_flow.zig").analyze(allocator, graph.authority) catch return reject(evidence, .data_flow, graph, null);
     allocator.free(flow);
+}
+
+/// The family's one error, with the stage that raised it and the graph's source ordinal recorded.
+fn reject(evidence: ?*rejection.Slot, rule: rejection.Rule, graph: compilation.CompiledWorkflow, subject: ?[]const u8) Error {
+    rejection.record(evidence, rule, graph.source_ordinal, subject);
+    return error.WorkflowGraphCompileInvalid;
 }
 
 /// One compiled step's own checks. The validators a kernel step does not take are stated once,
@@ -62,7 +71,7 @@ fn validateStep(graph: compilation.CompiledWorkflow, step: compilation.CompiledS
     if (!@import("workflow_iteration.zig").validProjection(step)) return invalid();
     if (single_operation and !@import("workflow_operation.zig").validRepair(step.repair_role, if (step.retry_authority) |value| value.scope else null, step.runner_accounting, step.side_effect)) return invalid();
     if (step.repair_role != .none and step.capabilities.len != 0) return invalid();
-    if (!@import("workflow_outcome_association.zig").validDescriptor(step.outcome_association, step.requires, step.optional, step.produces, step.replaces, step.repair_role)) return invalid();
+    if (!@import("workflow_outcome_association.zig").validDescriptor(step.outcome_association, step.requires, step.optional, step.produces, step.replaces, step.repair_role, step.outcomes)) return invalid();
     if (workflow.WorkflowStepId.parse(step.id.bytes) == null or workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
     if (single_operation and !@import("workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
     if (!@import("workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();
@@ -71,6 +80,7 @@ fn validateStep(graph: compilation.CompiledWorkflow, step: compilation.CompiledS
         if (!@import("workflow_model_request_lifecycle.zig").validProjection(step)) return invalid();
         if (!@import("workflow_provider_operation.zig").validProjection(step)) return invalid();
         if (!@import("workflow_provider_authorization.zig").validProjection(step)) return invalid();
+        if (!@import("workflow_actor_authentication.zig").validProjection(step)) return invalid();
         if (!@import("workflow_model_invocation.zig").validProjection(step)) return invalid();
     }
     const retry_parameter = findParameter(step.parameters, workflow_retry.parameter_id);
@@ -268,7 +278,7 @@ test "bounded progress can never be a compiled workflow terminal state" {
         .{ .from = step.id, .outcome = .ok, .target = .{ .terminal = .ok } },
         .{ .from = step.id, .outcome = .more, .target = .{ .terminal = .more } },
     };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{testGraph(&.{step}, &transitions)}, &no_operations));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{testGraph(&.{step}, &transitions)}, &no_operations, null));
 }
 
 test "publication ends every outcome directly without a later pure or effectful operation" {
@@ -285,8 +295,8 @@ test "publication ends every outcome directly without a later pure or effectful 
     };
     var accepted = testGraph(&.{publication}, &terminal);
     accepted.authority.maximum_step_executions = compilation.calculateExecutionLimit(accepted.authority.steps).?;
-    _ = try validate(a, &.{accepted}, &no_operations);
-    for ([_]pipeline.SideEffect{ .none, .filesystem_read, .filesystem_write, .model_call, .workflow_publication }) |effect| {
+    _ = try validate(a, &.{accepted}, &no_operations, null);
+    for ([_]pipeline.SideEffect{ .none, .filesystem_read, .filesystem_write, .model_call, .workflow_publication, .actor_authentication }) |effect| {
         var after = testStep("later", null);
         after.side_effect = effect;
         for (0..terminal.len) |redirected| {
@@ -298,17 +308,51 @@ test "publication ends every outcome directly without a later pure or effectful 
             var rejected = testGraph(&.{ publication, after }, &transitions);
             rejected.authority.maximum_step_executions = compilation.calculateExecutionLimit(rejected.authority.steps).?;
             try std.testing.expect(!compilation.publicationTerminates(rejected.authority));
-            try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{rejected}, &no_operations));
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{rejected}, &no_operations, null));
         }
     }
     var loop = terminal;
     loop[0].target = .{ .step = publication.id };
     accepted.authority.transitions = &loop;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{accepted}, &no_operations));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{accepted}, &no_operations, null));
     var wrong_terminal = terminal;
     wrong_terminal[1].target = .{ .terminal = .ok };
     accepted.authority.transitions = &wrong_terminal;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{accepted}, &no_operations));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{accepted}, &no_operations, null));
+}
+
+test "a graph rejection records its stage, the graph's ordinal and, for a step's own checks, the step" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // The progress outcome as a terminal is a graph-shape rejection, which names no step.
+    var progress = testStep("start", null);
+    progress.outcomes = &.{ .ok, .more };
+    const to_progress = [_]workflow.Transition{
+        .{ .from = progress.id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = progress.id, .outcome = .more, .target = .{ .terminal = .more } },
+    };
+    var shape: rejection.Slot = .{};
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{testGraph(&.{progress}, &to_progress)}, &no_operations, &shape));
+    try std.testing.expectEqual(rejection.Rule.graph_shape, shape.evidence.rule.?);
+    try std.testing.expectEqual(@as(u16, 1), shape.evidence.ordinal.?);
+    try std.testing.expect(shape.evidence.subject == null);
+    // A step whose own iteration projection is wrong is a step-contract rejection, and names that step.
+    const steps = [_]compilation.CompiledStep{iterationTestStep("initialize", .initialize)};
+    const transitions = [_]workflow.Transition{
+        .{ .from = steps[0].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = steps[0].id, .outcome = .failed, .target = .{ .terminal = .failed } },
+    };
+    var invalid_steps = steps;
+    invalid_steps[0].iteration.?.scope = .workflow_definition_registry;
+    var contract: rejection.Slot = .{};
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(a, &.{iterationTestGraph(&invalid_steps, &transitions)}, &no_operations, &contract));
+    try std.testing.expectEqual(rejection.Rule.step_contract, contract.evidence.rule.?);
+    try std.testing.expectEqualStrings("initialize", contract.evidence.subject.?.text());
+    // An accepted graph records nothing.
+    var accepted: rejection.Slot = .{};
+    _ = try validate(a, &.{iterationTestGraph(&steps, &transitions)}, &no_operations, &accepted);
+    try std.testing.expect(accepted.evidence.rule == null);
 }
 
 test "separate workflow branches may each select their own terminal publication" {
@@ -330,7 +374,7 @@ test "separate workflow branches may each select their own terminal publication"
     };
     var graph = testGraph(&.{ select, first, second }, &transitions);
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(graph.authority.steps).?;
-    _ = try validate(arena.allocator(), &.{graph}, &no_operations);
+    _ = try validate(arena.allocator(), &.{graph}, &no_operations, null);
 }
 
 fn testStep(id: []const u8, retry_limit: ?u32) compilation.CompiledStep {
@@ -381,19 +425,19 @@ fn testGraph(steps: []const compilation.CompiledStep, transitions: []const workf
 
 fn iterationTestStep(id: []const u8, kind: @FieldType(@import("workflow_iteration.zig").Descriptor, "kind")) compilation.CompiledStep {
     var step = testStep(id, null);
-    step.iteration = .{ .kind = kind, .scope = .raw_engine_config, .progress = .engine_config };
-    step.requires = if (kind == .initialize) &.{.raw_engine_config} else &.{ .raw_engine_config, .engine_config };
-    step.produces = if (kind == .initialize) &.{.engine_config} else &.{};
-    step.replaces = if (kind == .advance) &.{.engine_config} else &.{};
+    step.iteration = .{ .kind = kind, .scope = .workflow_operation_registry, .progress = .workflow_definition_registry };
+    step.requires = if (kind == .initialize) &.{.workflow_operation_registry} else &.{ .workflow_operation_registry, .workflow_definition_registry };
+    step.produces = if (kind == .initialize) &.{.workflow_definition_registry} else &.{};
+    step.replaces = if (kind == .advance) &.{.workflow_definition_registry} else &.{};
     return step;
 }
 
 fn iterationTestGraph(steps: []const compilation.CompiledStep, transitions: []const workflow.Transition) compilation.CompiledWorkflow {
     var graph = testGraph(steps, transitions);
-    graph.authority.invocation_outputs = &.{.raw_engine_config};
+    graph.authority.invocation_outputs = &.{.workflow_operation_registry};
     graph.authority.data_schemas = &.{
-        .{ .key = .raw_engine_config, .version = 1, .type_name = "finite-scope", .maximum_bytes = null },
-        .{ .key = .engine_config, .version = 1, .type_name = "finite-progress", .maximum_bytes = null },
+        .{ .key = .workflow_operation_registry, .version = 1, .type_name = "finite-scope", .maximum_bytes = null },
+        .{ .key = .workflow_definition_registry, .version = 1, .type_name = "finite-progress", .maximum_bytes = null },
     };
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(steps).?;
     return graph;
@@ -409,23 +453,23 @@ test "native finite iteration guards only its declared advancing outcome" {
         .{ .from = steps[1].id, .outcome = .ok, .target = .{ .step = steps[1].id } },
         .{ .from = steps[1].id, .outcome = .failed, .target = .{ .terminal = .failed } },
     };
-    _ = try validate(arena.allocator(), &.{iterationTestGraph(&steps, &transitions)}, &no_operations);
+    _ = try validate(arena.allocator(), &.{iterationTestGraph(&steps, &transitions)}, &no_operations, null);
     var failure_loop = transitions;
     failure_loop[2].target = .{ .terminal = .ok };
     failure_loop[3].target = .{ .step = steps[1].id };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&steps, &failure_loop)}, &no_operations));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&steps, &failure_loop)}, &no_operations, null));
     var unguarded = steps;
     unguarded[1].iteration = null;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&unguarded, &transitions)}, &no_operations));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&unguarded, &transitions)}, &no_operations, null));
 }
 
 test "native iteration initialization cannot replenish a cycle without an independent retry guard" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var reset = testStep("regenerate", 2);
-    reset.requires = &.{.raw_engine_config};
-    reset.replaces = &.{.raw_engine_config};
-    reset.invalidates = &.{.engine_config};
+    reset.requires = &.{.workflow_operation_registry};
+    reset.replaces = &.{.workflow_operation_registry};
+    reset.invalidates = &.{.workflow_definition_registry};
     const steps = [_]compilation.CompiledStep{ iterationTestStep("initialize", .initialize), iterationTestStep("advance", .advance), reset };
     const transitions = [_]workflow.Transition{
         .{ .from = steps[0].id, .outcome = .ok, .target = .{ .step = steps[1].id } },
@@ -435,14 +479,14 @@ test "native iteration initialization cannot replenish a cycle without an indepe
         .{ .from = steps[2].id, .outcome = .ok, .target = .{ .step = steps[0].id } },
         .{ .from = steps[2].id, .outcome = .failed, .target = .{ .terminal = .failed } },
     };
-    _ = try validate(arena.allocator(), &.{iterationTestGraph(&steps, &transitions)}, &no_operations);
+    _ = try validate(arena.allocator(), &.{iterationTestGraph(&steps, &transitions)}, &no_operations, null);
     var unguarded = steps;
     unguarded[2].retry_authority = null;
     unguarded[2].parameters = &.{};
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&unguarded, &transitions)}, &no_operations));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&unguarded, &transitions)}, &no_operations, null));
     var bypass = transitions;
     bypass[3].target = .{ .step = steps[0].id };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&steps, &bypass)}, &no_operations));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&steps, &bypass)}, &no_operations, null));
 }
 
 test "compiled native iteration rejects undeclared authority and effects" {
@@ -456,15 +500,15 @@ test "compiled native iteration rejects undeclared authority and effects" {
     for (0..6) |fault| {
         var invalid_steps = steps;
         switch (fault) {
-            0 => invalid_steps[0].iteration.?.scope = .engine_config,
-            1 => invalid_steps[0].iteration.?.progress = .raw_engine_config,
+            0 => invalid_steps[0].iteration.?.scope = .workflow_definition_registry,
+            1 => invalid_steps[0].iteration.?.progress = .workflow_operation_registry,
             2 => invalid_steps[0].iteration.?.outcome = .more,
             3 => invalid_steps[0].iteration.?.kind = .advance,
             4 => invalid_steps[0].side_effect = .model_call,
             5 => invalid_steps[0].repair_role = .validate,
             else => unreachable,
         }
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&invalid_steps, &transitions)}, &no_operations));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate(arena.allocator(), &.{iterationTestGraph(&invalid_steps, &transitions)}, &no_operations, null));
     }
 }
 
@@ -478,20 +522,20 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
         .{ .from = guarded_steps[1].id, .outcome = .ok, .target = .{ .step = guarded_steps[0].id } },
         .{ .from = guarded_steps[1].id, .outcome = .failed, .target = .{ .terminal = .failed } },
     };
-    _ = try validate(arena.allocator(), &.{testGraph(&guarded_steps, &transitions)}, &no_operations);
+    _ = try validate(arena.allocator(), &.{testGraph(&guarded_steps, &transitions)}, &no_operations, null);
 
     var wrong_bound = testGraph(&guarded_steps, &transitions);
     wrong_bound.authority.maximum_step_executions -= 1;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{wrong_bound}, &no_operations),
+        validate(arena.allocator(), &.{wrong_bound}, &no_operations, null),
     );
 
     var wrong_retry_steps = guarded_steps;
     wrong_retry_steps[0].retry_authority.?.operation_instance_id = workflow.WorkflowStepId.parse("work").?;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{testGraph(&wrong_retry_steps, &transitions)}, &no_operations),
+        validate(arena.allocator(), &.{testGraph(&wrong_retry_steps, &transitions)}, &no_operations, null),
     );
 
     var mismatched_retry_steps = guarded_steps;
@@ -500,7 +544,7 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
     mismatched_retry_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&mismatched_retry_steps).?;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{mismatched_retry_graph}, &no_operations),
+        validate(arena.allocator(), &.{mismatched_retry_graph}, &no_operations, null),
     );
 
     // Each other way the authority can disagree with its graph or its `retry-limit` parameter.
@@ -517,7 +561,7 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
         }
         try std.testing.expectError(
             error.WorkflowGraphCompileInvalid,
-            validate(arena.allocator(), &.{testGraph(&faulty_steps, &transitions)}, &no_operations),
+            validate(arena.allocator(), &.{testGraph(&faulty_steps, &transitions)}, &no_operations, null),
         );
     }
 
@@ -529,14 +573,14 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
     };
     var lone_graph = testGraph(&lone, &lone_transitions);
     lone_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&lone).?;
-    _ = try validate(arena.allocator(), &.{lone_graph}, &no_operations);
+    _ = try validate(arena.allocator(), &.{lone_graph}, &no_operations, null);
     var parameterized = lone;
     parameterized[0].parameters = &test_retry_parameters;
     var parameterized_graph = testGraph(&parameterized, &lone_transitions);
     parameterized_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&parameterized).?;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{parameterized_graph}, &no_operations),
+        validate(arena.allocator(), &.{parameterized_graph}, &no_operations, null),
     );
 
     var unguarded_steps = guarded_steps;
@@ -546,7 +590,7 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
     unguarded_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&unguarded_steps).?;
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        validate(arena.allocator(), &.{unguarded_graph}, &no_operations),
+        validate(arena.allocator(), &.{unguarded_graph}, &no_operations, null),
     );
 }
 

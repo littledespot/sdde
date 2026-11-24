@@ -5,7 +5,7 @@ const spec = @import("specification.zig");
 const reference = @import("reference_snapshot.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v26";
+pub const schema = "specification-state/v29";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,
@@ -42,8 +42,10 @@ pub const Prior = struct {
 };
 pub const Error = @import("reference_extraction_contract.zig").Error || error{InvalidSpecificationState};
 pub const ContractSource = @import("../ports/workflow_contract_source.zig").Source;
+/// The Unicode port that readback re-quotes stored extraction claims with (ADR 0036).
+pub const Normalizer = @import("../ports/unicode_normalizer.zig").Normalizer;
 
-pub fn parse(allocator: std.mem.Allocator, bytes: ?[]const u8, feature: @import("feature_identity.zig").FeatureId, contracts: ?ContractSource) Error!Prior {
+pub fn parse(allocator: std.mem.Allocator, bytes: ?[]const u8, feature: @import("feature_identity.zig").FeatureId, contracts: ?ContractSource, normalizer: Normalizer) Error!Prior {
     const input = bytes orelse return .{ .captured = null };
     const raw = @import("strict_json.zig").decode(std.json.Value, allocator, input, .{ .maximum_bytes = max_bytes, .maximum_depth = 64 }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
     if (raw != .object) return error.InvalidSpecificationState;
@@ -53,13 +55,13 @@ pub fn parse(allocator: std.mem.Allocator, bytes: ?[]const u8, feature: @import(
     switch (std.meta.stringToEnum(Stage, tag.string) orelse return error.InvalidSpecificationState) {
         .specified => {
             const current = @import("strict_json.zig").decode(State, allocator, input, .{ .maximum_bytes = max_bytes, .maximum_depth = 64 }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
-            try validate(allocator, current, feature, contracts);
+            try validate(allocator, current, feature, contracts, normalizer);
             return .{ .captured = input, .value = .{ .specified = current } };
         },
         .spec_clarification_pending => {
             const draft = @import("incomplete_specification.zig");
             const current = @import("strict_json.zig").decode(draft.State, allocator, input, .{ .maximum_bytes = max_bytes, .maximum_depth = 64 }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
-            draft.validate(allocator, current, feature, contracts) catch |err| return switch (err) {
+            draft.validate(allocator, current, feature, contracts, normalizer) catch |err| return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
                 error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE => error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE,
                 else => error.InvalidSpecificationState,
@@ -69,15 +71,15 @@ pub fn parse(allocator: std.mem.Allocator, bytes: ?[]const u8, feature: @import(
     }
 }
 
-pub fn validateReference(allocator: std.mem.Allocator, value: reference.Snapshot, contracts: ?ContractSource) Error!void {
+pub fn validateReference(allocator: std.mem.Allocator, value: reference.Snapshot, contracts: ?ContractSource, normalizer: Normalizer) Error!void {
     const binding = value.extraction_contract orelse return error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE;
     const source = contracts orelse return error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE;
     try @import("reference_extraction_contract.zig").validate(allocator, binding, source.resolve(binding.workflow_id), value.inputs.chunks.partition);
-    reference.validate(allocator, value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
+    reference.validate(allocator, value, normalizer) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
 }
 
-pub fn validate(allocator: std.mem.Allocator, state: State, feature: @import("feature_identity.zig").FeatureId, contracts: ?ContractSource) Error!void {
-    try validateReference(allocator, state.reference, contracts);
+pub fn validate(allocator: std.mem.Allocator, state: State, feature: @import("feature_identity.zig").FeatureId, contracts: ?ContractSource, normalizer: Normalizer) Error!void {
+    try validateReference(allocator, state.reference, contracts, normalizer);
     if (!std.mem.eql(u8, state.schema, schema) or state.revision == 0 or
         !std.mem.eql(u8, state.feature.bytes, feature.bytes) or
         !std.mem.eql(u8, state.reference.inputs.corpus.feature_id.bytes, feature.bytes) or

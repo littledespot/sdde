@@ -1,8 +1,14 @@
 //! Shared bounded, descriptor-relative regular-file capture.
 const std = @import("std");
 const identity = @import("file_identity.zig");
+const directories = @import("directory_access.zig");
 const Observation = @import("../../domain/filesystem_identity.zig").FileObservation;
 pub const Error = std.mem.Allocator.Error || error{ FileUnavailable, Cancelled };
+
+/// What a failed `std.Io` call is to a file capture or replacement: a cancellation, or an unavailable file.
+fn unavailable(err: anyerror) Error {
+    return if (directories.isCancellation(err)) error.Cancelled else error.FileUnavailable;
+}
 pub const Expected = union(enum) { any, absent, exact: []const u8 };
 
 /// Ordinary full replacement with no-follow, single-link and exact-input
@@ -37,9 +43,9 @@ pub fn replace(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, nam
         if (!std.mem.eql(u8, expected.exact, current)) return error.FileUnavailable;
     }
     if (!same(opened, try observe(io, parent, name))) return error.FileUnavailable;
-    file.setLength(io, 0) catch return error.FileUnavailable;
-    file.writePositionalAll(io, bytes, 0) catch return error.FileUnavailable;
-    file.sync(io) catch return error.FileUnavailable;
+    file.setLength(io, 0) catch |err| return unavailable(err);
+    file.writePositionalAll(io, bytes, 0) catch |err| return unavailable(err);
+    file.sync(io) catch |err| return unavailable(err);
     const after = try inspect(io, file);
     const verified = (try capture(io, allocator, parent, name, after, bytes.len)) orelse return error.FileUnavailable;
     defer allocator.free(verified);
@@ -52,7 +58,7 @@ pub fn observe(io: std.Io, parent: std.Io.Dir, name: []const u8) Error!Observati
     return inspect(io, file);
 }
 fn inspect(io: std.Io, file: std.Io.File) Error!Observation {
-    const stat = file.stat(io) catch return error.FileUnavailable;
+    const stat = file.stat(io) catch |err| return unavailable(err);
     if (stat.kind != .file) return error.FileUnavailable;
     return .{ .identity = identity.inspect(file.handle) catch return error.FileUnavailable, .size = stat.size, .modified_ns = stat.mtime.nanoseconds, .changed_ns = stat.ctime.nanoseconds };
 }
@@ -74,11 +80,13 @@ pub fn capture(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, nam
     if (expected) |prior| if (!same(prior, before)) return error.FileUnavailable;
     if (named.inode != before.identity.file_id or named.size != before.size or
         named.mtime.nanoseconds != before.modified_ns or named.ctime.nanoseconds != before.changed_ns) return error.FileUnavailable;
-    var reader = file.reader(io, &.{});
-    const bytes = @import("bounded_file_capture.zig").capture(allocator, &reader.interface, before.size, maximum) catch return error.FileUnavailable;
+    // The size is the one already observed: a reader that stats the file itself would swallow a cancellation.
+    var reader: std.Io.File.Reader = .initSize(file, io, &.{}, before.size);
+    // A read the reader gave up on keeps its cause in `reader.err`, which is where a cancellation shows.
+    const bytes = @import("bounded_file_capture.zig").capture(allocator, &reader.interface, before.size, maximum) catch |err| return unavailable(reader.err orelse err);
     errdefer allocator.free(bytes);
     if (!same(before, try inspect(io, file))) return error.FileUnavailable;
-    const after = parent.statFile(io, name, .{ .follow_symlinks = false }) catch return error.FileUnavailable;
+    const after = parent.statFile(io, name, .{ .follow_symlinks = false }) catch |err| return unavailable(err);
     if (after.kind != .file or after.inode != before.identity.file_id or after.size != before.size or
         after.mtime.nanoseconds != before.modified_ns or after.ctime.nanoseconds != before.changed_ns) return error.FileUnavailable;
     try requireExactName(io, parent, name);
@@ -87,7 +95,7 @@ pub fn capture(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, nam
 
 fn requireExactName(io: std.Io, parent: std.Io.Dir, name: []const u8) Error!void {
     var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
-    const length = parent.realPathFile(io, name, &path_buffer) catch return error.FileUnavailable;
+    const length = parent.realPathFile(io, name, &path_buffer) catch |err| return unavailable(err);
     var scratch: [std.Io.Dir.max_name_bytes * 34 + 16]u8 = undefined;
     var fixed: std.heap.FixedBufferAllocator = .init(&scratch);
     const actual = @import("unicode_normalization").nfc(fixed.allocator(), std.fs.path.basename(path_buffer[0..length]), std.Io.Dir.max_name_bytes) catch return error.FileUnavailable;

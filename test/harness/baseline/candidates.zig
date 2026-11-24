@@ -293,8 +293,7 @@ test "native assembled observations resolve unrelated exact values and preserve 
         var ids: evidence_fixture.IdSource = .{};
         const inputs = try evidence_fixture.prepare(a, &ids, try @import("../../../src/reference_ingestion_test.zig").read(a, "requirements.md", example[0]));
         const passive = try text.prepare(a, inputs);
-        var passive_transferred = false;
-        defer if (!passive_transferred) passive.deinit();
+        defer passive.deinit();
         const available = try tokens.candidates(a, inputs);
         const raw = try a.alloc(extraction.RawResult, inputs.chunks.entries.len);
         for (inputs.chunks.entries, raw) |chunk, *entry| entry.* = .{
@@ -302,10 +301,10 @@ test "native assembled observations resolve unrelated exact values and preserve 
             .result = .{ .response = try tokens.wire(a, try extraction_fixture.reply(a, inputs, chunk), try tokens.classifications(a, available, chunk)) },
         };
         const extracted = try extraction_fixture.finishText(a, inputs, try text.check(a, inputs, try @import("../../../src/domain/reference_extraction_parser.zig").parse(a, .{ .entries = raw })));
-        const reference_context: references.Context = .{ .inputs = inputs, .registry = passive.registry, .current = text.safety.value(passive.owner) };
+        const reference_context: references.Context = .{ .inputs = inputs, .registry = passive.registry };
         const global = try references.summaries(a, try references.initialize(a, inputs, extracted, 2), reference_context);
         const accounted = (try references.finish(a, global, try references.global(a, global), reference_context)).valid;
-        const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = inputs, .registry = passive.registry, .current = reference_context.current, .references = accounted };
+        const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = inputs, .registry = passive.registry, .references = accounted };
         const support = @import("../../../src/domain/reference_support.zig").records(accounted);
         const groups = try a.alloc(references.r.SignalId, support.signals.len);
         for (support.signals, groups) |signal, *group| group.* = signal.id;
@@ -383,9 +382,6 @@ test "native assembled observations resolve unrelated exact values and preserve 
             .directory_identity = .{ .filesystem_id = 1, .file_id = 2 },
         };
         view.slots[@intFromEnum(directory_schema.key)] = try values.create(a, directory_schema, @TypeOf(directory), directory);
-        const safety_schema = @import("../../../src/application/toolchain_workflow_values.zig").valid;
-        view.slots[@intFromEnum(safety_schema.key)] = try values.adopt(a, safety_schema, text.safety.ValidToolchain, text.safety.Owner, passive.owner, text.safety.value, text.safety.deinitOwner, text.safety.retainedBytes(passive.owner));
-        passive_transferred = true;
         const session_storage = @import("../../../src/application/specification_values.zig").storage;
         const session_owner = try session_storage.create(a, .{});
         session_owner.payload = .{ .session = current };

@@ -14,7 +14,8 @@ pub const ReconciliationError = Error || reconciliation.Error;
 pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, registry: literals.Registry, tokens: extraction.tokens.Candidates, scope: evidence.Scope) Error!*packets.Packet {
     const base = try extractionBase(allocator, inputs, registry, tokens, scope);
     defer packets.release(base);
-    return withCitationChoices(allocator, base, inputs, scope, &.{ .{ .property = "claims" }, .{ .items = {} }, .{ .property = "citations" } });
+    // ADR 0036 Decision 7: claims of one answer that cite the same lines name one category.
+    return withCitationChoices(allocator, base, inputs, scope, &.{ .{ .property = "claims" }, .{ .items = {} }, .{ .property = "citations" } }, "category");
 }
 
 /// Chunk evidence shared by the initial request and every extraction repair.
@@ -48,25 +49,30 @@ pub fn extractionBase(allocator: std.mem.Allocator, inputs: evidence.Inputs, reg
 }
 
 /// ADR 0036: a claim cites only the chunk's citable lines, so its quoted wording
-/// always exists. `path` locates the citations it bounds.
-pub fn withCitationChoices(allocator: std.mem.Allocator, packet: *const packets.Packet, inputs: evidence.Inputs, scope: evidence.Scope, path: []const @import("model_result_schema.zig").ChoiceStep) Error!*packets.Packet {
+/// always exists. `path` locates the citations it bounds. `agree`, for an answer that holds
+/// several claims, names the claim property that claims citing the same lines must share.
+pub fn withCitationChoices(allocator: std.mem.Allocator, packet: *const packets.Packet, inputs: evidence.Inputs, scope: evidence.Scope, path: []const @import("model_result_schema.zig").ChoiceStep, agree: ?[]const u8) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     var lines: std.ArrayList(i64) = .empty;
     const selections = @import("source_selections.zig");
     for (try selections.lines(arena.allocator(), inputs, scope)) |line| if (selections.citable(line.text)) try lines.append(arena.allocator(), line.id.ordinal);
-    return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = path }, .allowed = lines.items, .collection = .unique_subset }});
+    return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = path }, .allowed = lines.items, .collection = .{ .unique_subset = if (agree) |name| .{ .agree = name } else .none } }});
 }
 
 /// `summary_purpose` is the workflow's guidance text, present exactly for a summary input.
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope, summary_purpose: ?[]const u8) ReconciliationError!*packets.Packet {
     return reconciliationPacketFor(allocator, input, inputs, registry, .{ .shared = guidance_scope }, summary_purpose);
 }
-pub fn reconciliationCompositionPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, summary_purpose: []const u8) ReconciliationError!*packets.Packet {
+/// The summary request's packet: the shared base with the summary assignment context selected, as the phase
+/// packets select theirs.
+pub fn reconciliationSummaryPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, summary_purpose: []const u8) ReconciliationError!*packets.Packet {
     if (input.purpose != .summary) return error.InvalidReferenceReconciliation;
     const ids = try @import("reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
     defer allocator.free(ids);
-    return reconciliationPacketFor(allocator, input, inputs, registry, .{ .composed = .{ .assignment = .summary, .claim_ids = ids } }, summary_purpose);
+    const base = try reconciliationPacketFor(allocator, input, inputs, registry, .{ .composed = .{ .assignment = .summary, .claim_ids = ids } }, summary_purpose);
+    defer packets.release(base);
+    return packets.withAssignmentContext(allocator, base, packets.AssignmentContextId.parse("summary").?);
 }
 pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("reference_reconciliation_stage.zig").Prior, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
     const current = @import("reference_reconciliation_stage.zig").input(prior);
@@ -76,12 +82,12 @@ pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("r
         .conflicts => &.{},
     };
     defer if (prior != .conflicts) allocator.free(ids);
-    const assignment: Constraint.Assignment = switch (prior) {
-        inline else => |_, tag| @field(Constraint.Assignment, @tagName(tag)),
+    const assignment: reconciliation.diagnostic.Stage = switch (prior) {
+        inline else => |_, tag| @field(reconciliation.diagnostic.Stage, @tagName(tag)),
     };
     return reconciliationPacketFor(allocator, current, inputs, registry, .{ .composed = .{ .assignment = assignment, .claim_ids = ids } }, null);
 }
-const Presentation = union(enum) { shared: Constraint.Scope, composed: struct { assignment: Constraint.Assignment, claim_ids: []const reconciliation.ClaimId } };
+const Presentation = union(enum) { shared: Constraint.Scope, composed: struct { assignment: reconciliation.diagnostic.Stage, claim_ids: []const reconciliation.ClaimId } };
 // The workflow-owned summary purpose is semantic guidance for summary authoring
 // and scoped repair, not deterministic proof. Complete-result membership stays
 // in scoped constraints.
@@ -197,7 +203,7 @@ pub fn withSemanticChoices(a: std.mem.Allocator, packet: *const packets.Packet, 
     defer a.free(ids);
     const field = if (assignment == .summary) "statements" else "signals";
     const definition_id: schema.DefinitionId = @as(@import("specification_result_definitions.zig").Reconciliation, if (assignment == .summary) .summary else .signals_assignment).id();
-    return packets.withIntegerChoices(a, narrowed, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids, .collection = .unique_subset }});
+    return packets.withIntegerChoices(a, narrowed, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids, .collection = .{ .unique_subset = .none } }});
 }
 /// Availability projects existing evidence, not semantics or a second registry.
 /// Engine-derived exact occurrences never have a selectable model alternative.
@@ -243,10 +249,7 @@ pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packe
         // omitted or repeated claim and corrects the whole assignment. The schema
         // states no count, so the request is unchanged; an empty set admits only [].
         var dispositions: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } } }, .definition = packet.resultDefinition(), .allowed = ordinals };
-        if (ordinals.len != 0) {
-            dispositions.collection = .exact_members;
-            dispositions.member_count = .native;
-        }
+        if (ordinals.len != 0) dispositions.collection = .{ .exact_members = .{ .count = .native } };
         try choices.append(scratch, dispositions);
         try choices.append(scratch, .{ .target = .{ .path = &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = packet.resultDefinition(), .allowed = ordinals });
     }

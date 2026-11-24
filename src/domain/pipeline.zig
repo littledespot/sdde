@@ -2,18 +2,11 @@ const runner_accounting = @import("runner_accounting.zig");
 const data = @import("pipeline_data.zig");
 
 pub const DataKey = enum {
-    raw_principle_inventory,
-    principle_inventory,
-    captured_principles,
     principle_registry,
     prior_principle_registry,
     packet_guidance,
-    invocation_working_directory,
-    raw_engine_config,
-    engine_config,
     llm_provider_registry,
     repository_model_allowlist,
-    canonical_log_level,
     logging_policy,
     workflow_definition_registry,
     workflow_operation_registry,
@@ -42,7 +35,6 @@ pub const DataKey = enum {
     valid_toolchain,
     compiled_naming_policy,
     path_token_grammar,
-    path_token_scan,
     reference_passive_literals,
     parsed_specify_invocation,
     specify_invocation,
@@ -66,13 +58,11 @@ pub const DataKey = enum {
     rendered_reference_context,
     citable_reference_inputs,
     structured_token_candidates,
-    reference_citation_proposals,
-    validated_source_citations,
     raw_reference_extraction,
     reference_extraction_progress,
     parsed_reference_extraction,
     text_validated_reference_extraction,
-    validated_reference_selections,
+    validated_token_classifications,
     preserved_token_identities,
     prepared_reference_claims,
     validated_reference_claims,
@@ -93,6 +83,7 @@ pub const DataKey = enum {
     validated_reference_conflicts,
     reference_reconciliation_identities,
     reference_reconciliation_records,
+    answered_reference_reconciliation_records,
     accounted_reference_reconciliation,
     identified_specification_content,
     specification_generation_session,
@@ -103,7 +94,6 @@ pub const DataKey = enum {
     validated_specification_unit,
     specification_id_ledger,
     specification_coverage,
-    specification_coverage_repair,
     specification_support_review,
     specification_support_repair,
     source_omission_repair,
@@ -118,33 +108,13 @@ pub const DataKey = enum {
     specification_repair_authorization,
     required_authority_inputs,
     required_authority_ledger,
-    raw_required_authority_observations,
     required_authority_observations,
     required_authority_result,
     required_authority_gate,
-    feature_log_binding,
-    workflow_telemetry_fact,
-    sanitized_prompt_fragment,
-    validated_prompt_fragment,
-    log_event_definition,
-    prompt_capture_decision,
-    log_emit_decision,
-    trusted_log_clock,
-    feature_log_stream_lock,
-    feature_log_recovery,
-    feature_log_stream_state,
-    feature_log_retention_authorization,
-    feature_log_policy_transition_authority,
-    feature_log_runtime_status,
-    feature_log_finalization_authority,
-    identified_log_event,
-    identified_prompt_log,
-    serialized_log_record,
-    serialized_log_control_record,
-    log_rotation_decision,
-    log_flush_decision,
-    log_drop_evidence,
-    feature_log_append_evidence,
+    raw_actor_evidence,
+    actor_evidence_registry,
+    authentication_progress,
+    actor_observation,
 };
 
 pub const SideEffect = enum {
@@ -153,6 +123,9 @@ pub const SideEffect = enum {
     filesystem_write,
     workflow_publication,
     model_call,
+    /// Observes the invoking operating-system account through the authentication port, once, under a runner-issued
+    /// lease (ADR 0025).
+    actor_authentication,
 };
 
 pub const RunnerAccountingCapability = enum {
@@ -183,7 +156,6 @@ pub const NodeContract = struct {
 pub const RuntimeStatus = enum {
     active,
     cancelled,
-    deadline_exhausted,
 };
 
 pub const NodeRuntime = struct {
@@ -195,24 +167,24 @@ pub const NodeRuntime = struct {
     }
 };
 
+/// The display path of the input entry a stage failed on, copied by value and bounded: an entry whose
+/// path does not fit names none, and the text is never cut (ADR 0031).
+pub const StageEntryPath = @import("definition_rejection.zig").Bounded(512);
+
 /// Where inside a stage action a failing invocation stopped (ADR 0031). A Zig error carries no
 /// payload, so the runner lends each step invocation this slot and the binding writes the failing
 /// internal step's name, a static enum tag, before it returns its unchanged error. The runner
-/// records it in the failed action's event.
-pub const StageStepSlot = struct { name: ?[]const u8 = null };
+/// records it in the failed action's event. The reference stage's binding also writes the display
+/// path of the entry whose own reason the error is, copied from the validated inventory: it is
+/// presentation data for the CLI, never authority, and no event, log or report records it.
+pub const StageStepSlot = struct { name: ?[]const u8 = null, entry_path: ?StageEntryPath = null };
 
 pub const NodeDelta = struct {
     data_writes: data.Slots = data.empty_slots,
     data_replacements: data.Slots = data.empty_slots,
     data_invalidations: std.enums.EnumSet(DataKey) = .initEmpty(),
-    telemetry_facts: [telemetry.max_facts_per_delta]telemetry.WorkflowTelemetryFact = undefined,
-    telemetry_fact_count: u8 = 0,
     runner_accounting_transition: ?runner_accounting.Transition = null,
     repair_transition: ?@import("workflow_retry.zig").Transition = null,
-
-    pub fn addedTelemetryFacts(self: *const NodeDelta) []const telemetry.WorkflowTelemetryFact {
-        return self.telemetry_facts[0..self.telemetry_fact_count];
-    }
 
     pub fn effects(self: *const NodeDelta, keys: *EffectKeys) DataEffects {
         var writes: usize = 0;
@@ -269,31 +241,6 @@ pub const DataEffects = struct {
     }
 };
 
-pub const WorkflowLog = struct {
-    workflow_shortcode: telemetry.WorkflowShortcode,
-
-    pub const Error = error{TelemetryFactLimitExceeded};
-
-    pub fn init(shortcode: telemetry.WorkflowShortcode) WorkflowLog {
-        return .{ .workflow_shortcode = shortcode };
-    }
-
-    pub fn log(
-        self: WorkflowLog,
-        delta: *NodeDelta,
-        fact: telemetry.TelemetryFact,
-    ) Error!void {
-        if (delta.telemetry_fact_count >= telemetry.max_facts_per_delta) {
-            return error.TelemetryFactLimitExceeded;
-        }
-        delta.telemetry_facts[delta.telemetry_fact_count] = .{
-            .workflow_shortcode = self.workflow_shortcode,
-            .fact = fact,
-        };
-        delta.telemetry_fact_count += 1;
-    }
-};
-
 pub const DeltaError = error{
     MissingRequiredData,
     DataAlreadyPresent,
@@ -312,7 +259,6 @@ pub const DeltaError = error{
     MissingRunnerAccountingTransition,
     UndeclaredRepairTransition,
     ConflictingDataEffects,
-    InvalidTelemetryCount,
 };
 
 /// Dependency/effect validation only; actual workflow data lives in the runner-owned envelope.
@@ -324,7 +270,6 @@ pub const DataShape = struct {
     }
 
     pub fn applyDelta(self: DataShape, contract: NodeContract, delta: *const NodeDelta) DeltaError!DataShape {
-        if (delta.telemetry_fact_count > telemetry.max_facts_per_delta) return error.InvalidTelemetryCount;
         var keys: EffectKeys = .{};
         return self.apply(contract, delta.effects(&keys));
     }
@@ -504,54 +449,43 @@ fn alwaysActive(_: ?*anyopaque) RuntimeStatus {
     return .active;
 }
 
-test "workflow log adds attributed facts to a candidate delta without I/O" {
-    const shortcode = try telemetry.WorkflowShortcode.parse("TEST");
-    var delta: NodeDelta = .{};
-    try WorkflowLog.init(shortcode).log(&delta, .{ .event_type = .run_started });
-    try std.testing.expectEqual(@as(usize, 1), delta.addedTelemetryFacts().len);
-    try std.testing.expectEqualStrings(
-        "TEST",
-        delta.addedTelemetryFacts()[0].workflow_shortcode.slice(),
-    );
-}
-
 test "data shape applies only the exact declared effects" {
     const contract: NodeContract = .{
         .id = "test",
         .kind = .action,
-        .requires = &.{.engine_config},
-        .produces = &.{.canonical_log_level},
+        .requires = &.{.workflow_definition_registry},
+        .produces = &.{.principle_registry},
         .side_effect = .none,
     };
-    const initial = DataShape.init(&.{.engine_config});
+    const initial = DataShape.init(&.{.workflow_definition_registry});
     const next = try initial.apply(contract, DataEffects.fromContract(contract));
-    try std.testing.expect(next.contains(.canonical_log_level));
-    try std.testing.expect(!initial.contains(.canonical_log_level));
+    try std.testing.expect(next.contains(.principle_registry));
+    try std.testing.expect(!initial.contains(.principle_registry));
 }
 
 test "data shape rejects missing undeclared and duplicate writes" {
     const contract: NodeContract = .{
         .id = "test",
         .kind = .action,
-        .requires = &.{.engine_config},
-        .produces = &.{.canonical_log_level},
+        .requires = &.{.workflow_definition_registry},
+        .produces = &.{.principle_registry},
         .side_effect = .none,
     };
-    const envelope = DataShape.init(&.{.engine_config});
+    const envelope = DataShape.init(&.{.workflow_definition_registry});
     try std.testing.expectError(
         error.MissingDeclaredWrite,
         envelope.apply(contract, .{}),
     );
     try std.testing.expectError(
         error.UndeclaredWrite,
-        envelope.apply(contract, .{ .data_writes = &.{.raw_engine_config} }),
+        envelope.apply(contract, .{ .data_writes = &.{.workflow_operation_registry} }),
     );
     try std.testing.expectError(
         error.DuplicateWrite,
         envelope.apply(contract, .{
             .data_writes = &.{
-                .canonical_log_level,
-                .canonical_log_level,
+                .principle_registry,
+                .principle_registry,
             },
         }),
     );
@@ -562,4 +496,3 @@ test "data shape rejects missing undeclared and duplicate writes" {
     );
 }
 const std = @import("std");
-const telemetry = @import("telemetry.zig");

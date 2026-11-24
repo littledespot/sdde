@@ -32,10 +32,10 @@ fn rejected(view: *const @import("../domain/pipeline_data.zig").View) operations
 }
 pub const Authorize = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .packet_guidance },
+        .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .packet_guidance },
         .produces = &.{.specification_support_repair},
     };
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_repair } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_repair, .blocked_reader = .specification_support } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .blocked, .failed };
     allocator: std.mem.Allocator,
@@ -65,7 +65,7 @@ fn authorizationRejectionOutcome(err: execution.OperationError) error{OutOfMemor
 }
 pub const BuildInput = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_support_repair, .packet_guidance },
+        .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_support_repair, .packet_guidance },
         .produces = &.{.model_input_packet},
     };
     allocator: std.mem.Allocator,
@@ -99,7 +99,7 @@ pub const Parse = struct {
 };
 pub const Merge = struct {
     pub const effects: repair_owner.Effects = .{
-        .requires = &.{ .required_authority_inputs, .specification_support_review, .model_request_identity_ledger, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .specification_support_repair, .packet_guidance },
+        .requires = &.{ .required_authority_inputs, .specification_support_review, .model_request_identity_ledger, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .specification_support_repair, .packet_guidance },
         .replaces = &.{.specification_support_review},
         .invalidates = &.{.specification_support_repair},
     };

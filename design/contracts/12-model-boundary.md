@@ -101,11 +101,12 @@ Each generation request contains only what the current unit needs:
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
-  and local validation. Two admission constraints are exceptions, because
+  and local validation. Three admission constraints are exceptions, because
   provider schema syntax cannot express them: `exact_members` uniqueness, with a
   native count its completeness (`missing_member`; below, ADR 0046) and with a `distinct`
-  rule its distinctness (`equal_items`; below), and
-  ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3). Local admission, request descriptions and replay
+  rule its distinctness (`equal_items`; below),
+  ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3),
+  and ADR 0036's claim agreement (`disagreeing_items`; below). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -116,6 +117,19 @@ Each generation request contains only what the current unit needs:
   cardinality unless the native owner declares a unique-subset selector: its maximum
   is the smaller of the canonical maximum and eligible-ID count. This fact applies
   only to integer collections, never scalar choices, and introduces no token limit.
+  A unique-subset selector on an array's item list may also declare an `agree` property
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md) Decision 7): items that list a
+  common value return the same value for it, or admission rejects the first item that a
+  later one disagrees with as `disagreeing_items`, located at that item with scope `parent`
+  like `equal_items`:
+  - `agree` is a required enumeration of every item other than the list itself, so only IDs
+    and closed tags are compared, the items are objects, and the list is a required integer
+    list (an empty list holds no value, so it shares none);
+  - the selector governs one array, so an outer array rejects, and it excludes a coverage
+    on the same selector;
+  - a part whose schema lacks the array leaves the selector unused and records nothing,
+    while a selector that no schema holds rejects;
+  - the request description records the applied rule (`agreements`), so replay applies it.
   An `exact_members` selector instead names an integer property of array items:
   - the array must contain exactly one item for each allowed value;
   - its item count is fixed to the member count, which the guidance schema states
@@ -126,9 +140,12 @@ Each generation request contains only what the current unit needs:
     owner declares the count native only where a decision requires the request
     itself to stay unchanged; otherwise the count is stated;
   - a repeated member rejects natively as `duplicate_member`;
-  - an owner may declare a `distinct` rule, a list of other item properties, each required in
-    every item variant and none the key: items that return equal values for every listed
-    property, compared as the response returned them, reject natively as `equal_items`,
+  - an owner may declare a `distinct` rule, a list of other item properties, each declared in
+    every item variant, required or not, and none the key: items that return equal values for
+    every listed property, compared as the response returned them, reject natively as
+    `equal_items`. A property an item omits is a value of its own: two items that both omit it
+    agree on it, and an item that omits it differs from one that returns it (the scenarios
+    response's optional `given`, ADR 0038 Decision 3). The rejection is
     located at the first item of the first equal set, after `duplicate_member` and
     `missing_member`. The rule governs one array; equality across arrays is not admission's
     (ADR 0038 Decision 3);
@@ -222,7 +239,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v19` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v21` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 
@@ -366,7 +383,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   preparation paths, protocol corrections and diagnostic source capture retain
   that exact selection. It adds no caching behavior or schema authority.
 - Semantic guidance that native packet builders present is workflow-owned: one closed
-  `packet-guidance/v6` resource, published as run data by one `capture-packet-guidance`
+  `packet-guidance/v7` resource, published as run data by one `capture-packet-guidance`
   step and received explicitly by each consuming operation that declares
   `.packet_guidance`, never as the resource. The
   [ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance
@@ -478,7 +495,7 @@ findings. Only complete native collection validation permits authority advanceme
   The engine derives its enclosing member IDs from the supplied partition; model-authored
   statements select supporting claims, and validators require complete partition coverage.
 - The final global partition assembles one `ReferenceReconciliationProposal` from
-  separate disposition, signal-grouping and conflict responses (ADR 0022).
+  separate disposition, signal-grouping and conflict responses (ADR 0022; with no conflict group the conflicts answer is constructed, not requested).
   Conflict resolution is `unresolved` until a separate authorized decision exists, so
   model conflict proposals omit that fixed status and the engine constructs it.
 - Neither variant can redefine claim/token content or mint canonical
@@ -627,7 +644,9 @@ A genuine missing data decision must state its behavioral effect and request the
 details needed to resolve it, rather than a bare yes/no about entities. This guidance
 does not authorize native inference from question prose or verdict reassessment.
 
-Consolidate only the same engine-built subject under existing identity rules.
+Consolidate only the same engine-built subject under existing identity rules: the authority
+builder merges the gaps of one stage and one subject into one need that asks every distinct
+question, binds the union of their authorities and cites the union of their evidence (§14.14).
 Equal wording or shared citations across subjects do not establish equivalent
 decisions or let one answer resolve multiple requirements. A related-needs display
 is a projection only. Broader answer sharing requires an explicitly approved
@@ -736,7 +755,11 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 - The runner checks both direct authority generations and their source lineage; replacing a
   source requires rebuilding its affected projection and gate.
 - Only a directly consumed prior revision is a replacement's self-input. Reusing
-  an output key cannot turn an inherited stale dependency into that exception.
+  an output key cannot turn an inherited stale dependency into that exception. So is the prior revision
+  of another key the same step replaced with it, but only while that key still holds what the step wrote: a later change to
+  it is a change to a dependency. A step that replaces two keys (the acceptance of clarification responses replaces the
+  clarification inputs and the actor-evidence registry) therefore leaves neither stale through the other's superseded
+  revision. Iteration bookkeeping (the authentication progress) is `execution_control`, not authority.
 - Native data schemas distinguish current authorities from captured immutable evidence.
 - A captured value carries its complete current-authority frontier into every successor;
   retiring or replacing its transport slot does not invalidate that evidence.
@@ -916,17 +939,14 @@ user-directed decomposition contract: configured shapes and partitions, derived
 part schemas, explicit independent request bindings, deterministic prompt-free
 assembly and complete validation, and sets the 1,024-step workflow ceiling. The closed `json-composition/v1` resource is compiled through the existing
 resource boundary and selects parts through ordinary request preparation.
-The optional composition `definition` selects an existing named definition in its
-`result` resource; otherwise the resource root is selected. Compilation rejects
-unresolved selections. Projections, requests and complete validation retain this
-same binding, and registry transfer rebinds to its destination schema owner.
+The composition's `result` resource root is its complete schema. Projections, requests
+and complete validation retain this same binding, and registry transfer rebinds to its
+destination schema owner.
 
-A part's optional `input-context` selects a native immutable assignment context
-into `assignment` through the shared request preparation owner. The complete
-evidence packet and declared prerequisites remain available; missing contexts
-reject before inference. Corrections retain the selected presentation. Contexts
-carry applicable guidance, not independent validation, repair or gap policy
-(ADR 0016).
+A native packet's owner selects an assignment context into `assignment`; a composition
+part selects none. The complete evidence packet and declared prerequisites remain
+available, and corrections retain the selected presentation. Contexts carry applicable
+guidance, not independent validation, repair or gap policy (ADR 0016).
 
 The mechanism is shared across supported JSON shapes. Domain owners contribute
 facts and semantic validators; they do not gain separate assembly, retry, storage

@@ -12,6 +12,9 @@ const orchestrator = @import("specify_invocation_orchestrator.zig");
 
 pub const ParseInvocation = struct {
     pub const Action = @import("../actions/specify/parse_specify_invocation.zig").Action;
+    /// The invocation parse registers as the engine's invocation step: it succeeds or the invocation fails.
+    pub const kind: @import("../domain/workflow_operation.zig").Kind = .invocation;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{.ok};
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {

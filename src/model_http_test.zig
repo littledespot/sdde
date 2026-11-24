@@ -79,6 +79,52 @@ test "concrete HTTP deadline cancels and joins blocked connect write head and bo
     }
 }
 
+test "concrete HTTP timer sleeps one slice at a time and times out when the clock passes the deadline" {
+    for (std.enums.values(fixture_module.Point)) |point| {
+        var fixture: fixture_module.Fixture = undefined;
+        fixture.init(good);
+        defer fixture.deinit();
+        fixture.fault = .held;
+        fixture.point = point;
+        // 100 ms to the deadline in slices of 40: sleeps of 40, 40 and 20 ms, each followed by a clock read.
+        fixture.slice_ms = 40;
+        fixture.advance_slices = true;
+        var adapter = fixture.adapter();
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request());
+        try std.testing.expectEqual(.timeout, result.failed.cause);
+        try std.testing.expectEqual(phase(point), result.failed.diagnostic.?.phase);
+        try std.testing.expectEqual(@as(usize, 3), fixture.sleeps.load(.acquire));
+        try std.testing.expectEqual(@as(usize, 1), fixture.socket_cancellations.load(.acquire));
+        try fixture.expectCleaned();
+        try std.testing.expectEqual(@as(usize, 1), fixture.connects);
+    }
+}
+
+test "concrete HTTP timer observes a cancellation within one slice and joins the network task without resending" {
+    for (std.enums.values(fixture_module.Point)) |point| {
+        var fixture: fixture_module.Fixture = undefined;
+        fixture.init(good);
+        defer fixture.deinit();
+        fixture.fault = .held;
+        fixture.point = point;
+        fixture.slice_ms = 40;
+        fixture.advance_slices = true;
+        // The run is interrupted during the second slice, 20 ms before the deadline.
+        fixture.interrupt_at_sleep = 2;
+        var adapter = fixture.adapter();
+        adapter.runtime = fixture.interruptedRuntime();
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        try std.testing.expectError(error.Cancelled, adapter.port().exchange(arena.allocator(), fixture.request()));
+        try std.testing.expectEqual(@as(usize, 2), fixture.sleeps.load(.acquire));
+        try std.testing.expectEqual(@as(usize, 1), fixture.socket_cancellations.load(.acquire));
+        try fixture.expectCleaned();
+        try std.testing.expectEqual(@as(usize, 1), fixture.connects);
+    }
+}
+
 test "concrete HTTP preserves socket cancellation during connect write head and body" {
     for (std.enums.values(fixture_module.Point)) |point| {
         var fixture: fixture_module.Fixture = undefined;

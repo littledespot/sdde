@@ -5,6 +5,13 @@ const file_identity = @import("file_identity.zig");
 
 pub const Error = error{ DirectoryMissing, DirectoryUnavailable, Cancelled };
 
+/// Whether a failed call reports a cancellation request: `std.Io` spells it `Canceled`, this project's
+/// access helpers `Cancelled`. The one owner of that test for the filesystem adapters that map a fault to
+/// their port's own error.
+pub fn isCancellation(err: anyerror) bool {
+    return err == error.Canceled or err == error.Cancelled;
+}
+
 pub fn open(io: std.Io, base: std.Io.Dir, relative: []const u8) Error!std.Io.Dir {
     if (relative.len == 0) return error.DirectoryUnavailable;
     var current = base;
@@ -63,7 +70,7 @@ pub fn ensureWithPermissions(io: std.Io, base: std.Io.Dir, relative: []const u8,
 /// cannot silently select a differently named directory on the active filesystem.
 fn requireExactName(io: std.Io, directory: std.Io.Dir, expected: []const u8) Error!void {
     var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
-    const length = directory.realPathFile(io, ".", &path_buffer) catch return error.DirectoryUnavailable;
+    const length = directory.realPathFile(io, ".", &path_buffer) catch |err| return if (err == error.Canceled) error.Cancelled else error.DirectoryUnavailable;
     // Two bounded NFC calls: each needs at most 4 scalars/byte of i32
     // workspace plus its owned UTF-8 output; reserve alignment/terminators too.
     var scratch: [std.Io.Dir.max_name_bytes * 34 + 16]u8 = undefined;

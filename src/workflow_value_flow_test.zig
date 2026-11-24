@@ -21,7 +21,7 @@ const parse_invocation = @import("actions/workflow/parse_workflow_invocation.zig
 const gate = @import("domain/workflow_gate.zig");
 
 const input_schema = values.schema(.workflow_invocation, execution.Invocation, 1, 1024);
-const level_schema = values.schema(.canonical_log_level, log_policy.CanonicalizedLevel, 1, 256);
+const level_schema = values.schema(.principle_registry, log_policy.CanonicalizedLevel, 1, 256);
 const evidence_schema = values.schema(.workflow_operation_registry_evidence, gate.Decision, 1, 32);
 const schemas = [_]data.Schema{ level_schema, input_schema, evidence_schema };
 const gate_contract: gate.Contract = .{
@@ -52,7 +52,7 @@ test "unrelated YAML workflows carry typed invocation values through replacement
 }
 
 test "runtime rejects schema drift and releases candidates on cancellation invalid output and errors" {
-    inline for (.{ Fault.schema_version, .throw_after_allocation, .cancel_after_allocation, .deadline_after_allocation, .undeclared_outcome }) |fault| {
+    inline for (.{ Fault.schema_version, .throw_after_allocation, .cancel_after_allocation, .undeclared_outcome }) |fault| {
         var control: Control = .{ .fault = fault };
         var fixture = try Fixture.init(&control, linear_yaml);
         defer fixture.deinit();
@@ -64,12 +64,11 @@ test "runtime rejects schema drift and releases candidates on cancellation inval
             .undeclared_outcome => .{ .authority = .outcome_undeclared },
             .cancel_after_allocation => .cancelled,
             .throw_after_allocation => .{ .operation_failed = error.InvocationFailureUnrecorded },
-            .deadline_after_allocation => .deadline_exhausted,
             .none => unreachable,
         };
         try std.testing.expectEqual(expected, engine.run(children.bind()).execution_rejected);
         try std.testing.expectEqual(@as(usize, 0), control.observations);
-        const missing: pipeline.NodeContract = .{ .id = "test.missing", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .side_effect = .none };
+        const missing: pipeline.NodeContract = .{ .id = "test.missing", .kind = .action, .requires = &.{.principle_registry}, .produces = &.{}, .side_effect = .none };
         try std.testing.expectError(error.MissingRequiredData, runner.envelope.view(missing));
     }
     var control: Control = .{};
@@ -98,7 +97,7 @@ test "compiler rejects missing duplicate and invalid data schemas" {
     try std.testing.expect(!fixture.registry.validate());
     var graph = fixture.graph.*;
     graph.authority.data_schemas = &.{input_schema};
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(fixture.arena.allocator(), &.{graph}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(fixture.arena.allocator(), &.{graph}, &fixture.registry, null));
     fixture.registry.data_schemas = &schemas;
     var entries = operation_entries;
     for (&entries) |*entry| entry.binding.context = &control;
@@ -106,7 +105,7 @@ test "compiler rejects missing duplicate and invalid data schemas" {
     try std.testing.expect(fixture.registry.validate());
     entries[1].contract.optional = entries[1].contract.requires;
     try std.testing.expect(!fixture.registry.validate());
-    entries[1].contract.optional = &.{ .canonical_log_level, .canonical_log_level };
+    entries[1].contract.optional = &.{ .principle_registry, .principle_registry };
     try std.testing.expect(!fixture.registry.validate());
 }
 
@@ -175,17 +174,6 @@ test "authority replacement invalidates evidence even for identical bytes and ex
     try std.testing.expectEqual(@as(usize, 1), control.observations);
 }
 
-test "a logging barrier rejection cannot continue from the evidence issuer through YAML" {
-    var control: Control = .{ .block_logging = true };
-    var fixture = try Fixture.init(&control, guarded_yaml);
-    defer fixture.deinit();
-    var runner = fixture.runner(&control);
-    defer runner.deinit();
-    var children: EngineBindings = .{ .runner = &runner, .graph = fixture.graph };
-    try std.testing.expectEqual(workflow.OutcomeTag.blocked, engine.run(children.bind()).executionStatus().?);
-    try std.testing.expectEqual(@as(usize, 0), control.observations);
-}
-
 test "missing foreign and unsuccessful evidence cannot authorize execution" {
     inline for (.{ gate.Rejection.missing_evidence, .missing_authority, .foreign_issuer, .rejected_evidence }) |reason| {
         var control: Control = .{};
@@ -212,22 +200,20 @@ test "missing foreign and unsuccessful evidence cannot authorize execution" {
     }
 }
 
-test "gate boundary preserves cancellation and deadlines before and after checking evidence" {
-    inline for (.{ pipeline.RuntimeStatus.cancelled, .deadline_exhausted }) |terminal| {
-        for (0..3) |checks| {
-            var control: Control = .{};
-            var fixture = try Fixture.init(&control, guarded_yaml);
-            defer fixture.deinit();
-            var runner = fixture.runner(&control);
-            defer runner.deinit();
-            try prepareGate(&runner);
-            var countdown: GateCountdown = .{ .remaining = checks, .terminal = terminal };
-            runner.runtime = .{ .context = &countdown, .status_fn = GateCountdown.status };
-            const result = runner.bindings().invokeStep(.{ .bytes = "guarded" });
-            try std.testing.expect(result == .rejected);
-            try std.testing.expectEqual(if (terminal == .cancelled) workflow.OutcomeTag.cancelled else .failed, result.status());
-            try std.testing.expectEqual(@as(usize, 0), control.observations);
-        }
+test "gate boundary preserves cancellation before and after checking evidence" {
+    for (0..3) |checks| {
+        var control: Control = .{};
+        var fixture = try Fixture.init(&control, guarded_yaml);
+        defer fixture.deinit();
+        var runner = fixture.runner(&control);
+        defer runner.deinit();
+        try prepareGate(&runner);
+        var countdown: GateCountdown = .{ .remaining = checks, .terminal = .cancelled };
+        runner.runtime = .{ .context = &countdown, .status_fn = GateCountdown.status };
+        const result = runner.bindings().invokeStep(.{ .bytes = "guarded" });
+        try std.testing.expect(result == .rejected);
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.status());
+        try std.testing.expectEqual(@as(usize, 0), control.observations);
     }
 }
 
@@ -355,10 +341,9 @@ const GateCountdown = struct {
     }
 };
 
-const Fault = enum { none, schema_version, throw_after_allocation, cancel_after_allocation, deadline_after_allocation, undeclared_outcome };
+const Fault = enum { none, schema_version, throw_after_allocation, cancel_after_allocation, undeclared_outcome };
 const Control = struct {
     decision: gate.Decision = .accepted,
-    block_logging: bool = false,
     fault: Fault = .none,
     branch: workflow.OutcomeTag = .ok,
     status: pipeline.RuntimeStatus = .active,
@@ -387,7 +372,6 @@ const Control = struct {
         errdefer values.destroy(value);
         if (self.fault == .throw_after_allocation) return error.InvocationFailureUnrecorded;
         if (self.fault == .cancel_after_allocation) self.status = .cancelled;
-        if (self.fault == .deadline_after_allocation) self.status = .deadline_exhausted;
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(level_schema.key)] = value;
         return .{ .outcome = if (self.fault == .undeclared_outcome) .blocked else .ok, .delta = delta };
@@ -402,7 +386,7 @@ const Control = struct {
 
     fn route(context: ?*Control, input: registry_module.Input) registry_module.Error!execution.Candidate {
         const self = context.?;
-        if (input.step.data.contains(.canonical_log_level)) return error.InvocationFailureUnrecorded;
+        if (input.step.data.contains(.principle_registry)) return error.InvocationFailureUnrecorded;
         return .{ .outcome = self.branch, .delta = .{} };
     }
 
@@ -422,7 +406,6 @@ const Control = struct {
     fn validate(context: ?*Control, input: registry_module.Input) registry_module.Error!execution.Candidate {
         _ = values.read(&input.step.data, input_schema, execution.Invocation) catch return error.InvocationFailureUnrecorded;
         var delta: pipeline.NodeDelta = .{};
-        input.step.log.log(&delta, .{ .event_type = .action_completed }) catch return error.InvocationFailureUnrecorded;
         delta.data_writes[@intFromEnum(evidence_schema.key)] = values.create(std.testing.allocator, evidence_schema, gate.Decision, context.?.decision) catch return error.InvocationFailureUnrecorded;
         return .{ .outcome = .ok, .delta = delta };
     }
@@ -432,9 +415,7 @@ const Control = struct {
         return self.status;
     }
 
-    fn log(context: *anyopaque, _: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
-        const self: *Control = @ptrCast(@alignCast(context));
-        if (self.block_logging) return .{ .blocked = .LOG_SINK_FAILURE };
+    fn log(_: *anyopaque, _: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
         return .dropped;
     }
 };
@@ -461,10 +442,10 @@ const Fixture = struct {
         };
         var parser: parser_adapter.Adapter = .{};
         const raw = try startup.steps.parseWorkflows(parser.parser(), arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
-        const definitions = try definition_schema.validate(arena.allocator(), raw);
+        const definitions = try definition_schema.validate(arena.allocator(), raw, null);
         var result_schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-        const graphs = try graph_compilation.compile(&registry, result_schema_parser.compiler(), arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
-        _ = try graph_validation.validate(arena.allocator(), graphs, &registry);
+        const graphs = try graph_compilation.compile(&registry, result_schema_parser.compiler(), arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{}, null);
+        _ = try graph_validation.validate(arena.allocator(), graphs, &registry, null);
         return .{ .arena = arena, .graph = &graphs[0], .registry = registry };
     }
 
@@ -506,13 +487,13 @@ const EngineBindings = struct {
 
 const operation_entries = [_]registry_module.Entry{
     .{ .contract = .{ .id = "test.input", .kind = .invocation, .produces = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.invoke) },
-    .{ .contract = .{ .id = "test.normalize", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.normalize) },
-    .{ .contract = .{ .id = "test.replace", .kind = .step, .optional = &.{.canonical_log_level}, .replaces = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.replace) },
-    .{ .contract = .{ .id = "test.route", .kind = .step, .requires = &.{.workflow_invocation}, .optional = &.{.canonical_log_level}, .outcomes = &.{ .ok, .more }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.route) },
-    .{ .contract = .{ .id = "test.observe", .kind = .step, .requires = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
+    .{ .contract = .{ .id = "test.normalize", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.principle_registry}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.normalize) },
+    .{ .contract = .{ .id = "test.replace", .kind = .step, .optional = &.{.principle_registry}, .replaces = &.{.principle_registry}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.replace) },
+    .{ .contract = .{ .id = "test.route", .kind = .step, .requires = &.{.workflow_invocation}, .optional = &.{.principle_registry}, .outcomes = &.{ .ok, .more }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.route) },
+    .{ .contract = .{ .id = "test.observe", .kind = .step, .requires = &.{.principle_registry}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
     .{ .contract = .{ .id = "test.clear", .kind = .step, .invalidates = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.clear) },
     .{ .contract = .{ .id = "test.validate", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{ .ok, .blocked }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.validate) },
-    .{ .contract = .{ .id = "test.guarded", .kind = .step, .requires = &.{.canonical_log_level}, .gates = &.{"test.current-input@1"}, .outcomes = &.{ .ok, .blocked }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
+    .{ .contract = .{ .id = "test.guarded", .kind = .step, .requires = &.{.principle_registry}, .gates = &.{"test.current-input@1"}, .outcomes = &.{ .ok, .blocked }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
 };
 
 const guarded_yaml =

@@ -1,4 +1,5 @@
 const std = @import("std");
+const workflow_resources = @import("../../src/test_fixtures/workflow_resources.zig");
 
 pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.Run {
     const package_directory = b.addTempFiles();
@@ -138,7 +139,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_unregistered.clearEnvironment();
     denied_unregistered.expectExitCode(1);
     denied_unregistered.expectStdOutEqual("");
-    denied_unregistered.expectStdErrEqual("WORKFLOW_AUTHORITY_INVENTORY_INVALID\n");
+    // The unregistered file is an inventory resource no definition declares, and the rejection names the file.
+    denied_unregistered.expectStdErrEqual("WORKFLOW_AUTHORITY_INVENTORY_INVALID: resource_binding; transactions/unregistered.json\n");
 
     // The request lifecycle is the engine's `request-model` step (ADR 0030): neither an
     // operation of the removed lifecycle nor one of its stages is a selectable operation.
@@ -164,7 +166,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_removed_id.clearEnvironment();
     denied_removed_id.expectExitCode(1);
     denied_removed_id.expectStdOutEqual("");
-    denied_removed_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_removed_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID: step_operation; account.workflow.yaml; step=account\n");
 
     const stage_id_directory = b.addTempFiles();
     const stage_id_executable = stage_id_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
@@ -187,15 +189,16 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_stage_id.clearEnvironment();
     denied_stage_id.expectExitCode(1);
     denied_stage_id.expectStdOutEqual("");
-    denied_stage_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_stage_id.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID: step_operation; stage.workflow.yaml; step=stage\n");
     denied_removed_id.step.dependOn(&denied_stage_id.step);
 
-    for ([_][2][]const u8{
-        .{ "build-specification-authority-requirements", "ok: end.ok, blocked: end.blocked" },
-        .{ "build-required-authority-ledger", "ok: end.ok, blocked: end.blocked" },
-        .{ "parse-required-authority-observations", "ok: end.ok, blocked: end.blocked" },
-        .{ "reconcile-required-authorities", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked" },
-        .{ "validate-required-authority-reconciliation", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked" },
+    // Each is rejected for what its contract needs: the data it requires that nothing produces, or an outcome it
+    // does not declare.
+    for ([_][3][]const u8{
+        .{ "build-specification-authority-requirements", "ok: end.ok, blocked: end.blocked", ": data_flow; authority.workflow.yaml" },
+        .{ "build-required-authority-ledger", "ok: end.ok, blocked: end.blocked", ": data_flow; authority.workflow.yaml" },
+        .{ "reconcile-required-authorities", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked", ": declared_outcomes; authority.workflow.yaml; step=check" },
+        .{ "validate-required-authority-reconciliation", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked", ": declared_outcomes; authority.workflow.yaml; step=check" },
     }) |contract| {
         const project = b.addTempFiles();
         const binary = project.addCopyFile(executable.getEmittedBin(), executable.out_filename);
@@ -211,7 +214,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         denied.clearEnvironment();
         denied.expectExitCode(1);
         denied.expectStdOutEqual("");
-        denied.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+        denied.expectStdErrEqual(b.fmt("WORKFLOW_GRAPH_COMPILE_INVALID{s}\n", .{contract[2]}));
         denied_stage_id.step.dependOn(&denied.step);
     }
 
@@ -238,16 +241,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     toolchain_command.expectStdOutEqual("");
     toolchain_command.expectStdErrEqual("");
 
-    _ = toolchain_directory.add(".sddtoolkit/workflows/path-tokens.workflow.yaml", @import("../../src/test_fixtures/path_token_workflow.zig").yaml(b.allocator) catch @panic("build path-token fixture"));
-    _ = toolchain_directory.add(".sddtoolkit/workflows/sample.txt", "Use stories.md, spec.md and src/main.zig; https://example.test is inert text.");
     _ = toolchain_directory.add("references/Hello/stories.md", "A simple business requirement.\n");
-    const path_token_command = std.Build.Step.Run.create(b, "run packaged shared naming-policy and path-token detector");
-    path_token_command.addFileArg(toolchain_executable);
-    path_token_command.addArgs(&.{ "reference-ingestion", "--feature", "Lexical/Example", "--reference", "Hello" });
-    path_token_command.setCwd(toolchain_directory.getDirectory());
-    path_token_command.clearEnvironment();
-    path_token_command.expectStdOutEqual("");
-    path_token_command.expectStdErrEqual("");
 
     const literal_yaml = @import("../../src/test_fixtures/path_token_workflow.zig").prepared(b.allocator) catch @panic("build passive-literal fixture");
     const named_literal_yaml = std.mem.replaceOwned(u8, b.allocator, literal_yaml, "id: reference-ingestion", "id: display-literals") catch @panic("name passive-literal fixture");
@@ -306,7 +300,6 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&denied_removed_id.step);
     missing_config_command.step.dependOn(&denied_toolchain.step);
     missing_config_command.step.dependOn(&toolchain_command.step);
-    missing_config_command.step.dependOn(&path_token_command.step);
     missing_config_command.step.dependOn(&literal_command.step);
     missing_config_command.step.dependOn(&token_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
@@ -323,7 +316,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_progress.clearEnvironment();
     denied_progress.expectExitCode(1);
     denied_progress.expectStdOutEqual("");
-    denied_progress.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_progress.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID: declared_outcomes; hello.workflow.yaml; step=run\n");
     missing_config_command.step.dependOn(&denied_progress.step);
     {
         const directory = b.addTempFiles();
@@ -332,14 +325,9 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         _ = directory.add(".sddtoolkit.json", configured);
         _ = directory.add(".sddproviders.json", @embedFile("../../design/examples/.sddproviders.json"));
         _ = directory.addCopyFile(b.path("design/workflows/spec.workflow.yaml"), ".sddtoolkit/workflows/spec.workflow.yaml");
-        inline for (.{ "reconciliation", "generation", "support", "links" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
-            _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name ++ "." ++ extension), ".sddtoolkit/workflows/spec/" ++ name ++ "." ++ extension);
-        };
-        inline for (.{ "support-loss.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "scenarios.prompt.md", "scenarios.context.json", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "packet-guidance.json" }) |name| {
-            _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name), ".sddtoolkit/workflows/spec/" ++ name);
+        inline for (comptime workflow_resources.paths(@embedFile("../../design/workflows/spec.workflow.yaml"))) |path| {
+            _ = directory.addCopyFile(b.path("design/workflows/" ++ path), ".sddtoolkit/workflows/" ++ path);
         }
-        _ = directory.addCopyFile(b.path("design/workflows/spec/protocol.prompt.md"), ".sddtoolkit/workflows/spec/protocol.prompt.md");
-        _ = directory.addCopyFile(b.path("design/workflows/spec/repair.prompt.md"), ".sddtoolkit/workflows/spec/repair.prompt.md");
         _ = directory.add(".sddtoolkit/principles/toolchain.yaml", "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n");
         _ = directory.addCopyFile(b.path("test/e2e/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
         const check = std.Build.Step.Run.create(b, "load packaged generation YAML and resources without source assets or credentials");
@@ -356,7 +344,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     }
     // A catalogue entry captured before ADR 0030 records no deadline and is
     // rejected before any request, like an invalid deployment.
-    for ([_]enum { valid, invalid_region, missing_deadline }{ .valid, .invalid_region, .missing_deadline }) |variant| {
+    for ([_]enum { valid, malformed_credential, invalid_region, missing_deadline }{ .valid, .malformed_credential, .invalid_region, .missing_deadline }) |variant| {
         const directory = b.addTempFiles();
         const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
         const slots = std.mem.replaceOwned(u8, b.allocator, configuration, "\"slots\": {}", "\"slots\": {\"spec_generation\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"}}") catch @panic("allocate provider smoke config");
@@ -368,11 +356,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         const provider_bytes = std.mem.replaceOwned(u8, b.allocator, shipped_bytes, "\"requestTimeoutMs\": 180000", "\"requestTimeoutMs\": 60000") catch @panic("allocate fixture deadline");
         if (std.mem.eql(u8, provider_bytes, shipped_bytes)) @panic("provider smoke catalogue lacks the fixture deadline");
         const catalogue = switch (variant) {
-            .valid => provider_bytes,
+            .valid, .malformed_credential => provider_bytes,
             .invalid_region => std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "xx-invalid-1") catch @panic("allocate invalid deployment"),
             .missing_deadline => std.mem.replaceOwned(u8, b.allocator, provider_bytes, ",\n            \"requestTimeoutMs\": 60000", "") catch @panic("allocate pre-deadline catalogue"),
         };
-        if (variant != .valid and std.mem.eql(u8, catalogue, provider_bytes)) @panic("provider smoke variant left the catalogue unchanged");
+        if (variant != .valid and variant != .malformed_credential and std.mem.eql(u8, catalogue, provider_bytes)) @panic("provider smoke variant left the catalogue unchanged");
         _ = directory.add("config/.sddproviders.json", catalogue);
         _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("fixtures/provider-request/provider-request.workflow.yaml"));
         _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("fixtures/provider-request/provider-request.prompt.md"));
@@ -383,14 +371,21 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.addArg("provider-request");
         check.setCwd(directory.getDirectory());
         check.clearEnvironment();
+        // A key with a space is rejected without being sent, and the line says so without echoing it.
+        if (variant == .malformed_credential) check.setEnvironmentVariable("AWS_BEARER_TOKEN_BEDROCK", "not a key");
         check.expectExitCode(1);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (variant == .valid) "failed\n" else "LLM_PROVIDER_REGISTRY_INVALID\n");
+        // Without a usable key the call is never sent: the run says why it failed, after the outcome.
+        check.expectStdErrEqual(switch (variant) {
+            .valid => "failed\nprovider_failure: authentication_failed; delivery=not_sent; retry=never; credential=missing\n",
+            .malformed_credential => "failed\nprovider_failure: authentication_failed; delivery=not_sent; retry=never; credential=malformed\n",
+            .invalid_region, .missing_deadline => "LLM_PROVIDER_REGISTRY_INVALID\n",
+        });
         missing_config_command.step.dependOn(&check.step);
     }
-    for ([_][2][]const u8{
-        .{ "invoke: core.empty-invocation", "invoke: core.empty-invocation@1" },
-        .{ "use: core.noop", "use: core.noop@1" },
+    for ([_][3][]const u8{
+        .{ "invoke: core.empty-invocation", "invoke: core.empty-invocation@1", ": definition_header; hello.workflow.yaml" },
+        .{ "use: core.noop", "use: core.noop@1", ": steps; hello.workflow.yaml; step=run" },
     }) |change| {
         const directory = b.addTempFiles();
         const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
@@ -404,7 +399,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         rejected.clearEnvironment();
         rejected.expectExitCode(1);
         rejected.expectStdOutEqual("");
-        rejected.expectStdErrEqual("WORKFLOW_DEFINITION_SCHEMA_INVALID\n");
+        rejected.expectStdErrEqual(b.fmt("WORKFLOW_DEFINITION_SCHEMA_INVALID{s}\n", .{change[2]}));
         missing_config_command.step.dependOn(&rejected.step);
     }
     for ([_]struct { selector: []const u8, rejected: bool }{
@@ -418,7 +413,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.clearEnvironment();
         check.expectExitCode(if (case.rejected) 1 else 0);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (case.rejected) "InvalidReferenceAccounting\n" else "");
+        check.expectStdErrEqual(if (case.rejected) "ReferenceUnsupportedMedia: references/Unsupported/.hidden.json\n" else "");
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_]struct { feature: []const u8, rejected: bool }{
@@ -433,7 +428,9 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.clearEnvironment();
         check.expectExitCode(if (case.rejected) 1 else 0);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (case.rejected) "InvalidClarificationInput\n" else "");
+        // The blocked outcome and its cause, then each rejected form with the rule it broke: the orphan feature holds a
+        // closed form of no record.
+        check.expectStdErrEqual(if (case.rejected) "blocked\nInvalidClarificationInput\nP01: form_without_record\n" else "");
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_][]const []const u8{

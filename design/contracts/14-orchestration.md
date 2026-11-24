@@ -232,14 +232,16 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
 - On a new invocation, capture controlled submissions before preparing replacement forms.
 - Validate revisions, authentication and current applicability; §23.2 protects user-closed
   bytes.
-- Accepted answers and validated resolutions persist under the clarification exception, then the
-  owning workflow regenerates under
+- Accepted answers stay in memory and persist only with the run's own publication
+  ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)); validated resolutions
+  persist under the clarification exception. The owning workflow regenerates under
   [§25.2](25-publication.md#252-abandonment-and-reruns).
-- A deferred/open need retains its subject ID and receives a complete replacement form; a
-  consumed defer is recorded once, advances the revision and yields a blank open answer region.
+- A deferred/open need retains its subject ID and receives a complete replacement form with a blank
+  open answer region; a deferral takes no authentication and records nothing.
 - Old submissions become stale.
 - Resolved/cancelled forms expose no submittable region.
-- A valid cancel remains `cancelled`; an unresolved need ends `needs_user`.
+- A valid cancel ends the run `cancelled` and publishes the clarification state and its actor evidence
+  only; an unresolved need ends `needs_user`.
 
 The orchestrator branches only on typed child results; §23.2 owns write-time
 protection and §25 owns publication failure.
@@ -250,72 +252,41 @@ There is no transaction-recovery orchestrator; abandonment and reruns follow
 [§25.2](25-publication.md#252-abandonment-and-reruns). Runner cleanup releases the
 abandoned execution's resources.
 
-### 14.9 `FeatureLoggingFailureOrchestrator`
+### 14.9 Feature-logging failure report
 
-This instrumentation-internal orchestrator is entered once for a feature-sink failure. It coordinates transient-handle cleanup, one bounded emergency diagnostic and fail-closed execution abandonment. It performs no transaction stabilization or recovery, has no sink/filesystem capability itself, and is excluded from logging observation.
+The runtime logging lifecycle reports a feature-sink failure once, through the failure engine routine ([ADR 0032](../decisions/0032-engine-routines.md)): it formats the bounded emergency diagnostic and writes it once. A cancellation under the feature log is no sink failure: it is not reported, emits no emergency diagnostic and ends the run `cancelled` after the lock is released ("Cancellation mapping"). The report follows each logging routine's own stop, after its lock is released, and the failure the lifecycle returns abandons the run fail-closed. It performs no transaction stabilization or recovery, has no sink/filesystem capability beyond its one emergency port, and is excluded from logging observation.
 
-Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), the feature-logging orchestrators in §§14.9–14.10 become typed engine routines in its second conversion. They convert only once its logging preconditions hold. The emergency diagnostic stays exactly once, non-recursive and unobserved, and every lock is released on every path.
+The feature-logging sequences in §§14.9–14.10 are typed engine routines (persist, prepare, close, retention, prior-run finalization and failure) that the runtime logging lifecycle calls, and that composition's `Assembly.fail` calls for the failure routine alone when no lifecycle is active. The emergency diagnostic stays exactly once, non-recursive and unobserved, and every lock is released on every path.
 
-### 14.10 `FeatureLogPolicyTransitionOrchestrator`
+### 14.10 Logging policy per run and restart
 
-- This instrumentation-only orchestrator switches an existing run to a changed logging policy
-  after a route adopts the changed candidate ([§9.4](09-configuration.md)), when the validated
-  change plan sets `transitionFeatureLogging: true`, including mixed specification/planning
-  changes.
-- The successor is execution-local ([ADR 0032](../decisions/0032-engine-routines.md), decided
-  14 November 2026, with [ADR 0009](../decisions/0009-atomic-workflow-execution.md)): no
-  bootstrap authority is committed for it, no pointer advances and no durable lineage is
-  written. The run's current policy and binding are the ones its activation built in memory.
-  `ValidateFeatureLogPolicyTransitionAction`
-  ([13-09](actions/13-09-logging.md)) is its whole authority.
-- Ordinary feature events continue under the current binding while the successor candidate is
-  evaluated.
-
-- After the route adopts the changed candidate, the runner pauses new workflow nodes and buffers only
-  bounded typed `WorkflowTelemetryFact` values, preserving each active compiled workflow's
-  registry-validated shortcode.
-- In the same live run, the orchestrator builds/validates both policies/bindings, then visits
-  each enabled stream in fixed `event`, then `prompt` order.
-- It acquires the physical lock from the historical binding and converts that single token into
-  the validated dual-binding transition capability.
-- Under it, actions recover the historical active tail or validate an already-closed tail,
-  durably close when needed through `FeatureLogPort.closeForPolicyTransition`, initialize or
-  recover the successor-binding segment namespace, and validate the old/new boundary.
-- After all per-stream locks are released, the mixed-state assembler builds/validates one
-  complete successor sink; only then does `ActivateFeatureLogPolicyTransitionAction` swap the
-  run-local observer and flush buffered facts through the new definitions/policy.
-- No normal event/model/node occurs between the route's adoption of the changed candidate and
-  this switch.
-- Any failure emits the one fixed emergency record and enters `block_new_work`; the engine never
-  continues on an obsolete or partially switched policy.
+- A run keeps the one logging binding and policy its activation built in memory
+  ([ADR 0032](../decisions/0032-engine-routines.md)). A changed logging candidate
+  ([§9.4](09-configuration.md)) takes effect on the next run: no route switches policy mid-run, so
+  there is no policy-transition orchestrator, successor sink or buffered-fact handoff, and no
+  bootstrap authority, pointer or durable lineage is written for one
+  ([ADR 0009](../decisions/0009-atomic-workflow-execution.md)).
 
 - A process restart deliberately creates a fresh `runId`; it never pretends to resume or
   activate the crashed run's in-memory transition.
-- Fresh-run startup first uses the fixed event/prompt collection paths from the validated
-  `WorkflowArtifactRegistry` and active-feature capability; it does **not** build the current
-  run's policy or binding merely to discover history.
-- It scans/validates all bounded prior-run binding groups, resolves each historical policy
+- Prior-run history is found from the fixed event/prompt collection paths of the validated
+  `WorkflowArtifactRegistry`. The current run's activation runs first, so the current binding,
+  its sink and the active logger exist before any prior run is touched.
+- Discovery scans/validates all bounded prior-run binding groups, resolves each historical policy
   solely through its `segment_header` control row's policy identity
-  ([ADR 0026](../decisions/0026-header-identity-log-retention.md), amended 14 November 2026),
-  and processes groups in deterministic `(runId, bindingId, stream rank)` order.
-- For an active prior tail it acquires that prior run's ordinary single-binding physical lock,
-  recovers the tail, invokes `FeatureLogPort.closeHistoricalTailAfterCrash`, validates the
-  close, and releases; for a closed-only group it validates the durable `segment_trailer`
-  control row under the same lock and performs no write.
-- After release, `BuildHistoricalFeatureLogStreamFinalizationEvidenceAction` joins that exact
-  group result to its release observation.
-- `ValidateHistoricalFeatureLogRunFinalizationAction` requires one such discriminated record per
-  group and proves all locks released/no active prior tail.
-- Only that complete evidence authorizes canonicalization and construction of the fresh
-  current-authority policy/binding, emission of `run.started`, or current-run sink
-  initialization.
+  ([ADR 0026](../decisions/0026-header-identity-log-retention.md)), and processes groups in
+  deterministic `(runId, bindingId, stream rank)` order. A failure blocks the run.
+- For each active prior tail whose last segment has a complete header row, the prior-run
+  finalization routine acquires that prior run's own stream lock, proves under it that the group
+  still ends in an active tail, recovers the tail by truncating it to its last complete row,
+  writes one `segment_trailer` stamped with the trusted clock's reading, proves the group
+  closed, and releases the lock. A tail torn before its header row was complete has no identity
+  to close and is left whole. A closed-only group is never written.
+- Retention follows, so a finalized group is pruned like any closed one once its own close time
+  passes the retention period. Finalization and retention precede `run.started`.
 - Thus crash recovery needs no durable run-local transition pointer, and neither a current
-  binding nor a dual-binding capability is misapplied to a historical run.
-- Not yet implemented: prior-run finalization. The order above, relative to the current
-  activation, is undecided, and its preconditions are in
-  [ADR 0026](../decisions/0026-header-identity-log-retention.md). Retention runs after the
-  current activation and before `run.started`, and every prior group must still validate. A
-  prior run with an active tail is kept whole and unfinalized.
+  binding nor a dual-binding capability is misapplied to a historical run. A prior run's active
+  tail is crashed by assumption: concurrent runs of one feature are unsupported.
 
 ### 14.11 Implementation workflow composition
 
@@ -366,9 +337,14 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet 
 - Only a gate whose gaps are all `clarification_required` reaches the need builder; an
   upstream-rework or administrative-block entry blocks the gate first
   (`required_authority.zig:276`). The builder converts every such gap in one run: one
-  registered typed need per gap, owned by its requirement's registered owner stage (user
-  decision, 9 November 2026). The shared clarification refresh opens or updates one form per
-  need, keyed by its structural subject, and rejects two needs with the same stage and subject.
+  registered typed need per stage and structural subject, owned by its requirement's registered
+  owner stage (user decision, 9 November 2026). Gaps of one stage over one subject, such as two
+  signals over one line, are one need that asks each of their questions and binds the union of
+  their authorities (user decision, 23 November 2026; §12.7; ADR 0025). The shared clarification
+  refresh opens or updates one form per need, keyed by its structural subject, and rejects two
+  needs with the same stage and subject. A conflict's need is a selection among its claims; the engine applies the chosen
+  claim to the reconciliation before the ledger is built (ADR 0025, "The answer to a conflict"), so an answered conflict raises
+  no gap and a rerun rebuilds the ledger from the sources and the answers.
 - No gap is treated as resolved or omitted; a rerun rebuilds the ledger from current authority.
 - The complete reference-conflict set transition keeps its separate snapshot-consistency
   contract, which requires atomic set equality.

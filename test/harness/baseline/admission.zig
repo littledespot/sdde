@@ -333,7 +333,9 @@ pub const Tracker = struct {
     fn auditRecords(self: *Tracker, sequence: usize, after_call: usize, checked: generation.Checked, record_offset: usize, proposals: []const specification.RecordProposal) !void {
         for (proposals, 0..) |record, index| switch (record.content) {
             inline else => |fields, kind| inline for (std.meta.fields(@TypeOf(fields))) |field| {
-                try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = @unionInit(candidate.ValueField, field.name, {}) } } }, specification.textField(kind, field.name), @field(fields, field.name));
+                // An absent value is neither admitted nor audited.
+                const held: ?specification.BusinessValue = @field(fields, field.name);
+                if (held) |value| try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = @unionInit(candidate.ValueField, field.name, {}) } } }, specification.textField(kind, field.name), value);
             },
         };
     }
@@ -739,6 +741,24 @@ test "native audit retains distinct equal record fields but deduplicates their a
     try validate(a, tracker.snapshot(true), &.{ .{ .call = 1, .origin = testOrigin(1), .usage = null }, .{ .call = 2, .origin = testOrigin(2), .usage = null } });
 }
 
+test "native audit observes the parts an acceptance criterion holds, and none for an absent Given" {
+    const a = std.testing.allocator;
+    var tracker: Tracker = .init(a);
+    defer tracker.deinit();
+    const nodes = [_]text.BusinessSegment{.{ .literal = .{ .value = "The borrower asks to renew the loan." } }};
+    const value: specification.BusinessValue = .{ .segments = &nodes };
+    const provenance: specification.Provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} };
+    const records = [_]specification.RecordProposal{
+        .{ .content = .{ .acceptance_criterion = .{ .given = null, .when = value, .then = value } }, .source_group_ids = &.{}, .provenance = provenance },
+        .{ .content = .{ .acceptance_criterion = .{ .given = value, .when = value, .then = value } }, .source_group_ids = &.{}, .provenance = provenance },
+    };
+    const batch: generation.Checked = .{ .unit = .records, .origins = .{ .initial = testOrigin(1) }, .response = .{ .content = .{ .records = &records } } };
+    try tracker.unit(1, 1, batch, 0);
+    // The criterion without a Given offers its When and Then to the audit; the one with a Given offers all three.
+    try std.testing.expectEqual(@as(usize, 5), tracker.checks.items.len);
+    for ([_]policy.Field{ .ac_when, .ac_then, .ac_given, .ac_when, .ac_then }, tracker.checks.items) |expected, observed| try std.testing.expectEqual(expected, observed.field);
+}
+
 test "audit binds Subject and value kind to the native field policy instead of trusting labels" {
     const a = std.testing.allocator;
     var tracker: Tracker = .init(a);
@@ -839,7 +859,7 @@ test "source-checked refreshed questions retain native producers without inventi
     const sources = [_]evidence.Source{.{ .id = .{ .ordinal = 1 }, .path = .{ .bytes = "requirements.md" }, .reader = .markdown_source_v1, .bytes = "A delivery approval decision remains unresolved. Example: " ++ quoted, .blocks = &.{} }};
     const inputs: evidence.Inputs = .{ .corpus = .{ .state_id = .{ .bytes = "state" }, .feature_id = .{ .bytes = "parcels" }, .sources = &sources, .source_mappings = &.{}, .block_mappings = &.{} }, .chunks = .{ .state_id = .{ .bytes = "state" }, .partition = .source_blocks_v1, .entries = &.{} } };
     const original_sources = [_]wire.SourceText{.{ .source_id = sources[0].id, .bytes = sources[0].bytes }};
-    const records = [_]clarification.Record{.{ .id = "S01", .revision = 1, .subject = .{ .requirement = "specification", .unit = "brief", .slot = "content" }, .authority = &.{.{ .reference = .{ .bytes = "state" } }}, .question = "Which delivery approval rule applies?", .why_required = "The captured source leaves this decision open.", .answer_schema = .{ .bounded_business_text = clarification.max_text_bytes }, .status = .open, .response_id = null, .authority_resolution = null }};
+    const records = [_]clarification.Record{.{ .id = "S01", .revision = 1, .subject = .{ .requirement = "specification", .unit = "brief", .slot = "content", .sources = &.{} }, .authority = &.{.{ .reference = .{ .bytes = "state" } }}, .question = "Which delivery approval rule applies?", .why_required = "The captured source leaves this decision open.", .answer_schema = .{ .bounded_business_text = clarification.max_text_bytes }, .status = .open, .response_id = null, .authority_resolution = null }};
     const ready: clarification_refresh.Ready = .{ .state = .{ .value = .{ .schema = clarification.schema_version, .feature_id = "parcels", .state_ordinal = 1, .revision = 1, .next_ordinal = .{ .spec = 2, .plan = 1, .tasks = 1 }, .next_response_ordinal = 1, .records = &records, .responses = &.{} } }, .original_sources = &original_sources };
     _ = try ready.validate(a);
     const input_schema = @import("../../../src/application/reference_evidence_workflow.zig").inputs_schema;

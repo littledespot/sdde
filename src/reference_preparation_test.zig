@@ -72,6 +72,12 @@ const Countdown = struct {
 const Fake = struct {
     fail: ?evidence_stage.Step = null,
     bytes: []const u8 = source_text,
+    /// The number of entries: one, or two or three named `a.md`, `b.md` and `c.md` in inventory order.
+    count: usize = 1,
+    /// The capturer blocks the entry at each index with its reason.
+    blocked: [3]?reference.Failure = .{ null, null, null },
+    /// The capturer reports the entry at this index with a debit that does not match its bytes: a fault of the books.
+    books_fault: ?usize = null,
     duplicate_identity: bool = false,
     adapter: markdown.Adapter = .{ .io = undefined },
     ids: id_fixture.IdSource = .{},
@@ -107,8 +113,11 @@ const Fake = struct {
     fn enumerate(context: *anyopaque, _: *const roots.ReferenceContentReadCapability, allocator: std.mem.Allocator, selected: selector.Directory) corpus_port.Error!reference.RawInventory {
         const self: *Fake = @ptrCast(@alignCast(context));
         if (self.mark(.inventory_sources)) return error.ReferenceUnavailable;
-        const entries = try allocator.alloc(reference.Descriptor, if (self.duplicate_identity) 2 else 1);
-        entries[0] = self.descriptor(3);
+        const entries = try allocator.alloc(reference.Descriptor, if (self.duplicate_identity) 2 else self.count);
+        for (entries, 0..) |*entry, index| {
+            entry.* = self.descriptor(3 + index);
+            if (self.count > 1) entry.raw_path = ([_][]const u8{ "a.md", "b.md", "c.md" })[index];
+        }
         if (self.duplicate_identity) {
             entries[1] = self.descriptor(3);
             entries[1].raw_path = "other.md";
@@ -118,9 +127,16 @@ const Fake = struct {
     fn capture(context: *anyopaque, _: *const roots.ReferenceContentReadCapability, allocator: std.mem.Allocator, inventory: reference.Inventory) corpus_port.Error!reference.CapturedCorpus {
         const self: *Fake = @ptrCast(@alignCast(context));
         if (self.mark(.capture_sources)) return error.ReferenceUnavailable;
-        const entries = try allocator.alloc(reference.CapturedEntry, 1);
-        entries[0] = .{ .entry = inventory.entries[0], .source = .{ .bytes = self.bytes }, .debit = .{ .reserved = self.bytes.len, .outcome = .{ .committed = self.bytes.len } } };
-        return .{ .inventory = inventory, .entries = entries, .source_bytes = self.bytes.len, .budget_revision = 1 };
+        const entries = try allocator.alloc(reference.CapturedEntry, inventory.entries.len);
+        for (inventory.entries, entries, 0..) |entry, *captured, index| {
+            if (index < self.blocked.len) if (self.blocked[index]) |failure| {
+                captured.* = .{ .entry = entry, .source = .{ .blocked = failure }, .debit = null };
+                continue;
+            };
+            const reserved = if (self.books_fault == index) self.bytes.len + 1 else self.bytes.len;
+            captured.* = .{ .entry = entry, .source = .{ .bytes = self.bytes }, .debit = .{ .reserved = reserved, .outcome = .{ .committed = self.bytes.len } } };
+        }
+        return .{ .inventory = inventory, .entries = entries, .source_bytes = self.bytes.len * entries.len, .budget_revision = @intCast(entries.len) };
     }
     fn decode(context: *anyopaque, allocator: std.mem.Allocator, path: reference.RelativePath, bytes: []const u8, maximum: usize) @import("ports/reference_decoder.zig").Error!reference.Decoded {
         const self: *Fake = @ptrCast(@alignCast(context));
@@ -165,11 +181,90 @@ test "a failure in each reachable evidence step names that step and propagates t
     try expectEvidenceStops(&duplicate, .validate_inventory, error.InvalidReferenceInventory);
     var capture: Fake = .{ .fail = .capture_sources };
     try expectEvidenceStops(&capture, .capture_sources, error.ReferenceUnavailable);
-    // The reader blocks malformed text, which accounting does not accept as a document.
+    // The reader blocks malformed text, which accounting does not accept as a document and reports as its reason.
     var malformed: Fake = .{ .bytes = "\xff" };
-    try expectEvidenceStops(&malformed, .validate_accounting, error.InvalidReferenceAccounting);
+    try expectEvidenceStops(&malformed, .validate_accounting, error.ReferenceMalformedText);
     var identities: Fake = .{ .fail = .assign_identities };
     try expectEvidenceStops(&identities, .assign_identities, error.IdentityUnavailable);
+}
+
+fn entryPathText(diagnostic: *const evidence_stage.Diagnostic) ?[]const u8 {
+    if (diagnostic.entry_path) |*path| return path.text();
+    return null;
+}
+
+// ADR 0031: an error carries no payload, so the stage's diagnostic names the entry whose own reason the error is, by
+// its display path from the validated inventory, and no other failure names one.
+test "an entry's own reason names its display path in the stage diagnostic, and no other failure names one" {
+    const display = "reference-input/hello/source.md";
+    // Each reason the capturer can block an entry with, and the one the decoder blocks it with.
+    for (std.meta.tags(reference.Failure)) |failure| {
+        var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer scratch.deinit();
+        var fake: Fake = .{ .blocked = .{ failure, null, null } };
+        var diagnostic: evidence_stage.Diagnostic = .{};
+        try std.testing.expectError(reference.failureError(failure), fake.action().execute(scratch.allocator(), .{}, &diagnostic, directory, feature_id));
+        try std.testing.expectEqual(@as(?evidence_stage.Step, .validate_accounting), diagnostic.step);
+        try std.testing.expectEqualStrings(display, entryPathText(&diagnostic).?);
+    }
+    {
+        var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer scratch.deinit();
+        var malformed: Fake = .{ .bytes = "\xff" };
+        var diagnostic: evidence_stage.Diagnostic = .{};
+        try std.testing.expectError(error.ReferenceMalformedText, malformed.action().execute(scratch.allocator(), .{}, &diagnostic, directory, feature_id));
+        try std.testing.expectEqualStrings(display, entryPathText(&diagnostic).?);
+    }
+    // A fault of the inventory, a port or the identity source is no entry's reason: it names none. Nor does success.
+    const unnamed = [_]struct { fake: Fake, error_name: ?evidence_stage.Error }{
+        .{ .fake = .{ .fail = .inventory_sources }, .error_name = error.ReferenceUnavailable },
+        .{ .fake = .{ .duplicate_identity = true }, .error_name = error.InvalidReferenceInventory },
+        .{ .fake = .{ .fail = .capture_sources }, .error_name = error.ReferenceUnavailable },
+        .{ .fake = .{ .fail = .assign_identities }, .error_name = error.IdentityUnavailable },
+        .{ .fake = .{}, .error_name = null },
+    };
+    for (unnamed) |case| {
+        var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer scratch.deinit();
+        var fake = case.fake;
+        var diagnostic: evidence_stage.Diagnostic = .{};
+        if (case.error_name) |expected| {
+            try std.testing.expectError(expected, fake.action().execute(scratch.allocator(), .{}, &diagnostic, directory, feature_id));
+        } else _ = try fake.action().execute(scratch.allocator(), .{}, &diagnostic, directory, feature_id);
+        try std.testing.expectEqual(@as(?[]const u8, null), entryPathText(&diagnostic));
+    }
+    // A path longer than the bound names none, and the error is unchanged.
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    var long = directory;
+    const long_path = [_]u8{'a'} ** 600;
+    long.project_relative_path = &long_path;
+    var fake: Fake = .{ .blocked = .{ .unsupported_media, null, null } };
+    var diagnostic: evidence_stage.Diagnostic = .{};
+    try std.testing.expectError(error.ReferenceUnsupportedMedia, fake.action().execute(scratch.allocator(), .{}, &diagnostic, long, feature_id));
+    try std.testing.expectEqual(@as(?[]const u8, null), entryPathText(&diagnostic));
+}
+
+// The first entry that fails is the one named, whatever precedes or follows it, and a fault of the books that comes first
+// names none, because `validateAccounting` stops there and the error is not an entry's own reason.
+test "the stage names the first failing entry among several and none when the books fault first" {
+    const ordered = [_]struct { fake: Fake, expected: evidence_stage.Error, path: ?[]const u8 }{
+        .{ .fake = .{ .count = 2, .blocked = .{ null, .unsupported_media, null } }, .expected = error.ReferenceUnsupportedMedia, .path = "reference-input/hello/b.md" },
+        .{ .fake = .{ .count = 3, .blocked = .{ null, .unsupported_media, .symlink } }, .expected = error.ReferenceUnsupportedMedia, .path = "reference-input/hello/b.md" },
+        .{ .fake = .{ .count = 3, .blocked = .{ .symlink, null, .unsupported_media } }, .expected = error.ReferenceSymlink, .path = "reference-input/hello/a.md" },
+        .{ .fake = .{ .count = 2, .books_fault = 0, .blocked = .{ null, .symlink, null } }, .expected = error.InvalidReferenceAccounting, .path = null },
+    };
+    for (ordered) |case| {
+        var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer scratch.deinit();
+        var fake = case.fake;
+        var diagnostic: evidence_stage.Diagnostic = .{};
+        try std.testing.expectError(case.expected, fake.action().execute(scratch.allocator(), .{}, &diagnostic, directory, feature_id));
+        try std.testing.expectEqual(@as(?evidence_stage.Step, .validate_accounting), diagnostic.step);
+        if (case.path) |path| {
+            try std.testing.expectEqualStrings(path, entryPathText(&diagnostic).?);
+        } else try std.testing.expectEqual(@as(?[]const u8, null), entryPathText(&diagnostic));
+    }
 }
 
 test "evidence cancellation is checked between every pair of steps and stops before the next" {
@@ -224,7 +319,7 @@ const Prepared = struct {
 fn prepareTokens(allocator: std.mem.Allocator) !Prepared {
     var ids: id_fixture.IdSource = .{};
     const inputs = try id_fixture.prepare(allocator, &ids, try @import("reference_ingestion_test.zig").read(allocator, "source.md", source_text));
-    const owner = safety.validate(allocator, .{ .packages = &.{}, .policies = &.{"project.zig@1"} }, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
+    const owner = safety.validate(allocator, &.{"project.zig@1"}, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
     errdefer safety.deinitOwner(owner);
     const policy = try (@import("actions/toolchain/compile_naming_policy.zig").Action{ .normalizer = fixture.normalizer, .folder = fixture.folder }).execute(allocator, safety.value(owner));
     return .{ .owner = owner, .policy = policy, .inputs = inputs };
@@ -253,7 +348,7 @@ test "a naming policy compiled for another toolchain fails the grammar step" {
     defer arena.deinit();
     const prepared = try prepareTokens(arena.allocator());
     defer prepared.deinit();
-    const successor = safety.validate(arena.allocator(), .{ .packages = &.{}, .policies = &.{"project.zig@1"} }, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
+    const successor = safety.validate(arena.allocator(), &.{"project.zig@1"}, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
     defer safety.deinitOwner(successor);
     var diagnostic: token_stage.Diagnostic = .{};
     try std.testing.expectError(error.StaleNamingPolicy, tokenAction().execute(arena.allocator(), .{}, &diagnostic, prepared.policy, safety.value(successor), prepared.inputs));
@@ -328,7 +423,6 @@ fn invokeBinding(comptime Runner: type, comptime contract: pipeline.NodeContract
         .step = &step,
         .resources = &.{},
         .model_binding = null,
-        .log = pipeline.WorkflowLog.init(.{ .bytes = "TEST".* }),
         .runtime = runtime,
         .stage_step = slot,
     } });
@@ -376,6 +470,15 @@ test "the evidence binding publishes exactly the citable inputs and hands the sl
     var cancelled_slot: pipeline.StageStepSlot = .{};
     try std.testing.expectError(error.Cancelled, invokeBinding(evidence_runner.PrepareReferenceEvidence, evidence_stage.Action.contract, &cancelled, view, countdown.runtime(), &cancelled_slot));
     try std.testing.expectEqualStrings("validate_inventory", cancelled_slot.name.?);
+    // An entry's own reason also hands the slot its display path, copied by value before the scratch arena is
+    // released; the other failures leave it empty.
+    var blocked: Fake = .{ .blocked = .{ .unsupported_media, null, null } };
+    var blocked_runner: evidence_runner.PrepareReferenceEvidence = .{ .allocator = std.testing.allocator, .action = blocked.action() };
+    var blocked_slot: pipeline.StageStepSlot = .{};
+    try std.testing.expectError(error.ReferenceUnsupportedMedia, invokeBinding(evidence_runner.PrepareReferenceEvidence, evidence_stage.Action.contract, &blocked_runner, view, .{}, &blocked_slot));
+    try std.testing.expectEqualStrings("validate_accounting", blocked_slot.name.?);
+    try std.testing.expectEqualStrings("reference-input/hello/source.md", blocked_slot.entry_path.?.text());
+    try std.testing.expect(slot.entry_path == null and cancelled_slot.entry_path == null);
 }
 
 test "the evidence binding cleans up on every allocation failure" {
@@ -408,7 +511,7 @@ const token_read: pipeline.NodeContract = .{ .id = "read", .kind = .action, .req
 
 /// Seeds the envelope with the token stage's three inputs; the envelope takes the toolchain owner.
 fn seedTokenInputs(arena: std.mem.Allocator, envelope: *Envelope) !void {
-    const owner = safety.validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"project.zig@1"} }, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
+    const owner = safety.validate(std.testing.allocator, &.{"project.zig@1"}, @import("composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
     var ids: id_fixture.IdSource = .{};
     const inputs = try id_fixture.prepare(arena, &ids, try @import("reference_ingestion_test.zig").read(arena, "source.md", source_text));
     const policy = try (@import("actions/toolchain/compile_naming_policy.zig").Action{ .normalizer = fixture.normalizer, .folder = fixture.folder }).execute(arena, safety.value(owner));

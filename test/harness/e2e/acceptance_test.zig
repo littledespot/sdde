@@ -33,7 +33,6 @@ pub fn completed(a: std.mem.Allocator) !c.Report {
     };
     input.case_bytes = try std.json.Stringify.valueAlloc(a, input.case, .{});
     return .{
-        .schema = .@"spec-e2e-report/v20",
         .started_at_utc = "2026-10-17T00:00:00Z",
         .execution_id = "MOCK-run",
         .case_id = "MOCK-workflow-case",
@@ -87,7 +86,7 @@ test "E2E publication awaits adjudication and status or stored pass never accept
     try gate.apply(a, &complete);
     try std.testing.expectEqual(.adjudication_required, complete.acceptance.unresolved);
     for (std.meta.tags(c.Status)) |status| {
-        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
+        const asserted: c.Report = .{ .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
         try std.testing.expect(!try gate.commandSucceeded(a, asserted));
     }
     complete.expected_outcome = null;
@@ -114,6 +113,36 @@ test "E2E publication and clarification have distinct explicit expected outcomes
     report = try pause(a);
     report.clarifications = &.{.{ .id = .{ .stage = .spec, .ordinal = 2 }, .path = .{ .root = .specs, .root_relative = "other/clarify/S02.md", .project_relative = "specs/other/clarify/S02.md" } }};
     try std.testing.expectEqual(.invalid_clarifications, (try gate.evaluate(a, report)).unresolved);
+}
+
+test "a case that answers a form states each leg's own outcome, and a first leg with nothing to answer is an unmet outcome" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // The first leg is a clarification run: it passes without adjudication, and the launch goes on to the second.
+    var first = try pause(a);
+    first.expected_outcome = .clarification;
+    try std.testing.expect(try gate.commandSucceeded(a, first));
+    // The second leg is a publication run: it awaits adjudication like any publication, and names the first it continues.
+    var second = try completed(a);
+    second.continued_from = "2026-11-24T00-00-00Z-0123456789abcdef0123456789abcdef";
+    try std.testing.expectEqual(.adjudication_required, (try gate.evaluate(a, second)).unresolved);
+    // The case's combined outcome is not a leg's: a report that carries it is not accepted as either.
+    for ([_]c.Report{ try pause(a), try completed(a) }) |leg| {
+        var combined = leg;
+        combined.expected_outcome = .clarification_then_publication;
+        try std.testing.expectEqual(.unexpected_outcome, (try gate.evaluate(a, combined)).failed);
+    }
+    // A first leg that paused on no single form that offers the answer is reported, never accepted, and never answered.
+    var unanswered = try pause(a);
+    unanswered.status = .answer_unavailable;
+    unanswered.diagnostic = "ANSWER_FORM_COUNT";
+    try std.testing.expectEqual(.unexpected_outcome, (try gate.evaluate(a, unanswered)).failed);
+    try std.testing.expect(!try gate.commandSucceeded(a, unanswered));
+    // A first leg that published without pausing is not the pause the case expects.
+    var published = try completed(a);
+    published.expected_outcome = .clarification;
+    try std.testing.expectEqual(.unexpected_outcome, (try gate.evaluate(a, published)).failed);
 }
 
 test "E2E acceptance replays complete admission evidence and requires measured zero" {
@@ -203,7 +232,7 @@ test "E2E publication requires the generated status and an unconfigured threshol
         }
     }
     // The threshold precondition stops before any workflow outcome exists.
-    report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .threshold_unconfigured, .expected_outcome = .publication, .diagnostic = "ACCEPTANCE_THRESHOLD_UNCONFIGURED" };
+    report = .{ .started_at_utc = "", .status = .threshold_unconfigured, .expected_outcome = .publication, .diagnostic = "ACCEPTANCE_THRESHOLD_UNCONFIGURED" };
     try std.testing.expectEqual(.grading_unresolved, (try gate.evaluate(a, report)).unresolved);
 }
 

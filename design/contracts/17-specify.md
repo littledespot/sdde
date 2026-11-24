@@ -171,9 +171,12 @@ Typed content covers these concerns; each concern does not require a separate ca
   references resolve through the canonical projector, not from display equality.
 - There is no unreferenced command description to use as provenance.
 - The model returns typed business content rather than Markdown.
-- Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and
-  `then` value; the model does not supply Markdown labels or combine the three values into
-  free-form prose.
+- Each acceptance-criterion proposal contains exactly one nonempty typed `when` and `then`
+  value and at most one nonempty typed `given`, which it omits where the sources state no
+  starting situation for the requirement
+  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3); the
+  model does not supply Markdown labels or combine the values into free-form prose. An edge
+  case's own `given` stays required.
 
 [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#authored-associations)
 couples semantic support selection with the existing authoring assignments. There
@@ -197,7 +200,11 @@ Do not invent an actor, benefit or entity to fill a field.
 
 Record authoring binds one complete retained group containing at least one
 non-token claim and may return multiple records
-or none. Each record names the claims it supports, a nonempty subset of that group's
+or none. A batch over a group that holds an open question is offered only its
+clarification outcome, never record content (the engine excludes the records variant
+from that batch's request, through the schema restriction it already applies): a
+positive record cannot map an open question, so the request offers what validation
+accepts. Each record names the claims it supports, a nonempty subset of that group's
 claims kept in the group's order, and keeps exactly one group occurrence. Requirements
 own their claims: in one response, a business rule, outcome, assumption, non-goal or
 prohibition whose every claim a requirement or an earlier such record names is deleted
@@ -280,8 +287,11 @@ For each feature-brief or specification unit other than the engine-composed stor
   business claims in source order (corpus source, then first cited byte), each quote
   made one paragraph from its cited source lines, whose heading, code and list
   structure comes from the source reader's line structure (blank and heading lines
-  dropped, each line's indentation and leading list marker removed, code lines kept
-  as text, lines joined by one space; a quote of headings alone skipped), the quotes
+  dropped, a Setext heading's text included, and the lines that are Markdown structure
+  with no wording: a code fence's opening and closing line, a table delimiter row, a
+  thematic break, a Setext underline; each line's indentation and leading list marker
+  removed, code lines and table rows kept as text, lines joined by one space; a quote
+  with no words left skipped), the quotes
   joined by one space. The story selects the groups whose claims it quotes and it
   passes the same unit validation as any unit, which recognises its exact values as
   in model text. It has no clarification or inconclusive outcome; a catalogue with no
@@ -355,9 +365,9 @@ For each feature-brief or specification unit other than the engine-composed stor
   Original candidate indices/origins survive canonical section-order projection;
   native repair targets records by those candidate indices, never by canonical ID.
   A record clarification must name its closed `record_kind`; other generation
-  units prohibit that field. The existing clarification builder uses that family
-  as its subject, preserving identities across reruns instead of merging all record
-  questions into a new generic subject. This changes no clarification admission rule.
+  units prohibit that field. The engine derives the subject from the sources and never
+  reads the family ([ADR 0025](../decisions/0025-clarification-answer-authentication.md),
+  the clarification subject and Decision 6).
 
 - **Scenario slots** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
   Decision 3): once every group's records are admitted and the native deletes have run,
@@ -377,9 +387,12 @@ For each feature-brief or specification unit other than the engine-composed stor
   batch (SPEC01 D12.1). Its result schema admits
   one item per slot, the slot's number and a content-only acceptance criterion, each number
   exactly once (`exact_members`), with no claim, kind or group. The answer has no clarification
-  or inconclusive form. Items that return equal
+  or inconclusive form. An item's `given` is omitted where the claim's sources state no
+  starting situation, and the schema requires only its number, `when` and `then`. Items that return equal
   values for the criterion's given, when and then take the request's protocol correction,
-  which names the number of every item in each equal set (`distinct`, §12.2; §22.6). The engine fixes each
+  which names the number of every item in each equal set (`distinct`, §12.2; §22.6); an omitted
+  given equals only another omitted given, so two items that share a `when` and a `then` and
+  both omit it are equal, and one that omits it differs from one that states it. The engine fixes each
   criterion's kind, claim and group and appends the criteria to the group's batch in slot
   order; full unit validation and the field-level value repair then apply (§22.3), which
   never changes a criterion's claim. A criterion's exact copy must be a value its slot's
@@ -389,19 +402,22 @@ For each feature-brief or specification unit other than the engine-composed stor
   defect (`scenario_coverage`) that takes no repair. No criterion is inserted for an edge
   case.
 
-- **Edge-case outcome links** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
-  Decision 7): an edge case's response names its condition and claims, and no outcome. When
+- **Edge-case scenario links** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+  Decision 7): an edge case's response names its own `given` and claims, and no `when`, `then`
+  or outcome. When
   the scenarios step completes, the `link-scenarios` step finds each edge case's candidates
   natively: the acceptance criteria of its own batch that name one of its claims. One
   candidate is the link; two or more make one request per edge case that offers the
-  criteria, numbered, with their given, when and then, and returns one offered id (a result
+  criteria, numbered, with their given (where they hold one), when and then, and returns one offered id (a result
   schema that admits those ids and no text; the prompt is `links.prompt.md`); none blocks
   with the typed rejection `edge_case_without_criterion`, which names the edge case's group
-  and claims and is never repaired or retried. The engine prints the linked criterion's Then
-  as the edge case's outcome (§23.1) and stores the link as the criterion's ID, which
-  readback checks against the same candidate rule. The step takes one native iteration
-  population, the edge cases that need a choice; the model never selects a record, writes
-  an outcome or sees another batch's criteria.
+  and claims and is never repaired or retried. The engine prints the edge case as the linked
+  criterion's scenario with the edge case's own given added to its Given, or as its whole Given where
+  the criterion has none (§23.1), and stores
+  the link as the criterion's ID, which readback checks against the same candidate rule. The
+  step takes one native iteration population, the edge cases that need a choice; the model
+  never selects a record, writes a `when`, a `then` or an outcome, or sees another batch's
+  criteria.
 
 - **Draft-first sequencing:** complete validated references with a nonempty selectable retained group catalogue admit
   execution-local section generation without a
@@ -480,10 +496,15 @@ select a repair producer or turn candidate assertions into source requirements.
 - [ADR 0025](../decisions/0025-clarification-answer-authentication.md) defines that actor as the
   operating-system account that runs the engine; running Specify with valid closed forms
   accepts them. If any closed form is invalid, the run accepts none of them, makes no model
-  call and reports a typed reason for each failing form. Not yet implemented.
-- An empty close is invalid; `defer` remains open; `cancel` cancels the run.
-- Path-shaped answer text is scanned into the inert passive registry under the assigned response
-  ID, and that complete clarification response is published before refresh.
+  call and reports a typed reason for each failing form: its handle and the rule it broke,
+  printed with the outcome. The run ends `blocked`.
+- An empty close is invalid; `defer` remains open, takes no authentication and records nothing; a
+  `cancel` with its reason is accepted like a closed form and ends the run `cancelled` before any
+  model call.
+- Path-shaped answer text is scanned into the inert passive registry under the assigned response ID.
+  Accepted responses stay in memory through refresh and generation and are published only with the
+  run's own publication, so a run that fails, is blocked or is interrupted publishes none, and the
+  next run accepts the same closed forms again.
 
 - The engine then refreshes the selected reference directory and tests still-open `SNN` records
   against the new claims/citations.
@@ -508,7 +529,7 @@ The engine validates:
 - workflow-declared operation result schema and source references;
 - nonempty mandatory IR fields;
 - fixed singleton provenance keys plus engine-assigned, unique, well-formed `AC/UO/EC/FR/BR/AS/NG/PB/EN-*` identifiers; initial generation is gap-free per prefix, while edits preserve surviving IDs, allocate new monotonically increasing IDs, and never reuse deleted IDs;
-- exactly one nonempty `given`, `when`, and `then` field for each acceptance criterion; combined free-form, unlabeled, missing, duplicated, or reordered acceptance-condition content is invalid;
+- exactly one nonempty `when` and `then` field and at most one nonempty `given` field for each acceptance criterion; combined free-form, unlabeled, missing, duplicated, or reordered acceptance-condition content is invalid;
 - duplicate or byte-identical requirements;
 - typed clarification state rather than fragile substring matching;
 - citation validity and reference-file accounting;

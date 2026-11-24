@@ -80,7 +80,7 @@ test "model capture preserves full sanitized bodies and existing request attempt
     try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .transport_outcome = .{ .outcome = .cancelled } }, &.{}));
     try std.testing.expect(std.mem.startsWith(u8, sink.fragments.items[before + 1].fragment_id.bytes, "inference-response-transport_outcome-utf8-"));
     try std.testing.expect(!std.mem.eql(u8, sink.fragments.items[before].fragment_id.bytes, sink.fragments.items[before + 1].fragment_id.bytes));
-    try std.testing.expect(logger.failure == null);
+    try std.testing.expect(logger.failure() == null);
 }
 
 test "capture keeps binary provider responses reversible" {
@@ -107,10 +107,10 @@ test "capture serialization failure records logging failure without a false body
     logger.begin(metadata);
     defer logger.end();
     try std.testing.expectEqual(.blocked, logger.port().capture(.response, .{ .transport_outcome = .{ .outcome = .transport_failed } }, &.{}));
-    try std.testing.expectEqual(.LOG_SERIALIZATION_FAILURE, logger.failure.?.code);
-    try std.testing.expectEqual(.lineage, logger.failure.?.stage);
-    try std.testing.expectEqual(.allocation, logger.failure.?.cause);
-    try std.testing.expectEqualDeep(metadata.origin, logger.failure.?.origin.?);
+    try std.testing.expectEqual(.LOG_SERIALIZATION_FAILURE, logger.failure().?.code);
+    try std.testing.expectEqual(.lineage, logger.failure().?.stage);
+    try std.testing.expectEqual(.allocation, logger.failure().?.cause);
+    try std.testing.expectEqualDeep(metadata.origin, logger.failure().?.origin.?);
     try std.testing.expectEqual(@as(usize, 0), sink.fragments.items.len);
 }
 
@@ -129,22 +129,22 @@ test "capture honors disabled selection and makes persistence failures sticky" {
     const body = try a.alloc(u8, 10001);
     @memset(body, 'x');
     try std.testing.expectEqual(.blocked, logger.port().capture(.request, .{ .provider_body = body }, &.{}));
-    try std.testing.expectEqual(.LOG_FLUSH_FAILURE, logger.failure.?.code);
-    try std.testing.expectEqual(.persistence, logger.failure.?.stage);
-    try std.testing.expectEqual(.LOG_FLUSH_FAILURE, logger.failure.?.cause.sink);
+    try std.testing.expectEqual(.LOG_FLUSH_FAILURE, logger.failure().?.code);
+    try std.testing.expectEqual(.persistence, logger.failure().?.stage);
+    try std.testing.expectEqual(.LOG_FLUSH_FAILURE, logger.failure().?.cause.sink);
     try std.testing.expectEqual(@as(usize, 1), sink.fragments.items.len);
     sink.failure_at = null;
-    const retained_failure = logger.failure.?;
+    const retained_failure = logger.failure().?;
     try std.testing.expectEqual(.blocked, logger.port().capture(.response, .{ .provider_body = "must not continue" }, &.{}));
     try std.testing.expectEqual(@as(usize, 1), sink.fragments.items.len);
-    try std.testing.expectEqualDeep(retained_failure, logger.failure.?);
+    try std.testing.expectEqualDeep(retained_failure, logger.failure().?);
     var drop_logger: capture.Capture = .{ .allocator = a, .logs = sink.barrier() };
     sink.drop = true;
     drop_logger.begin(metadata);
     defer drop_logger.end();
     try std.testing.expectEqual(.blocked, drop_logger.port().capture(.response, .{ .provider_body = "unexpectedly dropped" }, &.{}));
-    try std.testing.expectEqual(.LOG_SERIALIZATION_FAILURE, drop_logger.failure.?.code);
-    try std.testing.expectEqual(.prompt_dropped, drop_logger.failure.?.cause);
+    try std.testing.expectEqual(.LOG_SERIALIZATION_FAILURE, drop_logger.failure().?.code);
+    try std.testing.expectEqual(.prompt_dropped, drop_logger.failure().?.cause);
 }
 
 test "request lineage distinguishes retry repair and unrelated requests" {
@@ -195,7 +195,7 @@ test "assembled candidate repair request capture does not invent a producing cal
     logger.begin(assembled);
     defer logger.end();
     try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = "authorized assembled-candidate insertion" }, &.{}));
-    try std.testing.expect(logger.failure == null);
+    try std.testing.expect(logger.failure() == null);
     const links = sink.fragments.items[0].attribution.?.links;
     try std.testing.expectEqual(.repair, links.kind);
     try std.testing.expectEqual(.assembled_candidate, links.source);
@@ -265,7 +265,7 @@ test "capture lineage failures remain attributable and never persist secret byte
         logger.begin(selected);
         defer logger.end();
         try std.testing.expectEqual(.blocked, logger.port().capture(.request, .{ .provider_body = "secret-value" }, &.{"secret-value"}));
-        const detail = logger.failure.?;
+        const detail = logger.failure().?;
         try std.testing.expectEqual(.lineage, detail.stage);
         const expected: @import("domain/model_call_lineage.zig").Rejection = if (source == .none) .missing_source else .unknown_source;
         try std.testing.expectEqual(expected, detail.cause.lineage);
@@ -297,14 +297,14 @@ test "capture allocation faults identify lineage serialization and redaction pha
         const result = logger.port().capture(.response, .{ .transport_outcome = .{ .outcome = .transport_failed } }, &.{"secret-value"});
         if (result == .recorded) break;
         try std.testing.expectEqual(.blocked, result);
-        const detail = logger.failure.?;
+        const detail = logger.failure().?;
         try std.testing.expectEqual(.allocation, detail.cause);
         try std.testing.expectEqual(.LOG_SERIALIZATION_FAILURE, detail.code);
         observed.insert(detail.stage);
         const before = sink.fragments.items.len;
         try std.testing.expectEqual(.blocked, logger.port().capture(.response, .{ .provider_body = "discarded" }, &.{}));
         try std.testing.expectEqual(before, sink.fragments.items.len);
-        try std.testing.expectEqualDeep(detail, logger.failure.?);
+        try std.testing.expectEqualDeep(detail, logger.failure().?);
     }
     for ([_]diagnostics.Stage{ .lineage, .request_description_serialization, .transport_outcome_serialization, .redaction }) |stage| try std.testing.expect(observed.contains(stage));
 }
@@ -321,7 +321,7 @@ test "request and returned-body persistence failures retain their exact code and
             logger.begin(metadata);
             defer logger.end();
             try std.testing.expectEqual(.blocked, logger.port().capture(direction, .{ .provider_body = "unpersisted body" }, &.{}));
-            const detail = logger.failure.?;
+            const detail = logger.failure().?;
             try std.testing.expectEqual(failure_code, detail.code);
             try std.testing.expectEqual(failure_code, detail.cause.sink);
             try std.testing.expectEqual(.persistence, detail.stage);

@@ -4,6 +4,9 @@
     "allow": [
       "Edit(**/*.md)",
       "Edit(/design/schemas/**)",
+      "Edit(/evaluations/**)",
+      "Skill(evaluate-e2e)",
+      "Skill(evaluate-e2e *)",
       "Bash(zig *)",
       "Bash(SDDE_REQUEST_PROJECTION=* zig build *)",
       "Bash(./scripts/test-integration.sh *)",
@@ -39,7 +42,8 @@
       "Bash(zig build * provider-compatibility*)",
       "Bash(zig build baseline*)",
       "Bash(zig build * baseline*)",
-      "Bash(*scripts/e2e-spec.sh*)",
+      "Skill(live-e2e)",
+      "Skill(live-e2e *)",
       "Bash(*scripts/e2e-call.sh*)",
       "Bash(*scripts/provider-compatibility.sh*)",
       "Bash(*scripts/baseline.sh*)",
@@ -61,12 +65,24 @@
       "Bash(*.env.e2e)",
       "Bash(*.env.e2e *)",
       "Bash(git *)",
+      "Edit(/.claude/live-e2e-approvals/**)",
       "Edit(/zig-pkg/**)",
       "Edit(/.zig-cache/**)",
       "Edit(/zig-out/**)"
     ]
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/live-e2e-approval.py record",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -88,6 +104,16 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format-zig.sh",
             "timeout": 30,
             "statusMessage": "zig fmt"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/live-e2e-approval.py record",
+            "timeout": 10
           }
         ]
       }

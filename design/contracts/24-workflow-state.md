@@ -16,6 +16,10 @@ Part of the [proposed design](../design.md#24-state-sequence-and-recovery-withou
   `canonicalEngineStateRoot` (equivalently feature-relative `state/workflow.json`).
 - The exact result is `<paths.workflows>/features/<featureId>/state/workflow.json`; logs remain
   beneath `<paths.specs>/<featureId>/logs/`.
+- The clarification state and the actor-evidence registry
+  ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)) are its siblings,
+  `state/clarifications.json` and `state/actor-evidence.json`. A run that writes the registry writes it
+  before the clarification state, and `workflow.json` stays last.
 - These paths are neither optional nor ad hoc and cannot be independently configured, supplied
   by a model/workflow definition, or replaced by another state layout:
 
@@ -27,16 +31,19 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v25,
+`specification-state` contract (currently v29,
 [ADR 0015](../decisions/0015-specification-principle-review.md),
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md),
-[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7 and
-[ADR 0048](../decisions/0048-engine-derived-specification-title.md); v26 is
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 3 and 7,
+[ADR 0048](../decisions/0048-engine-derived-specification-title.md) and
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md), whose `clarification-state/v3` joins each
+response to the actor-evidence registry; v30 is
 reserved for the `spec_incomplete` variant of
 [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
-since 30 October 2026, not implemented) over canonical `specification/v6` content, in which
-an edge case holds the ID of the acceptance criterion it links to and readback checks the
-link against the candidate rule of ADR 0038 Decision 7, and the display name is native text
+since 30 October 2026, not implemented) over canonical `specification/v8` content, in which
+an acceptance criterion holds a `given` only where its sources state a starting situation
+(ADR 0038 Decision 3), an edge case holds its own `given` and the ID of the acceptance criterion it links to, and
+readback checks the link against the candidate rule of ADR 0038 Decision 7, and the display name is native text
 that readback derives again from the captured sources (ADR 0048);
 stage discriminators distinguish the variants. Earlier versions reject without
 migration, aliases or a compatibility reader. The completed variant keeps the captured
@@ -59,9 +66,11 @@ invalidates affected descendants through the stage rules below.
   classification, dispositions and complete original-occurrence coverage (ADR 0024).
   Inconsistent stored authority rejects instead of being inferred from matching
   display bytes. Request-native exact scope binds its snapshot and eligible occurrence
-  bytes; `model-request-debug/v19` retains it for diagnostics, not state recovery.
+  bytes; `model-request-debug/v21` retains it for diagnostics, not state recovery.
   Published-state validation needs no model request, historical capture or operation
-  port.
+  port. It validates each stored citation against its claim's chunk and the source's bytes
+  with the admission check, and re-quotes each stored extraction claim from its citations
+  with the pure Unicode normalizer (ADR 0036).
 - **Review evidence.** State holds no review evidence (ADR 0023). Source-review
   findings, including §12's nullable `authority_gap` and ADR 0023's source-only
   readiness evidence, are execution-local, and readback restores none of them.
@@ -90,9 +99,9 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
   are non-failure pauses with a committed clarification-registry revision and no newly accepted
   stage IR.
 - A current validated authority resolution or authenticated response to the current record
-  revision returns to `specifying`, `planning`, or `tasking`; the clarification response
-  publication commits first, then every generation unit in the owning stage is regenerated from
-  its current complete authority set.
+  revision returns to `specifying`, `planning`, or `tasking`; the accepted response is held in
+  memory, then every generation unit in the owning stage is regenerated from its current complete
+  authority set, and the response is published with the run's own publication.
 - Nothing from the paused execution is reused
   ([§25.2](25-publication.md#252-abandonment-and-reruns)).
 - If the user explicitly chooses `defer` while the answer is required, the same record remains
@@ -114,13 +123,16 @@ State alone never authorizes a stage.
 - Reruns use applicable validated answers before proposing new questions.
 - Deduplication uses the stable target, earliest owner, requirement kind, subject selector and
   required slot; execution IDs, regenerated authority IDs, wording and transient gap reasons do
-  not define a new clarification.
+  not define a new clarification. The subject selector is the source text the engine derives from
+  its citations: each cited source's normalized relative path with the exact lines, persisted in
+  `clarification-state/v4`, which `specification-state` binds by ordinal and revision only
+  ([ADR 0025](../decisions/0025-clarification-answer-authentication.md), the clarification subject).
 - Current applicability is validated separately; changed evidence may reopen only an unprotected
   record, and §23.2 governs a protected one.
 - Ambiguous subject correspondence blocks rather than using fuzzy text matching.
 
 - The editable `spec.md` is reparsed and fully validated.
-- The current clarification registry and exact `clarify/` inventory are parsed/validated; only registered current-revision answer regions are imported, and the requested stage's closed-prefix matrix is enforced.
+- The current clarification registry and `clarify/` inventory are parsed/validated (§23.2 names the unmatched open forms a rerun sets aside and the files the inventory leaves alone); only registered current-revision answer regions are imported, and the requested stage's closed-prefix matrix is enforced.
 - When canonical plan state exists, the engine compares current normalized `SpecificationIR` directly with the stored plan-input `SpecificationIR`. A difference invalidates plan/task canonical state and approvals and returns the workflow to `specified`.
 - Canonical reference, the published `PlanInputAuthorityState`, its bound `PlanState`, task-definition, and task-runtime IR are loaded from engine state and revalidated directly.
 - Current repository facts are rebuilt. Each gate-sensitive value is directly compared through `CompareRepositoryFactValueAction`; during implementation, only a `transition_requires_task_binding` fact with a matching approved `FactTransitionBinding`, transition rule, and validated named-task execution evidence may differ from the plan input. An unexplained difference triggers the relevant plan/task reconciliation path.

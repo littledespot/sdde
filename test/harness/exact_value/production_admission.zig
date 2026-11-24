@@ -46,7 +46,7 @@ pub const Row = struct {
     outcome: Outcome,
 };
 pub const Report = struct {
-    version: enum { @"exact-value-production-admission/v3" } = .@"exact-value-production-admission/v3",
+    version: enum { @"exact-value-production-admission/v4" } = .@"exact-value-production-admission/v4",
     projection: enum { current_native_test_context_over_retained_source_bytes } = .current_native_test_context_over_retained_source_bytes,
     historical_metadata_promoted: bool = false,
     model_calls: usize = 0,
@@ -172,7 +172,7 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
             return error.InvalidCurrentAdmissionFixture;
         },
     };
-    const context: p.Context = .{ .inputs = reference.inputs, .references = accounted, .registry = reference.text.registry, .current = text.safety.value(reference.text.owner) };
+    const context: p.Context = .{ .inputs = reference.inputs, .references = accounted, .registry = reference.text.registry };
     var current = switch (try sessions.initialize(a, context.inputs.corpus.feature_id, context)) {
         .ready => |ready| ready,
         .blocked => |failure| {

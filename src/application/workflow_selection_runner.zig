@@ -82,7 +82,6 @@ pub const Runner = struct {
         return switch (self.runtime.status()) {
             .active => null,
             .cancelled => .cancelled,
-            .deadline_exhausted => .failed,
         };
     }
 };

@@ -17,6 +17,36 @@ test "specification record identity is closed and grows beyond three digits" {
     try testing.expect(std.meta.stringToEnum(spec.Kind, "open_question") == null);
 }
 
+test "a record family's scope section is the one printed under a level-four heading" {
+    inline for (comptime std.meta.tags(spec.Kind)) |kind| {
+        try testing.expectEqual(std.mem.startsWith(u8, comptime kind.heading(), "#### "), comptime kind.isScopeSection());
+    }
+}
+
+test "the generation schema defines every record family and lets a clarification name each family the records step authors" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(testing.io, "design/workflows/spec/generation.schema.json", allocator, .unlimited);
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, allocator, bytes, .{});
+    const definitions = parsed.object.get("$defs").?.object;
+    const kinds = definitions.get("record_clarification").?.object.get("properties").?.object.get("record_kind").?.object.get("enum").?.array;
+    inline for (comptime std.meta.tags(spec.Kind)) |kind| {
+        const name = @tagName(kind);
+        // Every family has its record definition; a family added to the engine without one is refused here.
+        try testing.expect(definitions.contains("record_" ++ name));
+        // An entity is written by the entities step, so a clarification about a record never names it.
+        var named = false;
+        for (kinds.items) |item| if (std.mem.eql(u8, item.string, name)) {
+            named = true;
+        };
+        try testing.expectEqual(kind.role() != .entity, named);
+    }
+    try testing.expectEqual(@as(usize, std.meta.tags(spec.Kind).len - 1), kinds.items.len);
+    // The other steps' clarification names no family: the field belongs to the records step alone.
+    try testing.expect(!definitions.get("clarification").?.object.get("properties").?.object.contains("record_kind"));
+}
+
 test "closed specification proposal has one content authority and no IDs modality or questions" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -74,7 +104,7 @@ test "shape validation checks all record families without asserting their meanin
     var records = [_]spec.CapturedRecord{
         .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = value, .when = value, .then = value } } },
         .{ .id = .{ .kind = .user_visible_outcome, .ordinal = 1 }, .content = .{ .user_visible_outcome = .{ .text = value } } },
-        .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .condition = value } }, .outcome = value },
+        .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .given = value } }, .scenario = .{ .given = value, .when = value, .then = value } },
         .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .content = .{ .functional_requirement = .{ .text = value } } },
         .{ .id = .{ .kind = .business_rule, .ordinal = 1 }, .content = .{ .business_rule = .{ .text = value } } },
         .{ .id = .{ .kind = .assumption, .ordinal = 1 }, .content = .{ .assumption = .{ .text = value } } },
@@ -95,6 +125,26 @@ test "shape validation checks all record families without asserting their meanin
     try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
     records[0].id = .{ .kind = .functional_requirement, .ordinal = 1 };
     try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+    // An edge case always shows its linked scenario, no other family shows one, and each shown
+    // part is a valid value.
+    records[0].id = .{ .kind = .acceptance_criterion, .ordinal = 1 };
+    try spec.validateDocument(document, true);
+    const shown = records[2].scenario;
+    records[2].scenario = null;
+    try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+    records[2].scenario = shown;
+    records[3].scenario = shown;
+    try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+    records[3].scenario = null;
+    inline for (.{ "given", "when", "then" }) |part| {
+        var blank = shown.?;
+        // The shown Given may be omitted, but a shown one must still be a valid value.
+        if (comptime std.mem.eql(u8, part, "given")) blank.given = .{ .bytes = " " } else @field(blank, part).bytes = " ";
+        records[2].scenario = blank;
+        try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+    }
+    records[2].scenario = shown;
+    try spec.validateDocument(document, true);
 }
 
 test "closed specification parsing cleans up every allocation failure" {
@@ -117,7 +167,7 @@ fn roundTrip(allocator: std.mem.Allocator) !void {
         const Body = @FieldType(spec.Content(spec.Scalar), @tagName(kind));
         var body: Body = undefined;
         inline for (@typeInfo(Body).@"struct".fields) |f| @field(body, f.name) = plain;
-        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1001 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .outcome = if (kind.showsOutcome()) plain else null };
+        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1001 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .scenario = if (kind.showsScenario()) .{ .given = plain, .when = plain, .then = plain } else null };
     }
     records[3].content.functional_requirement.text = exact;
     records[8].related = &.{ .{ .kind = .user_visible_outcome, .ordinal = 1001 }, .{ .kind = .functional_requirement, .ordinal = 1001 }, .{ .kind = .prohibited_behavior, .ordinal = 1001 } };
@@ -130,6 +180,56 @@ fn roundTrip(allocator: std.mem.Allocator) !void {
     const parsed = try markdown.parse(a, rendered);
     try testing.expectEqualDeep(document, parsed);
     try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
+}
+
+test "an edge case prints its criterion's scenario after its own given and reads back only that" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const prose = "The system displays ";
+    const exact = "Renewal refused.";
+    const refused: spec.Scalar = .{ .bytes = prose ++ exact, .code_spans = &.{.{ .start = prose.len, .end = prose.len + exact.len }} };
+    const when: spec.Scalar = .{ .bytes = "The borrower asks" };
+    const sentence: spec.Scalar = .{ .bytes = "The loan is active." };
+    const clause: spec.Scalar = .{ .bytes = "the loan is active" };
+    const overdue: spec.Scalar = .{ .bytes = "it is past its due date" };
+    // The separator is the criterion's own rule: a space after terminal punctuation, ", " otherwise;
+    // an own given that equals or begins with the copied Given is still the text after the separator.
+    const cases = [_]struct { copied: spec.Scalar, own: spec.Scalar, line: []const u8 }{
+        .{ .copied = sentence, .own = overdue, .line = "- **GIVEN** The loan is active. it is past its due date\n" },
+        .{ .copied = clause, .own = overdue, .line = "- **GIVEN** the loan is active, it is past its due date\n" },
+        .{ .copied = sentence, .own = sentence, .line = "- **GIVEN** The loan is active. The loan is active.\n" },
+        .{ .copied = clause, .own = .{ .bytes = "the loan is active and overdue" }, .line = "- **GIVEN** the loan is active, the loan is active and overdue\n" },
+    };
+    var first: []const u8 = "";
+    for (cases) |case| {
+        const document: spec.CapturedDocument = .{ .display_name = clause, .primary_user_story = clause, .entity_section = .omitted, .records = &.{
+            .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = case.copied, .when = when, .then = refused } } },
+            .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .given = case.own } }, .scenario = .{ .given = case.copied, .when = when, .then = refused } },
+            .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .content = .{ .functional_requirement = .{ .text = clause } } },
+        } };
+        const rendered = try markdown.render(a, document);
+        try testing.expect(std.mem.indexOf(u8, rendered, try std.mem.concat(a, u8, &.{ "**EC-001**\n", case.line, "- **WHEN** The borrower asks\n- **THEN** The system displays `Renewal refused.`\n" })) != null);
+        try testing.expect(std.mem.indexOf(u8, rendered, "CONDITION") == null and std.mem.indexOf(u8, rendered, "EXPECTED OUTCOME") == null);
+        const parsed = try markdown.parse(a, rendered);
+        try testing.expectEqualDeep(document, parsed);
+        try testing.expectEqualStrings(case.own.bytes, parsed.records[1].content.edge_case.given.bytes);
+        try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
+        if (first.len == 0) first = rendered;
+    }
+    // An edited copy of the When or Then, a GIVEN line that does not begin with the copied Given and
+    // the superseded condition and outcome lines never read back.
+    const forgeries = [_][2][]const u8{
+        .{ "- **THEN** The system displays `Renewal refused.`\n", "- **THEN** The loan is renewed.\n" },
+        .{ "- **WHEN** The borrower asks\n- **THEN**", "- **WHEN** The borrower waits\n- **THEN**" },
+        .{ "- **GIVEN** The loan is active. it", "- **GIVEN** The loan is inactive. it" },
+        .{ "- **GIVEN** The loan is active. it is past its due date\n- **WHEN** The borrower asks\n- **THEN** The system displays `Renewal refused.`\n", "- **CONDITION** it is past its due date\n- **EXPECTED OUTCOME** The system displays `Renewal refused.`\n" },
+        .{ "- **GIVEN** The loan is active. it is past its due date\n", "- **GIVEN** The loan is active.\n" },
+    };
+    for (forgeries) |forgery| {
+        try testing.expect(std.mem.indexOf(u8, first, forgery[0]) != null);
+        try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.replaceOwned(u8, a, first, forgery[0], forgery[1])));
+    }
 }
 
 test "source lines follow criteria requirements and entities and accept only the renderer's grammar" {
@@ -348,7 +448,7 @@ test "every optional-section combination round trips without empty headings" {
             if (include) {
                 var body: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
                 inline for (@typeInfo(@TypeOf(body)).@"struct".fields) |field| @field(body, field.name) = value;
-                try records.append(a, .{ .id = .{ .kind = kind, .ordinal = 1 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .outcome = if (kind.showsOutcome()) value else null });
+                try records.append(a, .{ .id = .{ .kind = kind, .ordinal = 1 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .scenario = if (kind.showsScenario()) .{ .given = value, .when = value, .then = value } else null });
             }
         }
         const document: spec.CapturedDocument = .{ .display_name = value, .primary_user_story = value, .records = records.items, .entity_section = if (mask & 64 != 0) .present else .omitted };
@@ -383,6 +483,100 @@ test "compact acceptance criteria preserve exact label text and reject malformed
     const valid = try std.mem.concat(a, u8, &.{ start, "- **AC-001**: **Given** state, **When** action, **Then** result", end });
     for ([_][]const u8{ "## User Scenarios & Testing _(mandatory)_\n", "### Acceptance Criteria\n", "## Requirements _(mandatory)_\n", "### Functional Requirements\n" }) |required| try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.replaceOwned(u8, a, valid, required, "")));
     for ([_][]const u8{ "\n### Business Rules\n", "\n### Assumptions & Scope Boundaries\n", "\n#### Explicit Non-Goals\n\n- **NG-001**: An excluded behavior.\n" }) |extra| try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.concat(a, u8, &.{ valid, extra })));
+}
+
+test "a criterion with no Given prints a When and Then pair, reads back as one and accepts no other shape" {
+    // ADR 0038 Decision 3: a criterion holds a Given only where its sources state a starting
+    // situation. The pair prints no Given label and no empty text, and label-shaped bytes in an exact value stay inert.
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const copy = "literal, **Given** token\nwith **When** and `quotes`";
+    const value: spec.Scalar = .{ .bytes = copy, .code_spans = &.{.{ .start = 0, .end = copy.len }} };
+    const plain: spec.Scalar = .{ .bytes = "an action occurs" };
+    const document: spec.CapturedDocument = .{ .display_name = plain, .primary_user_story = plain, .entity_section = .omitted, .records = &.{
+        .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = null, .when = plain, .then = value } } },
+        .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 2 }, .content = .{ .acceptance_criterion = .{ .given = plain, .when = plain, .then = plain } } },
+    } };
+    try spec.validateDocument(document, true);
+    const rendered = try markdown.render(a, document);
+    try testing.expect(std.mem.indexOf(u8, rendered, "- **AC-001**: **When** an action occurs, **Then** ") != null);
+    try testing.expect(std.mem.indexOf(u8, rendered, "- **AC-002**: **Given** an action occurs, **When** an action occurs, **Then** an action occurs") != null);
+    const parsed = try markdown.parse(a, rendered);
+    try testing.expectEqualDeep(document, parsed);
+    try testing.expect(parsed.records[0].content.acceptance_criterion.given == null);
+    try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
+    // A held Given is nonblank: absent is the only way a criterion has none.
+    const blank: spec.CapturedDocument = .{ .display_name = plain, .primary_user_story = plain, .entity_section = .omitted, .records = &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = .{ .bytes = " " }, .when = plain, .then = plain } } }} };
+    try testing.expectError(error.InvalidSpecification, spec.validateDocument(blank, true));
+
+    const start = "# Feature Specification: Example\n\n## User Scenarios & Testing _(mandatory)_\n\n### Primary User Story\n\nA person acts.\n\n### Acceptance Criteria\n\n";
+    const end = "\n\n## Requirements _(mandatory)_\n\n### Functional Requirements\n";
+    const pair = try markdown.parse(a, try std.mem.concat(a, u8, &.{ start, "- **AC-001**: **When** action, **Then** result", end }));
+    try testing.expect(pair.records[0].content.acceptance_criterion.given == null);
+    for ([_][]const u8{
+        "- **AC-001**: **Then** result, **When** action",
+        "- **AC-001**: **When** action",
+        "- **AC-001**: **Then** result",
+        "- **AC-001**: **When** action, **Then** result, **Given** state",
+        "- **AC-001**: **When** action, **Given** state, **Then** result",
+        "- **AC-001**: **When** action **When** extra, **Then** result",
+        "- **AC-001**: **When** action, **Then** result, **Then** extra",
+        "- **AC-001**: **When** , **Then** result",
+        "- **AC-001**: **When** action, **Then** ",
+        "- **AC-001**: when action, then result",
+    }) |record| try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.concat(a, u8, &.{ start, record, end })));
+}
+
+test "an edge case of a criterion with no Given prints its own given alone and reads back only that" {
+    // ADR 0038 Decision 7: the `GIVEN` line is the criterion's Given, a separator, then the
+    // edge case's own given, so a criterion with no Given contributes neither and the line is the own given.
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const prose = "The system displays ";
+    const exact = "Renewal refused.";
+    const refused: spec.Scalar = .{ .bytes = prose ++ exact, .code_spans = &.{.{ .start = prose.len, .end = prose.len + exact.len }} };
+    const when: spec.Scalar = .{ .bytes = "The borrower asks" };
+    const clause: spec.Scalar = .{ .bytes = "the loan is active" };
+    const overdue: spec.Scalar = .{ .bytes = "it is past its due date" };
+    const document: spec.CapturedDocument = .{ .display_name = clause, .primary_user_story = clause, .entity_section = .omitted, .records = &.{
+        .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = null, .when = when, .then = refused } } },
+        .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .given = overdue } }, .scenario = .{ .given = null, .when = when, .then = refused } },
+        .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .content = .{ .functional_requirement = .{ .text = clause } } },
+    } };
+    try spec.validateDocument(document, true);
+    const rendered = try markdown.render(a, document);
+    try testing.expect(std.mem.indexOf(u8, rendered, "**EC-001**\n- **GIVEN** it is past its due date\n- **WHEN** The borrower asks\n- **THEN** The system displays `Renewal refused.`\n") != null);
+    const parsed = try markdown.parse(a, rendered);
+    try testing.expectEqualDeep(document, parsed);
+    try testing.expect(parsed.records[1].scenario.?.given == null);
+    try testing.expectEqualStrings(overdue.bytes, parsed.records[1].content.edge_case.given.bytes);
+    try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
+    // The lines still copy their criterion's When and Then, and a `GIVEN` line is never empty.
+    const forgeries = [_][2][]const u8{
+        .{ "- **THEN** The system displays `Renewal refused.`\n", "- **THEN** The loan is renewed.\n" },
+        .{ "- **WHEN** The borrower asks\n- **THEN**", "- **WHEN** The borrower waits\n- **THEN**" },
+        .{ "- **GIVEN** it is past its due date\n", "- **GIVEN** \n" },
+    };
+    for (forgeries) |forgery| {
+        try testing.expect(std.mem.indexOf(u8, rendered, forgery[0]) != null);
+        try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.replaceOwned(u8, a, rendered, forgery[0], forgery[1])));
+    }
+    // A criterion with no Given is the copy only when no criterion holding a Given is: here the own given
+    // also reads as the other criterion's Given and separator then an own given, and either reading
+    // re-renders the line byte for byte.
+    const both: spec.CapturedDocument = .{ .display_name = clause, .primary_user_story = clause, .entity_section = .omitted, .records = &.{
+        .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = clause, .when = when, .then = refused } } },
+        .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 2 }, .content = .{ .acceptance_criterion = .{ .given = null, .when = when, .then = refused } } },
+        .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .given = .{ .bytes = "the loan is active, it is past its due date" } } }, .scenario = .{ .given = null, .when = when, .then = refused } },
+        .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .content = .{ .functional_requirement = .{ .text = clause } } },
+    } };
+    const shown = try markdown.render(a, both);
+    const read = try markdown.parse(a, shown);
+    try testing.expectEqualStrings(shown, try markdown.render(a, read));
+    try testing.expectEqualStrings(overdue.bytes, read.records[2].content.edge_case.given.bytes);
+    try testing.expect(read.records[2].scenario.?.given != null);
 }
 
 test "acceptance clauses that end a sentence join without a comma and keep their bytes" {

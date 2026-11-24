@@ -119,7 +119,7 @@ pub const Fixture = struct {
     }
 
     pub fn assignment(self: *Fixture) lifecycle.Assignment {
-        return .{ .binding_id = self.provider_binding.bindingId(), .model_visible_input_id = self.request.model_visible_input_id, .sampling = self.request.sampling };
+        return .of(&self.request);
     }
 
     pub fn change(self: *Fixture, kind: operation.ProviderOperationKind, command: lifecycle.Command) !void {

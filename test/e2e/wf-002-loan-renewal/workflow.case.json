@@ -1,8 +1,9 @@
 {
-  "schema": "spec-e2e-case/v3",
+  "schema": "spec-e2e-case/v5",
   "id": "wf-002-loan-renewal-spec",
   "workflow_id": "spec-generation",
   "expected_outcome": "publication",
+  "answers": [],
   "feature": "loan-renewal",
   "reference": "loan-renewal",
   "config": "test/e2e/wf-001-hello-world/.sddtoolkit.json",
@@ -50,10 +51,6 @@
     {
       "source": "design/workflows/spec/reconciliation.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/reconciliation.prompt.md"
-    },
-    {
-      "source": "design/workflows/spec/reconciliation-summary.composition.json",
-      "destination": ".sddtoolkit/workflows/spec/reconciliation-summary.composition.json"
     },
     {
       "source": "design/workflows/spec/reconciliation-dispositions.prompt.md",
@@ -164,7 +161,8 @@
     "specification",
     "reference_context",
     "clarification_state",
-    "workflow_state"
+    "workflow_state",
+    "actor_evidence"
   ],
   "evaluation_case": "test/e2e/wf-002-loan-renewal/spec.case.json"
 }

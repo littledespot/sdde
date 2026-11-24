@@ -4,7 +4,7 @@ Part of the [proposed design](../design.md#6-common-action-and-orchestrator-cont
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - Every action **and** every orchestrator conforms to the same runtime contract. An
-  [ADR 0032](../decisions/0032-engine-routines.md) engine routine (implemented for startup and provider bootstrap; feature logging not yet) is not
+  [ADR 0032](../decisions/0032-engine-routines.md) engine routine (implemented for startup, provider bootstrap and feature logging) is not
   a node and does not.
 - There is one envelope, one result vocabulary, and one dependency declaration mechanism across
   the engine.
@@ -23,7 +23,7 @@ Part of the [proposed design](../design.md#6-common-action-and-orchestrator-cont
 
 [View the Capability-free node runtime sample](../code.md#node-runtime).
 
-It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only; an ADR 0032 engine routine (implemented for startup and provider bootstrap; feature logging not yet) receives them as typed parameters, one port per step function. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
+It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only; an ADR 0032 engine routine (implemented for startup, provider bootstrap and feature logging) receives them as typed parameters, one port per step function. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
 
 The common contract makes data dependencies explicit:
 
@@ -35,7 +35,7 @@ The common contract makes data dependencies explicit:
   compiler; an orchestrator cannot hide a child's capability or claim a narrower effect.
 - Its internal child-only keys are not exposed outside the composition boundary.
 
-Keys are tags of the engine's one closed, unversioned `DataKey` enum, for example `engine_config`, `reference_snapshot`, `validated_specification_unit` and `specification_publication_state`; never ad hoc strings inside actions. The value schema the operation registry registers for a key carries its type and version.
+Keys are tags of the engine's one closed, unversioned `DataKey` enum, for example `workflow_definition_registry`, `reference_snapshot`, `validated_specification_unit` and `specification_publication_state`; never ad hoc strings inside actions. The value schema the operation registry registers for a key carries its type and version.
 
 `PipelineEnvelope` is immutable and identical for all nodes:
 
@@ -70,31 +70,23 @@ Keys are tags of the engine's one closed, unversioned `DataKey` enum, for exampl
 - For an orchestrator, runner-owned bindings track child deltas and expose the composite delta;
   the orchestrator does not merge registries itself.
 
-- `NodeDelta.telemetryFactsAdded` contains `WorkflowTelemetryFact` values.
+- A `NodeDelta` carries no telemetry. The runner emits `WorkflowTelemetryFact` values itself,
+  for lifecycle and branch events, so orchestrators and actions perform no logging work.
 - Each value pairs one validated four-character `WorkflowShortcode` from the active compiled
-  workflow's runner-created `WorkflowLog` binding with one closed `TelemetryFact` union of IDs,
-  enums, counts, timings, and outcomes.
+  workflow with one closed `TelemetryFact` union of IDs, enums, counts, timings, and outcomes.
 - It contains no log level, message, arbitrary map, environment value, or raw
   model/reference/code body.
-- Actions may call that narrow binding to add facts; orchestrator lifecycle/branch facts are
-  derived by the runner using the same binding, so orchestrators still perform no logging work.
-- After contract/delta validation, the runner's `PipelineTelemetryObserver` starts a separate
-  logging-internal `PipelineEnvelope` and passes those attributed facts plus trusted run/node
-  context through `FeatureLoggingOrchestrator`. Under
-  [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), feature logging
-  becomes a typed engine routine once its preconditions are met. Only that change replaces the
-  logging-internal envelope and logging-only `DataKey`s below with function-local values.
-- Both business and logging nodes still use `PipelineNode` and return all intermediate values
+- The runner's `PipelineTelemetryObserver` passes those attributed facts plus trusted run/node
+  context to the runtime logging lifecycle through the telemetry barrier. Under
+  [ADR 0032](../decisions/0032-engine-routines.md) the lifecycle runs the feature-logging
+  engine routines, whose values are function-local, so logging has no `PipelineEnvelope` and
+  no logging-only `DataKey`s, and sanitized prompt records never persist in workflow state or
+  become model context.
+- Business nodes use `PipelineNode` and return all intermediate values
   through validated `NodeDelta`s. Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet
   implemented), values passed between a stage action's internal functions are function-local;
   only its stage-edge outputs are node values.
-- Logging-only `DataKey`s are compiler-locked, transient, non-model-visible, excluded from
-  business-envelope composition and self-observation, and destroyed by the runner on every
-  terminal logging branch.
-- Thus sanitized prompt records may pass between discrete logging actions without bypassing the
-  common ABI, persisting in workflow state, or becoming model context.
-- `WorkflowLog.log` performs only delta construction; `NodeRuntime` continues to expose no sink,
-  filesystem, or direct logger capability.
+- `NodeRuntime` exposes no sink, filesystem, or direct logger capability.
 
 - An `invalid` outcome is not an operational error.
 - It is the normal input to an atomic repair orchestrator.
@@ -167,7 +159,7 @@ as blocked, without clearing that subject or its repair key. Neither disposition
 allows an unrelated, failed, cancelled or needs-user outcome to be relabelled.
 Incomplete publication requires current native clarification evidence carried into
 the exact prepared output; matching `needs_user` tags do not grant writer access.
-The runner rechecks cancellation/deadline immediately before invoking the binding,
+The runner rechecks cancellation immediately before invoking the binding,
 including after potentially blocking publication log finalization.
 Native repair authorization binds each unresolved subject to its exact repair
 key. A joined carrier or completed child repair cannot discharge a parent or
@@ -202,6 +194,8 @@ member's exact cases.
 | `authorization_evidence` | authorization | authorization evidence is unreadable, carries no bound deadline or disagrees with the deadline it bound |
 | `authorization_denied` | authorization | the authorization's preparation failed, or its lease is foreign, mismatched, stale or already consumed (a cancelled preparation is `cancelled`) |
 | `authorization_clock_unavailable` | authorization | the authorization clock is unavailable |
+| `authentication_lease_unavailable` | authentication | the runner cannot issue an authentication lease for an `actor_authentication` step: one is still outstanding or the execution's 297 are spent |
+| `authentication_unconsumed` | authentication | an `actor_authentication` step ended `ok` without consuming the lease the runner issued it |
 | `repair_permit_mismatch` | repair and retry | a retry-bearing step's repair permit or request assignment does not match |
 | `repair_transition` | repair and retry | a repair transition is missing, forbidden by the step's repair role or unchanged beyond its limit |
 | `retry_admission` | repair and retry | a retry allowance cannot be admitted or its exhaustion described |
@@ -235,13 +229,12 @@ starts empty, including after `needs_user` (ADR 0009).
 - The runner assigns a native occurrence before invoking a producer. A recorded
   entry binds that execution scope, occurrence and typed key to one sealed immutable
   value owner and its exact origin/dependencies. Retention shares that owner.
-- Placing the same canonical value and origin again returns its existing reference
-  without another entry, generation or effect. Conflicting value identity or
-  provenance rejects. Independently allocated values are not inferred equivalent
+- A second recording of one occurrence and key rejects, and so does a foreign or
+  schema-mismatched one. Independently allocated values are not inferred equivalent
   from matching text; a new invocation/repair remains distinct.
-- A placement receipt proves recording only. Existing duplicate-delta, lifecycle,
+- A recording proves recording only. Existing duplicate-delta, lifecycle,
   token reconciliation, retry, telemetry and publication checks remain authoritative.
-- Retained history never becomes current through placement. Current slots and
+- Retained history never becomes current through recording. Current slots and
   gates retain their freshness rules; ordinary nodes still receive only declared
   immutable inputs. Read-only report projections may select a registered historical
   key. The stack is never added wholesale to model context.
@@ -338,7 +331,7 @@ Every orchestrator must:
   outside an allowlist of contracts, outcomes, envelopes, loop controls, and child-node
   bindings.
 - Orchestrator modules cannot import infrastructure or domain-operation adapters.
-- For [ADR 0032](../decisions/0032-engine-routines.md) engine routines (implemented for startup and provider bootstrap; feature logging not yet),
+- For [ADR 0032](../decisions/0032-engine-routines.md) engine routines (implemented for startup, provider bootstrap and feature logging),
   the tests also check:
   - a `*_routine.zig` imports only domain and port modules, never adapters or `std.Io`;
   - no step takes two ports, the port set, a capability bag, `anytype` or `anyopaque`;

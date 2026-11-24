@@ -11,7 +11,7 @@ pub const Field = enum {
     ac_when,
     ac_then,
     visible_outcome,
-    edge_condition,
+    edge_given,
     functional_requirement,
     business_rule,
     assumption,
@@ -51,14 +51,14 @@ pub fn get(field: Field) Policy {
     // explicit insertion role instead of silently inheriting a permissive one.
     const exact_role: Role = switch (field) {
         .extraction_business, .extraction_design, .extraction_technical, .extraction_validation, .extraction_implementation_assumption, .extraction_open_question, .extraction_scope_guard, .extraction_reason, .reconciliation_business, .reconciliation_design, .reconciliation_technical, .reconciliation_validation, .reconciliation_implementation_assumption, .reconciliation_open_question, .reconciliation_scope_guard, .reconciliation_conflict => .prohibited,
-        .spec_description, .ac_given, .ac_when, .ac_then, .visible_outcome, .edge_condition, .functional_requirement, .business_rule, .non_goal, .prohibited_behavior => .obligation_bearing,
+        .spec_description, .ac_given, .ac_when, .ac_then, .visible_outcome, .edge_given, .functional_requirement, .business_rule, .non_goal, .prohibited_behavior => .obligation_bearing,
         .spec_goal, .spec_entity_basis, .clarification_question, .assumption => .prohibited,
         // ADR 0047: the engine-composed story quotes exact values but discharges no duty.
         .entity_name, .spec_story => .incidental,
     };
     const source_role: Role = switch (field) {
         .extraction_design, .extraction_technical, .extraction_validation, .extraction_implementation_assumption, .extraction_open_question, .extraction_reason, .reconciliation_design, .reconciliation_technical, .reconciliation_validation, .reconciliation_implementation_assumption, .reconciliation_open_question, .reconciliation_conflict => .incidental,
-        .spec_description, .spec_goal, .spec_story, .spec_entity_basis, .clarification_question, .ac_given, .ac_when, .ac_then, .visible_outcome, .edge_condition, .functional_requirement, .business_rule, .assumption, .non_goal, .prohibited_behavior, .entity_name, .extraction_business, .extraction_scope_guard, .reconciliation_business, .reconciliation_scope_guard => .prohibited,
+        .spec_description, .spec_goal, .spec_story, .spec_entity_basis, .clarification_question, .ac_given, .ac_when, .ac_then, .visible_outcome, .edge_given, .functional_requirement, .business_rule, .assumption, .non_goal, .prohibited_behavior, .entity_name, .extraction_business, .extraction_scope_guard, .reconciliation_business, .reconciliation_scope_guard => .prohibited,
     };
     return .{
         .field = field,

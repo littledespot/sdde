@@ -2,12 +2,12 @@
 const std = @import("std");
 const r = @import("reference_reconciliation.zig");
 const d = r.diagnostic;
-pub const TextContext = struct { registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: r.evidence.Inputs };
+pub const TextContext = struct { registry: @import("passive_literals.zig").Registry, inputs: r.evidence.Inputs };
 
-pub fn bind(allocator: std.mem.Allocator, items: r.Items, context: TextContext, validator: r.text.Validator) r.Error!void {
+pub fn bind(items: r.Items, context: TextContext) r.Error!void {
     if (!items.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidReferenceReconciliation;
     for (items.entries) |entry| _ = try r.evidence.resolve(context.inputs, .{ .state_id = items.state_id, .chunk_id = entry.claim.chunk_id });
-    try @import("path_token_grammar.zig").validateBinding(allocator, context.registry.grammar, context.current, context.inputs, validator.normalizer, validator.folder);
+    try @import("path_token_grammar.zig").validateInputs(context.registry.grammar, context.inputs);
 }
 
 pub fn claims(items: r.Items, ids: []const r.ClaimId, allowed: []const r.ClaimId) ?d.Issue {
@@ -24,7 +24,7 @@ pub fn scopes(allocator: std.mem.Allocator, items: r.Items, ids: []const r.Claim
     const result = try allocator.alloc(r.evidence.Scope, ids.len);
     if (!items.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidReferenceReconciliation;
     for (ids, result) |id, *scope| scope.* = .{ .state_id = items.state_id, .chunk_id = (try r.item(items, id)).claim.chunk_id };
-    return .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = result, .field = .reconciliation_conflict };
+    return .{ .registry = context.registry, .inputs = context.inputs, .scopes = result, .field = .reconciliation_conflict };
 }
 pub fn contentKind(value: r.ContentProposal) d.ContentKind {
     return switch (value) {
@@ -456,9 +456,9 @@ pub fn checkSummary(allocator: std.mem.Allocator, validator: r.text.Validator, p
     if (parsed.input.purpose != .summary or parsed.proposal != .summary) return error.InvalidReferenceReconciliation;
     try input(allocator, parsed.input);
     if (parsed.source.revision == 0) return error.InvalidReferenceReconciliation;
-    try bind(allocator, parsed.input.progress.plan.layout.items, context, validator);
+    try bind(parsed.input.progress.plan.layout.items, context);
     const carried = if (parsed.carried_from) |id| child: {
-        const current = (try reusableSummary(allocator, validator, parsed.input, context)) orelse return error.InvalidReferenceReconciliation;
+        const current = (try reusableSummary(allocator, parsed.input, context)) orelse return error.InvalidReferenceReconciliation;
         if (id.ordinal != current.id.ordinal or parsed.phase != .complete or !try equalSnapshot(d.Source, allocator, parsed.source, .{})) return error.InvalidReferenceReconciliation;
         break :child current;
     } else null;
@@ -485,9 +485,9 @@ pub fn checkSummary(allocator: std.mem.Allocator, validator: r.text.Validator, p
 
 /// Resolve from current validated history, not a supplied child with matching IDs.
 /// Stale authority fails; only structurally different assignments need a model.
-pub fn reusableSummary(a: std.mem.Allocator, validator: r.text.Validator, current: r.Input, context: TextContext) r.Error!?r.Summary {
+pub fn reusableSummary(a: std.mem.Allocator, current: r.Input, context: TextContext) r.Error!?r.Summary {
     try input(a, current);
-    try bind(a, current.progress.plan.layout.items, context, validator);
+    try bind(current.progress.plan.layout.items, context);
     if (current.purpose != .summary or current.partition.group.children.len != 1 or current.partition.group.claim_ids.len == 0) return null;
     const child_partition = current.progress.plan.partitions[current.partition.group.children[0].value];
     var cursor = current.progress.latest;
@@ -563,7 +563,7 @@ pub fn checkSignals(allocator: std.mem.Allocator, validator: r.text.Validator, p
     if (prior.phase == .dispositions) return error.InvalidReferenceReconciliation;
     const items = prior.input.progress.plan.layout.items;
     try input(allocator, prior.input);
-    try bind(allocator, items, context, validator);
+    try bind(items, context);
     const signals = try allocator.alloc(r.ValidatedSignal, prior.proposal.signals.len);
     for (signals, 0..) |*signal, index| {
         signal.* = switch (try checkSignal(allocator, validator, context, prior, index)) {

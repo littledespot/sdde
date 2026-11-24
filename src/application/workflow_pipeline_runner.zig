@@ -23,6 +23,8 @@ const values = @import("pipeline_values.zig");
 const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
 const operation_selection = @import("../domain/workflow_provider_operation.zig");
 const authorization_selection = @import("../domain/workflow_provider_authorization.zig");
+const actor_selection = @import("../domain/workflow_actor_authentication.zig");
+const actor_lease = @import("../domain/actor_authentication_lease.zig");
 const authorization_binding = @import("workflow_provider_authorization.zig");
 const authorization_workflow = @import("provider_authorization_workflow.zig");
 const authorization_result = @import("../domain/provider_authorization_result.zig");
@@ -65,16 +67,30 @@ pub const Runner = struct {
     token_accounting: workflow_token_runner.Runner,
     model_accounting: ?model_accounting.State = null,
     provider_clock: ?lease.Clock = null,
+    /// The execution's authentication leases (ADR 0025): the runner alone issues one before an `actor_authentication`
+    /// step runs and ends it after, on every path.
+    authentication_leases: actor_lease.Table = .{},
     publication_finalizer: ?@import("../ports/feature_log_activation.zig").Finalizer = null,
     retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
     repair_retry: retry.State,
     native_iteration: iteration.State = .{},
     remaining_step_executions: usize,
     events_closed: bool = false,
+    /// The operation registry is one object assembled at startup and validated there (13-01); the runner checks its
+    /// structure once, before its first step, so a drifted registry still stops the run before any step executes.
+    /// Each step still resolves its own contract, the policy and the data schemas against the registry.
+    registry_validated: bool = false,
     last_effects: ?execution.AppliedEffects = null,
-    /// The internal step a stage action stopped at during the current step invocation.
+    /// The internal step a stage action stopped at during the current step invocation, and the display path of the
+    /// entry whose own reason it stopped on (ADR 0031).
     stage_step: pipeline.StageStepSlot = .{},
     last_operation_rejection: ?execution.OperationRejection = null,
+    /// The typed failure of the last model call, or null when that call did not fail. It is set by each
+    /// call's result, so a later call that completes clears it: it names what ended a run, never an earlier fault.
+    last_provider_failure: ?@import("../domain/provider_failure_detail.zig").Detail = null,
+    /// The display path of the input entry a rejected stage step named (ADR 0031), kept for the CLI beside the
+    /// terminal rejection. It is presentation data: no event, log or report of the run records it.
+    last_entry_path: ?pipeline.StageEntryPath = null,
     /// The rejection a later one replaced, kept beside the terminal rejection (27-observability.md). The earliest
     /// replacement sets it; a later one never overwrites it, and a lone failure leaves it unset.
     first_cause: ?execution.FirstCause = null,
@@ -202,9 +218,13 @@ pub const Runner = struct {
         var started: bool = undefined;
         if (self.actionStart(id, &started, null)) |rejection| return .{ .rejected = rejection };
         const result = self.executeStep(id);
+        // Only the stage's own error names its entry: a later cancellation, deadline or log stop that replaces it does not.
+        if (result == .rejected and result.rejected == .operation_failed) if (self.stage_step.entry_path) |path| {
+            self.last_entry_path = path;
+        };
         if (self.actionEnd(id, started, result, self.stage_step.name, null)) |rejection| return .{ .rejected = rejection };
         if (self.eventsActive() and result == .rejected and result.rejected == .retry_limit) {
-            if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |failure| return .{ .rejected = self.replacing(result.rejected, .{ .logging = failure }) };
+            if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |stop| return .{ .rejected = self.replacing(result.rejected, execution.Rejection.logStop(stop)) };
         }
         return result;
     }
@@ -215,7 +235,7 @@ pub const Runner = struct {
     /// that run then names it (ADR 0030).
     fn actionStart(self: *Runner, id: workflow.WorkflowStepId, started: *bool, stage: ?request_stage.Stage) ?execution.Rejection {
         started.* = self.eventsActive();
-        if (started.*) if (self.logActionStart(id, stage)) |failure| return .{ .logging = failure };
+        if (started.*) if (self.logActionStart(id, stage)) |stop| return execution.Rejection.logStop(stop);
         return null;
     }
 
@@ -225,14 +245,14 @@ pub const Runner = struct {
         if (!self.eventsActive()) return null;
         // A logging failure here replaces the step's own rejection, when it ended in one.
         const replaced: ?execution.Rejection = if (result == .rejected) result.rejected else null;
-        if (!started) if (self.logActionStart(id, stage)) |failure| return self.replacing(replaced, .{ .logging = failure });
+        if (!started) if (self.logActionStart(id, stage)) |stop| return self.replacing(replaced, execution.Rejection.logStop(stop));
         const diagnostic = if (self.last_effects) |effects| effects.diagnostic else null;
         const failure = if (stage) |named| self.events().requestStage(id, named.name(), result, diagnostic) else self.events().action(id, result, diagnostic, stage_name);
         if (failure) |value| return self.replacing(replaced, self.captureRejectionWithLogging(value));
         return null;
     }
 
-    fn logActionStart(self: *Runner, id: workflow.WorkflowStepId, stage: ?request_stage.Stage) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logActionStart(self: *Runner, id: workflow.WorkflowStepId, stage: ?request_stage.Stage) ?@import("../domain/feature_log_stream.zig").Stop {
         return if (stage) |named| self.events().requestStage(id, named.name(), null, null) else self.events().action(id, null, null, null);
     }
 
@@ -331,12 +351,13 @@ pub const Runner = struct {
         if (!@import("../domain/workflow_model_invocation.zig").validProjection(step.*) or
             !operation_selection.validProjection(step.*) or
             !request_lifecycle_selection.validProjection(step.*) or
-            !authorization_selection.validProjection(step.*)) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
+            !authorization_selection.validProjection(step.*) or
+            !actor_selection.validProjection(step.*)) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         if (!compilation.matchesContract(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
             !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         switch (step.side_effect) {
-            .filesystem_read, .filesystem_write => if (self.envelope.outcomes.firstUnresolved() != null) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } },
+            .filesystem_read, .filesystem_write, .actor_authentication => if (self.envelope.outcomes.firstUnresolved() != null) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } },
             .none, .model_call, .workflow_publication => {},
         }
         for (step.gates) |gate| {
@@ -516,12 +537,12 @@ pub const Runner = struct {
                 if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, admitted.exhausted, stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 admitted_count = admitted.allowed;
             } else {
-                if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, self.retry_execution_counts[index], stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
+                if (authority.limit.standing(self.retry_execution_counts[index]) == .exhausted) return .{ .rejected = .{ .retry_limit = exhaustion(step.id, authority.limit, self.retry_execution_counts[index], stage) orelse return .{ .rejected = .{ .authority = .retry_admission } } } };
                 // Compiled limits are u32; exhaustion is checked before increment.
                 self.retry_execution_counts[index] += 1;
                 admitted_count = self.retry_execution_counts[index];
             }
-            if (self.eventsActive()) if (self.events().retryAttempt(id, admitted_count, false)) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.eventsActive()) if (self.events().retryAttempt(id, admitted_count, false)) |stop| return .{ .rejected = execution.Rejection.logStop(stop) };
         };
         // The compiler supplies the retry-derived allowance. Only a committed
         // advance through a validated finite population grants another traversal.
@@ -542,13 +563,18 @@ pub const Runner = struct {
                 else => |failure| authorizationRejected(failure),
             };
         }
+        var authentication_lease: ?actor_lease.Lease = null;
+        defer if (authentication_lease) |issued| self.authentication_leases.finalize(issued);
+        if (step.side_effect == .actor_authentication) {
+            authentication_lease = self.authentication_leases.issue() catch return .{ .rejected = .{ .authority = .authentication_lease_unavailable } };
+        }
         const occurrence = self.envelope.beginOccurrence(step.operation_id.bytes) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
         if (calls_model) {
             const invoked = call.?;
             // ADR 0039: a re-send is logged only once every send check has
             // passed, immediately before it is sent; a logging rejection stops it.
             if (retained_request.?.runawayResend()) |repeated| if (invoked.operation_id.model_attempt_ordinal.value == repeated.model_attempt_ordinal.value + 1) {
-                if (self.logRunawayResend(id, retained_request.?, repeated)) |failure| return .{ .rejected = .{ .logging = failure } };
+                if (self.logRunawayResend(id, retained_request.?, repeated)) |stop| return .{ .rejected = execution.Rejection.logStop(stop) };
             };
             const ledger = identity.ledger(self.model_accounting.?.requests);
             const origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, invoked.operation_id) orelse return .{ .rejected = .{ .authority = .lifecycle_evidence } };
@@ -577,9 +603,9 @@ pub const Runner = struct {
                 .description = @import("../domain/model_request_description.zig").Description.from(invoked.request, invoked.provider_binding, invoked.operation_id.kind),
                 .source_context = .{ .graph = self.selected.graph, .request = retained_request.? },
             });
-            if (self.eventsActive()) if (self.events().model(id, .{ .origin = origin, .binding = invoked.provider_binding.* }, .model_requested, null, null, null)) |failure| {
+            if (self.eventsActive()) if (self.events().model(id, .{ .origin = origin, .binding = invoked.provider_binding.* }, .requested)) |stop| {
                 self.model_capture.end();
-                return .{ .rejected = .{ .logging = failure } };
+                return .{ .rejected = execution.Rejection.logStop(stop) };
             };
         }
         defer if (calls_model) self.model_capture.end();
@@ -588,7 +614,8 @@ pub const Runner = struct {
             if (!outcome_binding.permitsPublication(&self.envelope, prepared_output)) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } };
             self.events_closed = true;
             if (self.publication_finalizer) |finalizer| switch (finalizer.beforePublication(prepared_output.terminal_outcome)) {
-                .execution => |outcome| if (outcome != .ok and outcome != .needs_user) return .{ .rejected = .{ .authority = .publication_finalizer } },
+                // A finalizer ends the run `cancelled` only for the output of a run the user cancelled (ADR 0025).
+                .execution => |outcome| if (outcome != .ok and outcome != .needs_user and !(outcome == .cancelled and prepared_output.terminal_outcome == .cancelled)) return .{ .rejected = .{ .authority = .publication_finalizer } },
                 .execution_rejected => |reason| return .{ .rejected = reason },
                 .bootstrap_failed, .invocation_invalid => return .{ .rejected = .{ .authority = .publication_finalizer } },
             };
@@ -601,7 +628,7 @@ pub const Runner = struct {
             .authority = &self.selected.graph.authority,
             .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
             .repair_permit = self.repair_retry.currentPermit(),
-            .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
+            .workflow_shortcode = self.selected.graph.shortcode,
             .runtime = self.runtime,
             .stage_step = &self.stage_step,
             .model_attempt = attempt_input,
@@ -609,6 +636,7 @@ pub const Runner = struct {
             .provider_invocation = if (validates_observation) call else null,
             .provider_operation = provider_input,
             .provider_authorization = if (authorization) |bound| .{ .facts = bound.facts, .slot = bound.slot, .runtime = bound.runtime } else null,
+            .actor_authentication = authentication_lease,
         } }) catch |err| {
             if (calls_model) {
                 const invoked = call.?;
@@ -618,9 +646,12 @@ pub const Runner = struct {
                 if (reconciled.rejection) |reason| return .{ .rejected = self.replacing(reconciled.replaced, reason) };
             }
             // A non-model operation that stopped because the runtime did reports that stop, as the
-            // checks before and after the invocation do. An allocation failure stays itself. A model
-            // call returned above: reconciling a failed call always leaves its rejection.
+            // checks before and after the invocation do. One that reports `Cancelled` was cancelled
+            // while the runtime still reports active (a cancelled filesystem call), and ends the run
+            // `cancelled` too. An allocation failure stays itself. A model call returned above:
+            // reconciling a failed call always leaves its rejection.
             if (err != error.OutOfMemory) if (runtimeTerminal(self.runtime)) |terminal| return .{ .rejected = terminal };
+            if (err == error.Cancelled) return .{ .rejected = .cancelled };
             return .{ .rejected = .{ .operation_failed = err } };
         };
         defer self.envelope.discard(&candidate.delta);
@@ -637,8 +668,18 @@ pub const Runner = struct {
             if (reconciled.rejection) |reason| return .{ .rejected = self.replacing(reconciled.replaced, reason) };
             if (candidate.outcome != .cancelled) authorization_binding.checkDeadline(self.provider_clock.?, self.runtime, authorization_deadline.?) catch |err| return authorizationRejected(err);
         }
+        if (validates_observation) {
+            const observation_workflow = @import("provider_observation_workflow.zig");
+            const observed = values.read(&.{ .slots = candidate.delta.data_writes }, observation_workflow.schema, observation_workflow.Result) catch return .{ .rejected = .{ .authority = .invocation_result } };
+            // Validation is where a raw result becomes a typed failure, a rejected body's content diagnostic
+            // included, so the call's failure is read from its validated result. The call's authorization,
+            // which precedes it, has already cleared an earlier call's.
+            if (providerFailure(observed)) |failure| self.last_provider_failure = @import("../domain/provider_failure_detail.zig").Detail.from(failure);
+        }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .rejected = .{ .authority = .outcome_undeclared } };
+        // An authentication that reports `ok` consumed its lease: the evidence it hands on observed the account.
+        if (authentication_lease) |issued| if (candidate.outcome == .ok and !issued.consumed()) return .{ .rejected = .{ .authority = .authentication_unconsumed } };
         if (advances_request and !completes_request) {
             const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .{ .authority = .authorization_evidence } };
             const assigned = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .{ .authority = .lifecycle_evidence } };
@@ -647,40 +688,59 @@ pub const Runner = struct {
         }
         const prepared = if (authorization) |bound| prepared: {
             const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .{ .authority = .authorization_evidence } };
-            break :prepared bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
+            const authorized = bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
+            // A call that is never sent, a missing key among them, fails here: its closed cause is the run's, and
+            // an authorization that succeeds clears an earlier call's, which the call's own result then replaces.
+            self.last_provider_failure = switch (result.outcome().*) {
+                .failed => |failure| @import("../domain/provider_failure_detail.zig").Detail.from(failure),
+                .prepared, .cancelled => null,
+            };
+            break :prepared authorized;
         } else false;
         const terminal = if (stage == null) terminalFor(self.selected.graph.authority.transitions, step.id, candidate.outcome) else null;
         const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected, step.iteration, step.outcome_association, terminal);
         authorization_published = prepared and applied == .outcome and applied.outcome == .ok;
         if (applied == .outcome and self.eventsActive()) {
-            if (self.logDiagnostics(step.*, candidate)) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.logDiagnostics(step.*, candidate)) |stop| return .{ .rejected = execution.Rejection.logStop(stop) };
         }
         return applied;
     }
 
-    fn logModelCompletion(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logModelCompletion(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag) ?@import("../domain/feature_log_stream.zig").Stop {
         if (!self.eventsActive()) return null;
-        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .LOG_SERIALIZATION_FAILURE;
+        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         var usage: ?provider.ProviderUsage = null;
         for (self.tokenLedger().accounted_operations.items) |accounted| {
             if (accounted.id.eql(call.operation_id) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
         }
-        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_completed, status, null, usage);
+        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .{ .completed = .{ .status = status, .usage = usage } });
     }
 
     /// ADR 0039: logged after the runaway's stop and before its one re-send is
     /// sent, with the runaway attempt's reported usage.
-    fn logRunawayResend(self: *Runner, id: workflow.WorkflowStepId, request: *const @import("../domain/model_request_handoff.zig").Request, runaway: provider.ProviderOperationId) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logRunawayResend(self: *Runner, id: workflow.WorkflowStepId, request: *const @import("../domain/model_request_handoff.zig").Request, runaway: provider.ProviderOperationId) ?@import("../domain/feature_log_stream.zig").Stop {
         if (!self.eventsActive()) return null;
-        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), runaway) orelse return .LOG_SERIALIZATION_FAILURE;
+        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), runaway) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         var usage: ?provider.ProviderUsage = null;
         for (self.tokenLedger().accounted_operations.items) |accounted| {
             if (accounted.id.eql(runaway) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
         }
-        return self.events().model(id, .{ .origin = origin, .binding = request.binding().* }, .model_runaway_resent, null, @tagName(provider.ProviderNonCandidateStopReason.output_limit), usage);
+        return self.events().model(id, .{ .origin = origin, .binding = request.binding().* }, .{ .runaway_resent = .{ .reason = @tagName(provider.ProviderNonCandidateStopReason.output_limit), .usage = usage } });
     }
 
     const ProviderStop = struct { reason: provider.ProviderNonCandidateStopReason, usage: provider.ProviderUsage };
+
+    /// The provider's own failure of one validated call, with its closed cause, retry class and delivery.
+    /// A call that completed, or that the provider stopped, is none.
+    fn providerFailure(result: *const @import("provider_observation_workflow.zig").Result) ?provider.ProviderFailure {
+        return switch (result.outcome()) {
+            .validated => |evidence| switch (evidence.result()) {
+                .failed => |failure| failure,
+                .complete, .stopped => null,
+            },
+            .rejected, .cancelled => null,
+        };
+    }
 
     fn providerStop(result: *const @import("../domain/model_invocation_result.zig").Result) ?ProviderStop {
         const raw = result.outcome() orelse return null;
@@ -698,40 +758,49 @@ pub const Runner = struct {
 
     /// Every provider-applied stop, including its own output maximum, is logged at
     /// warning level with its exact closed reason; usage alone never implies it.
-    fn logProviderStop(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag, stop: ProviderStop) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logProviderStop(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag, stop: ProviderStop) ?@import("../domain/feature_log_stream.zig").Stop {
         if (!self.eventsActive()) return null;
-        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .LOG_SERIALIZATION_FAILURE;
-        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_provider_stopped, status, @tagName(stop.reason), stop.usage);
+        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .{ .provider_stopped = .{ .status = status, .reason = @tagName(stop.reason), .usage = stop.usage } });
     }
 
     fn captureRejection(self: *const Runner) ?execution.Rejection {
-        if (self.model_capture.failure) |failure| return .{ .model_capture = failure };
-        return null;
+        const stopped = self.model_capture.stopped orelse return null;
+        return switch (stopped) {
+            .failed => |failure| .{ .model_capture = failure },
+            .cancelled => .cancelled,
+        };
     }
 
-    fn captureRejectionWithLogging(self: *const Runner, failure: @import("../domain/feature_log_stream.zig").FailureCode) execution.Rejection {
-        if (self.model_capture.failure) |captured| {
+    /// A capture failure is its own first cause, and a later logging failure reaches it as
+    /// `subsequent_logging_failure`. A cancellation is no logging failure, so it leaves the capture
+    /// failure whole.
+    fn captureRejectionWithLogging(self: *const Runner, stop: @import("../domain/feature_log_stream.zig").Stop) execution.Rejection {
+        if (self.model_capture.failure()) |captured| {
             var detail = captured;
-            detail.subsequent_logging_failure = failure;
+            switch (stop) {
+                .blocked => |failure| detail.subsequent_logging_failure = failure,
+                .cancelled => {},
+            }
             return .{ .model_capture = detail };
         }
-        return .{ .logging = failure };
+        return execution.Rejection.logStop(stop);
     }
 
-    fn logDiagnostics(self: *Runner, step: compilation.CompiledStep, candidate: execution.Candidate) ?@import("../domain/feature_log_stream.zig").FailureCode {
+    fn logDiagnostics(self: *Runner, step: compilation.CompiledStep, candidate: execution.Candidate) ?@import("../domain/feature_log_stream.zig").Stop {
         const view: data.View = .{ .slots = self.envelope.slots };
         const decoded = @import("model_envelope_workflow.zig");
         const schema_check = @import("model_payload_schema_workflow.zig");
         const produces_decode = std.mem.indexOfScalar(pipeline.DataKey, step.produces, .model_envelope_result) != null;
         const produces_schema = std.mem.indexOfScalar(pipeline.DataKey, step.produces, .model_payload_schema_result) != null;
         if (produces_decode or produces_schema) {
-            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .LOG_SERIALIZATION_FAILURE;
-            const evidence = values.read(&view, decoded.schema, decoded.Result) catch return .LOG_SERIALIZATION_FAILURE;
+            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            const evidence = values.read(&view, decoded.schema, decoded.Result) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             const source = evidence.source();
-            const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), source.operationId()) orelse return .LOG_SERIALIZATION_FAILURE;
+            const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), source.operationId()) orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             const info: event_capture.Model = .{ .origin = origin, .binding = request.binding().* };
             var reason: ?[]const u8 = null;
-            var event: @import("../domain/telemetry.zig").EventType = .model_protocol_failed;
+            var schema_rejected = false;
             if (produces_decode) switch (evidence.outcome()) {
                 .protocol_rejected => |rejected| reason = rejected.diagnostic.label(),
                 .not_decoded => |stopped| if (candidate.outcome == .invalid) {
@@ -744,17 +813,20 @@ pub const Runner = struct {
                     reason = "MISSING_FINAL_TEXT";
                 } else return null,
                 .decoded => |value| if (value.normalization() != .none) {
-                    if (self.events().model(step.id, info, .model_response_normalized, null, @tagName(value.normalization()), null)) |failure| return failure;
+                    if (self.events().model(step.id, info, .{ .response_normalized = @tagName(value.normalization()) })) |failure| return failure;
                 },
             };
             if (produces_schema and reason == null) {
-                const checked = values.read(&view, schema_check.schema, schema_check.Result) catch return .LOG_SERIALIZATION_FAILURE;
+                const checked = values.read(&view, schema_check.schema, schema_check.Result) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
                 if (checked.outcome() == .schema_rejected) {
                     reason = @tagName(checked.outcome().schema_rejected.reason);
-                    event = .model_schema_failed;
+                    schema_rejected = true;
                 }
             }
-            if (reason) |value| if (self.events().model(step.id, info, event, candidate.outcome, value, null)) |failure| return failure;
+            if (reason) |value| {
+                const rejected: event_capture.Rejection = .{ .status = candidate.outcome, .reason = value };
+                if (self.events().model(step.id, info, if (schema_rejected) .{ .schema_failed = rejected } else .{ .protocol_failed = rejected })) |failure| return failure;
+            }
             if (self.events().validation(step.id, candidate.outcome, reason, origin)) |failure| return failure;
         }
         // Project only this operation's newly published evidence. Reading the
@@ -763,23 +835,23 @@ pub const Runner = struct {
         inline for (.{ step.produces, step.replaces }) |keys| for (keys) |key| {
             produced.slots[@intFromEnum(key)] = view.slots[@intFromEnum(key)];
         };
-        const diagnostic = @import("candidate_validation_diagnostics.zig").read(&produced) catch return .LOG_SERIALIZATION_FAILURE;
+        const diagnostic = @import("candidate_validation_diagnostics.zig").read(&produced) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         if (diagnostic) |value| {
             if (value == .support_findings and value.support_findings.repair_rejection == null) {
-                if (self.events().emit(.{ .event_type = .review_rejected, .node_id = .{ .bytes = step.id.bytes }, .fields = .{ .outcome = event_capture.outcome(candidate.outcome) } })) |failure| return failure;
+                if (self.events().emit(.{ .review_rejected = .{ .node_id = .{ .bytes = step.id.bytes }, .outcome = event_capture.outcome(candidate.outcome) } })) |failure| return failure;
             }
             const reason = value.code();
             if (self.events().validation(step.id, candidate.outcome, reason, value.origin())) |failure| return failure;
         }
         if (candidate.delta.repair_transition) |transition| {
             if (transition == .validated) return self.events().validation(step.id, candidate.outcome, if (transition.validated.result == .recurring) "REPAIR_RECURRING" else null, null);
-            const event: @import("../domain/telemetry.zig").EventType = switch (transition) {
-                .authorized => .repair_requested,
-                .merged => .repair_applied,
+            const event: event_capture.RepairEvent = switch (transition) {
+                .authorized => .requested,
+                .merged => .{ .applied = candidate.outcome },
                 .validated => unreachable,
-                .merged_validated => |value| if (value.result == .resolved) .repair_applied else .repair_rejected,
+                .merged_validated => |value| if (value.result == .resolved) .{ .applied = candidate.outcome } else .{ .rejected = .{ .status = candidate.outcome, .reason = "REPAIR_RECURRING" } },
             };
-            if (self.events().repair(step.id, event, candidate.outcome, if (event == .repair_rejected) "REPAIR_RECURRING" else null)) |failure| return failure;
+            if (self.events().repair(step.id, event)) |failure| return failure;
         }
         return null;
     }
@@ -857,8 +929,11 @@ pub const Runner = struct {
         return resolved;
     }
 
-    fn authorityMatches(self: *const Runner) bool {
-        if (!self.operation_registry.validate()) return false;
+    fn authorityMatches(self: *Runner) bool {
+        if (!self.registry_validated) {
+            if (!self.operation_registry.validate()) return false;
+            self.registry_validated = true;
+        }
         const authority = self.selected.graph.authority;
         const policy = self.operation_registry.resolvePolicy(authority.policy_profile_id) orelse return false;
         if (!equalStrings(policy.allowed_capabilities, authority.allowed_capabilities)) return false;
@@ -1009,10 +1084,6 @@ pub const Runner = struct {
         if (pending) |applied| {
             self.model_accounting.?.commit(applied);
             pending = null;
-        }
-        for (candidate.delta.addedTelemetryFacts()) |fact| {
-            const logging_result = self.barrier.process(fact);
-            if (logging_result == .blocked) return .{ .rejected = .{ .logging = logging_result.blocked } };
         }
         // Workflow edges may inspect an operation outcome only after its delta
         // and runner transitions have been accepted and applied.
@@ -1171,6 +1242,5 @@ fn runtimeTerminal(runtime: pipeline.NodeRuntime) ?execution.Rejection {
     return switch (runtime.status()) {
         .active => null,
         .cancelled => .cancelled,
-        .deadline_exhausted => .deadline_exhausted,
     };
 }

@@ -6,16 +6,6 @@ const feature_log_runner = @import("../application/feature_log_runner.zig");
 const log_binding = @import("../domain/feature_log_binding.zig");
 const log_policy = @import("../domain/log_policy.zig");
 const artifacts = @import("../domain/workflow_artifact_registry.zig");
-const acquire_lock = @import("../actions/log/acquire_feature_log_stream_lock.zig");
-const release_lock = @import("../actions/log/release_feature_log_stream_lock.zig");
-const recover_stream = @import("../actions/log/recover_feature_log_stream.zig");
-const create_segment = @import("../actions/log/create_feature_log_segment.zig");
-const rotate_segment = @import("../actions/log/rotate_feature_log_segment.zig");
-const append_record = @import("../actions/log/append_feature_log_record.zig");
-const close_stream = @import("../actions/log/close_feature_log_stream.zig");
-const read_clock = @import("../actions/log/read_trusted_log_clock.zig");
-const write_console = @import("../actions/log/write_console_log_record.zig");
-const emit_emergency = @import("../actions/log/emit_emergency_log_failure_record.zig");
 
 pub const Error = feature_log_sink.Adapter.InitError || error{OutOfMemory};
 pub const Owner = opaque {};
@@ -50,17 +40,17 @@ pub fn create(
         .allocator = allocator,
         .policy = policy,
         .binding = binding,
-        .actions = .{
-            .acquire_lock = acquire_lock.Action{ .sink = owner.sink.lockAcquirer() },
-            .release_lock = release_lock.Action{ .sink = owner.sink.lockReleaser() },
-            .recover_stream = recover_stream.Action{ .sink = owner.sink.streamRecoverer() },
-            .create_segment = create_segment.Action{ .sink = owner.sink.segmentCreator() },
-            .rotate_segment = rotate_segment.Action{ .sink = owner.sink.segmentRotator() },
-            .append_record = append_record.Action{ .sink = owner.sink.recordAppender() },
-            .close_stream = close_stream.Action{ .sink = owner.sink.streamCloser() },
-            .read_clock = read_clock.Action{ .clock = owner.clock.clock() },
-            .write_console = write_console.Action{ .sink = owner.output.console() },
-            .emit_emergency = emit_emergency.Action{ .sink = owner.output.emergency() },
+        .ports = .{
+            .clock = owner.clock.clock(),
+            .acquirer = owner.sink.lockAcquirer(),
+            .recoverer = owner.sink.streamRecoverer(),
+            .creator = owner.sink.segmentCreator(),
+            .rotator = owner.sink.segmentRotator(),
+            .appender = owner.sink.recordAppender(),
+            .closer = owner.sink.streamCloser(),
+            .releaser = owner.sink.lockReleaser(),
+            .console = owner.output.console(),
+            .emergency = owner.output.emergency(),
         },
     };
     return @ptrCast(owner);

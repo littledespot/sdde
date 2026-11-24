@@ -53,13 +53,13 @@ test "native extraction composition defects cannot authorize unit repair or chan
         const passive: extraction.text.PassiveReference = .{ .passive_literal_id = context.registry.records[0].id };
         const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
         const candidate: extraction.Parsed = .{ .entries = &.{.{ .scope = scope, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .passive = passive }} } } }} };
-        const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+        const rejection = (try text_fixture.validate_text.execute(a, context.registry, inputs, candidate)).invalid;
         try std.testing.expectEqual(.reference_only, rejection.issue.reason);
-        const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
+        const facts = contexts.textFacts(inputs, context.registry, candidate);
         const before = try atomic.snapshot(extraction.Parsed, a, candidate);
         try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, facts, rejection));
         try std.testing.expectEqualDeep(before, try atomic.snapshot(extraction.Parsed, a, candidate));
-        const repeated = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+        const repeated = (try text_fixture.validate_text.execute(a, context.registry, inputs, candidate)).invalid;
         try std.testing.expectEqualDeep(rejection, repeated);
     }
 }
@@ -373,6 +373,16 @@ test "claims quote their cited source lines and split only across top-level list
         .{ .source = "```\n  key: v\n```\n", .citations = "[2]", .forced = true },
         .{ .source = "Config:\n```\na: 1\n", .citations = "[1,2,3]", .forced = true },
         .{ .source = "Config:\n\n```\na: 1\nb: 2\n```\n", .citations = "[4]", .forced = false },
+        // A blank interior line at either edge of the block cannot be cited (ADR 0036 Decision 1), so "in full" is
+        // every citable line of the block: the content lines alone or the whole block force the duty, a part leaves
+        // it free.
+        .{ .source = "Config:\n\n```\n\na: 1\nb: 2\n```\n", .citations = "[5,6]", .forced = true },
+        .{ .source = "Config:\n\n```\n\na: 1\nb: 2\n```\n", .citations = "[3,5,6,7]", .forced = true },
+        .{ .source = "Config:\n\n```\n\na: 1\nb: 2\n```\n", .citations = "[5]", .forced = false },
+        .{ .source = "Config:\n\n```\na: 1\nb: 2\n\n```\n", .citations = "[4,5]", .forced = true },
+        .{ .source = "Config:\n\n```\na: 1\nb: 2\n\n```\n", .citations = "[3,4,5,7]", .forced = true },
+        .{ .source = "Config:\n\n```\na: 1\nb: 2\n\n```\n", .citations = "[4]", .forced = false },
+        .{ .source = "Config:\n\n```\n\na: 1\n\nb: 2\n\n```\n", .citations = "[5,7]", .forced = true },
     }) |case| {
         const exact = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", case.source));
         const available = try token_fixture.candidates(a, exact);
@@ -381,6 +391,7 @@ test "claims quote their cited source lines and split only across top-level list
         const wire = try token_fixture.wire(a, body, &.{.{ .irrelevant = available.entries[0].id }});
         const checked = try @import("domain/token_classification_validation.zig").validate(a, exact, available, try text_fixture.check(a, exact, try parse.execute(a, .{ .entries = &.{raw(exact, 0, wire)} })));
         if (case.forced) {
+            try std.testing.expect(checked == .invalid);
             try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{available.entries[0].id}, checked.invalid.choices.required_preserve);
         } else try std.testing.expect(checked == .valid);
     }
@@ -588,14 +599,14 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
     {
         const next = try owned.create(allocator, owned.view(current));
         errdefer owned.destroy(next);
-        next.payload = .{ .selections_validated = try token_fixture.classify.execute(next.arena.allocator(), inputs, try token_fixture.candidates(source_allocator, inputs), current.payload.text_validated) };
+        next.payload = .{ .classifications_validated = try token_fixture.classify.execute(next.arena.allocator(), inputs, try token_fixture.candidates(source_allocator, inputs), current.payload.text_validated) };
         owned.destroy(current);
         current = next;
     }
     {
         const next = try owned.create(allocator, owned.view(current));
         errdefer owned.destroy(next);
-        next.payload = .{ .tokens_assigned = try token_fixture.assign.execute(next.arena.allocator(), current.payload.selections_validated) };
+        next.payload = .{ .tokens_assigned = try token_fixture.assign.execute(next.arena.allocator(), current.payload.classifications_validated) };
         owned.destroy(current);
         current = next;
     }
@@ -678,14 +689,14 @@ test "no-feature-claim text repair retains native failures and immutable classif
         .{ .nodes = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = 999 } } }} },
     }, 0..) |reason, scenario| {
         const candidate: extraction.Parsed = .{ .entries = &.{.{ .scope = scope, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = reason } }} };
-        const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+        const rejection = (try text_fixture.validate_text.execute(a, context.registry, inputs, candidate)).invalid;
         try std.testing.expectEqual(@as(@TypeOf(rejection.issue.reason), if (scenario == 0) .invalid_scalar else .unknown_passive), rejection.issue.reason);
         try std.testing.expect(rejection.target == .reason);
-        const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
+        const facts = contexts.textFacts(inputs, context.registry, candidate);
         const authorization = try repair.authorize(a, facts, rejection);
         const replacement: repair.Replacement = .{ .reference = .{ .nodes = &.{.{ .literal = .{ .value = "This source supplies background context." } }} } };
         const fixed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).text.inputs), facts, authorization, replacement, null);
-        const valid = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, fixed)).valid;
+        const valid = (try text_fixture.validate_text.execute(a, context.registry, inputs, fixed)).valid;
         try std.testing.expect(valid.entries[0].outcome == .no_feature_claim);
         try std.testing.expectEqualDeep(candidate.entries[0].token_classifications, fixed.entries[0].token_classifications);
         const retained = try (@import("domain/candidate_validation_diagnostic.zig").Diagnostic{ .extraction_text = rejection }).copy(a);
@@ -710,16 +721,12 @@ test "a generic authorize-repair step runs the reference text owner over a real 
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(a, &ids, try ingest(a, "guidance.md", "Background context only."));
     const context = try text_fixture.prepare(a, inputs);
-    var transferred = false;
-    defer if (!transferred) context.deinit();
+    defer context.deinit();
     const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
     const reason: extraction.text.ReferenceSemanticText = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} };
     const candidate: extraction.Parsed = .{ .entries = &.{.{ .scope = scope, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = reason } }} };
-    const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+    const rejection = (try text_fixture.validate_text.execute(a, context.registry, inputs, candidate)).invalid;
 
-    const current = try values.adopt(std.testing.allocator, @import("application/toolchain_workflow_values.zig").valid, text_fixture.safety.ValidToolchain, text_fixture.safety.Owner, context.owner, text_fixture.safety.value, text_fixture.safety.deinitOwner, text_fixture.safety.retainedBytes(context.owner));
-    transferred = true;
-    defer values.destroy(current);
     const source = try values.create(std.testing.allocator, @import("application/reference_evidence_workflow.zig").inputs_schema, evidence.Inputs, inputs);
     defer values.destroy(source);
     const registry = try values.create(std.testing.allocator, @import("application/passive_literal_workflow.zig").registry_schema, @import("domain/passive_literals.zig").Registry, context.registry);
@@ -741,7 +748,6 @@ test "a generic authorize-repair step runs the reference text owner over a real 
     var view: @import("domain/pipeline_data.zig").View = .{};
     view.slots[@intFromEnum(@import("application/reference_evidence_workflow.zig").inputs_schema.key)] = source;
     view.slots[@intFromEnum(@import("application/passive_literal_workflow.zig").registry_schema.key)] = registry;
-    view.slots[@intFromEnum(@import("application/toolchain_workflow_values.zig").valid.key)] = current;
     view.slots[@intFromEnum(native.parsed_schema.key)] = parsed_value;
     view.slots[@intFromEnum(native.text_schema.key)] = rejected_value;
     // A value of another stage at the key is the stage mismatch the extraction owner's native read maps to its own
@@ -755,7 +761,7 @@ test "a generic authorize-repair step runs the reference text owner over a real 
         const parameters = [_]compilation.CompiledParameter{.{ .id = .{ .bytes = generic.selector }, .value = .{ .enumeration = owner.id() } }};
         const effects = @import("application/reference_text_repair_workflow.zig").Authorize.effects;
         const step: compilation.CompiledStep = .{ .id = .{ .bytes = "authorize" }, .operation_id = .{ .bytes = "authorize-repair" }, .parameters = &parameters, .requires = effects.requires, .produces = effects.produces, .replaces = effects.replaces, .invalidates = effects.invalidates, .outcomes = &.{ .ok, .invalid, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
-        const input: @import("ports/workflow_operation_registry.zig").Input = .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } };
+        const input: @import("ports/workflow_operation_registry.zig").Input = .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null } };
         if (generic.AuthorizeRepair.invoke(&generic_context, input)) |authorized| {
             // Only the text owner finds its native facts in this data.
             try std.testing.expectEqual(repair_owner.RepairOwner.reference_text, owner);
@@ -790,19 +796,18 @@ test "reason text repair binds its packet, origin, progress and authority to cur
         const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", source));
         const context = try text_fixture.prepare(a, inputs);
         defer context.deinit();
-        const current = text_fixture.safety.value(context.owner);
         const available = try token_fixture.candidates(a, inputs);
         const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
         var unknown = available.entries[0].id;
         unknown.ordinal += 1;
         const candidate: extraction.Parsed = .{ .entries = &.{.{ .scope = scope, .origin = first, .producers = .{ .content = content, .classifications = first }, .token_classifications = &.{.{ .irrelevant = unknown }}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} };
-        const rejection = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, candidate)).invalid;
+        const rejection = (try text_fixture.validate_text.execute(a, context.registry, inputs, candidate)).invalid;
         try std.testing.expectEqual(.invalid_scalar, rejection.issue.reason);
         try std.testing.expectEqualDeep(content, rejection.origin.?);
-        const facts = try contexts.textFacts(inputs, context.registry, current, candidate);
+        const facts = contexts.textFacts(inputs, context.registry, candidate);
         const authorization = try repair.authorize(a, facts, rejection);
         const replacement: repair.Replacement = .{ .reference = .{ .nodes = &.{ .{ .literal = .{ .value = "Consult " } }, .{ .passive = .{ .passive_literal_id = context.registry.records[0].id } } } } };
-        const packet = try repair.packet(std.testing.allocator, facts, context.registry, current, available, authorization);
+        const packet = try repair.packet(std.testing.allocator, facts, context.registry, available, authorization);
         defer @import("domain/model_input_packet.zig").release(packet);
         try std.testing.expectEqualDeep(content, packet.repairOrigin().?);
         const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
@@ -818,27 +823,24 @@ test "reason text repair binds its packet, origin, progress and authority to cur
         const merged = try repair.merge(a, canonical, facts, authorization, try repair.parse(a, authorization, packet, wire), correction);
         try std.testing.expectEqualDeep(candidate.entries[0].token_classifications, merged.entries[0].token_classifications);
         try std.testing.expectEqualDeep(correction, extraction.textOrigin(merged.entries[0], .reason).?);
-        const checked = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, merged)).valid;
-        try std.testing.expectEqual(.resolved, (try repair.progress(a, text_fixture.validator, context.registry, current, inputs, merged)).?.validated.result);
+        const checked = (try text_fixture.validate_text.execute(a, context.registry, inputs, merged)).valid;
+        try std.testing.expectEqual(.resolved, (try repair.progress(a, text_fixture.validator, context.registry, inputs, merged)).?.validated.result);
         try std.testing.expectEqualDeep(merged.last_repair.?, checked.last_repair.?);
         try std.testing.expect(checked.last_repair.?.changed);
         // The reason's repair leaves the classification defect for its own route.
         const remaining = (try classifications.validate(a, inputs, available, checked)).invalid;
         try std.testing.expectEqualDeep(first, remaining.origin.?);
         try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{unknown}, remaining.issues.unknown);
-        const merged_facts = try contexts.textFacts(inputs, context.registry, current, merged);
+        const merged_facts = contexts.textFacts(inputs, context.registry, merged);
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, canonical, merged_facts, authorization, replacement, correction));
         var changed_registry = context.registry;
         const names = try a.dupe(@import("domain/path_token_grammar.zig").ReferenceName, changed_registry.grammar.reference_names);
         names[0].basename = "changed.md";
         changed_registry.grammar.reference_names = names;
-        const changed_facts = try contexts.textFacts(inputs, changed_registry, current, candidate);
+        const changed_facts = contexts.textFacts(inputs, changed_registry, candidate);
         try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, changed_facts, rejection));
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, facts, changed_registry, current, available, authorization));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, facts, changed_registry, available, authorization));
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, canonical, changed_facts, authorization, replacement, correction));
-        const foreign_policy = try text_fixture.prepare(a, inputs);
-        defer foreign_policy.deinit();
-        try std.testing.expectError(error.StaleNamingPolicy, contexts.textFacts(inputs, context.registry, text_fixture.safety.value(foreign_policy.owner), candidate));
         var stale = facts;
         stale.text.policy_ids = &.{"different-policy"};
         try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, stale, rejection));
@@ -846,15 +848,15 @@ test "reason text repair binds its packet, origin, progress and authority to cur
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .normalizer = text_fixture.normalizer, .original_sources = &.{} }, facts, authorization, authorization.operation.replace, correction));
         const again = try repair.merge(a, canonical, facts, authorization, authorization.operation.replace, correction);
         try std.testing.expect(!again.last_repair.?.changed);
-        try std.testing.expectEqual(.recurring, (try repair.progress(a, text_fixture.validator, context.registry, current, inputs, again)).?.validated.result);
-        const repeated = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, again)).invalid;
+        try std.testing.expectEqual(.recurring, (try repair.progress(a, text_fixture.validator, context.registry, inputs, again)).?.validated.result);
+        const repeated = (try text_fixture.validate_text.execute(a, context.registry, inputs, again)).invalid;
         try std.testing.expectEqual(.invalid_scalar, repeated.issue.reason);
         try std.testing.expectEqualDeep(correction, repeated.origin.?);
-        const retry = try repair.authorize(a, try contexts.textFacts(inputs, context.registry, current, again), repeated);
+        const retry = try repair.authorize(a, contexts.textFacts(inputs, context.registry, again), repeated);
         try std.testing.expectEqualDeep(authorization.retry.?.key, retry.retry.?.key);
         var registry = context.registry;
         registry.grammar.reference_state_id.bytes = "stale-state";
-        try std.testing.expectError(error.InvalidPathTokenGrammar, text_fixture.validate_text.execute(a, registry, current, inputs, candidate));
+        try std.testing.expectError(error.InvalidPathTokenGrammar, text_fixture.validate_text.execute(a, registry, inputs, candidate));
     }
 }
 

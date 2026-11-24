@@ -111,7 +111,8 @@
 - It does not authorize deleting the feature directory, rewriting unrelated files,
   resetting immutable history, or bypassing validation and predecessor gates.
 - Normal output publication still requires successful whole-workflow completion;
-  clarification publication may end in `needs_user`.
+  clarification publication may end in `needs_user`, and the publication of an accepted user `cancel` ends
+  the run `cancelled` ([ADR 0025](0025-clarification-answer-authentication.md)).
 
 ## Publication failure rule (accepted 2026-09-07)
 

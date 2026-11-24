@@ -19,8 +19,10 @@ tree.
    every confirmed finding.
 5. **Generated artifacts.** If the change affects canonical rendering or a generated
    projection, regenerate it from its source and confirm the outputs match.
-6. **Full offline suite.** Run `zig build verify`. It can take several minutes: use a
-   long timeout, or run it in the background and wait for it.
+6. **Full offline suite.** Run `zig build verify --summary line`. It can take several
+   minutes: use a long timeout, or run it in the background and wait for it. Judge it by
+   its exit status and the `N/N steps succeeded` line, not by stderr: a passing step that
+   writes to stderr still prints `failed command:`.
 7. **Report**, as the AGENTS.md "Definition of done" requires:
    - changed contracts and files;
    - tests added or changed, with their accepted and rejected cases;

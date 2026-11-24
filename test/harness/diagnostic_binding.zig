@@ -4,6 +4,7 @@ const debug = @import("../../src/domain/request_debugger.zig");
 const ports = @import("../../src/ports/request_replay.zig");
 const registered = @import("../../src/composition/provider_model_contracts.zig");
 const identities = @import("../../src/domain/llm_provider_identity.zig");
+const provider_api_key = @import("../../src/adapters/provider/provider_api_key.zig");
 
 pub const Error = std.mem.Allocator.Error || error{InvalidEvaluationContract};
 
@@ -24,7 +25,8 @@ pub fn validateBinding(binding: debug.Description) error{InvalidEvaluationContra
 }
 
 fn validatedContract(binding: debug.Description) error{InvalidEvaluationContract}!*const @import("../../src/domain/llm_provider_contracts.zig").ProviderModelContract {
-    if (binding.provider_config != .aws_bedrock or binding.operation_kind != .inference) return error.InvalidEvaluationContract;
+    // A replay needs a provider family that authenticates with one API key.
+    if (provider_api_key.Family.of(binding.provider_config) == null or binding.operation_kind != .inference) return error.InvalidEvaluationContract;
     const provider = identities.ProviderId.parse(binding.provider) orelse return error.InvalidEvaluationContract;
     const model = identities.ModelId.parse(binding.model) orelse return error.InvalidEvaluationContract;
     // The captured configuration names the family whose compiled contract applies.

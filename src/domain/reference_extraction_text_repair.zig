@@ -54,9 +54,9 @@ pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: e.TextRejection)
     result.retry = try retryPermit(a, result);
     return result;
 }
-pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, candidates: e.tokens.Candidates, authorization: Authorization) Error!*packets.Packet {
+pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_literals.zig").Registry, candidates: e.tokens.Candidates, authorization: Authorization) Error!*packets.Packet {
     try atomic.checkDependencies(a, authorization, facts);
-    try atomic.checkDependencies(a, authorization, try context.textFacts(facts.text.inputs, registry, current, facts.candidate));
+    try atomic.checkDependencies(a, authorization, context.textFacts(facts.text.inputs, registry, facts.candidate));
     const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.text.inputs.corpus.state_id, .chunk_id = authorization.target.scope };
     const base = try @import("reference_model_input.zig").extractionBase(a, facts.text.inputs, registry, candidates, scope);
     defer packets.release(base);
@@ -84,10 +84,10 @@ pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").Canonica
     return .{ .revision = merged.revision_after, .last_repair = merged, .pending_repair = if (authorization.retry) |permit| .{ .permit = permit, .target = .{ .field = target.field, .scope = .{ .bytes = try a.dupe(u8, target.scope.bytes) } } } else null, .entries = entries };
 }
 
-pub fn progress(a: std.mem.Allocator, validator: e.text.Validator, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: @import("reference_evidence.zig").Inputs, candidate: e.Parsed) Error!?@import("workflow_retry.zig").Transition {
+pub fn progress(a: std.mem.Allocator, validator: e.text.Validator, registry: @import("passive_literals.zig").Registry, inputs: @import("reference_evidence.zig").Inputs, candidate: e.Parsed) Error!?@import("workflow_retry.zig").Transition {
     const pending = candidate.pending_repair orelse return null;
     const scope: @import("reference_evidence.zig").Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = pending.target.scope };
-    const valid = try @import("reference_extraction_text.zig").validTarget(validator, a, registry, current, inputs, candidate, scope, pending.target.field);
+    const valid = try @import("reference_extraction_text.zig").validTarget(validator, a, registry, inputs, candidate, scope, pending.target.field);
     return .{ .validated = .{ .permit = pending.permit, .revision = candidate.revision, .result = if (valid) .resolved else .recurring } };
 }
 fn entryAt(parsed: e.Parsed, target: Target) Error!e.ParsedResult {

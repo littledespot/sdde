@@ -21,12 +21,24 @@ pub fn Responses(comptime boundary: spec.Boundary) type {
                 return .{ .disposition = self.disposition, .basis = self.basis };
             }
         };
+        /// `record_kind` is the family a records clarification is about. The engine validates it (a records unit names one, any other unit
+        /// none, and never the entity) and never reads it for a subject's identity (ADR 0025, the clarification subject).
         pub const Need = struct { reason: NeedReason, question: fields.AttributedValue, record_kind: ?spec.Kind = null };
         pub const Content = union(enum) {
             brief: fields.Brief,
             primary_user_story: fields.AttributedValue,
             entities: Self.Entities,
             records: []const fields.RecordProposal,
+
+            /// The unit this content answers.
+            pub fn unit(self: @This()) Unit {
+                return switch (self) {
+                    .brief => .brief,
+                    .primary_user_story => .primary_user_story,
+                    .entities => .entities,
+                    .records => .records,
+                };
+            }
         };
         pub const Response = union(enum) { content: Self.Content, clarification: Self.Need, inconclusive: Inconclusive };
     };
@@ -243,7 +255,7 @@ pub fn revalidate(allocator: std.mem.Allocator, validator: @import("typed_text.z
 }
 
 fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: Responses(boundary).Response) Error!Validation {
-    try provenance.bind(allocator, validator, context);
+    try provenance.bind(allocator, context);
     var inspection: provenance.Inspection = .{};
     const result: CanonicalResponse = switch (proposed) {
         .inconclusive => |failure| return .{ .invalid = .{ .unit = unit, .field = .interpretation, .rule = .interpretation, .observed = null, .blocked = .inconclusive_review, .detail = failure.detail } },
@@ -256,7 +268,7 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
             } };
         },
         .content => |content| blk: {
-            if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
+            if (std.meta.activeTag(unit) != std.meta.activeTag(content.unit())) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
             break :blk .{ .content = switch (content) {
                 .brief => |brief| .{ .brief = .{
                     .description = inspectAuthored(boundary, allocator, validator, context, brief.description, .spec_description, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .description, inspection, err),

@@ -11,9 +11,6 @@ const Io = std.Io;
 pub const Source = struct {
     io: Io,
     directory: Io.Dir,
-    run_directory: Io.Dir,
-    expected_binding: log_binding.BindingCandidate,
-    scans_run_history: bool,
 };
 
 pub fn recover(
@@ -26,19 +23,16 @@ pub fn recover(
     var ordinals: std.ArrayList(u16) = .empty;
     defer ordinals.deinit(allocator);
     var iterator = source.directory.iterate();
-    while (iterator.next(source.io) catch return error.SinkFailure) |entry| switch (feature_log_file.classifyBindingEntry(entry)) {
+    while (iterator.next(source.io) catch |err| return feature_log_file.sinkFault(err)) |entry| switch (feature_log_file.classifyBindingEntry(entry)) {
         .segment => |ordinal| ordinals.append(allocator, ordinal) catch return error.SinkFailure,
         .ignored => {},
         .invalid => return error.CorruptStream,
     };
-    const others = scanOtherBindings(source, stream, heading, allocator) catch return error.CorruptStream;
-    const run_segments = std.math.add(usize, ordinals.items.len, others.segments) catch return error.CorruptStream;
-    if (run_segments > log_limits.max_segments) return error.CorruptStream;
-    const total_segments: u8 = @intCast(run_segments);
-    const history_next_sequence = others.next_sequence;
+    if (ordinals.items.len > log_limits.max_segments) return error.CorruptStream;
+    const total_segments: u8 = @intCast(ordinals.items.len);
     if (ordinals.items.len == 0) return .{ .empty = .{
         .next_segment_ordinal = 1,
-        .next_sequence = history_next_sequence,
+        .next_sequence = 1,
         .total_segment_count = total_segments,
     } };
     std.mem.sort(u16, ordinals.items, {}, std.sort.asc(u16));
@@ -46,7 +40,7 @@ pub fn recover(
         if (ordinal != index + 1) return error.CorruptStream;
     }
     var active: ?log_stream.StreamState = null;
-    var prior_sequence: u64 = history_next_sequence - 1;
+    var prior_sequence: u64 = 0;
     for (ordinals.items, 0..) |ordinal, index| {
         const inspection = inspectSegment(
             source.io,
@@ -58,7 +52,10 @@ pub fn recover(
             heading,
             if (index + 1 == ordinals.items.len) .truncate else .reject,
             std.math.add(u64, prior_sequence, 1) catch return error.CorruptStream,
-        ) catch return error.CorruptStream;
+        ) catch |err| return switch (err) {
+            error.Cancelled => error.Cancelled,
+            error.InvalidSegment, error.SegmentUnavailable, error.OutOfMemory => error.CorruptStream,
+        };
         prior_sequence = inspection.last_sequence;
         if (!inspection.closed) {
             if (index + 1 != ordinals.items.len or active != null) return error.CorruptStream;
@@ -108,7 +105,7 @@ pub fn inspectReadOnly(
     tail: enum { ignore, reject },
     first_sequence: ?u64,
 ) InspectError!Inspection {
-    const heading = if (stream == .event) format.event_heading else format.prompt_heading;
+    const heading = format.segmentHeading(stream);
     return inspectSegment(io, directory, allocator, binding, stream, ordinal, heading, if (tail == .ignore) .ignore else .reject, first_sequence);
 }
 
@@ -149,25 +146,13 @@ pub fn inspectGroup(
 pub fn segmentPolicy(io: Io, directory: Io.Dir, allocator: std.mem.Allocator, ordinal: u16, stream: log_stream.Stream) InspectError!?[]const u8 {
     var name_buffer: [32]u8 = undefined;
     const file_name = feature_log_file.segmentName(ordinal, &name_buffer) catch return error.InvalidSegment;
-    var file = directory.openFile(io, file_name, .{
-        .mode = .read_only,
-        .allow_directory = false,
-        .follow_symlinks = false,
-        .resolve_beneath = true,
-    }) catch |err| return fileError(err);
-    defer file.close(io);
-    const stat = file.stat(io) catch |err| return fileError(err);
-    if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) return error.InvalidSegment;
+    const segment = feature_log_file.openSegment(io, directory, file_name, .read_only) catch |err| return openError(err);
+    defer segment.close(io);
     // The segment's bytes stay in a local arena; only the policy is returned.
     var local: std.heap.ArenaAllocator = .init(allocator);
     defer local.deinit();
-    var reader = file.reader(io, &.{});
-    const bytes = reader.interface.allocRemaining(local.allocator(), .limited64(stat.size + 1)) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => error.SegmentUnavailable,
-    };
-    if (bytes.len != stat.size) return error.InvalidSegment;
-    const heading = if (stream == .event) format.event_heading else format.prompt_heading;
+    const bytes = feature_log_file.readSegment(io, local.allocator(), segment) catch |err| return readError(err);
+    const heading = format.segmentHeading(stream);
     const header = (try headerRow(bytes, heading, stream)) orelse return null;
     return try allocator.dupe(u8, format.logPolicyCell(header) orelse return error.InvalidSegment);
 }
@@ -212,6 +197,20 @@ pub fn segmentOrdinals(io: Io, directory: Io.Dir, ordinals: *[log_limits.max_seg
     return count;
 }
 
+/// A segment the open rejected is invalid; any other failed open call is a file error.
+fn openError(err: anyerror) InspectError {
+    return if (err == error.SegmentRejected) error.InvalidSegment else fileError(err);
+}
+
+fn readError(err: feature_log_file.ReadError) InspectError {
+    return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.Canceled => error.Cancelled,
+        error.ReadFailed => error.SegmentUnavailable,
+        error.SizeDrift => error.InvalidSegment,
+    };
+}
+
 fn fileError(err: anyerror) InspectError {
     return switch (err) {
         error.Canceled => error.Cancelled,
@@ -234,28 +233,19 @@ fn inspectSegment(
 ) InspectError!Inspection {
     var name_buffer: [32]u8 = undefined;
     const file_name = feature_log_file.segmentName(ordinal, &name_buffer) catch return error.InvalidSegment;
-    var file = directory.openFile(io, file_name, .{
-        .mode = if (tail == .truncate) .read_write else .read_only,
-        .allow_directory = false,
-        .follow_symlinks = false,
-        .resolve_beneath = true,
-    }) catch |err| return fileError(err);
-    defer file.close(io);
-    var stat = file.stat(io) catch |err| return fileError(err);
-    if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
-        return error.InvalidSegment;
-    }
-    var reader = file.reader(io, &.{});
-    var bytes = reader.interface.allocRemaining(allocator, .limited64(stat.size + 1)) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => error.SegmentUnavailable,
-    };
-    if (bytes.len != stat.size) return error.InvalidSegment;
+    const segment = feature_log_file.openSegment(io, directory, file_name, if (tail == .truncate) .read_write else .read_only) catch |err| return openError(err);
+    defer segment.close(io);
+    var size = segment.size;
+    var bytes = feature_log_file.readSegment(io, allocator, segment) catch |err| return readError(err);
     // A crash while a segment was created can leave it torn before its header
-    // row is complete. Read-only inspection reports that as an active tail.
-    if (tail == .ignore and try headerRow(bytes, heading, stream) == null) {
-        return .{ .closed = false, .last_sequence = if (first_sequence) |first| first -| 1 else 0, .bytes = stat.size, .partial_tail = true };
-    }
+    // row is complete. Read-only inspection reports that as an active tail;
+    // recovery refuses it before any write, because truncating a segment with
+    // no identified header would extend what recovery may do to a log file.
+    if (try headerRow(bytes, heading, stream) == null) switch (tail) {
+        .ignore => return .{ .closed = false, .last_sequence = if (first_sequence) |first| first -| 1 else 0, .bytes = size, .partial_tail = true },
+        .truncate => return error.InvalidSegment,
+        .reject => {},
+    };
     if (bytes.len == 0) return error.InvalidSegment;
     var partial_tail = false;
     if (bytes[bytes.len - 1] != '\n') {
@@ -264,9 +254,9 @@ fn inspectSegment(
             .reject => return error.InvalidSegment,
             .ignore => partial_tail = true,
             .truncate => {
-                file.setLength(io, end + 1) catch |err| return fileError(err);
-                file.sync(io) catch |err| return fileError(err);
-                stat.size = end + 1;
+                segment.file.setLength(io, end + 1) catch |err| return fileError(err);
+                segment.file.sync(io) catch |err| return fileError(err);
+                size = end + 1;
             },
         }
         bytes = bytes[0 .. end + 1];
@@ -275,7 +265,7 @@ fn inspectSegment(
     const columns = if (stream == .event) format.event_column_count else format.prompt_column_count;
     var lines = std.mem.splitScalar(u8, bytes[heading.len..], '\n');
     const header = lines.next() orelse return error.InvalidSegment;
-    if (header.len == 0 or !std.mem.eql(u8, format.cellAt(header, 0) orelse return error.InvalidSegment, "segment_header")) {
+    if (header.len == 0 or !std.mem.eql(u8, format.cellAt(header, format.sharedColumn("record_kind")) orelse return error.InvalidSegment, "segment_header")) {
         return error.InvalidSegment;
     }
     try validRow(allocator, header, columns);
@@ -286,24 +276,24 @@ fn inspectSegment(
     while (lines.next()) |line| {
         if (line.len == 0) continue;
         try validRow(allocator, line, columns);
-        const kind = format.cellAt(line, 0) orelse return error.InvalidSegment;
+        const kind = format.cellAt(line, format.sharedColumn("record_kind")) orelse return error.InvalidSegment;
         if (std.mem.eql(u8, kind, @tagName(stream))) {
             if (closed) return error.InvalidSegment;
             format.validatePersistedIdentityRow(line, binding, ordinal, stream) catch return error.InvalidSegment;
-            const sequence = std.fmt.parseInt(u64, format.cellAt(line, 9) orelse return error.InvalidSegment, 10) catch return error.InvalidSegment;
+            const sequence = std.fmt.parseInt(u64, format.cellAt(line, format.sharedColumn("sequence")) orelse return error.InvalidSegment, 10) catch return error.InvalidSegment;
             if (last_sequence) |prior| if (sequence != (std.math.add(u64, prior, 1) catch return error.InvalidSegment)) return error.InvalidSegment;
             last_sequence = sequence;
         } else if (std.mem.eql(u8, kind, "segment_trailer")) {
             if (closed) return error.InvalidSegment;
             format.validatePersistedIdentityRow(line, binding, ordinal, stream) catch return error.InvalidSegment;
             // A segment with no record states its own final sequence.
-            const final = last_sequence orelse std.fmt.parseInt(u64, format.cellAt(line, 9) orelse return error.InvalidSegment, 10) catch return error.InvalidSegment;
+            const final = last_sequence orelse std.fmt.parseInt(u64, format.cellAt(line, format.sharedColumn("sequence")) orelse return error.InvalidSegment, 10) catch return error.InvalidSegment;
             format.validatePersistedControlRow(line, .segment_trailer, stream, final) catch return error.InvalidSegment;
             last_sequence = final;
             closed = true;
         } else return error.InvalidSegment;
     }
-    return .{ .closed = closed, .last_sequence = last_sequence orelse 0, .bytes = stat.size, .partial_tail = partial_tail };
+    return .{ .closed = closed, .last_sequence = last_sequence orelse 0, .bytes = size, .partial_tail = partial_tail };
 }
 
 fn validRow(allocator: std.mem.Allocator, line: []const u8, columns: usize) InspectError!void {
@@ -313,74 +303,4 @@ fn validRow(allocator: std.mem.Allocator, line: []const u8, columns: usize) Insp
         error.OutOfMemory => error.OutOfMemory,
         else => error.InvalidSegment,
     };
-}
-
-/// The run's other bindings of this stream: their segments, which count toward
-/// the run-wide cap, and the sequence after their highest trailer. A sink
-/// without run history has no other bindings.
-const OtherBindings = struct { segments: usize = 0, next_sequence: u64 = 1 };
-
-fn scanOtherBindings(
-    source: Source,
-    stream: log_stream.Stream,
-    heading: []const u8,
-    allocator: std.mem.Allocator,
-) !OtherBindings {
-    if (!source.scans_run_history) return .{};
-    var segment_count: usize = 0;
-    var maximum: u64 = 0;
-    var iterator = source.run_directory.iterate();
-    while (try iterator.next(source.io)) |entry| {
-        switch (feature_log_file.classifyContainerEntry(entry)) {
-            .directory => {},
-            .ignored => continue,
-            .invalid => return error.CorruptStream,
-        }
-        if (std.mem.eql(u8, entry.name, source.expected_binding.binding_id.bytes)) continue;
-        var historical = try source.run_directory.openDir(source.io, entry.name, .{
-            .iterate = true,
-            .follow_symlinks = false,
-        });
-        defer historical.close(source.io);
-        var segments = historical.iterate();
-        while (try segments.next(source.io)) |historical_entry| {
-            const ordinal = switch (feature_log_file.classifyBindingEntry(historical_entry)) {
-                .segment => |ordinal| ordinal,
-                .ignored => continue,
-                .invalid => return error.CorruptStream,
-            };
-            segment_count += 1;
-            var file = try historical.openFile(source.io, historical_entry.name, .{
-                .mode = .read_only,
-                .allow_directory = false,
-                .follow_symlinks = false,
-                .resolve_beneath = true,
-            });
-            defer file.close(source.io);
-            const stat = try file.stat(source.io);
-            if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
-                return error.CorruptStream;
-            }
-            var reader = file.reader(source.io, &.{});
-            const bytes = try reader.interface.allocRemaining(allocator, .limited64(stat.size + 1));
-            if (bytes.len != stat.size or !std.mem.startsWith(u8, bytes, heading) or bytes.len == 0 or bytes[bytes.len - 1] != '\n') {
-                return error.CorruptStream;
-            }
-            const without_lf = bytes[0 .. bytes.len - 1];
-            const trailer_start = (std.mem.lastIndexOfScalar(u8, without_lf, '\n') orelse return error.CorruptStream) + 1;
-            const trailer = without_lf[trailer_start..];
-            if (!std.mem.eql(u8, format.cellAt(trailer, 0) orelse return error.CorruptStream, "segment_trailer") or
-                !std.mem.eql(u8, format.cellAt(trailer, 2) orelse return error.CorruptStream, @tagName(stream)) or
-                !std.mem.eql(u8, format.cellAt(trailer, 5) orelse return error.CorruptStream, entry.name) or
-                try std.fmt.parseInt(u16, format.cellAt(trailer, 6) orelse return error.CorruptStream, 10) != ordinal or
-                !std.mem.eql(u8, format.cellAt(trailer, 15) orelse return error.CorruptStream, source.expected_binding.run_id.bytes) or
-                !std.mem.eql(u8, format.cellAt(trailer, 16) orelse return error.CorruptStream, source.expected_binding.feature_id.bytes))
-            {
-                return error.CorruptStream;
-            }
-            const sequence = try std.fmt.parseInt(u64, format.cellAt(trailer, 9) orelse return error.CorruptStream, 10);
-            maximum = @max(maximum, sequence);
-        }
-    }
-    return .{ .segments = segment_count, .next_sequence = std.math.add(u64, maximum, 1) catch return error.CorruptStream };
 }

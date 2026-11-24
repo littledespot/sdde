@@ -1,17 +1,5 @@
 {
   "$defs": {
-    "attributed_value": {
-      "type": "object",
-      "properties": {
-        "value": {
-          "$ref": "#/$defs/business_value"
-        }
-      },
-      "required": [
-        "value"
-      ],
-      "additionalProperties": false
-    },
     "business_value": {
       "oneOf": [
         {
@@ -201,7 +189,6 @@
       },
       "required": [
         "kind",
-        "given",
         "when",
         "then"
       ],
@@ -229,13 +216,13 @@
         "kind": {
           "const": "edge_case"
         },
-        "condition": {
+        "given": {
           "$ref": "#/$defs/business_value"
         }
       },
       "required": [
         "kind",
-        "condition"
+        "given"
       ],
       "additionalProperties": false
     },
@@ -432,7 +419,6 @@
       },
       "required": [
         "number",
-        "given",
         "when",
         "then"
       ],
@@ -500,18 +486,6 @@
       "properties": {
         "content": {
           "$ref": "#/$defs/record_entity"
-        }
-      },
-      "required": [
-        "content"
-      ],
-      "additionalProperties": false
-    },
-    "repair_record_functional_requirement": {
-      "type": "object",
-      "properties": {
-        "content": {
-          "$ref": "#/$defs/record_functional_requirement"
         }
       },
       "required": [

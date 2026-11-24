@@ -37,7 +37,6 @@ pub const Preset = struct {
 };
 pub const Registry = struct { presets: []const Preset };
 pub const Resolved = struct { packages: []const *const Preset };
-pub const Composed = struct { packages: []const []const u8, policies: []const []const u8 };
 pub const PolicyContract = struct {
     id: []const u8,
     project_selectable: bool,

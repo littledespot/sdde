@@ -70,7 +70,11 @@ pub const Provider = struct {
         };
         // Exactly one transport exchange. The consumed capability stays alive
         // only through this exchange and cannot be reused by either API.
-        if (self.capture) |capture| if (capture.capture(.request, .{ .provider_body = prepared.body }, &.{secret}) == .blocked) return error.ModelLoggingBlocked;
+        if (self.capture) |capture| switch (capture.capture(.request, .{ .provider_body = prepared.body }, &.{secret})) {
+            .recorded, .disabled => {},
+            .blocked => return error.ModelLoggingBlocked,
+            .cancelled => return error.Cancelled,
+        };
         var body_on_error: ?transport.ResponseBody = null;
         const response = self.transport.exchange(allocator, .{
             .target = prepared.target,

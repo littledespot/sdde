@@ -4,20 +4,31 @@ const workflow = @import("workflow.zig");
 const definition = @import("workflow_definition.zig");
 const inventory = @import("workflow_inventory.zig");
 const workflow_source = @import("workflow_source.zig");
+const rejection = @import("definition_rejection.zig");
 
 pub const Error = error{WorkflowDefinitionSchemaInvalid};
 
 /// Converts the raw parsed workflow documents into declarative definitions through the closed
-/// workflow-definition schema. It applies no policy and registers nothing.
+/// workflow-definition schema. It applies no policy and registers nothing. A rejection records the
+/// section that failed, the definition's ordinal and, for a failing step, its ID in `evidence`, when one
+/// is supplied; a failure outside every section is the definition's header.
 pub fn validate(
     allocator: std.mem.Allocator,
     raw_values: []const definition.RawDefinition,
+    evidence: ?*rejection.Slot,
 ) Error![]const definition.Definition {
     const definitions = allocator.alloc(definition.Definition, raw_values.len) catch return invalid();
     for (raw_values, definitions) |raw, *destination| {
-        destination.* = try convert(allocator, raw.ordinal, raw.root);
+        destination.* = convert(allocator, raw.ordinal, raw.root, evidence) catch return failed(evidence, .definition_header, raw.ordinal, null);
     }
     return definitions;
+}
+
+/// The family's one error with the section that raised it and the definition recorded; an inner owner's
+/// rule, recorded first, is the one that stays.
+fn failed(evidence: ?*rejection.Slot, rule: rejection.Rule, ordinal: u16, subject: ?[]const u8) Error {
+    rejection.record(evidence, rule, ordinal, subject);
+    return error.WorkflowDefinitionSchemaInvalid;
 }
 
 const root_fields = [_][]const u8{ "schema", "id", "version", "shortcode", "invoke", "policy", "start", "resources", "steps", "subgraphs" };
@@ -29,6 +40,7 @@ fn convert(
     allocator: std.mem.Allocator,
     ordinal: u16,
     root: *definition.RawNode,
+    evidence: ?*rejection.Slot,
 ) Error!definition.Definition {
     const map = closedMapping(root, &root_fields, &root_required) orelse return invalid();
     if (!stringEquals(field(map, "schema"), definition.schema_version)) return invalid();
@@ -40,8 +52,8 @@ fn convert(
     const invocation = workflow.OperationId.parse(string(field(map, "invoke")) orelse return invalid()) orelse return invalid();
     const policy = workflow.RegisteredRef.parse(string(field(map, "policy")) orelse return invalid()) orelse return invalid();
     const start = workflow.WorkflowStepId.parseLocal(string(field(map, "start")) orelse return invalid()) orelse return invalid();
-    const resources = try convertResources(allocator, field(map, "resources"));
-    const steps = try convertSteps(allocator, field(map, "steps") orelse return invalid());
+    const resources = convertResources(allocator, field(map, "resources")) catch return failed(evidence, .resources, ordinal, null);
+    const steps = convertSteps(allocator, field(map, "steps") orelse return invalid(), ordinal, evidence) catch return failed(evidence, .steps, ordinal, null);
 
     return .{
         .source_ordinal = ordinal,
@@ -54,7 +66,7 @@ fn convert(
         .resources = resources,
         .steps = steps.operations,
         .calls = steps.calls,
-        .subgraphs = try convertSubgraphs(allocator, field(map, "subgraphs")),
+        .subgraphs = convertSubgraphs(allocator, field(map, "subgraphs")) catch return failed(evidence, .subgraphs, ordinal, null),
     };
 }
 
@@ -79,6 +91,8 @@ fn convertResources(
 fn convertSteps(
     allocator: std.mem.Allocator,
     raw: *definition.RawNode,
+    ordinal: u16,
+    evidence: ?*rejection.Slot,
 ) Error!struct { operations: []const workflow.DeclarativeStep, calls: []const definition.SubgraphCall } {
     const map = mapping(raw) orelse return invalid();
     if (map.len == 0 or map.len > definition.max_steps) return invalid();
@@ -87,26 +101,52 @@ fn convertSteps(
     for (map) |pair| {
         const id = workflow.WorkflowStepId.parseLocal(string(pair.key) orelse return invalid()) orelse return invalid();
         if (closedMapping(pair.value, &.{ "call", "with", "on" }, &.{ "call", "on" })) |call| {
-            calls.append(allocator, .{
-                .id = id,
-                .source = try sourceEntry(allocator, null, id.bytes, .subgraph, string(field(call, "call")) orelse return invalid(), pair.value),
-                .subgraph = definition.SubgraphId.parse(string(field(call, "call")) orelse return invalid()) orelse return invalid(),
-                .parameters = try convertParameters(allocator, field(call, "with")),
-                .outcomes = try convertOutcomes(allocator, field(call, "on") orelse return invalid()),
-            }) catch return invalid();
+            const converted = convertCall(allocator, id, call, pair.value, ordinal, evidence) catch return failed(evidence, .steps, ordinal, id.bytes);
+            calls.append(allocator, converted) catch return invalid();
             continue;
         }
-        const step_map = closedMapping(pair.value, &step_fields, &step_required) orelse return invalid();
-        steps.append(allocator, .{
-            .id = id,
-            .source = try sourceEntry(allocator, null, id.bytes, .operation, string(field(step_map, "use")) orelse return invalid(), pair.value),
-            .operation_id = workflow.OperationId.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid(),
-            .parameters = try convertParameters(allocator, field(step_map, "with")),
-            .outcomes = try convertOutcomes(allocator, field(step_map, "on") orelse return invalid()),
-        }) catch return invalid();
+        const step_map = closedMapping(pair.value, &step_fields, &step_required) orelse return failed(evidence, .steps, ordinal, id.bytes);
+        const converted = convertOperation(allocator, id, step_map, pair.value, ordinal, evidence) catch return failed(evidence, .steps, ordinal, id.bytes);
+        steps.append(allocator, converted) catch return invalid();
     }
     std.mem.sort(workflow.DeclarativeStep, steps.items, {}, stepLessThan);
     return .{ .operations = steps.toOwnedSlice(allocator) catch return invalid(), .calls = calls.toOwnedSlice(allocator) catch return invalid() };
+}
+
+/// One step that calls a subgraph. Its parameters and outcomes are sections of their own.
+fn convertCall(
+    allocator: std.mem.Allocator,
+    id: workflow.WorkflowStepId,
+    call: []const definition.RawPair,
+    value: *definition.RawNode,
+    ordinal: u16,
+    evidence: ?*rejection.Slot,
+) Error!definition.SubgraphCall {
+    return .{
+        .id = id,
+        .source = try sourceEntry(allocator, null, id.bytes, .subgraph, string(field(call, "call")) orelse return invalid(), value),
+        .subgraph = definition.SubgraphId.parse(string(field(call, "call")) orelse return invalid()) orelse return invalid(),
+        .parameters = convertParameters(allocator, field(call, "with")) catch return failed(evidence, .parameters, ordinal, id.bytes),
+        .outcomes = convertOutcomes(allocator, field(call, "on") orelse return invalid()) catch return failed(evidence, .outcomes, ordinal, id.bytes),
+    };
+}
+
+/// One step that runs an operation. Its parameters and outcomes are sections of their own.
+fn convertOperation(
+    allocator: std.mem.Allocator,
+    id: workflow.WorkflowStepId,
+    step_map: []const definition.RawPair,
+    value: *definition.RawNode,
+    ordinal: u16,
+    evidence: ?*rejection.Slot,
+) Error!workflow.DeclarativeStep {
+    return .{
+        .id = id,
+        .source = try sourceEntry(allocator, null, id.bytes, .operation, string(field(step_map, "use")) orelse return invalid(), value),
+        .operation_id = workflow.OperationId.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid(),
+        .parameters = convertParameters(allocator, field(step_map, "with")) catch return failed(evidence, .parameters, ordinal, id.bytes),
+        .outcomes = convertOutcomes(allocator, field(step_map, "on") orelse return invalid()) catch return failed(evidence, .outcomes, ordinal, id.bytes),
+    };
 }
 
 fn convertSubgraphs(allocator: std.mem.Allocator, raw: ?*definition.RawNode) Error![]const definition.Subgraph {
@@ -385,12 +425,12 @@ test "accepts the concise workflow mapping and rejects legacy fields" {
     defer arena.deinit();
     const builder: RawBuilder = .{ .allocator = arena.allocator() };
     const accepted = [_]definition.RawDefinition{.{ .ordinal = 1, .root = try conciseRaw(builder, false) }};
-    const values = try validate(arena.allocator(), &accepted);
+    const values = try validate(arena.allocator(), &accepted, null);
     try std.testing.expectEqualStrings("arbitrary-flow", values[0].workflow_id.bytes);
     try std.testing.expectEqualStrings("run", values[0].start_step_id.bytes);
 
     const rejected = [_]definition.RawDefinition{.{ .ordinal = 1, .root = try conciseRaw(builder, true) }};
-    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, validate(arena.allocator(), &rejected));
+    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, validate(arena.allocator(), &rejected, null));
 }
 
 test "rejects unknown outcome and unsafe resource name" {
@@ -417,8 +457,52 @@ test "rejects unknown outcome and unsafe resource name" {
     });
     try std.testing.expectError(
         error.WorkflowDefinitionSchemaInvalid,
-        validate(arena.allocator(), &.{.{ .ordinal = 1, .root = root }}),
+        validate(arena.allocator(), &.{.{ .ordinal = 1, .root = root }}, null),
     );
+}
+
+test "a schema rejection records its section, the definition and, for a step, the step" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const builder: RawBuilder = .{ .allocator = arena.allocator() };
+    // An outcome key outside the schema's spelling, in the step named `run` of the definition at ordinal 4.
+    var outcome: rejection.Slot = .{};
+    try std.testing.expectError(
+        error.WorkflowDefinitionSchemaInvalid,
+        validate(arena.allocator(), &.{.{ .ordinal = 4, .root = try outcomeRaw(builder, "success", "end.ok") }}, &outcome),
+    );
+    try std.testing.expectEqual(rejection.Rule.outcomes, outcome.evidence.rule.?);
+    try std.testing.expectEqual(@as(u16, 4), outcome.evidence.ordinal.?);
+    try std.testing.expectEqualStrings("run", outcome.evidence.subject.?.text());
+    // A document that fails in no section is the definition's header, and names no step.
+    var header: rejection.Slot = .{};
+    try std.testing.expectError(
+        error.WorkflowDefinitionSchemaInvalid,
+        validate(arena.allocator(), &.{.{ .ordinal = 2, .root = try conciseRaw(builder, true) }}, &header),
+    );
+    try std.testing.expectEqual(rejection.Rule.definition_header, header.evidence.rule.?);
+    try std.testing.expectEqual(@as(u16, 2), header.evidence.ordinal.?);
+    try std.testing.expect(header.evidence.subject == null);
+    // An unsafe resource name is the resources section, which is read before the steps.
+    const steps = try builder.mapping(&.{try builder.pair("run", try builder.mapping(&.{
+        try builder.pair("use", try builder.scalar("core.noop")),
+        try builder.pair("on", try builder.mapping(&.{try builder.pair("ok", try builder.scalar("end.ok"))})),
+    }))});
+    const root = try builder.mapping(&.{
+        try builder.pair("schema", try builder.scalar("workflow/v1")),
+        try builder.pair("id", try builder.scalar("bad-flow")),
+        try builder.pair("version", try builder.integer(1)),
+        try builder.pair("shortcode", try builder.scalar("BADF")),
+        try builder.pair("invoke", try builder.scalar("core.empty-invocation")),
+        try builder.pair("policy", try builder.scalar("core.capability-free@1")),
+        try builder.pair("start", try builder.scalar("run")),
+        try builder.pair("resources", try builder.mapping(&.{try builder.pair("prompt", try builder.scalar("../prompt.md"))})),
+        try builder.pair("steps", steps),
+    });
+    var resources: rejection.Slot = .{};
+    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, validate(arena.allocator(), &.{.{ .ordinal = 1, .root = root }}, &resources));
+    try std.testing.expectEqual(rejection.Rule.resources, resources.evidence.rule.?);
+    try std.testing.expectEqual(@as(u16, 1), resources.evidence.ordinal.?);
 }
 
 test "outcome keys and terminal targets use the schema spelling, never a Zig tag name" {
@@ -434,13 +518,13 @@ test "outcome keys and terminal targets use the schema spelling, never a Zig tag
         .{ .key = "failed", .target = "end.failed", .outcome = .failed },
         .{ .key = "cancelled", .target = "end.cancelled", .outcome = .cancelled },
     }) |case| {
-        const values = try validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }});
+        const values = try validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }}, null);
         const transition = values[0].steps[0].outcomes[0];
         try std.testing.expectEqual(case.outcome, transition.outcome);
         try std.testing.expectEqual(case.outcome, transition.target.terminal);
     }
     // `more` is a declared outcome key whose successor is a step, never a terminal.
-    const progress = try validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, "more", "run") }});
+    const progress = try validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, "more", "run") }}, null);
     try std.testing.expectEqual(workflow.OutcomeTag.more, progress[0].steps[0].outcomes[0].outcome);
     try std.testing.expect(progress[0].steps[0].outcomes[0].target == .step);
     for ([_]struct { key: []const u8, target: []const u8 }{
@@ -453,7 +537,7 @@ test "outcome keys and terminal targets use the schema spelling, never a Zig tag
     }) |case| {
         try std.testing.expectError(
             error.WorkflowDefinitionSchemaInvalid,
-            validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }}),
+            validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }}, null),
         );
     }
 }

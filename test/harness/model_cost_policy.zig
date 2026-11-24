@@ -33,6 +33,17 @@ pub fn require(use: Use, provider: identity.ProviderId, model: identity.ModelId)
     return error.DisallowedTestModel;
 }
 
+/// Every tuple permitted for generation, as `provider/model`. Help and rejection
+/// text read this, so none restates the list.
+pub const generation_tuples: []const u8 = blk: {
+    var text: []const u8 = "";
+    for (permitted) |entry| {
+        if (std.mem.indexOfScalar(Use, entry.uses, .generation) == null) continue;
+        text = text ++ (if (text.len == 0) "" else ", ") ++ entry.provider ++ "/" ++ entry.model;
+    }
+    break :blk text;
+};
+
 pub fn requireConfiguredSlots(models: *const config.ModelsConfig) Error!void {
     for (models.slots.map.values()) |slot| {
         try require(.generation, identity.ProviderId.parse(slot.provider) orelse return error.DisallowedTestModel, identity.ModelId.parse(slot.model) orelse return error.DisallowedTestModel);
@@ -55,6 +66,17 @@ test "live test cost policy accepts each permitted tuple for exactly its approve
             try std.testing.expectError(error.DisallowedTestModel, require(use, .{ .bytes = entry.provider }, .{ .bytes = entry.model }));
         }
     };
+}
+
+test "the generation tuple list names exactly the tuples permitted for generation" {
+    var buffer: [512]u8 = undefined;
+    var listed = std.mem.splitSequence(u8, generation_tuples, ", ");
+    for (permitted) |entry| {
+        if (std.mem.indexOfScalar(Use, entry.uses, .generation) == null) continue;
+        const tuple = try std.fmt.bufPrint(&buffer, "{s}/{s}", .{ entry.provider, entry.model });
+        try std.testing.expectEqualStrings(tuple, listed.next().?);
+    }
+    try std.testing.expect(listed.next() == null);
 }
 
 test "live test cost policy rejects altered identities and cross-provider pairings" {

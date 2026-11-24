@@ -7,32 +7,8 @@ const v = @import("reference_reconciliation_validation.zig");
 const context = @import("reference_reconciliation_context.zig");
 const dispositions = @import("reference_disposition_validation.zig");
 const packets = @import("model_input_packet.zig");
-pub const Target = union(enum) {
-    statement_selection: usize,
-    statement_content: usize,
-    statement: usize,
-    insert_statement: struct { index: usize, claim: r.ClaimId },
-    disposition: struct { index: usize, claim: r.ClaimId },
-    signal_selection: usize,
-    signal_content: usize,
-    signal: usize,
-    insert_signal: struct { index: usize, claim: r.ClaimId },
-    conflict_selection: usize,
-    conflict_summary: usize,
-    conflict: usize,
-    insert_conflict: struct { index: usize, claims: []const r.ClaimId },
-
-    const Guidance = struct { unit: std.meta.Tag(Target), index: ?usize = null, claim: ?r.ClaimId = null, claims: ?[]const r.ClaimId = null };
-    pub fn guidance(self: Target) Guidance {
-        var result: Guidance = .{ .unit = std.meta.activeTag(self) };
-        switch (self) {
-            inline .insert_statement, .disposition, .insert_signal => |value| result.claim = value.claim,
-            .insert_conflict => |value| result.claims = value.claims,
-            inline else => |index| result.index = index,
-        }
-        return result;
-    }
-};
+const Target = d.Target;
+const StableTarget = d.StableTarget;
 pub const Replacement = union(enum) {
     selection: struct { claim_ids: []const r.ClaimId },
     content: r.ContentProposal,
@@ -82,16 +58,6 @@ pub const Block = d.RepairBlock;
 pub const Decision = union(enum) { model: Authorization, automatic: struct { authorization: Authorization, replacement: ?Replacement }, blocked: Block };
 const occurrences = @import("repair_occurrences.zig");
 const Family = enum { selection, content, disposition, membership, coverage, duplicate };
-const StableTarget = union(enum) {
-    statement: occurrences.Id,
-    disposition: r.ClaimId,
-    signal: occurrences.Id,
-    conflict: occurrences.Id,
-    missing_statement: r.ClaimId,
-    missing_signal: r.ClaimId,
-    missing_conflict: []const r.ClaimId,
-};
-pub const ObservationTarget = struct { selected: Target, stable: StableTarget, rule: d.Rule, operation: enum { replace, insert, delete } };
 
 fn stableTarget(a: std.mem.Allocator, source: d.Source, proposal: @FieldType(r.Parsed, "proposal"), target: Target) Error!StableTarget {
     return switch (target) {
@@ -142,7 +108,8 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@im
         source.at(.summary, .record), source.at(.dispositions, .record), source.at(.signals, .record), source.at(.conflicts, .record),
     } };
     permit.key.scope = (try shared.snapshot(@TypeOf(scope), a, scope)).bytes;
-    if (source.last_repair) |prior| if (prior.retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
+    // A scope keeps the maximum its first authorization froze, through any merge between (22-repair.md:757).
+    if (source.ordinary_retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
         permit.maximum_targets = previous.maximum_targets;
     };
     return permit;
@@ -351,7 +318,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .target = .{ .path = &.{.{ .property = if (authorization.target == .conflict_selection) "group_id" else "claim_ids" }} },
         .definition = definition.id(),
         .allowed = ids,
-        .collection = if (authorization.target == .conflict_selection) .sequence else .unique_subset,
+        .collection = if (authorization.target == .conflict_selection) .sequence else .{ .unique_subset = .none },
     }});
 }
 
@@ -392,11 +359,11 @@ pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const p
     return atomic.parse(a, authorization, input, bytes);
 }
 
+/// Only a disposition target carries choices; every other target has none.
 fn dispositionChoices(a: std.mem.Allocator, parsed: r.Parsed, target: Target) Error!?dispositions.RepairChoices {
-    return switch (target) {
-        .disposition => |value| dispositions.repairChoices(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.index, value.claim),
-        else => null,
-    };
+    if (target != .disposition) return null;
+    const value = target.disposition;
+    return dispositions.repairChoices(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.index, value.claim);
 }
 pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
     if (!canonical.matchesInputs(ctx.inputs)) return error.InvalidAtomicRepair;
@@ -407,6 +374,7 @@ pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").Canonica
     const target = authorization.target;
     const merged = try atomic.checkMerge(a, canonical, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
     var result = try apply(a, parsed, target, replacement, merged, origin);
+    result.source.ordinary_retry = authorization.retry orelse result.source.ordinary_retry;
     if (authorization.retry) |permit| result.source.pending_repair = .{ .permit = permit, .target = .{
         .selected = if (target == .insert_conflict) .{ .insert_conflict = .{ .index = target.insert_conflict.index, .claims = try a.dupe(r.ClaimId, target.insert_conflict.claims) } } else target,
         .stable = try stableTarget(a, parsed.source, parsed.proposal, target),
@@ -482,7 +450,8 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
             .signal_selection, .signal_content, .signal, .insert_signal => {
                 result.phase = if (parsed.phase == .complete) .complete else .signals;
             },
-            else => {},
+            // A summary or conflict change leaves the phase where it was.
+            .statement_selection, .statement_content, .statement, .insert_statement, .conflict_selection, .conflict_summary, .conflict, .insert_conflict => {},
         };
         result.proposal = .{ .global = global };
     }
@@ -495,7 +464,8 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
         .insert_signal => |value| result.source.signals = parsed.source.signals.inserting(a, value.index, parsed.proposal.global.signals.len) catch |err| return occurrenceError(err),
         .conflict => |index| result.source.conflicts = parsed.source.conflicts.deleting(a, index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
         .insert_conflict => |value| result.source.conflicts = parsed.source.conflicts.inserting(a, value.index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
-        else => {},
+        // A replacement keeps the occurrence it replaces; only an insert or a delete moves occurrences.
+        .statement_selection, .statement_content, .disposition, .signal_selection, .signal_content, .conflict_selection, .conflict_summary => {},
     }
     result.source.revision = merged.revision_after;
     result.source.last_repair = merged;
@@ -509,8 +479,6 @@ fn occurrenceError(err: occurrences.Error) Error {
     };
 }
 
-pub const ValidationStage = enum { summary, dispositions, signals, conflicts };
-
 pub fn dispositionProgress(a: std.mem.Allocator, parsed: r.Parsed) Error!?@import("workflow_retry.zig").Transition {
     const pending = parsed.source.pending_repair orelse return null;
     if (stageOf(pending.target.selected) != .dispositions) return null;
@@ -521,7 +489,7 @@ pub fn dispositionProgress(a: std.mem.Allocator, parsed: r.Parsed) Error!?@impor
     return .{ .validated = .{ .permit = pending.permit, .revision = parsed.source.revision, .result = if (valid) .resolved else .recurring } };
 }
 
-fn stageOf(target: Target) ValidationStage {
+fn stageOf(target: Target) d.Stage {
     return switch (target) {
         .statement_selection, .statement_content, .statement, .insert_statement => .summary,
         .disposition => .dispositions,
@@ -537,7 +505,7 @@ fn containsOccurrence(set: occurrences.Set, count: usize, id: occurrences.Id) Er
 
 /// Observe the selected native rule after the ordinary stage validator has run.
 /// Other failed records do not substitute for proof about this authorized unit.
-pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextContext, parsed: r.Parsed, stage: ValidationStage, checked_dispositions: []const r.ClaimDisposition) Error!?@import("workflow_retry.zig").Transition {
+pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextContext, parsed: r.Parsed, stage: d.Stage, checked_dispositions: []const r.ClaimDisposition) Error!?@import("workflow_retry.zig").Transition {
     const pending = parsed.source.pending_repair orelse return null;
     const watch = pending.target;
     const target = watch.selected;
@@ -592,35 +560,67 @@ pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextCo
     };
     return .{ .validated = .{ .permit = pending.permit, .revision = parsed.source.revision, .result = if (valid) .resolved else .recurring } };
 }
+/// The records a repair target of one kind can name. A summary proposal holds statements; a global one holds
+/// signals and conflicts.
+const Kind = enum { statement, signal, conflict };
+/// Which part of a record a target replaces: the claims it selects, its text, or the whole record.
+const Part = enum { selection, text, record };
+
+/// How many records of `kind` the proposal holds, or null when it is the other proposal.
+fn recordCount(comptime kind: Kind, proposal: @FieldType(r.Parsed, "proposal")) ?usize {
+    return switch (kind) {
+        .statement => if (proposal == .summary) proposal.summary.statements.len else null,
+        .signal => if (proposal == .global) proposal.global.signals.len else null,
+        .conflict => if (proposal == .global) proposal.global.conflicts.len else null,
+    };
+}
+
+/// The part of record `index` that the target replaces, as the replacement it holds today.
+fn recordPart(comptime kind: Kind, proposal: @FieldType(r.Parsed, "proposal"), index: usize, part: Part) Error!Replacement {
+    if (index >= (recordCount(kind, proposal) orelse return error.InvalidAtomicRepair)) return error.InvalidAtomicRepair;
+    return switch (kind) {
+        .statement => switch (part) {
+            .selection => .{ .selection = .{ .claim_ids = proposal.summary.statements[index].claim_ids } },
+            .text => .{ .content = proposal.summary.statements[index].content },
+            .record => .{ .statement = proposal.summary.statements[index] },
+        },
+        .signal => switch (part) {
+            .selection => .{ .selection = .{ .claim_ids = proposal.global.signals[index].claim_ids } },
+            .text => .{ .content = proposal.global.signals[index].content },
+            .record => .{ .signal = proposal.global.signals[index] },
+        },
+        .conflict => switch (part) {
+            .selection => .{ .selection = .{ .claim_ids = proposal.global.conflicts[index].claim_ids } },
+            .text => .{ .summary = proposal.global.conflicts[index].summary },
+            .record => .{ .conflict = proposal.global.conflicts[index] },
+        },
+    };
+}
+
+/// An insertion adds a record after the last one, so it has no replacement to read.
+fn insertionPoint(comptime kind: Kind, proposal: @FieldType(r.Parsed, "proposal"), index: usize) Error!?Replacement {
+    if (index != (recordCount(kind, proposal) orelse return error.InvalidAtomicRepair)) return error.InvalidAtomicRepair;
+    return null;
+}
+
 fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
     const summary = parsed.proposal == .summary;
-    switch (target) {
-        .disposition => |value| if (!try modelDisposition(parsed.input.progress.plan.layout.items, value.claim)) return error.InvalidAtomicRepair,
-        else => {},
-    }
+    // Only a disposition names a claim that must carry model content.
+    if (target == .disposition and !try modelDisposition(parsed.input.progress.plan.layout.items, target.disposition.claim)) return error.InvalidAtomicRepair;
     return switch (target) {
-        .statement_selection, .statement_content, .statement => |index| if (summary and index < parsed.proposal.summary.statements.len) switch (target) {
-            .statement_selection => .{ .selection = .{ .claim_ids = parsed.proposal.summary.statements[index].claim_ids } },
-            .statement_content => .{ .content = parsed.proposal.summary.statements[index].content },
-            .statement => .{ .statement = parsed.proposal.summary.statements[index] },
-            else => unreachable,
-        } else error.InvalidAtomicRepair,
-        .insert_statement => |value| if (summary and value.index == parsed.proposal.summary.statements.len) null else error.InvalidAtomicRepair,
+        .statement_selection => |index| try recordPart(.statement, parsed.proposal, index, .selection),
+        .statement_content => |index| try recordPart(.statement, parsed.proposal, index, .text),
+        .statement => |index| try recordPart(.statement, parsed.proposal, index, .record),
+        .insert_statement => |value| try insertionPoint(.statement, parsed.proposal, value.index),
         .disposition => |value| if (!summary and value.index < parsed.proposal.global.claim_dispositions.len) .{ .disposition = parsed.proposal.global.claim_dispositions[value.index].disposition } else error.InvalidAtomicRepair,
-        .signal_selection, .signal_content, .signal => |index| if (!summary and index < parsed.proposal.global.signals.len) switch (target) {
-            .signal_selection => .{ .selection = .{ .claim_ids = parsed.proposal.global.signals[index].claim_ids } },
-            .signal_content => .{ .content = parsed.proposal.global.signals[index].content },
-            .signal => .{ .signal = parsed.proposal.global.signals[index] },
-            else => unreachable,
-        } else error.InvalidAtomicRepair,
-        .insert_signal => |value| if (!summary and value.index == parsed.proposal.global.signals.len) null else error.InvalidAtomicRepair,
-        .conflict_selection, .conflict_summary, .conflict => |index| if (!summary and index < parsed.proposal.global.conflicts.len) switch (target) {
-            .conflict_selection => .{ .selection = .{ .claim_ids = parsed.proposal.global.conflicts[index].claim_ids } },
-            .conflict_summary => .{ .summary = parsed.proposal.global.conflicts[index].summary },
-            .conflict => .{ .conflict = parsed.proposal.global.conflicts[index] },
-            else => unreachable,
-        } else error.InvalidAtomicRepair,
-        .insert_conflict => |value| if (!summary and value.index == parsed.proposal.global.conflicts.len) null else error.InvalidAtomicRepair,
+        .signal_selection => |index| try recordPart(.signal, parsed.proposal, index, .selection),
+        .signal_content => |index| try recordPart(.signal, parsed.proposal, index, .text),
+        .signal => |index| try recordPart(.signal, parsed.proposal, index, .record),
+        .insert_signal => |value| try insertionPoint(.signal, parsed.proposal, value.index),
+        .conflict_selection => |index| try recordPart(.conflict, parsed.proposal, index, .selection),
+        .conflict_summary => |index| try recordPart(.conflict, parsed.proposal, index, .text),
+        .conflict => |index| try recordPart(.conflict, parsed.proposal, index, .record),
+        .insert_conflict => |value| try insertionPoint(.conflict, parsed.proposal, value.index),
     };
 }
 
@@ -633,7 +633,7 @@ fn owner(a: std.mem.Allocator, parsed: r.Parsed) Error!@import("model_request_id
 fn needsText(unit: d.Unit) bool {
     return switch (unit) {
         .dispositions, .disposition => false,
-        else => true,
+        .summary, .statement, .signals, .signal, .conflicts, .conflict => true,
     };
 }
 fn targetOrigin(target: Target) struct { unit: d.Unit, field: d.Field } {
@@ -697,7 +697,7 @@ fn retireSignals(a: std.mem.Allocator, parsed: r.Parsed, claims: []const r.Claim
 }
 
 pub const Omission = struct {
-    const loss = @import("source_omission.zig");
+    const loss = @import("source_omission_authority.zig");
     pub const Facts = struct { reconciliation: context.Facts, support: loss.Support };
     const OmissionRule = struct { finding: @import("required_authority.zig").ReviewEvidence, disposition_choices: ?dispositions.RepairChoices };
     pub const OmissionTarget = union(enum) { unit: Target, conflict_group: []const r.ClaimId };
@@ -892,3 +892,73 @@ pub const Omission = struct {
     pub const Authorization = OmissionAuthorization;
     pub const Error = OmissionError;
 };
+
+test "select reads each kind's record from its own proposal and rejects an index or a proposal that does not match" {
+    const ids = [_]r.ClaimId{ .{ .ordinal = 1 }, .{ .ordinal = 2 }, .{ .ordinal = 3 }, .{ .ordinal = 4 } };
+    const statements = [_]r.StatementProposal{
+        .{ .claim_ids = ids[0..1], .content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 1 } } } },
+        .{ .claim_ids = ids[1..2], .content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 2 } } } },
+    };
+    const signals = [_]r.SignalProposal{
+        .{ .claim_ids = ids[0..2], .content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 3 } } } },
+        .{ .claim_ids = ids[2..4], .content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 4 } } } },
+    };
+    const conflicts = [_]r.ConflictProposal{
+        .{ .claim_ids = ids[0..2], .kind = .value_mismatch, .summary = .{ .nodes = &.{} } },
+        .{ .claim_ids = ids[2..4], .kind = .scope_mismatch, .summary = .{ .nodes = &.{} } },
+    };
+    // Only the proposal is read for these targets: the input is read only to check a disposition.
+    const summary: r.Parsed = .{ .input = undefined, .proposal = .{ .summary = .{ .statements = &statements } } };
+    const global: r.Parsed = .{ .input = undefined, .proposal = .{ .global = .{ .claim_dispositions = &.{}, .signals = &signals, .conflicts = &conflicts } } };
+
+    // Accepted: each part of each record, at every index.
+    for (0..2) |index| {
+        const Row = struct { parsed: r.Parsed, target: Target, expected: Replacement };
+        for ([_]Row{
+            .{ .parsed = summary, .target = .{ .statement_selection = index }, .expected = .{ .selection = .{ .claim_ids = statements[index].claim_ids } } },
+            .{ .parsed = summary, .target = .{ .statement_content = index }, .expected = .{ .content = statements[index].content } },
+            .{ .parsed = summary, .target = .{ .statement = index }, .expected = .{ .statement = statements[index] } },
+            .{ .parsed = global, .target = .{ .signal_selection = index }, .expected = .{ .selection = .{ .claim_ids = signals[index].claim_ids } } },
+            .{ .parsed = global, .target = .{ .signal_content = index }, .expected = .{ .content = signals[index].content } },
+            .{ .parsed = global, .target = .{ .signal = index }, .expected = .{ .signal = signals[index] } },
+            .{ .parsed = global, .target = .{ .conflict_selection = index }, .expected = .{ .selection = .{ .claim_ids = conflicts[index].claim_ids } } },
+            .{ .parsed = global, .target = .{ .conflict_summary = index }, .expected = .{ .summary = conflicts[index].summary } },
+            .{ .parsed = global, .target = .{ .conflict = index }, .expected = .{ .conflict = conflicts[index] } },
+        }) |row| try std.testing.expectEqualDeep(@as(?Replacement, row.expected), try select(row.parsed, row.target));
+    }
+    // Accepted: an insertion names the position after the last record and has no replacement to read.
+    for ([_]struct { parsed: r.Parsed, target: Target }{
+        .{ .parsed = summary, .target = .{ .insert_statement = .{ .index = statements.len, .claim = ids[0] } } },
+        .{ .parsed = global, .target = .{ .insert_signal = .{ .index = signals.len, .claim = ids[0] } } },
+        .{ .parsed = global, .target = .{ .insert_conflict = .{ .index = conflicts.len, .claims = ids[0..2] } } },
+    }) |row| try std.testing.expectEqual(@as(?Replacement, null), try select(row.parsed, row.target));
+
+    // Rejected: an index past the last record, an insertion anywhere but after it, and a target of a kind the
+    // proposal does not hold.
+    for ([_]struct { parsed: r.Parsed, target: Target }{
+        .{ .parsed = summary, .target = .{ .statement_selection = statements.len } },
+        .{ .parsed = summary, .target = .{ .statement_content = statements.len } },
+        .{ .parsed = summary, .target = .{ .statement = statements.len } },
+        .{ .parsed = global, .target = .{ .signal_selection = signals.len } },
+        .{ .parsed = global, .target = .{ .signal_content = signals.len } },
+        .{ .parsed = global, .target = .{ .signal = signals.len } },
+        .{ .parsed = global, .target = .{ .conflict_selection = conflicts.len } },
+        .{ .parsed = global, .target = .{ .conflict_summary = conflicts.len } },
+        .{ .parsed = global, .target = .{ .conflict = conflicts.len } },
+        .{ .parsed = summary, .target = .{ .insert_statement = .{ .index = 0, .claim = ids[0] } } },
+        .{ .parsed = global, .target = .{ .insert_signal = .{ .index = 0, .claim = ids[0] } } },
+        .{ .parsed = global, .target = .{ .insert_conflict = .{ .index = 0, .claims = ids[0..2] } } },
+        .{ .parsed = global, .target = .{ .statement_selection = 0 } },
+        .{ .parsed = global, .target = .{ .statement_content = 0 } },
+        .{ .parsed = global, .target = .{ .statement = 0 } },
+        .{ .parsed = global, .target = .{ .insert_statement = .{ .index = 0, .claim = ids[0] } } },
+        .{ .parsed = summary, .target = .{ .signal_selection = 0 } },
+        .{ .parsed = summary, .target = .{ .signal_content = 0 } },
+        .{ .parsed = summary, .target = .{ .signal = 0 } },
+        .{ .parsed = summary, .target = .{ .insert_signal = .{ .index = 0, .claim = ids[0] } } },
+        .{ .parsed = summary, .target = .{ .conflict_selection = 0 } },
+        .{ .parsed = summary, .target = .{ .conflict_summary = 0 } },
+        .{ .parsed = summary, .target = .{ .conflict = 0 } },
+        .{ .parsed = summary, .target = .{ .insert_conflict = .{ .index = 0, .claims = ids[0..2] } } },
+    }) |row| try std.testing.expectError(error.InvalidAtomicRepair, select(row.parsed, row.target));
+}

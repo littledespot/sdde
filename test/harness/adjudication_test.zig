@@ -147,7 +147,7 @@ test "a rejected record names the stage and the judgment reason that rejected it
     try std.testing.expectEqual(adjudication.Stage.reviewer, rejection.?.stage);
     try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, try std.mem.replaceOwned(u8, a, valid, "\"reviewer\":", "\"approved\":true,\"reviewer\":"), original, &rejection));
     try std.testing.expectEqual(adjudication.Stage.record, rejection.?.stage);
-    try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, valid, try std.mem.replaceOwned(u8, a, original, "spec-e2e-report/v20", "spec-e2e-report/v19"), &rejection));
+    try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluateReporting(a, valid, try std.mem.replaceOwned(u8, a, original, @tagName(native.report_schema), "spec-e2e-report/v24"), &rejection));
     try std.testing.expectEqual(adjudication.Stage.report, rejection.?.stage);
 
     // An accepted record leaves no rejection.
@@ -179,11 +179,11 @@ test "adjudication record and original E2E report are closed explicitly versione
     }
     for ([_][2][]const u8{
         // The previous version and an older one no longer decode, and nor does the previous shape, which has no first cause.
-        .{ "spec-e2e-report/v20", "spec-e2e-report/v19" },
-        .{ "spec-e2e-report/v20", "spec-e2e-report/v18" },
+        .{ @tagName(native.report_schema), "spec-e2e-report/v24" },
+        .{ @tagName(native.report_schema), "spec-e2e-report/v18" },
         .{ "\"first_cause\":null,", "" },
         .{ "\"origin\":\"live\",", "" },
-        .{ "\"schema\":\"spec-e2e-report/v20\",", "" },
+        .{ "\"schema\":\"" ++ @tagName(native.report_schema) ++ "\",", "" },
         .{ "\"status\":", "\"untrusted_pass\":true,\"status\":" },
         // Retired advisory-grader fields are not readable report content.
         .{ "\"status\":", "\"evaluation\":null,\"status\":" },

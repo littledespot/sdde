@@ -1,20 +1,33 @@
-# 13.9 Feature logging actions
+# 13.9 Feature logging routines
 
-Part of [design §13](../../design.md#13-action-catalogue). Action names define responsibility
-boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
-whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
+Part of [design §13](../../design.md#13-action-catalogue). Feature logging is no registered
+operation: under [ADR 0032](../../decisions/0032-engine-routines.md) its fixed sequences are
+six engine routines in `src/application/feature_log_*_routine.zig`. Each is a closed `Step`
+enum run by one entry function, `run`, whose steps each take only the port they use; pure steps
+live in `src/domain/` (`feature_log_decisions.zig`, `feature_log_rows.zig`,
+`feature_log_stop.zig`, `feature_log_format.zig`, `feature_log_retention.zig`). Results remain
+execution-local until whole-workflow publication; [§25](../25-publication.md) and the
+clarification exception apply.
 
-One entry per registered operation; reads and writes are its `NodeContract` data keys.
 [F0002](../../features/F0002-LogService.md) owns the logging contract (events, record format,
 segments, locks and the emergency record) and [§26.5](../26-security.md) the levels and emission
-rule. The runner-owned logging observer submits trusted lifecycle events and applied
-`WorkflowTelemetryFact`s to these operations; their IDs are not observed recursively, and the
-logging orchestrator has no clock, filesystem, redaction, serializer or sink port.
+rule. The runner-owned logging observer submits trusted lifecycle events and the
+`WorkflowTelemetryFact`s the runner emits to the runtime logging lifecycle through the telemetry
+barrier; their IDs are not observed recursively. The lifecycle calls the routines, and composition's
+`Assembly.fail` calls the failure routine directly for a failure that has no active lifecycle; the
+lifecycle reports each routine's stop once: a logging failure through the failure routine, a cancellation
+not at all. A routine has no clock, filesystem, redaction, serializer or sink port of its own; the
+composition root builds the ports and the lifecycle hands each routine the ones it names.
 [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md#production-activation-and-finalization)
 owns activation and finalization: one owner finalizes logging before a registered
 `workflow_publication` operation writes, and the terminal binding finalizes every other outcome.
-Under [ADR 0032](../../decisions/0032-engine-routines.md) (feature logging not yet implemented) these operations
-become the steps of a feature-logging engine routine.
+
+Cancellation reaches a routine only as the sink's `Cancelled`. A routine polls no `NodeRuntime`,
+a cancelled step releases its lock, and a cancellation has no `LOG_*` code and emits no emergency
+line ([ADR 0032](../../decisions/0032-engine-routines.md), "Cancellation mapping"). A lock that
+cannot be released after a cancelled or failed step is a logging failure of its own
+(`LOG_RELEASE_FAILURE`) and outranks the stop before it; retention keeps its prune stop and
+reports a release failure only when nothing stopped it first.
 
 ## Policy
 
@@ -23,98 +36,7 @@ The `canonicalize_log_level` and `validate_logging_policy` steps of the startup 
 configured-level canonicalization and logging-policy compilation; both reject
 `LoggingPolicyInvalid`.
 
-## `ValidateFeatureLogPolicyTransitionAction` (`validate-feature-log-policy-transition`)
-
-- **Owner:** [`src/actions/log/validate_feature_log_policy_transition.zig`](../../../src/actions/log/validate_feature_log_policy_transition.zig)
-- **Reads:** `feature_log_binding`, `logging_policy` · **Writes:** `feature_log_policy_transition_authority` · **Side effect:** `none`
-- **Does:** Admits a switch to a new binding and policy in the same feature and run, with a new binding ID and policy ID and a transition-compatible policy.
-- **Rejects:** `InvalidFeatureLogPolicyTransition`.
-
-## `ValidateFeatureLogFinalizationAction` (`validate-feature-log-finalization`)
-
-- **Owner:** [`src/actions/log/validate_feature_log_finalization.zig`](../../../src/actions/log/validate_feature_log_finalization.zig)
-- **Reads:** `feature_log_runtime_status` · **Writes:** `feature_log_finalization_authority` · **Side effect:** `none`
-- **Does:** Admits finalization: an active binding must be prepared, and a retired one is never finalized.
-- **Rejects:** `InvalidFeatureLogFinalization`.
-
-## Records
-
-## `ReadTrustedLogClockAction` (`read-trusted-log-clock`)
-
-- **Owner:** [`src/actions/log/read_trusted_log_clock.zig`](../../../src/actions/log/read_trusted_log_clock.zig)
-- **Reads:** none · **Writes:** `trusted_log_clock` (UTC and monotonic time) · **Side effect:** `none`
-- **Rejects:** `LogClockReadFailure`.
-
-## `ValidateLogEventFactAction` (`validate-log-event-fact`)
-
-- **Owner:** [`src/actions/log/validate_log_event_fact.zig`](../../../src/actions/log/validate_log_event_fact.zig)
-- **Reads:** `workflow_telemetry_fact` · **Writes:** `log_event_definition` · **Side effect:** `none`
-- **Does:** Validates a telemetry fact against the event registry and resolves its definition (level, emission, fields).
-- **Rejects:** `InvalidLogEventFact`.
-
-## `EvaluateLogThresholdAction` (`evaluate-log-threshold`)
-
-- **Owner:** [`src/actions/log/evaluate_log_threshold.zig`](../../../src/actions/log/evaluate_log_threshold.zig)
-- **Reads:** `logging_policy`, `log_event_definition` · **Writes:** `log_emit_decision` · **Side effect:** `none`
-- **Does:** Emits an event the registry marks `always`, and otherwise applies the configured threshold ([§26.5](../26-security.md)), before any identity or sink work.
-- **Rejects:** none (`drop` is a decision).
-
-## `BuildLogEventRecordAction` (`build-log-event-record`)
-
-- **Owner:** [`src/actions/log/build_log_event_record.zig`](../../../src/actions/log/build_log_event_record.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_state`, `trusted_log_clock`, `workflow_telemetry_fact` · **Writes:** `identified_log_event` · **Side effect:** `none`
-- **Does:** Identifies an emitted event with its binding, workflow shortcode, event ID, the stream's next sequence and the trusted time.
-- **Rejects:** `InvalidLogEvent`.
-
-## `SerializeEventLogRecordAction` (`serialize-event-log-record`)
-
-- **Owner:** [`src/actions/log/serialize_event_log_record.zig`](../../../src/actions/log/serialize_event_log_record.zig)
-- **Reads:** `identified_log_event` · **Writes:** `serialized_log_record` · **Side effect:** `none`
-- **Does:** Encodes one event as a complete fixed-column pipe-delimited row.
-- **Rejects:** `LogSerializationFailure`.
-
-## `ValidatePromptLogFragmentAction` (`validate-prompt-log-fragment`)
-
-- **Owner:** [`src/actions/log/validate_prompt_log_fragment.zig`](../../../src/actions/log/validate_prompt_log_fragment.zig)
-- **Reads:** `sanitized_prompt_fragment` · **Writes:** `validated_prompt_fragment` · **Side effect:** `none`
-- **Rejects:** `InvalidPromptLogFragment` ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md) fragment rules).
-
-## `EvaluatePromptLogCaptureAction` (`evaluate-prompt-log-capture`)
-
-- **Owner:** [`src/actions/log/evaluate_prompt_log_capture.zig`](../../../src/actions/log/evaluate_prompt_log_capture.zig)
-- **Reads:** `logging_policy`, `validated_prompt_fragment` · **Writes:** `prompt_capture_decision` · **Side effect:** `none`
-- **Does:** Captures prompt fragments only when the policy's level enables prompt capture.
-- **Rejects:** none (`drop` is a decision).
-
-## `BuildPromptLogRecordAction` (`build-prompt-log-record`)
-
-- **Owner:** [`src/actions/log/build_prompt_log_record.zig`](../../../src/actions/log/build_prompt_log_record.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_state`, `trusted_log_clock`, `validated_prompt_fragment` · **Writes:** `identified_prompt_log` · **Side effect:** `none`
-- **Does:** Identifies a captured fragment with its binding, event ID, next sequence and trusted time.
-- **Rejects:** `InvalidPromptLogRecord`.
-
-## `SerializePromptLogRecordAction` (`serialize-prompt-log-record`)
-
-- **Owner:** [`src/actions/log/serialize_prompt_log_record.zig`](../../../src/actions/log/serialize_prompt_log_record.zig)
-- **Reads:** `identified_prompt_log` · **Writes:** `serialized_log_record` · **Side effect:** `none`
-- **Does:** Encodes one prompt fragment as a complete pipe-delimited row.
-- **Rejects:** `LogSerializationFailure`.
-
-## `SerializeFeatureLogControlRecordAction` (`serialize-feature-log-control-record`)
-
-- **Owner:** [`src/actions/log/serialize_feature_log_control_record.zig`](../../../src/actions/log/serialize_feature_log_control_record.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_state`, `trusted_log_clock` · **Writes:** `serialized_log_control_record` · **Side effect:** `none`
-- **Does:** Encodes a `segment_header` or `segment_trailer` control row, and measures its length for rotation.
-- **Rejects:** `LogSerializationFailure`.
-
-## `WriteConsoleLogRecordAction` (`write-console-log-record`)
-
-- **Owner:** [`src/actions/log/write_console_log_record.zig`](../../../src/actions/log/write_console_log_record.zig)
-- **Reads:** `serialized_log_record` · **Writes:** none · **Side effect:** `filesystem_write`
-- **Does:** Mirrors one serialized row to the console sink when the policy enables it.
-- **Rejects:** `ConsoleLogWriteFailure`.
-
-## Streams and segments
+## Activation
 
 ## `feature_logging_workflow.Activate` (`activate-feature-logging`)
 
@@ -123,103 +45,109 @@ configured-level canonicalization and logging-policy compilation; both reject
 - **Does:** Activates the run's feature logging for the resolved feature directory under the workflow's shortcode, and publishes the directory as activated ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)).
 - **Rejects:** outcomes `blocked` and `cancelled` from the port; a missing port fails.
 
-## `AcquireFeatureLogStreamLockAction` (`acquire-feature-log-stream-lock`)
+## Persist routine
 
-- **Owner:** [`src/actions/log/acquire_feature_log_stream_lock.zig`](../../../src/actions/log/acquire_feature_log_stream_lock.zig)
-- **Reads:** `feature_log_binding` · **Writes:** `feature_log_stream_lock` · **Side effect:** `filesystem_write`
-- **Does:** Makes one attempt for the stream's exclusive lock within the fixed deadline, with no retry ([F0002](../../features/F0002-LogService.md)).
-- **Rejects:** `LogLockTimeout` (`LOG_LOCK_TIMEOUT`) only for a lock held elsewhere; every other sink fault is `LogSinkFailure` (`LOG_SINK_FAILURE`).
+[`src/application/feature_log_persist_routine.zig`](../../../src/application/feature_log_persist_routine.zig)
+· **Steps:** `check_status`, `validate`, `select`, `read_clock`, `acquire`, `recover`,
+`serialize_header`, `create`, `render`, `measure`, `rotate`, `append`, `mirror`, `release`.
 
-## `ReleaseFeatureLogStreamLockAction` (`release-feature-log-stream-lock`)
+- **Does:** Persists one telemetry fact to the event stream or one sanitized prompt fragment to
+  the prompt stream, in one straight line under the stream's lock.
+  - **Validate and select:** a fact must validate against the event registry
+    (`InvalidLogEventFact`, a serialization failure) and a fragment against
+    [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)'s fragment rules
+    (`InvalidPromptLogFragment`). An event the registry marks `always` is emitted at every
+    threshold and every other event follows the configured one ([§26.5](../26-security.md)); a
+    fragment is captured only when the policy's level enables prompt capture. A dropped input costs
+    no clock, lock or identity work.
+  - **Clock and lock:** reads the trusted clock (`LogClockReadFailure`, a serialization failure),
+    then makes one attempt for the stream's exclusive lock within the fixed deadline, with no
+    retry ([F0002](../../features/F0002-LogService.md)). Only a lock held elsewhere is
+    `LOG_LOCK_TIMEOUT`; every other sink fault is `LOG_SINK_FAILURE`.
+  - **Open:** a stream with no cached state is recovered from its segments under the held lock, or
+    given its first segment with its column heading and `segment_header` row; a stream a cancelled
+    step dropped is recovered the same way.
+  - **Render:** identifies the row with its binding, workflow shortcode, event ID, the stream's
+    next sequence and the trusted time, and encodes it as one complete fixed-column
+    pipe-delimited row (`LOG_SERIALIZATION_FAILURE`).
+  - **Rotate:** appends when the row and trailer fit the segment; rotates to the next ordinal
+    (writing the old segment's trailer and the next segment's heading and header) when they do
+    not; and is exhausted at the segment-count cap or when the row cannot fit a new segment
+    (`LOG_SEGMENT_LIMIT_EXHAUSTED`). The row then names the segment it opens.
+  - **Append:** appends the row, flushing at or above the policy's flush level, on a terminal
+    stage or task event, or when the buffered count or interval reaches its limit
+    (`LOG_FLUSH_FAILURE`, `LOG_SINK_FAILURE`); the stream's state advances after the row reached
+    its file.
+  - **Mirror:** writes the row to the console sink when the policy enables it; the console is
+    only a mirror, so a failed write is `LOG_SINK_FAILURE` after the state advanced.
+  - **Release:** releases the lock on every path.
+- **Rejects:** `LOG_LOCK_TIMEOUT`, `LOG_SERIALIZATION_FAILURE`, `LOG_SINK_FAILURE`,
+  `LOG_FLUSH_FAILURE`, `LOG_RELEASE_FAILURE`, `LOG_SEGMENT_LIMIT_EXHAUSTED`; a cancellation is
+  not a rejection, and it drops the stream's cached state because the file may be ahead of it.
 
-- **Owner:** [`src/actions/log/release_feature_log_stream_lock.zig`](../../../src/actions/log/release_feature_log_stream_lock.zig)
-- **Reads:** `feature_log_stream_lock` · **Writes:** invalidates `feature_log_stream_lock` · **Side effect:** `filesystem_write`
-- **Rejects:** `LogReleaseFailure`.
+## Prepare routine
 
-## `CreateFeatureLogSegmentAction` (`create-feature-log-segment`)
+[`src/application/feature_log_prepare_routine.zig`](../../../src/application/feature_log_prepare_routine.zig)
+· **Steps:** `check_status`, `read_clock`, `acquire`, `recover`, `serialize_header`, `create`,
+`release`.
 
-- **Owner:** [`src/actions/log/create_feature_log_segment.zig`](../../../src/actions/log/create_feature_log_segment.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_lock` · **Writes:** `feature_log_stream_state` · **Side effect:** `filesystem_write`
-- **Does:** Creates a stream's first segment with its column heading and `segment_header` row.
-- **Rejects:** `LogSinkFailure`.
+- **Does:** Recovers or creates the first segment of the event stream and, when the policy captures
+  prompts, of the prompt stream, each under its own stream lock, before the log can be the active
+  observer. A retired run is a sink failure, and a prepared run is already prepared.
+- **Rejects:** the persist routine's lock, sink, serialization and release codes. A stopped prompt
+  stream leaves the event stream it opened open, so the lifecycle closes it with the close routine
+  and the activation's own clock reading before it reports the prompt stop.
 
-## `RecoverFeatureLogStreamAction` (`recover-feature-log-stream`)
+## Close routine
 
-- **Owner:** [`src/actions/log/recover_feature_log_stream.zig`](../../../src/actions/log/recover_feature_log_stream.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_lock` · **Writes:** `feature_log_stream_state` · **Side effect:** `filesystem_write`
-- **Does:** Recovers an existing stream's state from its segments under the held lock.
-- **Rejects:** `LogSinkFailure`.
+[`src/application/feature_log_close_routine.zig`](../../../src/application/feature_log_close_routine.zig)
+· **Steps:** `validate_status`, `read_clock`, `acquire_recovery`, `recover_dropped`,
+`release_recovery`, `serialize_trailer`, `acquire_close`, `close_stream`, `release_close`.
 
-## `EvaluateFeatureLogRotationNeedAction` (`evaluate-feature-log-rotation-need`)
+- **Does:** Finalizes a prepared, live run: for each stream it first recovers a stream whose state
+  a cancelled step dropped, under the stream's lock, so the trailer follows the rows really on
+  disk, then writes the final `segment_trailer` under the lock, closes the stream and releases the
+  lock. Every stream is closed even when the first stopped, the first stop is the one reported,
+  and the run is retired only when none stopped. An unprepared or retired run is never finalized.
+- **Rejects:** the persist routine's lock, sink, flush, serialization and release codes.
 
-- **Owner:** [`src/actions/log/evaluate_feature_log_rotation_need.zig`](../../../src/actions/log/evaluate_feature_log_rotation_need.zig)
-- **Reads:** `feature_log_stream_state`, `serialized_log_record`, `serialized_log_control_record` · **Writes:** `log_rotation_decision` · **Side effect:** `none`
-- **Does:** Decides `append` when the row and trailer fit the segment, `rotate` to the next ordinal otherwise, and `exhausted` at the segment-count cap or when the row can't fit a new segment.
-- **Rejects:** none; `exhausted` leads to `LOG_SEGMENT_LIMIT_EXHAUSTED`.
+## Retention routine
 
-## `RotateFeatureLogSegmentAction` (`rotate-feature-log-segment`)
+[`src/application/feature_log_retention_routine.zig`](../../../src/application/feature_log_retention_routine.zig)
+· **Steps:** `authorize`, `resolve_stream`, `acquire`, `prune`, `release`.
 
-- **Owner:** [`src/actions/log/rotate_feature_log_segment.zig`](../../../src/actions/log/rotate_feature_log_segment.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_lock`, `feature_log_stream_state` · **Writes:** replaces `feature_log_stream_state` · **Side effect:** `filesystem_write`
-- **Does:** Writes the old segment's trailer and creates the next segment with its heading and header, under the held lock.
-- **Rejects:** `LogSinkFailure`.
+- **Does:** Prunes one prior run's closed segments of one stream: authorizes the single-use prune
+  from the policy and the trusted time ([ADR 0026](../../decisions/0026-header-identity-log-retention.md))
+  (`FeatureLogRetentionAuthorizationInvalid`, a sink failure), resolves the stream the
+  authorization covers for the current and historical bindings, takes the prior run's own stream
+  lock, consumes the authorization and prunes the segments older than its cutoff, and releases the
+  lock after any prune outcome. Pruning stays the only deletion path.
+- **Rejects:** `LOG_LOCK_TIMEOUT`, `LOG_SINK_FAILURE` (including an authorization that does not
+  match the binding), `LOG_RELEASE_FAILURE` when nothing stopped it first.
 
-## `EvaluateFeatureLogFlushNeedAction` (`evaluate-feature-log-flush-need`)
+## Prior-run finalization routine
 
-- **Owner:** [`src/actions/log/evaluate_feature_log_flush_need.zig`](../../../src/actions/log/evaluate_feature_log_flush_need.zig)
-- **Reads:** `logging_policy`, `feature_log_stream_state`, `trusted_log_clock` · **Writes:** `log_flush_decision` · **Side effect:** `none`
-- **Does:** Flushes at or above the policy's flush level, on a terminal stage or task event, or when the buffered record count or interval reaches its limit; otherwise buffers.
-- **Rejects:** none.
+[`src/application/feature_log_prior_finalization_routine.zig`](../../../src/application/feature_log_prior_finalization_routine.zig)
+· **Steps:** `read_clock`, `acquire`, `check_open`, `recover_tail`, `serialize_trailer`,
+`close_stream`, `verify_closed`, `release`.
 
-## `AppendFeatureLogRecordAction` (`append-feature-log-record`)
+- **Does:** Closes one crashed prior run's open tail of one stream ([§14.10](../14-orchestration.md),
+  [ADR 0026](../../decisions/0026-header-identity-log-retention.md)): reads the trusted clock, takes
+  the prior run's own stream lock, proves under it that the group still ends in an active tail,
+  recovers the tail by truncating it to its last complete row, writes one `segment_trailer` stamped
+  with the clock's reading, proves the group closed, and releases the lock on every path. A group
+  that is no longer an active tail under the lock is left as it is and stops the routine. A release
+  failure outranks the stop before it, as in the close routine.
+- **Rejects:** `LOG_LOCK_TIMEOUT`, `LOG_SINK_FAILURE`, `LOG_FLUSH_FAILURE`,
+  `LOG_SERIALIZATION_FAILURE` (the clock), `LOG_RELEASE_FAILURE`; a cancellation is not a rejection.
 
-- **Owner:** [`src/actions/log/append_feature_log_record.zig`](../../../src/actions/log/append_feature_log_record.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_lock`, `feature_log_stream_state`, `serialized_log_record` · **Writes:** `feature_log_append_evidence` · **Side effect:** `filesystem_write`
-- **Does:** Appends one row under the held lock, flushing when decided.
-- **Rejects:** `LogFlushFailure`, `LogSinkFailure`.
+## Failure routine
 
-## `AdvanceFeatureLogStreamStateAction` (`advance-feature-log-stream-state`)
+[`src/application/feature_log_failure_routine.zig`](../../../src/application/feature_log_failure_routine.zig)
+· **Steps:** `format`, `write`.
 
-- **Owner:** [`src/actions/log/advance_feature_log_stream_state.zig`](../../../src/actions/log/advance_feature_log_stream_state.zig)
-- **Reads:** `feature_log_stream_state`, `feature_log_append_evidence`, `trusted_log_clock` · **Writes:** replaces `feature_log_stream_state` · **Side effect:** `none`
-- **Does:** Advances segment bytes, the next sequence and the flush counters after an append.
-- **Rejects:** none.
-
-## `CloseFeatureLogStreamAction` (`close-feature-log-stream`)
-
-- **Owner:** [`src/actions/log/close_feature_log_stream.zig`](../../../src/actions/log/close_feature_log_stream.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_lock`, `feature_log_stream_state` · **Writes:** invalidates `feature_log_stream_state` · **Side effect:** `filesystem_write`
-- **Does:** Writes the final `segment_trailer` and closes the stream.
-- **Rejects:** `LogFlushFailure`, `LogSinkFailure`.
-
-## Retention
-
-## `BuildFeatureLogRetentionAuthorizationAction` (`build-feature-log-retention-authorization`)
-
-- **Owner:** [`src/actions/log/build_feature_log_retention_authorization.zig`](../../../src/actions/log/build_feature_log_retention_authorization.zig)
-- **Reads:** `logging_policy`, `feature_log_binding` · **Writes:** `feature_log_retention_authorization` · **Side effect:** `none`
-- **Does:** Authorizes pruning one historical binding's stream from the policy and the trusted time ([ADR 0026](../../decisions/0026-header-identity-log-retention.md)).
-- **Rejects:** `FeatureLogRetentionAuthorizationInvalid`.
-
-## `ResolveFeatureLogRetentionStreamAction` (`resolve-feature-log-retention-stream`)
-
-- **Owner:** [`src/actions/log/resolve_feature_log_retention_stream.zig`](../../../src/actions/log/resolve_feature_log_retention_stream.zig)
-- **Reads:** `feature_log_binding`, `feature_log_retention_authorization` · **Writes:** none (returns the stream) · **Side effect:** `none`
-- **Does:** Resolves the stream an authorization covers for the current and historical bindings.
-- **Rejects:** `FeatureLogRetentionAuthorizationInvalid`.
-
-## `PruneFeatureLogSegmentAction` (`prune-feature-log-segment`)
-
-- **Owner:** [`src/actions/log/prune_feature_log_segments.zig`](../../../src/actions/log/prune_feature_log_segments.zig)
-- **Reads:** `feature_log_binding`, `feature_log_stream_lock`, `feature_log_retention_authorization` · **Writes:** invalidates `feature_log_retention_authorization` · **Side effect:** `filesystem_write`
-- **Does:** Consumes the single-use authorization and prunes the stream's segments older than its cutoff.
-- **Rejects:** `LogSinkFailure`, including an authorization that doesn't match the binding.
-
-## Emergency
-
-## `EmitEmergencyLogFailureRecordAction` (`emit-emergency-log-failure-record`)
-
-- **Owner:** [`src/actions/log/emit_emergency_log_failure_record.zig`](../../../src/actions/log/emit_emergency_log_failure_record.zig)
-- **Reads:** none · **Writes:** none · **Side effect:** `filesystem_write`
-- **Does:** Makes one bounded write of `SDDE_LOG_FAILURE workflow=<CODE> level=fatal code=<FAILURE_CODE>` to the emergency sink, with no retry or recursive logging.
-- **Rejects:** none; a failed write is dropped.
+- **Does:** Makes one bounded write of
+  `SDDE_LOG_FAILURE workflow=<SHORTCODE> level=fatal code=<FAILURE_CODE>` to the emergency sink,
+  with no retry or recursive logging.
+- **Rejects:** none; a line that cannot be formatted or written is lost, because a report of that
+  would be a second report of one failure.

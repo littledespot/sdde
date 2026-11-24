@@ -6,7 +6,6 @@ pub const Payload = union(enum) {
     support: @import("../domain/specification_support.zig").Source.Collection,
     support_repair: @import("../domain/specification_support_repair.zig").Source.State,
     ledger: a.Ledger,
-    raw: []const u8,
     observations: a.Observations,
     result: a.Result,
     content: @import("../domain/specification.zig").IdentifiedContent,

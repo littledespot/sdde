@@ -94,8 +94,6 @@ pub const StepBinding = error{
     ReferencePartUnavailable,
     /// The reconciliation layout has no size.
     ReconciliationSizeMissing,
-    /// The path-token operation has no source text.
-    PathTokenTextMissing,
     /// The specification has no brief.
     SpecificationBriefMissing,
     /// The run supplied no project authority to this step.

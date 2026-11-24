@@ -403,7 +403,7 @@ test "Bedrock evaluation validates explicit test selection and registered contro
     try models.appendSlice(a, &@import("../../src/model_contract_test_fixture.zig").bedrock_model_ids);
     for (cost_policy.permitted) |tuple| try models.append(a, tuple.model);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family.
+        // The Bedrock-only evaluator binding covers the Bedrock family.
         const family = entry.facts.bedrockFamily() orelse continue;
         for (std.enums.values(domain.BedrockRegion)) |region| for (models.items) |raw_model| {
             const model = c.ModelId.parse(raw_model).?;
@@ -495,7 +495,7 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
     const a = arena.allocator();
     const inputs = try capture(a);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family,
+        // The Bedrock-only evaluator binding covers the Bedrock family,
         // with a judge model and Region that name nothing real (ADR 0029).
         const family = entry.facts.bedrockFamily() orelse continue;
         const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
@@ -580,7 +580,7 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
     const response = try std.fmt.allocPrint(a, "HTTP/1.1 200 OK\r\nX-Amzn-RequestId: bedrock-request-1\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
     const fixture_module = @import("../../src/model_http_test_fixture.zig");
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family,
+        // The Bedrock-only evaluator binding covers the Bedrock family,
         // with a judge model and Region that name nothing real (ADR 0029).
         const family = entry.facts.bedrockFamily() orelse continue;
         const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
@@ -666,10 +666,10 @@ test "evaluation trace retains failed attempts, the correction request and malfo
     var first = observed_good;
     first.failure = .provider_failed;
     first.payload = null;
-    first.response_body = "untrusted provider failure body";
+    first.response_body = .{ .bytes = "untrusted provider failure body", .complete = true };
     var second = observed_good;
     second.payload = "```json\n{}\n```";
-    second.response_body = "untrusted provider completion body";
+    second.response_body = .{ .bytes = "untrusted provider completion body", .complete = true };
     var fake: Fake = .{ .observations = &.{ first, second, second } };
     var trace: @import("evaluation_trace.zig").Trace = .{
         .store = .{ .io = io, .allocator = a, .run = run.dir, .secrets = &.{} },
@@ -688,12 +688,129 @@ test "evaluation trace retains failed attempts, the correction request and malfo
     try std.testing.expect(trace.failure == null);
     for ([_]provider.Observation{ first, second, second }, 1..) |observation, ordinal| {
         const path = try @import("evidence.zig").Store.path(a, .evaluation, ordinal, .response);
-        try std.testing.expectEqualStrings(observation.response_body.?, try @import("files.zig").read(io, a, run.dir, path));
+        try std.testing.expectEqualStrings(observation.response_body.?.bytes, try @import("files.zig").read(io, a, run.dir, path));
     }
     try std.testing.expectEqualStrings(second.payload.?, try @import("files.zig").read(io, a, run.dir, "evidence/evaluation/call-000002/model_output.txt"));
     const correction_request = try @import("files.zig").read(io, a, run.dir, try @import("evidence.zig").Store.path(a, .evaluation, 3, .request));
     try std.testing.expect(std.mem.indexOf(u8, correction_request, "rejected_response") != null);
     try std.testing.expectEqualStrings(fake.bodies[2], correction_request);
+}
+
+test "evaluation trace records whether a retained body is complete, removes known credentials from it and writes none for no body" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const io = std.testing.io;
+    const secret = "sk-evaluator-test-credential";
+    var run = std.testing.tmpDir(.{});
+    defer run.cleanup();
+    var complete = observed_good;
+    complete.response_body = .{ .bytes = "complete provider body", .complete = true };
+    var partial = observed_good;
+    partial.failure = .provider_failed;
+    partial.payload = null;
+    partial.usage = null;
+    partial.response_body = .{ .bytes = "{\"echo\":\"" ++ secret ++ "\",\"cont", .complete = false };
+    var bodyless = partial;
+    bodyless.response_body = null;
+    var fake: Fake = .{ .observations = &.{ complete, partial, bodyless } };
+    var trace: @import("evaluation_trace.zig").Trace = .{
+        .store = .{ .io = io, .allocator = a, .run = run.dir, .secrets = &.{secret} },
+        .inner = fake.port(),
+    };
+    for (0..3) |_| _ = try trace.port().invoke(a, "{}", 100);
+    try std.testing.expect(trace.failure == null);
+    const files = @import("files.zig");
+    const complete_outcome = try files.read(io, a, run.dir, "evidence/evaluation/call-000001/outcome.json");
+    try std.testing.expect(std.mem.indexOf(u8, complete_outcome, "\"response_complete\":true") != null);
+    try std.testing.expectEqualStrings("complete provider body", try files.read(io, a, run.dir, "evidence/evaluation/call-000001/response.json"));
+    // A prefix is kept as received, marked incomplete, with the credential removed.
+    const partial_outcome = try files.read(io, a, run.dir, "evidence/evaluation/call-000002/outcome.json");
+    try std.testing.expect(std.mem.indexOf(u8, partial_outcome, "\"response_complete\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, partial_outcome, "\"failure\":\"provider_failed\"") != null);
+    const prefix = try files.read(io, a, run.dir, "evidence/evaluation/call-000002/response.json");
+    try std.testing.expectEqualStrings("{\"echo\":\"[REDACTED_CREDENTIAL]\",\"cont", prefix);
+    try std.testing.expect(std.mem.indexOf(u8, prefix, secret) == null);
+    // No body, no response file and no completeness claim.
+    const bodyless_outcome = try files.read(io, a, run.dir, "evidence/evaluation/call-000003/outcome.json");
+    try std.testing.expect(std.mem.indexOf(u8, bodyless_outcome, "\"response_complete\":null") != null);
+    try std.testing.expectError(error.InputUnavailable, files.read(io, a, run.dir, "evidence/evaluation/call-000003/response.json"));
+}
+
+test "Bedrock transport faults retain the received prefix as an incomplete body and yield no candidate or usage" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture_module = @import("../../src/model_http_test_fixture.zig");
+    const body = try bedrockResponseBytes(a, "end_turn", good);
+    const response = try std.fmt.allocPrint(a, "HTTP/1.1 200 OK\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
+    for ([_]fixture_module.Fault{ .reset, .eof, .deadline }) |fault| {
+        var socket: fixture_module.Fixture = undefined;
+        socket.init(response);
+        defer socket.deinit();
+        socket.fault = fault;
+        socket.body_prefix_bytes = 3;
+        var transport = socket.adapter();
+        var adapter: bedrock.Adapter = .{ .transport = transport.port(), .clock = transport.clock, .model = bedrock_selection.model, .region = bedrock_selection.region.?, .api_key = &socket.canary };
+        var run = std.testing.tmpDir(.{});
+        defer run.cleanup();
+        var trace: @import("evaluation_trace.zig").Trace = .{
+            .store = .{ .io = std.testing.io, .allocator = a, .run = run.dir, .secrets = &.{&socket.canary} },
+            .inner = adapter.port(),
+        };
+        const observed = try trace.port().invoke(a, "{}", 100);
+        try std.testing.expect(trace.failure == null);
+        // The transport's failure keeps its disposition; the bytes change neither it nor the score.
+        try std.testing.expectEqual(if (fault == .deadline) provider.Failure.timeout else .provider_failed, observed.failure.?);
+        try std.testing.expect(observed.payload == null and observed.usage == null);
+        try std.testing.expectEqualStrings(body[0..3], observed.response_body.?.bytes);
+        try std.testing.expect(!observed.response_body.?.complete);
+        const files = @import("files.zig");
+        try std.testing.expectEqualStrings(body[0..3], try files.read(std.testing.io, a, run.dir, "evidence/evaluation/call-000001/response.json"));
+        const outcome = try files.read(std.testing.io, a, run.dir, "evidence/evaluation/call-000001/outcome.json");
+        try std.testing.expect(std.mem.indexOf(u8, outcome, "\"response_complete\":false") != null);
+        try socket.expectCleaned();
+    }
+}
+
+test "an OpenAI response body is complete only when its framing ended, and a cut body keeps the prefix that arrived" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const http = @import("http.zig");
+    const text = "{\"id\":\"complete\"}";
+    var buffer: [64]u8 = undefined;
+    // A real content-length reader whose frame ends with the input: the body arrived whole.
+    var whole_input = std.Io.Reader.fixed(text);
+    var whole_http: std.http.Reader = .{ .in = &whole_input, .interface = undefined, .state = .received_head, .max_head_len = 4096 };
+    const finished = try http.drain(a, whole_http.bodyReader(&buffer, .none, text.len), &whole_http.state);
+    try std.testing.expect(finished.complete);
+    try std.testing.expectEqualStrings(text, finished.bytes);
+    // The same reader over an input that ends before the declared length: the standard reader reports that EOF as
+    // an ordinary end of stream, so only the framing's terminal state shows the body is a prefix.
+    var short_input = std.Io.Reader.fixed(text[0..5]);
+    var short_http: std.http.Reader = .{ .in = &short_input, .interface = undefined, .state = .received_head, .max_head_len = 4096 };
+    const prefix = try http.drain(a, short_http.bodyReader(&buffer, .none, text.len), &short_http.state);
+    try std.testing.expect(!prefix.complete);
+    try std.testing.expectEqualStrings(text[0..5], prefix.bytes);
+    // A reader that delivers part of a body and then gives up.
+    const Failing = struct {
+        reader: std.Io.Reader,
+        sent: bool = false,
+        fn stream(r: *std.Io.Reader, w: *std.Io.Writer, _: std.Io.Limit) std.Io.Reader.StreamError!usize {
+            const self: *@This() = @alignCast(@fieldParentPtr("reader", r));
+            if (self.sent) return error.ReadFailed;
+            self.sent = true;
+            try w.writeAll("{\"partial");
+            return 9;
+        }
+    };
+    var storage: [16]u8 = undefined;
+    var failing: Failing = .{ .reader = .{ .vtable = &.{ .stream = Failing.stream }, .buffer = &storage, .seek = 0, .end = 0 } };
+    const ready: std.http.Reader.State = .ready;
+    const cut = try http.drain(a, &failing.reader, &ready);
+    try std.testing.expect(!cut.complete);
+    try std.testing.expectEqualStrings("{\"partial", cut.bytes);
 }
 
 test "evidence write failure prevents a new evaluator call" {
@@ -1903,7 +2020,7 @@ test "Bedrock judge temperature is the evaluator's own value, present exactly wh
     const a = arena.allocator();
     const inputs = try capture(a);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family.
+        // The Bedrock-only evaluator binding covers the Bedrock family.
         const family = entry.facts.bedrockFamily() orelse continue;
         const selection: configuration.Selection = .{
             .api = .bedrock_converse,

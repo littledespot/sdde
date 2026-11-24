@@ -168,6 +168,7 @@ test "response size is unrestricted while invalid UTF8 retains usage without a c
             try std.testing.expectEqual(provider.ProviderFailureCause.response_invalid, failure.cause);
             try std.testing.expectEqual(provider.ProviderRetryClass.never, failure.retry_class);
             try std.testing.expectEqual(provider.ProviderDeliveryDisposition.response_received, failure.delivery);
+            try std.testing.expectEqual(provider.ProviderDecodeDiagnostic.content_not_utf8, failure.decode.?);
             try std.testing.expect(failure.operation_id.eql(fixture.call.operation_id));
         }
         try std.testing.expectEqual(@as(u64, 12), owned.evidence.usage().?.total_tokens);

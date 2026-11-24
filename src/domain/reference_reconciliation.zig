@@ -129,11 +129,39 @@ pub const SummaryAssignment = struct { checked: CheckedSummary, id: SummaryId, s
 pub const CheckedDispositions = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: Proposal, dispositions: []const ClaimDisposition };
 pub const CheckedSignals = struct { prior: CheckedDispositions, signals: []const ValidatedSignal };
 pub const CheckedConflicts = struct { prior: CheckedSignals, conflicts: []const ValidatedConflict };
-pub const RecordAssignments = struct { checked: CheckedConflicts, signal_ids: []const SignalId, conflict_ids: []const ConflictId };
+pub const RecordAssignments = struct {
+    checked: CheckedConflicts,
+    signal_ids: []const SignalId,
+    conflict_ids: []const ConflictId,
+
+    /// The validated dispositions the signals and conflicts were built on. The one place the checked chain is
+    /// unwound, so no reader spells its nesting.
+    pub fn global(self: RecordAssignments) CheckedDispositions {
+        return self.checked.prior.prior;
+    }
+
+    /// The same chain over other dispositions, proposal, signals and conflicts, with their identities: the one place the
+    /// checked chain is rebuilt, as `global` is the one place it is unwound. The caller owns the validity of what it passes.
+    pub fn rebuilt(self: RecordAssignments, dispositions: []const ClaimDisposition, proposal: Proposal, signals: []const ValidatedSignal, signal_ids: []const SignalId, conflicts: []const ValidatedConflict, conflict_ids: []const ConflictId) RecordAssignments {
+        var checked = self.checked;
+        checked.prior.prior.dispositions = dispositions;
+        checked.prior.prior.proposal = proposal;
+        checked.prior.signals = signals;
+        checked.conflicts = conflicts;
+        return .{ .checked = checked, .signal_ids = signal_ids, .conflict_ids = conflict_ids };
+    }
+};
 pub const Signal = struct { id: SignalId, value: ValidatedSignal };
 pub const Conflict = struct { id: ConflictId, value: ValidatedConflict };
 pub const Records = struct { assignments: RecordAssignments, signals: []const Signal, conflicts: []const Conflict };
-pub const Accounted = struct { records: Records, outcome: enum { complete, blocked } };
+pub const Accounted = struct {
+    records: Records,
+    outcome: enum { complete, blocked },
+
+    pub fn global(self: Accounted) CheckedDispositions {
+        return self.records.assignments.global();
+    }
+};
 
 pub fn item(items: Items, id: ClaimId) Error!Item {
     if (id.ordinal == 0 or id.ordinal > items.entries.len) return error.InvalidReferenceReconciliation;

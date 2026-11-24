@@ -44,7 +44,18 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
      (`unsupported_media`, `malformed_text`, `decoded_budget`), and the step still succeeds.
   5. `validateAccounting`: requires the decoded and captured entries to match the inventory one for
      one within the entry limit, then totals source and decoded bytes into the accepted
-     documents. Rejects `InvalidReferenceAccounting`.
+     documents. An entry that was observed as a symlink, a special file or an unreadable one, or
+     that the capturer or the decoder blocked, fails with the error of its own `Failure`
+     (`ReferenceSymlink`, `ReferenceSpecialFile`, `ReferenceUnreadable`, `ReferenceSourceSize`,
+     `ReferenceSourceBudget`, `ReferenceSourceCapture`, `ReferenceUnsupportedMedia`,
+     `ReferenceMalformedText`, `ReferenceDecodedBudget`), so the source fails at ingestion with a
+     typed reason (ADR 0036). The capturer blocks an entry it observed as no file, so an entry
+     observed as a symlink, a special file or an unreadable one that was captured anyway, and any
+     other mismatch of the books, rejects `InvalidReferenceAccounting`. The stage's diagnostic names
+     the first entry that fails with its own `Failure` by its display path, for the CLI (the
+     directory's project-relative path and the entry's normalized path from the validated
+     inventory, never a symlink target); a path longer than 512 bytes names none
+     ([ADR 0031](../../decisions/0031-stage-actions.md), [§8](../08-diagnostics-evidence.md)).
   6. `assignIdentities`: numbers sources in document order and maps each provisional source and
      block to its canonical ID under a fresh reference-state ID. It is the only step that draws
      system entropy, through its own port. Rejects errors of `reference_evidence.Error` and
@@ -126,7 +137,7 @@ workflow runs `prepare-reference-evidence`, `compile-naming-policy`, then
 ## `ValidateReferenceExtractionTextAction` (`validate-reference-extraction-text`)
 
 - **Owner:** [`src/actions/reference/validate_reference_extraction_text.zig`](../../../src/actions/reference/validate_reference_extraction_text.zig)
-- **Reads:** `parsed_reference_extraction`, `reference_passive_literals`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `text_validated_reference_extraction` · **Side effect:** `none`
+- **Reads:** `parsed_reference_extraction`, `reference_passive_literals`, `citable_reference_inputs` · **Writes:** `text_validated_reference_extraction` · **Side effect:** `none`
 - **Does:** Validates each parsed claim's text against the toolchain, the passive-literal registry and the captured inputs.
 - **Rejects:** errors of `reference_extraction.Error`
 
@@ -144,17 +155,17 @@ merges) are variants of the generic repair operations, specified once in
 - **Does:** Appends one chunk's response to the extraction progress, rejecting a packet whose unit isn't a reference chunk or whose purpose isn't initial generation.
 - **Rejects:** `InvalidReferenceExtraction` and the rest of `reference_extraction.Error`
 
-## `ValidateReferenceSelectionsAction` (`validate-reference-selections`)
+## `ValidateTokenClassificationsAction` (`validate-token-classifications`)
 
-- **Owner:** [`src/actions/reference/validate_reference_selections.zig`](../../../src/actions/reference/validate_reference_selections.zig)
-- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction` · **Writes:** `validated_reference_selections` · **Side effect:** `none`
+- **Owner:** [`src/actions/reference/validate_token_classifications.zig`](../../../src/actions/reference/validate_token_classifications.zig)
+- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction` · **Writes:** `validated_token_classifications` · **Side effect:** `none`
 - **Does:** Validates the token classifications against the structured token candidates.
 - **Rejects:** errors of `reference_extraction.Error`
 
 ## `AssignPreservedTokenIdentitiesAction` (`assign-preserved-token-identities`)
 
 - **Owner:** [`src/actions/reference/assign_preserved_token_identities.zig`](../../../src/actions/reference/assign_preserved_token_identities.zig)
-- **Reads:** `validated_reference_selections` · **Writes:** `preserved_token_identities` · **Side effect:** `none`
+- **Reads:** `validated_token_classifications` · **Writes:** `preserved_token_identities` · **Side effect:** `none`
 - **Does:** Numbers each `preserve` selection in order; `irrelevant` and `blocked` selections get no ID.
 - **Rejects:** `InvalidStructuredTokens` and the rest of `reference_extraction.Error`
 
@@ -233,7 +244,7 @@ merges) are variants of the generic repair operations, specified once in
 
 - **Owner:** [`src/actions/reference/build_reference_reconciliation_model_input.zig`](../../../src/actions/reference/build_reference_reconciliation_model_input.zig)
 - **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
-- **Does:** Builds the reconciliation request packet, adding the workflow's summary purpose.
+- **Does:** Builds the summary request packet, adding the workflow's summary purpose and selecting the `summary` assignment context.
 - **Rejects:** errors of `reference_model_input.ReconciliationError`
 
 ## `CheckReferenceReconciliationPurposeAction` (`check-reference-reconciliation-purpose`)
@@ -246,14 +257,14 @@ merges) are variants of the generic repair operations, specified once in
 ## `CheckReferenceSummaryReuseAction` (`check-reference-summary-reuse`)
 
 - **Owner:** [`src/actions/reference/check_reference_summary_reuse.zig`](../../../src/actions/reference/check_reference_summary_reuse.zig)
-- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** nothing · **Side effect:** `none`
+- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** nothing · **Side effect:** `none`
 - **Does:** Prove that a non-final, nonempty partition contains exactly one current validated child with unchanged membership and dependencies under §16.4.
 - **Rejects:** errors of `reference_reconciliation.Error`
 
 ## `ReuseReferenceReconciliationSummaryAction` (`reuse-reference-reconciliation-summary`)
 
 - **Owner:** [`src/actions/reference/reuse_reference_reconciliation_summary.zig`](../../../src/actions/reference/reuse_reference_reconciliation_summary.zig)
-- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `parsed_reference_reconciliation` · **Side effect:** `none`
+- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `parsed_reference_reconciliation` · **Side effect:** `none`
 - **Does:** Recheck reuse eligibility and carry the child's ordered content into the existing summary validation path.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
@@ -267,8 +278,8 @@ merges) are variants of the generic repair operations, specified once in
 ## `CollectReferenceReconciliationResultAction` (`collect-reference-reconciliation-result`)
 
 - **Owner:** [`src/actions/reference/collect_reference_reconciliation_result.zig`](../../../src/actions/reference/collect_reference_reconciliation_result.zig)
-- **Reads:** `reference_reconciliation_input`, `assembled_json`, `validated_assembled_json` · **Writes:** `raw_reference_reconciliation`; invalidates `assembled_json`, `validated_assembled_json` · **Side effect:** `none`
-- **Does:** Takes a summary partition's initial-generation response, checking that it belongs to the current reference state.
+- **Reads:** `reference_reconciliation_input`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** `raw_reference_reconciliation` · **Side effect:** `none`
+- **Does:** Takes a summary partition's admitted initial-generation response, checking that it belongs to the current reference state; the whole body carries that response's origin.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
 ## `ParseReferenceReconciliationResultAction` (`parse-reference-reconciliation-result`)
@@ -285,27 +296,26 @@ merges) are variants of the generic repair operations, specified once in
 - **Does:** Render the sidecar using snapshot-owned source labels/locations and inert registered display literals only.
 - **Rejects:** errors of `reference_context.Error`, `specification_projection.Error`
 
-## `ScanPathTokensAction` (`scan-path-tokens`)
-
-- **Owner:** [`src/actions/reference/scan_path_tokens.zig`](../../../src/actions/reference/scan_path_tokens.zig)
-- **Parameters:** required `text` ([`path_token_workflow.zig`](../../../src/application/path_token_workflow.zig)).
-- **Reads:** `path_token_grammar`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `path_token_scan` · **Side effect:** `none`
-- **Does:** Checks the grammar is still bound to the current policy and toolchain, then lexes path tokens over the raw bytes, never NFC offsets.
-- **Rejects:** errors of `path_token_scan.Error`
-
-## `ValidateSourceCitationsAction` (`validate-source-citations`)
-
-- **Owner:** [`src/actions/reference/validate_source_citations.zig`](../../../src/actions/reference/validate_source_citations.zig)
-- **Reads:** `citable_reference_inputs`, `reference_citation_proposals` · **Writes:** `validated_source_citations` · **Side effect:** `none`
-- **Does:** Checks each proposed citation against the captured sources: structural support only, not semantic proof.
-- **Rejects:** errors of `reference_evidence.Error`
-
 ## `ValidateReferenceReconciliationCompletenessAction` (`validate-reference-reconciliation-completeness`)
 
 - **Owner:** [`src/actions/reference/validate_reference_reconciliation_completeness.zig`](../../../src/actions/reference/validate_reference_reconciliation_completeness.zig)
-- **Reads:** `reference_reconciliation_records` · **Writes:** `accounted_reference_reconciliation` · **Side effect:** `none`
+- **Reads:** `answered_reference_reconciliation_records` · **Writes:** `accounted_reference_reconciliation` · **Side effect:** `none`
 - **Does:** Revalidates the partition history and requires the global result to follow the last partition with one disposition per item.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
+
+## `ApplyClarificationAnswersAction` (`apply-clarification-answers`)
+
+- **Owner:** [`src/actions/reference/apply_clarification_answers.zig`](../../../src/actions/reference/apply_clarification_answers.zig)
+- **Reads:** `reference_reconciliation_records`, `citable_reference_inputs`, `clarification_inputs` · **Writes:** `answered_reference_reconciliation_records` · **Side effect:** `none`
+- **Does:** Resolves the choices of the `resolved_by_user` Specify forms that offered one option for each claim of a reference
+  conflict, and applies each to the validated reconciliation: the chosen claim is retained and given a signal, the other claims of
+  the conflict are superseded by it and the conflict is dropped, so the result is an ordinary reconciliation that every later
+  reader and the persisted snapshot's validation accept ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md),
+  "The answer to a conflict"). A conflict is answered only when every claim is a model claim of one kind and none is in another
+  conflict, and a choice is matched by the conflict's subject, so an answer whose option no claim offers any more, an answer of
+  another kind and an answer to any other gap apply nothing. With no choice it returns the records unchanged.
+- **Rejects:** `InvalidClarificationInput` for a resolved conflict form whose answer is not one of its options or has no
+  response, and `InvalidReferenceReconciliation` for a conflict whose subject or claims the evidence does not hold.
 
 ## `BuildReferenceSnapshotAction` (`build-reference-snapshot`)
 
@@ -324,7 +334,7 @@ merges) are variants of the generic repair operations, specified once in
 ## `ValidateReferenceReconciliationSummaryAction` (`validate-reference-reconciliation-summary`)
 
 - **Owner:** [`src/actions/reference/validate_reference_reconciliation_summary.zig`](../../../src/actions/reference/validate_reference_reconciliation_summary.zig)
-- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_summary` · **Side effect:** `none`
+- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `validated_reference_summary` · **Side effect:** `none`
 - **Does:** Checks the summary; an invalid result records the defect's relations and dependency snapshot for the repair authorizer.
 - **Rejects:** errors of `reference_reconciliation.Error`
 
@@ -367,7 +377,7 @@ merges) are variants of the generic repair operations, specified once in
 ## `ValidateReferenceSignalProposalsAction` (`validate-reference-signal-proposals`)
 
 - **Owner:** [`src/actions/reference/validate_reference_signal_proposals.zig`](../../../src/actions/reference/validate_reference_signal_proposals.zig)
-- **Reads:** `validated_reference_dispositions`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_signals` · **Side effect:** `none`
+- **Reads:** `validated_reference_dispositions`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `validated_reference_signals` · **Side effect:** `none`
 - **Does:** Checks the signals; an invalid result records the defect's relations and dependency snapshot.
 - **Rejects:** errors of `reference_reconciliation.Error`
 
@@ -381,7 +391,7 @@ merges) are variants of the generic repair operations, specified once in
 ## `ValidateReferenceConflictProposalsAction` (`validate-reference-conflict-proposals`)
 
 - **Owner:** [`src/actions/reference/validate_reference_conflict_proposals.zig`](../../../src/actions/reference/validate_reference_conflict_proposals.zig)
-- **Reads:** `validated_reference_signals`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_conflicts` · **Side effect:** `none`
+- **Reads:** `validated_reference_signals`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `validated_reference_conflicts` · **Side effect:** `none`
 - **Does:** Requires a complete prior phase, checks the conflicts, and records relations and dependencies for an invalid result.
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
@@ -403,7 +413,7 @@ merges) are variants of the generic repair operations, specified once in
 
 - **Owner:** [`src/actions/reference/collect_reference_signals_candidate.zig`](../../../src/actions/reference/collect_reference_signals_candidate.zig)
 - **Reads:** `validated_reference_dispositions`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `parsed_reference_reconciliation`; invalidates `validated_reference_dispositions` · **Side effect:** `none`
-- **Does:** Collects the signals response; a prior phase other than signals is `InvalidReferenceReconciliation`.
+- **Does:** Collects the signals response; a prior phase other than signals is `InvalidReferenceReconciliation`. When the dispositions declare no conflict group, it leaves the phase `complete`, so no conflicts request follows (the conflicts answer is the empty collection and nothing else, [ADR 0022](../../decisions/0022-native-reference-phase-handoffs.md) "Forced conflicts answer").
 - **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
 ## `CollectReferenceConflictsCandidateAction` (`collect-reference-conflicts-candidate`)

@@ -14,6 +14,9 @@ pub const Origin = struct {
     // Current authority frontier after expanding captured, immutable inputs.
     lineage: [key_count]?u64 = @splat(null),
     lineage_conflicts: std.enums.EnumSet(pipeline.DataKey) = .initEmpty(),
+    /// The keys the producing step replaced with this value. Its input generations of them are superseded revisions it
+    /// replaced in the same transaction, not dependencies that can go stale.
+    replaced: std.enums.EnumSet(pipeline.DataKey) = .initEmpty(),
 };
 
 /// Compiled native value schema. Workflows reference keys, never supply schemas

@@ -8,6 +8,7 @@ const artifacts = @import("../../domain/workflow_artifact_registry.zig");
 const state = @import("../../domain/specification_state.zig");
 const clarification = @import("../../domain/clarification_inputs.zig");
 const forms = @import("../../domain/clarification_form.zig");
+const rejection = @import("../../domain/clarification_form_rejection.zig");
 const invocation_types = @import("../../domain/specify_invocation.zig");
 const normalizer_port = @import("../../ports/unicode_normalizer.zig");
 const feature_port = @import("../../ports/feature_directory_inspector.zig");
@@ -38,7 +39,7 @@ pub const Step = enum {
 pub const Diagnostic = struct { step: ?Step = null };
 
 /// The failure representation of the thirteen absorbed actions, unchanged. `Cancelled` means the
-/// runtime stopped being active; the runner reports which stop it was.
+/// runtime stopped being active or a port call was cancelled; the runner reports the cancellation.
 pub const Error = normalizer_port.Error || feature.Error || feature_port.Error || reference.Error ||
     reference_port.Error || artifacts.FeaturePathError || state_port.Error || state.Error ||
     input_port.Error || clarification.Error || error{Cancelled};
@@ -55,10 +56,23 @@ pub const Outputs = struct {
     prior: state.Prior,
 };
 
+/// What the stage's last step decides about the clarification forms: all are accepted, or each form that broke a rule is
+/// named with the rule (ADR 0025). A rejected closed form stops the run with none of the answers accepted.
+pub const Verdict = union(enum) { accepted: clarification.Inputs, rejected: rejection.FormRejections };
+
+/// The edge values of a stage that rejected clarification forms, with the forms. The stage's contract writes every edge
+/// value whatever its outcome, so a rejected stage still produces them; its inputs hold no submission, because none of
+/// the answers is accepted.
+pub const Rejected = struct { outputs: Outputs, forms: rejection.FormRejections };
+
+/// What the stage produced: the edge values, or the rejected forms. A rejection is an expected result, not a failure.
+pub const Result = union(enum) { ready: Outputs, rejected: Rejected };
+
 /// One stage: validate the invocation's feature directory and reference selector, inspect both,
 /// resolve the feature's artifact paths, then read and validate the prior specification state and
 /// the clarification inputs. Its steps route no outcome of their own: each success continues to
-/// the next and every failure ends the stage.
+/// the next and every failure ends the stage. A clarification form that breaks a rule is no failure:
+/// the last step names each such form with its rule, and the stage ends with that result (ADR 0025).
 pub const Action = struct {
     normalizer: normalizer_port.Normalizer,
     feature_roots: ?feature.Roots = null,
@@ -80,7 +94,7 @@ pub const Action = struct {
 
     /// Intermediates and the edge values live in `scratch`; the prior state and the bytes it was
     /// parsed from live in `retained`.
-    pub fn execute(self: Action, scratch: std.mem.Allocator, retained: std.mem.Allocator, runtime: pipeline.NodeRuntime, diagnostic: *Diagnostic, invocation: invocation_types.Invocation) Error!Outputs {
+    pub fn execute(self: Action, scratch: std.mem.Allocator, retained: std.mem.Allocator, runtime: pipeline.NodeRuntime, diagnostic: *Diagnostic, invocation: invocation_types.Invocation) Error!Result {
         const feature_candidate = steps.normalizeFeature(self.normalizer, scratch, invocation) catch |err| return stopped(diagnostic, .normalize_feature, err);
         try checkpoint(diagnostic, runtime, .validate_feature);
         const selector = steps.validateFeature(scratch, feature_candidate, self.feature_roots) catch |err| return stopped(diagnostic, .validate_feature, err);
@@ -97,7 +111,7 @@ pub const Action = struct {
         try checkpoint(diagnostic, runtime, .capture_state);
         const state_bytes = steps.captureState(self.state_source, retained, observed, paths) catch |err| return stopped(diagnostic, .capture_state, err);
         try checkpoint(diagnostic, runtime, .parse_state);
-        const prior = steps.parseState(retained, self.contracts, observed.selector.feature_id, state_bytes) catch |err| return stopped(diagnostic, .parse_state, err);
+        const prior = steps.parseState(retained, self.contracts, self.normalizer, observed.selector.feature_id, state_bytes) catch |err| return stopped(diagnostic, .parse_state, err);
         try checkpoint(diagnostic, runtime, .capture_clarifications);
         const captures = steps.captureClarifications(self.input_source, scratch, observed, paths) catch |err| return stopped(diagnostic, .capture_clarifications, err);
         try checkpoint(diagnostic, runtime, .parse_clarification_state);
@@ -105,8 +119,26 @@ pub const Action = struct {
         try checkpoint(diagnostic, runtime, .validate_clarification_state);
         const validated = steps.validateClarificationState(parsed, paths.feature.feature_id) catch |err| return stopped(diagnostic, .validate_clarification_state, err);
         try checkpoint(diagnostic, runtime, .validate_clarification_forms);
-        const inputs = steps.validateClarificationForms(self.form_parser, scratch, validated, captures) catch |err| return stopped(diagnostic, .validate_clarification_forms, err);
-        return .{ .feature = observed, .selector = selector, .reference = reference_directory, .paths = paths, .captures = captures, .inputs = inputs, .prior = prior };
+        const verdict = steps.validateClarificationForms(self.form_parser, scratch, validated, captures) catch |err| return stopped(diagnostic, .validate_clarification_forms, err);
+        const outputs: Outputs = .{
+            .feature = observed,
+            .selector = selector,
+            .reference = reference_directory,
+            .paths = paths,
+            .captures = captures,
+            .inputs = switch (verdict) {
+                .accepted => |accepted| accepted,
+                .rejected => .{ .state = validated, .submissions = &.{}, .protected_forms = &.{} },
+            },
+            .prior = prior,
+        };
+        return switch (verdict) {
+            .accepted => .{ .ready = outputs },
+            .rejected => |list| rejected: {
+                diagnostic.step = .validate_clarification_forms;
+                break :rejected .{ .rejected = .{ .outputs = outputs, .forms = list } };
+            },
+        };
     }
 };
 
@@ -160,8 +192,8 @@ pub const steps = struct {
         return (source orelse return error.FeatureInputUnavailable).capture(allocator, selected, paths);
     }
 
-    pub fn parseState(allocator: std.mem.Allocator, contracts: ?state.ContractSource, selected: identity.FeatureId, bytes: ?[]const u8) state.Error!state.Prior {
-        return state.parse(allocator, bytes, selected, contracts);
+    pub fn parseState(allocator: std.mem.Allocator, contracts: ?state.ContractSource, normalizer: normalizer_port.Normalizer, selected: identity.FeatureId, bytes: ?[]const u8) state.Error!state.Prior {
+        return state.parse(allocator, bytes, selected, contracts, normalizer);
     }
 
     pub fn captureClarifications(source: input_port.Capturer, allocator: std.mem.Allocator, observed: feature.Directory, paths: artifacts.FeaturePaths) input_port.Error!clarification.Captures {
@@ -176,36 +208,72 @@ pub const steps = struct {
         return clarification.validate(parsed, selected);
     }
 
-    pub fn validateClarificationForms(parser: parser_port.FormParser, allocator: std.mem.Allocator, validated: clarification.ValidatedState, captured: clarification.Captures) clarification.Error!clarification.Inputs {
+    pub fn validateClarificationForms(parser: parser_port.FormParser, allocator: std.mem.Allocator, validated: clarification.ValidatedState, captured: clarification.Captures) clarification.Error!Verdict {
+        // A publication that failed after its forms leaves forms the registry does not describe. A form that
+        // verifiably holds no submission is replaced by the rerun (ADR 0009), whether or not it matches; any other form
+        // that does not validate is rejected with the rule it broke, and every such form is named (ADR 0025).
+        var rejected: rejection.FormRejections = .{};
         const registry = validated.value orelse {
-            if (captured.forms.len != 0) return error.InvalidClarificationInput;
-            return .{ .state = validated, .submissions = &.{}, .protected_forms = &.{} };
+            for (captured.forms) |capture| if (forms.holding(capture.bytes) == .submission) rejected.add(capture.id, .form_without_record);
+            if (rejected.len != 0) return .{ .rejected = rejected };
+            return .{ .accepted = .{ .state = validated, .submissions = &.{}, .protected_forms = &.{} } };
         };
-        if (captured.forms.len != registry.records.len) return error.InvalidClarificationInput;
+        for (captured.forms) |capture| {
+            const recorded = for (registry.records) |record| {
+                if (clarification.Id.parse(record.id).?.index() == capture.id.index()) break true;
+            } else false;
+            if (!recorded and forms.holding(capture.bytes) == .submission) rejected.add(capture.id, .form_without_record);
+        }
         var submissions: std.ArrayList(clarification.Submission) = .empty;
         errdefer submissions.deinit(allocator);
         var protected: std.ArrayList(clarification.FormCapture) = .empty;
         errdefer protected.deinit(allocator);
-        for (registry.records, captured.forms) |record, capture| {
+        for (registry.records) |record| {
             const id = clarification.Id.parse(record.id).?;
-            if (capture.id.index() != id.index()) return error.InvalidClarificationInput;
+            const capture = for (captured.forms) |form| {
+                if (form.id.index() == id.index()) break form;
+            } else {
+                rejected.add(id, .form_missing);
+                continue;
+            };
             var binding: forms.Binding = .{ .state_ordinal = registry.state_ordinal, .state_revision = registry.revision, .record_revision = record.revision, .status = record.status };
             if (record.status == .resolved_by_authority) {
                 const expected = try forms.renderAuthorityAudit(allocator, record, registry);
                 defer allocator.free(expected);
-                if (!std.mem.eql(u8, expected, capture.bytes)) return error.InvalidClarificationInput;
+                if (!std.mem.eql(u8, expected, capture.bytes)) rejected.add(id, .audit_changed);
                 continue;
             }
             const response = if (record.response_id) |response_id| clarification.findResponse(registry, response_id).? else null;
             if (response) |saved| {
-                if (!std.mem.eql(u8, saved.submitted_form_bytes, capture.bytes)) return error.InvalidClarificationInput;
+                if (!std.mem.eql(u8, saved.submitted_form_bytes, capture.bytes)) {
+                    rejected.add(id, .saved_form_changed);
+                    continue;
+                }
                 binding = .{ .state_ordinal = saved.input_state_ordinal, .state_revision = saved.input_state_revision, .record_revision = saved.input_record_revision, .status = .open };
             }
-            const submitted = try parser.parse(allocator, capture.bytes, record, binding);
+            const parsed = parser.parse(allocator, capture.bytes, record, binding) catch |failure| {
+                if (failure == error.InvalidClarificationInput and response == null and forms.holding(capture.bytes) == .unsubmitted) continue;
+                return failure;
+            };
+            const submitted = switch (parsed) {
+                .form => |form| form,
+                .rejected => |reason| {
+                    if (response == null and forms.holding(capture.bytes) == .unsubmitted) continue;
+                    rejected.add(id, reason);
+                    continue;
+                },
+            };
             if (response) |saved| {
-                if (!sameAnswer(saved.answer, submitted.answer) or
-                    (record.status == .resolved_by_user and submitted.requested_status != .closed) or
-                    (record.status == .cancelled_by_user and submitted.requested_status != .cancel)) return error.InvalidClarificationInput;
+                if (!sameAnswer(saved.answer, submitted.answer)) {
+                    rejected.add(id, .answer_changed);
+                    continue;
+                }
+                if ((record.status == .resolved_by_user and submitted.requested_status != .closed) or
+                    (record.status == .cancelled_by_user and submitted.requested_status != .cancel))
+                {
+                    rejected.add(id, .status_contradicts_record);
+                    continue;
+                }
             }
             if (submitted.requested_status == .closed) try protected.append(allocator, capture);
             try submissions.append(allocator, .{
@@ -217,9 +285,10 @@ pub const steps = struct {
                 .origin = if (response != null) .recorded else .submitted,
             });
         }
+        if (rejected.len != 0) return .{ .rejected = rejected };
         const owned = try submissions.toOwnedSlice(allocator);
         errdefer allocator.free(owned);
-        return .{ .state = validated, .submissions = owned, .protected_forms = try protected.toOwnedSlice(allocator) };
+        return .{ .accepted = .{ .state = validated, .submissions = owned, .protected_forms = try protected.toOwnedSlice(allocator) } };
     }
 };
 

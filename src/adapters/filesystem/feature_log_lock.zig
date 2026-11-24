@@ -18,13 +18,13 @@ pub fn acquire(io: Io, run_directory: Io.Dir, held: *?Io.File, deadline_ms: u16)
             .exclusive = true,
             .permissions = feature_log_file.ownerOnlyPermissions(),
             .resolve_beneath = true,
-        }) catch return error.SinkFailure,
-        else => return error.SinkFailure,
+        }) catch |err| return feature_log_file.sinkFault(err),
+        else => return feature_log_file.sinkFault(open_error),
     };
     errdefer file.close(io);
-    const stat = file.stat(io) catch return error.SinkFailure;
+    const stat = file.stat(io) catch |err| return feature_log_file.sinkFault(err);
     if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions)) return error.SinkFailure;
-    if (!(file.tryLock(io, .exclusive) catch return error.SinkFailure)) return error.LockUnavailable;
+    if (!(file.tryLock(io, .exclusive) catch |err| return feature_log_file.sinkFault(err))) return error.LockUnavailable;
     held.* = file;
 }
 

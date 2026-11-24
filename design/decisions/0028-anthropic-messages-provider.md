@@ -102,8 +102,9 @@ implements the dated wire manifest, including the error table.
   `TEST_ANTHROPIC_API_KEY`.
   - Keys are read once, after binding validation, and only for families bound to the
     selected workflow's model slots.
-  - A missing key makes that family's authorization fail as `authentication_failed`.
-    There is no startup check.
+  - A missing or malformed key makes that family's authorization fail as `authentication_failed`;
+    the failure line says which (`credential=missing|malformed`, contract 08; user decision,
+    21 November 2026). There is no startup check.
 - **Request:**
   - **Text:** system and guidance parts, then the response-format and schema
     guidance, become `system` text blocks. User and evidence parts become one

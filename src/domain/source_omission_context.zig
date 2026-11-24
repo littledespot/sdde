@@ -33,7 +33,7 @@ fn claims(a: std.mem.Allocator, items: r.Items, ids: []const r.ClaimId, context:
 }
 
 fn scopes(a: std.mem.Allocator, items: r.Items, ids: []const r.ClaimId, context: Context) r.Error![]const r.evidence.Scope {
-    return (try @import("reference_reconciliation_validation.zig").scopes(a, items, ids, .{ .inputs = context.inputs, .registry = context.registry, .current = context.current })).scopes;
+    return (try @import("reference_reconciliation_validation.zig").scopes(a, items, ids, .{ .inputs = context.inputs, .registry = context.registry })).scopes;
 }
 
 pub fn projectSignal(a: std.mem.Allocator, records: Records, context: Context, signal: r.Signal) r.Error!Signal {

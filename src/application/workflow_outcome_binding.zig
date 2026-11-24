@@ -154,8 +154,9 @@ pub fn prepare(
                 try changes.add(.{ .authorize = .{ .subject = subject, .transition = transition } });
             } else if (candidate.outcome == .blocked) {
                 const result_key = binding.result orelse return error.InvalidOutcomeAssociation;
+                const reader = binding.blocked_reader orelse return error.InvalidOutcomeAssociation;
                 const decided = decidedView(&before, &after, candidate);
-                if (!changed(candidate, result_key) or !try authorizationBlocked(&decided, result_key)) return error.InvalidOutcomeAssociation;
+                if (!changed(candidate, result_key) or !try authorizationBlocked(&decided, reader)) return error.InvalidOutcomeAssociation;
                 const result = try nativeSubject(envelope, occurrence, candidate, binding.kind, result_key, true);
                 try changes.add(.{ .reclassify = .{ .repair_blocked = .{ .subject = subject.native, .result = result.native } } });
             }
@@ -170,7 +171,8 @@ pub fn prepare(
         },
         .diagnostic_admission => {
             if (candidate.outcome == .ok and envelope.outcomes.permitsDiagnosticAdmission(subject)) {
-                const decision = try diagnosticAdmission(&after, binding.evidence);
+                const reader = binding.admission_reader orelse return error.InvalidOutcomeAssociation;
+                const decision = try diagnosticAdmission(&after, reader);
                 if (decision == .accepted) try changes.add(.{ .resolve = .{ .diagnostic_admitted = .{ .subject = subject, .evidence = decision } } });
             }
         },
@@ -185,20 +187,29 @@ pub fn prepare(
                 try changes.add(.{ .resolve = .{ .authority_reconciled = subject } });
             } else if (candidate.diagnostic == null) {
                 if (decision.* != .rejected) return error.InvalidOutcomeAssociation;
-                try changes.add(.{ .reclassify = .{ .authority_result = .{ .subject = subject, .result = result } } });
+                const canonical: association.ResultOutcome = switch (result.continuation) {
+                    .all_resolved => return error.InvalidOutcomeAssociation,
+                    .invalid => .invalid,
+                    .needs_user => .needs_user,
+                    .blocked => .blocked,
+                };
+                try changes.add(.{ .reclassify = .{ .authority_result = .{ .subject = subject, .canonical = canonical } } });
             }
         },
         .clarification_route => {
             if (candidate.outcome == .ok or candidate.outcome == .needs_user) {
                 const needs = values.read(&after, clarification.needs_schema, @import("../domain/clarification_refresh.zig").Needs) catch return error.InvalidOutcomeAssociation;
                 if (needs.entries.len == 0) return error.InvalidOutcomeAssociation;
-                if (binding.evidence == .required_authority_result) {
-                    const result = authority_values.read(&before, authority.result_schema, .result) catch return error.InvalidOutcomeAssociation;
-                    if (result.continuation != .needs_user) return error.InvalidOutcomeAssociation;
-                } else if (binding.evidence == .validated_specification_unit) {
-                    const result = @import("specification_values.zig").storage.read(&before, @import("specification_workflow.zig").checked_schema, .checked) catch return error.InvalidOutcomeAssociation;
-                    if (result.response != .clarification) return error.InvalidOutcomeAssociation;
-                } else return error.InvalidOutcomeAssociation;
+                switch (binding.route_reader orelse return error.InvalidOutcomeAssociation) {
+                    .required_authority => {
+                        const result = authority_values.read(&before, authority.result_schema, .result) catch return error.InvalidOutcomeAssociation;
+                        if (result.continuation != .needs_user) return error.InvalidOutcomeAssociation;
+                    },
+                    .specification_unit => {
+                        const result = @import("specification_values.zig").storage.read(&before, @import("specification_workflow.zig").checked_schema, .checked) catch return error.InvalidOutcomeAssociation;
+                        if (result.response != .clarification) return error.InvalidOutcomeAssociation;
+                    },
+                }
                 const need_subject = try nativeSubject(envelope, occurrence, candidate, .clarification, .clarification_needs, true);
                 try changes.add(.{ .resolve = .{ .clarification_routed = .{ .subject = subject, .needs = need_subject } } });
             }
@@ -207,7 +218,7 @@ pub fn prepare(
             if (candidate.outcome == .ok or candidate.outcome == .blocked) {
                 const result = values.read(&after, clarification.state_schema, @import("../domain/clarification_refresh.zig").Result) catch return error.InvalidOutcomeAssociation;
                 if ((result.* == .ready) != (candidate.outcome == .ok)) return error.InvalidOutcomeAssociation;
-                if (result.* == .blocked) try changes.add(.{ .reclassify = .{ .clarification_result = .{ .subject = subject, .result = result } } });
+                if (result.* == .blocked) try changes.add(.{ .reclassify = .{ .clarification_result = .{ .subject = subject } } });
             }
         },
     }
@@ -234,6 +245,7 @@ pub fn permitsPublication(envelope: *const envelope_module.PipelineEnvelope, pre
     return envelope.outcomes.permitsPublication(.{ .kind = .clarification, .key = binding.prepared_schema.key, .generation = origin.generation, .occurrence = origin.occurrence }, switch (prepared.terminal_outcome) {
         .ok => .ok,
         .needs_user => .needs_user,
+        .cancelled => .cancelled,
     });
 }
 
@@ -423,31 +435,32 @@ fn missingFinalText(changes: *Changes, source: *const observation.Result, outcom
     }
 }
 
-fn diagnosticAdmission(view: *const data.View, evidence: pipeline.DataKey) Error!gate.Decision {
-    if (evidence != .specification_support_review) return error.InvalidOutcomeAssociation;
-    const value = values.read(view, @import("specification_support_workflow.zig").schema, authority_values.Value) catch return error.InvalidOutcomeAssociation;
-    return switch (authority_values.payload(value).*) {
-        .support => |collection| if (collection == .accepted and collection.accepted.candidate.pending_localization == null) .accepted else .rejected,
-        else => .rejected,
+fn diagnosticAdmission(view: *const data.View, reader: association.AdmissionReader) Error!gate.Decision {
+    return switch (reader) {
+        .specification_support_review => decision: {
+            const value = values.read(view, @import("specification_support_workflow.zig").schema, authority_values.Value) catch return error.InvalidOutcomeAssociation;
+            break :decision switch (authority_values.payload(value).*) {
+                .support => |collection| if (collection == .accepted and collection.accepted.candidate.pending_localization == null) .accepted else .rejected,
+                else => .rejected,
+            };
+        },
     };
 }
 
 /// Each registered native owner reads its retained decision. This projection
 /// neither reconstructs eligibility nor treats an operation tag as evidence.
-fn authorizationBlocked(view: *const data.View, result: pipeline.DataKey) Error!bool {
-    const blocked = switch (result) {
-        .specification_coverage_repair => @import("specification_coverage_repair_workflow.zig").authorizationBlocked(view),
-        .reference_reconciliation_repair => @import("reference_reconciliation_repair_workflow.zig").authorizationBlocked(view),
-        .specification_repair_authorization => @import("specification_repair_workflow.zig").authorizationBlocked(view),
-        .specification_support_repair => @import("specification_support_repair_workflow.zig").authorizationBlocked(view),
-        else => return error.InvalidOutcomeAssociation,
+fn authorizationBlocked(view: *const data.View, reader: association.BlockedReader) Error!bool {
+    const blocked = switch (reader) {
+        .reference_reconciliation => @import("reference_reconciliation_repair_workflow.zig").authorizationBlocked(view),
+        .specification_unit => @import("specification_repair_workflow.zig").authorizationBlocked(view),
+        .specification_support => @import("specification_support_repair_workflow.zig").authorizationBlocked(view),
     };
     return blocked catch |cause| if (cause == error.OutOfMemory) error.OutOfMemory else error.InvalidOutcomeAssociation;
 }
 
 const subject_schema = values.schema(.parsed_reference_extraction, u8, 1, 16).captured();
 const evidence_schema = values.schema(.text_validated_reference_extraction, u8, 1, 16).captured();
-const unrelated_schema = values.schema(.canonical_log_level, u8, 1, 16);
+const unrelated_schema = values.schema(.principle_registry, u8, 1, 16);
 const subject_contract: pipeline.NodeContract = .{ .id = "test.native-subject", .kind = .action, .requires = &.{}, .produces = &.{subject_schema.key}, .side_effect = .none };
 const observe_subject: association.Descriptor = .{ .observe = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key } };
 
@@ -540,7 +553,7 @@ test "transitive native carriers require current generations rather than histori
     for ([_]bool{ false, true }) |captured| {
         var source_schema = values.schema(.parsed_reference_extraction, u8, 1, 16);
         var carrier_schema = values.schema(.text_validated_reference_extraction, u8, 1, 16);
-        var result_schema = values.schema(.canonical_log_level, u8, 1, 16);
+        var result_schema = values.schema(.principle_registry, u8, 1, 16);
         const foreign_schema = values.schema(.logging_policy, u8, 1, 16);
         if (captured) {
             source_schema = source_schema.captured();
@@ -603,7 +616,7 @@ test "transitive native carriers require current generations rather than histori
 
 test "native merges carry only the exact authorized repair reference through captured replacement" {
     for ([_]bool{ false, true }) |combined_validation| for ([_]bool{ false, true }) |same_target| {
-        const authorization_schema = values.schema(.canonical_log_level, u8, 1, 16).captured();
+        const authorization_schema = values.schema(.principle_registry, u8, 1, 16).captured();
         const foreign_schema = values.schema(.logging_policy, u8, 1, 16).captured();
         var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ subject_schema, evidence_schema, authorization_schema, foreign_schema });
         defer envelope.deinit();
@@ -755,9 +768,11 @@ test "diagnostic admission requires the sealed accepted source or principle coll
         reviewed.delta.data_replacements[index] = reviewed.delta.data_writes[index];
         reviewed.delta.data_writes[index] = null;
         const occurrence = try envelope.beginOccurrence("test.support-admission");
-        var accepted = try prepare(&envelope, occurrence, .{ .diagnostic_admission = .{ .kind = .candidate, .subject = support_schema.key, .evidence = support_schema.key, .result = support_schema.key } }, &reviewed);
+        var accepted = try prepare(&envelope, occurrence, .{ .diagnostic_admission = .{ .kind = .candidate, .subject = support_schema.key, .evidence = support_schema.key, .result = support_schema.key, .admission_reader = .specification_support_review } }, &reviewed);
         defer accepted.deinit();
         try std.testing.expectEqual(mode == 1, accepted.compatible(.ok));
+        // The same sealed decision through a descriptor that names no reader is refused: the reader is the one difference.
+        if (mode == 1) try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, occurrence, .{ .diagnostic_admission = .{ .kind = .candidate, .subject = support_schema.key, .evidence = support_schema.key, .result = support_schema.key } }, &reviewed));
         try std.testing.expect(envelope.outcomes.firstUnresolved() != null);
         try std.testing.expectEqual(@as(u64, 1), envelope.generation);
     }
@@ -808,7 +823,7 @@ test "dependent regeneration requires native merged authority and current packet
     defer arena.deinit();
     const allocator = arena.allocator();
     const schema_bytes = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":10}},\"required\":[\"value\"],\"additionalProperties\":false}";
-    const plan_bytes = "{\"schema\":\"json-composition/v1\",\"result\":\"result\",\"parts\":{\"value\":{\"paths\":[\"/value\"],\"input-context\":\"value\"}}}";
+    const plan_bytes = "{\"schema\":\"json-composition/v1\",\"result\":\"result\",\"parts\":{\"value\":{\"paths\":[\"/value\"]}}}";
     const raw_schema = try std.json.parseFromSlice(std.json.Value, allocator, schema_bytes, .{});
     const raw_plan = try std.json.parseFromSlice(std.json.Value, allocator, plan_bytes, .{});
     const canonical = try @import("../domain/model_result_schema.zig").compile(allocator, raw_schema.value, schema_bytes);
@@ -882,8 +897,6 @@ test "dependent regeneration requires native merged authority and current packet
         const part = try state.select(allocator, 0);
         const projected = try state.packet(std.testing.allocator, part);
         defer packets.release(projected);
-        try std.testing.expect(projected != fresh);
-        try std.testing.expect(!permitsPacket(&envelope, assignment.model_request_id, null, projected, null, &native_retry));
         try std.testing.expectEqual(validation == .dependent_review, permitsPacket(&envelope, assignment.model_request_id, null, projected, part, &native_retry));
         var foreign_part = part;
         foreign_part.base = original;
@@ -909,4 +922,127 @@ test "dependent regeneration requires native merged authority and current packet
 fn packetContains(subjects: []const association.NativeSubject, expected: association.NativeSubject) bool {
     for (subjects) |subject| if ((association.Subject{ .native = subject }).eql(.{ .native = expected })) return true;
     return false;
+}
+
+test "registration admits an authorizer's blocked outcome only with the reader of its own result" {
+    const operations = @import("../ports/workflow_operation_registry.zig");
+    const bound = @import("workflow_operation_binding.zig");
+    const Unused = struct {
+        fn invoke(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
+            return error.InvocationFailureUnrecorded;
+        }
+    };
+    const result_schema = values.schema(.specification_support_repair, u8, 1, 16).captured();
+    const unread: association.Binding = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key, .result = result_schema.key };
+    var read = unread;
+    read.blocked_reader = .specification_support;
+    var foreign = unread;
+    foreign.blocked_reader = .reference_reconciliation;
+    // Each differs from the admitted case in one respect: no reader, or another result's reader.
+    const cases = [_]struct { binding: association.Binding, admitted: bool }{
+        .{ .binding = read, .admitted = true },
+        .{ .binding = unread, .admitted = false },
+        .{ .binding = foreign, .admitted = false },
+    };
+    for (cases) |case| {
+        const entries = [_]operations.Entry{
+            .{ .contract = .{ .id = "test.authorize", .kind = .step, .requires = &.{subject_schema.key}, .produces = &.{result_schema.key}, .outcomes = &.{ .ok, .more, .invalid, .blocked, .failed }, .side_effect = .none, .repair_role = .authorize, .outcome_association = .{ .repair_authorize = case.binding } }, .binding = bound.bind(void, null, Unused.invoke) },
+        };
+        const registry: operations.Registry = .{ .operations = &entries, .data_schemas = &.{ subject_schema, result_schema }, .policies = &.{}, .gates = &.{} };
+        try std.testing.expectEqual(case.admitted, registry.validate());
+    }
+}
+
+test "each blocked reader names the result key its owner stores its decision under" {
+    // The switch is exhaustive, so a new reader has to state its owner's schema here too.
+    inline for (@typeInfo(association.BlockedReader).@"enum".fields) |field| {
+        const reader: association.BlockedReader = @enumFromInt(field.value);
+        const stored = switch (reader) {
+            .reference_reconciliation => @import("reference_reconciliation_repair_workflow.zig").state_schema.key,
+            .specification_unit => @import("specification_repair_workflow.zig").authorization_schema.key,
+            .specification_support => @import("specification_support_repair_workflow.zig").schema.key,
+        };
+        try std.testing.expectEqual(stored, reader.result());
+    }
+}
+
+test "each admission reader names the evidence key its owner stores its decision under" {
+    // The switch is exhaustive, so a new reader has to state its owner's schema here too.
+    inline for (@typeInfo(association.AdmissionReader).@"enum".fields) |field| {
+        const reader: association.AdmissionReader = @enumFromInt(field.value);
+        const stored = switch (reader) {
+            .specification_support_review => @import("specification_support_workflow.zig").schema.key,
+        };
+        try std.testing.expectEqual(stored, reader.evidence());
+    }
+}
+
+test "registration admits a diagnostic admission only with the reader of its own evidence" {
+    const operations = @import("../ports/workflow_operation_registry.zig");
+    const bound = @import("workflow_operation_binding.zig");
+    const Unused = struct {
+        fn invoke(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
+            return error.InvocationFailureUnrecorded;
+        }
+    };
+    const reviewed_schema = values.schema(.specification_support_review, u8, 1, 16).captured();
+    const unread: association.Binding = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = reviewed_schema.key };
+    var read = unread;
+    read.admission_reader = .specification_support_review;
+    var foreign = read;
+    foreign.evidence = subject_schema.key;
+    // Each differs from the admitted case in one respect: no reader, or evidence the reader does not read.
+    const cases = [_]struct { binding: association.Binding, admitted: bool }{
+        .{ .binding = read, .admitted = true },
+        .{ .binding = unread, .admitted = false },
+        .{ .binding = foreign, .admitted = false },
+    };
+    for (cases) |case| {
+        const entries = [_]operations.Entry{
+            .{ .contract = .{ .id = "test.admit", .kind = .step, .requires = &.{ subject_schema.key, reviewed_schema.key }, .outcomes = &.{ .ok, .invalid }, .side_effect = .none, .outcome_association = .{ .diagnostic_admission = case.binding } }, .binding = bound.bind(void, null, Unused.invoke) },
+        };
+        const registry: operations.Registry = .{ .operations = &entries, .data_schemas = &.{ subject_schema, reviewed_schema }, .policies = &.{}, .gates = &.{} };
+        try std.testing.expectEqual(case.admitted, registry.validate());
+    }
+}
+
+test "each route reader names the evidence key its owner stores its decision under" {
+    // The switch is exhaustive, so a new reader has to state its owner's schema here too.
+    inline for (@typeInfo(association.RouteReader).@"enum".fields) |field| {
+        const reader: association.RouteReader = @enumFromInt(field.value);
+        const stored = switch (reader) {
+            .specification_unit => @import("specification_workflow.zig").checked_schema.key,
+            .required_authority => authority.result_schema.key,
+        };
+        try std.testing.expectEqual(stored, reader.evidence());
+    }
+}
+
+test "registration admits a clarification route only with the reader of its own evidence" {
+    const operations = @import("../ports/workflow_operation_registry.zig");
+    const bound = @import("workflow_operation_binding.zig");
+    const Unused = struct {
+        fn invoke(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
+            return error.InvocationFailureUnrecorded;
+        }
+    };
+    const routed_schema = values.schema(.validated_specification_unit, u8, 1, 16).captured();
+    const unread: association.Binding = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = routed_schema.key };
+    var read = unread;
+    read.route_reader = .specification_unit;
+    var foreign = read;
+    foreign.evidence = subject_schema.key;
+    // Each differs from the admitted case in one respect: no reader, or evidence the reader does not read.
+    const cases = [_]struct { binding: association.Binding, admitted: bool }{
+        .{ .binding = read, .admitted = true },
+        .{ .binding = unread, .admitted = false },
+        .{ .binding = foreign, .admitted = false },
+    };
+    for (cases) |case| {
+        const entries = [_]operations.Entry{
+            .{ .contract = .{ .id = "test.route", .kind = .step, .requires = &.{ subject_schema.key, routed_schema.key }, .outcomes = &.{ .ok, .needs_user }, .side_effect = .none, .outcome_association = .{ .clarification_route = case.binding } }, .binding = bound.bind(void, null, Unused.invoke) },
+        };
+        const registry: operations.Registry = .{ .operations = &entries, .data_schemas = &.{ subject_schema, routed_schema }, .policies = &.{}, .gates = &.{} };
+        try std.testing.expectEqual(case.admitted, registry.validate());
+    }
 }

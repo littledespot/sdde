@@ -168,22 +168,24 @@ Reruns replace outputs and protect user-closed forms under
 
 The shared artifact-path owner resolves the selected feature's `spec.md`,
 `reference-context.md`, `clarify/` and log paths under `paths.specs`, plus
-`state/workflow.json` and `state/clarifications.json` under
+`state/workflow.json`, `state/clarifications.json` and `state/actor-evidence.json` under
 `<paths.workflows>/features/<feature-directory>/`. These are derived paths,
 not configurable filenames, an ownership registry or write permission.
 
 The `prepare-inputs` stage resolves the paths and captures and validates the clarification
 inputs. Its binding carries `feature-input-read`; `core.feature-input-read@1` explicitly
 permits that capability alongside feature/reference inspection; the inspection-only
-`core.directory-read@1` does not. The executable test definition is
+`core.directory-read@1` does not. The `prepare-actor-evidence` stage, which runs after feature logging
+activates, captures and validates the actor-evidence registry the same way
+([ADR 0025](../decisions/0025-clarification-answer-authentication.md)). The executable test definition is
 [`reference-preflight.workflow.yaml`](../../src/test_fixtures/reference-preflight.workflow.yaml),
 not the complete Specify workflow.
 
 - The single native persisted schema is
   [`clarification_inputs.State`](../../src/domain/clarification_inputs.zig): strict JSON
-  tagged `clarification-state/v2`, bound to the selected feature, with registry/record
-  revisions, stage ID counters, stable subjects, authority bindings, bounded answer
-  schemas and recorded responses.
+  tagged `clarification-state/v4`, bound to the selected feature, with registry/record
+  revisions, stage ID counters, stable source-derived subjects, authority bindings, bounded answer
+  schemas and recorded responses, each of which joins an entry of the actor-evidence registry.
 - Reference authority uses the real reference state identity; other authorities use the
   shared canonical kind/ordinal/revision contract.
 - A response owns its original form bytes and revision binding.
@@ -192,12 +194,18 @@ not the complete Specify workflow.
   Markdown except `requestedStatus` and the answer region.
 
 - Capture reads only this state file and the registered `SNN.md`, `PNN.md` and `TNN.md`
-  forms: at most 297 forms of 16 KiB each and 8 MiB of state.
+  forms: at most 297 forms of 16 KiB each and 8 MiB of state. The registry is a separate capture of one file
+  of at most 2 MiB.
 - It does not create directories or read generated views, unrelated features or
   `workflow.json`.
 - Missing state with no forms represents fresh inputs.
-- Orphan, malformed, unknown, stale, changed or missing protected forms fail without
-  modifying anything.
+- A regular file in `clarify/` whose name is not form-shaped is not read and does not fail the
+  run ([§23.2](../contracts/23-rendering.md)).
+- A form that verifiably holds no submission does not fail the run, whether or not it matches
+  the registry and whether or not a registry exists
+  ([§23.2](../contracts/23-rendering.md)). Any other orphan, malformed, unknown, stale, changed
+  or missing protected form fails without modifying anything, and a record without its form
+  fails.
 - Recorded closures use their original revision binding and must match the response's
   exact saved bytes.
 
@@ -242,15 +250,13 @@ work; this initial reader does not claim support for arbitrary reference bytes.
 
 ### 3.4 Citable reference inputs
 
-The evidence stage's last three steps extend that boundary, and one registered operation
-validates citations:
+The evidence stage's last three steps extend that boundary:
 
 | Step or operation | Contract |
 | --- | --- |
 | `assignIdentities` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
 | `buildChunks` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
 | `validateChunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
-| `validate-source-citations` | Citable inputs and engine-scoped typed proposals → validated source citations. |
 
 - The [reference identity owner](../../src/domain/reference_identity.zig) supplies the
   same state/chunk types used by model-request owners.
@@ -285,7 +291,7 @@ explicit in the selected YAML:
 | Operation | Contract |
 | --- | --- |
 | `parse-reference-extraction-results` | Engine-scoped raw observations → closed parsed candidates. |
-| `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates whose claim wording is quoted from their cited lines (§3.7, ADR 0036). |
+| `validate-reference-extraction-text` | Parsed candidates, citable inputs and source-backed literal registry → text-validated candidates whose claim wording is quoted from their cited lines (§3.7, ADR 0036). |
 | `validate-reference-claims` | Citable inputs and prepared claims → validated canonical citations; an invalid selection is a failure. Exact-token citations retain §3.4 validation. |
 | `assign-reference-claim-identities` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
 | `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes; binds preserved tokens to their assigned citation IDs. |
@@ -297,7 +303,9 @@ explicit in the selected YAML:
 - These are shape descriptions, not literal JSON examples.
 - Each claim has only a `category` and a `citations` set of source-line IDs
   ([ADR 0036](../decisions/0036-source-quoted-claims.md)). Admission restricts the IDs to
-  the chunk's citable (non-blank) lines.
+  the chunk's citable (non-blank) lines, and rejects two claims that cite a common line
+  under different categories (ADR 0036 Decision 7): the existing bounded protocol
+  correction names the lines and both claims, so the model files a line under one category.
 - The model supplies no wording. The engine quotes each claim's cited lines as written,
   Markdown included, trimming each run only at its ends (never inside fenced code) and
   joining separate runs with an ellipsis line. A claim spanning several top-level list
@@ -330,7 +338,7 @@ explicit in the selected YAML:
   chunk/claim/citation order; response arrival order cannot change them.
 - No ID counters or ledgers are persisted.
 
-- These candidates require the later reconciliation and required-authority gates; the
+- These candidates require the later reconciliation and required-authority validation; the
   extraction validator alone does not establish semantic support.
 - Markdown inline-code, fenced-body and inline-link-destination candidates are implemented; other format extractors remain future
   work.
@@ -345,16 +353,15 @@ contracts follow Design §7.1. Source discovery uses §11's `SupersetPathTokenGr
 compiled from resolved naming/extension rules, reserved/manifest names and reference
 basenames. It does not classify ordinary prose as an operational reference.
 
-The initial native boundary is implemented through two pure registered operations and one
-step of the token stage:
+The initial native boundary is implemented through one pure registered operation and one
+step of the token stage; the passive-literal extraction scans each source block with the grammar:
 
 | Operation or step | Required inputs → output |
 | --- | --- |
 | `compile-naming-policy` | `valid_toolchain` → `compiled_naming_policy` |
 | `buildGrammar` (`prepare-reference-tokens`) | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
-| `scan-path-tokens` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
 
-- [F0003 §3.5](F0003-ToolChainService.md#35-registered-lexical-naming-rules) owns the
+- [F0003 §3.5](F0003-Toolchain.md#35-registered-lexical-naming-rules) owns the
   registered rule contract.
 - Grammar construction includes every selected rule and captured reference basename,
   with exact toolchain, feature and reference bindings; omitted, altered or stale inputs
@@ -444,7 +451,7 @@ file/network access, output write, clarification change or completion transition
 | --- | --- |
 | `extractFacts` (`prepare-reference-tokens`) | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
 | `assignCandidates` (`prepare-reference-tokens`) | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
-| `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
+| `validate-token-classifications` | Current candidates and text-validated responses → complete chunk-local token classifications, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
 | `assign-preserved-token-identities` | Validated decisions → state-local token ordinals in source order; irrelevant/blocked candidates allocate none. |
 | `build-preserved-token-claims` | Token assignments → prepared deterministic claims alongside unchanged model claims, before common citation validation, claim-ID assignment and ledger construction. |
 
@@ -492,10 +499,10 @@ No call site declares a deadline: the body's authorization step takes no paramet
 each model's catalogue entry carries `requestTimeoutMs`
 ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
 
-Extraction parts derive from one complete extraction schema; reconciliation summaries
-use one composition part of the reconciliation schema. Under
+Extraction parts derive from one complete extraction schema; a reconciliation summary
+is a plain request over the reconciliation schema's `summary` definition. Under
 [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md) each global phase is a
-separate request; dependent phases receive natively validated phase facts, not JSON
+separate request, a conflicts phase with no group excepted; dependent phases receive natively validated phase facts, not JSON
 prerequisites (§3.9). Part schemas validate before retention. Complete assembly undergoes relationship, signal, conflict and coverage validation.
 Native repair revalidates the complete candidate without reassembling provider JSON.
 Composition adds no retry allowance or token budget.
@@ -553,7 +560,7 @@ All operations are pure and individually registered in the generic YAML registry
 | Summary reuse | `check-reference-summary-reuse`, `reuse-reference-reconciliation-summary`; otherwise summary collection and parsing |
 | Non-final summaries | `validate-reference-reconciliation-summary`, `assign-reference-summary-identities`, `build-reference-reconciliation-summary` |
 | Global phases | Build and collect dispositions, signals and conflicts assignments; `check-reference-reconciliation-phase`; the disposition, signal and conflict validators |
-| Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `validate-reference-reconciliation-completeness` |
+| Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `apply-clarification-answers` (the user's choice among the claims of a conflict, [ADR 0025](../decisions/0025-clarification-answer-authentication.md)), `validate-reference-reconciliation-completeness` |
 
 - The engine selects the current partition's summary or named phase schema.
 - [§16.4](../contracts/16-reference-ingestion.md#164-semantic-extraction-flow) owns
@@ -687,7 +694,7 @@ closed requiredness/ownership policies, current support checks and outcomes.
 | `build-specification-authority-requirements` | Project native reference facts into the shared source-readiness requirements. |
 | `apply-specification-support` | Project an admitted review into shared authority inputs after collection/repair. |
 | `build-required-authority-ledger` | Validate and canonically order registered requirements/current inputs. |
-| `build-required-authority-observations` | Derive each requirement's observation (inspected authorities and evidence IDs) from the ledger; the registered `parse-required-authority-observations` instead parses a supplied observation document with the shared strict JSON decoder. |
+| `build-required-authority-observations` | Derive each requirement's observation (inspected authorities and evidence IDs) from the ledger. |
 | `reconcile-required-authorities` | Account for every supplied evidence member and derive one resolution or gap per requirement. |
 | `validate-required-authority-reconciliation` | Rebuild against current inputs and issue accepted/rejected gate evidence. |
 | `retire-required-authority-projection` | Invalidate the source-review projection keys before generation (`retire-source-review`). |
@@ -712,18 +719,19 @@ closed requiredness/ownership policies, current support checks and outcomes.
 - `build-required-authority-clarification-needs` converts validated gaps to the
   existing clarification lifecycle, retaining structural subjects and earliest owners.
 
-- The registered `required-authority@1` gate binds its sole issuer to the current input,
-  observation and result generations.
+- `validate-required-authority-reconciliation` rebuilds the result from the current input,
+  observation and result generations and writes `required_authority_gate`; no other
+  operation writes that key.
 - The existing runner also checks source lineage, so refreshing a reference, candidate
   or support source requires explicit projection/reconciliation/validation again.
-- Protected operations declare that gate in their native contract; YAML cannot bypass it
-  or supply an alternative issuer.
+- The outcome ledger holds a rejected authority result pending: no path routed onward by YAML
+  ends `ok`, and a definition that skips validation leaves its step unreachable.
 - There is no persisted authority ledger, new prompt, fingerprint or recovery mechanism.
 
 `zig build test-required-authority` covers scripted outcomes, unrelated kinds, all
 Specify record families, missing/foreign/duplicate/stale support, permitted and
-prohibited dispositions, scoped exceptions, source preservation and YAML gate
-bypasses.
+prohibited dispositions, scoped exceptions, source preservation and YAML routing
+of a rejected result.
 
 ### Support findings and scoped correction
 
@@ -910,9 +918,12 @@ validators:
 - The YAML's successful content branch projects the assembled, coverage-validated typed
   content through the existing Markdown codec and reparses it.
 - It renders `reference-context.md` from an accepted reference snapshot, refreshes the
-  clarification registry through the shared refresh operation, and prepares all four
-  registered outputs before the writer runs.
-- `workflow.json` is written last.
+  clarification registry through the shared refresh operation, and prepares all five
+  registered outputs (the specification, the reference context, the clarification state, the actor-evidence
+  registry and the workflow state) before the writer runs.
+- The registry is written before the clarification state, and `workflow.json` is written last. A run
+  that ends `cancelled` on the user's own `cancel` writes only the forms, the registry and the
+  clarification state.
 
 - Specify captures the current principle registry and runs no principle assessment
   ([ADR 0015](../decisions/0015-specification-principle-review.md)); only the records
@@ -928,7 +939,7 @@ validators:
   step that makes its request, with that step's own parameters), reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v26`). Neither variant holds review evidence.
+  registry identity (`specification-state/v29`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton
@@ -1051,7 +1062,7 @@ then applicable sections in this exact relative order:
 | Primary User Story | `primary_user_story` | The source's business claims, quoted in source order and joined natively ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). |
 | Acceptance Criteria | `acceptance_criterion` / `AC-*` | Testable initial state, action, and expected outcome. |
 | User-Visible Outcomes | `user_visible_outcome` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
-| Edge Cases | `edge_case` / `EC-*` | Boundary/error condition, with the expected business response the engine prints from the acceptance criterion it links to ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7). |
+| Edge Cases | `edge_case` / `EC-*` | Boundary/error situation as one added circumstance, printed as a Given/When/Then scenario of the acceptance criterion it links to ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7). |
 | Functional Requirements | `functional_requirement` / `FR-*` | Required system or user capability in business terms. |
 | Business Rules | `business_rule` / `BR-*` | Constraint, validation rule, or policy controlling behavior. |
 | Assumptions | `assumption` / `AS-*` | Supported assumption that keeps the feature bounded. |
@@ -1066,18 +1077,22 @@ anonymous persisted records.
 ### 5.3 Acceptance-criterion rendering
 
 The renderer restores the original compact acceptance-criterion form while
-retaining three separate typed values and engine-assigned identities:
+retaining separate typed values and engine-assigned identities:
 
 ```markdown
 ### Acceptance Criteria
 
 - **AC-001**: **Given** <precondition>, **When** <action>, **Then** <observable outcome>
+- **AC-002**: **When** <action>, **Then** <observable outcome>
 ```
 
+A criterion holds a `given` only where its sources state a starting situation for the
+requirement ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3);
+one with none renders the second form, `**When**` then `**Then**`, and no empty `Given`.
 The labels, casing, separators and order are canonical. Missing, duplicate,
-reordered or foreign labels reject; label-shaped bytes inside exact Markdown
-code spans remain inert content. Multiline exact values retain the shared
-continuation encoding.
+reordered or foreign labels reject, and so does a `Given` label with no text; label-shaped
+bytes inside exact Markdown code spans remain inert content. Multiline exact values retain
+the shared continuation encoding.
 
 ### 5.4 Empty and conditional collections
 
@@ -1163,9 +1178,11 @@ Native shapes and ID syntax are owned by [specification.zig](../../src/domain/sp
 mechanical codec is [specification_markdown.zig](../../src/domain/specification_markdown.zig).
 
 - Simple records use `- **FR-001**: <text>` with the applicable prefix.
-- Edge cases use `**EC-001**`, then `- **CONDITION** <text>` and
-  `- **EXPECTED OUTCOME** <text>`: the outcome is the `then` of the acceptance criterion the
-  edge case links to, derived by the engine (§23), never model text.
+- Edge cases use `**EC-001**`, then `- **GIVEN** <text>`, `- **WHEN** <text>` and
+  `- **THEN** <text>`, and no other label: the engine copies the Given, When and Then of the
+  acceptance criterion the edge case links to (§23), and the model writes only the edge
+  case's own given, which follows the copied Given on the `GIVEN` line; where that criterion
+  has no Given, the `GIVEN` line is the edge case's own given alone.
 - Entities use `**EN-001**`, then `- **NAME** <text>` and, when any statement shares one
   of the entity's source groups, `- **RELATED STATEMENTS** <IDs>`: those statements' IDs
   joined with `, ` in document order, derived by the engine (§23), never model text.
@@ -1231,8 +1248,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   `inconclusive`, with that variant's fields directly, without the IR's `content`
   wrapper. No model response carries the story (ADR 0047).
 - Record-assignment clarifications also require a closed `record_kind`; narrative
-  and applicability clarifications prohibit it. Native validation and the shared
-  question builder retain the per-family clarification subject.
+  and applicability clarifications prohibit it. Native validation checks it, and the
+  shared question builder derives the subject from the sources without reading it
+  (ADR 0025, the clarification subject and Decision 6).
 - Repair uses the same compact codec, and its expected-value guidance uses the response
   wire shape.
 - Under ADR 0006 and §7.1, model business values are plain strings or a closed
@@ -1344,8 +1362,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Native dependency capture is independent of request serialization.
 - `typed_text` owns the complete text-policy/source projection, the reconciliation
   context owns flattened summary lineage, and specification provenance supplies the
-  shared read facts consumed by generation and coverage repair.
-- Current toolchain identity is checked before capture; capabilities are not serialized.
+  shared read facts consumed by generation and specification repair.
+- Capabilities are not serialized.
 - Grammar-name or history changes reject an old authorization before dispatch/merge,
   even when the model packet would look unchanged.
 - Extraction classification guidance retains the frozen chunk outcome and permitted
@@ -1367,8 +1385,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   candidate.
 - A native observer copies them into the existing E2E events and reports; it neither
   parses model text nor decides progress.
-- These are retained merge snapshots, not a total repair count or proof of validation
-  acceptance.
+- The E2E report lists every merge its steps retained, once for each authorization. A repair
+  attempt that ends without a merge isn't listed, so the list is not a total repair count or
+  proof of validation acceptance.
 - Protocol corrections remain separate provider attempts.
 
 - A records response with a non-requirement statement naming both taken and untaken
@@ -1518,7 +1537,7 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
 
 - Implemented through ordinary YAML: §§3.1–3.13, including feature-log activation,
   model-connected extraction and reconciliation, generation/validation/repair, the
-  shared required-authority gate, the native content schema and Markdown codec, and
+  shared required-authority validation, the native content schema and Markdown codec, and
   registered publication of either completed output or the ADR 0017 incomplete
   specification with its clarification forms and pending state.
 - Not implemented: authenticated answer application (ADR 0025, SPEC01 E7), additional

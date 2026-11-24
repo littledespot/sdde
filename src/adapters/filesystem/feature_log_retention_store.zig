@@ -17,27 +17,22 @@ pub fn prune(io: Io, allocator: std.mem.Allocator, directory: Io.Dir, cutoff_uni
     var entries: [log_limits.max_segments]Entry = undefined;
     var count: usize = 0;
     var iterator = directory.iterate();
-    while (iterator.next(io) catch return error.SinkFailure) |directory_entry| {
+    while (iterator.next(io) catch |err| return feature_log_file.sinkFault(err)) |directory_entry| {
         const ordinal = switch (feature_log_file.classifyBindingEntry(directory_entry)) {
             .segment => |ordinal| ordinal,
             .ignored => continue,
             .invalid => return error.CorruptStream,
         };
-        var file = directory.openFile(io, directory_entry.name, .{
-            .mode = .read_only,
-            .allow_directory = false,
-            .follow_symlinks = false,
-            .resolve_beneath = true,
-        }) catch return error.SinkFailure;
-        defer file.close(io);
-        const stat = file.stat(io) catch return error.SinkFailure;
-        if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
-            return error.CorruptStream;
-        }
-        var reader = file.reader(io, &.{});
-        const bytes = reader.interface.allocRemaining(allocator, .limited(@intCast(stat.size + 1))) catch return error.SinkFailure;
+        const segment = feature_log_file.openSegment(io, directory, directory_entry.name, .read_only) catch |err| {
+            return if (err == error.SegmentRejected) error.CorruptStream else feature_log_file.sinkFault(err);
+        };
+        defer segment.close(io);
+        const bytes = feature_log_file.readSegment(io, allocator, segment) catch |err| return switch (err) {
+            error.SizeDrift => error.CorruptStream,
+            error.Canceled => error.Cancelled,
+            error.OutOfMemory, error.ReadFailed => error.SinkFailure,
+        };
         defer allocator.free(bytes);
-        if (bytes.len != stat.size) return error.CorruptStream;
         if (count == entries.len) return error.CorruptStream;
         entries[count] = .{ .ordinal = ordinal, .closed_at_unix_ms = format.trailerUnixMs(bytes) orelse return error.CorruptStream };
         count += 1;
@@ -47,7 +42,7 @@ pub fn prune(io: Io, allocator: std.mem.Allocator, directory: Io.Dir, cutoff_uni
         if (entry.closed_at_unix_ms > cutoff_unix_ms) break;
         var name_buffer: [32]u8 = undefined;
         const file_name = feature_log_file.segmentName(entry.ordinal, &name_buffer) catch return error.SinkFailure;
-        directory.deleteFile(io, file_name) catch return error.SinkFailure;
+        directory.deleteFile(io, file_name) catch |err| return feature_log_file.sinkFault(err);
     }
 }
 

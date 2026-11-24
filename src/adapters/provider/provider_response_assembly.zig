@@ -103,12 +103,18 @@ pub fn failure(id: operation.ProviderOperationId, cause: operation.ProviderFailu
     return .{ .operation_id = id, .cause = cause, .delivery = delivery, .retry_class = classifier.retryClass(.exchange, cause) };
 }
 
+fn invalidResponse(id: operation.ProviderOperationId, decode: operation.ProviderDecodeDiagnostic) operation.ProviderFailure {
+    var value = failure(id, .response_invalid, .response_received);
+    value.decode = decode;
+    return value;
+}
+
 pub fn exchangeFailure(cause: operation.ProviderFailureCause, delivery: operation.ProviderDeliveryDisposition) transport.Failure {
     return .{ .cause = cause, .delivery = delivery, .retry_class = classifier.retryClass(.exchange, cause) };
 }
 
 pub fn rejected(id: operation.ProviderOperationId, value: transport.Failure) operation.ProviderFailure {
-    return .{ .operation_id = id, .cause = value.cause, .retry_class = value.retry_class, .delivery = value.delivery, .transport = value.diagnostic };
+    return .{ .operation_id = id, .cause = value.cause, .retry_class = value.retry_class, .delivery = value.delivery, .transport = value.diagnostic, .decode = value.decode };
 }
 
 /// A decoder's error-or-success classification of one exchange.
@@ -121,17 +127,17 @@ pub fn inference(allocator: std.mem.Allocator, response: transport.Response, sel
     if (try classify(allocator, response)) |value| return .{ .failed = rejected(id, value) };
     var parsed = support.parse(allocator, response.received.body) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
-        else => .{ .failed = failure(id, .response_invalid, .response_received) },
+        else => .{ .failed = invalidResponse(id, .body_not_json) },
     };
     defer parsed.deinit();
     var decoded = decode(allocator, parsed.value, selected, null) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
-        error.InvalidResponse => .{ .failed = failure(id, .response_invalid, .response_received) },
+        error.InvalidResponse => .{ .failed = invalidResponse(id, .body_refused) },
     };
     defer decoded.deinit(allocator);
     return observation(allocator, &decoded, selected, request, id) catch |err| switch (err) {
         error.OutOfMemory => error.OutOfMemory,
-        error.InvalidResponse => .{ .failed = failure(id, .response_invalid, .response_received) },
+        error.InvalidResponse => .{ .failed = invalidResponse(id, .content_not_utf8) },
     };
 }
 
@@ -142,9 +148,11 @@ pub const DecodeError = fn (std.json.Value, Received) support.Invalid!operation.
 /// Parse an error body strictly, then let the decoder's closed table classify
 /// it; anything unrecognized is `response_invalid`.
 pub fn classifyErrorBody(allocator: std.mem.Allocator, received: Received, comptime decodeError: DecodeError) std.mem.Allocator.Error!transport.Failure {
-    const invalid = exchangeFailure(.response_invalid, .response_received);
+    var invalid = exchangeFailure(.response_invalid, .response_received);
+    invalid.decode = .body_not_json;
     var parsed = support.parse(allocator, received.body) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else invalid;
     defer parsed.deinit();
+    invalid.decode = .error_unrecognized;
     const cause = decodeError(parsed.value, received) catch return invalid;
     return exchangeFailure(cause, .response_received);
 }

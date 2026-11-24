@@ -138,8 +138,7 @@ pub fn validateUsage(call: Call, observation: *const provider.ProviderInvocation
     const invoked = call.operations.requireInvoked(call.operation_id) catch return error.InvalidProviderInvocationContext;
     const record = call.operations.record(call.operation_id) orelse return error.InvalidProviderInvocationContext;
     if (!provider.validateInferenceInvocation(call.provider_binding, request, invoked) or
-        !record.binding_id.eql(request.binding_id) or
-        !record.model_visible_input_id.eql(request.model_visible_input_id) or record.sampling != request.sampling) return error.InvalidProviderInvocationContext;
+        !record.assignment.eql(.of(request))) return error.InvalidProviderInvocationContext;
     return switch (observation.*) {
         .failed => |failure| if (failure.operation_id.eql(invoked.id)) null else error.ProviderInvocationAssociationInvalid,
         .completed => |completed| usage: {
@@ -190,6 +189,7 @@ pub fn validate(allocator: std.mem.Allocator, call: Call, observation: *const pr
                             .cause = .response_invalid,
                             .retry_class = .never,
                             .delivery = .response_received,
+                            .decode = .content_not_utf8,
                         } };
                     };
                     break :complete .{ .complete = result.content.bytes };

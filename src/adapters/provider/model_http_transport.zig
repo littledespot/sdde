@@ -33,6 +33,8 @@ pub const Failure = struct {
     delivery: operation.ProviderDeliveryDisposition,
     diagnostic: ?operation.TransportDiagnostic = null,
     body: ?ResponseBody = null,
+    /// Set only by response classification, never by the transport. It reaches the failure line, not the capture.
+    decode: ?operation.ProviderDecodeDiagnostic = null,
 
     pub fn metadata(self: Failure) @import("../../domain/model_exchange.zig").TransportFailure {
         return .{ .cause = self.cause, .retry_class = self.retry_class, .delivery = self.delivery, .diagnostic = self.diagnostic };

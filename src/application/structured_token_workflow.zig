@@ -10,22 +10,22 @@ const owned = @import("../domain/reference_candidate_value.zig");
 
 // Source-derived bounds only. Model candidate values use the sealed owner below. The stage action
 // `prepare-reference-tokens` publishes the candidates; the extracted facts stay function-local.
-pub const candidates_schema = values.schema(.structured_token_candidates, tokens.Candidates, 1, 64 * 1024 * 1024);
+pub const candidates_schema = values.schema(.structured_token_candidates, tokens.Candidates, 1, values.max_value_bytes);
 pub const assigned_schema = values.schema(.preserved_token_identities, owned.Value, 1, null);
 pub const prepared_schema = values.schema(.prepared_reference_claims, owned.Value, 1, null);
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ candidates_schema, assigned_schema, prepared_schema };
 
 pub const AssignTokens = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .validated_reference_selections, .evidence = .validated_reference_selections, .result = .preserved_token_identities } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .validated_token_classifications, .evidence = .validated_token_classifications, .result = .preserved_token_identities } };
     pub const Action = @import("../actions/reference/assign_preserved_token_identities.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const prior = try extraction_values.read(&input.step.data, extraction_values.selections_schema, .selections_validated);
+        const prior = try extraction_values.read(&input.step.data, extraction_values.classifications_schema, .classifications_validated);
         const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .tokens_assigned = self.action.execute(owner.arena.allocator(), prior.payload().selections_validated) catch |operation_error| return operation_error };
+        owner.payload = .{ .tokens_assigned = self.action.execute(owner.arena.allocator(), prior.payload().classifications_validated) catch |operation_error| return operation_error };
         return extraction_values.publish(self.allocator, assigned_schema, owner, .ok);
     }
 };

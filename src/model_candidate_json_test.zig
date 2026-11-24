@@ -185,7 +185,7 @@ const response_wire = struct {
     const records = .{
         .{ "acceptance_criterion", "{\"kind\":\"acceptance_criterion\",\"given\":" ++ normalized ++ ",\"when\":" ++ normalized ++ ",\"then\":" ++ plain ++ "}" },
         .{ "user_visible_outcome", "{\"kind\":\"user_visible_outcome\",\"text\":" ++ normalized ++ "}" },
-        .{ "edge_case", "{\"kind\":\"edge_case\",\"condition\":" ++ normalized ++ "}" },
+        .{ "edge_case", "{\"kind\":\"edge_case\",\"given\":" ++ normalized ++ "}" },
         .{ "functional_requirement", "{\"kind\":\"functional_requirement\",\"text\":" ++ normalized ++ "}" },
         .{ "business_rule", "{\"kind\":\"business_rule\",\"text\":" ++ plain ++ "}" },
         .{ "assumption", "{\"kind\":\"assumption\",\"text\":" ++ normalized ++ "}" },
@@ -235,9 +235,10 @@ test "independent wire cases cover every selected specification result and neste
         const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
         if (comptime std.mem.eql(u8, record[0], "entity")) try candidateSchemaCase("generation", "records", need, .enum_mismatch, "/record_kind") else try checkCandidate("generation", "records", need);
         try candidateSchemaCase("generation", "brief", need, .unknown_property, "/record_kind");
-        // No repair writes a whole criterion: the engine writes each one from its slot (ADR 0038 Decision 3).
-        if (comptime std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_" ++ record[0], bytes);
-        if (comptime std.mem.eql(u8, record[0], "acceptance_criterion")) try std.testing.expectError(error.MissingSchemaSelection, checkCandidate("generation", "repair_record_" ++ record[0], bytes));
+        // Only an entity's membership repair writes a whole record. No repair writes a whole criterion: the
+        // engine writes each one from its slot (ADR 0038 Decision 3). A requirement is repaired by its text.
+        if (comptime std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_entity", bytes);
+        if (comptime std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "acceptance_criterion")) try std.testing.expectError(error.MissingSchemaSelection, checkCandidate("generation", "repair_record_" ++ record[0], bytes));
     }
     try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.plain ++ "}");
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
@@ -284,7 +285,7 @@ test "fixed source review reconstructs bound claims and rejects an echoed union"
     try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, "{\"kind\":\"supported\",\"provenance\":{\"claim_ids\":[1,2]},\"source_ids\":[],\"detail\":\"\"}", required));
 }
 
-test "D1 source variants require questions only for gaps in focused findings" {
+test "source variants require questions only for gaps in focused findings" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -462,11 +463,17 @@ test "focused review evidence shapes follow native minima without excluding sour
     }
 }
 
-test "an edge case authors its condition only and its outcome link is one closed criterion id" {
-    // ADR 0038 Decision 7: the records response carries no expected outcome; the engine prints
-    // the linked criterion's Then, so a response that supplies one is not this contract.
-    try candidateCase("generation", "records", "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\",\"condition\":" ++ response_wire.normalized ++ ",\"expected_outcome\":" ++ response_wire.normalized ++ "},\"claim_ids\":[" ++ response_wire.id ++ "]}]}", .unknown_property, "/records/0/content/expected_outcome");
-    try candidateCase("generation", "records", "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\"},\"claim_ids\":[" ++ response_wire.id ++ "]}]}", .missing_required_property, "/records/0/content/condition");
+test "an edge case authors its given only and its link is one closed criterion id" {
+    // ADR 0038 Decision 7: the records response carries the edge case's own given and no condition,
+    // when, then or outcome; the engine prints the linked criterion's scenario around it.
+    const edge = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\"";
+    const claims = "},\"claim_ids\":[" ++ response_wire.id ++ "]}]}";
+    try candidateCase("generation", "records", edge ++ ",\"given\":" ++ response_wire.normalized ++ ",\"expected_outcome\":" ++ response_wire.normalized ++ claims, .unknown_property, "/records/0/content/expected_outcome");
+    inline for (.{ "condition", "when", "then" }) |extra| {
+        try candidateCase("generation", "records", edge ++ ",\"given\":" ++ response_wire.normalized ++ ",\"" ++ extra ++ "\":" ++ response_wire.normalized ++ claims, .unknown_property, "/records/0/content/" ++ extra);
+    }
+    try candidateCase("generation", "records", edge ++ ",\"condition\":" ++ response_wire.normalized ++ claims, .unknown_property, "/records/0/content/condition");
+    try candidateCase("generation", "records", edge ++ claims, .missing_required_property, "/records/0/content/given");
     // The link is a request of its own: an id, never text, and no other property.
     try checkCandidate("links", "scenario_link", "{\"criterion\":2}");
     try candidateCase("links", "scenario_link", "{\"criterion\":2,\"outcome\":\"The renewal is refused.\"}", .unknown_property, "/outcome");
@@ -485,6 +492,20 @@ test "a claim-bound scenarios answer is a number and the criterion's three parts
     const second = "{\"number\":2," ++ parts ++ "}";
     try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ first ++ "]}");
     try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ second ++ "," ++ first ++ "]}");
+    // ADR 0038 Decision 3: a criterion holds a Given only where the sources state one, so the
+    // answer may omit it, alone or beside an item that holds one, and the wire carries no placeholder for it.
+    const omitted = "{\"number\":1,\"when\":" ++ response_wire.normalized ++ ",\"then\":" ++ response_wire.plain ++ "}";
+    try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ omitted ++ "]}");
+    try checkCandidate("generation", "scenarios", "{\"scenarios\":[" ++ omitted ++ "," ++ second ++ "]}");
+    {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const encoded = try decodeCandidate("generation", "scenarios", arena.allocator(), "{\"scenarios\":[" ++ omitted ++ "]}");
+        try std.testing.expect(std.mem.indexOf(u8, encoded, "given") == null);
+    }
+    // The When and Then stay required, and an omitted Given is not a null one: the schema rejects the null.
+    try candidateCase("generation", "scenarios", "{\"scenarios\":[{\"number\":1,\"given\":" ++ response_wire.plain ++ ",\"then\":" ++ response_wire.plain ++ "}]}", .missing_required_property, "/scenarios/0/when");
+    try candidateSchemaCase("generation", "scenarios", "{\"scenarios\":[{\"number\":1,\"given\":null,\"when\":" ++ response_wire.plain ++ ",\"then\":" ++ response_wire.plain ++ "}]}", .type_mismatch, "/scenarios/0/given");
     inline for (.{
         .{ "claim_ids", "[7]" },
         .{ "kind", "\"acceptance_criterion\"" },

@@ -58,7 +58,6 @@ pub const Generation = enum {
     records,
     scenarios,
     value,
-    attributed_value,
     repair_record_entity,
 
     pub fn id(self: Generation) schema.DefinitionId {

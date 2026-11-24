@@ -276,7 +276,7 @@ pub fn displayCatalogue(a: std.mem.Allocator, context: p.Context, exact_claims: 
     var requirements: std.ArrayList(projection.Requirement) = .empty;
     var exact_choices: std.ArrayList(projection.ExactLiteral) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
-    for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
+    for (context.references.global().dispositions) |disposition| {
         if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
         const item = try @import("reference_reconciliation.zig").item(all, disposition.claim_id);
         var requirement = try projection.requirement(a, item, context.inputs, context.registry);
@@ -467,8 +467,12 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     } else false;
     var question_ids: std.ArrayList(i64) = .empty;
     var claim_ids: std.ArrayList(i64) = .empty;
+    // A records batch over a group that holds an open question is offered no record content: only the
+    // clarification outcome, which that group's evidence can state (invariant 20; ADR 0020).
+    var content_batch = true;
     if (selected == .records) {
         const bound = (try binding.record(a, records, context.inputs, cursor)).records;
+        content_batch = try binding.bindsContent(records, bound.signal);
         try question_ids.append(a, bound.signal.ordinal);
         for (bound.selection.claim_ids) |id| try claim_ids.append(a, id.ordinal);
     } else for (questions) |group| {
@@ -488,23 +492,24 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
         if (!try binding.tokenOnly(records, group.signal_id)) try basis_ids.append(a, group.signal_id.ordinal);
     };
     var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
-    try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
-    if (selected == .records) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .unique_subset, .coverage = statement_rule });
+    try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .{ .unique_subset = .none } });
+    if (selected == .records and content_batch) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .{ .unique_subset = .{ .coverage = statement_rule } } });
     if (selected != .records and positive_ids.len != 0) switch (selected) {
         // Each brief field the model writes selects its own groups.
         .brief => inline for (comptime std.meta.fieldNames(@FieldType(g.ModelResponse, "brief"))) |field| {
-            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .{ .unique_subset = .none } });
         },
         .primary_user_story => return error.InvalidSpecificationUnit,
         .entities => {
-            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "basis" }, .{ .property = "signal_ids" } } }, .allowed = basis_ids.items, .collection = .unique_subset });
-            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "basis" }, .{ .property = "signal_ids" } } }, .allowed = basis_ids.items, .collection = .{ .unique_subset = .none } });
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .{ .unique_subset = .none } });
         },
         .records => unreachable,
     };
     const narrowed = try packets.withIntegerChoices(allocator, base, choices.items);
     defer packets.release(narrowed);
-    if (selected != .records and (positive_ids.len == 0 or (selected == .entities and basis_ids.items.len == 0))) {
+    const content_excluded = if (selected == .records) !content_batch else positive_ids.len == 0 or (selected == .entities and basis_ids.items.len == 0);
+    if (content_excluded) {
         const excluded = try a.alloc(@import("model_result_schema.zig").ExcludedVariant, base.excludedVariants().len + 1);
         @memcpy(excluded[0..base.excludedVariants().len], base.excludedVariants());
         excluded[excluded.len - 1] = .{ .kind = @tagName(std.meta.activeTag(selected)) };
@@ -669,9 +674,11 @@ pub fn completeScenarios(a: std.mem.Allocator, current: Session) Error!Session {
     return append(current, combined);
 }
 
-/// Cross-batch and cross-unit consistency belongs to the session. The same
-/// check governs admission, completed replacements and assembly; its records
-/// rules, including ADR 0035 restatements, apply while records are admitted.
+/// Cross-batch and cross-unit consistency belongs to the session. Admission
+/// calls it; it acts only on a records batch while records are admitted or
+/// their scenarios written, so the story's composition and assembly, which run
+/// when no records are being admitted, don't. Its records rules, including
+/// ADR 0035 restatements, apply while records are admitted.
 /// `model` is the candidate these checked records came from; it supplies the
 /// observed old value a native delete requires.
 pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Context, checked: g.Checked, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
@@ -797,7 +804,6 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
             .invalid => return error.InvalidSpecificationUnit,
         };
         if (result.response != .content) return error.InvalidSpecificationUnit;
-        if (try checkConsistency(allocator, current, context, result, null) != null) return error.InvalidSpecificationUnit;
         if (g.recordCollection(.canonical, result.response.content)) |unit_records| {
             // Canonical section order is a projection; candidate indices and
             // repair origins retain the model's order throughout the session.

@@ -35,7 +35,8 @@ pub const Scenario = struct {
         .then = spec.textField(spec.scenario_family, "then"),
     };
     number: slots.SlotNumber,
-    given: spec.BusinessValue,
+    /// Omitted where the sources state no starting situation for the requirement.
+    given: ?spec.BusinessValue = null,
     when: spec.BusinessValue,
     then: spec.BusinessValue,
 };
@@ -64,8 +65,7 @@ pub fn numberChoice(allocator: std.mem.Allocator, group_plan: slots.Plan) std.me
         .target = .{ .path = &.{ .{ .property = "scenarios" }, .items, .{ .property = "number" } } },
         .definition = definition.id(),
         .allowed = try group_plan.numbers(allocator),
-        .collection = .exact_members,
-        .distinct = criterion_properties,
+        .collection = .{ .exact_members = .{ .distinct = criterion_properties } },
     };
 }
 

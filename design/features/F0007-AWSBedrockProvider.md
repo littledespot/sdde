@@ -125,7 +125,8 @@ quality conclusion follows from API availability.
 - The environment source captures it once after exact workflow selection and
   model-binding validation, and only if the graph declares authorization preparation.
 - Missing, empty, whitespace-containing or non-ASCII values fail without trimming or
-  fallback.
+  fallback. An unset or empty value is `credential=missing` and any other is
+  `credential=malformed` on the failure line; no byte or length is reported.
 - The owned snapshot is non-refreshing; copied secret bytes are zeroed on cleanup.
 - Tests generate synthetic canaries at runtime, never hardcoded keys.
 

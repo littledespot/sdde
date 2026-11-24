@@ -440,7 +440,7 @@ test "recorded assignment membership gates measurement like production admission
     var compiler: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const canonical = try compiler.compiler().compile(a, "{\"type\":\"object\",\"properties\":{\"findings\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[\"findings\"],\"additionalProperties\":false}");
     const path: []const schema.ChoiceStep = &.{ .{ .property = "findings" }, .items, .{ .property = "ordinal" } };
-    const exact = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 4 }, .collection = .exact_members }});
+    const exact = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 4 }, .collection = .{ .exact_members = .{} } }});
     defer exact.release();
     const repeated = "{\"findings\":[{\"ordinal\":2},{\"ordinal\":2}]}";
     const input: corpus.Input = .{ .packet = packet, .output = repeated, .schema = exact.selected().modelBytes(), .original_sources = &.{}, .members = exact.selected().memberChoices() };

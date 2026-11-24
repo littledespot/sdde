@@ -13,6 +13,6 @@ pub const TextFacts = struct {
     candidate: extraction.Parsed,
     text: extraction.text.Dependencies,
 };
-pub fn textFacts(inputs: @import("reference_evidence.zig").Inputs, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, candidate: extraction.Parsed) extraction.Error!TextFacts {
-    return .{ .candidate = candidate, .text = try extraction.text.dependencies(inputs, registry, current) };
+pub fn textFacts(inputs: @import("reference_evidence.zig").Inputs, registry: @import("passive_literals.zig").Registry, candidate: extraction.Parsed) TextFacts {
+    return .{ .candidate = candidate, .text = extraction.text.dependencies(inputs, registry) };
 }

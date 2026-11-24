@@ -20,17 +20,29 @@ pub const Metadata = struct {
     description: ?@import("../domain/model_request_description.zig").Description = null,
     source_context: ?@import("request_source_capture.zig").Context = null,
 };
+pub const Stopped = union(enum) { failed: diagnostics.Failure, cancelled };
 pub const Capture = struct {
     allocator: std.mem.Allocator,
     logs: barrier.Barrier,
     current: ?Metadata = null,
-    failure: ?diagnostics.Failure = null,
+    /// How this execution's capture stopped, once it did: a capture failure, or a cancellation under the
+    /// feature log while a body was persisted, which is no capture failure.
+    stopped: ?Stopped = null,
     history: lineage.History = .{},
     links: ?lineage.Links = null,
     description_recorded: bool = false,
 
     pub fn deinit(self: *Capture) void {
         self.history.deinit(self.allocator);
+    }
+
+    /// The capture failure this execution recorded, if that is how it stopped.
+    pub fn failure(self: *const Capture) ?diagnostics.Failure {
+        const stopped = self.stopped orelse return null;
+        return switch (stopped) {
+            .failed => |value| value,
+            .cancelled => null,
+        };
     }
 
     pub fn port(self: *Capture) capture_port.Port {
@@ -47,7 +59,10 @@ pub const Capture = struct {
     }
     fn capture(context: *capture_port.Context, direction: prompt.PromptDirection, body: capture_port.Body, credentials: []const []const u8) capture_port.Outcome {
         const self: *Capture = @ptrCast(@alignCast(context));
-        if (self.failure != null) return .blocked;
+        if (self.stopped) |stopped| return switch (stopped) {
+            .failed => .blocked,
+            .cancelled => .cancelled,
+        };
         const metadata = self.current orelse return self.fail(direction, .metadata, .missing_metadata);
         var request_id: [64]u8 = undefined;
         const request = std.fmt.bufPrint(&request_id, "request-{d}", .{metadata.origin.request.value}) catch return self.fail(direction, .request_identity, .formatting);
@@ -78,7 +93,11 @@ pub const Capture = struct {
                     const encoded = std.json.Stringify.valueAlloc(arena.allocator(), value, .{}) catch return self.fail(.request, .source_snapshot_serialization, .allocation);
                     var source_fragment = fragment;
                     source_fragment.direction = .request;
-                    if (self.persist(source_fragment, "source_snapshot", encoded, credentials) == .blocked) return .blocked;
+                    switch (self.persist(source_fragment, "source_snapshot", encoded, credentials)) {
+                        .blocked => return .blocked,
+                        .cancelled => return .cancelled,
+                        .recorded, .disabled => {},
+                    }
                 }
             }
             if (metadata.description) |description| {
@@ -86,7 +105,11 @@ pub const Capture = struct {
                 defer self.allocator.free(encoded);
                 var description_fragment = fragment;
                 description_fragment.direction = .request;
-                if (self.persist(description_fragment, "request_description", encoded, credentials) == .blocked) return .blocked;
+                switch (self.persist(description_fragment, "request_description", encoded, credentials)) {
+                    .blocked => return .blocked,
+                    .cancelled => return .cancelled,
+                    .recorded, .disabled => {},
+                }
             }
             self.description_recorded = true;
         }
@@ -114,10 +137,14 @@ pub const Capture = struct {
             switch (self.logs.processPrompt(fragment)) {
                 .persisted => {},
                 .dropped => return self.fail(initial.direction, .persistence, .prompt_dropped),
-                .blocked => |failure| {
-                    // The logging orchestrator already emitted its emergency record.
-                    self.failure = .{ .code = failure, .stage = .persistence, .cause = .{ .sink = failure }, .origin = metadata.origin, .direction = initial.direction };
+                .blocked => |code| {
+                    // The runtime logging lifecycle already emitted its emergency record.
+                    self.stopped = .{ .failed = .{ .code = code, .stage = .persistence, .cause = .{ .sink = code }, .origin = metadata.origin, .direction = initial.direction } };
                     return .blocked;
+                },
+                .cancelled => {
+                    self.stopped = .cancelled;
+                    return .cancelled;
                 },
             }
         }
@@ -125,7 +152,7 @@ pub const Capture = struct {
     }
     fn fail(self: *Capture, direction: prompt.PromptDirection, stage: diagnostics.Stage, cause: diagnostics.Cause) capture_port.Outcome {
         if (self.current) |metadata| self.logs.reportFailure(metadata.workflow, .LOG_SERIALIZATION_FAILURE);
-        self.failure = .{ .code = .LOG_SERIALIZATION_FAILURE, .stage = stage, .cause = cause, .origin = if (self.current) |metadata| metadata.origin else null, .direction = direction };
+        self.stopped = .{ .failed = .{ .code = .LOG_SERIALIZATION_FAILURE, .stage = stage, .cause = cause, .origin = if (self.current) |metadata| metadata.origin else null, .direction = direction } };
         return .blocked;
     }
 };

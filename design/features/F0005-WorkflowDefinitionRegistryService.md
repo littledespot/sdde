@@ -275,7 +275,7 @@ map every outcome, as the fixture does.
   workflow root.
 - An operation parameter that expects a prompt, schema, example, JSON-composition
   ([ADR 0016](../decisions/0016-configured-json-response-composition.md)) or
-  `packet-guidance/v6` (ADR 0016 packet-guidance amendment) resource accepts only a
+  `packet-guidance/v7` (ADR 0016 packet-guidance amendment) resource accepts only a
   declared alias of that expected kind.
 - A JSON-composition resource references one complete result schema and owns only the
   part partition and dependencies; it adds no configuration owner or executable
@@ -621,7 +621,7 @@ service is published.
   through one narrow compiler port bound at composition.
 - Result-schema resources are decoded; their tagged compiled values carry an opaque
   immutable schema and exact captured bytes. JSON-composition resources (§3.3) and
-  `packet-guidance/v6` resources (ADR 0016 packet-guidance amendment) are also decoded
+  `packet-guidance/v7` resources (ADR 0016 packet-guidance amendment) are also decoded
   and validated at compilation through their closed encodings.
 - The registry owns deep copies of this same authority.
 - Missing, malformed, unsupported or unbounded schema declarations reject the graph with
@@ -642,8 +642,7 @@ service is published.
 
 - The same envelope implements [§6's execution-local information stack](../contracts/06-pipeline-nodes.md#execution-local-information-stack).
   Native schemas declare retained history; producer occurrences are runner-assigned.
-  Identical placement of a canonical record is idempotent, while conflicting or
-  foreign placement rejects. Current authority and retained observations stay distinct.
+  A second recording of one occurrence and key rejects, and so does a foreign one. Current authority and retained observations stay distinct.
   This requires no YAML fields, model-visible metadata or additional workflow steps.
 - Retry reports project operation, immutable-request-assignment and native-defect
   counts from the existing runner owner, retaining compiled scope and each independent key.
@@ -658,8 +657,11 @@ service is published.
 ### Execution guards
 
 Registered outcome-association descriptors compile alongside data effects and
-identify a closed native role plus declared subject, evidence and result keys.
-Definitions cannot supply recovery permissions. Registry admission, graph
+identify a closed native role plus declared subject, evidence and result keys. An
+authorizer that declares `blocked` also names the closed reader of that decision, a
+diagnostic admission and a clarification route the closed reader of their evidence.
+Definitions cannot supply
+recovery permissions. Registry admission, graph
 validation and execution compare the same descriptor. Static flow validation
 rejects paths that discard an unresolved opaque outcome or closed request before
 a protected effect or incompatible terminal. A registered native disposition
@@ -683,7 +685,8 @@ transitions and their existing native authority.
   execution of its exact issuer, bound to the still-present, unchanged authority
   generations and their recorded source lineage.
 - A replaced or removed ancestor invalidates derived evidence; a replacement's
-  self-input identifies its superseded revision, not a dependency on itself.
+  self-input identifies its superseded revision, not a dependency on itself. So does its prior revision of another key the
+  same step replaced, while that key still holds what the step wrote ([§12.8](../contracts/12-model-boundary.md#128-closed-authority-reconciliation-boundary)).
 - Native omission merges use [§12.8's renewal contract](../contracts/12-model-boundary.md#128-closed-authority-reconciliation-boundary):
   retain historical inputs, invalidate the complete declared dependency set and
   require fresh source/policy authority before rebuilding dependent evidence.
@@ -709,7 +712,10 @@ transitions and their existing native authority.
 - Registered operational ports include `LLMProviderInterface` (`model-provider`), the
   preloaded authorization preparation port (`provider-authorization`), the three
   root-bound toolchain source ports (`toolchain-read`), the toolchain document parser
-  (`toolchain-parser`), and reference directory inspection (`reference-read`).
+  (`toolchain-parser`), reference directory inspection (`reference-read`), and the invoking-account
+  authentication port (`actor-authentication`, [ADR 0025](../decisions/0025-clarification-answer-authentication.md)),
+  which a step declares together with the `actor_authentication` side effect and which only the
+  runner's single-use lease lets it use.
 - The pure bounded Unicode normalizer grants no operational capability.
 - Further port types require explicit native registration; unknown erased contexts or
   callback fields are rejected, not inferred as pure.
@@ -845,6 +851,33 @@ source path operational authority. No failure falls back to another file,
 encoding, definition set, cached registry, hard-coded workflow, or source
 asset.
 
+**Rejection detail (approved by the user on 20 November 2026).** A rejection in
+these six families keeps its public code, and the CLI prints after it, on the same
+line, `: <rule>[; <path>][; step=<id>]`:
+
+- The rule is a closed class, one per definition section or validation stage and
+  never per call site (`Rule` in `src/domain/definition_rejection.zig`). Where an
+  owner has no finer class, the failing startup step stands in for it. The path is
+  the workflow-root-relative path of the inventory entry the failure belongs to, a
+  definition or a resource file; with no path the entry is named `entry <n>`. The
+  identifier is the step, or for a resource the resource (`resource=<id>`), where
+  the rule is scoped to one.
+- The owner of each check records the rule, the entry's inventory ordinal and
+  that identifier in a slot the startup routine owns, then returns its unchanged
+  error ([ADR 0032](../decisions/0032-engine-routines.md)). The routine copies the
+  display path from the validated inventory by ordinal before it releases the
+  inventory, so the path is never authority. The parser port reports no location, so
+  a rejected definition is found by parsing each capture alone (one definition at a
+  time, so a capture that fails alone is the one that failed).
+- The evidence is bounded and never cut: an identifier longer than the identifier
+  grammar allows is omitted, and a path longer than 512 bytes is replaced by its
+  ordinal.
+- A rule names a stage, not a cause: an allocation failure under a stage is reported
+  as that stage's rejection, as the public code already is.
+- Public codes, their `code(step)` mapping and the harness report are unchanged.
+  Configuration, root and provider rejections keep their code alone: their
+  promises of bounded detail are separate items.
+
 - Raw bytes, decoded raw values, schema-valid definitions, compiled candidates, registry
   candidates, handles, and evidence remain distinct owned values.
 - Each is destroyed exactly once on success, deterministic rejection, cancellation,
@@ -940,6 +973,9 @@ Those concerns remain with their accepted owners or later increments.
     policy supplies no budget and no retry count. Every retry-capable operation instance declares its own
     bounded `retry-limit`; missing limits, policy-supplied retry defaults, and
     retry parameters on non-retry contracts fail compilation.
+22. A rejection in a workflow-definition family prints its public code followed by its
+    rule class, the definition's path and, where scoped, the step or resource
+    (§9); the code is unchanged and nothing outside that family prints detail.
 
 ## 12. Verification
 
@@ -1040,11 +1076,23 @@ Implementation tests must cover the owning boundaries:
 - no write, model call, command, or feature lock occurs
 - all owned intermediates are released on every terminal branch.
 
+**Rejection detail**
+
+- each owner records its rule, the definition's ordinal and, where scoped, the step
+  or resource in the slot, and an accepted input records nothing; a rule recorded
+  first stays
+- a failed capture or parse names the definition's file; a failure with no definition
+  at fault names only its step; a failure outside the workflow authority names no
+  detail
+- evidence is copied whole or omitted, never cut.
+
 **Packaging**
 
 - load a valid relocated variable registry and its declared workflow-owned resources
   with the native executable in a clean directory containing only target-owned runtime
-  inputs, never `design/`, source files, build cache, or a Zig toolchain.
+  inputs, never `design/`, source files, build cache, or a Zig toolchain
+- each packaged workflow rejection prints its public code, then its rule class, the
+  definition's path and, where scoped, the step.
 
 ## Implementation status
 

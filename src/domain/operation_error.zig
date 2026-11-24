@@ -2,15 +2,18 @@
 //! No dynamic error names or payloads cross the runner boundary.
 const std = @import("std");
 pub const ProviderAuthorizationLease = error{ AuthorizationDenied, AuthorizationExpired, ClockUnavailable, Cancelled };
-pub const FeatureInputSource = std.mem.Allocator.Error || error{FeatureInputUnavailable};
-pub const ReferenceStateIdentity = error{IdentityUnavailable};
+/// An authentication that did not observe an account: a lease the runner did not issue or that was used before, an
+/// account or run identity the adapter cannot read, an operating system it does not support, or the trusted clock.
+pub const ActorAuthentication = std.mem.Allocator.Error || error{ AuthenticationDenied, AccountUnavailable, UnsupportedPlatform, ClockUnavailable, Cancelled };
+pub const FeatureInputSource = std.mem.Allocator.Error || error{ FeatureInputUnavailable, Cancelled };
+pub const ReferenceStateIdentity = error{ IdentityUnavailable, Cancelled };
 pub const ReferenceCorpusSource = std.mem.Allocator.Error || error{ ReferenceUnavailable, ReferenceInventoryChanged, ReferenceLimitExceeded, Cancelled };
-pub const FeatureDirectoryInspector = std.mem.Allocator.Error || error{FeatureDirectoryUnavailable};
-pub const PrincipleSource = @import("principle_registry.zig").Error || error{PrincipleSourceUnavailable};
-pub const ReferenceDirectoryInspector = std.mem.Allocator.Error || error{ReferenceDirectoryUnavailable};
+pub const FeatureDirectoryInspector = std.mem.Allocator.Error || error{ FeatureDirectoryUnavailable, Cancelled };
+pub const PrincipleSource = @import("principle_registry.zig").Error || error{ PrincipleSourceUnavailable, Cancelled };
+pub const ReferenceDirectoryInspector = std.mem.Allocator.Error || error{ ReferenceDirectoryUnavailable, Cancelled };
 pub const UnicodeNormalizer = std.mem.Allocator.Error || error{ InvalidUtf8, NormalizationLimitExceeded, NormalizationFailed };
 pub const ReferenceDecoder = std.mem.Allocator.Error || error{ UnsupportedMedia, MalformedText, DecodeLimitExceeded };
-pub const ToolchainAuthoritySource = error{InvalidToolchainSource};
+pub const ToolchainAuthoritySource = error{ InvalidToolchainSource, Cancelled };
 pub const ToolchainDocumentParser = error{InvalidToolchainDocument};
 pub const FeatureLogLayout = std.mem.Allocator.Error || error{ InvalidFeatureLogLayout, FeatureLogLayoutUnavailable, InsecurePermissions, Cancelled };
 pub const FeatureLogSink = error{
@@ -21,9 +24,11 @@ pub const FeatureLogSink = error{
     SinkFailure,
     FlushFailure,
     ReleaseFailure,
+    Cancelled,
 };
 pub const LlmProviderInterface = std.mem.Allocator.Error || error{ Cancelled, ModelLoggingBlocked };
 pub const PortError = ProviderAuthorizationLease ||
+    ActorAuthentication ||
     FeatureInputSource ||
     ReferenceStateIdentity ||
     ReferenceCorpusSource ||
@@ -56,10 +61,10 @@ pub const Error = @import("pipeline_data.zig").ValueError ||
     @import("workflow_outcome_association.zig").Error ||
     @import("pipeline_data.zig").EnvelopeError ||
     @import("reference_reconciliation.zig").Error ||
-    @import("specification_coverage_repair.zig").Error ||
+    @import("specification_coverage.zig").Error ||
     @import("scenario_link.zig").Error ||
     @import("specification_repair.zig").Error ||
-    @import("source_omission.zig").Error ||
+    @import("source_omission_authority.zig").Error ||
     @import("required_authority.zig").Error ||
     @import("reference_ingestion.zig").Error ||
     @import("workflow_retry.zig").StateError ||
@@ -68,6 +73,7 @@ pub const Error = @import("pipeline_data.zig").ValueError ||
     @import("feature_directory.zig").Error ||
     @import("reference_selector.zig").Error ||
     @import("clarification_refresh.zig").Error ||
+    @import("actor_evidence.zig").Error ||
     @import("json_composition_runtime.zig").Error ||
     @import("model_request_handoff.zig").Error ||
     @import("model_attempt_accounting.zig").Error ||

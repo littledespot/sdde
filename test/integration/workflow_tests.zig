@@ -3,20 +3,18 @@ const std = @import("std");
 const pipeline = @import("../../src/domain/pipeline.zig");
 const config = @import("../../src/domain/config.zig");
 const bootstrap_root_registry = @import("../../src/domain/bootstrap_root_registry.zig");
-const toolchain_authority_source = @import("../../src/adapters/filesystem/toolchain_authority_source.zig");
-const toolchain_documents = @import("../../src/adapters/parsers/toolchain_documents.zig");
 const workflow = @import("../../src/domain/workflow.zig");
 const workflow_compilation = @import("../../src/domain/workflow_compilation.zig");
 const workflow_execution = @import("../../src/domain/workflow_execution.zig");
 const telemetry = @import("../../src/domain/telemetry.zig");
 const request_projection = @import("../../src/test_fixtures/request_projection.zig");
+const workflow_resources = @import("../../src/test_fixtures/workflow_resources.zig");
 const model_provider_requirement = @import("../../src/domain/model_provider_requirement.zig");
 const llm_provider_identity = @import("../../src/domain/llm_provider_identity.zig");
 const bootstrap_services = @import("../../src/application/bootstrap_services.zig");
 const llm_provider_contracts = @import("../../src/domain/llm_provider_contracts.zig");
 const llm_provider_registry = @import("../../src/domain/llm_provider_registry.zig");
 const repository_model_allowlist = @import("../../src/domain/repository_model_allowlist.zig");
-const toolchain = @import("../../src/domain/toolchain.zig");
 const run_outcome = @import("../../src/domain/run_outcome.zig");
 const workflow_engine = @import("../../src/application/workflow_engine_orchestrator.zig");
 const model_provider_bootstrap_binding = @import("../../src/application/model_provider_bootstrap_binding.zig");
@@ -28,7 +26,6 @@ const log_binding = @import("../../src/domain/feature_log_binding.zig");
 const log_limits = @import("../../src/domain/feature_log_limits.zig");
 const feature_log_sink = @import("../../src/adapters/filesystem/feature_log_sink.zig");
 const active_feature_log_runtime = @import("../../src/composition/active_feature_log_runtime.zig");
-const feature_log_finalization_runner = @import("../../src/application/feature_log_finalization_runner.zig");
 const model_provider_bootstrap = @import("../../src/composition/model_provider_bootstrap.zig");
 const engine_invocation = @import("../../src/composition/engine_invocation.zig");
 const workflow_operation_registry = @import("../../src/ports/workflow_operation_registry.zig");
@@ -36,8 +33,9 @@ const workflow_operation_registry = @import("../../src/ports/workflow_operation_
 const composition = @import("../../src/composition/root.zig");
 const runInProjectWithRegistry = composition.runInProjectWithRegistry;
 const reportInvocation = composition.reportInvocation;
-const policy_registry = @import("../../src/composition/toolchain_policy_registry.zig").registry;
 const untraced_allocator = @import("../../src/test_fixtures/untraced_allocator.zig");
+/// The Unicode port prior-state readback re-quotes stored claims with.
+const readback_normalizer: @import("../../src/ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = @import("unicode_normalization").nfc };
 
 fn runInvocationInProject(
     io: std.Io,
@@ -46,6 +44,16 @@ fn runInvocationInProject(
     arguments: []const []const u8,
 ) run_outcome.Outcome {
     return runInvocationInProjectWithRuntime(io, allocator, project_root, arguments, .{}, null);
+}
+
+/// What a rejected definition's startup detail records: the startup step that refused it and the rule it broke. A
+/// rejection that several checks could have caused is told apart by this, not by the public code, which is the same
+/// for all of them.
+fn rejectionDetail(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8) !@import("../../src/domain/definition_rejection.zig").Detail {
+    var report = try reportInvocation(io, allocator, project_root, arguments, .{}, null);
+    defer report.deinit();
+    if (report.outcome != .bootstrap_failed) return error.TestExpectedBootstrapFailure;
+    return report.bootstrap_detail orelse error.TestExpectedRejectionDetail;
 }
 
 // Tests that need only the native outcome use the same production invocation.
@@ -82,6 +90,51 @@ fn testBootstrappedInvocation(
     };
 }
 
+/// The provider bootstrap the specification matrix substitutes for the production one: ready with the test
+/// provider's services, whose provider and model identity the frozen request projection embeds.
+const MatrixProviderBootstrap = struct {
+    allocator: std.mem.Allocator,
+
+    fn binding(self: *MatrixProviderBootstrap) model_provider_bootstrap_binding.Binding {
+        return .{ .context = self, .invoke_fn = prepare };
+    }
+
+    fn prepare(
+        context: *anyopaque,
+        _: *const workflow_execution.SelectedWorkflow,
+        _: *const config.ModelsConfig,
+        _: @import("../../src/domain/model_controls.zig").Temperatures,
+        _: *const bootstrap_root_registry.LLMProviderConfigCapability,
+    ) model_provider_bootstrap_binding.Outcome {
+        const self: *MatrixProviderBootstrap = @ptrCast(@alignCast(context));
+        return .{ .ready = @import("../../src/model_request_workflow_test.zig").providerServices(self.allocator, null, &.{ "spec_generation", "repair" }, false) catch unreachable };
+    }
+};
+
+/// The test operations a workflow fixture names, appended to the production registry before startup validates it.
+const RegistryExtension = struct {
+    const Native = @FieldType(composition.Runtime, "native");
+    const base_len = @typeInfo(@FieldType(Native, "entries")).array.len;
+    extra: [4]workflow_operation_registry.Entry,
+    storage: [base_len + 4]workflow_operation_registry.Entry = undefined,
+
+    fn register(context: *anyopaque, native: *Native) void {
+        const self: *RegistryExtension = @ptrCast(@alignCast(context));
+        self.storage = native.entries ++ self.extra;
+        native.registry.operations = &self.storage;
+    }
+};
+
+/// Run the invocation's selection and preparation steps, which leaves its runner built: the steps `Driver.run`
+/// takes as done.
+fn prepareMatrixInvocation(invocation: *engine_invocation.Assembly) !void {
+    const bindings = invocation.bindings();
+    try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+    try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+    try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+    try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+}
+
 fn runInProject(
     io: std.Io,
     allocator: std.mem.Allocator,
@@ -96,7 +149,7 @@ fn runInProjectWithRuntime(
     project_root: std.Io.Dir,
     runtime: pipeline.NodeRuntime,
 ) bootstrap_services.Outcome {
-    return runInProjectWithRegistry(io, allocator, project_root, runtime, &core_workflow_operations.registry);
+    return runInProjectWithRegistry(io, allocator, project_root, runtime, &core_workflow_operations.registry, null);
 }
 
 const valid_config =
@@ -330,7 +383,7 @@ test "loads exact preset inheritance and publishes the safety-valid toolchain" {
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: [app@1.0.0]\npolicies: []\n" });
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/presets/base.toolchain-preset.yaml", .data = "schema: toolchain-preset/v1\npackage: base@1.0.0\nlayer: language\nextends: []\npolicies: [project.zig@1]\n" });
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/presets/app.toolchain-preset.yaml", .data = "schema: toolchain-preset/v1\npackage: app@1.0.0\nlayer: framework\nextends: [base@1.0.0]\npolicies: []\n" });
-    try expectToolchainRun(io, project_root.dir, .ok, &.{ "base@1.0.0", "app@1.0.0" }, 2);
+    try expectToolchainRun(io, project_root.dir, .ok, 2);
 }
 
 test "unrelated workflows do not load toolchain documents even with a toolchain workflow installed" {
@@ -392,7 +445,7 @@ test "one invalid unselected preset blocks complete toolchain publication" {
         .sub_path = ".sdd/presets/invalid.toolchain-preset.yaml",
         .data = "schema: toolchain-preset/v1\npackage: unused@1.0.0\nlayer: runtime\nextends: []\npolicies: []\nunknown: rejected\n",
     });
-    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
+    try expectToolchainRun(io, project_root.dir, .failed, 0);
 }
 
 test "one unselected preset with an unresolved dependency blocks the complete registry" {
@@ -406,7 +459,7 @@ test "one unselected preset with an unresolved dependency blocks the complete re
         .sub_path = ".sdd/presets/unused.toolchain-preset.yaml",
         .data = "schema: toolchain-preset/v1\npackage: unused@1.0.0\nlayer: runtime\nextends: [missing@1.0.0]\npolicies: []\n",
     });
-    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
+    try expectToolchainRun(io, project_root.dir, .failed, 0);
 }
 
 test "toolchain loading rejects alternate project filenames and unsupported preset siblings" {
@@ -433,7 +486,7 @@ test "toolchain loading rejects alternate project filenames and unsupported pres
                 .data = "schema: project-toolchain/v1\npresets: []\npolicies: []\n",
             });
         }
-        try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
+        try expectToolchainRun(io, project_root.dir, .failed, 0);
     }
 }
 
@@ -455,7 +508,7 @@ test "toolchain loading rejects a linked exact project document" {
         ".sdd/principles/toolchain.yaml",
         .{},
     );
-    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
+    try expectToolchainRun(io, project_root.dir, .failed, 0);
 }
 
 const valid_workflow =
@@ -472,30 +525,20 @@ const valid_workflow =
     \\    on: { ok: end.ok }
 ;
 
-fn expectToolchainRun(io: std.Io, project_root: std.Io.Dir, expected: workflow.OutcomeTag, expected_packages: []const []const u8, expected_policies: usize) !void {
-    try std.testing.expectEqual(expected, try inspectToolchainRun(io, project_root, .{}, expected_packages, expected_policies));
+fn expectToolchainRun(io: std.Io, project_root: std.Io.Dir, expected: workflow.OutcomeTag, expected_policies: usize) !void {
+    try std.testing.expectEqual(expected, try inspectToolchainRun(io, project_root, .{}, expected_policies));
 }
 
-fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.NodeRuntime, expected_packages: []const []const u8, expected_policies: usize) !workflow.OutcomeTag {
+fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.NodeRuntime, expected_policies: usize) !workflow.OutcomeTag {
     try project_root.writeFile(io, .{ .sub_path = ".sdd/workflows/toolchain.workflow.yaml", .data = @embedFile("../../src/test_fixtures/toolchain.workflow.yaml") });
-    var source = toolchain_authority_source.Adapter.init(io, project_root);
-    var parser: toolchain_documents.Adapter = .{};
-    var reference_adapter: @import("../../src/adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var feature_adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var operations: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
-    var feature_inputs: @import("../../src/adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var reference_contents: @import("../../src/adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-    var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
-    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-    operations.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
-    var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry);
-    defer boot.deinit();
-    try std.testing.expect(boot == .ready);
-    operations.bindRoots(boot.ready.roots.registry());
-    operations.bindWorkflows(boot.ready.workflows.registry());
-    var provider = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project_root, .{}, &llm_provider_contracts.Registry.empty);
-    var invocation = engine_invocation.Assembly.init(std.testing.allocator, &boot.ready, &.{"toolchain-check"}, &operations.registry, provider.bind(), runtime);
+    // Startup runs under no control; the observing control governs the invocation alone, so each cancellation
+    // boundary the test counts is one of the invocation's.
+    var production: composition.Runtime = undefined;
+    production.init(io, std.testing.allocator, project_root, .{});
+    defer production.deinit();
+    try std.testing.expect(production.boot == .ready);
+    production.control = runtime;
+    var invocation = production.invocation(&.{"toolchain-check"}, .{ .snapshots = .initFill(null) });
     defer invocation.deinit();
     const result = workflow_engine.run(invocation.bindings()).executionStatus().?;
     const read_contract: pipeline.NodeContract = .{ .id = "test-toolchain-consumer", .kind = .action, .requires = &.{.valid_toolchain}, .produces = &.{}, .side_effect = .none };
@@ -505,10 +548,6 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     }
     const view = try invocation.pipeline_runner.?.envelope.view(read_contract);
     const valid = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/toolchain_workflow_values.zig").valid, @import("../../src/domain/toolchain_safety.zig").ValidToolchain);
-    const service = @import("../../src/application/toolchain_service.zig").ToolChainService.init(valid);
-    try std.testing.expect(service.toolchain() == valid);
-    try std.testing.expectEqual(expected_packages.len, valid.packages().len);
-    for (expected_packages, valid.packages()) |expected_package, package| try std.testing.expectEqualStrings(expected_package, package);
     try std.testing.expectEqual(expected_policies, valid.policies().len);
     try std.testing.expectEqualStrings("core.safety@1", valid.policies()[0].id);
     return result;
@@ -523,7 +562,7 @@ test "selected toolchain cancellation stops at every runtime boundary without pu
     try writeValidToolchain(io, project.dir);
     for (0..256) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
-        const result = try inspectToolchainRun(io, project.dir, control.runtime(), &.{}, 1);
+        const result = try inspectToolchainRun(io, project.dir, control.runtime(), 1);
         if (result == .ok) {
             try std.testing.expect(checks > 9);
             return;
@@ -670,12 +709,12 @@ fn writeReferenceIngestionFixture(io: std.Io, project: std.Io.Dir) !void {
     try project.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = stories });
 }
 
-test "native YAML compiles selected naming rules and scans text without artifact writes" {
+test "native YAML compiles selected naming rules and prepares reference tokens without artifact writes" {
     const io = std.testing.io;
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
     try writeReferenceIngestionFixture(io, project.dir);
-    const yaml = try @import("../../src/test_fixtures/path_token_workflow.zig").yaml(std.testing.allocator);
+    const yaml = try @import("../../src/test_fixtures/path_token_workflow.zig").prepared(std.testing.allocator);
     defer std.testing.allocator.free(yaml);
     const renamed = try std.mem.replaceOwned(u8, std.testing.allocator, yaml, "id: reference-ingestion", "id: lexical-check");
     defer std.testing.allocator.free(renamed);
@@ -687,20 +726,16 @@ test "native YAML compiles selected naming rules and scans text without artifact
     defer arena.deinit();
     const closed = try @import("../../src/test_fixtures/clarification_inputs.zig").closed(arena.allocator(), "S01", true);
     try writeClarificationCapture(io, project.dir, closed);
-    for ([_][]const u8{ "Use stories.md and src/main.zig?", "Ordinary business text", "\xff" }) |text| {
-        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/sample.txt", .data = text });
+    {
         const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "lexical-check", "--feature", "Chosen/Café", "--reference", "first" });
-        try std.testing.expectEqual(if (std.unicode.utf8ValidateSlice(text)) workflow.OutcomeTag.ok else .failed, result.executionStatus().?);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", arena.allocator(), .limited(16384));
         try std.testing.expectEqualSlices(u8, closed.forms[0].bytes, retained);
     }
-    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/sample.txt", .data = "Ordinary text" });
+    // The tokens step reads the compiled naming policy, so a workflow without that step doesn't compile.
     for ([_][2][]const u8{
         .{ "use: compile-naming-policy", "use: core.noop" },
-        .{ "use: prepare-reference-tokens", "use: core.noop" },
-        .{ "with: { text: sample }", "with: { text: sample, extensions: .zig }" },
-        .{ "with: { text: sample }", "with: {}" },
     }) |change| {
         const broken = try std.mem.replaceOwned(u8, std.testing.allocator, renamed, change[0], change[1]);
         defer std.testing.allocator.free(broken);
@@ -769,7 +804,27 @@ test "reference failures are not skipped and cannot change closed clarification 
             directory.setPermissions(io, .fromMode(0o700)) catch @panic("restore test directory permissions");
             directory.close(io);
         };
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+        var rejected_report = reportInvocation(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, .{}, null) catch return error.TestUnexpectedResult;
+        defer rejected_report.deinit();
+        const rejected = rejected_report.outcome;
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, rejected.executionStatus().?);
+        // The run's report names the failing entry by its display path, from the validated inventory.
+        const failing_name = switch (failure) {
+            .unsupported => "data.json",
+            .disguised, .malformed, .oversized => "other.md",
+            .hidden => ".unknown",
+            .symlink => "alias.md",
+            .unreadable => "locked",
+        };
+        try std.testing.expectEqualStrings(try std.fmt.allocPrint(allocator, "source-material/first/{s}", .{failing_name}), rejected_report.reference_entry_path.?.text());
+        // The stage's error names why the source failed: one reason for each class of failure.
+        try std.testing.expectEqualStrings(switch (failure) {
+            .unsupported, .disguised, .hidden => "ReferenceUnsupportedMedia",
+            .malformed => "ReferenceMalformedText",
+            .symlink => "ReferenceSymlink",
+            .oversized => "ReferenceSourceSize",
+            .unreadable => "ReferenceUnreadable",
+        }, @errorName(rejected.execution_rejected.operation_failed));
         try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).executionStatus().?);
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", allocator, .limited(16384));
         try std.testing.expectEqualSlices(u8, clarifications.forms[0].bytes, retained);
@@ -839,11 +894,10 @@ test "reference ingestion compiler enforces inputs and content-read capability" 
     for ([_][2][]const u8{
         .{ "policy: core.reference-ingestion@1", "policy: core.feature-input-read@1" },
         .{ "use: prepare-inputs", "use: core.noop" },
-        .{ "use: prepare-reference-evidence", "use: validate-source-citations" },
         .{ "use: prepare-reference-evidence", "use: parse-reference-extraction-results" },
         .{ "use: prepare-reference-evidence", "use: prepare-reference-tokens" },
         .{ "use: prepare-reference-evidence", "use: validate-reference-extraction-text" },
-        .{ "use: prepare-reference-evidence", "use: validate-reference-selections" },
+        .{ "use: prepare-reference-evidence", "use: validate-token-classifications" },
         .{ "use: prepare-reference-evidence", "use: assign-preserved-token-identities" },
         .{ "use: prepare-reference-evidence", "use: build-preserved-token-claims" },
         .{ "use: prepare-reference-evidence", "use: validate-reference-claims" },
@@ -878,32 +932,11 @@ test "reference ingestion cancellation does not create artifacts" {
     return error.ReferenceIngestionNeverCompleted;
 }
 
-const ReferenceCitationTestProducer = struct {
-    invalid: bool,
-    observed: usize = 0,
+/// The reference modules the scripted reference producers read through.
+const reference_test = struct {
     const bindings = @import("../../src/application/reference_evidence_workflow.zig");
     const evidence = @import("../../src/domain/reference_evidence.zig");
     const values = @import("../../src/application/pipeline_values.zig");
-    fn propose(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
-        const source = values.read(&input.step.data, bindings.inputs_schema, evidence.Inputs) catch return error.InvocationFailureUnrecorded;
-        const chunk = source.chunks.entries[0];
-        const proposal: evidence.CitationProposal = .{
-            .source_id = chunk.source_id,
-            .block_id = chunk.block_id,
-            .location = chunk.span,
-            .verbatim = if (context.?.invalid) "not in the source" else null,
-        };
-        return @import("../../src/application/workflow_candidate.zig").publish(std.testing.allocator, bindings.proposals_schema, evidence.CitationProposals, .{
-            .scope = .{ .state_id = source.corpus.state_id, .chunk_id = chunk.id },
-            .entries = &.{proposal},
-        });
-    }
-    fn observe(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
-        const result = values.read(&input.step.data, bindings.citations_schema, evidence.ValidatedCitations) catch return error.InvocationFailureUnrecorded;
-        if (result.entries.len != 1) return error.InvocationFailureUnrecorded;
-        context.?.observed += 1;
-        return .{ .outcome = .ok, .delta = .{} };
-    }
 };
 
 const ReferenceExtractionTestProducer = struct {
@@ -914,7 +947,7 @@ const ReferenceExtractionTestProducer = struct {
     const owned = @import("../../src/domain/reference_candidate_value.zig");
     fn propose(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
         const allocator = std.testing.allocator;
-        const source = ReferenceCitationTestProducer.values.read(&input.step.data, ReferenceCitationTestProducer.bindings.inputs_schema, ReferenceCitationTestProducer.evidence.Inputs) catch return error.InvocationFailureUnrecorded;
+        const source = reference_test.values.read(&input.step.data, reference_test.bindings.inputs_schema, reference_test.evidence.Inputs) catch return error.InvocationFailureUnrecorded;
         var arena: std.heap.ArenaAllocator = .init(allocator);
         defer arena.deinit();
         const scratch = arena.allocator();
@@ -930,7 +963,7 @@ const ReferenceExtractionTestProducer = struct {
                     // Claim wording is quoted from the source (ADR 0036); the reason is model text.
                     .unbound => .{ .response = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"Read src/main.zig.\"},\"token_classifications\":[]}" },
                     .passive, .unknown_literal => response: {
-                        const registry = ReferenceCitationTestProducer.values.read(&input.step.data, @import("../../src/application/passive_literal_workflow.zig").registry_schema, @import("../../src/domain/passive_literals.zig").Registry) catch return error.InvocationFailureUnrecorded;
+                        const registry = reference_test.values.read(&input.step.data, @import("../../src/application/passive_literal_workflow.zig").registry_schema, @import("../../src/domain/passive_literals.zig").Registry) catch return error.InvocationFailureUnrecorded;
                         var ordinal: u32 = if (context.?.mode == .unknown_literal) std.math.maxInt(u32) else 0;
                         if (context.?.mode == .passive) for (registry.occurrences) |occurrence| {
                             if (occurrence.origin.source_id.ordinal == chunk.source_id.ordinal and occurrence.origin.block_id.ordinal == chunk.block_id.ordinal) {
@@ -944,7 +977,7 @@ const ReferenceExtractionTestProducer = struct {
                     .preserved, .missing_classification, .positive_empty_preserved, .irrelevant => response: {
                         const token_values = @import("../../src/application/structured_token_workflow.zig");
                         const token_fixture = @import("../../src/test_fixtures/reference_tokens.zig");
-                        const candidates = ReferenceCitationTestProducer.values.read(&input.step.data, token_values.candidates_schema, extraction.tokens.Candidates) catch return error.InvocationFailureUnrecorded;
+                        const candidates = reference_test.values.read(&input.step.data, token_values.candidates_schema, extraction.tokens.Candidates) catch return error.InvocationFailureUnrecorded;
                         const choices = token_fixture.classifications(scratch, candidates.*, chunk) catch return error.InvocationFailureUnrecorded;
                         const decisions = scratch.dupe(extraction.tokens.Classification, choices) catch return error.InvocationFailureUnrecorded;
                         if (context.?.mode == .irrelevant) for (decisions) |*decision| {
@@ -961,7 +994,7 @@ const ReferenceExtractionTestProducer = struct {
             switch (context.?.mode) {
                 .claims, .no_claim, .passive, .invalid_citation, .duplicate => {
                     const token_fixture = @import("../../src/test_fixtures/reference_tokens.zig");
-                    const candidates = ReferenceCitationTestProducer.values.read(&input.step.data, @import("../../src/application/structured_token_workflow.zig").candidates_schema, extraction.tokens.Candidates) catch return error.InvocationFailureUnrecorded;
+                    const candidates = reference_test.values.read(&input.step.data, @import("../../src/application/structured_token_workflow.zig").candidates_schema, extraction.tokens.Candidates) catch return error.InvocationFailureUnrecorded;
                     const choices = token_fixture.classifications(scratch, candidates.*, chunk) catch return error.InvocationFailureUnrecorded;
                     const decisions = scratch.dupe(extraction.tokens.Classification, choices) catch return error.InvocationFailureUnrecorded;
                     if (context.?.mode == .no_claim) for (decisions) |*decision| {
@@ -1019,12 +1052,11 @@ const ReferenceReconciliationTestProducer = struct {
     }
 };
 
-test "native YAML validates citations extraction and reconciliation before continuation" {
+test "native YAML validates extraction and reconciliation before continuation" {
     const io = std.testing.io;
     const binding = @import("../../src/application/workflow_operation_binding.zig");
-    const scenarios = [_]?@FieldType(ReferenceExtractionTestProducer, "mode"){ null, null, .claims, .no_claim, .blocked, .malformed, .missing, .duplicate, .invalid_citation, .unbound, .passive, .unknown_literal, .legacy, .preserved, .missing_classification, .positive_empty_preserved, .irrelevant, .reconciled, .conflict, .bad_reconciliation };
-    for (scenarios, 0..) |mode, scenario| {
-        const invalid = scenario == 1;
+    const scenarios = [_]@FieldType(ReferenceExtractionTestProducer, "mode"){ .claims, .no_claim, .blocked, .malformed, .missing, .duplicate, .invalid_citation, .unbound, .passive, .unknown_literal, .legacy, .preserved, .missing_classification, .positive_empty_preserved, .irrelevant, .reconciled, .conflict, .bad_reconciliation };
+    for (scenarios) |mode| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1035,82 +1067,61 @@ test "native YAML validates citations extraction and reconciliation before conti
         }
         if (mode == .passive) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Read stories.md.\n" });
         if (mode == .preserved or mode == .missing_classification or mode == .positive_empty_preserved or mode == .irrelevant) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Hello, World!` and retain `Cafe\u{301}`.\n" });
-        const suffix = if (mode != null) "use: prepare-reference-tokens, on: { ok: propose-extraction, failed: end.failed } }\n" ++
+        const suffix = "use: prepare-reference-tokens, on: { ok: propose-extraction, failed: end.failed } }\n" ++
             "  propose-extraction: { use: test.propose-extraction, on: { ok: parse-extraction } }\n" ++
             "  parse-extraction: { use: parse-reference-extraction-results, on: { ok: validate-text, failed: end.failed } }\n" ++
             "  validate-text: { use: validate-reference-extraction-text, on: { ok: validate-classifications, invalid: end.invalid, failed: end.failed } }\n" ++
-            "  validate-classifications: { use: validate-reference-selections, on: { ok: assign-tokens, invalid: end.invalid, failed: end.failed } }\n" ++
+            "  validate-classifications: { use: validate-token-classifications, on: { ok: assign-tokens, invalid: end.invalid, failed: end.failed } }\n" ++
             "  assign-tokens: { use: assign-preserved-token-identities, on: { ok: build-token-claims, failed: end.failed } }\n" ++
             "  build-token-claims: { use: build-preserved-token-claims, on: { ok: validate-claims, failed: end.failed } }\n" ++
             "  validate-claims: { use: validate-reference-claims, on: { ok: assign-claims, failed: end.failed } }\n" ++
             "  assign-claims: { use: assign-reference-claim-identities, on: { ok: build-ledger, failed: end.failed } }\n" ++
             "  build-ledger: { use: build-reference-extraction-ledger, on: { ok: account-extraction, failed: end.failed } }\n" ++
             "  account-extraction: { use: validate-reference-extraction-accounting, on: { ok: observe-extraction, blocked: end.blocked, failed: end.failed } }\n" ++
-            "  observe-extraction: { use: test.observe-extraction, on: { ok: end.ok } }" else "use: prepare-reference-evidence\n    on: { ok: propose-citations, failed: end.failed }\n" ++
-            "  propose-citations: { use: test.propose-citations, on: { ok: validate-citations } }\n" ++
-            "  validate-citations: { use: validate-source-citations, on: { ok: observe-citations, failed: end.failed } }\n" ++
-            "  observe-citations: { use: test.observe-citations, on: { ok: end.ok } }";
+            "  observe-extraction: { use: test.observe-extraction, on: { ok: end.ok } }";
         const preparation = try @import("../../src/test_fixtures/path_token_workflow.zig").prepared(std.testing.allocator);
         defer std.testing.allocator.free(preparation);
-        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, if (mode != null) preparation else @embedFile("../../src/test_fixtures/reference-ingestion.workflow.yaml"), if (mode != null) "use: prepare-reference-tokens, on: { ok: end.ok, failed: end.failed } }" else "use: prepare-reference-evidence\n    on: { ok: end.ok, failed: end.failed }", suffix);
+        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, preparation, "use: prepare-reference-tokens, on: { ok: end.ok, failed: end.failed } }", suffix);
         defer std.testing.allocator.free(yaml);
         const reconciliation_suffix = try @import("../../src/test_fixtures/reference_reconciliation_workflow.zig").suffix(std.testing.allocator, 3);
         defer std.testing.allocator.free(reconciliation_suffix);
         const complete_yaml = if (reconcile) try std.mem.replaceOwned(u8, std.testing.allocator, yaml, "  observe-extraction: { use: test.observe-extraction, on: { ok: end.ok } }", reconciliation_suffix) else try std.testing.allocator.dupe(u8, yaml);
         defer std.testing.allocator.free(complete_yaml);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = complete_yaml });
-        if (mode != null) {
-            try project.dir.createDirPath(io, ".sdd/principles");
-            try project.dir.createDirPath(io, ".sdd/presets");
-            try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
-        }
+        try project.dir.createDirPath(io, ".sdd/principles");
+        try project.dir.createDirPath(io, ".sdd/presets");
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (mode == .duplicate) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/second.md", .data = "Another independent requirement.\n" });
-        var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
-        var document_parser: toolchain_documents.Adapter = .{};
-        var reference_source: @import("../../src/adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var feature_source: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var feature_inputs: @import("../../src/adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var reference_contents: @import("../../src/adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-        var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
-        var native: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
-        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-        native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
-        var producer: ReferenceCitationTestProducer = .{ .invalid = invalid };
-        var extraction_producer: ReferenceExtractionTestProducer = .{ .mode = mode orelse .claims };
-        var reconciliation_producer: ReferenceReconciliationTestProducer = .{ .mode = mode orelse .claims };
+        var extraction_producer: ReferenceExtractionTestProducer = .{ .mode = mode };
+        var reconciliation_producer: ReferenceReconciliationTestProducer = .{ .mode = mode };
         var protected_arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer protected_arena.deinit();
         const closed = try @import("../../src/test_fixtures/clarification_inputs.zig").closed(protected_arena.allocator(), "S01", true);
         try writeClarificationCapture(io, project.dir, closed);
-        const entries = native.entries ++ [_]workflow_operation_registry.Entry{
-            .{ .contract = .{ .id = "test.propose-citations", .kind = .step, .requires = &.{.citable_reference_inputs}, .produces = &.{.reference_citation_proposals}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.propose) },
-            .{ .contract = .{ .id = "test.observe-citations", .kind = .step, .requires = &.{.validated_source_citations}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.observe) },
+        // The test operations this workflow names join the registry the production startup validates.
+        var extension: RegistryExtension = .{ .extra = .{
             .{ .contract = .{ .id = "test.propose-extraction", .kind = .step, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .structured_token_candidates }, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
             .{ .contract = .{ .id = "test.observe-extraction", .kind = .step, .requires = &.{.accounted_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.observe) },
             .{ .contract = .{ .id = "test.propose-reconciliation", .kind = .step, .requires = &.{.reference_reconciliation_input}, .produces = &.{.parsed_reference_reconciliation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceReconciliationTestProducer, &reconciliation_producer, ReferenceReconciliationTestProducer.propose) },
             .{ .contract = .{ .id = "test.observe-reconciliation", .kind = .step, .requires = &.{ .accounted_reference_reconciliation, .required_authority_ledger }, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceReconciliationTestProducer, &reconciliation_producer, ReferenceReconciliationTestProducer.observe) },
-        };
-        native.registry.operations = &entries;
-        var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
-        defer boot.deinit();
-        try std.testing.expect(boot == .ready);
-        native.bindRoots(boot.ready.roots.registry());
-        native.bindWorkflows(boot.ready.workflows.registry());
-        var principle_source: @import("../../src/adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        native.bindConfiguration(boot.ready.config.config());
-        native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
-        var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
-        const result = testBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{});
-        const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
+        } };
+        var production: composition.Runtime = undefined;
+        production.initWith(io, std.testing.allocator, project.dir, .{}, .{ .context = &extension, .run = RegistryExtension.register });
+        defer production.deinit();
+        const native = &production.native;
+        try std.testing.expect(production.boot == .ready);
+        var invocation = production.invocation(&.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, .{ .snapshots = .initFill(null) });
+        defer invocation.deinit();
+        const result = workflow_engine.run(invocation.bindings());
+        const expected: workflow.OutcomeTag = switch (mode) {
             .claims, .no_claim, .passive, .preserved, .irrelevant, .reconciled => .ok,
             .blocked, .conflict => .blocked,
             .missing_classification, .positive_empty_preserved, .bad_reconciliation, .unbound, .unknown_literal => .invalid,
             // Admission restricts citations to supplied lines, so an unknown one is a defect.
             .malformed, .missing, .duplicate, .legacy, .invalid_citation => .failed,
-        } else if (invalid) .failed else .ok;
+        };
         try std.testing.expectEqual(expected, result.executionStatus().?);
-        try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (reconcile) reconciliation_producer.observed else if (mode != null) extraction_producer.observed else producer.observed);
+        try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (reconcile) reconciliation_producer.observed else extraction_producer.observed);
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", protected_arena.allocator(), .limited(16384));
         try std.testing.expectEqualSlices(u8, closed.forms[0].bytes, retained);
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
@@ -1124,7 +1135,7 @@ test "native YAML validates citations extraction and reconciliation before conti
                 const invalid_yaml = try std.mem.replaceOwned(u8, std.testing.allocator, complete_yaml, change[0], change[1]);
                 defer std.testing.allocator.free(invalid_yaml);
                 try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = invalid_yaml });
-                var rejected = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+                var rejected = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry, null);
                 defer rejected.deinit();
                 try std.testing.expect(rejected != .ready);
             }
@@ -1138,6 +1149,24 @@ test "configured specification generation YAML executes native references models
 
 test "request projection records every provider invocation, keyed and deterministic" {
     try untraced_allocator.run(checkRequestProjection, .{});
+}
+
+test "a scenario's freeze directory is its stable name: one safe directory name that no other scenario holds" {
+    const Name = request_projection.Name;
+    for ([_][]const u8{ "base-00", "fault-repair-missing_answer-persistent", "a", "x" ** request_projection.max_name }) |text| {
+        try std.testing.expectEqualStrings(text, (try Name.parse(text)).slice());
+    }
+    // A name is never a path, an option, empty, over long or in another case.
+    for ([_][]const u8{ "", "-fault", "Fault", "a/b", "a b", "a.b", "..", "x" ** (request_projection.max_name + 1) }) |text| {
+        try std.testing.expectError(error.InvalidScenarioName, Name.parse(text));
+    }
+    var sink: request_projection.Sink = .{ .allocator = std.testing.allocator, .io = std.testing.io };
+    defer sink.entries.deinit(std.testing.allocator);
+    try sink.entries.append(std.testing.allocator, .{ .scenario = 0, .name = try Name.parse("one"), .call = 1, .request = 1, .attempt = 1, .owner = .reference_chunk, .purpose = .initial_generation, .digest = @splat(0) });
+    // The scenario that holds a name may claim it again; another scenario may take another name, never that one.
+    try sink.claim(0, try Name.parse("one"));
+    try sink.claim(1, try Name.parse("two"));
+    try std.testing.expectError(error.DuplicateScenarioName, sink.claim(1, try Name.parse("one")));
 }
 
 test "an outcome link request is projected as a closed choice with its own prompt, once per pending edge case" {
@@ -1155,7 +1184,11 @@ fn checkLinkProjection(allocator: std.mem.Allocator) !void {
     // case, after every other request of its run, and each request offers its own edge case.
     const native = sink.entries.items[0].scenario;
     var calls: usize = 0;
-    for (sink.entries.items) |entry| calls += @intFromBool(entry.scenario == native + 1);
+    var asking: request_projection.Name = .{};
+    for (sink.entries.items) |entry| if (entry.scenario == native + 1) {
+        calls += 1;
+        asking = entry.name;
+    };
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1163,7 +1196,7 @@ fn checkLinkProjection(allocator: std.mem.Allocator) !void {
     var asked: usize = 0;
     var bodies: std.ArrayList([]const u8) = .empty;
     for (1..calls + 1) |call| {
-        const path = try std.fmt.allocPrint(a, "scenario_links/scenario-{d:0>3}/call-{d:0>4}.json", .{ native + 1, call });
+        const path = try std.fmt.allocPrint(a, "scenario_links/{s}/call-{d:0>4}.json", .{ asking.slice(), call });
         const projection = try request_projection.Projection.decode(a, try freeze.dir.readFileAlloc(io, path, a, .limited(16 * 1024 * 1024)));
         const schema = (try std.json.parseFromSlice(std.json.Value, a, projection.schema, .{})).value;
         const properties = if (schema == .object) schema.object.get("properties") else null;
@@ -1234,7 +1267,7 @@ fn checkRequestProjection(allocator: std.mem.Allocator) !void {
     // A written projection keeps the request's model-visible members and omits the
     // three that refactors change by design.
     const entry = first.entries.items[0];
-    const path = try std.fmt.allocPrint(allocator, "source_preservation/scenario-{d:0>3}/call-{d:0>4}.json", .{ entry.scenario, entry.call });
+    const path = try std.fmt.allocPrint(allocator, "source_preservation/{s}/call-{d:0>4}.json", .{ entry.name.slice(), entry.call });
     defer allocator.free(path);
     const bytes = try freeze.dir.readFileAlloc(io, path, allocator, .limited(16 * 1024 * 1024));
     defer allocator.free(bytes);
@@ -1279,6 +1312,10 @@ test "a text defect in a written scenario takes the field-level value repair and
 
 test "a records batch without a requirement stops before any scenarios request, and scenarios that stay wrong fail at the step's retry limit" {
     try testSpecificationWorkflows(.scenario_stops);
+}
+
+test "a criterion whose sources state no starting situation publishes without a Given, and an edge case linked to it prints its own given alone" {
+    try testSpecificationWorkflows(.criteria_without_given);
 }
 const step_trace = @import("../../src/test_fixtures/workflow_step_trace.zig");
 
@@ -1347,7 +1384,26 @@ fn stateId(runner: *@import("../../src/application/workflow_pipeline_runner.zig"
     return inputs.corpus.state_id.bytes;
 }
 
-const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links, scenario_repair, scenario_stops };
+/// `raised_retry_limit` runs the scenarios that script a request's faults up to its step's retry limit (the
+/// disposition, summary and global sequences, and the two scenarios-step exhaustions) on a definition whose limit
+/// of 2 is 3, so their expected call positions are derived from the compiled limit and not typed for 2 (SPEC01 C45).
+///
+/// The `hook_*` cases run one brief scenario with a failure injected into a scripted hook and assert what `run`
+/// returns (finding the first failure, never a swallowed one and never an abort): `hook_trace_failure` gives the step
+/// trace an allocator that fails, so a hook's operation error is the failure; `hook_assertion_failure` pre-seeds the
+/// brief scenario's retained reference with a foreign pointer, so the driver's check of it fails; `hook_first_failure`
+/// injects both, and the trace's earlier failure is the one returned.
+const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links, scenario_repair, scenario_stops, criteria_without_given, raised_retry_limit, hook_trace_failure, hook_assertion_failure, hook_first_failure };
+
+/// What `run` returns in a `hook_*` case, null in every other.
+fn expectedHookFailure(workflow_cases: SpecificationCases) ?anyerror {
+    return switch (workflow_cases) {
+        .hook_trace_failure, .hook_first_failure => error.OutOfMemory,
+        .hook_assertion_failure => error.TestUnexpectedResult,
+        else => null,
+    };
+}
+
 /// The applicability sources' level-1 title heading (ADR 0048).
 const applicability_heading = "# Required output\n";
 
@@ -1355,6 +1411,145 @@ const applicability_heading = "# Required output\n";
 // sweep's allocations would otherwise each pay for a stack trace.
 fn testSpecificationWorkflows(workflow_cases: SpecificationCases) !void {
     return untraced_allocator.run(runSpecificationWorkflows, .{ workflow_cases, null });
+}
+
+/// Scripted requests that the retry-limit scenarios fault are checked against a limit of 3, which writes no
+/// freeze: the projection is of the shipped definition, and these runs patch its limits.
+fn checkRaisedRetryLimit(allocator: std.mem.Allocator) !void {
+    var sink: request_projection.Sink = .{ .allocator = allocator, .io = std.testing.io };
+    defer sink.deinit();
+    try runSpecificationWorkflows(allocator, .raised_retry_limit, &sink);
+}
+
+test "the disposition, summary and global fault sequences follow a raised retry limit: their calls are derived from the compiled step's limit" {
+    try untraced_allocator.run(checkRaisedRetryLimit, .{});
+}
+
+test "a scripted sequence's calls follow from the allowance: ordinals count 1 to n in each request and the request answered until the limit is spent takes every attempt" {
+    const sequence = @import("../../src/test_fixtures/summary_protocol_sequence.zig");
+    const global = @import("../../src/test_fixtures/global_protocol_sequence.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    for ([_][]const sequence.Calls{ &sequence.plan, &global.plan }) |plan| {
+        // Retry limits 1 to 3 (the request-model maximum) give allowances 2 to 4.
+        for ([_]u32{ 2, 3, 4 }) |allowance| {
+            const shape = try sequence.expand(arena.allocator(), plan, allowance);
+            var calls: usize = 0;
+            for (plan) |entry| calls += switch (entry) {
+                .fixed => |fixed| fixed,
+                .allowance => allowance,
+            };
+            try std.testing.expectEqual(calls, shape.ordinals.len);
+            try std.testing.expectEqual(calls, shape.first_calls.len);
+            for (shape.ordinals, shape.first_calls, 0..) |ordinal, first, call| {
+                // A request opens at its own first call, never later, and each of its calls is the next attempt.
+                try std.testing.expect(first <= call);
+                try std.testing.expectEqual(@as(u32, @intCast(call - first + 1)), ordinal);
+                if (call != 0) try std.testing.expect(shape.first_calls[call - 1] <= first);
+            }
+            // The request answered until the limit is spent has every attempt its step allows.
+            const opening = sequence.firstAllowanceCall(plan).?;
+            var attempts: u32 = 0;
+            for (shape.first_calls) |first| attempts += @intFromBool(first == opening);
+            try std.testing.expectEqual(allowance, attempts);
+            try sequence.expectShape(shape, try sequence.expand(arena.allocator(), plan, allowance));
+            // A shape expanded for another allowance is not the run's: positions after the spent request move.
+            try std.testing.expectError(error.TestExpectedEqual, sequence.expectShape(shape, try sequence.expand(arena.allocator(), plan, allowance + 1)));
+        }
+    }
+}
+
+/// The scripted driver gates its merge checks on the merge of a repair owner (SPEC01 C41): the shipped graph
+/// runs every one, and a graph that stops running one reports that owner, however it stops: the step is
+/// gone, or it runs another operation.
+fn checkGatedMerges(steps: []const workflow_compilation.CompiledStep) !void {
+    const allocator = std.testing.allocator;
+    const driver = @import("../../src/test_fixtures/spec_generation_driver.zig");
+    const owners = @import("../../src/domain/repair_owner.zig");
+    try std.testing.expectEqual(@as(?owners.RepairOwner, null), driver.unboundMerge(steps));
+    for ([_]owners.RepairOwner{ .source_omission_extraction, .source_omission_reconciliation, .reference_reconciliation, .specification_support }) |owner| {
+        var kept: std.ArrayList(workflow_compilation.CompiledStep) = .empty;
+        defer kept.deinit(allocator);
+        for (steps) |step| if (!driver.isRoute(step, .merge, owner)) try kept.append(allocator, step);
+        try std.testing.expect(kept.items.len < steps.len);
+        try std.testing.expectEqual(@as(?owners.RepairOwner, owner), driver.unboundMerge(kept.items));
+    }
+    const renamed = try allocator.dupe(workflow_compilation.CompiledStep, steps);
+    defer allocator.free(renamed);
+    var changed: usize = 0;
+    for (renamed) |*step| if (std.mem.eql(u8, step.operation_id.bytes, owners.Operation.merge.id())) {
+        step.operation_id = .{ .bytes = owners.Operation.parse.id() };
+        changed += 1;
+    };
+    try std.testing.expect(changed != 0);
+    // Every merge now runs another operation, so the first gated owner is the one reported.
+    try std.testing.expectEqual(@as(?owners.RepairOwner, .source_omission_extraction), driver.unboundMerge(renamed));
+}
+
+// The record's own rules without a run: the first failure stays, and a failed check after a step hands back the
+// step's own result. That `run` returns the record, from a trace hook and from a check, is `checkHookFailure`'s.
+test "recording a failed check in a scripted hook keeps the first failure, and a step's own result passes through it" {
+    const driver_module = @import("../../src/test_fixtures/spec_generation_driver.zig");
+    var driver: driver_module.Driver = .{ .runner = undefined, .fake = undefined, .allocator = std.testing.allocator };
+    try std.testing.expectEqual(@as(?anyerror, null), driver.hook_failure);
+    driver.hookFailed(error.TestExpectedEqual);
+    driver.hookFailed(error.InvalidReferenceSnapshot);
+    try std.testing.expectEqual(@as(?anyerror, error.TestExpectedEqual), driver.hook_failure);
+    // A check that fails after the step ran records its failure and hands back the step's own result unchanged, so
+    // the engine goes on as it would have.
+    for ([_]workflow.OutcomeTag{ .ok, .invalid, .more }) |outcome| {
+        var checked: driver_module.Driver = .{ .runner = undefined, .fake = undefined, .allocator = std.testing.allocator };
+        const applied = checked.failed(error.TestUnexpectedResult, .{ .outcome = outcome });
+        try std.testing.expectEqual(outcome, applied.status());
+        try std.testing.expectEqual(@as(?anyerror, error.TestUnexpectedResult), checked.hook_failure);
+    }
+}
+
+test "a provider call leaves no scripted answer behind it: the plan the next call may meet holds none of the freed arena" {
+    const driver_module = @import("../../src/test_fixtures/spec_generation_driver.zig");
+    var fake: @import("../../src/adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{
+        .allocator = std.testing.allocator,
+        .authorization_leases = undefined,
+        .invocation_plan = .{ .complete = .{ .content = "", .input_tokens = 1, .output_tokens = 1 } },
+    };
+    var driver: driver_module.Driver = .{ .runner = undefined, .fake = &fake, .allocator = std.testing.allocator };
+    driver.call_arena = .init(std.testing.allocator);
+    fake.invocation_plan.complete.content = try driver.call_arena.?.allocator().dupe(u8, "scripted by the call");
+    driver_module.Driver.afterInvoke(&driver);
+    try std.testing.expectEqual(@as(?std.heap.ArenaAllocator, null), driver.call_arena);
+    try std.testing.expectEqualStrings("", fake.invocation_plan.complete.content);
+    // A plan that is not a complete answer is left as it is.
+    fake.invocation_plan = .cancelled;
+    driver.call_arena = .init(std.testing.allocator);
+    driver_module.Driver.afterInvoke(&driver);
+    try std.testing.expect(fake.invocation_plan == .cancelled);
+}
+
+/// A failure a hook records is the failure its scenario's `run` returns (SPEC01 C41), the first one recorded when
+/// several fail. These runs stop short of a published output, so they write no freeze.
+fn checkHookFailure(allocator: std.mem.Allocator, workflow_cases: SpecificationCases) !void {
+    var sink: request_projection.Sink = .{ .allocator = allocator, .io = std.testing.io };
+    defer sink.deinit();
+    try runSpecificationWorkflows(allocator, workflow_cases, &sink);
+}
+
+test "a failure recorded in a scripted hook is the failure its scenario's run returns, and the first of several" {
+    for ([_]SpecificationCases{ .hook_trace_failure, .hook_assertion_failure, .hook_first_failure }) |workflow_cases| {
+        try untraced_allocator.run(checkHookFailure, .{workflow_cases});
+    }
+}
+
+/// A fault scenario's name: its stage, shape and repetition, which identify it without its position.
+fn faultName(buffer: []u8, prefix: []const u8, fault: @import("../../src/test_fixtures/spec_generation_driver.zig").Fault) ![]const u8 {
+    const stage = @tagName(fault.stage);
+    const shape = @tagName(fault.shape);
+    return switch (fault.repetition) {
+        .once => std.fmt.bufPrint(buffer, "{s}-{s}-{s}", .{ prefix, stage, shape }),
+        .persistent => std.fmt.bufPrint(buffer, "{s}-{s}-{s}-persistent", .{ prefix, stage, shape }),
+        .first_request => |count| std.fmt.bufPrint(buffer, "{s}-{s}-{s}-first{d}", .{ prefix, stage, shape, count }),
+        .every_request => |count| std.fmt.bufPrint(buffer, "{s}-{s}-{s}-every{d}", .{ prefix, stage, shape, count }),
+        .recover_then_exhaust => |count| std.fmt.bufPrint(buffer, "{s}-{s}-{s}-recover{d}", .{ prefix, stage, shape, count }),
+    };
 }
 
 /// `projection` collects the request projection; without one, a sink
@@ -1440,7 +1635,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     const brief_start = global_start + 4;
     const applicability_start = brief_start + 4;
     const applicability_cases = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").Applicability);
-    const timing = @import("../../src/test_fixtures/scenario_timing.zig");
+    // The step of a scenario a failing assertion names.
+    const Phase = enum { fixture, bootstrap, runner, execution, assertions, cleanup };
     const membership_start = applicability_start + applicability_cases.len * 2;
     const preservation_start = membership_start + 8;
     // ADR 0038 Decision 7: an edge case's outcome link is native, a model's closed choice, or a
@@ -1463,7 +1659,24 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     const equal_once = scenario_stop_start + 2;
     const equal_exhaustion = scenario_stop_start + 3;
     const equal_across_groups = scenario_stop_start + 4;
-    var costs: [scenario_stop_start + 5]?timing.Sample = @splat(null);
+    // ADR 0036 Decision 7: an extraction answer that files one set of lines under two categories takes one
+    // protocol correction naming both claims, and the run publishes from the answer that keeps one. It
+    // follows the others so that no earlier scenario changes its number.
+    const split_claim_once = scenario_stop_start + 5;
+    // ADR 0035: a record that restates the story is deleted natively and the outcome naming its claim
+    // stays. The runs share the equal-criteria runs' sources and `.chosen` edge cases, which pair the claims
+    // into groups of two, so the first group has a second claim that keeps its requirement. One run for each
+    // kind of restating record. They follow the others so that no earlier scenario changes its number.
+    const story_restatement_start = scenario_stop_start + 6;
+    const story_restatement_kinds = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").RestatingKind);
+    // A no-feature-claim answer whose reason the text validation rejects takes the reference-text repair
+    // route of `extract-references`, and its repaired answer validates. It follows the restatement runs.
+    const text_repair_index = story_restatement_start + story_restatement_kinds.len;
+    // ADR 0038 Decisions 3 and 7: the `.chosen` link run's sources and edge cases, with every scenarios answer
+    // omitting its Given. Each criterion then has none, and the edge case linked to it prints its own given alone.
+    // It follows the others so that no earlier scenario changes its number.
+    const given_less_index = text_repair_index + 1;
+    const scenario_count = given_less_index + 1;
     const case_range_begin: usize = switch (workflow_cases) {
         .existing => 0,
         .source_preservation => preservation_start,
@@ -1471,6 +1684,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .scenario_links => link_start,
         .scenario_repair => scenario_repair_start,
         .scenario_stops => scenario_stop_start,
+        .criteria_without_given => given_less_index,
+        .raised_retry_limit => disposition_start,
+        .hook_trace_failure, .hook_assertion_failure, .hook_first_failure => brief_start,
     };
     const case_range_end: usize = switch (workflow_cases) {
         .existing => preservation_start,
@@ -1478,23 +1694,27 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .reuse_regeneration => preservation_start + 2,
         .scenario_links => scenario_repair_start,
         .scenario_repair => scenario_stop_start,
-        .scenario_stops => costs.len,
+        .scenario_stops => given_less_index,
+        .criteria_without_given => scenario_count,
+        .raised_retry_limit => scenario_count,
+        .hook_trace_failure, .hook_assertion_failure, .hook_first_failure => brief_start + 1,
     };
-    defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
     // Scripted corrections of a value outside an integer enumeration that the driver checked.
     var choice_corrections: usize = 0;
     for (case_range_begin..case_range_end) |scenario| {
-        var cost = timing.Timer.start(io, &costs[scenario]);
-        defer cost.finish();
+        var phase: Phase = .fixture;
         var assertion_context: []const u8 = "setup";
-        errdefer |err| std.debug.print("specification-generation scenario {d} failed in {s}/{s}: {s}\n", .{ scenario, @tagName(cost.phase), assertion_context, @errorName(err) });
+        errdefer |err| std.debug.print("specification-generation scenario {d} failed in {s}/{s}: {s}\n", .{ scenario, @tagName(phase), assertion_context, @errorName(err) });
         const applicability = if (scenario >= applicability_start and scenario < membership_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
         const membership_scenario = scenario >= membership_start and scenario < preservation_start;
-        const link_scenario = scenario >= link_start and scenario < scenario_repair_start;
+        const given_less_scenario = scenario == given_less_index;
+        const link_scenario = (scenario >= link_start and scenario < scenario_repair_start) or given_less_scenario;
         const scenario_repair_scenario = scenario >= scenario_repair_start and scenario < scenario_stop_start;
-        const equal_scenario = scenario >= equal_once;
-        const stop_scenario = scenario >= scenario_stop_start and !equal_scenario;
+        const text_repair_scenario = scenario == text_repair_index;
+        const story_restatement_scenario = scenario >= story_restatement_start and !text_repair_scenario and !given_less_scenario;
+        const equal_scenario = scenario >= equal_once and scenario != split_claim_once and !story_restatement_scenario and !text_repair_scenario and !given_less_scenario;
+        const stop_scenario = scenario >= scenario_stop_start and !equal_scenario and !story_restatement_scenario and !text_repair_scenario and !given_less_scenario;
         const preservation_scenario = scenario >= preservation_start and scenario < link_start;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
         const global_scenario = scenario >= global_start and scenario < brief_start;
@@ -1510,7 +1730,14 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const repeated_scenario = scenario >= repeated_start and scenario < protocol_text_start;
         const protocol_text_scenario = scenario >= protocol_text_start and scenario < protocol_selection_scenario;
         const protocol_content_scenario = scenario >= protocol_content_start and scenario < omission_scenario;
-        const fault: ?@TypeOf(faults[0]) = if (brief_scenario) .{ .stage = .generation, .shape = .forbidden_provenance, .repetition = if (scenario - brief_start < 2) .persistent else .{ .first_request = 2 } } else if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else if (scenario == scenario_exhaustion) .{ .stage = .scenarios, .shape = .review_partial_assignment, .repetition = .persistent } else if (scenario == equal_once) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .{ .first_request = 1 } } else if (scenario == equal_exhaustion) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .persistent } else null;
+        const fault: ?@TypeOf(faults[0]) = if (brief_scenario) .{ .stage = .generation, .shape = .forbidden_provenance, .repetition = if (scenario - brief_start < 2) .persistent else .{ .first_request = 2 } } else if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else if (scenario == scenario_exhaustion) .{ .stage = .scenarios, .shape = .review_partial_assignment, .repetition = .persistent } else if (scenario == equal_once) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .{ .first_request = 1 } } else if (scenario == equal_exhaustion) .{ .stage = .scenarios, .shape = .equal_criteria, .repetition = .persistent } else if (scenario == split_claim_once) .{ .stage = .extraction, .shape = .split_claim, .repetition = .{ .first_request = 1 } } else null;
+        if (workflow_cases == .raised_retry_limit and !(disposition_scenario or summary_scenario or global_scenario or scenario == scenario_exhaustion or scenario == equal_exhaustion)) continue;
+        // A scenario's freeze directory is keyed by what it exercises, so adding a fault or a range
+        // leaves every other range's names alone. An enumeration or a fault list names its member; a
+        // numbered range names its member by its offset.
+        var name_buffer: [request_projection.max_name]u8 = undefined;
+        const name_text = if (scenario < 14) try std.fmt.bufPrint(&name_buffer, "base-{d:0>2}", .{scenario}) else if (brief_scenario) try std.fmt.bufPrint(&name_buffer, "brief-{d:0>2}", .{scenario - brief_start}) else if (scenario == records_gap_scenario) "records-gap" else if (scenario == scenario_exhaustion) "scenario-exhaustion" else if (scenario == equal_once) "equal-once" else if (scenario == equal_exhaustion) "equal-exhaustion" else if (scenario == equal_across_groups) "equal-across-groups" else if (scenario == split_claim_once) "split-claim-once" else if (scenario < classification_repair_start) try faultName(&name_buffer, "fault", faults[scenario - 14]) else if (classification_scenario) try std.fmt.bufPrint(&name_buffer, "classification-{d:0>2}", .{scenario - classification_repair_start}) else if (reconciliation_scenario) try std.fmt.bufPrint(&name_buffer, "reconciliation-{s}", .{@tagName(reconciliation_faults[scenario - reconciliation_start])}) else if (repeated_scenario) try std.fmt.bufPrint(&name_buffer, "repeated-{d:0>2}", .{scenario - repeated_start}) else if (protocol_text_scenario) try std.fmt.bufPrint(&name_buffer, "protocol-text-{d:0>2}", .{scenario - protocol_text_start}) else if (scenario == protocol_selection_scenario) "protocol-selection" else if (protocol_content_scenario) try std.fmt.bufPrint(&name_buffer, "protocol-content-{d:0>2}", .{scenario - protocol_content_start}) else if (candidate_omission) try std.fmt.bufPrint(&name_buffer, "candidate-omission-{d:0>2}", .{scenario - omission_scenario}) else if (extraction_omission) try std.fmt.bufPrint(&name_buffer, "extraction-omission-{d:0>2}", .{scenario - extraction_omission_start}) else if (source_gaps) try std.fmt.bufPrint(&name_buffer, "source-gap-{d:0>2}", .{scenario - source_gap_start}) else if (evidence_scenario) try std.fmt.bufPrint(&name_buffer, "evidence-{d:0>2}", .{scenario - evidence_start}) else if (disposition_scenario) try std.fmt.bufPrint(&name_buffer, "disposition-{d:0>2}", .{scenario - disposition_start}) else if (source_repair_scenario and scenario - source_repair_start < source_losses.len) try std.fmt.bufPrint(&name_buffer, "source-repair-{s}", .{@tagName(source_losses[scenario - source_repair_start])}) else if (scenario == finer_composition_scenario) "source-repair-finer-composition" else if (source_repair_scenario) try faultName(&name_buffer, "loss-fault", loss_faults[scenario - loss_fault_start]) else if (summary_scenario) try std.fmt.bufPrint(&name_buffer, "summary-{d:0>2}", .{scenario - summary_start}) else if (global_scenario) try std.fmt.bufPrint(&name_buffer, "global-{d:0>2}", .{scenario - global_start}) else if (applicability) |mode| try std.fmt.bufPrint(&name_buffer, "applicability-{s}{s}", .{ @tagName(mode), if (other_applicability) "-other" else "" }) else if (membership_scenario) try std.fmt.bufPrint(&name_buffer, "membership-{d:0>2}", .{scenario - membership_start}) else if (preservation_scenario) try std.fmt.bufPrint(&name_buffer, "preservation-{d:0>2}", .{scenario - preservation_start}) else if (given_less_scenario) "link-without-given" else if (link_scenario) try std.fmt.bufPrint(&name_buffer, "link-{d:0>2}", .{scenario - link_start}) else if (scenario_repair_scenario) try std.fmt.bufPrint(&name_buffer, "scenario-repair-{d:0>2}", .{scenario - scenario_repair_start}) else if (story_restatement_scenario) try std.fmt.bufPrint(&name_buffer, "story-restatement-{s}", .{@tagName(story_restatement_kinds[scenario - story_restatement_start])}) else if (text_repair_scenario) "text-repair-reason" else return error.UnnamedScenario;
+        const scenario_name = try request_projection.Name.parse(name_text);
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1529,13 +1756,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // Every source set below opens with a level-1 title heading (ADR 0048).
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\n" ++ "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
-        if (link_scenario or scenario_repair_scenario or equal_scenario) {
+        if (link_scenario or scenario_repair_scenario or equal_scenario or story_restatement_scenario) {
             const several = scenario != link_start;
             // A choice needs two claims in each group, which a list's items give (ADR 0038
             // Decision 4); the other cases state one claim in each source. Beside its items, the
             // heading of a list is a claim of its own, so the first source's three items make
             // four claims and every group holds two. Equal criteria need two scenarios in a group.
-            const chosen = scenario == link_start + 1 or equal_scenario;
+            const chosen = scenario == link_start + 1 or given_less_scenario or equal_scenario or story_restatement_scenario;
             try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (chosen) "# Loan renewal\n- Renew the loan.\n- Show the new return deadline.\n- Keep a record of the renewal.\n" else if (several) "# Loan renewal\nRenew the loan.\n" else "# Loan renewal\nA librarian renews an eligible loan and sees the new return deadline.\n" });
             if (several) {
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/receipt.md", .data = if (chosen) "- Issue a receipt.\n- Show the receipt number.\n" else "Issue a receipt.\n" });
@@ -1544,6 +1771,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         // One source group of one claim, so its batch has exactly one scenario slot.
         if (stop_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nRenew the loan.\n" });
+        // A first source that states nothing about the feature, so a no-feature-claim answer is the right one
+        // for it, beside one that states a requirement. The scripted generator defects the first chunk, which
+        // is the first source in path order, so `notes.md` must sort before `stories.md`.
+        if (text_repair_scenario) {
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/notes.md", .data = "Reading notes.\n" });
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nRenew the loan.\n" });
+        }
         if (membership_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - membership_start) % 4 >= 2)
             "# Library loans\nMOCK Track library loans and display their return deadlines.\n"
         else
@@ -1588,72 +1822,76 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // These cases exercise two independent model-summary request lifecycles.
         // Two-claim partitions supply another leaf instead of a reusable parent.
         const two_summary_requests = summary_scenario or (brief_scenario and (scenario - brief_start) % 2 == 0);
-        const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
-        defer if (two_summary_requests) allocator.free(configured_definition);
+        const grouped_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
+        defer if (two_summary_requests) allocator.free(grouped_definition);
+        // A patch that finds nothing to change would run the scenario unpatched and pass it.
+        if (two_summary_requests) try std.testing.expect(!std.mem.eql(u8, definition, grouped_definition));
+        // The raised-limit runs give the requests the sequences fault (the summary, dispositions and signals
+        // requests) and the scenarios request the exhaustion scenarios fault a limit of 3, and leave every other
+        // limit as shipped.
+        const raised_limit = workflow_cases == .raised_retry_limit;
+        var raised_arena: std.heap.ArenaAllocator = .init(allocator);
+        defer raised_arena.deinit();
+        const configured_definition = if (raised_limit) raised: {
+            var text: []const u8 = grouped_definition;
+            for ([_][2][]const u8{
+                .{ "retry-limit: 2\n        on: {ok: collect-reconciliation", "retry-limit: 3\n        on: {ok: collect-reconciliation" },
+                .{ "prompt: dispositions-prompt, result-schema: reconciliation-schema, retry-limit: 2}", "prompt: dispositions-prompt, result-schema: reconciliation-schema, retry-limit: 3}" },
+                .{ "prompt: signals-prompt, result-schema: reconciliation-schema, retry-limit: 2}", "prompt: signals-prompt, result-schema: reconciliation-schema, retry-limit: 3}" },
+                .{ "context: scenarios-context\n          prompt: scenarios-prompt\n          result-schema: generation-schema\n          retry-limit: 2", "context: scenarios-context\n          prompt: scenarios-prompt\n          result-schema: generation-schema\n          retry-limit: 3" },
+            }) |change| {
+                const next = try std.mem.replaceOwned(u8, raised_arena.allocator(), text, change[0], change[1]);
+                try std.testing.expect(!std.mem.eql(u8, text, next));
+                text = next;
+            }
+            break :raised text;
+        } else grouped_definition;
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
-        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "scenarios.prompt.md", "scenarios.context.json", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "support.schema.json", "links.prompt.md", "links.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
-            const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
+        inline for (comptime workflow_resources.paths(@embedFile("../../design/workflows/spec.workflow.yaml"))) |path| {
+            const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/" ++ path, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
             // A finer required-object selector must survive the native extraction
             // handoff and subsequent source repair, not merely JSON assembly.
-            const finer = scenario == finer_composition_scenario and std.mem.eql(u8, name, "extraction.composition.json");
+            const finer = scenario == finer_composition_scenario and std.mem.eql(u8, path, "spec/extraction.composition.json");
             const configured = if (finer) try std.mem.replaceOwned(u8, allocator, bytes, "\"/reason\"", "\"/reason/nodes\"") else bytes;
             defer if (finer) allocator.free(configured);
-            try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/spec/" ++ name, .data = configured });
+            if (finer) try std.testing.expect(!std.mem.eql(u8, bytes, configured));
+            try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/" ++ path, .data = configured });
         }
-        var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
-        var document_parser: toolchain_documents.Adapter = .{};
-        var reference_source: @import("../../src/adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var feature_source: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var feature_inputs: @import("../../src/adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var reference_contents: @import("../../src/adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
         // Counted state namespaces keep model-visible request bytes reproducible for the
         // request projection; the random adapter is covered by the other suites.
         var reference_ids: @import("../../src/reference_evidence_test.zig").IdSource = .{};
-        var native: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
-        native.init(allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.port(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-        cost.enter(.bootstrap);
-        var boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry);
-        cost.enter(.runner);
-        defer boot.deinit();
-        var feature_outputs: @import("../../src/adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        native.publish_output.action.writer = feature_outputs.port();
-        native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
-        if (boot != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot});
-        try std.testing.expect(boot == .ready);
+        phase = .bootstrap;
+        var production: composition.Runtime = undefined;
+        production.init(io, allocator, project.dir, .{});
+        phase = .runner;
+        defer production.deinit();
+        production.native.ops.prepare_reference_evidence.action.identities = reference_ids.port();
+        const boot = &production.boot;
+        const native = &production.native;
+        if (boot.* != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot.*});
+        try std.testing.expect(boot.* == .ready);
         try std.testing.expectEqual(preservation_scenario, boot.ready.config.config().validation.sourcePreservationCheck);
-        var logging: @import("../../src/composition/feature_logging_runtime.zig").Assembly = .{
-            .allocator = allocator,
-            .io = io,
-            .project = project.dir,
-            .roots = boot.ready.roots.registry(),
-            .logs = &boot.ready.logs,
-            .inputs = &feature_inputs,
-            .outputs = &feature_outputs,
-        };
-        defer logging.deinit();
-        native.activate_feature_logging.activator = logging.activator();
-        native.bindRoots(boot.ready.roots.registry());
-        native.bindWorkflows(boot.ready.workflows.registry());
-        var principle_source: @import("../../src/adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        native.bindConfiguration(boot.ready.config.config());
-        native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
-        var services = try @import("../../src/model_request_workflow_test.zig").providerServices(allocator, null, &.{ "spec_generation", "repair" }, false);
-        defer services.deinit();
+        const logging = &production.logging.?;
+        // The production invocation, with the provider bootstrap and the provider runtime the matrix substitutes: its
+        // requests carry the test provider's identity.
+        var test_providers: MatrixProviderBootstrap = .{ .allocator = allocator };
+        var invocation = production.invocation(&.{ "spec-generation", "--feature", "chosen", "--reference", "first" }, .{ .snapshots = .initFill(null) });
+        defer invocation.deinit();
+        invocation.provider_bootstrap = test_providers.binding();
+        invocation.provider_runtime = null;
+        try prepareMatrixInvocation(&invocation);
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
-        if (scenario == 0) try verifyAuthoringDiagnosticParent(io, allocator, project.dir, graph, boot.ready.roots.registry().llmProviderConfig());
-        var runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services, boot.ready.config.config().workflowTokenBudget);
-        defer runner.deinit();
-        runner.publication_finalizer = logging.finalizer();
+        if (workflow_cases == .existing and scenario == 0) try checkGatedMerges(graph.authority.steps);
+        const runner = &invocation.pipeline_runner.?;
         var clock: @import("../../src/provider_authorization_test_fixture.zig").TestClock = .{};
         runner.provider_clock = clock.port();
         var authorization: @import("../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = allocator };
-        native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
-        var fake = @import("../../src/model_request_workflow_test.zig").invocationProvider(&runner, allocator);
-        var recorder: request_projection.Recorder = .{ .sink = sink, .scenario = scenario, .inner = fake.interface() };
-        native.model_requests.invoke_model.action = .{ .provider = recorder.interface() };
-        var driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .allocator = allocator, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .entities_required = scenario == 11 };
+        native.model_requests.stages.prepare_authorization.action = .{ .authorization = authorization.port() };
+        var fake = @import("../../src/model_request_workflow_test.zig").invocationProvider(runner, allocator);
+        var recorder: request_projection.Recorder = .{ .sink = sink, .scenario = scenario, .name = scenario_name, .inner = fake.interface() };
+        native.model_requests.stages.invoke_model.action = .{ .provider = recorder.interface() };
+        var driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = runner, .fake = &fake, .allocator = allocator, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .entities_required = scenario == 11 };
         driver.repeated_provenance_fault = scenario == 6;
         driver.finalizer = logging.finalizer();
         if (fault) |selected_fault| {
@@ -1662,31 +1900,21 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             if (selected_fault.stage == .repair and selected_fault.shape == .missing_answer) {
                 driver.repeated_provenance_fault = selected_fault.repetition == .persistent;
                 driver.repair_across_units = selected_fault.repetition == .recover_then_exhaust;
-                driver.measurement_prefix = if (selected_fault.repetition == .persistent) ".zig-cache/provenance-answer-exhaustion" else ".zig-cache/provenance-answer-recovery";
             }
-            if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/r37-recovery";
         }
         if (applicability) |mode| {
             driver.applicability = mode;
             driver.brief_text = .{ mode.source(other_applicability), mode.source(other_applicability) };
             driver.entities_required = mode == .entities;
-            if (!other_applicability) driver.measurement_prefix = switch (mode) {
-                .no_entities => ".zig-cache/phase4-complete",
-                .unjustified => ".zig-cache/phase4-unjustified",
-                .missing_text => ".zig-cache/phase4-question",
-                else => null,
-            };
         }
         if (scenario == 0) driver.fault = .{ .stage = .support, .shape = .empty, .repetition = .{ .every_request = 1 } };
         if (scenario == 1) {
             driver.support_fault = .foreign_source_single;
         }
-        if (scenario <= 1) driver.measurement_prefix = if (scenario == 0) ".zig-cache/chunk13-compatible-request" else ".zig-cache/chunk13-conflict-request";
         driver.generation_gap = scenario == 12 or scenario == 13;
         driver.candidate_omissions = candidate_omission;
         driver.extraction_omission = extraction_omission;
         driver.source_gaps = source_gaps;
-        if (source_gaps) driver.measurement_prefix = if (scenario == source_gap_start) ".zig-cache/review-decision-greeting" else ".zig-cache/review-decision-loan";
         if (evidence_scenario) driver.evidence_fault = if (scenario == evidence_start + 2) .empty_correction else .recover;
         if (extraction_omission) driver.malformed_once = true;
         driver.missing_classifications = classification_scenario;
@@ -1713,59 +1941,65 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (disposition_scenario) driver.disposition_sequence = if (scenario - disposition_start < 2) .exhaust else .recover;
         if (source_repair_scenario) {
             driver.source_loss = source_repairs[scenario - source_repair_start];
-            if (driver.source_loss == .false_conflict) driver.measurement_prefix = ".zig-cache/r41-recovery";
-            if (driver.source_loss == .false_conflict_questions) driver.measurement_prefix = ".zig-cache/fix002-question-conflict";
             if (scenario >= loss_fault_start) driver.fault = loss_faults[scenario - loss_fault_start];
         }
         if (preservation_scenario and scenario != preservation_start) driver.source_loss = .partial;
         if (summary_scenario) {
             driver.summary_sequence = if (scenario - summary_start < 2) .exhaust else .recover;
-            if (scenario == summary_start) driver.measurement_prefix = ".zig-cache/r35-request";
             driver.malformed_once = true;
         }
         if (global_scenario) {
             driver.global_sequence = if (scenario - global_start < 2) .exhaust else .recover;
-            driver.measurement_prefix = if (scenario == global_start) ".zig-cache/r36-failure" else if (scenario == global_start + 2) ".zig-cache/r36-recovery" else null;
             driver.malformed_once = true;
         }
         if (brief_scenario) {
-            if (scenario == brief_start) driver.measurement_prefix = ".zig-cache/r40-request";
             // Model provenance remains forbidden during correction. Native
             // binding supplies evidence after the semantic fields are admitted.
             const summary_first = (scenario - brief_start) % 2 == 0;
             if (summary_first) driver.summary_sequence = .recover else driver.support_fault = .foreign_source_single;
             driver.brief_text = if (summary_first) .{ "Display the greeting and current UTC date and time on startup.", "Show the current UTC date and time." } else .{ "Confirm loan renewal and display the return deadline.", "Show the new return deadline." };
         }
-        cost.enter(.execution);
-        if (link_scenario) driver.edge_cases = switch (scenario - link_start) {
+        phase = .execution;
+        if (link_scenario) driver.edge_cases = if (given_less_scenario) .chosen else switch (scenario - link_start) {
             0 => .native,
             1 => .chosen,
             else => .unlinked,
         };
+        driver.scenarios_without_given = given_less_scenario;
         // Edge cases that name both claims of a group give it two scenario slots; their links are the
         // `.chosen` case's, which these runs share with it.
-        if (equal_scenario) driver.edge_cases = .chosen;
+        if (equal_scenario or story_restatement_scenario) driver.edge_cases = .chosen;
         driver.scenario_defect = scenario_repair_scenario;
         driver.behaviour_without_requirement = scenario == records_gap_scenario;
+        if (story_restatement_scenario) driver.story_restatement = story_restatement_kinds[scenario - story_restatement_start];
+        driver.defective_reason = text_repair_scenario;
         if (scenario == equal_across_groups) driver.fault = .{ .stage = .scenarios, .shape = .equal_across_groups, .repetition = .persistent };
         if (membership_scenario) {
             // This positive/retry matrix has one business group. Feature-wide
             // entities own their applicability and records; record batches cannot
             // repair entity membership. Native deletion needs no model response.
             driver.contradict_entities = true;
-            if (scenario < membership_start + 2) driver.measurement_prefix = if (scenario == membership_start) ".zig-cache/membership-extra" else ".zig-cache/membership-missing";
             driver.failed_repair = scenario >= membership_start + 4;
             driver.entities_required = (scenario - membership_start) % 2 == 1;
         }
-        var trace: step_trace.Trace = .init(allocator);
+        // The `hook_*` cases inject the failure a hook must return: an allocator that fails for the step trace (every
+        // allocation from the first fails), and a foreign pointer where the brief scenario retains its reference.
+        var failing_trace: std.testing.FailingAllocator = .init(allocator, .{ .fail_index = 0 });
+        const trace_fails = workflow_cases == .hook_trace_failure or workflow_cases == .hook_first_failure;
+        var trace: step_trace.Trace = .init(if (trace_fails) failing_trace.allocator() else allocator);
         defer trace.deinit();
         driver.trace = &trace;
-        const result = try driver.run();
-        cost.enter(.assertions);
+        if (workflow_cases == .hook_assertion_failure or workflow_cases == .hook_first_failure) driver.brief_references = @ptrFromInt(0x1000);
+        const result = if (expectedHookFailure(workflow_cases)) |failure| {
+            try std.testing.expectError(failure, driver.run());
+            phase = .cleanup;
+            continue;
+        } else try driver.run();
+        phase = .assertions;
         assertion_context = "request-projection";
         try std.testing.expectEqual(fake.invocation_call_count, recorder.recorded);
         assertion_context = "step-trace";
-        try writeStepTrace(io, allocator, project.dir, @tagName(workflow_cases), scenario, &trace, &driver, &runner, result);
+        try writeStepTrace(io, allocator, project.dir, @tagName(workflow_cases), scenario, &trace, &driver, runner, result);
         assertion_context = "workflow-outcome";
         if (workflow_cases == .reuse_regeneration) {
             try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);
@@ -1778,6 +2012,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (global_scenario) try @import("../../src/test_fixtures/global_protocol_sequence.zig").verify(&driver, result);
         if (summary_scenario) try @import("../../src/test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
+        // The patched limit reached the compiled workflow: a limit of 3 allows 4 attempts (ADR 0030), where the
+        // shipped limit of 2 allows 3. The derived expectations above would otherwise pass at either.
+        if (raised_limit and (summary_scenario or global_scenario)) try std.testing.expectEqual(@as(u32, 4), driver.largest_allowance);
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
         const expected: workflow.OutcomeTag = if (scenario == equal_across_groups) .blocked else if (link_scenario) (if (driver.edge_cases == .unlinked) .blocked else .ok) else if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict or (driver.fault != null and driver.fault.?.repetition == .persistent)) .failed else .ok) else if (candidate_omission or extraction_omission or scenario == records_gap_scenario or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_classification_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
@@ -1791,7 +2028,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (link_scenario) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            const refusal = "- **EXPECTED OUTCOME** " ++ @import("../../src/test_fixtures/spec_generation_responses.zig").refusal;
+            const refusal = "- **THEN** " ++ @import("../../src/test_fixtures/spec_generation_responses.zig").refusal;
             switch (driver.edge_cases.?) {
                 // The run stops before any request, and the typed gap names the edge case's group.
                 .unlinked => {
@@ -1811,12 +2048,17 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     try std.testing.expect(!chosen or groups > 1);
                     try std.testing.expect(view.contains(.published_workflow_output));
                     const rendered = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_rendering_workflow.zig").rendered_schema, .rendered);
-                    // The printed outcome is the linked criterion's Then: the one the model named for
-                    // that edge case. The answers alternate between the last and the first criterion
-                    // offered, so the refusal prints for the first, third, ... edge case only.
+                    // The printed scenario is the linked criterion's own Given, When and Then: the one the
+                    // model named for that edge case. The answers alternate between the last and the
+                    // first criterion offered, so the refusal prints for the first, third, ... edge
+                    // case only.
                     const refusals: usize = if (chosen) (groups + 1) / 2 else 0;
                     try std.testing.expectEqual(refusals, std.mem.count(u8, rendered, refusal));
-                    try std.testing.expectEqual(if (chosen) groups else 1, std.mem.count(u8, rendered, "- **EXPECTED OUTCOME** "));
+                    const edge_cases: usize = if (chosen) groups else 1;
+                    try std.testing.expectEqual(edge_cases, std.mem.count(u8, rendered, "- **GIVEN** "));
+                    try std.testing.expectEqual(edge_cases, std.mem.count(u8, rendered, "- **WHEN** "));
+                    try std.testing.expectEqual(edge_cases, std.mem.count(u8, rendered, "- **THEN** "));
+                    try std.testing.expect(std.mem.indexOf(u8, rendered, "CONDITION") == null and std.mem.indexOf(u8, rendered, "EXPECTED OUTCOME") == null);
                     const content = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").content_schema, .content);
                     var linked: usize = 0;
                     for (content.records) |record| {
@@ -1832,6 +2074,34 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                         linked += 1;
                     }
                     try std.testing.expectEqual(if (chosen) groups else 1, linked);
+                    if (given_less_scenario) {
+                        // Every scenarios answer omitted its Given, so no criterion holds one, none prints a label
+                        // for one, and each edge case's `GIVEN` line is its own given alone, then the criterion's
+                        // When and Then.
+                        var scratch: std.heap.ArenaAllocator = .init(allocator);
+                        defer scratch.deinit();
+                        const lines = scratch.allocator();
+                        var criteria: usize = 0;
+                        for (content.records) |record| switch (record.proposal.content) {
+                            .acceptance_criterion => |criterion| {
+                                try std.testing.expect(criterion.given == null);
+                                criteria += 1;
+                            },
+                            .edge_case => |edge| {
+                                var own: std.ArrayList(u8) = .empty;
+                                for (edge.given.segments) |segment| {
+                                    try std.testing.expect(segment == .literal);
+                                    try own.appendSlice(lines, segment.literal.value);
+                                }
+                                const line = try std.fmt.allocPrint(lines, "- **GIVEN** {s}\n- **WHEN** ", .{own.items});
+                                try std.testing.expect(std.mem.indexOf(u8, rendered, line) != null);
+                            },
+                            else => {},
+                        };
+                        try std.testing.expect(criteria != 0);
+                        try std.testing.expect(std.mem.indexOf(u8, rendered, "**Given** ") == null);
+                        try std.testing.expectEqual(criteria, std.mem.count(u8, rendered, "**When** "));
+                    }
                     // The persisted state holds the link as the criterion's ID, and readback
                     // rejects a dangling link, a missing link and a link on any other record.
                     const specification_state = @import("../../src/domain/specification_state.zig");
@@ -1840,7 +2110,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     defer allocator.free(saved);
                     var readback: std.heap.ArenaAllocator = .init(allocator);
                     defer readback.deinit();
-                    _ = (try specification_state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, contracts)).specified() orelse return error.ExpectedSpecifiedState;
+                    _ = (try specification_state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, contracts, readback_normalizer)).specified() orelse return error.ExpectedSpecifiedState;
                     const link = if (chosen) "\"outcome_of\":{\"kind\":\"acceptance_criterion\",\"ordinal\":2}" else "\"outcome_of\":{\"kind\":\"acceptance_criterion\",\"ordinal\":1}";
                     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, saved, link));
                     for ([_][2][]const u8{
@@ -1850,7 +2120,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     }) |forgery| {
                         const forged = try std.mem.replaceOwned(u8, readback.allocator(), saved, forgery[0], forgery[1]);
                         try std.testing.expect(!std.mem.eql(u8, forged, saved));
-                        try std.testing.expectError(error.InvalidSpecificationState, specification_state.parse(readback.allocator(), forged, .{ .bytes = "chosen" }, contracts));
+                        try std.testing.expectError(error.InvalidSpecificationState, specification_state.parse(readback.allocator(), forged, .{ .bytes = "chosen" }, contracts, readback_normalizer));
                     }
                 },
             }
@@ -1895,18 +2165,24 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (scenario == scenario_exhaustion or scenario == equal_exhaustion) {
             // A group's scenarios answer that keeps omitting a slot's number, or keeps repeating one
             // criterion, is corrected until the scenarios step's retry limit, then the run fails typed
-            // with nothing published. One request, three attempts: the first and its two corrections.
+            // with nothing published. One request, every attempt its step allows: the first and its corrections.
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            // The run ends on the last attempt of the scenarios request, whose compiled step gives the allowance.
+            const operations = runner.tokenLedger().accounted_operations.items;
+            try std.testing.expect(operations.len != 0);
+            const allowed = try driver.allowance(operations[operations.len - 1].id.model_request_id);
+            // A limit of 3 and its first attempt: the raised group's patch reached the compiled scenarios step.
+            if (raised_limit) try std.testing.expectEqual(@as(u32, 4), allowed);
             const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
             try std.testing.expect(@import("../../src/domain/specification_session.zig").scenarioPhase(session));
             try std.testing.expectEqual(@as(usize, 0), session.scenario_cursor);
             try std.testing.expect(session.units[@import("../../src/domain/specification_session.zig").records_index] == null);
             try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
             const exhausted = result.execution_rejected.retry_limit;
-            try std.testing.expectEqual(@as(u32, 2), exhausted.limit.value);
-            try std.testing.expectEqual(@as(u64, 3), exhausted.completed_executions);
-            try std.testing.expectEqual(@as(usize, 3), driver.scenario_calls);
-            try std.testing.expectEqual(@as(usize, 3), driver.fault_calls);
+            try std.testing.expectEqual(allowed - 1, exhausted.limit.value);
+            try std.testing.expectEqual(@as(u64, allowed), exhausted.completed_executions);
+            try std.testing.expectEqual(@as(usize, allowed), driver.scenario_calls);
+            try std.testing.expectEqual(@as(usize, allowed), driver.fault_calls);
             try std.testing.expectEqual(@as(usize, 1), driver.fault_requests);
             var owned = false;
             for (graph.authority.steps) |step| if (std.mem.eql(u8, step.id.bytes, exhausted.operation().bytes)) {
@@ -2022,9 +2298,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 defer readback.deinit();
                 const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
                 const state = @import("../../src/domain/specification_state.zig");
-                var restored = (try state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified() orelse return error.MissingPublishedSpecification;
+                var restored = (try state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer)).specified() orelse return error.MissingPublishedSpecification;
                 restored.content.entities.disposition = if (driver.entities_required) .not_applicable else .required;
-                try std.testing.expectError(error.InvalidSpecificationState, state.validate(readback.allocator(), restored, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource()));
+                try std.testing.expectError(error.InvalidSpecificationState, state.validate(readback.allocator(), restored, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer));
             }
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
@@ -2059,13 +2335,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges + driver.fault_calls);
             for (runner.tokenLedger().accounted_operations.items) |operation| try std.testing.expect(operation.id.model_request_id.purpose != .semantic_review);
-            try verifyPublication(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+            try verifyPublication(io, allocator, project.dir, runner, &driver, boot.ready.workflows.registry().contractSource());
             // The captured principle corpus is carried in state for the next
             // capture; Spec doesn't assess it.
             var readback: std.heap.ArenaAllocator = .init(allocator);
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-            const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
+            const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer)).specified().?;
             try std.testing.expect(state.principle_registry.sources.len > 0 and state.principle_registry.chunks.len > 0);
         }
         if (applicability) |mode| {
@@ -2074,12 +2350,12 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             // No review follows generation, so nothing changes the native
             // entity decision or manufactures a clarification.
             try std.testing.expectEqual(@as(usize, 0), driver.support_merges);
-            try verifyPublication(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+            try verifyPublication(io, allocator, project.dir, runner, &driver, boot.ready.workflows.registry().contractSource());
             var readback: std.heap.ArenaAllocator = .init(allocator);
             defer readback.deinit();
             const a = readback.allocator();
             const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
-            const restored = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
+            const restored = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer);
             const state = restored.specified() orelse return error.ExpectedSpecifiedState;
             const reference = state.reference;
             try std.testing.expectEqual(@as(usize, 0), reference.conflicts.len);
@@ -2097,20 +2373,22 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expect(std.mem.startsWith(u8, published, "# Feature Specification: Required output\n"));
             const forged = try std.mem.replaceOwned(u8, a, saved, "\"display_name\":{\"bytes\":\"Required output\"", "\"display_name\":{\"bytes\":\"Required outputs\"");
             try std.testing.expect(!std.mem.eql(u8, forged, saved));
-            try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, forged, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource()));
+            try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, forged, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer));
             try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .functional_requirement));
             try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .acceptance_criterion));
             try std.testing.expectEqual(@as(@TypeOf(state.content.entities.disposition), if (mode == .entities) .required else .not_applicable), state.content.entities.disposition);
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/clarify/S01.md", .{}));
         }
-        if (scenario == 3) try verifyPublication(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+        if (scenario == 3) try verifyPublication(io, allocator, project.dir, runner, &driver, boot.ready.workflows.registry().contractSource());
         if (disposition_scenario) {
             try driver.verifyDispositionSequence(result);
+            // The dispositions request's step took the raised limit: three plus the first attempt, as the independent literal.
+            if (raised_limit and driver.disposition_sequence == .exhaust) try std.testing.expectEqual(@as(u32, 4), driver.largest_allowance);
             if (expected == .ok) {
                 var readback: std.heap.ArenaAllocator = .init(allocator);
                 defer readback.deinit();
                 const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-                const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
+                const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer)).specified().?;
                 // Two semantic repair subjects plus the native token remain
                 // fully accounted after the semantic-only disposition repair.
                 try std.testing.expectEqual(@as(usize, 3), state.reference.extraction.claims.len);
@@ -2181,6 +2459,14 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     const references = (try @import("../../src/application/specification_workflow.zig").readContext(&view)).references.records;
                     try std.testing.expectEqual(@as(usize, 0), references.conflicts.len);
                     try std.testing.expect(view.contains(.published_workflow_output));
+                    // The repair removes the only conflict group, so the re-pass has none and its conflicts answer is
+                    // forced (ADR 0022): the one conflicts request is the first pass's, and no second one follows.
+                    var conflicts_requests: usize = 0;
+                    for (runner.tokenLedger().accounted_operations.items) |operation| {
+                        const owner = operation.id.model_request_id.immutable_unit_owner_id;
+                        if (owner == .reference_global and std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-conflicts-") != null) conflicts_requests += 1;
+                    }
+                    try std.testing.expectEqual(@as(usize, 1), conflicts_requests);
                 }
                 if (expected == .failed) {
                     try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
@@ -2190,7 +2476,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 // These coherent, natively admitted references reached generation.
                 // No review follows it, so the scripted loss is never reported
                 // and nothing restarts its producer.
-                try verifyPublication(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+                try verifyPublication(io, allocator, project.dir, runner, &driver, boot.ready.workflows.registry().contractSource());
                 try std.testing.expectEqual(@as(usize, 0), driver.classification_repair_calls + driver.reconciliation_repair_calls);
             }
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
@@ -2220,7 +2506,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (source_gaps) {
             // Ready sources take no review, so a source gap the model would invent
             // after generation has no request to appear in.
-            try verifyPublication(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+            try verifyPublication(io, allocator, project.dir, runner, &driver, boot.ready.workflows.registry().contractSource());
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges + driver.initial_source_review_calls);
         }
         if (evidence_scenario) {
@@ -2228,7 +2514,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             _ = view;
-            try verifyPublication(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+            try verifyPublication(io, allocator, project.dir, runner, &driver, boot.ready.workflows.registry().contractSource());
         }
         if (expected == .needs_user) {
             var notice_arena: std.heap.ArenaAllocator = .init(allocator);
@@ -2268,7 +2554,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (scenario == 7) {
             const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?;
             try std.testing.expect(diagnostic == .coverage);
-            try std.testing.expectEqual(.no_independent_supported_target, diagnostic.coverage.blocked.?);
+            try std.testing.expectEqual(.no_independent_supported_target, diagnostic.coverage.blocked);
         }
         if (reconciliation_scenario) {
             const diagnostic = try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
@@ -2286,6 +2572,20 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             } else if (expected == .needs_user) {
                 try std.testing.expect(diagnostic != null and diagnostic.? == .support_findings);
             } else try std.testing.expect(diagnostic == null);
+            // ADR 0022 (amended 20 November 2026): a conflicts request is sent exactly when a conflict group exists to
+            // explain; with none the answer is the empty collection, which the engine constructs. These scenarios make
+            // no source repair, so the final groups are the groups the request saw; the source-repair scenarios below
+            // assert their own count.
+            if (runner.envelope.slots[@intFromEnum(pipeline.DataKey.accounted_reference_reconciliation)] != null) {
+                const accounted = try @import("../../src/application/reference_extraction_workflow.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
+                var conflicts_requests: usize = 0;
+                for (runner.tokenLedger().accounted_operations.items) |operation| {
+                    const owner = operation.id.model_request_id.immutable_unit_owner_id;
+                    if (owner == .reference_global and std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-conflicts-") != null) conflicts_requests += 1;
+                }
+                const conflict_groups = accounted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.proposal.conflict_groups.len;
+                try std.testing.expectEqual(conflict_groups != 0, conflicts_requests != 0);
+            }
             if (driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals) {
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
@@ -2315,11 +2615,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     try std.testing.expectEqual(@as(u32, 2), operation.id.model_attempt_ordinal.value);
                     corrections += 1;
                 };
-                try std.testing.expectEqual(@as(usize, if (driver.reconciliation_fault == .misbound_signals) 2 else 1), corrections);
+                // The one correction is the faulted summary or signals answer's. A signals answer is the last global
+                // request of a source with no conflict group, since its conflicts answer is forced (ADR 0022).
+                try std.testing.expectEqual(@as(usize, 1), corrections);
                 var readback: std.heap.ArenaAllocator = .init(allocator);
                 defer readback.deinit();
                 const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-                const restored = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
+                const restored = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer);
                 try std.testing.expect(restored.specified() != null);
             }
             if (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition) {
@@ -2393,8 +2695,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expectEqual(@as(usize, 2), attempts);
             if (driver.reconciliation_protocol_fault == .foreign_content_always) {
                 try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
-                try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
+                // The repair request ran until the allowance its compiled step gives was spent.
+                const allowed = try driver.allowance(request.?);
+                try std.testing.expectEqual(@as(usize, allowed), attempts);
+                try std.testing.expectEqual(allowed - 1, result.execution_rejected.retry_limit.limit.value);
+                try std.testing.expectEqual(@as(u64, allowed), result.execution_rejected.retry_limit.completed_executions);
                 const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
                 try std.testing.expect(!view.contains(.published_workflow_output));
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
@@ -2407,9 +2712,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expect(diagnostic == .reconciliation);
             try std.testing.expectEqual(@as(u64, 1), diagnostic.reconciliation.revision);
             try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
-            try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_repair_calls);
-            try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
-            try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
+            // The run ends on the last attempt of the repair request, whose compiled step gives the allowance.
+            const spent = runner.tokenLedger().accounted_operations.items;
+            try std.testing.expect(spent.len != 0);
+            const allowed = try driver.allowance(spent[spent.len - 1].id.model_request_id);
+            try std.testing.expectEqual(@as(usize, allowed), driver.reconciliation_repair_calls);
+            try std.testing.expectEqual(allowed - 1, result.execution_rejected.retry_limit.limit.value);
+            try std.testing.expectEqual(@as(u64, allowed), result.execution_rejected.retry_limit.completed_executions);
             // Self/foreign relation IDs fail protocol admission, so even
             // the repeated response consumes the numeric correction bound.
             try std.testing.expectEqual(.retry_limit, result.execution_rejected.retry_limit.reason);
@@ -2530,6 +2839,48 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expect(try expectEngineBoundCriteria(allocator, session) != 0);
             try std.testing.expect(driver.scenario_calls > @import("../../src/domain/specification_session.zig").scenarioPopulation(session));
         }
+        if (fault != null and fault.?.shape == .split_claim) {
+            // The correction named the split claims, and the answer it asked for published, so the fault was not vacuous.
+            try std.testing.expect(driver.split_claim_corrections != 0);
+        }
+        if (story_restatement_scenario) {
+            assertion_context = "story-restatement";
+            // ADR 0035: the first group's batch holds a record that states the story's own text ahead of an
+            // outcome naming the same claim, and no requirement names that claim. ADR 0038 Decision 5 would
+            // delete that outcome and keep the restatement, so a batch that keeps the outcome and holds no
+            // record of the restating kind shows the story comparison ran. The scripts offer no other record of that kind.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            const sessions = @import("../../src/domain/specification_session.zig");
+            const story = session.units[sessions.story_index].?.response.content.primary_user_story;
+            var outcomes: usize = 0;
+            assertion_context = "story-restatement-kept-record";
+            for (session.record_batches) |batch| for (batch.response.content.records) |record| {
+                try std.testing.expect(!std.mem.eql(u8, @tagName(std.meta.activeTag(record.content)), @tagName(driver.story_restatement.?)));
+                try std.testing.expect(!try @import("../../src/domain/specification_generation.zig").restatesStory(allocator, story, record));
+                if (record.content == .user_visible_outcome) outcomes += 1;
+            };
+            assertion_context = "story-restatement-kept-outcome";
+            try std.testing.expect(outcomes != 0);
+            // The restating record was offered, and the run made no repair request: the engine deleted it itself.
+            assertion_context = "story-restatement-offered";
+            try std.testing.expect(driver.story_restatements != 0);
+            assertion_context = "story-restatement-no-repair-request";
+            for (runner.tokenLedger().accounted_operations.items) |operation| try std.testing.expect(operation.id.model_request_id.purpose != .atomic_repair);
+        }
+        if (text_repair_scenario) {
+            assertion_context = "text-repair";
+            // The rejected reason took one model request of the repair route, which belongs to an extraction
+            // chunk, and its corrected answer validated, so the run publishes instead of ending at the rejection.
+            var repairs: usize = 0;
+            for (runner.tokenLedger().accounted_operations.items) |operation| {
+                const id = operation.id.model_request_id;
+                if (id.purpose != .atomic_repair) continue;
+                try std.testing.expect(std.meta.activeTag(id.immutable_unit_owner_id) == .reference_chunk);
+                repairs += 1;
+            }
+            try std.testing.expectEqual(@as(usize, 1), repairs);
+        }
         if (fault != null and fault.?.shape == .duplicate_record) {
             // The repeat was deleted natively: no batch keeps two records of equal content.
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
@@ -2620,7 +2971,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             }
         }
         if (scenario == 0) {
-            try expectAuthoringCatalogueCalls(&runner, driver.generation_calls);
+            try expectAuthoringCatalogueCalls(runner, driver.generation_calls);
             try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
         }
         if (expected == .ok) {
@@ -2674,7 +3025,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expect(std.mem.indexOf(u8, bytes, "Status: Incomplete") != null);
             try std.testing.expectError(error.InvalidSpecification, @import("../../src/domain/specification_markdown.zig").parse(a, bytes));
             const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
-            const pending = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
+            const pending = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer);
             try std.testing.expect(pending.value == .pending and pending.specified() == null);
             for (pending.value.pending.open_clarifications) |id| {
                 const name = id.filename();
@@ -2730,21 +3081,30 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 const a = readback.allocator();
                 const state_path = "engine/workflows/features/chosen/state/workflow.json";
                 const saved = try project.dir.readFileAlloc(io, state_path, a, .limited(64 * 1024 * 1024));
-                var restored = (try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
+                var restored = (try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource(), readback_normalizer)).specified().?;
                 try std.testing.expectEqualStrings("spec-generation", restored.reference.extraction_contract.?.workflow_id.bytes);
                 restored.reference.extraction_contract.?.workflow_version += 1;
                 try project.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, restored, .{}) });
                 // Publication changes previously absent filesystem roots. A new
                 // invocation must bootstrap their current physical authority.
-                var next_boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry);
-                defer next_boot.deinit();
-                try std.testing.expect(next_boot == .ready);
-                native.bindRoots(next_boot.ready.roots.registry());
-                native.bindWorkflows(next_boot.ready.workflows.registry());
-                const next_graph = next_boot.ready.workflows.registry().resolve(graph.authority.workflow_id).?;
-                var next_runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = runner.selected.invocation, .graph = next_graph }, &native.registry, next_boot.ready.logs.barrier(), .{}, &services, next_boot.ready.config.config().workflowTokenBudget);
-                defer next_runner.deinit();
-                var next_driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &next_runner, .fake = &fake, .allocator = allocator };
+                var next_production: composition.Runtime = undefined;
+                next_production.init(io, allocator, project.dir, .{});
+                defer next_production.deinit();
+                next_production.native.ops.prepare_reference_evidence.action.identities = reference_ids.port();
+                try std.testing.expect(next_production.boot == .ready);
+                // The same substitutions as the first run's, so a request this run wrongly made would reach the
+                // recorded provider and count as a call.
+                next_production.native.model_requests.stages.prepare_authorization.action = .{ .authorization = authorization.port() };
+                next_production.native.model_requests.stages.invoke_model.action = .{ .provider = recorder.interface() };
+                var next_providers: MatrixProviderBootstrap = .{ .allocator = allocator };
+                var next_invocation = next_production.invocation(&.{ "spec-generation", "--feature", "chosen", "--reference", "first" }, .{ .snapshots = .initFill(null) });
+                defer next_invocation.deinit();
+                next_invocation.provider_bootstrap = next_providers.binding();
+                next_invocation.provider_runtime = null;
+                try prepareMatrixInvocation(&next_invocation);
+                const next_runner = &next_invocation.pipeline_runner.?;
+                next_runner.provider_clock = clock.port();
+                var next_driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = next_runner, .fake = &fake, .allocator = allocator };
                 const rejected = try next_driver.run();
                 if (rejected != .execution_rejected or rejected.execution_rejected != .operation_failed) std.debug.print("stale extraction contract rerun: outcome={s}, result={s}, operation={s}, calls={d}\n", .{ @tagName(rejected.executionStatus().?), @tagName(rejected), next_driver.rejected_operation orelse "none", next_driver.calls });
                 try std.testing.expect(rejected == .execution_rejected and rejected.execution_rejected == .operation_failed);
@@ -2755,63 +3115,10 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             }
         } else if (expected != .needs_user) try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
         choice_corrections += driver.choice_corrections;
-        cost.passed();
+        phase = .cleanup;
     }
     // The main matrix scripts such corrections, so the driver's check of each one was not vacuous.
     if (workflow_cases == .existing) try std.testing.expect(choice_corrections > 0);
-}
-
-// Offline authorization preflight for the Phase 5 diagnostic launcher. Resolve
-// the authentic extraction-parent preparation through the current compiled
-// graph and production provider bootstrap; no request is dispatched.
-fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, graph: *const workflow_compilation.CompiledWorkflow, provider_path: *const bootstrap_root_registry.LLMProviderConfigCapability) !void {
-    var arena: std.heap.ArenaAllocator = .init(allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const repository = std.Io.Dir.cwd();
-    const config_bytes = try repository.readFileAlloc(io, "test/e2e/wf-001-hello-world/.sddtoolkit.json", a, .limited(1_048_576));
-    var configuration = try @import("../../src/domain/engine_config_decode.zig").decode(a, config_bytes);
-    defer configuration.deinit();
-    const provider_bytes = try repository.readFileAlloc(io, "test/e2e/config/.sddproviders.json", a, .limited(1_048_576));
-    // This integration fixture explicitly configures this provider path; the
-    // production bootstrap below still opens it through the validated capability.
-    try project.writeFile(io, .{ .sub_path = ".sddproviders.json", .data = provider_bytes });
-    var assembly = model_provider_bootstrap.Assembly.init(io, a, project, .{}, &@import("../../src/composition/provider_model_contracts.zig").registry);
-    const selected: workflow_execution.SelectedWorkflow = .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph };
-    var outcome = assembly.bind().invoke(&selected, &configuration.config.models, configuration.config.temperatures(), provider_path);
-    defer outcome.deinit();
-    try std.testing.expect(outcome == .ready);
-    const step = for (graph.authority.steps) |*current| {
-        if (std.mem.eql(u8, current.id.bytes, "g7-extract-content")) break current;
-    } else return error.MissingDiagnosticParentStep;
-    try std.testing.expectEqualStrings("request-model", step.operation_id.bytes);
-    try std.testing.expectEqualStrings("spec_generation", step.model.?.slot.bytes);
-    const binding = try (@import("../../src/actions/provider/resolve_provider_model_binding.zig").Action{}).execute(graph, step.id, outcome.ready.registry(), outcome.ready.allowlist());
-    const configured = configuration.config.models.slots.map.get(binding.slot_id.bytes).?;
-    try std.testing.expectEqualStrings(configured.provider, binding.registry_entry.provider.bytes);
-    try std.testing.expectEqualStrings(configured.model, binding.registry_entry.model.bytes);
-    try std.testing.expect(@import("../../src/domain/request_debugger.zig").sameOptional(configured.reasoningEffort, binding.reasoning_effort));
-    try std.testing.expectEqualDeep(binding.registry_entry.capabilities.inferenceControls(configuration.config.temperatures()), binding.controls);
-    var digest: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(graph.source.?.content, &digest, .{});
-    const observed = .{
-        .version = "authoring-diagnostic-parent-preflight/v1",
-        .workflow = graph.authority.workflow_id.bytes,
-        .workflow_version = graph.authority.workflow_version,
-        .workflow_sha256 = std.fmt.bytesToHex(digest, .lower),
-        .request_step = step.id.bytes,
-        .operation = step.operation_id.bytes,
-        .slot = binding.slot_id.bytes,
-        .provider = binding.registry_entry.provider.bytes,
-        .model = binding.registry_entry.model.bytes,
-        .provider_config = binding.registry_entry.config,
-        .reasoning_effort = binding.reasoning_effort,
-        .response_mode = binding.registry_entry.responseMode(),
-        .controls = binding.controls,
-        .dispatched_calls = @as(u32, 0),
-    };
-    try repository.createDirPath(io, ".zig-cache/authoring-associations");
-    try repository.writeFile(io, .{ .sub_path = ".zig-cache/authoring-associations/parent-preflight.json", .data = try std.json.Stringify.valueAlloc(a, observed, .{ .whitespace = .indent_2 }) });
 }
 
 /// ADR 0038 Decision 3: each group with a scenario slot holds one acceptance criterion for each
@@ -2874,12 +3181,12 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const a = arena.allocator();
     check = "canonical persisted state";
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
-    const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
+    const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts, readback_normalizer);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v26", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v26", "specification-state/v25");
+    try std.testing.expectEqualStrings("specification-state/v29", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v29", "specification-state/v28");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
-    try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
+    try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts, readback_normalizer));
     const principles = @import("../../src/domain/principle_registry.zig");
     const live_registry = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/principle_workflow.zig").registry_schema, principles.Registry);
     try std.testing.expect(try principles.equal(a, live_registry.*, persisted.principle_registry));
@@ -2946,8 +3253,7 @@ test "feature input YAML is read-only for new targets and unrelated workflows" {
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));
     }
     // Unselected invalid content is not read, even though its reader is registered.
-    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
-    try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/unknown.txt", .data = "unrecognized" });
+    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify/unrecognized");
     try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).executionStatus().?);
 }
 
@@ -3003,7 +3309,12 @@ test "feature input failures preserve invalid stale and changed close submission
         if (failure == .wrong_feature) captures.state = try std.mem.replaceOwned(u8, allocator, captures.state.?, "Chosen/Café", "Unrelated");
         if (failure == .orphan_form) captures.state = null;
         try writeClarificationCapture(io, project.dir, captures);
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+        // A rejected form blocks the run (ADR 0025); a registry that is not the feature's, or not a registry, still fails it.
+        const expected: workflow.OutcomeTag = switch (failure) {
+            .malformed_state, .wrong_feature => .failed,
+            .malformed_form, .stale_form, .changed_answer, .missing_form, .orphan_form => .blocked,
+        };
+        try std.testing.expectEqual(expected, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
         if (failure == .missing_form) {
             try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/clarify/S01.md", .{}));
         } else {
@@ -3016,8 +3327,8 @@ test "feature input failures preserve invalid stale and changed close submission
 
 test "feature input capture rejects unknown entries directories and symlink paths" {
     const io = std.testing.io;
-    for ([_]enum { unknown, nested, collection_file, collection_link, form_link, dangling_form, state_link, state_parent_link, alias_form }{
-        .unknown, .nested, .collection_file, .collection_link, .form_link, .dangling_form, .state_link, .state_parent_link, .alias_form,
+    for ([_]enum { nested, collection_file, collection_link, form_link, dangling_form, state_link, state_parent_link, alias_form, alias_extension, zero_ordinal, stray_link, oversized_form }{
+        .nested, .collection_file, .collection_link, .form_link, .dangling_form, .state_link, .state_parent_link, .alias_form, .alias_extension, .zero_ordinal, .stray_link, .oversized_form,
     }) |failure| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -3037,8 +3348,13 @@ test "feature input capture rejects unknown entries directories and symlink path
             else => {
                 try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
                 switch (failure) {
-                    .unknown => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/notes.txt", .data = "unknown" }),
                     .nested => try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify/nested"),
+                    .alias_extension => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/S01.MD", .data = "alias" }),
+                    .zero_ordinal => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/S00.md", .data = "no such form" }),
+                    // A form is still read, so a form larger than a form may be still fails.
+                    .oversized_form => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/S01.md", .data = "x" ** (20 * 1024) }),
+                    // Only a regular file is left alone: a link with a name no form has still fails.
+                    .stray_link => try project.dir.symLink(io, "../../../../../outside/data", "requirements/current/Chosen/Café/clarify/notes.txt", .{}),
                     .form_link => try project.dir.symLink(io, "../../../../../outside/data", "requirements/current/Chosen/Café/clarify/S01.md", .{}),
                     .dangling_form => try project.dir.symLink(io, "missing.md", "requirements/current/Chosen/Café/clarify/S01.md", .{}),
                     .alias_form => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/s01.md", .data = "alias" }),
@@ -3047,6 +3363,43 @@ test "feature input capture rejects unknown entries directories and symlink path
             },
         }
         try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+    }
+}
+
+test "regular files in clarify/ that no form could be named are never opened or changed, and the run completes" {
+    const form_limit = @import("../../src/domain/clarification_inputs.zig").max_form_bytes;
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
+    // One is larger than a form may be, so opening it would fail the capture.
+    const oversized = try std.testing.allocator.alloc(u8, 2 * form_limit);
+    defer std.testing.allocator.free(oversized);
+    @memset(oversized, 'x');
+    const strays = [_]struct { name: []const u8, bytes: []const u8 }{
+        .{ .name = "notes.txt", .bytes = "unknown" },
+        .{ .name = ".DS_Store", .bytes = "finder" },
+        .{ .name = "S01.md.bak", .bytes = "backup" },
+        .{ .name = "S1.md", .bytes = "short" },
+        .{ .name = "big.log", .bytes = oversized },
+    };
+    for (strays) |stray| {
+        const path = try std.fmt.allocPrint(std.testing.allocator, "requirements/current/Chosen/Café/clarify/{s}", .{stray.name});
+        defer std.testing.allocator.free(path);
+        try project.dir.writeFile(io, .{ .sub_path = path, .data = stray.bytes });
+    }
+    // One nobody can read, so opening it would fail the capture.
+    try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/locked.log", .data = "locked", .flags = .{ .permissions = std.Io.File.Permissions.fromMode(0o000) } });
+    for (0..2) |_| {
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+        for (strays) |stray| {
+            const path = try std.fmt.allocPrint(std.testing.allocator, "requirements/current/Chosen/Café/clarify/{s}", .{stray.name});
+            defer std.testing.allocator.free(path);
+            const kept = try project.dir.readFileAlloc(io, path, std.testing.allocator, .limited(2 * form_limit + 1));
+            defer std.testing.allocator.free(kept);
+            try std.testing.expectEqualSlices(u8, stray.bytes, kept);
+        }
     }
 }
 
@@ -3122,12 +3475,17 @@ test "clarification publication refreshes stable paths and protects concurrent c
             const input_steps = @import("../../src/actions/specify/prepare_inputs.zig").steps;
             const parsed = try input_steps.parseClarificationState(parser.stateParser(), a, captured);
             const state = try c.validate(parsed, selected.feature_id);
-            const inputs = try input_steps.validateClarificationForms(parser.formParser(), a, state, captured);
+            const inputs = switch (try input_steps.validateClarificationForms(parser.formParser(), a, state, captured)) {
+                .accepted => |accepted| accepted,
+                .rejected => return error.FormsRejected,
+            };
             const record = fixture.record(name);
             const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
             const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need}, .original_sources = &.{} });
             const views = try @import("../../src/domain/clarification_views.zig").render(a, next, inputs.protected_forms);
-            const prepared = try (@import("../../src/actions/clarification/prepare_clarification_output.zig").Action{}).execute(a, observed, paths, captured, inputs, .{ .ready = next }, views);
+            var evidence_source = source_adapter.actorEvidenceCapturer();
+            evidence_source.capability = registry.featureInputRead();
+            const prepared = try @import("../../src/domain/clarification_output.zig").prepare(a, observed, paths, captured, inputs, .{ .ready = next }, views, @import("../../src/domain/actor_evidence.zig").empty(selected.feature_id), try evidence_source.capture(a, observed, paths));
             const form_path = try std.mem.concat(a, u8, &.{ selected.project_relative_path, "/clarify/", name, ".md" });
             var writer_adapter: @import("../../src/adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
             var writer = writer_adapter.port();
@@ -3153,6 +3511,218 @@ test "clarification publication refreshes stable paths and protects concurrent c
             try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, paths.get(.workflow_state).project_relative, .{}));
         }
     }
+}
+
+const ClarificationFiles = struct { form: []const u8, registry: []const u8 };
+
+/// One clarification refresh and publication over the project's current files, as the input and output stages do it:
+/// capture, parse and validate the registry and its forms, refresh one open need, render, publish. The registry is the
+/// last file of the set, so `fail_registry` fails it after the forms were written. `files` names the round's form and
+/// registry once they are known, copied into `keep`.
+fn clarificationRound(io: std.Io, keep: std.mem.Allocator, project: std.Io.Dir, name: []const u8, fail_registry: bool, files: *ClarificationFiles) !void {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    const fixture = @import("../../src/test_fixtures/clarification_inputs.zig");
+    const refresh = @import("../../src/domain/clarification_refresh.zig");
+    const parser = @import("../../src/adapters/parsers/clarification_inputs.zig");
+    const access = @import("../../src/adapters/filesystem/file_access.zig");
+    const Failing = struct {
+        var calls: usize = 0;
+        var fail_at: ?usize = null;
+        fn replace(replace_io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, file: []const u8, expected: access.Expected, bytes: []const u8) access.Error!void {
+            const index = calls;
+            calls += 1;
+            if (fail_at == index) return error.FileUnavailable;
+            return access.replace(replace_io, allocator, parent, file, expected, bytes);
+        }
+    };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var boot = runInProject(io, std.testing.allocator, project);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    const selected = try @import("../../src/domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+    var inspector_adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project };
+    var inspector = inspector_adapter.inspector();
+    inspector.capability = registry.featureDirectoryRead();
+    const observed = try inspector.inspect(a, selected);
+    const paths = try @import("../../src/domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+    var source_adapter: @import("../../src/adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project };
+    var source = source_adapter.capturer();
+    source.capability = registry.featureInputRead();
+    const captured = try source.capture(a, observed, paths);
+    const input_steps = @import("../../src/actions/specify/prepare_inputs.zig").steps;
+    const parsed = try input_steps.parseClarificationState(parser.stateParser(), a, captured);
+    const state = try c.validate(parsed, selected.feature_id);
+    const inputs = switch (try input_steps.validateClarificationForms(parser.formParser(), a, state, captured)) {
+        .accepted => |accepted| accepted,
+        .rejected => return error.FormsRejected,
+    };
+    const record = fixture.record(name);
+    const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
+    const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need}, .original_sources = &.{} });
+    const views = try @import("../../src/domain/clarification_views.zig").render(a, next, inputs.protected_forms);
+    var evidence_source = source_adapter.actorEvidenceCapturer();
+    evidence_source.capability = registry.featureInputRead();
+    const prepared = try @import("../../src/domain/clarification_output.zig").prepare(a, observed, paths, captured, inputs, .{ .ready = next }, views, @import("../../src/domain/actor_evidence.zig").empty(selected.feature_id), try evidence_source.capture(a, observed, paths));
+    files.* = .{
+        .form = try std.mem.concat(keep, u8, &.{ selected.project_relative_path, "/clarify/", name, ".md" }),
+        .registry = try keep.dupe(u8, paths.get(.clarification_state).project_relative),
+    };
+    var adapter: @import("../../src/adapters/filesystem/workflow_output.zig").Writer(Failing.replace) = .{ .io = io, .project_root = project };
+    var writer = adapter.port();
+    writer.capability = registry.featureOutputWrite();
+    Failing.calls = 0;
+    Failing.fail_at = if (fail_registry) prepared.files.len - 1 else null;
+    try writer.publish(a, prepared);
+}
+
+// ADR 0009: a fresh rerun replaces the complete output set after a failed write, unresolved forms included, and a form
+// the user closed is never overwritten. The forms a failed registry write leaves are replaced by the rerun unless one
+// holds a submission, which stops it with the file unchanged.
+test "a registry write that fails behind its forms is replaced by the rerun unless a form holds a submission" {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../src/domain/clarification_form.zig");
+    const fixture = @import("../../src/test_fixtures/clarification_inputs.zig");
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // No registry published before the failed round (its form has no registry), and one published before (its form
+    // is a registry revision ahead of the registry); the user closes the leftover form, or does not.
+    for ([_]bool{ false, true }) |published_before| for ([_]bool{ false, true }) |closed_by_user| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+        var files: ClarificationFiles = undefined;
+        var form_before: ?[]const u8 = null;
+        var registry_before: ?[]const u8 = null;
+        if (published_before) {
+            try clarificationRound(io, a, project.dir, "S01", false, &files);
+            form_before = try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes));
+            registry_before = try project.dir.readFileAlloc(io, files.registry, a, .limited(c.max_state_bytes));
+        }
+        try std.testing.expectError(error.OutputWriteFailed, clarificationRound(io, a, project.dir, "S01", true, &files));
+        // The forms precede the registry, so the failed round replaced a form and left the registry as it was.
+        var form_after = try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes));
+        if (form_before) |bytes| try std.testing.expect(!std.mem.eql(u8, bytes, form_after));
+        try expectRegistry(io, a, project.dir, files.registry, registry_before);
+        if (closed_by_user) {
+            form_after = try forms.render(a, fixture.record("S01"), .{ .state_ordinal = 9, .state_revision = 9, .record_revision = 9, .status = .open }, .closed, "An answer.");
+            try project.dir.writeFile(io, .{ .sub_path = files.form, .data = form_after });
+            try std.testing.expectError(error.FormsRejected, clarificationRound(io, a, project.dir, "S01", false, &files));
+            try std.testing.expectEqualStrings(form_after, try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes)));
+            try expectRegistry(io, a, project.dir, files.registry, registry_before);
+        } else {
+            try clarificationRound(io, a, project.dir, "S01", false, &files);
+            const registry_after = try project.dir.readFileAlloc(io, files.registry, a, .limited(c.max_state_bytes));
+            if (registry_before) |bytes| try std.testing.expect(!std.mem.eql(u8, bytes, registry_after));
+            // The form is the canonical rendering for the registry the rerun published: replaced, not set aside.
+            const published = try @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser().parse(a, registry_after);
+            const canonical = try forms.render(a, published.records[0], fixture.binding(published, published.records[0]), .open, "");
+            try std.testing.expectEqualStrings(canonical, try project.dir.readFileAlloc(io, files.form, a, .limited(c.max_form_bytes)));
+            try clarificationRound(io, a, project.dir, "S01", false, &files);
+        }
+    };
+}
+
+test "an unsubmitted form of no record is left in place and ignored by later rounds, and a close of it stops them" {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../src/domain/clarification_form.zig");
+    const fixture = @import("../../src/test_fixtures/clarification_inputs.zig");
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+    // A file no form could be named sits beside the forms through every round, which neither reads nor writes it.
+    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
+    try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/.DS_Store", .data = "finder" });
+    // A failed round writes the form of a need that the next rounds do not have.
+    var orphan: ClarificationFiles = undefined;
+    try std.testing.expectError(error.OutputWriteFailed, clarificationRound(io, a, project.dir, "P01", true, &orphan));
+    const orphan_bytes = try project.dir.readFileAlloc(io, orphan.form, a, .limited(c.max_form_bytes));
+    var files: ClarificationFiles = undefined;
+    for (0..2) |_| {
+        try clarificationRound(io, a, project.dir, "S01", false, &files);
+        // No round writes it, since no record names it, and none deletes it.
+        try std.testing.expectEqualStrings(orphan_bytes, try project.dir.readFileAlloc(io, orphan.form, a, .limited(c.max_form_bytes)));
+    }
+    // Once the user closes it, it holds a submission no record can take, and every round stops with it unchanged.
+    const closed = try forms.render(a, fixture.record("P01"), .{ .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .status = .open }, .closed, "An answer.");
+    try project.dir.writeFile(io, .{ .sub_path = orphan.form, .data = closed });
+    try std.testing.expectError(error.FormsRejected, clarificationRound(io, a, project.dir, "S01", false, &files));
+    try std.testing.expectEqualStrings(closed, try project.dir.readFileAlloc(io, orphan.form, a, .limited(c.max_form_bytes)));
+    try std.testing.expectEqualStrings("finder", try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/.DS_Store", a, .limited(64)));
+}
+
+// ADR 0025: one invalid closed form blocks the run and none of the answers are accepted. The inputs stage names each
+// rejected form with the rule it broke where the operator reads it, and writes nothing: forms and registry stay byte
+// for byte as they were.
+test "an invalid closed clarification form blocks the run with the rule it broke and writes nothing" {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../src/domain/clarification_form.zig");
+    const fixture = @import("../../src/test_fixtures/clarification_inputs.zig");
+    const rejection = @import("../../src/domain/clarification_form_rejection.zig");
+    const io = std.testing.io;
+    const open_binding: forms.Binding = .{ .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .status = .open };
+    const Row = struct { captures: c.Captures, expected: []const rejection.FormRejection };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var rows: std.ArrayList(Row) = .empty;
+    // A recorded response whose form was edited after acceptance.
+    const recorded = try fixture.closed(a, "S01", true);
+    const edited = try std.mem.replaceOwned(u8, a, recorded.forms[0].bytes, "Approved Café", "Different Café");
+    try rows.append(a, .{ .captures = .{ .state = recorded.state, .forms = &.{.{ .id = recorded.forms[0].id, .bytes = edited }} }, .expected = &.{.{ .id = recorded.forms[0].id, .reason = .saved_form_changed }} });
+    // A record whose form was removed.
+    try rows.append(a, .{ .captures = .{ .state = recorded.state, .forms = &.{} }, .expected = &.{.{ .id = c.Id.parse("S01").?, .reason = .form_missing }} });
+    // A closed form of no record, in each stage.
+    for ([_][]const u8{ "S01", "P01", "T01" }) |name| {
+        const bytes = try forms.render(a, fixture.record(name), open_binding, .closed, "An answer.");
+        try rows.append(a, .{ .captures = .{ .state = null, .forms = &.{.{ .id = c.Id.parse(name).?, .bytes = bytes }} }, .expected = &.{.{ .id = c.Id.parse(name).?, .reason = .form_without_record }} });
+    }
+    for (rows.items) |row| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        try writeClarificationCapture(io, project.dir, row.captures);
+        var report = reportInvocation(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }, .{}, null) catch return error.TestUnexpectedResult;
+        defer report.deinit();
+        try std.testing.expectEqual(workflow.OutcomeTag.blocked, report.outcome.executionStatus().?);
+        try std.testing.expectEqualStrings("InvalidClarificationInput", @tagName(report.last_operation_rejection.?.cause));
+        try std.testing.expectEqualDeep(row.expected, report.form_rejections);
+        // Nothing was written or removed: the forms and the registry are as the user and the last run left them.
+        for (row.captures.forms) |form| {
+            const retained = try project.dir.readFileAlloc(io, try std.mem.concat(a, u8, &.{ "requirements/current/Chosen/Café/clarify/", &form.id.filename() }), a, .limited(c.max_form_bytes));
+            try std.testing.expectEqualStrings(form.bytes, retained);
+        }
+        if (row.captures.state) |bytes| try std.testing.expectEqualStrings(bytes, try project.dir.readFileAlloc(io, "engine/workflows/features/Chosen/Café/state/clarifications.json", a, .limited(c.max_state_bytes)));
+        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
+        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "engine/workflows/features/Chosen/Café/state/workflow.json", .{}));
+    }
+    // The same forms that are valid are accepted, so a rejection is the form's and no property of the run.
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try writeClarificationCapture(io, project.dir, recorded);
+    var accepted = reportInvocation(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }, .{}, null) catch return error.TestUnexpectedResult;
+    defer accepted.deinit();
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, accepted.outcome.executionStatus().?);
+    try std.testing.expectEqual(@as(usize, 0), accepted.form_rejections.len);
+}
+
+/// The registry file holds exactly `expected` bytes, or does not exist when `expected` is null.
+fn expectRegistry(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, path: []const u8, expected: ?[]const u8) !void {
+    const c = @import("../../src/domain/clarification_inputs.zig");
+    if (expected) |bytes| {
+        try std.testing.expectEqualStrings(bytes, try project.readFileAlloc(io, path, a, .limited(c.max_state_bytes)));
+    } else try std.testing.expectError(error.FileNotFound, project.openFile(io, path, .{}));
 }
 
 test "registered output writer validates the complete set and never writes completion after a failed file" {
@@ -3194,6 +3764,105 @@ test "registered output writer validates the complete set and never writes compl
     prepared.files = &.{.{ .target = view.target, .bytes = "x\n" }};
     try writer.publish(a, prepared);
     try std.testing.expectEqualStrings("x\n", try project.dir.readFileAlloc(io, paths.get(.reference_context).project_relative, a, .limited(128)));
+}
+
+test "the actor-evidence registry is written under its exact prior and before the state that joins it" {
+    const output = @import("../../src/domain/workflow_output.zig");
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+    var boot = runInProject(io, std.testing.allocator, project.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const selected = try @import("../../src/domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+    var inspector_adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var inspector = inspector_adapter.inspector();
+    inspector.capability = registry.featureDirectoryRead();
+    const observed = try inspector.inspect(a, selected);
+    const paths = try @import("../../src/domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+    const evidence_file: output.File = .{ .target = .{ .artifact = .actor_evidence }, .bytes = "registry\n" };
+    const state_file: output.File = .{ .target = .{ .artifact = .clarification_state }, .bytes = "state\n" };
+    const completion: output.File = .{ .target = .{ .artifact = .workflow_state }, .bytes = "completion\n" };
+    var prepared: output.Prepared = .{ .terminal_outcome = .ok, .feature = observed, .paths = paths, .prior = .{ .state = null, .forms = &.{} }, .prior_workflow_state = .{ .captured = null }, .prior_actor_evidence = .{ .captured = null }, .files = &.{ evidence_file, state_file, completion } };
+    var writer_adapter: @import("../../src/adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var writer = writer_adapter.port();
+    writer.capability = registry.featureOutputWrite();
+    const registry_path = paths.get(.actor_evidence).project_relative;
+    const state_path = paths.get(.clarification_state).project_relative;
+    // The shape: a registry names its prior, and no state that joins it is written before it. Nothing is written.
+    prepared.prior_actor_evidence = .unselected;
+    try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+    prepared.prior_actor_evidence = .{ .captured = null };
+    prepared.files = &.{ state_file, evidence_file, completion };
+    try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+    prepared.files = &.{ evidence_file, completion, state_file };
+    try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, registry_path, .{}));
+    // The precondition: a registry that is not the one captured stops the output before any file is written, whether it
+    // is absent when a registry was captured or present when none was.
+    prepared.files = &.{ evidence_file, state_file, completion };
+    prepared.prior_actor_evidence = .{ .captured = "a registry that is not on disk\n" };
+    try std.testing.expectError(error.OutputChanged, writer.publish(a, prepared));
+    try project.dir.createDirPath(io, std.fs.path.dirname(registry_path).?);
+    try project.dir.writeFile(io, .{ .sub_path = registry_path, .data = "written meanwhile\n" });
+    prepared.prior_actor_evidence = .{ .captured = null };
+    try std.testing.expectError(error.OutputChanged, writer.publish(a, prepared));
+    try std.testing.expectEqualStrings("written meanwhile\n", try project.dir.readFileAlloc(io, registry_path, a, .limited(128)));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, state_path, .{}));
+    // The exact prior publishes: the registry is replaced completely and the state follows it.
+    prepared.prior_actor_evidence = .{ .captured = "written meanwhile\n" };
+    try writer.publish(a, prepared);
+    try std.testing.expectEqualStrings("registry\n", try project.dir.readFileAlloc(io, registry_path, a, .limited(128)));
+    try std.testing.expectEqualStrings("state\n", try project.dir.readFileAlloc(io, state_path, a, .limited(128)));
+}
+
+test "a registry changed after the run's own write stops the files that follow it" {
+    const access = @import("../../src/adapters/filesystem/file_access.zig");
+    const output = @import("../../src/domain/workflow_output.zig");
+    const Interfering = struct {
+        /// A writer other than the run replaces the registry the moment the run has written it.
+        fn replace(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, name: []const u8, expected: access.Expected, bytes: []const u8) access.Error!void {
+            try access.replace(io, allocator, parent, name, expected, bytes);
+            if (std.mem.eql(u8, name, @import("../../src/domain/workflow_artifact_registry.zig").actor_evidence_filename)) parent.writeFile(io, .{ .sub_path = name, .data = "foreign\n" }) catch return error.FileUnavailable;
+        }
+    };
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+    var boot = runInProject(io, std.testing.allocator, project.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const selected = try @import("../../src/domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+    var inspector_adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var inspector = inspector_adapter.inspector();
+    inspector.capability = registry.featureDirectoryRead();
+    const observed = try inspector.inspect(a, selected);
+    const paths = try @import("../../src/domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+    const prepared: output.Prepared = .{ .terminal_outcome = .ok, .feature = observed, .paths = paths, .prior = .{ .state = null, .forms = &.{} }, .prior_workflow_state = .{ .captured = null }, .prior_actor_evidence = .{ .captured = null }, .files = &.{
+        .{ .target = .{ .artifact = .actor_evidence }, .bytes = "registry\n" },
+        .{ .target = .{ .artifact = .clarification_state }, .bytes = "state\n" },
+        .{ .target = .{ .artifact = .workflow_state }, .bytes = "completion\n" },
+    } };
+    var adapter: @import("../../src/adapters/filesystem/workflow_output.zig").Writer(Interfering.replace) = .{ .io = io, .project_root = project.dir };
+    var writer = adapter.port();
+    writer.capability = registry.featureOutputWrite();
+    try std.testing.expectError(error.OutputChanged, writer.publish(a, prepared));
+    // The registry is the foreign one, and neither the state that joins it nor the completion was written.
+    try std.testing.expectEqualStrings("foreign\n", try project.dir.readFileAlloc(io, paths.get(.actor_evidence).project_relative, a, .limited(128)));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.clarification_state).project_relative, .{}));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.workflow_state).project_relative, .{}));
 }
 
 // Writer tests need configured roots, not the native input-preflight graph.
@@ -3323,7 +3992,12 @@ test "feature input compiler requires the declared read capability" {
         const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"), edit[0], edit[1]);
         defer std.testing.allocator.free(changed);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = changed });
-        try std.testing.expect(runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" }) == .bootstrap_failed);
+        // The narrower profile also lacks the `blocked` terminal the step declares, which another rule would refuse
+        // later: the rule named here is the capability check's own.
+        const Rule = @import("../../src/domain/definition_rejection.zig").Rule;
+        const detail = try rejectionDetail(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" });
+        try std.testing.expectEqualStrings("compile_workflows", detail.step);
+        try std.testing.expectEqual(@as(?Rule, .step_capabilities), detail.evidence.rule);
     }
 }
 
@@ -3358,20 +4032,11 @@ test "feature preflight uses configured specs roots and preserves selected files
         defer target.close(io);
         try target.writeFile(io, .{ .sub_path = "spec.md", .data = "existing spec\n" });
         try target.writeFile(io, .{ .sub_path = "unrelated.txt", .data = "unrelated\n" });
-        var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
-        var document_parser: toolchain_documents.Adapter = .{};
-        var reference_source: @import("../../src/adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var feature_source: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var native: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
-        var feature_inputs: @import("../../src/adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var reference_contents: @import("../../src/adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-        var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
-        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-        native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
-        var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
-        defer boot.deinit();
-        try std.testing.expect(boot == .ready);
+        var production: composition.Runtime = undefined;
+        production.init(io, std.testing.allocator, project.dir, .{});
+        defer production.deinit();
+        const boot = &production.boot;
+        try std.testing.expect(boot.* == .ready);
         var adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
         var inspector = adapter.inspector();
         inspector.capability = boot.ready.roots.registry().featureDirectoryRead();
@@ -3429,21 +4094,11 @@ test "feature inspection rejects missing authority stale roots and forged resolv
     defer project.cleanup();
     try writeReferencePreflightFixture(io, project.dir);
     try project.dir.createDirPath(io, "specs/chosen");
-    var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
-    var document_parser: toolchain_documents.Adapter = .{};
-    var reference_source: @import("../../src/adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
-    var feature_source: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
-    var native: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
-    var feature_inputs: @import("../../src/adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-    var reference_contents: @import("../../src/adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-    var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-    var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
-    native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-    native.prepare_inputs.action.state_source = feature_inputs.workflowStateCapturer();
-    var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
-    defer boot.deinit();
-    try std.testing.expect(boot == .ready);
-    const registry = boot.ready.roots.registry();
+    var production: composition.Runtime = undefined;
+    production.init(io, std.testing.allocator, project.dir, .{});
+    defer production.deinit();
+    try std.testing.expect(production.boot == .ready);
+    const registry = production.boot.ready.roots.registry();
     const selected = try feature.validate(std.testing.allocator, .{ .bytes = "chosen" }, registry.featureDirectoryRoots());
     defer std.testing.allocator.free(selected.project_relative_path);
     var adapter: @import("../../src/adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
@@ -3462,9 +4117,13 @@ test "feature inspection rejects missing authority stale roots and forged resolv
 
 test "input stage YAML rejects unknown parameters and insufficient read authority" {
     const io = std.testing.io;
+    const Rule = @import("../../src/domain/definition_rejection.zig").Rule;
+    // Each change is refused by its own startup step and rule, named here: an unknown parameter is refused while the
+    // definition is parsed, before any rule is recorded, and the narrower profile, which also lacks the `blocked`
+    // terminal the step declares, is refused by the capability check, which another rule would otherwise follow.
     const changes = .{
-        .{ "use: prepare-inputs", "use: prepare-inputs\n    with: { unexpected: true }" },
-        .{ "policy: core.feature-input-read@1", "policy: core.reference-read@1" },
+        .{ "use: prepare-inputs", "use: prepare-inputs\n    with: { unexpected: true }", "parse_workflows", @as(?Rule, null) },
+        .{ "policy: core.feature-input-read@1", "policy: core.reference-read@1", "compile_workflows", @as(?Rule, .step_capabilities) },
     };
     inline for (changes) |change| {
         var project = std.testing.tmpDir(.{});
@@ -3473,7 +4132,9 @@ test "input stage YAML rejects unknown parameters and insufficient read authorit
         const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"), change[0], change[1]);
         defer std.testing.allocator.free(changed);
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
-        try std.testing.expect(runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "chosen", "--reference", "source" }) == .bootstrap_failed);
+        const detail = try rejectionDetail(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "chosen", "--reference", "source" });
+        try std.testing.expectEqualStrings(change[2], detail.step);
+        try std.testing.expectEqual(change[3], detail.evidence.rule);
     }
 }
 
@@ -3710,21 +4371,16 @@ test "feature log storage opens only an activated layout from present artifact a
     defer active_feature_log_runtime.deinit(active_runtime);
     const shortcode = try @import("../../src/domain/telemetry.zig").WorkflowShortcode.parse("TEST");
     try std.testing.expect(boot.ready.logs.activate(
-        active_feature_log_runtime.runner(active_runtime).childBindings(),
+        active_feature_log_runtime.runner(active_runtime),
         shortcode,
     ) == .ok);
     const persisted = boot.ready.logs.barrier().process(.{
         .workflow_shortcode = shortcode,
-        .fact = .{ .event_type = .run_started },
+        .fact = .{ .run_started = .{} },
     });
     try std.testing.expect(persisted == .persisted);
     try project_root.dir.access(io, "specs/F0002/logs/events/RUN-1/LOGBIND-1/0001.log", .{});
-    var finalization_execution: feature_log_finalization_runner.Runner = .{
-        .target = active_feature_log_runtime.runner(active_runtime),
-        .mode = .active,
-        .shortcode = shortcode,
-    };
-    try std.testing.expect(boot.ready.logs.finalizeActive(finalization_execution.childBindings()) == .ok);
+    try std.testing.expect(boot.ready.logs.finalizeActive(active_feature_log_runtime.runner(active_runtime), shortcode) == .ok);
     const bytes = try project_root.dir.readFileAlloc(
         io,
         "specs/F0002/logs/events/RUN-1/LOGBIND-1/0001.log",
@@ -3819,34 +4475,6 @@ test "one unsupported workflow sibling blocks the complete registry" {
     defer outcome.deinit();
     try std.testing.expectEqual(
         @import("../../src/domain/bootstrap_error.zig").PublicError.WORKFLOW_AUTHORITY_INVENTORY_INVALID,
-        outcome.failed,
-    );
-}
-
-test "deadline exhaustion during root validation fails without publishing services" {
-    const io = std.testing.io;
-    var project_root = std.testing.tmpDir(.{});
-    defer project_root.cleanup();
-    try project_root.dir.writeFile(io, .{
-        .sub_path = ".sddtoolkit.json",
-        .data = valid_config,
-    });
-    try project_root.dir.createDirPath(io, ".sdd/workflows");
-
-    var control: RuntimeAfterObservations = .{
-        .active_observations_remaining = 10,
-        .terminal = .deadline_exhausted,
-    };
-    var outcome = runInProjectWithRuntime(
-        io,
-        std.testing.allocator,
-        project_root.dir,
-        control.runtime(),
-    );
-    defer outcome.deinit();
-
-    try std.testing.expectEqual(
-        @import("../../src/domain/bootstrap_error.zig").PublicError.BOOTSTRAP_ROOT_RESOLUTION_ERROR,
         outcome.failed,
     );
 }
@@ -4115,7 +4743,7 @@ test "normalization-equivalent absent roots fail as a registry error" {
     );
 }
 
-test "principle capture uses one no-follow root and the detailed and consolidated paths agree" {
+test "principle capture uses one no-follow root" {
     const io = std.testing.io;
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
@@ -4135,23 +4763,21 @@ test "principle capture uses one no-follow root and the detailed and consolidate
     const capability = boot.ready.roots.registry().projectPrinciples();
     var reader = source.reader();
     reader.capability = capability;
-    var enumerator = source.enumerator();
-    enumerator.capability = capability;
-    var capturer = source.capturer();
-    capturer.capability = capability;
+    const combined = try reader.read(a);
+    // `read` is its two phases: enumerate, then capture against that inventory.
     const normalization: @import("../../src/ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = @import("unicode_normalization").nfc };
     const folding: @import("../../src/ports/unicode_normalizer.zig").CaseFolder = .{ .fold_fn = @import("unicode_normalization").caseFold };
-    const inventory = try r.classify(a, try enumerator.enumerate(a), normalization, folding);
-    const low = try capturer.capture(a, inventory);
-    const combined = try reader.read(a);
-    try std.testing.expectEqualDeep(low, combined);
+    const Adapter = @TypeOf(source);
+    const inventory = try r.classify(a, try Adapter.enumerate(&source, capability, a), normalization, folding);
+    try std.testing.expectEqualDeep(try Adapter.capture(&source, capability, a, inventory), combined);
     try std.testing.expectEqual(@as(usize, 1), combined.sources.len);
     try std.testing.expectEqualStrings("Free-form policy.\nNo required heading or front matter.", combined.sources[0].bytes);
     const registry = try r.build(a, combined, null);
     const action: @import("../../src/actions/principle/capture_principle_registry.zig").Action = .{ .source = reader };
     try std.testing.expect(try r.equal(a, registry, try action.execute(a, null)));
     try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = "Changed policy." });
-    try std.testing.expectError(error.PrincipleSourceUnavailable, capturer.capture(a, inventory));
+    // A file changed after its inventory was taken is no capture of that inventory.
+    try std.testing.expectError(error.PrincipleSourceUnavailable, Adapter.capture(&source, capability, a, inventory));
     const refreshed = try action.execute(a, registry);
     try std.testing.expectEqual(registry.id.revision + 1, refreshed.id.revision);
     try std.testing.expect(refreshed.sources[0].id.ordinal >= registry.next_source);

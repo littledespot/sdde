@@ -10,6 +10,17 @@ const files = @import("file_access.zig");
 const source = @import("feature_input_source.zig");
 pub const Adapter = Writer(files.replace);
 
+/// A recheck or open that cannot complete reports a changed output, and a write that cannot complete a failed
+/// write; a cancellation is neither. What a cancelled write leaves on disk is the failed write's: files already
+/// replaced stay, and no completion marker is written.
+fn outputChanged(err: anyerror) output.Error {
+    return if (directories.isCancellation(err)) error.Cancelled else error.OutputChanged;
+}
+
+fn outputWriteFailed(err: anyerror) output.Error {
+    return if (directories.isCancellation(err)) error.Cancelled else error.OutputWriteFailed;
+}
+
 /// The test seam has exactly the registered-file replacement signature. It
 /// changes no path, precondition, ordering or completion policy.
 pub fn Writer(comptime replace_file: @TypeOf(files.replace)) type {
@@ -37,37 +48,47 @@ pub fn Writer(comptime replace_file: @TypeOf(files.replace)) type {
             var binding = effective.binding;
             var observed = effective.directory;
             var reader: source.Adapter = .{ .io = self.io, .project_root = self.project_root, .active_feature = self.active_feature };
-            const initial = reader.captureBound(binding, a, observed, prepared.paths) catch return error.OutputChanged;
+            const initial = reader.captureBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
             if (!output.sameCapture(prepared.prior, initial)) return error.OutputChanged;
             if (prepared.prior_workflow_state == .captured) {
-                const current = reader.captureWorkflowStateBound(binding, a, observed, prepared.paths) catch return error.OutputChanged;
+                const current = reader.captureWorkflowStateBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
                 if (!output.sameBytes(prepared.prior_workflow_state.captured, current)) return error.OutputChanged;
             }
-            const specs = (directories.openObserved(self.io, self.project_root, binding.paths.specs, binding.specs_observation) catch return error.OutputChanged) orelse
-                (directories.ensure(self.io, self.project_root, binding.paths.specs) catch return error.OutputWriteFailed);
+            if (prepared.prior_actor_evidence == .captured) {
+                const current = reader.captureActorEvidenceBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
+                if (!output.sameBytes(prepared.prior_actor_evidence.captured, current)) return error.OutputChanged;
+            }
+            const specs = (directories.openObserved(self.io, self.project_root, binding.paths.specs, binding.specs_observation) catch |err| return outputChanged(err)) orelse
+                (directories.ensure(self.io, self.project_root, binding.paths.specs) catch |err| return outputWriteFailed(err));
             defer specs.close(self.io);
-            binding.specs_observation = .{ .directory = directories.inspectReadable(self.io, specs) catch return error.OutputWriteFailed };
+            binding.specs_observation = .{ .directory = directories.inspectReadable(self.io, specs) catch |err| return outputWriteFailed(err) };
             observed.root_observation = binding.specs_observation;
-            const feature = (directories.openObserved(self.io, specs, observed.selector.feature_id.bytes, observed.observation) catch return error.OutputChanged) orelse
-                (directories.ensure(self.io, specs, observed.selector.feature_id.bytes) catch return error.OutputWriteFailed);
+            const feature = (directories.openObserved(self.io, specs, observed.selector.feature_id.bytes, observed.observation) catch |err| return outputChanged(err)) orelse
+                (directories.ensure(self.io, specs, observed.selector.feature_id.bytes) catch |err| return outputWriteFailed(err));
             defer feature.close(self.io);
-            observed.observation = .{ .directory = directories.inspectReadable(self.io, feature) catch return error.OutputWriteFailed };
+            observed.observation = .{ .directory = directories.inspectReadable(self.io, feature) catch |err| return outputWriteFailed(err) };
             var expected = prepared.prior;
+            // The registry bytes the output expects on disk: the prior ones until the registry is written, then its own.
+            var expected_registry: ?[]const u8 = if (prepared.prior_actor_evidence == .captured) prepared.prior_actor_evidence.captured else null;
             for (prepared.files) |file| {
                 // Whole controlled-input set, not just the file being replaced.
-                const current = reader.captureBound(binding, a, observed, prepared.paths) catch return error.OutputChanged;
+                const current = reader.captureBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
                 if (!output.sameCapture(expected, current)) return error.OutputChanged;
                 const path = try output.path(a, prepared.paths, file.target);
-                const root = (directories.openObserved(self.io, self.project_root, if (path.root == .specs) binding.paths.specs else binding.paths.workflows, if (path.root == .specs) binding.specs_observation else .{ .directory = binding.workflows_identity }) catch return error.OutputChanged) orelse return error.OutputChanged;
+                const root = (directories.openObserved(self.io, self.project_root, if (path.root == .specs) binding.paths.specs else binding.paths.workflows, if (path.root == .specs) binding.specs_observation else .{ .directory = binding.workflows_identity }) catch |err| return outputChanged(err)) orelse return error.OutputChanged;
                 defer root.close(self.io);
-                const parent = directories.ensure(self.io, root, std.fs.path.dirname(path.root_relative).?) catch return error.OutputWriteFailed;
+                const parent = directories.ensure(self.io, root, std.fs.path.dirname(path.root_relative).?) catch |err| return outputWriteFailed(err);
                 defer parent.close(self.io);
                 // Recheck after directory preparation, immediately before replacement.
-                const fresh = reader.captureBound(binding, a, observed, prepared.paths) catch return error.OutputChanged;
+                const fresh = reader.captureBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
                 if (!output.sameCapture(expected, fresh)) return error.OutputChanged;
                 if (prepared.prior_workflow_state == .captured) {
-                    const current_state = reader.captureWorkflowStateBound(binding, a, observed, prepared.paths) catch return error.OutputChanged;
+                    const current_state = reader.captureWorkflowStateBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
                     if (!output.sameBytes(prepared.prior_workflow_state.captured, current_state)) return error.OutputChanged;
+                }
+                if (prepared.prior_actor_evidence == .captured) {
+                    const current_registry = reader.captureActorEvidenceBound(binding, a, observed, prepared.paths) catch |err| return outputChanged(err);
+                    if (!output.sameBytes(expected_registry, current_registry)) return error.OutputChanged;
                 }
                 var condition: files.Expected = .any;
                 if (file.target == .form) {
@@ -83,11 +104,15 @@ pub fn Writer(comptime replace_file: @TypeOf(files.replace)) type {
                     condition = if (fresh.state) |bytes| .{ .exact = bytes } else .absent;
                 } else if (file.target.artifact == .workflow_state) {
                     condition = if (prepared.prior_workflow_state.captured) |bytes| .{ .exact = bytes } else .absent;
+                } else if (file.target.artifact == .actor_evidence) {
+                    condition = if (prepared.prior_actor_evidence.captured) |bytes| .{ .exact = bytes } else .absent;
                 }
-                replace_file(self.io, a, parent, std.fs.path.basename(path.root_relative), condition, file.bytes) catch return error.OutputWriteFailed;
+                replace_file(self.io, a, parent, std.fs.path.basename(path.root_relative), condition, file.bytes) catch |err| return outputWriteFailed(err);
                 switch (file.target) {
-                    .artifact => |kind| if (kind == .clarification_state) {
-                        expected.state = file.bytes;
+                    .artifact => |kind| switch (kind) {
+                        .clarification_state => expected.state = file.bytes,
+                        .actor_evidence => expected_registry = file.bytes,
+                        .specification, .reference_context, .workflow_state => {},
                     },
                     .form => |id| {
                         var next: std.ArrayList(c.FormCapture) = .empty;
@@ -247,5 +272,34 @@ test "activated publication rejects changed roots features and physical director
         try std.testing.expectError(error.OutputChanged, writer.publishBound(binding, a, prepared));
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, fixture.paths.get(.specification).project_relative, .{}));
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, fixture.paths.get(.workflow_state).project_relative, .{}));
+    }
+}
+
+test "a cancellation at any call of a publication ends it cancelled, never as a changed output or a failed write" {
+    const cancelling = @import("../../test_fixtures/cancelling_io.zig");
+    // Every class of call a publication makes, each reached by at least one scenario below.
+    const ops = [_]cancelling.Op{ .open_dir, .create_dir, .real_path_file, .dir_access, .dir_stat, .dir_read, .stat_file, .stat, .read_positional, .set_length, .write_positional, .sync };
+    var reached = [_]usize{0} ** ops.len;
+    inline for (.{ .neither, .root, .both }) |present| {
+        const Attempt = struct {
+            fn publish(_: void, cancel_io: std.Io) anyerror!void {
+                var project = std.testing.tmpDir(.{});
+                defer project.cleanup();
+                var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+                defer arena.deinit();
+                const a = arena.allocator();
+                const fixture = try ActivatedFixture.init(a, std.testing.io, project.dir, "requirements/current", "Chosen/Café", present);
+                defer active_directory.deinitOwner(fixture.owner);
+                var writer: Adapter = .{ .io = cancel_io, .project_root = project.dir, .active_feature = active_directory.capability(fixture.owner) };
+                try writer.publishBound(fixture.binding, a, fixture.prepared());
+            }
+        };
+        for (ops, &reached) |op, *count| count.* += try cancelling.sweep(op, {}, Attempt.publish);
+    }
+    for (ops, reached) |op, count| {
+        std.testing.expect(count > 0) catch |err| {
+            std.debug.print("publication never makes a call of class {s}\n", .{@tagName(op)});
+            return err;
+        };
     }
 }

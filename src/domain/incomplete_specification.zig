@@ -16,7 +16,7 @@ pub const State = struct {
 };
 pub const Error = state.Error || c.Error || error{InvalidIncompleteSpecification};
 
-pub fn build(a: std.mem.Allocator, prior: state.Prior, reference: snapshot.Snapshot, clarifications: c.ValidatedState, contracts: ?state.ContractSource) Error!State {
+pub fn build(a: std.mem.Allocator, prior: state.Prior, reference: snapshot.Snapshot, clarifications: c.ValidatedState, contracts: ?state.ContractSource, normalizer: state.Normalizer) Error!State {
     const value = clarifications.value orelse return error.InvalidIncompleteSpecification;
     const feature = reference.inputs.corpus.feature_id;
     _ = try c.validate(.{ .value = value }, feature);
@@ -34,11 +34,11 @@ pub fn build(a: std.mem.Allocator, prior: state.Prior, reference: snapshot.Snaps
         .clarification = .{ .state_ordinal = value.state_ordinal, .revision = value.revision },
         .open_clarifications = try open.toOwnedSlice(a),
     };
-    try validate(a, result, feature, contracts);
+    try validate(a, result, feature, contracts, normalizer);
     return result;
 }
 
-pub fn validate(a: std.mem.Allocator, value: State, feature: @import("feature_identity.zig").FeatureId, contracts: ?state.ContractSource) Error!void {
+pub fn validate(a: std.mem.Allocator, value: State, feature: @import("feature_identity.zig").FeatureId, contracts: ?state.ContractSource, normalizer: state.Normalizer) Error!void {
     if (!std.mem.eql(u8, value.schema, state.schema) or value.revision == 0 or
         !std.mem.eql(u8, value.feature.bytes, feature.bytes) or
         !std.mem.eql(u8, value.reference.inputs.corpus.feature_id.bytes, feature.bytes) or
@@ -50,7 +50,7 @@ pub fn validate(a: std.mem.Allocator, value: State, feature: @import("feature_id
         previous = id.ordinal;
     }
     for (value.id_ledger.next) |next| if (next == 0) return error.InvalidIncompleteSpecification;
-    try state.validateReference(a, value.reference, contracts);
+    try state.validateReference(a, value.reference, contracts, normalizer);
 }
 
 pub fn bindClarifications(value: State, clarifications: c.ValidatedState) Error!c.State {

@@ -5,6 +5,11 @@ const source = @import("../../ports/feature_directory_inspector.zig");
 const directories = @import("directory_access.zig");
 const observations = @import("../../domain/bootstrap_roots.zig");
 
+/// What a failed directory call is to this port: a cancellation, or an unavailable directory.
+fn unavailable(err: anyerror) source.Error {
+    return if (directories.isCancellation(err)) error.Cancelled else error.FeatureDirectoryUnavailable;
+}
+
 pub const Adapter = struct {
     io: std.Io,
     project_root: std.Io.Dir,
@@ -22,16 +27,16 @@ pub const Adapter = struct {
         };
         defer allocator.free(checked.project_relative_path);
         if (!std.mem.eql(u8, checked.project_relative_path, selector.project_relative_path)) return error.FeatureDirectoryUnavailable;
-        const root = (directories.openObserved(self.io, self.project_root, binding.paths.specs, binding.observation) catch return error.FeatureDirectoryUnavailable) orelse
+        const root = (directories.openObserved(self.io, self.project_root, binding.paths.specs, binding.observation) catch |err| return unavailable(err)) orelse
             return .{ .selector = selector, .root_observation = .absent, .observation = .absent };
         defer root.close(self.io);
         const root_observation: observations.RootObservation = binding.observation;
         var directory = directories.open(self.io, root, selector.feature_id.bytes) catch |err| return switch (err) {
             error.DirectoryMissing => .{ .selector = selector, .root_observation = root_observation, .observation = .absent },
-            else => error.FeatureDirectoryUnavailable,
+            else => unavailable(err),
         };
         defer directory.close(self.io);
-        const identity = directories.inspectReadable(self.io, directory) catch return error.FeatureDirectoryUnavailable;
+        const identity = directories.inspectReadable(self.io, directory) catch |err| return unavailable(err);
         return .{ .selector = selector, .root_observation = root_observation, .observation = .{ .directory = identity } };
     }
 };

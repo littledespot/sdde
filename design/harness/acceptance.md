@@ -15,7 +15,13 @@ case rubrics, never native defaults.
 Both source-complete cases expect `publication`. A clarification fails their
 expected outcome. Future cases may explicitly expect `clarification`; success
 then requires native `needs_user`, validated partial publication and actual
-registered open clarification handles.
+registered open clarification handles. A case may expect `clarification_then_publication`
+([e2e.md](e2e.md#case-and-publication-contract)): each leg's report states its own outcome, never the combined one.
+The first leg passes as a `clarification` run, mechanically and with no adjudication, and the second is a `publication`
+run that awaits adjudication like any publication, scored on the case rubric with the declared answer counted as
+source. The adjudication record covers the second leg only, since the first publishes an incomplete specification that
+stays ungraded (ADR 0017). A first leg that paused with nothing to answer (`answer_unavailable`) fails as an unexpected
+outcome.
 
 Raw model grades cannot authoritatively accept or reject a published specification.
 This policy changes no cost policy and authorizes no alternate model, calibration
@@ -147,17 +153,25 @@ and qualification. No real grader is currently qualified by these pending record
   and diagnostic, the resolved `evaluation-config/v2` judge configuration with its
   Bedrock family, and explicit grader/acceptance evidence with an always-unresolved
   decision.
-- `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v20` (v18 plus the closed `reason` of an `authority` terminal rejection,
-  which includes the repair-key and request-assignment population bounds, and
-  the `first_cause` the run kept beside its terminal rejection): the
+- `spec-e2e-case/v5`: required expected outcome and answers; no judge configuration; the actor-evidence registry
+  among its five expected artifacts. A report's `continued_from` (`spec-e2e-report/v27`) names the first leg a second leg
+  continues.
+- `spec-e2e-report/v27` (v27 adds `continued_from` and the status `answer_unavailable`; v18, with the admission audit's field member `edge_given` in place of
+  `edge_condition` ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+  Decision 7), plus the closed `reason` of an `authority` terminal rejection,
+  which includes the repair-key and request-assignment population bounds and the
+  authentication-lease reasons of [ADR 0025](../decisions/0025-clarification-answer-authentication.md), the
+  `first_cause` the run kept beside its terminal rejection, the actor-evidence registry among the
+  artifacts a missing artifact names, and every repair merge the
+  steps retained in `repairs`, not the last of each candidate): the
   single total token budget and aggregate actual usage,
   each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance, with ADR 0048's `no_title_heading` and
   `conflicting_title_headings` among the native rejections, and ADR 0038's
   `scenario_coverage` unit defect in place of the `uncovered_member` schema rejection, and
-  its `equal_items` schema rejection. It embeds no model evaluation.
+  its `equal_items` schema rejection, and ADR 0036's `disagreeing_items` schema rejection. It
+  embeds no model evaluation.
 - `spec-adjudication-record/v1`, `spec-adjudication/v3`: the `/evaluate-e2e` skill's
   rubric judgment and derived development acceptance.
 - `grader-calibration-panel/v1`, `grader-calibration-review/v1`,

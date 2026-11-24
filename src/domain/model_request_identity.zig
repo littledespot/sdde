@@ -35,15 +35,7 @@ pub const PositiveOrdinal = struct {
 /// Read-only position in this execution's existing request ledger.
 pub const RecordIndex = struct { value: usize };
 
-pub const LedgerRevision = struct {
-    value: u64,
-
-    pub const initial: LedgerRevision = .{ .value = 0 };
-
-    pub fn eql(left: LedgerRevision, right: LedgerRevision) bool {
-        return left.value == right.value;
-    }
-};
+pub const LedgerRevision = @import("ledger_revision.zig").Revision("model_request_identity");
 
 pub const ReferenceChunkOwner = struct {
     reference_state_id: ReferenceStateId,
@@ -310,15 +302,13 @@ const LedgerStorage = struct {
     revision: LedgerRevision,
     record_count: usize,
     latest_record: ?*const RecordNode,
+
+    pub fn releaseRoot(self: *LedgerStorage) void {
+        self.stage_run_epoch_id.reference.release();
+    }
 };
 
-const OwnerStorage = struct {
-    backing_allocator: std.mem.Allocator,
-    reference_count: usize,
-    previous_owner: ?*Owner,
-    arena: std.heap.ArenaAllocator,
-    ledger: LedgerStorage,
-};
+const Chain = @import("ledger_owner.zig").LedgerOwner(Owner, LedgerStorage, error.ModelRequestOwnerReferenceExhausted);
 
 pub fn createInitial(
     allocator: std.mem.Allocator,
@@ -326,27 +316,17 @@ pub fn createInitial(
 ) Error!*Owner {
     if (!purpose_registry.hasAny()) return error.InvalidRequestPurposeRegistry;
 
-    const value = try allocator.create(OwnerStorage);
-    errdefer allocator.destroy(value);
-    value.* = .{
-        .backing_allocator = allocator,
-        .reference_count = 1,
-        .previous_owner = null,
-        .arena = .init(allocator),
-        .ledger = undefined,
-    };
-    errdefer value.arena.deinit();
+    const pending = try Chain.beginInitial(allocator);
+    errdefer pending.abort();
     const epoch = try @import("execution_reference.zig").create(allocator);
-    const owner: *Owner = @ptrCast(value);
-    value.ledger = .{
-        .owner = owner,
+    return pending.sealInitial(.{
+        .owner = pending.owner(),
         .stage_run_epoch_id = .{ .reference = epoch },
         .purpose_registry = purpose_registry,
         .revision = .initial,
         .record_count = 0,
         .latest_record = null,
-    };
-    return owner;
+    });
 }
 
 pub fn createSuccessor(
@@ -371,19 +351,10 @@ pub fn createSuccessor(
     };
 
     const previous_owner = current_storage.owner;
-    const previous_storage = ownerStorage(previous_owner);
-    const value = try previous_storage.backing_allocator.create(OwnerStorage);
-    errdefer previous_storage.backing_allocator.destroy(value);
-    value.* = .{
-        .backing_allocator = previous_storage.backing_allocator,
-        .reference_count = 1,
-        .previous_owner = null,
-        .arena = .init(previous_storage.backing_allocator),
-        .ledger = undefined,
-    };
-    errdefer value.arena.deinit();
+    const pending = try Chain.beginSuccessor(previous_owner);
+    errdefer pending.abort();
 
-    const allocator = value.arena.allocator();
+    const allocator = pending.arena();
     const canonical_model_request_id = try allocator.create(ModelRequestId);
     canonical_model_request_id.* = .{
         .stage_run_epoch_id = current_storage.stage_run_epoch_id,
@@ -401,17 +372,14 @@ pub fn createSuccessor(
         },
         .canonical_model_request_id = canonical_model_request_id,
     };
-    try retainOwner(previous_owner);
-    value.previous_owner = previous_owner;
-    const owner: *Owner = @ptrCast(value);
-    value.ledger = .{
-        .owner = owner,
+    const owner = try pending.sealSuccessor(previous_owner, .{
+        .owner = pending.owner(),
         .stage_run_epoch_id = current_storage.stage_run_epoch_id,
         .purpose_registry = current_storage.purpose_registry,
         .revision = .{ .value = next_revision_value },
         .record_count = next_record_count,
         .latest_record = node,
-    };
+    });
     return .{ .owner = owner, .model_request_id = canonical_model_request_id };
 }
 
@@ -436,40 +404,27 @@ pub fn createLifecycleSuccessor(
     };
 
     const previous_owner = current_storage.owner;
-    const previous_storage = ownerStorage(previous_owner);
-    const value = try previous_storage.backing_allocator.create(OwnerStorage);
-    errdefer previous_storage.backing_allocator.destroy(value);
-    value.* = .{
-        .backing_allocator = previous_storage.backing_allocator,
-        .reference_count = 1,
-        .previous_owner = null,
-        .arena = .init(previous_storage.backing_allocator),
-        .ledger = undefined,
-    };
-    errdefer value.arena.deinit();
+    const pending = try Chain.beginSuccessor(previous_owner);
+    errdefer pending.abort();
 
-    const node = try value.arena.allocator().create(RecordNode);
+    const node = try pending.arena().create(RecordNode);
     node.* = .{
         .previous = current_storage.latest_record,
         .record = next_record,
         .canonical_model_request_id = current_node.canonical_model_request_id,
     };
-    try retainOwner(previous_owner);
-    value.previous_owner = previous_owner;
-    const owner: *Owner = @ptrCast(value);
-    value.ledger = .{
-        .owner = owner,
+    return pending.sealSuccessor(previous_owner, .{
+        .owner = pending.owner(),
         .stage_run_epoch_id = current_storage.stage_run_epoch_id,
         .purpose_registry = current_storage.purpose_registry,
         .revision = .{ .value = next_revision_value },
         .record_count = current_storage.record_count,
         .latest_record = node,
-    };
-    return owner;
+    });
 }
 
 pub fn ledger(owner: *const Owner) *const ModelRequestIdentityLedger {
-    return @ptrCast(&ownerStorageConst(owner).ledger);
+    return @ptrCast(Chain.read(owner));
 }
 
 /// Validate the exact immutable successor without constructing another ledger.
@@ -495,7 +450,7 @@ fn validateSuccessor(current: *const ModelRequestIdentityLedger, next: *const Mo
     const prior = ledgerStorage(current);
     const value = ledgerStorage(next);
     const revision = std.math.add(u64, prior.revision.value, 1) catch return error.ModelRequestRevisionExhausted;
-    if (ownerStorageConst(value.owner).previous_owner != prior.owner or value.revision.value != revision or
+    if (Chain.previousOwner(value.owner) != prior.owner or value.revision.value != revision or
         !value.stage_run_epoch_id.eql(prior.stage_run_epoch_id)) return error.ModelRequestRevisionConflict;
     const node = value.latest_record orelse return error.ModelRequestNotFound;
     if (node.previous != prior.latest_record) return error.ModelRequestRevisionConflict;
@@ -509,19 +464,7 @@ pub fn retainLedger(current: *const ModelRequestIdentityLedger) ValidationError!
 }
 
 pub fn deinitOwner(owner: *Owner) void {
-    var next: ?*Owner = owner;
-    while (next) |current| {
-        const value = ownerStorage(current);
-        std.debug.assert(value.reference_count > 0);
-        value.reference_count -= 1;
-        if (value.reference_count != 0) return;
-        const previous = value.previous_owner;
-        if (previous == null) value.ledger.stage_run_epoch_id.reference.release();
-        const allocator = value.backing_allocator;
-        value.arena.deinit();
-        allocator.destroy(value);
-        next = previous;
-    }
+    Chain.release(owner);
 }
 
 pub fn validateUnitOwner(owner: ImmutableUnitOwnerId) ValidationError!void {
@@ -885,19 +828,7 @@ fn authorityIdEql(left: []const u8, right: []const u8) bool {
 }
 
 pub fn retainOwner(owner: *Owner) ValidationError!void {
-    const value = ownerStorage(owner);
-    std.debug.assert(value.reference_count > 0);
-    value.reference_count = std.math.add(usize, value.reference_count, 1) catch {
-        return error.ModelRequestOwnerReferenceExhausted;
-    };
-}
-
-fn ownerStorage(owner: *Owner) *OwnerStorage {
-    return @ptrCast(@alignCast(owner));
-}
-
-fn ownerStorageConst(owner: *const Owner) *const OwnerStorage {
-    return @ptrCast(@alignCast(owner));
+    return Chain.retain(owner);
 }
 
 fn ledgerStorage(value: *const ModelRequestIdentityLedger) *const LedgerStorage {

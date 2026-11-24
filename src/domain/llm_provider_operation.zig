@@ -202,9 +202,30 @@ pub const ProviderFailure = struct {
     delivery: ProviderDeliveryDisposition,
     transport: ?TransportDiagnostic = null,
     content: ?ProviderContentDiagnostic = null,
+    /// Why an `authentication_failed` call had no usable key. Diagnostic only: it never affects
+    /// `cause`, `retry_class` or `delivery`.
+    credential: ?ProviderCredentialDiagnostic = null,
+    /// Why a `response_invalid` call without a transport or content diagnostic was refused.
+    /// Diagnostic only, like `credential`.
+    decode: ?ProviderDecodeDiagnostic = null,
 };
 
 pub const ProviderContentDiagnostic = enum { invalid_content, missing_final_text };
+
+/// An unset or empty key is `missing`; a key with a space, control or non-ASCII byte is `malformed`.
+pub const ProviderCredentialDiagnostic = enum { missing, malformed };
+
+/// The stage of response handling that refused a body that arrived.
+pub const ProviderDecodeDiagnostic = enum {
+    /// The body was not JSON.
+    body_not_json,
+    /// The decoder refused the JSON envelope.
+    body_refused,
+    /// The response's text was not valid UTF-8.
+    content_not_utf8,
+    /// An error body the provider's error table does not know.
+    error_unrecognized,
+};
 
 pub const ProviderUsage = struct {
     input_tokens: u64,

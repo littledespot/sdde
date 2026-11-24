@@ -44,6 +44,12 @@ pub const Variant = struct {
     gates: []const []const u8,
     retry_limit: ?RetryLimitDescriptor,
     iteration: ?@import("workflow_iteration.zig").Descriptor,
+
+    /// Whether the association fits the variant's own outcomes, data effects and role: the same check
+    /// registry admission and graph validation apply, callable where a variant is built.
+    pub fn validAssociation(self: Variant) bool {
+        return @import("workflow_outcome_association.zig").validDescriptor(self.outcome_association, self.requires, self.optional, self.produces, self.replaces, self.repair_role, self.outcomes);
+    }
 };
 
 pub const Contract = struct {

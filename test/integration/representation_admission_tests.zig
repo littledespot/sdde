@@ -279,17 +279,17 @@ test "test.integration.representation_admission unrelated domains retain real na
         try std.testing.expect(prepared.registry.records.len != 0);
         const insertion: text.BusinessSegment = .{ .passive = .{ .passive_literal_id = prepared.registry.records[0].id } };
         const insertion_only = [_]text.BusinessSegment{insertion};
-        const scoped: text.Context = .{ .registry = prepared.registry, .current = prepared_fixture.safety.value(prepared.owner), .inputs = inputs, .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id }, .field = .spec_story };
+        const scoped: text.Context = .{ .registry = prepared.registry, .inputs = inputs, .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id }, .field = .spec_story };
         const raw = try codec.encode(text.BusinessText, a, .{ .segments = &insertion_only });
         const decoded = try codec.decode(text.BusinessText, a, raw);
-        const rejected = (try prepared_fixture.validator.checkBusinessIn(a, .{ .registry = scoped.registry, .current = scoped.current, .inputs = inputs, .scopes = &.{scoped.scope}, .field = .spec_story }, decoded)).invalid;
+        const rejected = (try prepared_fixture.validator.checkBusinessIn(a, .{ .registry = scoped.registry, .inputs = inputs, .scopes = &.{scoped.scope}, .field = .spec_story }, decoded)).invalid;
         try std.testing.expectEqual(.reference_only, rejected.reason);
         const fragments = [_]text.BusinessSegment{ .{ .literal = .{ .value = example[1] } }, insertion, .{ .literal = .{ .value = " as the source requires." } } };
         const legitimate = try codec.decode(text.BusinessText, a, try codec.encode(text.BusinessText, a, .{ .segments = &fragments }));
-        try std.testing.expect((try prepared_fixture.validator.checkBusinessIn(a, .{ .registry = scoped.registry, .current = scoped.current, .inputs = inputs, .scopes = &.{scoped.scope}, .field = .spec_story }, legitimate)) == .valid);
+        try std.testing.expect((try prepared_fixture.validator.checkBusinessIn(a, .{ .registry = scoped.registry, .inputs = inputs, .scopes = &.{scoped.scope}, .field = .spec_story }, legitimate)) == .valid);
         const encoded_prose = try std.fmt.allocPrint(a, "The operation returns {s} after completion.", .{raw});
         const encoded = try decodeSelectedText(a, try std.json.Stringify.valueAlloc(a, encoded_prose, .{}));
-        const wire_rejected = (try prepared_fixture.validator.checkBusinessIn(a, .{ .registry = scoped.registry, .current = scoped.current, .inputs = inputs, .scopes = &.{scoped.scope}, .field = .spec_story }, encoded)).invalid;
+        const wire_rejected = (try prepared_fixture.validator.checkBusinessIn(a, .{ .registry = scoped.registry, .inputs = inputs, .scopes = &.{scoped.scope}, .field = .spec_story }, encoded)).invalid;
         try std.testing.expectEqual(.embedded_insertion_syntax, wire_rejected.reason);
     }
 }
@@ -324,7 +324,7 @@ test "test.integration.representation_admission native summary reuse has measure
     try tracker.observe(&view, 1, 1);
     const progress = try fixtures.build_summary.execute(a, try fixtures.assign_summary.execute(a, leaf));
     const next = try fixtures.build_input.execute(a, progress);
-    const reused = try (@import("../../src/actions/reference/reuse_reference_reconciliation_summary.zig").Action{ .validator = fixtures.validate_summary.validator }).execute(a, next, fixture.context());
+    const reused = try (@import("../../src/actions/reference/reuse_reference_reconciliation_summary.zig").Action{}).execute(a, next, fixture.context());
     const checked = (try fixtures.validate_summary.execute(a, reused, fixture.context())).valid;
     const carried_owner = try owned.create(a, owned.view(initial_owner));
     carried_owner.payload = .{ .reconciliation_summary = checked };

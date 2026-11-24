@@ -16,7 +16,7 @@ pub const Prepared = struct {
     assigned: literals.Assigned,
     registry: literals.Registry,
     pub fn check(self: Prepared, allocator: std.mem.Allocator, inputs: @import("../domain/reference_evidence.zig").Inputs, parsed: @import("../domain/reference_extraction.zig").Parsed) !@import("../domain/reference_extraction.zig").TextValidated {
-        return switch (try validate_text.execute(allocator, self.registry, safety.value(self.owner), inputs, parsed)) {
+        return switch (try validate_text.execute(allocator, self.registry, inputs, parsed)) {
             .valid => |value| value,
             .invalid => |rejection| rejection.issue.failure(),
         };
@@ -27,7 +27,7 @@ pub const Prepared = struct {
 };
 /// Test setup only; every candidate comes from the same native action used by YAML.
 pub fn prepare(allocator: std.mem.Allocator, inputs: @import("../domain/reference_evidence.zig").Inputs) !Prepared {
-    const owner = safety.validate(allocator, .{ .packages = &.{}, .policies = &.{"project.zig@1"} }, @import("../composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
+    const owner = safety.validate(allocator, &.{"project.zig@1"}, @import("../composition/toolchain_policy_registry.zig").registry) catch return error.OutOfMemory;
     errdefer safety.deinitOwner(owner);
     const policy = try (@import("../actions/toolchain/compile_naming_policy.zig").Action{ .normalizer = normalizer, .folder = folder }).execute(allocator, safety.value(owner));
     const grammar = try stage.buildGrammar(normalizer, folder, allocator, policy, safety.value(owner), inputs);

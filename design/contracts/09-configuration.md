@@ -240,7 +240,7 @@ when:
 Configuration and content authority are separate systems.
 
 The root `.sddtoolkit.json` remains one closed document with no override or fallback
-merge layer. [F0003 §3](../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+merge layer. [F0003 §3](../features/F0003-Toolchain.md#3-closed-loading-and-publication-contract)
 owns the implemented toolchain format: exact package references and stable union of
 registered policy IDs. The broader field-level composition below remains proposed
 policy design; it adds no fields to the implemented configuration or toolchain schemas.
@@ -389,7 +389,7 @@ contract > planning > runtime-only`.
 | Specification schema, business boundary, passive-literal scanner or renderer/parser | Regenerate and revalidate Specify. |
 | Toolchain, project mechanical layer, environment, portability, file-kind/path, parser, command, dependency, sandbox or capability policy | Return to Plan; reconcile previously published implementation when applicable under §24.5. |
 | Semantic principles | Recapture at the consuming gate, rebuild Plan's complete cited selection and invalidate affected plan/task approvals; do not change business requirements. |
-| Compatible logging/model binding or unrelated workflow definition | Retain the semantic stage; apply the validated runtime change and any logging-transition obligation. Changes are compared by bound `WorkflowId`, not inventory position. |
+| Compatible logging/model binding or unrelated workflow definition | Retain the semantic stage; apply the validated runtime change, which a logging change takes from the next run. Changes are compared by bound `WorkflowId`, not inventory position. |
 | Project/artifact root, bound workflow identity/graph, serializer or unsupported schema/renderer change | Block with `BOOTSTRAP_ADMINISTRATIVE_MIGRATION_REQUIRED`; no implicit conversion, pointer advance or hot swap. |
 
 - A planning-owned change discovered during Specify remains a distinct deferred planning
@@ -398,8 +398,7 @@ contract > planning > runtime-only`.
   the first Plan model call.
 - It cannot be relabelled unchanged.
 - Runtime-only changes cannot suppress a simultaneous earlier-owner change.
-- After an adopting route, the runner completes any required logging-policy transition before
-  another normal event, model call or node.
+- A changed logging policy applies from the next run; a run keeps the one it activated.
 
 These routes describe ownership and invalidation, not separate transactions.
 There is no durable ID reservation, task-commit watermark or saved bootstrap

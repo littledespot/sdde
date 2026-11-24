@@ -84,6 +84,11 @@ pub const AuthorityReason = enum {
     authorization_denied,
     /// The authorization clock is unavailable.
     authorization_clock_unavailable,
+    /// The runner cannot issue an authentication lease for an `actor_authentication` step: the execution's leases are
+    /// spent, or one is still outstanding.
+    authentication_lease_unavailable,
+    /// An `actor_authentication` step ended `ok` without consuming the lease the runner issued it.
+    authentication_unconsumed,
     /// The repair permit or the request assignment of a retry-bearing step does not match.
     repair_permit_mismatch,
     /// A runner-owned accounting transition cannot be prepared or applied: attempt accounting, provider
@@ -130,6 +135,15 @@ pub const Rejection = union(enum) {
     deadline_exhausted,
     token_budget: @import("workflow_token_accounting.zig").BudgetError,
     retry_limit: @import("workflow_retry.zig").Exhaustion,
+
+    /// What a logging stop rejects the run as: a logging failure is a `logging` rejection, and a
+    /// cancellation under the feature log is the run's own `cancelled` (ADR 0026, ADR 0032).
+    pub fn logStop(stop: @import("feature_log_stream.zig").Stop) Rejection {
+        return switch (stop) {
+            .blocked => |code| .{ .logging = code },
+            .cancelled => .cancelled,
+        };
+    }
 
     /// The stable name every surface shows for this rejection (events, the command line, reports and
     /// traces). An authority rejection names its reason; the reason sits beside the tag and moves no

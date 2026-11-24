@@ -7,10 +7,6 @@ pub const ValidToolchain = opaque {
     pub fn identity(self: *const ValidToolchain) reference.Ref {
         return validStorage(self).identity;
     }
-    pub fn packages(self: *const ValidToolchain) []const []const u8 {
-        return validStorage(self).packages;
-    }
-
     pub fn policies(self: *const ValidToolchain) []const toolchain.PolicyContract {
         return validStorage(self).policies;
     }
@@ -18,7 +14,6 @@ pub const ValidToolchain = opaque {
 
 const ValidToolchainStorage = struct {
     identity: reference.Ref,
-    packages: []const []const u8,
     policies: []const toolchain.PolicyContract,
 };
 
@@ -31,7 +26,7 @@ const OwnerStorage = struct {
 
 pub fn validate(
     backing_allocator: std.mem.Allocator,
-    composed: toolchain.Composed,
+    selected_ids: []const []const u8,
     registry: toolchain.PolicyRegistry,
 ) toolchain.Error!*Owner {
     for (registry.contracts, 0..) |contract, index| {
@@ -48,11 +43,9 @@ pub fn validate(
     owner.* = .{ .backing_allocator = backing_allocator, .arena = .init(backing_allocator), .value = undefined };
     errdefer owner.arena.deinit();
     const allocator = owner.arena.allocator();
-    const packages = allocator.alloc([]const u8, composed.packages.len) catch return error.InvalidToolchain;
-    for (composed.packages, packages) |package, *copy| copy.* = allocator.dupe(u8, package) catch return error.InvalidToolchain;
     var selected: std.ArrayList(*const toolchain.PolicyContract) = .empty;
     for (registry.contracts) |*contract| if (contract.locked_required) try appendPolicy(allocator, &selected, contract);
-    for (composed.policies) |id| {
+    for (selected_ids) |id| {
         const contract = findPolicy(registry, id) orelse return error.InvalidToolchain;
         if (!contract.project_selectable) return error.InvalidToolchain;
         try appendPolicy(allocator, &selected, contract);
@@ -72,7 +65,7 @@ pub fn validate(
             .naming = rules,
         };
     }
-    owner.value = .{ .identity = reference.create(backing_allocator) catch return error.InvalidToolchain, .packages = packages, .policies = policies };
+    owner.value = .{ .identity = reference.create(backing_allocator) catch return error.InvalidToolchain, .policies = policies };
     return @ptrCast(owner);
 }
 
@@ -124,22 +117,22 @@ test "safety injects locked policy and owns immutable result" {
         .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
         .{ .id = "project.zig@1", .project_selectable = true, .locked_required = false, .naming = &.{} },
     } };
-    const owner = try validate(std.testing.allocator, .{ .packages = &.{"zig@0.16.0"}, .policies = &.{"project.zig@1"} }, registry);
+    const owner = try validate(std.testing.allocator, &.{"project.zig@1"}, registry);
     defer deinitOwner(owner);
-    try std.testing.expectEqualStrings("zig@0.16.0", value(owner).packages()[0]);
     try std.testing.expectEqualStrings("core.safety@1", value(owner).policies()[0].id);
+    try std.testing.expectEqualStrings("project.zig@1", value(owner).policies()[1].id);
 }
 
 test "safety rejects unknown nonselectable and duplicate policy authority" {
     const registry: toolchain.PolicyRegistry = .{ .contracts = &.{
         .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
     } };
-    try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"unknown@1"} }, registry));
-    try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"core.safety@1"} }, registry));
+    try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, &.{"unknown@1"}, registry));
+    try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, &.{"core.safety@1"}, registry));
 
     const duplicate: toolchain.PolicyRegistry = .{ .contracts = &.{
         .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
         .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
     } };
-    try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{} }, duplicate));
+    try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, &.{}, duplicate));
 }

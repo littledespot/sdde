@@ -549,6 +549,51 @@ test "lifecycle history cannot reuse a lower request ordinal" {
     try std.testing.expectEqual(@as(usize, 3), runner.ledger().?.recordCount());
 }
 
+test "request ledger allocation failures keep the current ledger and release every owner" {
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(ledgerAllocationCase, .{});
+}
+
+/// Drives the ledger's three owner builders: the initial ledger, two assignment successors (the
+/// second links a previous owner) and one lifecycle successor. Whichever allocation fails, the
+/// runner still holds the ledger it held before the call, and the leak check proves each partial
+/// owner and each retained previous owner was released.
+fn ledgerAllocationCase(allocator: std.mem.Allocator) !void {
+    var runner = runner_module.Runner.init(allocator);
+    defer runner.deinit();
+    try runner.initialize(identity.RequestPurposeRegistry.all());
+
+    const first = runner.assign(.initial, unitOwner("cluster-1"), modelOperation("generate"), .initial_generation) catch |err| {
+        try expectLedger(&runner, null, 0, 0);
+        return err;
+    };
+    const after_first = runner.ledger().?;
+    try expectLedger(&runner, after_first, 1, 1);
+
+    const second_before = runner.ledger().?;
+    _ = runner.assign(.{ .value = 1 }, unitOwner("cluster-2"), modelOperation("generate"), .initial_generation) catch |err| {
+        try expectLedger(&runner, second_before, 1, 1);
+        return err;
+    };
+    try expectLedger(&runner, null, 2, 2);
+
+    const advance_before = runner.ledger().?;
+    runner.advance(.{ .value = 2 }, first, .assigned, .invoked) catch |err| {
+        try expectLedger(&runner, advance_before, 2, 2);
+        try std.testing.expectEqual(identity.RequestStatus.assigned, runner.ledger().?.record(first).?.status);
+        return err;
+    };
+    try std.testing.expectEqual(identity.RequestStatus.invoked, runner.ledger().?.record(first).?.status);
+    try expectLedger(&runner, null, 3, 2);
+}
+
+/// The runner's ledger is `same` when one is given, at `revision` with `records` records.
+fn expectLedger(runner: *const runner_module.Runner, same: ?*const identity.ModelRequestIdentityLedger, revision: u64, records: usize) !void {
+    const current = runner.ledger().?;
+    if (same) |expected| try std.testing.expect(current == expected);
+    try std.testing.expectEqual(revision, current.revision().value);
+    try std.testing.expectEqual(records, current.recordCount());
+}
+
 test "request identity actions declare the sole ledger production and replacement" {
     try std.testing.expectEqualSlices(
         pipeline.DataKey,

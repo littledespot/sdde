@@ -29,19 +29,18 @@ production invocation path, not only the E2E evidence wrapper.
 
 ## 1. Responsibility
 
-- F0002 gives each workflow one simple producer binding, `WorkflowLog`, whose
-  `workflowLog.log(delta, TelemetryFact)` operation adds one attributed closed typed
-  fact to an action's candidate delta; it does not write, filter, format, or flush a
-  record.
-- After the runner validates and applies that delta, F0002 converts the fact, or a
-  separately sanitized prompt exchange, under one validated feature/run logging policy
-  and binding into a safe non-authoritative record.
+- The runner is the only producer: it emits each closed typed `TelemetryFact`, attributed
+  to the selected compiled workflow's shortcode, for its lifecycle and branch events. No
+  action and no node delta carries a fact, and a producer does not write, filter, format,
+  or flush a record.
+- F0002 converts the fact, or a separately sanitized prompt exchange, under one
+  validated feature/run logging policy and binding into a safe non-authoritative record.
 - An input is either filtered, persisted successfully, or produces a typed fail-closed
   outcome.
 
-Every F0002 input originates from the runner-created producer binding for the
-selected compiled workflow. Every emitted record carries that workflow
-definition's mandatory registry-validated four-character shortcode.
+Every F0002 input originates from the runner for the selected compiled workflow. Every
+emitted record carries that workflow definition's mandatory registry-validated
+four-character shortcode.
 
 F0002 is not a general logger. Producers cannot choose a level, message, path,
 sink, format, or redaction rule, and they never receive a filesystem or logger
@@ -49,12 +48,11 @@ capability.
 
 ## 2. Minimal runtime contract
 
-The runner invokes the logging graph with:
+The runner submits to the runtime logging lifecycle:
 
-- one trusted runner lifecycle fact attributed through the active workflow's
-  `WorkflowLog`, validated `WorkflowTelemetryFact` from an applied node delta,
-  or validated transient `SanitizedPromptExchangeLogRecord` from the separate
-  selected-content sanitization pipeline;
+- one validated `WorkflowTelemetryFact` the runner emitted, attributed to the active
+  workflow's shortcode, or validated transient `SanitizedPromptExchangeLogRecord`
+  from the separate selected-content sanitization pipeline;
 - the active validated `FeatureLogPolicy`;
 - the exact `FeatureLogBinding`; and
 - the immutable compiler-owned `LogEventDefinitionRegistry`.
@@ -66,11 +64,11 @@ The graph returns the existing common `Outcome` and composite `NodeDelta`:
 | `ok` with drop evidence | Section 26.5's emission rule drops the event; no event identity, sequence, lock, or write is created. |
 | `ok` with persistence evidence | The complete safe record was appended, any required flush completed, and the stream lock was released. |
 | `blocked` | Logging failed; cleanup, emergency reporting, and execution cleanup completed before new work was blocked. |
+| `cancelled` | The sink observed a cancellation, which is no logging failure: the stream lock was released, no emergency line was written, and the run ends `cancelled` (ADR 0032, "Cancellation mapping"). |
 
 There is no logging-specific public response type or direct producer-to-sink
-call. `WorkflowLog.log` returns only candidate-delta construction success or
-failure; the runner-owned logging graph owns the later drop, persistence, or
-blocked outcome.
+call; the runtime logging lifecycle owns the drop, persistence, blocked, or
+cancelled outcome.
 
 ## 3. Authority and single ownership
 
@@ -82,7 +80,7 @@ F0002 never reads `.sddtoolkit.json` and never receives `SDDToolKitConfig` or
 ```text
 F0001 immutable config
   -> logging-policy compiler reads config.logs
-  -> compiled fragment enters persisted bootstrap authority (not yet implemented; ADR 0026)
+  -> compiled fragment becomes the run's in-memory policy; no bootstrap authority is persisted (ADR 0026)
   -> active FeatureLogPolicy and FeatureLogBinding
   -> F0002
 ```
@@ -124,10 +122,8 @@ workflow definition:
 workflow definition supplies shortcode: IMPL
   -> workflow-definition schema delegates syntax to WorkflowShortcode.parse
   -> workflow registry proves shortcode uniqueness
-  -> runner constructs one WorkflowLog from the typed value
-  -> executing node calls workflowLog.log(delta, TelemetryFact)
-  -> WorkflowTelemetryFact in the candidate delta
-  -> runner validates and applies the delta
+  -> runner attributes each fact it emits to the typed value
+  -> WorkflowTelemetryFact (one TelemetryFact variant per event)
   -> F0002 record
 ```
 
@@ -136,8 +132,8 @@ workflow definition supplies shortcode: IMPL
 - `ValidateWorkflowDefinitionSchemaAction` delegates to that constructor rather than
   duplicating shortcode syntax.
 - `ValidateWorkflowDefinitionRegistryAction` rejects duplicates.
-- After the selected `WorkflowId` resolves, the runner constructs one `WorkflowLog` from
-  that typed value and supplies the binding to the executing graph.
+- After the selected `WorkflowId` resolves, the runner attributes every fact it emits to
+  that typed value.
 - A model, stored log, node parameter, or runtime caller cannot replace it.
 - It is observability metadata, not workflow identity or operational authority.
 
@@ -150,67 +146,55 @@ expands no fixed engine workflow-name union
 
 | Authority | Sole owner |
 | --- | --- |
-| Event level, emission (§26.5), template, field schema, and sensitivity | `LogEventDefinitionRegistry` |
+| Event level, emission (§26.5), template, and sensitivity | `LogEventDefinitionRegistry` |
+| Event field schema | The closed `TelemetryFact` variants (`row`) |
 | Four-character workflow shortcode source and validation | Workflow definition; canonical `WorkflowShortcode` parser; workflow-registry uniqueness validation |
-| Workflow-shortcode/fact binding | `WorkflowLog.log` and delta validation |
-| Emit/drop comparison | `EvaluateLogThresholdAction` |
+| Workflow-shortcode/fact binding | The pipeline runner |
+| Emit/drop comparison | The persist routine's emission decision (`feature_log_decisions.zig`) |
 | Feature log collection paths | `WorkflowArtifactRegistry` and validated `FeatureLogBinding` |
 | Fact ordering and business-node barriers | Pipeline runner |
 | Concrete adapters and registered node implementation bindings | Composition root |
 | Immutable executable workflow graph construction | Workflow compiler |
 
-F0002 does not recreate any of these decisions. The actions in governing
+F0002 does not recreate any of these decisions. The routines in governing
 Section 13.9 remain the canonical responsibility catalogue; this feature does
-not define a parallel action list.
+not define a parallel routine list.
 
 ## 4. Producer contract
 
-The runner constructs one pure producer binding for the selected compiled
-workflow, and its executing actions report observability through that binding:
+The runner is the only producer. It pairs each fact it emits with the selected compiled
+workflow's shortcode as one `WorkflowTelemetryFact`:
 
 ```zig
-const workflow_log = WorkflowLog.init(compiled_workflow.workflow_shortcode);
-
-pub fn log(
-    self: WorkflowLog,
-    delta: *NodeDelta,
-    fact: TelemetryFact,
-) !void;
+pub const TelemetryFact = union(EventType) { run_started: ..., task_started: ..., /* one variant per event */ };
 ```
 
-- The call is delta construction, not direct logging I/O.
-- It appends the fact to `NodeDelta.telemetryFactsAdded` together with
-  `self.workflow_shortcode` as one `WorkflowTelemetryFact`; it grants no sink,
-  filesystem, clock, or runner capability.
-- The runner validates and applies the complete delta before handing the attributed fact
-  to the logging graph.
-- The runner supplies the binding only after the workflow definition and complete
-  registry validate; executing nodes cannot supply or replace the shortcode.
+Each variant's payload holds that event's required fields, its optional fields and the common
+optional fields (Section 6.2), and no other field, so a missing required field or a field outside
+the row is a compile error
+([telemetry.zig](../../src/domain/telemetry.zig) `row` and `Payload`).
 
-The call shape is intentionally concise:
+- Emission is a typed value handed to the runtime logging lifecycle, not direct logging I/O; it grants
+  no sink, filesystem, clock, or runner capability.
+- The runner supplies the shortcode only after the workflow definition and complete
+  registry validate; no node, action, or model supplies or replaces it.
+
+The shape is intentionally concise:
 
 ```zig
-try workflow_log.log(delta, .{
-    .task_started = .{
-        .task_id = task_id,
-    },
-});
+.{ .task_started = .{ .task_id = task_id } }
 
-try workflow_log.log(delta, .{
-    .task_completed = .{
-        .task_id = task_id,
-        .outcome = .completed,
-        .duration_ms = duration_ms,
-    },
-});
+.{ .task_completed = .{
+    .task_id = task_id,
+    .outcome = .completed,
+    .duration_ms = duration_ms,
+} }
 
-try workflow_log.log(delta, .{
-    .validation_failed = .{
-        .validator_id = validator_id,
-        .diagnostic_code = diagnostic_code,
-        .outcome = .rejected,
-    },
-});
+.{ .validation_failed = .{
+    .validator_id = validator_id,
+    .diagnostic_code = diagnostic_code,
+    .outcome = .rejected,
+} }
 ```
 
 These examples define the public shape. Each accepted `TelemetryFact` variant
@@ -218,8 +202,10 @@ maps to exactly one event in the closed proof-of-concept registry in Section
 6.2. The registry, rather than the caller, supplies its canonical level,
 message-template ID, fields, and sensitivity.
 
-The code doesn't meet this shape or the Section 6.2 registry yet (SPEC01 "F0002 event
-registry"); this section and Section 6.2 remain the target (user decision, 9 November 2026).
+The field rows live in [telemetry.zig](../../src/domain/telemetry.zig) (`row`); level, emission and
+sensitivity live in the [registry](../../src/domain/log_event_registry.zig). A variant of
+`model.prompt_fragment` is representable but is never a fact: the registry rejects it, because the
+prompt stream's content is accepted only from the sanitization pipeline.
 
 A fact may contain registered typed IDs, enums, counts, durations, diagnostic
 codes, command IDs, exit codes, and evidence outcomes. It cannot contain:
@@ -231,12 +217,12 @@ codes, command IDs, exit codes, and evidence outcomes. It cannot contain:
 - raw prompt, response, reference, code, patch, or command-output content; or
 - a path, sink, or persistence instruction.
 
-Runner lifecycle facts use the same logging graph. A model response is never a
+Runner lifecycle facts use the same lifecycle. A model response is never a
 trusted fact or event definition.
 
 ## 5. Record processing
 
-For an accepted fact, the runner-invoked graph performs the discrete actions
+For an accepted fact, the persist routine performs the discrete steps
 defined in governing Section 13.9:
 
 1. require the exact-four-character `WorkflowShortcode` carried by the
@@ -250,13 +236,9 @@ defined in governing Section 13.9:
 7. append and flush/rotate as required under the exact stream lock; and
 8. release the lock before returning the common outcome.
 
-The steps remain separate action responsibilities. Their orchestrator receives
-runner-owned child bindings and no filesystem, clock, serializer, redaction,
-or sink capability.
-
-Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), these steps
-become the typed steps of a feature-logging engine routine once the ADR's logging
-preconditions hold. The outcomes, failure path and non-recursion here are unchanged.
+Under [ADR 0032](../decisions/0032-engine-routines.md), these steps are the typed steps of the
+feature-logging persist routine, each taking only the port it uses; the routine holds no
+filesystem, clock, serializer, redaction, or sink capability of its own.
 
 Filtering occurs before event identity, sequence, segment, or lock allocation.
 Logging-internal nodes are not recursively observed.
@@ -326,8 +308,12 @@ Logging-internal nodes are not recursively observed.
   unregistered fields are forbidden.
 
 - Field types are closed: all `*_id` values are their corresponding validated opaque
-  identifier types; `diagnostic_code`, `stage`, `outcome`, `evidence_status`,
-  `repair_unit_kind`, `direction`, and `body_class` are closed enums; `attempt`,
+  identifier types; `stage`, `outcome`, `evidence_status`, `repair_unit_kind`,
+  `direction`, and `body_class` are closed enums; `diagnostic_code` is a validated token
+  of 1 to 96 bytes of uppercase ASCII letters, digits and underscores that names the typed
+  diagnostic it reports, under the token rule of
+  [06-pipeline-nodes.md](../contracts/06-pipeline-nodes.md), which adds no code family
+  (user decision, 21 November 2026); `attempt`,
   `duration_ms`, token counts, `retained_bytes`, and `count` are non-negative bounded
   integers serialized as canonical decimal ASCII; `exit_code` is a bounded signed
   integer; booleans are lowercase `true` or `false`; time/offset use the canonical
@@ -483,7 +469,7 @@ event|feature-log/v2|event|event-columns/v3|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-
 ```
 
 `IMPL` is illustrative only; the selected compiled workflow's definition
-supplies the actual shortcode through the runner-created `WorkflowLog` binding.
+supplies the actual shortcode through the runner's attribution.
 
 When prompt capture is enabled, one sanitized fragment is one row:
 
@@ -605,8 +591,8 @@ Configuration discovery/decode or logging-policy compilation failure blocks
 bootstrap before F0002 is active. No example, packaged config, environment
 value, caller value, or hard-coded threshold is used as fallback.
 
-An initialized logging failure follows the governing
-`FeatureLoggingFailureOrchestrator` exactly:
+An initialized logging failure follows the governing feature-logging failure report
+(Section 14.9) exactly:
 
 1. release/terminalize logging resources and transient content;
 2. make one direct `stderr` attempt using the exact bounded ASCII emergency
@@ -617,15 +603,16 @@ An initialized logging failure follows the governing
 
 The failure path is not logged through F0002 and cannot recurse. The atomic
 execution contract in ADR 0009 applies; log state never resumes a workflow.
+A cancellation under the log is not an initialized logging failure: it does not
+enter this path and writes no emergency line.
 
 - Before a current feature binding exists, the bounded content-free emergency path is
-  available only after the selected compiled workflow's runner-created `WorkflowLog`
-  binding exists.
+  available only after the runner holds the selected compiled workflow's shortcode.
 - Without that attribution F0002 emits no log record; bootstrap uses its non-logging
   diagnostic path and blocks.
-- Restart and same-run policy changes use the historical/current authority rules in
-  Sections 14.10 and 26.5; F0002 never reinterprets stored records with raw or candidate
-  configuration.
+- Restart uses the prior-run finalization and retention rules in Sections 14.10 and 26.5,
+  and a run keeps one binding and policy; F0002 never reinterprets stored records with raw or
+  candidate configuration.
 
 ## 9. Explicit non-responsibilities
 
@@ -640,9 +627,8 @@ F0002 does not:
   Section 6.2 registry;
 - accept configured, workflow-supplied, registry-generated, or plugin-supplied
   delimited columns/headings;
-- provide `log(level, message, fields)` or caller-selected destinations;
-  `workflowLog.log(delta, TelemetryFact)` is the only producer convenience
-  operation;
+- provide `log(level, message, fields)` or caller-selected destinations; the runner's
+  typed `TelemetryFact` is the only producer input;
 - derive paths or treat logs as workflow evidence;
 - expose raw-content capture through `TelemetryFact`;
 - add network export, a query UI, asynchronous dispatch, or a production
@@ -664,14 +650,13 @@ F0002 does not:
 3. Each workflow definition supplies exactly one four-character
    case-sensitive ASCII alphanumeric shortcode; schema validation delegates to
    the canonical typed parser, registry validation proves uniqueness, and the
-   runner constructs the selected workflow's `WorkflowLog` binding.
-4. `WorkflowLog.log` binds that shortcode to exactly one `TelemetryFact` as a
-   `WorkflowTelemetryFact` before it enters the candidate delta.
-5. Producers use only `workflowLog.log(delta, TelemetryFact)`; the operation
-   performs no I/O, and producers cannot select a level, message, path, format,
-   sensitivity, or sink capability.
-6. Every fact reaches exactly one drop, persisted, or blocked outcome through
-   the common runner contract.
+   runner attributes each fact it emits to the selected workflow's shortcode.
+4. The runner binds that shortcode to exactly one `TelemetryFact` as a
+   `WorkflowTelemetryFact` before the fact enters the runtime logging lifecycle.
+5. The runner is the only producer; emission performs no I/O, and no node, action or
+   model can select a level, message, path, format, sensitivity, or sink capability.
+6. Every fact reaches exactly one drop, persisted, blocked, or cancelled outcome
+   through the common runner contract.
 7. Event definition, threshold decision, workflow attribution, path binding,
    and runner scheduling each retain their single governing owner.
 8. Every serialized event, prompt-fragment, console-mirror, and emergency
@@ -702,9 +687,12 @@ F0002 does not:
    file append/flush result.
 13. Filtering allocates no record identity, sequence, segment, or lock.
 14. Storage/recovery follows the governing lock, ordering, rotation, retention,
-   restart, and policy-transition contracts without a second implementation.
+   and restart contracts without a second implementation.
 15. Logging failure cleans up, reports once without recursion, abandons the
-   execution candidate, and blocks before new work without recovery.
+   execution candidate, and blocks before new work without recovery. A
+   cancellation under the log is no logging failure: it releases the lock,
+   writes no emergency line, abandons the candidate, and ends the run
+   `cancelled`.
 16. Logs cannot affect workflow state, approval, evidence, or completion.
 17. The packaged executable has no dependency on source examples, the source
     tree, build cache, or Zig toolchain.
@@ -728,12 +716,12 @@ negative cases:
 
 - two-value config-to-compiler-to-runtime handoff, rejection of every removed tuning
   key, one level canonicalizer, workflow-definition shortcode syntax plus registry
-  uniqueness, runner-owned `WorkflowLog` construction, exact shortcode/fact binding, and
+  uniqueness, runner-owned attribution, exact shortcode/fact binding, and
   rejection of raw config/path/message/shortcode inputs or runtime file rereads;
 
 **Processing**
 
-- `workflowLog.log` appends exactly one attributed typed fact and performs no I/O
+- the runner emits exactly one attributed typed fact per event and performs no I/O
 - rejection of missing, shorter, longer, malformed, or duplicate workflow shortcodes
   during definition/registry validation and rejection of a mismatched typed runtime
   binding
@@ -790,7 +778,7 @@ rather than copied into this feature document.
 
 - Implemented: the logging service and stream lifecycle, prior-run retention, production
   Specify feature logging, workflow shortcodes from the definition through the
-  runner-created `WorkflowLog` binding, and the compiler-locked policy constants and
+  runner's attribution, and the compiler-locked policy constants and
   `feature-log/v2` column schemas ([format](../../src/domain/feature_log_format.zig),
   [limits](../../src/domain/feature_log_limits.zig)).
 - Parts marked not implemented above remain open.

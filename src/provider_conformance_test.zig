@@ -1230,11 +1230,18 @@ fn exactKeySource(comptime source: type, family: key.Family) !void {
     try std.testing.expect(std.mem.eql(u8, material.ready.bytes, &canary));
     try environment.put(own, "");
     try std.testing.expect(std.mem.eql(u8, material.ready.bytes, &canary));
-    for ([_][]const u8{ "", " ", "\r\n", "\xff" }) |invalid| {
-        try environment.put(own, invalid);
+    // An empty key is as good as none; a key with a space, control or non-ASCII byte is present but unusable.
+    for ([_]struct { bytes: []const u8, state: std.meta.Tag(key.Material) }{
+        .{ .bytes = "", .state = .unavailable },
+        .{ .bytes = " ", .state = .malformed },
+        .{ .bytes = "\r\n", .state = .malformed },
+        .{ .bytes = "\xff", .state = .malformed },
+        .{ .bytes = "otherwise-valid-key\r", .state = .malformed },
+    }) |invalid| {
+        try environment.put(own, invalid.bytes);
         var rejected = source.read(std.testing.allocator, &environment, family);
         defer rejected.deinit();
-        try std.testing.expect(rejected == .unavailable);
+        try std.testing.expectEqual(invalid.state, std.meta.activeTag(rejected));
     }
 }
 
@@ -1256,6 +1263,27 @@ test "Bedrock model error nested status and conflicting discriminators fail clos
         var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 424, .exception = "ModelErrorException", .body = case.body } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
         defer observed.deinit();
         try std.testing.expectEqual(case.cause, observed.failed.cause);
+    }
+}
+
+test "a refused response names the stage that refused it, and a classified failure names none" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    const cases = [_]struct { status: u16, exception: ?[]const u8, body: []const u8, decode: ?operation.ProviderDecodeDiagnostic }{
+        .{ .status = 200, .exception = null, .body = "not json", .decode = .body_not_json },
+        .{ .status = 200, .exception = null, .body = "{\"unknown\":1}", .decode = .body_refused },
+        .{ .status = 424, .exception = "ModelErrorException", .body = "{}", .decode = .error_unrecognized },
+        .{ .status = 424, .exception = "ModelErrorException", .body = "<html></html>", .decode = .body_not_json },
+        .{ .status = 429, .exception = "ThrottlingException", .body = "{\"message\":\"slow down\"}", .decode = null },
+    };
+    for (cases) |case| {
+        var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = case.status, .exception = case.exception, .body = case.body } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+        defer observed.deinit();
+        try std.testing.expectEqual(case.decode, observed.failed.decode);
+        // The reason is presentation only: it never changes the cause, retry class or delivery.
+        try std.testing.expectEqual(@as(operation.ProviderFailureCause, if (case.decode == null) .throttled else .response_invalid), observed.failed.cause);
+        try std.testing.expectEqual(@as(?operation.ProviderCredentialDiagnostic, null), observed.failed.credential);
     }
 }
 

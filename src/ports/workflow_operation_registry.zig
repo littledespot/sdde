@@ -26,12 +26,15 @@ pub const StepInput = struct {
     resources: []const compilation.CompiledResource,
     model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
     repair_permit: ?workflow_retry.Permit = null,
-    log: pipeline.WorkflowLog,
+    /// The selected workflow's shortcode, which the feature-logging activation step binds to the run's log. Absent
+    /// outside the runner.
+    workflow_shortcode: ?@import("../domain/telemetry.zig").WorkflowShortcode = null,
     /// The runner's capability-free status handle, which a stage action checks between its
     /// internal steps (ADR 0031). A caller that invokes a binding outside the runner has none to
     /// supply, so it stays always active.
     runtime: pipeline.NodeRuntime = .{},
-    /// The runner's slot for the internal step a stage action stopped at; absent outside the runner.
+    /// The runner's slot for the internal step a stage action stopped at, and the display path of the entry whose
+    /// own reason it stopped on; absent outside the runner.
     stage_step: ?*pipeline.StageStepSlot = null,
     model_request_lifecycle: ?*const @import("../domain/provider_operation_lifecycle.zig").Ledger = null,
     provider_invocation: ?@import("../domain/provider_invocation_validation.zig").Call = null,
@@ -50,6 +53,8 @@ pub const StepInput = struct {
         slot: @import("provider_operation_authorization.zig").AllocatedSlot,
         runtime: pipeline.NodeRuntime,
     } = null,
+    /// The single-use lease the runner issued for this invocation of an `actor_authentication` step (ADR 0025).
+    actor_authentication: ?@import("../domain/actor_authentication_lease.zig").Lease = null,
 };
 
 pub const Input = union(enum) {
@@ -146,9 +151,10 @@ pub const Registry = struct {
     }
 
     pub fn validate(self: *const Registry) bool {
-        // Rebuild on every call: registry backing slices and bindings can change.
+        // Rebuilt on every call, caching nothing: the caller decides when to check. The runner checks once, before
+        // its first step (14-orchestration.md:35); the registry is assembled once at startup and not changed after.
         // Indexing the closed key set avoids rescanning every schema for every
-        // operation input/output, without caching any validation authority.
+        // operation input/output.
         var schemas: SchemaIndex = @splat(null);
         for (self.data_schemas) |*schema| {
             const slot = &schemas[@intFromEnum(schema.key)];
@@ -355,13 +361,14 @@ fn containsString(values: []const []const u8, expected: []const u8) bool {
 }
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
-    if (!@import("../domain/workflow_outcome_association.zig").validDescriptor(contract.outcome_association, contract.requires, contract.optional, contract.produces, contract.replaces, contract.repair_role)) return false;
+    if (!@import("../domain/workflow_outcome_association.zig").validDescriptor(contract.outcome_association, contract.requires, contract.optional, contract.produces, contract.replaces, contract.repair_role, contract.outcomes)) return false;
     if (!@import("../domain/workflow_iteration.zig").validContract(contract, capabilities)) return false;
     if (!operation.validRepair(contract.repair_role, if (contract.retry_limit) |limit| limit.scope else null, contract.runner_accounting, contract.side_effect)) return false;
     if (contract.repair_role != .none and (contract.kind != .step or capabilities.len != 0)) return false;
     if (!@import("../domain/workflow_model_invocation.zig").validContract(contract, capabilities)) return false;
     if (!@import("../domain/workflow_model_request_lifecycle.zig").validContract(contract, capabilities)) return false;
     if (!@import("../domain/workflow_provider_authorization.zig").validContract(contract, capabilities)) return false;
+    if (!@import("../domain/workflow_actor_authentication.zig").validContract(contract, capabilities)) return false;
     if (!operation.validAccounting(contract.runner_accounting, contract.requires, contract.produces, contract.side_effect, contract.retry_limit != null)) return false;
     if (!@import("../domain/workflow_provider_operation.zig").validContract(contract, capabilities)) return false;
     if (contract.outcomes.len == 0 or !uniqueOutcomes(contract.outcomes) or

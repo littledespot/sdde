@@ -378,7 +378,7 @@ test "prefix normalization preserves valid keys and rejects every other malforme
     }
 }
 
-test "R36 stray quote then unchanged missing signal brace never becomes an admitted candidate" {
+test "a stray quote then an unchanged missing signal brace never becomes an admitted candidate" {
     const initial =
         \\{"claim_dispositions":[{"claim_id":{"ordinal":1},"disposition":{"kind":"retained"}},"{"claim_id":{"ordinal":2},"disposition":{"kind":"retained"}}],"signals":[{"claim_ids":[{"ordinal":1}],"content":{"kind":"model","model":{"kind":"business","segments":[{"kind":"literal","value":"The application must start successfully.When started, the application must display `Hello, World!`.Should also output date and time in UTC"}]}}],"conflicts":[]}
     ;
@@ -390,7 +390,7 @@ test "R36 stray quote then unchanged missing signal brace never becomes an admit
     defer std.testing.allocator.free(fixed);
     try checkDocument(fixed, true);
     // Syntax acceptance grants no meaning/coverage authority: the production
-    // R36 sequence separately rejects and repairs this mixed-kind selection.
+    // The global protocol sequence separately rejects and repairs this mixed-kind selection.
     for ([_][]const u8{
         "{\"rows\":[{\"content\":{\"value\":\"Loan renewed!\"}}]}",
         "{\"rows\":[{\"content\":{\"value\":\"Inventory received\"}}]}",
@@ -556,7 +556,7 @@ const aggregate_bindings: []const @import("domain/model_text_field.zig").Binding
     .{ .field = .entity_name, .path = &.{.{ .property = "identity" }} },
     .{ .field = .spec_goal, .path = &.{.{ .property = "a/b~c" }} },
     // An absent selected union branch is not a returned leaf.
-    .{ .field = .edge_condition, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "edge_case" }, .{ .property = "condition" } } },
+    .{ .field = .edge_given, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "edge_case" }, .{ .property = "given" } } },
 };
 const aggregate_questions: []const @import("domain/model_text_wire.zig").ProseField = &.{
     .{ .field = .clarification_question, .path = &.{ .{ .property = "questions" }, .items } },

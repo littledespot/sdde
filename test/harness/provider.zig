@@ -24,13 +24,16 @@ pub fn reported(failure: Failure) report.Failure {
         inline else => |tag| @field(report.Failure, @tagName(tag)),
     };
 }
+/// What a transport received of a response and whether that is all of it, as the engine's own transport
+/// reports it. Retained as evidence only: a partial body is never a candidate and gives no usage.
+pub const Body = @import("../../src/adapters/provider/model_http_transport.zig").ResponseBody;
 pub const Observation = struct {
     request_id: ?[]const u8 = null,
     identity: Identity = .unavailable,
     usage: ?report.Usage = null,
     failure: ?Failure = null,
     payload: ?[]const u8 = null,
-    response_body: ?[]const u8 = null,
+    response_body: ?Body = null,
 };
 pub const Context = opaque {};
 pub const Error = std.mem.Allocator.Error || error{Cancelled};

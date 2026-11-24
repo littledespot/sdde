@@ -147,7 +147,7 @@ test "stored classification replay rejects omitted native duties and forged pres
             .passive_records = &.{},
             .passive_occurrences = &.{},
         };
-        try snapshots.validate(a, snapshot);
+        try snapshots.validate(a, snapshot, text.normalizer);
         const items = try @import("domain/reference_claim_items.zig").build(a, inputs, completed.ledger);
         try std.testing.expect(try duty.itemRequired(items, .{ .ordinal = 2 }));
         try std.testing.expect(!(try duty.itemRequired(items, .{ .ordinal = 1 })));
@@ -187,7 +187,7 @@ test "stored classification replay rejects omitted native duties and forged pres
                 try std.testing.expectEqual(@as(u32, 2), stored.extraction.next_claim_ordinal);
                 try std.testing.expectEqual(@as(u32, 2), stored.extraction.next_citation_ordinal);
             }
-            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, stored));
+            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, stored, text.normalizer));
         }
     }
 }
@@ -258,6 +258,29 @@ test "structured Markdown preserves raw code and link destinations without inter
             try std.testing.expectEqual(candidate.id.extractor_id, candidate.fact.extractor_id);
         }
         try tokens.validateCandidates(arena.allocator(), inputs, available);
+    }
+}
+
+test "a fenced block's value excludes the blank lines at its edges and an all-blank block holds none" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // A blank line cannot be cited (ADR 0036 Decision 1), so only a value without blank edges can be held in
+    // full by a quote of the block's citable lines.
+    for ([_]struct { source: []const u8, value: ?[]const u8 }{
+        .{ .source = "Example:\n```\na: 1\nb: 2\n```\n", .value = "a: 1\nb: 2\n" },
+        .{ .source = "Example:\n```\n\na: 1\nb: 2\n```\n", .value = "a: 1\nb: 2\n" },
+        .{ .source = "Example:\n```\na: 1\nb: 2\n\n\n```\n", .value = "a: 1\nb: 2\n" },
+        .{ .source = "Example:\n```\n \na: 1\n\nb: 2\n\t\n```\n", .value = "a: 1\n\nb: 2\n" },
+        .{ .source = "Example:\n```\n\na: 1\n", .value = "a: 1\n" },
+        .{ .source = "Example:\n```\n\n  \n```\n", .value = null },
+        .{ .source = "Example:\r\n```\r\n\r\na: 1\r\n\r\n```\r\n", .value = "a: 1\r\n" },
+    }) |case| {
+        const available = try fixture.candidates(a, try inputsFor(a, case.source));
+        if (case.value) |expected| {
+            try std.testing.expectEqual(@as(usize, 1), available.entries.len);
+            try std.testing.expectEqualStrings(expected, available.entries[0].fact.citation.verbatim.?);
+        } else try std.testing.expectEqual(@as(usize, 0), available.entries.len);
     }
 }
 
@@ -339,7 +362,8 @@ test "reader keeps multiline values together and fails over-limit values explici
     try std.testing.expect(available.entries[0].fact.citation.location.end.byte <= resolved.chunk.span.end.byte);
     const near_limit = try inputsFor(allocator, "a" ** 16000 ++ " `" ++ "b" ** 1000 ++ "`");
     try std.testing.expectEqual(@as(usize, 1), (try fixture.candidates(allocator, near_limit)).entries.len);
-    try std.testing.expectError(error.InvalidReferenceAccounting, ingest(allocator, "long.md", "`" ++ "x" ** (@import("domain/reference_ingestion.zig").limits.block_bytes + 1) ++ "`"));
+    // A value over the block limit is a failure of the entry's own decoding, and its reason says so.
+    try std.testing.expectError(@import("domain/reference_ingestion.zig").failureError(.decoded_budget), ingest(allocator, "long.md", "`" ++ "x" ** (@import("domain/reference_ingestion.zig").limits.block_bytes + 1) ++ "`"));
 }
 
 test "exact values of every token kind enter ordinary claim and citation accounting" {

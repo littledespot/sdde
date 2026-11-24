@@ -39,8 +39,8 @@
   WHEN, THEN, never anything else", one `GIVEN` holding both conditions, then "yes, amendment
   to ADR 0038, do not make any code changes"): an edge case is printed as a Given/When/Then
   scenario of the criterion it links to, and the model writes only its own given
-  (Decision 7). Not yet implemented: the code, the workflow assets and the sections this
-  amendment names still state the 8 November rule. Amended on 14 November 2026 (SPEC01 Q14
+  (Decision 7). Implemented on 21 November 2026 (user: "preflight and implement Q14: build
+  the edge-case amendment"). Amended on 14 November 2026 (SPEC01 Q14
   b4, D14.2; user: "update the documentation with the recommendation"): items of one
   scenarios response with equal content take the request's protocol correction, naming every
   item's number, in place of the `competing_records` block (Decision 3). Implemented on 15
@@ -48,7 +48,12 @@
   copy in a criterion must belong to its slot's own claim (Decision 3). The user then
   approved, as part of its implementation, the repair bound that Decision 3 states
   ("recommendations approved. implement", 16 November 2026). Implemented on 16 November
-  2026.
+  2026. Amended on 22 November 2026 (Z_SPEC01 Q26; user, 20 November 2026: "R1: YES", on the
+  advisory R1 of the evaluations of that day, then "preflight and implement Q26"): an
+  acceptance criterion's `given` is optional, written only where the sources state a starting
+  situation for the requirement (Decision 3), and the `GIVEN` line of an edge case that links
+  to a criterion with none is the edge case's own given (Decision 7). Implemented on 22
+  November 2026.
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -111,7 +116,16 @@
     holds `given` in place of `condition`. In the implementing change the canonical content,
     the state and the packet guidance advance from the versions then current, and so do the
     required-authority contract, reports and request descriptions wherever the rename removes
-    or renames one of their closed members; earlier versions reject.
+    or renames one of their closed members; earlier versions reject. Implemented 21 November
+    2026: `specification/v7`, `specification-state/v27`, `packet-guidance/v7`, the
+    required-authority contract 6, `model-request-debug/v21` and `spec-e2e-report/v23` (the
+    report's admission audit names the text field, `edge_given` in place of `edge_condition`).
+    The stored link keeps its name, `outcome_of`, and the link vocabulary stays "outcome
+    link": it still names the criterion the edge case prints, now as a whole scenario, and a
+    rename would take another state version. The retained calibration captures that bound
+    `edge_condition` drop that binding, as
+    [ADR 0048](0048-engine-derived-specification-title.md) retired the title's; their raw bytes
+    and hashes are unchanged.
   - The equal-criteria amendment of 14 November 2026, Decision 3: §12.2 (the admission
     constraints that stay native), §17.3 (the scenarios response's admission), §22.6 (the
     corrections that name extra fields), [ADR 0019](0019-single-request-debugger.md) (the
@@ -125,6 +139,29 @@
     text-issue reason appears in no versioned request description, report or state, and the
     first scenarios request is byte-identical. A specification state that an earlier build
     published with such a copy no longer reads back, and nothing migrates it.
+  - The optional-Given amendment of 22 November 2026, Decisions 3 and 7: §12.2 (the
+    `distinct` rule's properties are declared, not required, and an omitted property is a
+    value of its own), §17.3 and §17.5 (the criterion's `given` is optional, and the edge
+    case's `GIVEN` line), §21 (the acceptance form), §22.3 (an absent Given is no repair
+    target), §23.1 (the criterion's pair form, the edge-case line and its readback), §24
+    (the criterion's shape), §28.6,
+    [text-field-composition.md](../contracts/text-field-composition.md) (the criterion's
+    Given row), the §31 artifact-editability item, F0100 §5.3 and §5.6, and
+    [code.md](../code.md); [ADR 0016](0016-configured-json-response-composition.md) (the shared
+    `given` guidance entry serves both the criterion's and the edge case's Given);
+    [ADR 0020](0020-derived-exact-reference-lineage.md),
+    [ADR 0023](0023-advisory-post-generation-review.md) and
+    [ADR 0024](0024-native-exact-token-authority.md) (the content and state versions);
+    and [ADR 0041](0041-failed-run-incomplete-publication.md) (its reserved state version
+    moves from v28 to v29). In the implementing change the canonical content advances to
+    `specification/v8` and the state to `specification-state/v28`, and earlier versions
+    reject. `packet-guidance/v7` (its closed key set is unchanged, so an edit of the `given`
+    and acceptance-criterion texts advances nothing), the required-authority contract 6,
+    `model-request-debug/v21` and `spec-e2e-report/v25` advance no closed member: the scenarios
+    schema's `required` list loses `given` inside the schema bytes a request records, and a
+    recorded earlier request replays with its own schema. The scenarios prompt loses the
+    sentence that let a scenario give what its own wording presupposes, because the shared
+    `given` guidance now owns that rule.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -182,8 +219,9 @@ only block.
      slot. The request offers each slot, numbered from one, with its claim's source text
      and exact values, and no statement, entity, story or other batch's record, so a
      criterion can't copy a statement's wording (SPEC01 D12.1).
-   - **The response is content only:** one item per slot, holding the slot's number and the
-     criterion's given, when and then. The result schema selects the numbers as an
+   - **The response is content only:** one item per slot, holding the slot's number, the
+     criterion's when and then, and its given where the sources state one (below). The
+     result schema selects the numbers as an
      `exact_members` set, so each appears exactly once, and carries no claim, kind or
      group. A missing, repeated or foreign number, or any other property, takes the
      request's protocol correction. So do items of the response that return equal values
@@ -219,6 +257,26 @@ only block.
        run; the rule never weakens. The rule applies only to the acceptance criterion the
        engine binds to one claim, at admission, repair and stored readback. An edge case and
        every record whose claims the model chose keep ADR 0020's union and set equality.
+   - **A criterion's Given is optional** (22 November 2026; user: "R1: YES", 20 November).
+     A criterion holds a `given` only where the sources state a starting situation for its
+     requirement. The scenarios schema requires an item's number, `when` and `then` and
+     declares `given` without requiring it; a held Given is nonblank, and the typed content
+     holds `null` where there is none, with the wire omitting it. Before the amendment
+     the schema required a nonblank Given, the field rule said to write nonblank prose, and the
+     prompt let a scenario give "what its own wording presupposes", so a requirement that
+     states only a trigger got that trigger repeated, or an invented prerequisite, as its
+     Given (Z_SPEC01 Q26 holds the measurements). The shared `given` field guidance, which the edge case's own given also
+     reads, says the starting situation is stated without assuming the result under test or
+     inventing prerequisites, and that a criterion whose sources state none has none; the
+     edge case's own given stays required. The rest of the contract holds:
+     - **Equality.** An omitted Given is a value of its own for the `distinct` rule and the
+       typed duplicate rule: two criteria with equal When and Then that both omit it are equal,
+       and one that omits it differs from one that states it (§12.2).
+     - **Repair.** An absent Given is no repair target, and no repair adds one or removes
+       one; a held Given takes `replace` like any other text field (§22.3).
+     - **Rendering.** A criterion without a Given renders `**When** … **Then** …`, with no
+       `Given` label and no empty text (§23.1). The offered candidates of the link step show
+       a Given only where a criterion holds one.
    - **The engine binds** each criterion's kind (`acceptance_criterion`), claims (the
      slot's one claim) and group (the batch's), and appends the criteria to the group's
      batch in slot order, so the batch spans both responses. The merged batch takes full
@@ -334,7 +392,10 @@ only block.
    - **Lines:** `GIVEN` is the linked criterion's Given, then the edge case's own given, in
      one line. They are joined by the separator §23.1 derives from a clause's ending (`, `,
      or one space after terminal punctuation), applied here between the two texts, so
-     neither text's bytes change. `WHEN` is the criterion's When and `THEN` its Then. The
+     neither text's bytes change. Where the linked criterion has no Given (Decision 3,
+     22 November 2026), `GIVEN` is the edge case's own given alone, with no separator: the
+     edge case adds its one circumstance to a scenario that states no starting situation.
+     `WHEN` is the criterion's When and `THEN` its Then. The
      copied parts are the criterion's own display, exact-value spans included.
    - **Candidates:** the acceptance criteria of the edge case's own records batch that name
      at least one of its claims, across both of its group's responses (Decision 3). They are
@@ -388,11 +449,19 @@ only block.
       contradicting given prints as a `GIVEN` whose two parts disagree, which the human who
       reviews `spec.md` judges. Where the criterion's Given doesn't carry the condition that
       governs its Then, an outcome the source doesn't support still prints.
-    - The guidance text for the edge case's `given` is not decided here. Packet guidance
-      holds exactly one text for each registered key (ADR 0016), and the `given` text
-      describes a criterion's whole starting situation, where the edge case's own given is
-      one added circumstance. The implementing change decides the key and its text on
-      repeated runs; how the model phrases a given is unmeasured.
+    - The guidance text for the edge case's `given` is the registered `given` entry,
+      unchanged. Packet guidance holds exactly one text for each registered key (ADR 0016),
+      and a key follows a field's name across record families
+      (`src/domain/packet_guidance.zig`), so the edge case's `given` shares the criterion's
+      text, which describes a whole starting situation, where the edge case's own given is
+      one added circumstance; the edge-case family's own text ("A boundary or exceptional
+      condition.") sits beside it in the same request. The edge case's text keeps the
+      criterion's sentence about a criterion with no starting situation: a records request
+      without it changed what the call wrote, dropping requirement claims and weakening
+      obligations ("can renew" for "must be able to renew") in paired screens of both
+      development cases. A separate text would need a key by family and field, a native
+      registry change, and must carry that sentence or be decided on scored repeated runs of
+      both development cases. How the model phrases a given is otherwise unmeasured.
     - An edge case repeats its criterion's Given and When, so it can't carry a second flow of
       a claim (a cost of Decision 3's slot criteria, below), and a defect in a criterion's
       Given or When repeats in each edge case linked to it. The 9 November ruling that files
@@ -408,7 +477,7 @@ only block.
       retained runs. Its benefit is not demonstrated, and it is kept or reverted on scored
       repeated runs of both development cases (AGENTS.md "Model output, prompts and
       evidence").
-  - **Two edge cases with one condition** and different claims are no longer told apart by
+  - **Two edge cases with one given** and different claims are no longer told apart by
     their outcomes: like any single-field record they block as `competing_records`.
   - A lead-in condition is split from the items it governs. "Unless the borrower is
     staff:" followed by two items becomes three claims, and each item claim reads as
@@ -477,8 +546,11 @@ only block.
   members `spec-e2e-report/v17`. The scenario-slot amendment changes no record shape or
   content version. The equal-criteria amendment took `model-request-debug/v19`, which records
   its `distinct` rule, and `spec-e2e-report/v20`. The
-  edge-case scenario amendment renames the edge case's one field, and the amendment list
-  says which versions advance.
+  edge-case scenario amendment renamed the edge case's one field to `given` and took
+  `specification/v7`, `specification-state/v27`, `packet-guidance/v7`, the required-authority
+  contract 6, `model-request-debug/v21` and `spec-e2e-report/v23`. The optional-Given
+  amendment made an acceptance criterion's `given` optional and took `specification/v8` and
+  `specification-state/v28` only; the other four stay.
 - **Tests.**
   - The result-schema rule: admitted (a value only an exclusive item names, ungoverned
     kinds, empty), kept by clones, and invalid configurations rejected; admission
@@ -605,7 +677,7 @@ only block.
       the persisted links read back; and block with the typed rejection when a batch has an
       edge case and no criterion. Each request is projected as a closed choice with its own
       prompt, and offered ids differ from unit positions in the domain cases.
-    - an edge case as a scenario (13 November 2026, not yet implemented):
+    - an edge case as a scenario (13 November 2026, implemented 21 November 2026):
       - the rendering shows exactly the `GIVEN`, `WHEN` and `THEN` lines: the `GIVEN` is the
         linked criterion's Given, the separator and the edge case's own given, and the `WHEN`
         and `THEN` are the criterion's own, for a native link, for a chosen one and in an
@@ -617,10 +689,36 @@ only block.
         covers the edge case's `given`;
       - readback recovers the own given from the text after the copied Given, also when the
         own given equals or begins with the copied Given, and in an unrelated domain; it
-        rejects an edited copy of the Given, When or Then, a `GIVEN` line that doesn't begin
-        with the copied Given, and a `CONDITION` or `EXPECTED OUTCOME` line;
+        rejects a When or Then that is no criterion's own, a `GIVEN` line that doesn't begin
+        with a criterion's Given, and a `CONDITION` or `EXPECTED OUTCOME` line. A copy edited
+        into another criterion's own text reads back, yet it differs from the render of the
+        content's projection, which publication compares;
       - the content, state and packet guidance round-trip at their new versions and reject
         the previous ones;
       - a scripted run publishes an edge case as its criterion's scenario, for a native link
         and for a chosen one.
+  - A criterion's optional Given (Decision 3, 22 November 2026), each at its owner:
+    - the scenarios answer omits `given` and its schema requires only the number, `when` and
+      `then`: an answer that omits it, alone or beside one that states it, is admitted, a
+      missing `when` rejects, and an explicit `null` rejects; the decoder encodes an omitted
+      Given with no member for it;
+    - an omitted Given is a value of its own: two scenarios that share a When and a Then and
+      both omit it are one equal set, and one that omits it beside one that states it is
+      not, in the schema's `distinct` rule and in the typed duplicate rule;
+    - the engine binds a criterion without a Given and the unit's own validation admits it;
+      its values are the parts it holds, stored readback accepts it, and a held Given beside
+      it still reads back only as valid text;
+    - an absent Given is no repair target and no repair adds one, a defect in the criterion's
+      When repairs with the Given still absent, and a held Given takes `replace`;
+    - the criterion renders as the `When` and `Then` pair and reads back as one, with label-shaped
+      bytes inside an exact value inert; a `Then` before a `When`, a missing `When` or `Then`, a
+      `Given` label after the `When` and a `Given` label with no text reject;
+    - an edge case linked to such a criterion prints its own given alone on the `GIVEN` line and
+      reads back only that, an edited When or Then rejects, and where a criterion that holds a
+      Given also matches the line, both readings re-render the same bytes; the link request
+      offers the criterion without a `given`;
+    - the state round-trips at `specification-state/v28` and the content at
+      `specification/v8` with an absent Given;
+    - the baseline admission audit observes the parts a criterion holds and none for an absent
+      Given.
   - The list-item split: its quoting, structure and omission-repair cases (ADR 0036).

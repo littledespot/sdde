@@ -28,7 +28,7 @@ pub const Step = enum {
 pub const Diagnostic = struct { step: ?Step = null };
 
 /// The failure representation of the nine absorbed actions, unchanged. `Cancelled` means the
-/// runtime stopped being active; the runner reports which stop it was.
+/// runtime stopped being active or a port call was cancelled; the runner reports the cancellation.
 pub const Error = toolchain.Error || error{Cancelled};
 
 /// One stage: capture the project and preset documents, parse them, validate, resolve,
@@ -58,15 +58,24 @@ pub const Action = struct {
         try checkpoint(diagnostic, runtime, .resolve_inheritance);
         const resolved = steps.resolveInheritance(scratch, project, registry) catch |err| return stopped(diagnostic, .resolve_inheritance, err);
         try checkpoint(diagnostic, runtime, .compose);
-        const composed = steps.compose(scratch, project, resolved) catch |err| return stopped(diagnostic, .compose, err);
+        const selected = steps.compose(scratch, project, resolved) catch |err| return stopped(diagnostic, .compose, err);
         try checkpoint(diagnostic, runtime, .validate_safety);
-        return steps.validateSafety(retained, composed, self.policies) catch |err| return stopped(diagnostic, .validate_safety, err);
+        return steps.validateSafety(retained, selected, self.policies) catch |err| return stopped(diagnostic, .validate_safety, err);
     }
 };
 
 fn stopped(diagnostic: *Diagnostic, step: Step, err: Error) Error {
     diagnostic.step = step;
     return err;
+}
+
+/// A toolchain source that fails stays an invalid toolchain, as before; one that reports a cancellation
+/// is a cancellation.
+fn invalidSource(err: source_port.Error) Error {
+    return switch (err) {
+        error.InvalidToolchainSource => error.InvalidToolchain,
+        error.Cancelled => error.Cancelled,
+    };
 }
 
 fn checkpoint(diagnostic: *Diagnostic, runtime: pipeline.NodeRuntime, next: Step) Error!void {
@@ -77,20 +86,20 @@ fn checkpoint(diagnostic: *Diagnostic, runtime: pipeline.NodeRuntime, next: Step
 /// registered, addressable or composable from workflow YAML. A step that reaches a port takes
 /// exactly that port, never the `Action`, and a step that reads does not parse.
 pub const steps = struct {
-    pub fn captureProject(source: source_port.ProjectCapturer, allocator: std.mem.Allocator) toolchain.Error!toolchain.Capture {
-        return source.captureProject(allocator) catch error.InvalidToolchain;
+    pub fn captureProject(source: source_port.ProjectCapturer, allocator: std.mem.Allocator) Error!toolchain.Capture {
+        return source.captureProject(allocator) catch |err| return invalidSource(err);
     }
 
-    pub fn inventoryPresets(source: source_port.PresetEnumerator, allocator: std.mem.Allocator) toolchain.Error![]const toolchain.Entry {
-        return source.inventoryPresets(allocator) catch error.InvalidToolchain;
+    pub fn inventoryPresets(source: source_port.PresetEnumerator, allocator: std.mem.Allocator) Error![]const toolchain.Entry {
+        return source.inventoryPresets(allocator) catch |err| return invalidSource(err);
     }
 
     /// The capture budget is checked before any preset is read.
-    pub fn capturePresets(source: source_port.PresetCapturer, allocator: std.mem.Allocator, project: toolchain.Capture, entries: []const toolchain.Entry) toolchain.Error![]const toolchain.Capture {
+    pub fn capturePresets(source: source_port.PresetCapturer, allocator: std.mem.Allocator, project: toolchain.Capture, entries: []const toolchain.Entry) Error![]const toolchain.Capture {
         try accounting.validateCaptureBudget(project, entries);
         const captures = allocator.alloc(toolchain.Capture, entries.len) catch return error.InvalidToolchain;
         for (entries, captures) |entry, *capture| {
-            capture.* = source.capturePreset(entry, allocator) catch return error.InvalidToolchain;
+            capture.* = source.capturePreset(entry, allocator) catch |err| return invalidSource(err);
         }
         return captures;
     }
@@ -123,12 +132,12 @@ pub const steps = struct {
         return inheritance.resolve(allocator, project, registry);
     }
 
-    pub fn compose(allocator: std.mem.Allocator, project: toolchain.Project, resolved: toolchain.Resolved) toolchain.Error!toolchain.Composed {
+    pub fn compose(allocator: std.mem.Allocator, project: toolchain.Project, resolved: toolchain.Resolved) toolchain.Error![]const []const u8 {
         return composition.compose(allocator, project, resolved);
     }
 
     /// Only this step constructs the safety-valid owner.
-    pub fn validateSafety(allocator: std.mem.Allocator, composed: toolchain.Composed, policies: toolchain.PolicyRegistry) toolchain.Error!*safety.Owner {
-        return safety.validate(allocator, composed, policies);
+    pub fn validateSafety(allocator: std.mem.Allocator, selected: []const []const u8, policies: toolchain.PolicyRegistry) toolchain.Error!*safety.Owner {
+        return safety.validate(allocator, selected, policies);
     }
 };

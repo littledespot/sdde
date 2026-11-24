@@ -125,7 +125,7 @@ their claims; a partly taken statement is `shared_member`, a wholly taken one a 
 `model-request-debug/v16`, `spec-e2e-report/v14`, `baseline-acquisition/v11`. Evidence:
 `evaluations/q16-measures-set.json`, `evaluations/d162-measures-set.json` (Keep if not met:
 restatement 4 → 3, "not enough evidence"). The native delete first fired on 3 November; the
-report lists only some deletes (SPEC01 T8).
+report then listed only some deletes (fixed: T8 below).
 
 ## Q19 D19.2. The engine composes the story (ADR 0047)
 
@@ -238,7 +238,14 @@ that every exemption at the wire is a validator delete.
   counts (R8, design/harness/acceptance.md).
 - **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…`): the D12.2
   set's publications and the first six ADR 0047 runs (`evaluations/e2e/<run>/`,
-  `evaluations/adjudications/`). One applied decision is open (SPEC01 §7 H1).
+  `evaluations/adjudications/`). `2026-11-02T09-15-27Z-d2ee…`'s applied decision reads
+  `admission_evidence_invalid`, from a harness bug since fixed, while its record scores `critical_failed`.
+  **It stands** (decided 20 November 2026, user: "update the documentations with the above
+  recommendations"):
+  - the first record under a skill version counts and no later one under that version is applied
+    (design/harness/acceptance.md:88-91);
+  - the run directory is gone, and only the build that made it reads its v14 report (e2e.md:618-620);
+  - the run fails either way, and it is in no reference set.
 - **v15, implemented 7 November 2026** (user: "implement items 1 and 2"): `spec-e2e-report/v15`
   and `baseline-acquisition/v12` carry ADR 0047's source-catalogue reasons and `issue`, the
   publication reason `adjudication_required`, and an admission audit that accepts no story
@@ -262,6 +269,14 @@ count as one evaluator:
   edge case's linked Then once, on the criterion (ADR 0038 Decision 7); no reference run has an
   outcome link.
 
+**`43c04100…` follows `3fe52a92…`** (user, 20 November 2026: "R3: YES", on the advisory R3 of the
+`2026-11-20T07-4*` and `07-5*` evaluations): a requirement's designed shape (its story quote, its one
+record and its one bound criterion) isn't `restatement`. Those evaluations scored that shape as
+restatement in loan-renewal (`organization` 3 in all three runs) and not in hello-world (4 in all three).
+The ruling changes only `organization`, never an accuracy class, so the accuracy counts that decide keeps
+(SPEC01 §2 rule 6) read the same under both versions and no reference is re-scored; `organization`
+isn't compared across the change. The six evaluations and their applied records stand.
+
 **Readings made rules, 3 November 2026** (user: "YES"; in SKILL.md §2): a link defect costs
 nothing beyond its content defect; a repeat that gives a requirement's value states it, one that
 gives none is a summary; a weaker restatement in a checkable outcome also costs
@@ -276,11 +291,97 @@ or an outcome without its verb, isn't weakening. `e2e-assistant-evaluation/v4` r
 exactly; the run publishes with no correction, and no batch keeps two records of equal content
 (`workflow_tests.zig`, beside D16.2's `shared_statement` scenario). Open parts: SPEC01 T3.
 
+## T3. The story restatement and the reference-text repair route in the scripted matrix (built 19 November 2026)
+
+**Decided** 19 November 2026 (user: "implement next item", then "implement T3"); test-only. ADR 0035's `restatement`
+rule had unit coverage only. Two scenarios, `story-restatement-business_rule` and `-non_goal`, follow
+`split-claim-once` in the `scenario_stops` group (`workflow_tests.zig`, so no earlier scenario changes its name). The scripted records
+generator's `story_restatement` option (`spec_generation_responses.zig`) leaves the first group's first story-quoted
+claim without a functional requirement and offers, in order, a record of that kind holding the admitted story's own
+text (read from the session, not written out) and an outcome naming the claim. Both runs publish with the restating
+record gone, the outcome and the other claim's requirement kept, no repair request, and the driver's counter
+(`story_restatements`) showing the record was offered. **Why differential:** the baseline generator gives every record
+the group's whole claim selection and every claim a requirement, so ADR 0038 Decision 5 deletes a story-equal record as
+well, and the end state is the same whichever rule fires. The rule's name is read nowhere outside the domain. Here no
+requirement names the claim, so Decision 5 would keep the first record that names it and delete the later outcome, and
+the published batch tells the two rules apart; the first batch keeps per-record claims for that (`own_claims`). The runs
+use the equal-criteria sources with `.chosen` edge cases, which pair the claims into groups of two. **Proof:** with
+`restatement` disabled each run fails at `story-restatement-kept-record` (a record of the restating kind survived),
+checked once for each kind, while no earlier scenario noticed. A freeze beside one without the two runs differed only
+in their two directories and `manifest.json`; every other request was byte-identical. **Not covered:** the rule's other
+single-statement kinds (`assumption`, `prohibited_behavior`) and a restatement whose evidence the story doesn't cover
+(unit tests only).
+
+**The reference-text repair route** (`authorize-text-repair` to `text-repair-release` in `extract-references`) had unit
+coverage only: the reference-ingestion fixture's rejected reasons (`unbound`, `unknown_literal`) end `.invalid` before
+it. The scenario `text-repair-reason`, last in the `scenario_stops` group, gives the feature a notes source and a
+stories source, and the notes source must sort first because the generator's first chunk is the first source in path
+order. The scripted generator's `defective_reason` option answers that chunk with a no-feature-claim reason holding a
+control character, which response admission accepts and the text validation rejects as an invalid scalar. The route
+runs and its one repair request is answered with a valid reason, the extraction validates again and the run publishes.
+In this fixture a reason naming a path is accepted, and an unknown passive literal never reaches the validation:
+admission corrects it first. **Proof:** with the merge no longer applying the repaired reason
+(`reference_extraction_text_repair.zig`), the scenario fails (retry limit at the repair's request, the candidate still
+rejected as an invalid scalar) and no other integration test does. Making the route unreachable in the shipped workflow
+fails the load of every test that runs it, so the workflow compiler already guards the wiring. A freeze beside one
+without the scenario differed only in its directory and `manifest.json`.
+
+## T2. Tests compare with the owner of model-facing text, not a copy (built 19 November 2026)
+
+**Decided** 19 November 2026 (user: "implement E1 then T2"). The tests and fixtures that copied model-facing English
+or checked its absence now derive the text from the code or resource that sends it, so a wording change at the owner
+fails no test and a wrong wiring still does. About 25 of the record's 32 lines were real prose copies in seven files;
+the rest were identifiers or structure. Owners: the retry module's `repetition_notice` and
+`missing_final_text_explanation` (`model_protocol_retry.zig`; the notice was an inline format string); `Diagnostic.explanation()`
+for schema and decoder rejections; `Constraint.descriptionFor(scope)` and `description()` for packet rules
+(`reference_reconciliation_diagnostic.zig`); `selectedGuidance` and `guidance` for field guidance
+(`text_field_policy.zig`); `ValueChoices.correction` (`specification_provenance.zig`); the shipped packet guidance through
+`test_fixtures/packet_guidance.zig`; and `insertion_requirement` and `correction_requirement` for an entity-membership
+repair (`specification_repair.zig`). **Production edits:** the two retry constants and the two repair requirements, each
+the old literal moved into a `pub const` its consumer now reads, nothing else.
+
+**Deleted, not replaced:** the phrase pins "identical response" (the rule is that the notice doesn't claim byte identity,
+which an absent phrase can't enforce; the notice's count of 1 on a confirmed repetition and 0 otherwise is the guard that
+remains), "same projection kind" and "native code" (the test `no rule text the model reads carries engine vocabulary`
+already bars "native" and "projection kind" in every rule text), "Assess policy compliance" (named nowhere in the
+repository), and the phrase checks on `protocol.prompt.md` (the test compares the prompt with the one the correction carries).
+"Together, the statements must cover every assigned claim ID" and
+"Every retained claim must appear" narrowed to the owner's full sentence, which no longer detects a reworded leak. A check
+that an explanation names the guidance objects it sends the model to (`exclusive.`, `equal.`, `agreement.`) replaced the
+per-reason word list.
+
+**Renamed:** dumps r35, r36, r37, r40, r41 and fix002 to what they hold (`summary-protocol-request`,
+`global-protocol-failure` and `-recovery`, `alternating-missing-recovery`, `brief-request`, `false-conflict-questions`
+and `-recovery`); the tests, comments and fixture headers named R21, R22, R35, R36, R42, R46, D1 and Q17; and the
+matching `build/test_run_inputs.zig` entries, whose orphans (`d1-review`, `r42-recovery`, `r43-recovery`,
+`principle-citation-*`, `chunk13-admission-`, `chunk18-stack-request-*`) went. **Proof:** a freeze beside one taken before
+the first edits printed nothing under `diff -r`, manifest included; a freeze after the repair constants carries both
+requirements in the same scenarios and calls as the retained `q22-final` (four insertions, two corrections). With the
+repair constants swapped, the identity-label guidance branches equal, or an explanation that no longer names
+`exclusive.`, the three assertions that replaced a deleted pin fail, and no other test does. The `contract-reviewer`
+found no blocker and four minor defects, all fixed: three assertions weakened without an owner-derived substitute and
+five copies or pins the sweep missed. **Not done:** the harness-facing reason in `request_debugger_test.zig`, which no
+model reads. **Leftovers built 20 November 2026:** the 18 measurement dumps are gone: the driver's `measurement_prefix`
+and the writer it fed (`spec_generation_driver.zig`), the 11 assignments in `workflow_tests.zig`, and the matching
+entries of `build/test_run_inputs.zig` (a listed location that no test names is dead weight in the reuse key). Nothing
+read them: no source, script or design file named them, and the request-projection freeze is a different writer. The
+step trace (`workflow-step-trace/v1`) stays: it is the structural-equivalence record the records above name. The copies
+under 25 characters were swept with a scratchpad scan over every string literal of one or two runs in the test sources
+and fixtures, against the corpus the detector uses (the freeze's guidance, protocol prompt and schema strings, and the
+workflow assets). None of what matched is model-facing prose: it is YAML and JSON syntax (`steps:`,
+`use: request-model`, `"const":"business"`), JSON pointers, schema member names (`maxItems`) and arbitrary container
+values (`source meaning`), so nothing changed. The scan is by literal, not by meaning: a short copy split across
+literals is not seen. **Proof:** the integration suite and the freeze run pass without the dumps, and `code-heuristics`
+reproduces the 19 November T5 counts. **T5 retaken 19 November 2026** (table under
+E5): T5.1 `tests_copying_model_text` 19 to 10, all single-word absence literals. The retry notice is now an exact span of
+the freeze's guidance, and T5.6 `model_text_outside_owner` counts 15 in 4 files against 12, two of them the retry
+module's constants: a measurement effect, not new model text.
+
 ## T5. Brittleness counts
 
 **Committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes them to the
 `brittleness` member of `code-heuristics/v2` (`build/code_heuristics/brittleness.zig`). Latest
-counts: E5 below; when they are due: SPEC01 T5.
+counts: the table under E5 below (19 November 2026, after T2); when they are due: SPEC01 T5.
 - **Definitions** (approved 1 November 2026; exact matches only):
   - A is every `.md` and JSON string value under `design/workflows/`, whitespace-collapsed.
   - M is production literals outside tests, of 3+ whitespace-separated runs, whose decoded
@@ -337,9 +438,117 @@ parts: SPEC01 E6.
 published-output defect class (a wrong failure code in the feature log); no request, report or
 state change. `acquire_feature_log_stream_lock.zig` fails with `LogLockTimeout` only for
 `LockUnavailable` and with `LogSinkFailure` for every other sink error (an exhaustive switch in
-`Action.execute`), and its `failureCode` gives each one's log code, `LOG_LOCK_TIMEOUT` or
+`Action.execute`), and its `stop` gives each one's log code, `LOG_LOCK_TIMEOUT` or
 `LOG_SINK_FAILURE` (F0002:545, :556-557); the feature log runner and the retention runner call
-it. The cancellation half stays in SPEC01 E6.
+it. The cancellation half is the next entry.
+
+## E6. Cancellation under the feature log is the run's cancellation (built 19 November 2026)
+
+**Decided** 8 November 2026 (user: "recommendations accepted for 1 to 6"); **approved** 19 November 2026
+(user: "yes, and implement E6"), with the amendments to ADR 0032, ADR 0026, contract 27, §14.9 and §14.10,
+13-09 and F0002. **Defect class:** a terminal state reported as another (AGENTS.md "Keep failed, blocked,
+cancelled and completed distinct"). No published-output defect class: nothing supplies a cancellation status in
+production (SPEC01 §10 C28), so the outcome is proven only by fixtures, and no quality benefit is claimed.
+**Built:** the feature-log sink port carries `Cancelled` (`operation_error.zig`), the log outcome and a new
+`Stop` carry `cancelled` beside `blocked` (`feature_log_stream.zig`), and a cancellation under the lock, while a
+segment is read, appended, closed or pruned, or while the sink's directories are opened ends the run `cancelled`.
+It has no `LOG_*` code, emits no emergency line and releases its lock. A cancellation during segment creation or
+rotation is reported as one too, but see "Not done" for the torn segment it can leave.
+- **Adapters:** one owner of the mapping per boundary replaces the `SinkFailure` sites that wrapped an Io call:
+  `feature_log_file.sinkFault` and `flushFault` (about 26 calls), `feature_log_directory.storageFault` (about 6),
+  and `log_output` for the console mirror write. About 11 validation `SinkFailure`s stay. Recovery no longer
+  reports a cancellation as `CorruptStream`, and a read the reader gave up on shows its cancellation in
+  `reader.err`. The five filesystem adapters, the sink's activation, the historical stream and `requireExactName`
+  in `directory_access.zig` (a directory open's `realPathFile`) map it.
+- **Actions:** the seven sink actions and the console action pass `Cancelled` on, each with an exhaustive `switch`
+  over the sink's closed error set, so a new sink error forces a decision.
+- **Application:** child-binding results split so only the steps that touch the sink can be `cancelled`
+  (`SinkOutcome`); the orchestrator and the retention, finalization and policy-transition coordinators carry it;
+  the event capture returns a `Stop`, and `Rejection.logStop` is the one place a stop becomes a `logging` or
+  `cancelled` rejection (about 21 pipeline-runner sites). The model-exchange capture holds one typed `stopped`
+  state, a capture failure or a cancellation, and a cancelled prompt capture ends the call `cancelled`.
+- **Stale stream state:** a cancellation can land after a row's or trailer's bytes were written (a flush, the
+  console mirror), leaving the file ahead of the runner's cached stream state; finalization then failed its size
+  check and the run ended `blocked`. A cancelled persist or close now drops that state (`Runner.dropped`), the next
+  persist recovers it from the bytes, and finalization recovers a dropped stream under its lock before closing it,
+  as after a crash (`feature_log_runner.zig`, ADR 0032 "Cancellation mapping"). Production finalizes once, so what
+  matters there is the recovery of a stream a cancelled persist dropped; that a cancelled close drops its state too
+  is the runner's own contract for a caller that closes again.
+- **Every stream is closed:** finalization closes the prompt stream even when the event stream's close stopped,
+  and reports the first stop; an activation whose prompt prepare stops closes the event stream it opened, since
+  that run is never finalized. Both apply to a failure as to a cancellation.
+- **Decided with it:** a cancelled log step emits no emergency line; finalization still runs after it. In
+  finalization a cancellation never replaces a logging failure and a later logging failure replaces an earlier
+  cancellation; when finalization's own log step is cancelled, a rejection the run already had is replaced by
+  `cancelled` and kept as its first cause, a run already cancelled stays as it was, and a capture failure stays
+  whole. A lock that cannot be released after a cancelled step is a logging failure of its own; retention keeps its
+  first stop.
+- **Proof:** a request-projection freeze after the change is byte-identical to one taken before it
+  (`diff -r` empty, manifest included; 145 scenarios, 1,969 calls); `zig build test-integration` 134 of 134;
+  26 new tests (2100 to 2126 repository tests) with a new `src/test_fixtures/cancelling_io.zig`, a real
+  filesystem `Io` that cancels the nth call of one operation class. Through the real adapter it drives the lock,
+  recovery, segment creation, append, flush, close (by flush, stat and write), the run-history scan, retention, the
+  console mirror and the sink's directory check, and for an activation every directory open, create, `realPathFile`,
+  access, read and stat (each ends activation `cancelled`, never blocked), and every durable flush of a run through
+  to its finish (each ends `cancelled`). Segment rotation is driven only through a fake sink. Each mapping and
+  state rule above fails a test when removed: the shared mapping, the recovery and reader-cause mappings, the
+  `realPathFile` mapping, the dropped state of each stream, the finalization recovery, the runner's `stopped`, the
+  orchestrator's release on a cancelled append, `Rejection.logStop`, and the runner's capture-cancel check.
+- **Not done:** a cancellation that lands
+  between creating a segment and writing its header leaves a torn segment, which recovery refuses
+  (`feature_log_recovery.zig` rejects an empty or header-less current segment), so that run's finalization fails and
+  it ends `blocked` as it did before this change. **Decided no** (user, 19 November 2026: "apply recommendation"):
+  current-run recovery doesn't rewrite a torn last segment; ADR 0032 "Cancellation mapping" records the limit. A
+  non-cancel failure after a row's bytes were written (a flush fault; a console fault since "C3 console failure")
+  leaves the same stale cache, and its run ends `blocked` anyway. A stream's cache is a `?StreamState` beside the `dropped` set, not one
+  per-stream value. Hand-written `Canceled` mappings outside the sink boundary stay as they were
+  (`feature_log_history.zig`), as do the `else =>` arms over closed sets in `feature_logging_runtime.zig` that this
+  change didn't add and the inferred error set of the run-history scan. A cancelled request capture is accounted
+  like any cancelled provider call. The scope was wider than the record's estimate of about 35 sites and 9
+  consumers, one contract throughout.
+
+### Cancellation outside logging
+
+Built 19 November 2026 (user: "yes", to amending ADR 0031's runtime-status rule so that an operation's own
+`Cancelled` ends the run `cancelled` while the runtime still reports active).
+
+- **Defect:** the filesystem and system adapters a stage reads or publishes through reported a cancelled `std.Io`
+  call as their port's ordinary fault (`FeatureInputUnavailable`, `InvalidToolchainSource`, `OutputWriteFailed`
+  and the like), and the runner ended such a run `operation_failed` unless the runtime had itself stopped.
+- **Change:** `Cancelled` is in the error set of each read port (feature input and workflow state, feature
+  directory, reference directory, reference corpus, principle, toolchain authority and reference state identity)
+  and of the workflow output port. Each adapter maps a cancellation at its `Io` calls and keeps every other fault as it was,
+  by a local helper over `directory_access.isCancellation` (the random draw tests its own closed `Io` error set).
+  `directory_inventory.zig` and `file_access.zig` carry
+  it for the adapters above them, `prepare_toolchain.zig` converts a source's `InvalidToolchainSource` to
+  `InvalidToolchain` and a `Cancelled` to `Cancelled`, and the runner reports an operation's `Cancelled` as a
+  cancelled run (`workflow_pipeline_runner.zig`, after the runtime-stop check; ADR 0031 "Cancellation").
+- **Found by the sweep:** a std file reader that is not given the file's size stats the file itself and swallows a
+  cancelled stat, so the read succeeded and the cancellation was lost. Every reader that already holds the observed
+  size now passes it (`File.Reader.initSize` in `file_access.zig`, `toolchain_authority_source.zig`, and the log
+  readers in `feature_log_recovery.zig` and `feature_log_retention_store.zig`, which E6 had left with the same gap).
+  Startup configuration readers run before any runtime exists and are not part of this.
+- **Proof:** `cancelling_io.sweep` cancels each call of one operation class in turn on a real directory and requires
+  `Cancelled` from the cancelled attempt and success from the rest. `src/adapter_cancellation_test.zig` sweeps the
+  feature directory inspector, the feature input and workflow-state readers, the reference inspector, enumerator and
+  capturer, the principle reader, the toolchain readers and the random draw (the `Io` fixture gained `stat_file` and
+  `random_secure`); `workflow_output.zig` sweeps a full publication (open, create, access, stat, read, truncate,
+  write and sync); `feature_log_layout_test.zig` now sweeps file opens, stats and reads of activation as well; the
+  runner test covers an operation's `Cancelled` under an active, cancelled and deadline-exhausted runtime; the
+  toolchain stage test covers each source step. 2126 to 2135 repository tests. Breaking each adapter's mapping, the
+  toolchain conversion or the runner rule, and restoring the log recovery's unseeded reader, each failed a named test.
+- **Not done:** a cancelled write in the publication leaves what a failed write leaves (the adapter's header: no
+  journal, no rollback): the files already replaced stay, and a file created for the write stays, possibly empty. The
+  workflow state is the last file written, so its bytes are on disk only if its write completed before the
+  cancellation landed (a cancelled sync or verification read leaves them). The run ends `cancelled`. The sweep
+  asserts the returned error, not the disk.
+- **Open, found in review:** the adapters' helpers take the failed call's error as `anyerror`, as the `catch return
+  error.X` they replaced did, so an allocation failure under a publication recheck is reported as `OutputChanged`
+  or the port's fault (`principle_source.zig` passes it through); a failing-allocator case and a shared mapper over
+  the closed `Io` error sets would close it. The stages that only propagate a port's `Cancelled` (`prepare_inputs`,
+  `prepare_reference_evidence`) have no test of a port-originated cancellation, only of the runtime stop. The
+  harness oracle (`test/harness/e2e/oracle.zig`) reports a `Cancelled` from `file_access.capture` as an unreadable
+  artefact; nothing in the harness cancels.
 
 ## Next 6. An entity is a name and its groups (ADR 0038 Decision 6)
 
@@ -1028,8 +1237,10 @@ has been reduce E1 should be kept"): kept for the reduced brittleness; no outcom
     (SPEC01 §2.12).
   - **DE1b, 13 November 2026** ("yes for all 3 decisions"): a runtime orchestrator with runner-owned child
     bindings and one runner invocation per stage (ADR 0030:136-160), not a compiled stage graph; the non-kept
-    request keys are engine-internal in E1 and their removal from the `DataKey` enum is a follow-up (open,
-    SPEC01 E1); steps 2 and 3 first, reported at the end of step 3.
+    request keys are engine-internal in E1; steps 2 and 3 first, reported at the end of step 3. Removing those
+    keys from the `DataKey` enum was a follow-up: **decided no** 19 November 2026 (user: "E1 DataKey - NO"). It
+    needs a kernel-private store for stage values and an ADR 0030 amendment for about 8 of 143 members, with no
+    change to any model request, so the keys stay.
   - **DE1c, 13 November 2026** ("yes, recommendations approved"): the three evidence keys the E2E harness
     reads after a step (`provider_authorization_result`, `model_envelope_result`,
     `provider_invocation_result`) are recorded-retention keys, read through history, and every stage event of
@@ -1586,7 +1797,10 @@ publishes nothing.
      `InvalidReferenceSelector`). The decision to count the kernel step's retry authority in the ceiling is a
      separate change (SPEC01 E1).
   7. and 8. (the §22.6 correction location; the evaluator partial-body retention and F0005 §9's
-     workflow-definition rejection detail) are separate items, open in SPEC01 E5.
+     workflow-definition rejection detail) are separate items; the evaluator partial-body retention was
+     built 20 November 2026 ("Evaluator partial bodies"), the workflow-definition rejection detail was built
+     20 November 2026 ("Workflow-definition rejection detail"), and the §22.6 correction location is open in
+     SPEC01 E5.
   9. Reasons are emitted as upper-cased names under the current token rule; enumerating the closed
      `diagnostic_code` set (F0002's open item) is separate (SPEC01 §8).
   10. The change edits the ADR 0033, 0030 and 0041 pointers and text, contracts 06, 08, 22 and 27,
@@ -1777,34 +1991,47 @@ publishes nothing.
   | E5 | `authority` rejection producers, and the reasons they name | 148 sites, no reason | 149 sites, 24 reasons | 149 sites, 24 reasons |
   | E8 | T5.2 raw-string schema-name branches in production (tests) | 19 (89) | 0 (69) | 0 (68) |
 
-  The `code-heuristics` counts, taken with `zig build code-heuristics -- --freeze
-  evaluations/request-projection/e5-final` (T5.4 by hand). No retake exists between the one below and now except
-  E8's T5.2, so each change's share of these is not recorded.
+  The `code-heuristics` counts, taken with `zig build code-heuristics -- --freeze <dir>` (T5.4 by hand): the 14
+  November column with `evaluations/request-projection/e5-final`, the 19 November column with a freeze taken by
+  `SDDE_REQUEST_PROJECTION=<dir> zig build test-integration` on the working tree after T2 (a modified build; 145
+  scenarios, 1,969 calls; not retained). No retake exists between the columns except E8's T5.2, so no change's share
+  of a difference is recorded.
 
-  | Count (report member) | 2 November 2026, `b38628c` (recorded, SPEC01 T5) | Now |
-  | --- | --- | --- |
-  | T5.1 model-facing text in tests (`tests_copying_model_text`) | 19 | 19 |
-  | T5.2 raw-string schema-name branches (`schema_name_branches`) | 20 (tests 88) | 0 (tests 68) |
-  | T5.3 instructions with more than one site (`repeated_instructions`) | 5 at 11 sites | 5 at 11 sites |
-  | T5.4 repair steps whose prompt no non-repair step binds | 6 | 6 |
-  | T5.5 model- or case-specific branches (`model_or_case_branches`) | 0 | 0 |
-  | T5.6 model-facing English outside its owner (`model_text_outside_owner`) | 13 in 4 files | 12 in 4 files |
+  | Count (report member) | 2 November 2026, `b38628c` (recorded, SPEC01 T5) | 14 November 2026, after E5 | 19 November 2026, after T2 |
+  | --- | --- | --- | --- |
+  | T5.1 model-facing text in tests (`tests_copying_model_text`) | 19 | 19 | 10 |
+  | T5.2 raw-string schema-name branches (`schema_name_branches`) | 20 (tests 88) | 0 (tests 68) | 0 (tests 69) |
+  | T5.3 instructions with more than one site (`repeated_instructions`) | 5 at 11 sites | 5 at 11 sites | 8 at 17 sites |
+  | T5.4 repair steps whose prompt no non-repair step binds | 6 | 6 | 7 |
+  | T5.5 model- or case-specific branches (`model_or_case_branches`) | 0 | 0 | 0 |
+  | T5.6 model-facing English outside its owner (`model_text_outside_owner`) | 13 in 4 files | 12 in 4 files | 15 in 4 files |
+
+  **19 November reading.** T5.1 is the count T2 targeted: it fell from 19 to 10, and all ten sites are single-word
+  absence literals (`packet`, `repair`, `fragments`, `$defs` three times, `reference`, `principles`,
+  `passive_literal_id`, `Judge`), so none is a copied sentence. T2 touched no prompt, schema or `spec.workflow.yaml`,
+  so it didn't move T5.3 (of the eight instructions, two sit in `model_schema_diagnostic.zig` and six in
+  `design/workflows/spec/`; which three are new isn't recorded) or T5.4 (the seventh site is `repair` in
+  `generate-scenarios`, `spec.workflow.yaml:772`); both are the net of the changes since 14 November,
+  unattributed. T5.6's 15 sites are `model_controls.zig` 1, `model_protocol_retry.zig` 2,
+  `model_schema_diagnostic.zig` 10 and `strict_json.zig` 2. The two in the retry module are T2's constants, and
+  the T2 entry expected at most one more. The 14 November breakdown by file isn't recorded, so how many of the
+  three extra sites T2 caused isn't established.
 
   **Method.** The `grep -c` and `wc` counts use the pattern in the row on the file named; the `DataKey` members,
   the `src/actions` files, the `anyopaque` lines, the `.authority = .<reason>` producers and the `error{}` members
   were counted by a short script over the same files and patterns; the T5 counts are the tool's, and T5.4 is the
-  six `repair-prompt` bindings in `spec.workflow.yaml`, each in a `slot: repair` step, with no non-repair step
-  binding it.
+  `repair-prompt` bindings in `spec.workflow.yaml` (six on 14 November, seven on 19 November), each in a
+  `slot: repair` step, with no non-repair step binding it.
   **Reading it.** A later change moves what an earlier one measured, so "Now" minus "Recorded after" is not that
   change's. The YAML's 27 lines between E1's 883 and today's 910 are not attributed in the records (E4 records
   910 after its edits). `anyopaque` lines in `src/application/` rose by 6 since E3: E1 recorded 2 of them (the
   runner-owned child-binding context), and the other 4 are not attributed, because no per-file record exists; the
   files E5 added or rewrote hold none (`step_binding_error.zig`, `workflow_execution.zig`, `repair_owner.zig`,
   `workflow_model_invocation.zig`, `feature_log_activation.zig`, `feature_logging_runtime.zig`), apart from the
-  runner's 6 that E4 recorded. T5.1's 19 now include two architecture pins whose literal is a word that also
-  occurs in a prompt (the result-schema authority test, E8's rule, and the generic repair operations test, E4's),
-  a recorded limit of the tool
-  (short absence literals match by substring). E5's gain is in payload-free failure names, which no T5 count
+  runner's 6 that E4 recorded. T5.1's 19 on 14 November included two architecture pins whose literal is a word that
+  also occurs in a prompt (the result-schema authority test, E8's rule, and the generic repair operations test, E4's),
+  a recorded limit of the tool (short absence literals match by substring); both are still among the ten of 19
+  November (`architecture_test.zig:209`, `:3006`). E5's gain is in payload-free failure names, which no T5 count
   measures.
 
 ## Design–code conflicts resolved (14 November 2026)
@@ -2024,6 +2251,99 @@ blocked decision that retires its own evidence is accepted, and a decision made 
 holds is still rejected; it fails with `decidedView` disabled, at the check the real runs hit. `zig build verify`
 147 steps, 2,226 tests; no model request changes.
 
+## C6 reader. An authorizer that declares blocked names the reader of that decision (20 November 2026)
+
+**Decided** 20 November 2026 (user: "yes", then "yes implement", on a preflight that fixed the scope to the
+authorizer's blocked table; the `diagnostic_admission` branch is the next section and `clarification_route` stays
+in SPEC01 C6 and C21). **Defect class:** none; a registration-time contract check, so no published-output claim and no model
+request changes. **Failure:** a descriptor that registry admission and graph validation admitted could be
+refused by the outcome binding at run time. `authorizationBlocked` was a table of four result keys ending in
+`else => InvalidOutcomeAssociation`, so an authorizer that declared `blocked` over another key registered,
+compiled and failed its first run, indistinguishably from an owner that could not read its decision. No
+registered variant took that path. **Change:** `BlockedReader`, a closed enum of the four native owners that
+retain a blocked decision, rides on the `repair_authorize` binding and determines its result key.
+`validDescriptor`, the one check registry admission and graph validation share, now takes the contract's
+outcomes and requires a reader exactly where `blocked` is declared; `variantOf` runs the same check at comptime
+(`Variant.validAssociation`), so a registered variant that fails it stops the build; `authorizationBlocked`
+switches exhaustively on the reader. The four owners declare their reader beside their `outcomes`. Amends
+ADR 0033 (variant facts and acceptance), 13-04 and F0005:660-663. **Tests:** `validDescriptor` over every reader
+(accepted: a reader with `blocked`, none without; rejected: each missing, extra, resultless, on another
+descriptor kind, and of another result); registry admission refuses a registered authorizer variant that loses,
+adds or mismatches its reader and graph validation one that loses it; the reconciliation authorizer's real
+blocked decision is refused through `prepare` when its descriptor names no reader and accepted when it does;
+each reader's result key equals the key its owner stores the decision under; the architecture test pins that
+`variantOf` runs the check. Mutations: removing one owner's reader fails the build; removing the rule fails the
+new tests; passing no outcomes at either call site fails the compile and registry tests.
+
+## C6 admission reader. A diagnostic admission names the reader of its evidence (20 November 2026)
+
+**Decided** 20 November 2026 (user: "update the documentations with the above recommendations", then "preflight C6
+diagnostic_admission then implement"); the `clarification_route` and request descriptors stay in SPEC01 C6 and C21.
+**Defect class:** none; a registration-time contract check, so no published-output claim and no model request
+changes. **Failure:** `diagnosticAdmission` tested the evidence key against the support review and returned
+`InvalidOutcomeAssociation` for any other, so a `diagnostic_admission` over other evidence registered, compiled
+and failed its first run. The two registered ones (`collect-specification-support` and its loss form) read the
+support review. **Change:** `AdmissionReader`, a closed enum with one member, the support review, rides on the
+binding and determines its evidence key. `validDescriptor` requires it on a `diagnostic_admission` and on no
+other descriptor; `diagnosticAdmission` switches exhaustively on it; the two producers declare it. These
+contracts are no variants, so no comptime check exists here: registry admission and graph validation reject at
+startup. Amends F0005:660-663; 13-04 states no association for these operations, so it is unchanged. **Tests:** `validDescriptor` (accepted: a reader on a diagnostic
+admission, none on another descriptor; rejected: each missing, extra, and for other evidence); registry
+admission over the same three cases, which replaces the test that recorded the unreadable case; the real sealed
+support decision is accepted through `prepare` with its reader and refused without it; the reader's evidence key
+equals the key its owner stores the decision under. Mutations: removing the rule fails the two new tests;
+defaulting a missing reader in the binding fails the accepted-path test; a producer without its reader fails the
+production registry test. Graph validation shares the rule and its call site; no test sends the admission rule
+through it.
+
+## C3 console failure. The stream state advances before the console mirror (20 November 2026)
+
+**Decided** 20 November 2026 (user: "update the documentations with the above recommendations"), built the same
+day. **Defect class:** none; log completeness after a console failure, not a published-output defect. **Failure:**
+`persistEvent` and `persistPrompt` appended a row, wrote the console mirror and only then advanced the stream's
+cached state, so a console failure left the row on disk and the state one row behind it: every later append and
+the close then failed on the file size, and the segment kept the row without a trailer. **Change** (`feature_log_runner.zig`):
+both functions advance the state, assign it and clear the dropped mark straight after the append, before the
+console write. The console is only a mirror (ADR 0018); a cancelled console write still drops the state through
+`forget` and the next persist recovers it from the bytes (ADR 0032, unchanged). A flush failure stays as it was:
+the bytes may or may not be durable, nothing is recovered, and the segment keeps the failed row without a
+trailer (the crash shape ADR 0026 keeps whole). No design text states the order, so none changes. **Test**
+(`feature_log_runtime_test.zig`, "after a console failure the next append and the close continue the file, and
+after a flush failure they leave it as it was"): in the event and the prompt stream, after a console failure the
+next row follows the failed one and the stream closes with its trailer; the flush assertions stand. Reverting
+the event ordering fails it.
+
+## C4 reference entry path. The CLI names the failing entry (20 November 2026)
+
+**Decided** 20 November 2026 (user: "update the documentations with the above recommendations"); the ADR 0031
+amendment it needs approved the same day ("Yes, amend ADR 0031"); built. **Defect class:** none; a diagnosability
+change that names no published-output defect. **Change:** `pipeline.StageEntryPath`, a 512-byte bounded copy, joins
+`StageStepSlot`. `prepare-reference-evidence` records, in its diagnostic, the display path (the directory's
+project-relative path, `/`, the entry's normalized path) of the first entry the capturer or decoder blocked, only
+when the returned error is that entry's own reason; its binding copies the value before the scratch arena is
+released; the runner keeps it as `last_entry_path` when the stage's own error rejects the step, not when a later
+cancellation or log stop replaces it; `Report.reference_entry_path` carries
+it; the CLI prints `<Name>: <path>` after the error name. An inventory, accounting, port or identity error names
+none, no symlink target is kept, and a path longer than 512 bytes names none. No event, log or E2E report records it,
+so the report version is unchanged. Amends ADR 0031 ("Failures and diagnostics"), 13-03 step 5, contract 08 and
+27-observability; F0005 criterion 22 is unchanged, because it governs workflow-definition rejections.
+**Tests:** every `Failure` tag, the decoder's block and the unnamed faults at the stage, with several entries (a valid
+one first, two blocked, a fault of the books first); the slot at the binding; each
+failure class's path through the run report in the integration scenarios; the packaged executable's stderr
+(`ReferenceUnsupportedMedia: references/Unsupported/.hidden.json`). Dropping the runner's copy fails the integration
+scenario and dropping the action's path fails the stage and binding tests.
+
+## Q13 clarification question lines (20 November 2026)
+
+**Decided** (user, 20 November 2026: "make clarification question lines use `source_coordinates.lines`"), built the
+same day. **Defect class:** none; a displayed line number that disagreed with `spec.md`'s, in a clarification form no
+development case reaches. **Change** (`clarification_preparation.zig`): the excerpt line takes `Source N, line A` for
+one line and `Source N, lines A–B` for a run from `source_coordinates.lines`, so a whole line ends at column 1 of the
+next without reading as "lines 5–6", and a span that closes before it opens is `InvalidClarificationInput`. No
+clause fixes the form's wording, so no design text changes. **Test:** whole line, run, mid-line token and two-line
+spans, with the old reading absent, and the invalid span; the existing count of the one-line citation changed to
+`Source 1, line 1:`. Printing the raw end line again fails them.
+
 ## Upstream rework. A form never carries an earlier owner's gap (16 November 2026)
 
 **Decided** 15 November 2026 (the design wins: §14.14 and invariant 22 send an earlier-owner gap to §24.5's rework
@@ -2143,6 +2463,1290 @@ material, which would fail source-grounding at 78.6; `3ca7…`'s repaired AC-001
 reading files it and grades the repair harmful; `7843…`'s criteria print "Given X, When Y, Then Z" with the model's
 straight quotes around an exact value, a rendering note not filed. One run each is one sample: no reliability claim.
 
+## Q8 D8.4. A line is cited under one category (ADR 0036 Decision 7; kept 18 November 2026)
+
+**Decided** 18 November 2026 (user: "implement At extraction: yes ...", then "Wider rule: yes"; the set:
+"Keep-or-revert set: approved"); **kept** 18 November 2026 (user: "recommendations approved", to "Keep D8.4? Yes
+means the line-pair correction stays in the engine."). **Defect class:** a blocked run: loan-renewal
+`2026-11-17T08-43-22Z-46a7…` filed line 8 as `business` and `scope_guard`, and records authoring blocked as
+`competing_records`. **Built:** [ADR 0036](../design/decisions/0036-source-quoted-claims.md) Decision 7.
+
+**Set** (`2026-11-17T21-5*` and `22-0*`, 3 runs per case, none retried, `anthropic` `claude-haiku-5-5`, build
+revision `98cb49a`, source `111573…`, every report `build.source.modified: true`; skill `3fe52a92…`; reference the
+Haiku set `2026-11-17T08-4*`, hello-world 3 of 3 and loan-renewal 2 of 3 published): hello-world 2 of 3 published,
+both passed (96.4, 92.9; 0 / 0 / 0 / 0); loan-renewal 0 of 3. **The rule fired in 2 of 3 loan-renewal runs**, each on
+a first answer filing lines 8 and 9 under `business` and `scope_guard`, each corrected at the first retry, none
+exhausted (one extra send each). The engine split and merged each corrected answer into the reference's six claims,
+so the next request (`22-00-28Z` dispositions, `22-01-46Z` summary) is byte-identical to that of published reference
+run `08-44-26Z`. **No failure traces to it:** two loan-renewal runs blocked as `competing_records` because grouping
+left the title claim alone and its records call restated claim 2 (SPEC01 Q23); one blocked on coverage because
+grouping put a duplicate claim with its target and binding dropped the group ("Q24" below); one hello-world run ended
+`invalid` on a repeated `signal_ids` entry (decision C5 holds). The publication guard is breached at face value and
+the targets are below the evidence floor (3 events), so §2 rule 6 recommended no keep; the user kept it on the
+byte-identical evidence. Evaluations: `evaluations/e2e/<run>/`; adjudications `adjudication-3681e6cd…` and
+`adjudication-dda538e2…`.
+
+## Q23. The document title is not a claim (kept 18 November 2026)
+
+**Decided** 18 November 2026 (user: "recommendations approved", to "Delete the headings sentence? Yes means
+`# Library Loan Renewal` stops becoming claim 1, and I'd implement it and run the measured set."); **extended** (user:
+"perform three more runs per case"); **kept** 18 November 2026 (user: "keep Q23"). **Defect class:** blocked runs and
+restatement from a title-only group. In all 12 retained runs before it, extraction filed the level-1 heading as a
+`business` claim; where grouping left it alone (5 runs), its records call had no requirement to state and copied a
+neighbour (`competing_records` blocks in `2026-11-17T22-01-46Z-c032…` and `22-02-22Z-6ef4…`). **Built:** the sentence
+"Include meaningful identity and purpose headings." is deleted from `extraction.context.json` `claims`; the title stays
+the engine's (ADR 0048). The screen did not run: `e2e-call` couldn't replay an `anthropic` capture (it can since 19 November 2026, below).
+
+**Set** (`2026-11-17T23-4*` to `23-58-08Z` and `2026-11-18T05-3*`, 6 runs per case, none retried, build revision
+`26982bb`, source `0a61828b…`, every report `build.source.modified: true`; skill `3fe52a92…`; reference D8.4's set):
+heading claims 1 of 12 (12 of 12 before), title-only groups 1 of 12 (5 of 12), publication 10 of 12 against 2 of 6
+(p = 73/729 ≈ 0.100 over 6 failure events, below the evidence floor), `competing_records` 0 against 2, all 10
+publications passed. Guards held: no lost source requirement (one judgement call, `23-51-55Z-649d…` FR-002), publication
+up in both cases. The watch item crossed: unsupported addition in hello-world 3 against 0 (an "installed" Given from the
+scenarios call). §2 rule 6 recommended no keep; the user kept it on the recommendation that the addition traces to the
+scenarios call, not the changed file. The two failures: hello-world `05-35-07Z-6629…`, the title claimed once more and
+its copied exact value never repaired ("Q25" below); loan-renewal `23-53-26Z-15af…`, "Q24" below. Evaluations:
+`evaluations/e2e/<run>/`; adjudications `adjudication-9a537163…`, `-94c42837…`, `-d5bd74b2…`, `-191a07d0…`,
+`-d90b773a…`, `-789b37ed…`, `-18c43709…`, `-f82f0460…`, `-2f90bbf5…` and `-0d1e8202…`.
+
+## Q24. A retired claim's meaning (recorded as a model limitation, 19 November 2026)
+
+**Decided** 19 November 2026 (user: "action the above recommendations", after "should I close Q24 as Option 1,
+leaving the engine unchanged and recording wrong retirement as a reported model limitation?"). **Defect:** a blocked
+run and a lost requirement, both from a retirement (`duplicate` or `superseded`) the model decides in dispositions.
+(a) Signal validation admits a group mixing a retained claim with a retired one (`signalEligible`,
+`reference_reconciliation_validation.zig:139-147`), but records binding drops it (`reference_support.zig:13-24`,
+`specification_source_binding.zig:145-159`), so the retained claim loses its records and coverage blocks with no
+repair: `2026-11-17T22-00-28Z-7db6…` and `23-53-26Z-15af…`. (b) Nothing judges that a retired claim's meaning
+survives: `2026-11-18T06-53-25Z-966d…` retired line 8 ("A loan may be renewed only once.") as `superseded` by claim
+1, which states no limit, and published without it. A retirement kept a claim out of 3 of the 12 loan-renewal runs of
+the D8.4, Q23 and Q24 sets. **Tried and reverted** (18 November 2026, user: "do not keep Q24"): a model signal selects
+only retained claims. Set `2026-11-18T06-51-49Z` to `06-55-50Z`: 6 of 6 published and 0 blocks of class (a), but
+`966d…` published without line 8 and failed adjudication (renewal-eligibility 2); §2 rule 6's guard on lost source
+requirement (1 in 6 publications against 0 in 10) blocked a keep. **Why no change:** a records request is assigned
+requirements only for retained claims (`specification_session.zig:279-294`, `specification_source_binding.zig:120-127`),
+a record may name only retained claims (`specification_provenance.zig:117`), and coverage skips every claim that isn't
+retained (`specification_coverage.zig:49-50`), so no admission or binding rule gets a wrongly retired meaning into a
+record. The old rule blocks a run only when grouping happens to mix the retired claim in; when grouping omits it, the
+line is lost silently. A rule letting a `duplicate` share its target's group would turn the block into a publication
+without that claim's wording, and would amend ADR 0022:93-95 and :117-122, ADR 0020:141-146, 17-specify.md:188-189 and
+:198, and F0100:1389-1391. A prompt change to the dispositions call is a prose patch after one run, and a second
+assessment of a retirement is excluded without an accepted exception (AGENTS.md). `/evaluate-e2e` reports each wrong
+retirement as `lost_source_requirement`, origin `model_noncompliance`
+(`reconciliation-dispositions.prompt.md:1-2`). Reopen if a decision changes what a retirement means for a requirement
+(ADR 0022, ADR 0046).
+
+## Q25. A claim cited only by headings (recorded as a model limitation, 19 November 2026)
+
+**Decided** 19 November 2026 (user: "action the above recommendations", after "I'd also keep Q25 as a model
+limitation"). **Defect:** a failed or blocked run from a title-only group. Q23 removed the extraction sentence that
+asked for heading claims, and heading claims fell from 12 of 12 runs to 1 of 18 (Q23's set 1 of 12, Q24's set 0 of 6).
+The one left, `2026-11-18T05-35-07Z-6629…`, filed the level-1 heading as a `business` claim; grouping left it alone,
+its records call copied its neighbours' requirement with `Hello, World!`, and the scenarios check rejected the copy
+through two repairs (`RepairNoProgress`). **Cause:** the `business` meaning still names "Feature identity"
+(`extraction.context.json:6`), and ADR 0036 Decision 3 makes a heading cited with list items a claim of its own, while
+the title is the engine's (ADR 0048) and the story skips heading-only quotes (ADR 0047 Decision 1). **Why no change:**
+a structural rule rejecting a claim whose cited lines are all headings needs an ADR amending ADR 0036 Decisions 1 to 3
+and ADR 0048's rejected test, for one failure in 18 runs. Reopen if heading claims persist in a later set.
+
+## T8, C40 and `e2e-call` for Anthropic captures (built 19 November 2026)
+
+**Decided** 19 November 2026 (user: "implement group 1 with above recommendations"). Measurement and harness only.
+Two request-projection freezes under the new names, one taken after C40 and one after the rest of this set, are
+byte-identical (6 groups, 142 scenarios, 1,910 calls); none was taken before C40, which only renames directories.
+
+- **T8. Report repairs cover every unit.** `report.json` `repairs` kept only the last merge of each candidate still
+  retained at run end, so `e2e-measures` and the evaluation missed earlier merges in a unit and every merge of an
+  earlier unit (`2026-11-08T09-23-55Z-149a…`: seven deletes in `events.jsonl`, 7→8 alone in the report). `Trace`
+  now accumulates each step's retained merges in `repair_log.Log` (once per authorization, in the order first seen)
+  and `invoke.zig` projects them into the report: `spec-e2e-report/v22`. A repair attempt that ends without a merge is
+  still not listed, and the step event's `repairs` stays per step. F0100 and e2e.md say so. Proof: `repair_log.zig`'s
+  tests (merges a later step replaced are reported once, in order; the final state's merges follow them), and a
+  harness integration test that drives `invoke.run` through a scripted Messages transport
+  (`test/harness/integration/tests.zig`). Two sources each answer with a reason the text validation rejects, and two
+  repair requests follow, both merging the one extraction candidate, so the run's final state keeps only the later
+  merge. The finished report lists both. Removing `invoke.zig`'s call to `projectRepairs`, or `Trace.recordStep`'s
+  call to `observe`, fails that test and no other. Every retained run is v21 or earlier, so `e2e-measures` marks its
+  report `unavailable` and `adjudicate-spec` rejects it; they need the build that made them.
+- **C40. A scenario is named, not numbered.** The request-projection freeze keys each scripted scenario by a stable
+  name (`base-NN`, `brief-NN`, `source-repair-<tag>` and so on, `runSpecificationWorkflows`), a `Name` of 1 to 80
+  characters of `a-z 0-9 - _`, and a name used twice in one sink is rejected at the scenario's first call
+  (`request_projection.zig`). The 17 literal-index branches stay. Freezes taken before this change are keyed
+  `scenario-NNN` and don't line up with named ones.
+- **`e2e-call` replays an `anthropic` capture.** The captured call's provider family selects the test credential
+  (`TEST_AWS_BEARER_TOKEN_BEDROCK` or `TEST_ANTHROPIC_API_KEY`) and the production variable the replay adapter reads
+  (`cli.zig` `bindCredential`); `diagnostic_binding.zig` admits any keyed family instead of Bedrock alone. The
+  `e2e-spec` and `e2e-call` help and the rejection text read the cost policy's list of generation tuples and the
+  families' variable names (`model_cost_policy.generation_tuples`, `environment.generation_key_help`), so they no
+  longer restate them. Each screen still needs its own live approval. The Q23 screen that "didn't run" can now be
+  taken.
+
+## Evaluator partial bodies. The standalone evaluator keeps a failed or interrupted response body (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "yes ammend evaluator.md", then "implement E5"). Harness only; no engine, model
+input or report change, and no published-output defect class: it makes a failed judge call inspectable for the H3
+panels.
+
+- **Defect:** the evaluator's `Observation` held a bare `?[]const u8`, set only after a full read or a `.received`
+  response. A Bedrock call that reset, ended early or hit its deadline came back as `.failed` with a `ResponseBody`
+  prefix the adapter never read, and the OpenAI adapter dropped its buffered bytes when the read failed.
+- **Change:** `Observation.response_body` is the engine transport's own `ResponseBody` (`bytes`, `complete`;
+  `provider.Body`). `bedrock.zig` carries a received body as complete and a `.failed` body as the transport reported
+  it; `http.zig` reads through `drain`, which returns the bytes that arrived and calls them complete only when the
+  read ended and the HTTP framing's terminal state did (a write failure is an allocation failure), and resolves an
+  incomplete body's error from the framing, then the connection, then an end of stream, as the engine's exchange
+  does; `evaluation_trace.zig` writes it as `response.json` and records `response_complete`
+  (true, false, or null for no body) in the attempt's `outcome.json`. `evaluator.md` ("Attempts and failures",
+  "Reports and origin") says so: the reports retain no body, the evidence files retain the redacted body, and
+  `evaluation-report/v8` is unchanged.
+- **Proof:** three tests in `test/harness/tests.zig`. The trace test checks a complete, a partial and a bodyless
+  observation (completeness true, false and null; a credential removed from the prefix; no response file for no
+  body). The Bedrock test runs the production HTTP adapter over the socket fixture with `reset`, `eof` and `deadline`
+  faults and requires the first three body bytes, incomplete, the same failure as before, and no payload or usage.
+  The OpenAI test drains a real content-length reader over a whole input, the same reader over an input shorter than
+  its declared length (the standard reader reports that EOF as an ordinary end, so only the framing state shows a
+  prefix) and a reader that fails after nine bytes. Each of the mappings (Bedrock's `.failed` body, `drain`'s read
+  failure and framing proof, the trace's completeness) fails a named test when broken. 482 to 485 evaluator tests.
+- **Found in review, fixed:** the first `http.zig` wiring unwrapped a null `bodyErr()` (a reset or a deadline-cancelled
+  read leaves it null; the engine falls back to the connection's read error) and called a content-length body cut by
+  EOF complete.
+- **Limits recorded in `evaluator.md`:** a body is retained whenever the adapter returns an observation; where the
+  provider port returns only an error (a cancelled Bedrock exchange, an allocation failure) none is. A credential cut
+  by the truncation isn't detected, the limit of ADR 0018. `http.zig`'s exchange itself still can't be driven offline
+  (the native client is disabled in tests), so `drain` is tested over the standard readers and the error resolution
+  that follows it is not.
+
+## Workflow-definition rejection detail (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "yes", to amending F0005 §9, ADR 0032's diagnostics line and contract 13-01, "and
+then implement"). Diagnosability only: no engine behaviour, model input or published-output defect class changes, and
+public codes, their `code(step)` mapping and the harness report are unchanged.
+
+- **Defect:** F0005 §9 promised "source ordinal and bounded rule evidence", but every definition owner returned one
+  payload-free error and the CLI printed only the family code. A rejected definition did not say which file, section or
+  step.
+- **Change:** the CLI prints `CODE: <rule>[; <path>][; step=<id>]` for the six workflow-definition families, for example
+  `WORKFLOW_GRAPH_COMPILE_INVALID: declared_outcomes; hello.workflow.yaml; step=run`. A closed `Rule`
+  (`src/domain/definition_rejection.zig`), one per section or validation stage, is recorded with the definition's source
+  ordinal and the step or resource by the owner of the check (`workflow_definition_schema.zig`,
+  `workflow_resource_binding.zig`, `workflow_graph_compilation.zig`, `workflow_graph_validation.zig`) into a slot the
+  startup routine owns, through an optional `?*Slot` argument; the first rule recorded stays. The routine copies the
+  display path from the validated inventory by ordinal before the inventory is released, finds the definition a parse
+  failure names by parsing each capture alone, and marks the file of a failed capture. Where an owner has no finer rule
+  the failing startup step stands in. The evidence is fixed-size and omitted rather than cut. `Runtime` keeps the
+  diagnostic and `Report.bootstrap_detail` carries it to `main.zig`.
+- **Proof:** owner tests for each phase (schema sections and the step, resource binding, compile, graph validation), a
+  startup-routine test for the file of a failed capture and parse (the parse case with two definitions, either one
+  malformed), one for no detail outside the workflow authority and on success, a renderer test, and the nine
+  packaged-smoke pins now read the real stderr of the packaged executable. Breaking each of first-rule-wins, the parse
+  location, the display path, the subject, the ordinal and a resource-kind step fault's rule fails a named test.
+- **Found in review, fixed:** a step fault in a definition that declares a resource was reported as
+  `compiled_resources` (the resource kinds are derived from every step first); it now names the step, and a real
+  resource failure names the resource. The compile outcome-flow check is `outcome_flow`, not `declared_outcomes`. An
+  inventory file no definition declares names that file. The parse location is a one-port function inside `steps`
+  (`locateParseFailure`), not a helper beside the routine.
+- **Not done:** a rule is one per section or stage, so a data-flow rejection does not name the data key, a compile
+  rejection names the check and not which parameter, and `graph_shape` groups several shape checks. A step that came from
+  a subgraph is named by its expanded ID. An allocation failure under a stage is reported as that stage's rejection, as
+  the public code is. Only some rules have an owner test of their own (`step_operation`, `compiled_resources`,
+  `step_contract`, `graph_shape`, `unbounded_cycle`, `outcomes`, `definition_header`, `resources`, `resource_binding`).
+  Configuration, root and provider rejections still print their code alone (F0001, F0004 and F0006 make the same
+  promise; each is its own item), and so does the harness report.
+- **Decided** 20 November 2026 (user: "what is the best option, do not induce brittleness or additional complexity"):
+  the evidence argument stays optional (`?*Slot`, `?*Diagnostic`). Production never passes null and about 110 test call
+  sites do. Required would make each of them build a throwaway slot, and what it would guard, a production caller
+  dropping the evidence, is already caught by the startup-routine test and the nine packaged-smoke pins. No
+  architecture pin is added: it would be a per-file text pin (T4).
+
+## Provider failure detail (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "yes, amend and implement", to carrying a failed model step's typed provider
+failure to the run report and the CLI as presentation data beside the rejection, and amending contracts 08 and 27 and
+F0006 §8). Diagnosability only: no engine behaviour, model input or published-output defect class changes, and the
+runner rejection tags, the feature log, the harness report and its versions are unchanged.
+
+- **Defect:** the provider result held a typed cause, retry class, delivery and transport diagnostic, but a failed model
+  call reached the CLI as `failed` alone, so a missing key, HTTP 401, 403 or 429, a DNS failure and a TLS failure read
+  alike.
+- **Change:** `Report.provider_failure` (`provider_failure_detail.zig`) holds the closed cause, retry class and delivery
+  of the last model call, and its transport phase and cause or content diagnostic when it has one. The runner records it
+  from each call's validated result (`provider_observation_workflow`), where a rejected body's content diagnostic is
+  formed, and from the authorization result of a call that was never sent (a missing key); a call's authorization
+  replaces an earlier call's. `main.zig` prints it after an `invalid`, `blocked`, `failed` or `cancelled` outcome, in the
+  form contract 08 defines. Every member is an enum name, so no key, header, body, URL or provider text can reach it.
+  Contracts 08 and 27 and F0006 §8 say so.
+- **Found in review, fixed:** the first build read the raw invocation result, where the content diagnostic does not
+  exist, so a rejected body (`invalid_content`, an invalid UTF-8 body) printed no detail; it is read from the validated
+  result now. A failed authorization is recorded only once its validation passes, and a successful one clears an earlier
+  call's detail.
+- **Proof:** a unit test that every cause, delivery and retry class prints its own name and that the transport and content
+  parts print only when present; runner tests for a failed call, a rejected body with its content diagnostic, a stopped
+  call after a stale detail, a failed authorization plan and a cancelled one (no detail); and the packaged smoke's
+  missing-key pin, which reads the real stderr. Keeping an earlier call's detail through a successful authorization, and
+  not recording a validated failure, each fail a named test.
+- **Open:** SPEC01 §10 C4.
+
+## Leftover forms of a failed publication are replaced (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "YES as per recommendation", after the scenario showed the rerun rejected). ADR 0009
+governs: it outranks F0100, which is a proposed feature design. Class: successful completion, for a run that writes
+clarification forms. No model request or published specification changes.
+
+- **Defect:** forms are written before the registry, so a failure between them left forms the registry did not describe,
+  and the next run's `validateClarificationForms` rejected them as `InvalidClarificationInput`: the form of a round with no
+  registry, and the form of a round a registry revision ahead of its registry. ADR 0009 overwrites unresolved forms on a
+  rerun, an unsubmitted draft included, and replaces the whole set without recovery.
+- **Change:** `clarification_form.holding` returns a closed `Holding` for a form file, `.unsubmitted` only for a form read
+  whole as open with no deferral and `.submission` for everything else; the rule is §23.2's, and the parser shares the
+  deferral and trim definitions with it (`isDeferral`, `answer_trim`) and `isClosed` its front-matter scan.
+  `validateClarificationForms` pairs each record with its form by ID, no longer needs equal counts, and sets aside an
+  `.unsubmitted` form that fails to parse against a record without a recorded response, one that no record names, and any
+  when there is no registry. It still fails every other such form and a record without its form. The rerun overwrites a
+  set-aside form its record renders; a form no record names stays in place.
+- **Found in review, fixed:** the first wording said a form no record names is replaced, but nothing rewrites it and the
+  writer has no delete; it stays in place and a later user close of it stops every run (§23.2 now says so). The integration
+  scenario passed whether or not the rerun replaced the form, because a skipped form also validates; it now compares the
+  form with the canonical rendering for the published registry. The deferral, the trim and the front-matter scan were
+  copied between `holding`, `isClosed` and the parser; they have one owner.
+- **Proof:** unit tests for `holding` (a draft and an empty answer; a close, a cancellation, a deferral after blank lines, a
+  read that isn't a form, invalid UTF-8, a second status line, a wrong schema, unclosed front matter, a repeated answer
+  marker, CRLF) and for the step (no registry, a stale form, an extra form, a record without its form, each with a closed
+  form that still fails); and the integration scenarios: the registry write fails after the forms with and without a
+  registry published before, the rerun replaces the set, and a form the user closed stops the run with the form and the
+  registry unchanged; a form no record names survives later rounds byte for byte until the user closes it. Skipping every
+  form that fails to parse, ignoring a closed extra form, and reading the answer untrimmed each fail a named test.
+- **Not done:** a form the engine would have rendered is not told from one whose engine-owned region the user edited: both
+  are set aside when open and undeferred, as ADR 0009:91-93 overwrites every engine-owned region. No diagnostic records that
+  a form was set aside. A torn form is not modeled (the writer seam fails before the file is touched).
+
+## Reference ingestion fails with the entry's own reason (built 20 November 2026)
+
+**Decided** by user instruction ("apply recommendations", to the recommendation to build the ingestion reasons).
+Diagnosability only; defect class named: none. No model request or published specification changes, and nothing that
+failed before passes. ADR 0036:292-294 says a source fails at ingestion with a typed reason, and design.md invariant 11
+forbids silently skipping an unsupported or unreadable file.
+
+- **Defect:** `decodeMarkdown` and the capturer record why an entry was blocked (`reference.Failure`), but
+  `validateAccounting` collapsed every reason into `InvalidReferenceAccounting`, so a `.json` file in the reference
+  directory, a malformed text file and an inconsistency of the books all read alike.
+- **Change:** each `Failure` has its own member of `reference.Error` (`ReferenceUnsupportedMedia`, `ReferenceMalformedText`,
+  and so on), mapped by one exhaustive `failureError`. `validateAccounting` returns the capturer's reason for an entry it
+  blocked, and the decoder's reason for an entry it blocked, which it reads before the debits that decode released and
+  before the corpus limits it may have blocked on. `InvalidReferenceAccounting` stays for the books' own faults, an entry
+  observed as no file that the capturer nevertheless captured among them. The names are operation-failure names, so the CLI
+  prints the name that was `InvalidReferenceAccounting` and the event code follows; 13-03 says so. The report's operation
+  codes are a derived enum, which only grows: no member is renamed or removed, so retained reports still decode (SPEC01 §2
+  rule 12).
+- **Found in review, fixed:** `decoder_failure` had no producer (`decodeMarkdown` set it as an initial value that every
+  branch overwrote), so its error was dead closed vocabulary; the member and the sentinel are gone and each entry is built
+  in one expression. The observation arms duplicated the capturer's mapping and a test proved a corpus that is a fault of the
+  books as if it were a reason; the capturer's block is the reason now. The decoder's reason was read after the corpus-limit
+  checks, so an entry the decoder blocked on that limit would have read as the books' fault.
+- **Proof:** every `Failure` maps to its own error and none is the books' fault; a decoder-blocked entry of each decoder
+  reason, a capturer-blocked entry and each observation kind fail with their reason, and the captured counterpart of an
+  observation fails the books; the stage stops at `validate_accounting` with the reason; the integration scenario shows one
+  reason for each of seven failure classes through the production adapters (unsupported, disguised and hidden files, malformed
+  text, a symlink, an oversized file, an unreadable directory); and the packaged smoke pins `ReferenceUnsupportedMedia`.
+- **Not done:** SPEC01 §10 C4 states what is open, the decisions included.
+
+## A passing run is quiet (partly built 20 November 2026)
+
+**Decided** by user instruction ("then C38", after "preflight C7 then implement"). Test hygiene only: no engine
+behavior, model input or published output changes (SPEC01 §10 C38).
+
+- **Change:** a case's configuration mirrors every feature-log row to the real stderr, and the harness integration
+  tests and the provider-compatibility tests run cases whose rows they read from the feature log. They now materialize the
+  case with `console` off (`quiet_project.zig`), leaving the captured sources, which the tests verify against the
+  repository, as captured; the two tests that rewrite the config set it in their own edit. A test print of retention bytes
+  that asserted nothing is gone.
+- **Proof:** `test-integration` writes 0.46 MB of stderr where it wrote 9.9 MB, and the same 138 tests pass.
+- **Not done:** the scenario cost table, the baseline acquisition rows and the emergency lines of the layout tests still
+  write to stderr, so those steps still print `failed command:` on a pass (SPEC01 §10 C38).
+
+## A regular file in `clarify/` whose name is not form-shaped is left alone (built 20 November 2026)
+
+**Decided** 15 November 2026 (SPEC01 §10 C7: the same exemption the user gave log folders, ADR 0026, with directories,
+symlinks and form-shaped names still failing), built on user instruction ("preflight C7 then implement"). Class:
+successful completion. The capture rejected every entry of `clarify/` that was not a form, so a `.DS_Store` failed a run
+after every model call, and again at the publish step's repeat of the capture.
+
+- **Change:** `Id.classifyName` (`clarification_inputs.zig`) returns a closed `Id.Name`, a form's exact name, a
+  form-shaped name, or another name; `captureClarifications` skips a regular file of another name before opening it, and
+  fails every other entry. §23.2 owns the rule and its costs; the writer's rechecks reuse the capture and the writer has no
+  delete.
+- **Found in review, fixed:** the shape of a form's name was encoded three times in the adapter's checks and a predicate;
+  it has one classifier now. Tests gained the engine-written names, the extension and ordinal rows, a file nobody can
+  read, and an oversized form that still fails.
+- **Proof:** the classifier test; an integration test whose strays survive two runs byte for byte with the run
+  completing; the failure cases that remain (a directory, a link with a name no form has, the case, extension and
+  zero-ordinal aliases, an oversized form); and a stray beside the forms through publication rounds. Skipping a
+  non-regular entry too fails two named cases.
+- **Not done:** an entry whose type the listing doesn't report fails, as ADR 0026 does. The exemption is `clarify/` only.
+
+## `ToolChainService` deleted (20 November 2026)
+
+**Decided** 20 November 2026 (user approved deleting it, then: "delete ToolChainService from the code"; SPEC01 C27). It
+wrapped a `*const ValidToolchain` and returned it; no production code constructed it, and consumers read
+`valid_toolchain` from the envelope (F0003). No model request or published output changes.
+
+## C49 and C6 route. Five remedies (built 20 November 2026)
+
+**Decided** 20 November 2026 (user: "update the docs with the above recommendations", then "preflight and
+implement"); SPEC01 C49 and C6. Built offline only: no live set ran, and the two Q phases (story reading, records
+batch) each need the user's approval for one. Both development sources are plain lists with no fence, table, Setext
+heading or open question, so their requests are unchanged. The design text moved with the code (ADR 0036 Decision 2,
+ADR 0047 Decision 1, 17-specify.md, F0005 "Execution guards").
+
+- **Story reading** (class: rendering artefact). `source_paragraph.paragraph` skips a line that is `markup` or
+  `heading`. `ListLine.markup` marks a code fence's opening and closing line (the fence scan owns them, so an empty
+  fence is found too), a table delimiter row (a GFM row of dashes with optional colons between pipes, at least one
+  pipe), and a thematic break or Setext underline (`isBlockSeparator`); `heading` also marks the text lines of a
+  Setext heading, found by one finder that `levelOneHeading` now shares (it still takes only a level-1 heading, so a
+  title is derived as before). `=` and `-` underlines both head the paragraph above them, as CommonMark reads them, so
+  a line of text directly above `---` is a heading, the way an ATX heading line is. Segments, claim splitting and
+  extraction quotes are unchanged. Proof: structure flags by line for fences (info string, either kind, empty), table
+  rows with and without alignment or outer pipes, underlines of both levels, a thematic break, code lines that look
+  like structure, a list, and an underline under a list item; the story reading of ten sources, two of them
+  reading no words; the title and extraction tests unchanged. A thematic break is dropped too: it carries no words,
+  though the decision named only fence delimiters, table separator rows and Setext underlines. YAML front matter
+  (`---`, `title: X`, `---`) reads `title: X` as a Setext heading and drops it; neither development source has one.
+- **Retry scope** (class: successful completion). A reconciliation repair's permit takes its scope's frozen maximum
+  from `Source.ordinary_retry`, which only the ordinary merge writes. The decision said the source-omission merge
+  should stop overwriting `last_repair`; it can't, because `last_repair` is also that merge's own runner transition
+  (`source_omission_repair_workflow.zig:149`) and the report's repair observation
+  (`candidate_repair_observations.zig:16-18`). The extraction permits take a maximum of 1, so the fault is
+  reconciliation's alone. Proof: the ordinary merge records its permit; an omission merge from a source that holds one
+  leaves it, and the next ordinary permit then has the same scope and maximum; without a held permit a scope gets the
+  maximum its proposal gives; a held permit of another scope isn't carried. Disabling the carry fails that block and
+  the runner-state test that depends on it.
+- **Records batch** (class: successful completion). `bindsContent` is the content rule the validation already applies
+  (`activeSignal` in content mode); a batch whose group fails it gets the records variant excluded and no claim choice,
+  leaving the clarification and inconclusive outcomes. Proof: both batches at their own request, in two sources. The
+  business batch accepts a records answer and the question batch's schema rejects it; each accepts a clarification
+  over its own group. Removing the exclusion fails it. A run that ended blocked on such a group now ends
+  awaiting clarification; answering is E7, so a rerun asks again.
+- **Clarification route** (class: none). `RouteReader` has the two members, the validated specification unit and the
+  required-authority result, each naming its evidence key; `validDescriptor` requires one on a clarification route
+  and on no other descriptor; the binding switches on it exhaustively. The request descriptors stay as they are. Proof:
+  accepted and rejected cases at `validDescriptor` and registry admission, and each reader's key equals the key its
+  owner stores under. A route without its reader fails the production registry test.
+- **Clock** (class: none). The exchange timer sleeps on `.boot`, the clock the deadline is read on. The test pins both
+  owners by source text. On macOS the threaded `Io` has no `clock_nanosleep` and sleeps a relative duration with
+  `nanosleep`, which takes no clock, so there the change is not observable; on Linux `.boot` is `CLOCK_BOOTTIME`.
+  Counting suspended time on macOS would need the timer to read the clock again after a wake.
+
+## C10. The conflicts request is skipped when its only valid answer is empty (built 20 November 2026)
+
+**Decided** 15 November 2026 (yes, conflicts only; tokens are reported, never the reason), built on user instruction
+("preflight and implement C10: skip the conflicts call when the only valid answer is empty. This lands with the ADR 0022
+amendment."). **Class:** successful completion, by removing a request whose answer was fixed. No failure had been observed,
+so no benefit is demonstrated. Built offline only; no live run was approved.
+
+- **Defect:** with no conflict group, the choice set is empty and the schema owner narrows `conflicts` to `maxItems: 0`,
+  yet the request was built, sent, collected and released.
+- **Change:** `reference_reconciliation_stage.collect` leaves the phase `complete` when the signals are collected and the
+  dispositions declared no conflict group (`conflictsForced`), so the YAML phase check at `check-conflicts` routes to
+  `validate-conflicts`, which still runs every validator in order. No operation, step or version was added or advanced:
+  an explicit new step would have formed a static cycle through `validate-dispositions` with no retry guard, which the
+  graph rejects (`unbounded_cycle`), and the conflicts validator reads the phase from the re-validated signals. The
+  conflicts record carries no origin, as native projections have none. The dispositions, signals and summary requests
+  are always sent. ADR 0022 states it as the closed "Forced conflicts answer" policy, with 16-reference-ingestion.md
+  (step 10 and the carry-forward sentence), 13-03's signals-collection entry and F0100 §3.9 following.
+- **Proof:** a stage test over two sources (no group completes the phase and records no conflicts origin; a group leaves
+  the phase at signals and builds the request; the dispositions stage is never forced); the stage module also refuses to
+  build or collect a conflicts request for a prior with no group (a rejected case in the premature and stale handoff
+  test, whose conflicts fixtures now hold a group); each of the 17 reconciliation fault scenarios that reach accounted
+  reconciliation asserts a conflicts request exists exactly when a conflict group does, and the source-repair
+  `false_conflict` scenario, whose repair removes the only group, asserts its one conflicts request is the first pass's;
+  the `misbound_signals` scenario's corrections fall from 2 to 1 and its conflicts-phase fault injection, which no
+  scenario can reach, is deleted (no scenario now sends a malformed body to a conflicts request; foreign handles stay
+  covered); the global-protocol-sequence test asserts no conflicts origin. Disabling the rule fails the stage test;
+  the opposite mutation was not run.
+- **Request projection** (`SDDE_REQUEST_PROJECTION`, before and after on the same tree): 145 scenarios; 136 conflicts
+  requests removed from 126 of them (manifest calls 1969 to 1833); none other removed; 1826 of the 1833 surviving
+  requests are byte-identical to their before counterparts and 7 differ only in a producer's request ordinal inside a
+  source-review or source-repair request (a request number falls by one); the 19 scenarios with a conflict group are
+  unchanged. Later calls in a changed scenario renumber.
+- **Not measured:** the step trace and the live cost. Neither development case's run was repeated, and no accuracy class
+  is claimed.
+
+## Q26. A Given only where the source states one (kept 22 November 2026)
+
+**Decided** 20 November 2026 (user: "R1: YES", on the advisory R1 of the `2026-11-20T07-4*` and `07-5*` evaluations);
+**kept** 22 November 2026 (user: "keep Q26, benefit not demonstrated"). **Defect class:** unsupported addition and
+ambiguity in an acceptance criterion's Given. The scenarios request required a Given even where a requirement states
+only a trigger (`minLength` 1 in the response schema, "Write nonblank prose" in the field rule, and "what its own
+wording presupposes" in `scenarios.prompt.md`), so the model repeated the trigger or invented a prerequisite. In the
+20 November set 5 criteria in 4 of 6 runs repeated one event as Given and When, and all 3 accuracy defects were
+unsupported additions in a Given.
+
+**Built:** `given` is an optional property of the scenarios response and of the criterion content (omitted, never
+`null` or blank; an edge case's own given stays required). An omitted Given is a value of its own in the schema's
+`distinct` rule and the duplicate rule. A criterion without one renders "**When** … **Then** …", and an edge case
+linked to it prints its own given alone on its `GIVEN` line. The presupposition sentence is deleted, and the shared
+`given` guidance and the criterion family text are amended. `specification/v8` and `specification-state/v28` advance
+(ADR 0041 takes v29); `model-request-debug`, `packet-guidance`, the required-authority contract and the report formats
+stay. Design text: ADR 0038 Decisions 3 and 7, contracts 12, 17, 21, 22, 23, 24 and 28, F0100, design.md §31.
+Request freezes: `evaluations/request-projection/q26-before` (equal to `coupling-final`) and `q26-after`; the differing
+requests are the scenarios and records calls, their repairs, and the source-repair and support requests that quote the
+family text.
+
+**Screens** (22 November 2026; hello-world `2026-11-21T12-03-05Z` call 9, loan-renewal `2026-11-21T12-02-20Z` call 10;
+`claude-haiku-5-5`, low effort, 10 trials per arm, all 40 completed): hello-world 30 of 30 scenarios kept a Given as
+captured and 0 of 30 with the Q26 request; loan-renewal 30 of 30 in both arms.
+
+**Set** (`2026-11-21T21-28-43Z` to `21-32-12Z`, three runs per case, none retried, build revision `ea69a53`, source
+`83083614…`, every report `build.source.modified: true`; skill `69c55877…`; reference Q14's set, build `c22fa1f`). All
+six published natively and were adjudicated as passed: hello-world 100% three times, loan-renewal 96.43%, 100% and
+96.43% (mean 97.62%; Q14's set 98.6%). Content-basis lost source requirement, weakened obligation, unsupported addition
+and contradiction 0 in every run.
+
+- **Target** (a Given repeating its When): hello-world 0 of 9 criteria, loan-renewal 2 of 15 (the display criterion,
+  whose source line 7 states one event; runs 1 and 3); Q14's set 1 of 10 loan-renewal and 0 of 9 hello-world. Three
+  events, below the floor of about ten: benefit not demonstrated.
+- **Given omitted:** hello-world 9 of 9 criteria, loan-renewal 0 of 15, as the screens showed.
+- **Counted apart:** a generic-precondition Given ("…with an existing due date" on the extension criterion):
+  hello-world 0 of 9, loan-renewal 3 of 15 (Q14's two published loan runs 5 of 10). Under SPEC01 §1's ruling
+  (22 November 2026) each is a minor `unsupported_addition` (3 content-basis in the set; aggregates 92.86%, 96.43%,
+  92.86%); the adjudications above were applied before it. The
+  removed sentence did not remove it.
+- **Guards:** lost source requirement 0; weakened obligation 0; publication 6 of 6 (Q14's set 5 of 6).
+- **Watch:** no criterion dropped a Given its source states; the one repair (loan run 2) replaced an AC-002 Then for
+  `foreign_exact`, graded helpful, and touched no Given; no run wrote an edge case; a Then repeating its Given 2 of 15,
+  reported only; one false link in 33 records.
+- **Cause of the retained repeats:** origin `prompt_conflict`, confidence `likely` (the amended `given` guidance beside
+  the field rule at `text_field_policy.zig:110`; both reached call 14 of loan runs 1 and 3), with `model_noncompliance`
+  the other reading.
+
+Evaluations: `evaluations/e2e/<run>/`; adjudications `adjudication-787066f3…`, `-fd878b2c…`, `-6d4d2e00…`,
+`-1bccce67…`, `-037d12a4…` and `-663e6f32…`.
+
+## Q26 follow-up. A Given-less scenario kept; the keyed-apart guidance and the links reword reverted (22 November 2026)
+
+Decided 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"), built on "preflight and
+implement", **reverted 22 November 2026** in all but the scenario (user: "action recommendation", on the concurrent screen
+in "Q26 follow-up set"). **Defect class aimed at:** an unsupported addition or placeholder in a Given. The records request
+told the model that "an acceptance criterion whose sources state no starting situation has none" beside an edge case,
+whose `given` the schema requires, because one `given` entry served both families.
+
+- **Built, then reverted.** `packet-guidance/v8` keyed each record text field by family and field, so the edge case's
+  `given` text lacked that sentence (every other text byte for byte as in v7), and `links.prompt.md:2` read "its when, and
+  its given where it has one, cover that situation". Both are reverted: `packet-guidance/v7` with the one shared `given`
+  entry, and the links line as before, so every request equals Q26's (`evaluations/request-projection/q26-reverted-after`
+  against `q26-after`: 1833 files identical, the scenario's 23 calls added). ADR 0016 and ADR 0038 are restored to the
+  shared-entry wording, and ADR 0038's Decision 7 bullet states why the edge case keeps the sentence. The key derivation,
+  its tests and the T5.3 repeated-sentence count (9 at 19) went with it; the retaken counts equal Q26's.
+- **Scripted scenario (kept).** `link-without-given` (case `criteria_without_given`, appended after the others so that no earlier
+  scenario changes its number) runs the `.chosen` sources and edge cases with `Options.scenarios_without_given`: every
+  scenarios answer omits its Given (the fixture refuses it together with `scenario_defect`, whose defect is in a Given).
+  It asserts that no criterion holds a Given and none prints a `**Given**` label, that each edge case's `GIVEN` line is
+  its own given alone, directly above the `WHEN` line, and that the persisted link and its readback hold with the three
+  forgeries rejected. With the omission switched off the case fails.
+- **Screens** (22 November 2026; `claude-haiku-5-5`, low effort, 10 trials per arm, all 40 completed; reports
+  `zig-out/e2e-call/2026-11-22T08-11-04Z`, `08-11-38Z`, `08-12-03Z` and `08-12-35Z`): the records call of each case,
+  hello-world `2026-11-22T06-36-44Z` call 8 and loan-renewal `2026-11-22T06-52-17Z` call 9, as captured and with the
+  edge case's `given` entry as v8 states it. The second arm is the captured content and schema with that one sentence
+  removed (exactly one occurrence changed; its edit files are under `zig-out/q26-followup-screens/`, which the build
+  does not keep, and rebuild from the capture). Every trial was schema-valid. Hello-world wrote 3 functional
+  requirements in 8 of 10 trials in each arm; the other 2 wrote 2 as captured and 1 edited. **Claims named** (the
+  claim IDs of each response's records): as captured, all 10 hello-world trials named claims 1, 2 and 3; edited, 8 did
+  and 2 named only claim 2, one functional requirement for the display requirement, with the start and UTC claims
+  unnamed. That is 2 of 10 against 0 of 10, which is within chance at this size (one-sided p about 0.24) and is not
+  evidence of harm, but its direction is the guard's (lost source requirement), so the set must show it. Loan-renewal
+  wrote one functional requirement and one business rule in all 10 trials of each arm, naming claims 1 and 4 in all 20.
+  No trial wrote an edge case. Input tokens fell by the removed sentence
+  (16023 to 16002, 16654 to 16633). A screen measures structure and decides nothing (SPEC01 §2 rule 4). The link
+  request has no screen: no development run has a link call to replay.
+- **Contract reviews.** The build and the revert each had one: no blocker. The revert's review found the kept links reword
+  changed the link requests, which SPEC01 §2 rule 1 does not allow for an unkept change set, so it was reverted too, and
+  asked that the ADR clauses state the rule once (ADR 0038 Decision 7) and that this record drop the reverted text.
+  The scripted fixture refuses `scenario_defect` together with an omitted Given.
+- **Checks.** Final tree, after the last code edit: `zig build lint`, `test-architecture` (266 tests), `test-integration`
+  (150) and `zig build verify` (146 of 146 steps, 2451 of 2451 tests). T5 retaken on this tree equals Q26's (SPEC01 §5 T5).
+
+## C22 remainder. The model request operations' tables derive from structs (22 November 2026)
+
+Decided 22 November 2026 (user: "update documenation with recommendation for decisions 3 4, 5, 6"), built on "implement C22,
+now" so that it shares the Q26 follow-up's build (SPEC01 §2 rule 1). **Defect class:** change amplification, with no
+published-output effect. `model_request_operations.zig` kept a count (`8`), seven hand entry rows, a 17-entry `stage_types`
+and 17 hand stage rows beside the fields they described, so their agreement was a runtime test.
+
+- **Built.** `Selectable` holds the seven selectable operations in the old row order, and the entry count is its field
+  count plus the kernel entry. `Stages` holds one context for each kernel stage, a field named by its `kernel.Stage` tag, so a
+  stage without a context or a context without a stage does not compile. `stage_types` and the stage rows derive from it in
+  stage order (`kernel.validProjection` requires that order), the entry rows derive from `Selectable` in field order with the
+  kernel entry last, and `Assembly` is `{ selectable, stages, request_stages, entries }`. The contexts' initializers are
+  still written by hand and the compiler checks them against the fields. Four stage fields took their tag names
+  (`prepare` to `prepare_request`, `protocol_retry` to `build_protocol_retry`, `runaway_resend` to `build_runaway_resend`,
+  `complete_request` to `close_request`); `model_provider_runtime.zig` and about 180 test references now read
+  `stages.<name>`. One selectable operation costs an import alias, a field and its initializer; one stage costs its tag, a
+  field and its initializer (before: four or five parallel places each).
+- **Tests.** The guard in `test/harness/integration/tests.zig` is stricter than the combined check it replaces: each selectable
+  context is registered exactly once in `entries`, bound to that field and absent from `request_stages`; each stage context
+  exactly once in `request_stages`, bound to that field, its row's stage named like the field, and absent from `entries`; and the
+  rows follow `std.enums.values(Stage)` in order. A new architecture test fixes what the compiler leaves to a person: the
+  assembly holds its four members, and no context field returns beside the structs the tables derive from. The
+  compile-time rejections (a missing or extra stage context, a field that is not an operation) have no runtime test, and
+  a swap of two stage types whose stages share outcomes (`build_protocol_retry` and `build_runaway_resend`) is caught
+  only by the behavioural tests, as the old hand rows were. The unrelated member of the class is `Operations`, whose
+  table was derived by C22's first part.
+- **Contract review.** No blocker and no major finding; the change is behaviour-identical (initializers, entry and
+  stage order, row addresses). Two minor findings fixed: the first architecture test restated the compiler's checks and was
+  cut to the shape pin, and two sentences of this record named the old path or an exactly-once check the new guard replaces.
+- **Request freeze.** The projection of the integration scenarios is byte-identical to
+  `evaluations/request-projection/q26-followup-after` (`diff -rq` empty, manifest included; integration 150 of 150), so
+  the change shares the coming set's build.
+- **Checks.** Final tree: `zig build lint`, `test-architecture` (266 tests), `test-integration` (150) and
+  `zig build verify` (146 of 146 steps, 2452 of 2452 tests, one more than the Q26 follow-up's: the shape pin). The
+  architecture test was cut after the projection was taken and moves no request byte.
+
+## Q26 follow-up set (22 November 2026)
+
+User: "implement C22, now" (landed first, so the build carries it) and the set from the recommendation list. Three runs of
+each development case, none retried, `2026-11-22T08-35-52Z` to `08-39-02Z`, build revision `29807c964f23…`, every report
+`build.source.modified: true`, source `62d848af…` for all six, `claude-haiku-5-5` at low effort, skill `2b3fb8de…`. The
+reference was re-scored first (below). All six published natively and every adjudication was accepted. The change:
+`packet-guidance/v8` (the edge case's `given` entry apart from the criterion's), `links.prompt.md:2`, and C22's
+remainder, which moves no request byte.
+
+| Run | Case | Calls | Tokens | Aggregate | Content-basis defects (lost / weakened / unsupported / contradiction) |
+| --- | --- | --- | --- | --- | --- |
+| `08-35-52Z` | hello-world | 9 | 38,816 | 100% | 0 / 0 / 0 / 0 |
+| `08-36-27Z` | loan-renewal | 12 | 66,924 | 89.29% | 0 / 1 / 2 / 0 |
+| `08-37-14Z` | hello-world | 9 | 38,831 | 96.43% | 0 / 0 / 0 / 0 |
+| `08-37-44Z` | loan-renewal | 11 | 64,700 | 92.86% | 0 / 0 / 3 / 0 |
+| `08-38-26Z` | hello-world | 9 | 40,495 | 100% | 0 / 0 / 0 / 0 |
+| `08-39-02Z` | loan-renewal | 11 | 64,502 | 89.29% | 0 / 1 / 3 / 0 |
+
+Adjudications `adjudication-f3371a5b…`, `-b84c78b2…`, `-68131f9f…` (hello-world) and `-75c2ec6a…`, `-400978a9…`,
+`-b2a2c983…` (loan-renewal). No protocol correction, re-send, runaway or normalization, and no feature-log or evidence
+anomaly in any run.
+
+- **Hello-world** (mean 98.81%; reference over Q26's nine runs 99.21%): no Given on 9 of 9 criteria, no edge case. The
+  one deduction is run `08-37-14Z`'s doubled label (`**When** When the application is started.`, a minor
+  `rendering_artefact`, `organization` 3). The records call named every requirement claim in all three runs; the screen's
+  2 of 10 edited-arm trials that named one of three claims did not recur.
+- **Loan-renewal** (mean 90.48%; reference 94.45% over Q26's nine runs, 94.05% and 92.86% over the two later sets):
+  every criterion carries a Given (15 of 15), none repeats its When, **8 of 15 are generic preconditions** (all 8 are the
+  content-basis unsupported additions; 24 of 75 in the 15 earlier runs on this evaluator), none dropped a Given its
+  source states, and the one repair (`08-36-27Z`, AC-001's Then, a `foreign_exact` value) was helpful and touched no Given.
+  **Weakened obligation: FR-001 reads "can renew" for "must be able to" in `08-36-27Z` and `08-39-02Z`**, filed as
+  `weakened_obligation` (`eligibility` 3) as earlier evaluations ruled the same text; none of the 15 earlier loan-renewal
+  runs on this evaluator weakened a requirement. Each run also has one `restatement` of AC-001's Then, as Q26's sets did.
+- **No edge case** was written in any run, so the edge case's own `given` entry and its `GIVEN` line are still
+  unexercised live. No Given-less loan-renewal criterion appeared either.
+- **Why 16 calls became 11 to 12.** Not this change. Calls 1 to 4 (extraction, classification, summary, dispositions) are
+  byte-identical to the earlier runs'; the signals call's request is byte-identical to `06-52-17Z`'s and `06-53-38Z`'s, and
+  its answer grouped the five claims into two signals (`[1,4,5]` and `[2,3]`) in all three runs, where the earlier runs
+  had four. The records and scenarios calls run once per group, so each fell from four to two (the whole saving, plus one
+  correction send in `06-52-17Z`). **Signals screen** (22 November 2026, `zig-out/e2e-call/2026-11-22T09-01-32Z`): the
+  as-captured request of `06-52-17Z` call 6 (`g8-validate-request-signals`, checked equal in content, schema, model and
+  effort to `08-36-27Z` call 5), `claude-haiku-5-5`, low effort, 10 trials, all valid. Four signals (`[1,4]`, `[2]`,
+  `[3]`, `[5]`, the earlier runs' answer) in 3 of 10 trials, three signals (`[1,4,5]`, `[2]`, `[3]`) in 5 and two
+  (`[1,4,5]`, `[2,3]`, the set's answer) in 2. The engine did not change that request, so the grouping the model returns
+  for it has shifted since the earlier runs: provider-side drift, confirmed at the call level. It means the loan-renewal runs do not share the reference's inputs below the signals
+  call, so a difference in the records call's output (FR-001's wording, the Given counts) can't be attributed to this change
+  from three runs. Claims offered and named: call 8 offered `[1,4,5]` and named all three (FR, BR, BR); call 9 offered
+  `[2,3]` and named both in every run; no offered claim went unnamed, and no source requirement is lost.
+- **Reference re-scored on `2b3fb8de…`** (`evaluations/e2e/<run>/`; each run's earlier `69c55877…` evaluation replaced).
+  Q26's three sets, hello-world 100 / 100 / 100, 96.43 / 100 / 100, 100 / 100 / 96.43 (set 3 run 3 now carries three
+  generic Givens as unsupported additions); loan-renewal 92.86 / 96.43 / 92.86, 96.43 / 96.43 / 92.86 and 96.43 / 96.43 /
+  89.29, from means of 97.62, 98.81 and 97.62. Content-basis unsupported additions in Q26's loan-renewal runs 3, 5 and 5
+  (13 of 45 criteria, generic Givens), none lost, weakened or contradicting. Only set 3's hello-world runs were applied as
+  new adjudications (their saved original reports were passed to `adjudicate-spec`); the other fifteen re-scores were written as
+  `adjudication-record.2b3fb8de-unapplied.json` beside the applied records, as the 9 November re-scores were (SPEC01 §2 rule
+  12), because their run directories are gone. Origins and links were carried over from the `69c55877…` evaluations.
+
+**Extension to eight per case** (22 November 2026; user: "apply recommendations", on the screen of the signals call, whose
+drift it confirmed). Ten more runs on the same source (`62d848af…` in every report), `09-02-56Z` to `09-08-22Z`, all
+published and adjudicated as passed, one protocol correction (`09-04-52Z`, an extraction answer with a sixth claim), no
+re-send, runaway, normalization or evidence anomaly.
+
+| Run | Case | Calls | Tokens | Aggregate | Content-basis (lost / weakened / unsupported / contradiction) | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| `09-02-56Z` | hello-world | 9 | 40,044 | 96.43% | 0 / 0 / 0 / 0 | three filler Givens, one `placeholder` |
+| `09-03-33Z` | loan-renewal | 14 | 86,646 | 89.29% | 0 / 0 / 2 / 0 | groups `[1,4]`, `[2,3]`, `[5]`; one helpful repair |
+| `09-04-25Z` | hello-world | 9 | 38,290 | 89.29% | 0 / 0 / 1 / 0 | records call named only claim 2 |
+| `09-04-52Z` | loan-renewal | 12 | 68,200 | 92.86% | 0 / 1 / 2 / 0 | `[1,4,5]`, `[2,3]`; FR-001 "can renew" |
+| `09-05-33Z` | hello-world | 9 | 38,936 | 96.43% | 0 / 0 / 0 / 0 | one `restatement` |
+| `09-06-04Z` | loan-renewal | 13 | 83,339 | 89.29% | 0 / 0 / 1 / 0 | `[1,4,5]`, `[2]`, `[3]` |
+| `09-06-47Z` | hello-world | 9 | 38,438 | 85.71% | 0 / 0 / 1 / 0 | records call named only claim 2 |
+| `09-07-14Z` | loan-renewal | 11 | 64,798 | 89.29% | 0 / 1 / 3 / 0 | `[1,4,5]`, `[2,3]`; FR-001 "can renew" |
+| `09-07-54Z` | hello-world | 9 | 39,785 | 100% | 0 / 0 / 0 / 0 | |
+| `09-08-22Z` | loan-renewal | 13 | 84,074 | 92.86% | 0 / 0 / 2 / 0 | `[1,4]`, `[2,3]`, `[5]` |
+
+Adjudications `adjudication-d80af42a…`, `-460d16e1…`, `-88142cb9…`, `-21d33ffa…`, `-d9c5d4bf…` (hello-world) and
+`-b3508dcd…`, `-730f845e…`, `-9a482ed4…`, `-a1272e8c…`, `-302129b6…` (loan-renewal).
+
+- **All eight runs per case.** Published 8 of 8 and accepted 8 of 8 in each case. Hello-world: 100, 96.43, 100, 96.43,
+  89.29, 96.43, 85.71, 100, mean 95.54% (15 reference runs on this evaluator, 99.29%). Loan-renewal: 89.29, 92.86, 89.29,
+  89.29, 92.86, 89.29, 89.29, 92.86, mean 90.63% (94.05%). Content-basis over the 16 runs: lost 0, weakened 4,
+  unsupported addition 20 (2 hello-world, 18 loan-renewal), contradiction 0.
+- **Hello-world's records call naming one claim.** `09-04-25Z` and `09-06-47Z` wrote one functional requirement, for the
+  greeting, and none for startup or UTC; both requirements survive verbatim in the engine-composed story, so the
+  evaluator filed no `lost_source_requirement` (ADR 0047 counts a story quote; the run scored `ambiguity` and
+  `organization` instead). `09-06-47Z` publishes bytes identical to a 21 November run on a build before Q26's, so the
+  failure existed under the old text. Counting the screen, 4 of 18 trials or runs with this change name one claim, against
+  0 of 25 without it (the screen's captured arm and the 15 earlier runs), one-sided p about 0.025. The live runs are on
+  the drifted model, so they are not a like-for-like control; the screen's two arms are concurrent, and 2 of 10 against
+  0 of 10 is within chance by itself.
+- **Loan-renewal's FR-001.** "can renew" for "must be able to" in 4 of 8 runs (`08-36-27Z`, `08-39-02Z`, `09-04-52Z`,
+  `09-07-14Z`), none in the 15 earlier runs, every one of them with claim 1 in the three-claim group `[1,4,5]` (4 of the 6
+  runs with that group; 0 of the 2 with `[1,4]`). The signals request is byte-identical in every run, and the screen of it
+  gave 4, 3 and 2 groups in 3, 5 and 2 of 10 trials, so the three-claim group is the drift's, and the earlier build never
+  produced it. Whether the wording follows the group or this change is not separable from these runs.
+- **Generic Givens** in loan-renewal: 16 of 40 criteria in the 8 runs (8 of 15, 8 of 25), against 24 of 75 before; the 18
+  unsupported additions are those 16 and two "followed by" additions in a user-visible outcome. Filler Givens in 1 of 8
+  hello-world runs, as Q26's second set had 1 of 3 (the same text, so not new). No criterion
+  dropped a Given its source states, no repair touched a Given, and no edge case was written in any of the 16 runs.
+- **Cost:** hello-world 38.3k to 40.0k tokens; loan-renewal 64.8k to 86.6k, 11 to 14 calls, against 105k and 16 before
+  (the grouping).
+- **Concurrent screen** (22 November 2026, user: "action recommendation"; `claude-haiku-5-5`, low effort, 20 trials per
+  arm, the four reports `zig-out/e2e-call/2026-11-22T09-24-57Z`, `09-25-37Z`, `09-26-20Z` and `09-27-06Z`): the records call of
+  each case as captured (the v8 text) and with the omission sentence put back (the v7 text, built from the capture with
+  one occurrence changed; edit files `zig-out/q26-followup-screens/<case>.v7.edit.json`), minutes apart on the same model.
+  Hello-world (`09-06-47Z` call 8): claims 1, 2 and 3 named in 15 of 20 as captured and only claim 2 in 5; with the
+  sentence, all three in 20 of 20 (Fisher one-sided p about 0.024). Loan-renewal (`09-07-14Z` call 8, claims `[1,4,5]`): the
+  functional requirement for claim 1 reads "can renew" in 16 of 20 as captured (and "must be able to" in 4), and with the
+  sentence "must be able to" in 15 of the 16 completed and "can renew" in 1; the sentence arm also had 4 of 20 answers
+  rejected as `protocol_invalid` (`string_length`, 0 of 20 as captured), which the engine answers with a correction send.
+  Both cases move the same way, so removing the sentence from the edge case's text changed what the records call writes.
+- **Reverted** (user: "action recommendation"). The keyed-apart guidance (`packet-guidance/v8`) is reverted to the shared
+  `given` entry (`packet-guidance/v7`), restoring the omission sentence in the edge case's records-request text, and the
+  links reword with it (SPEC01 §2 rule 1: an unkept change set is reverted in full). Kept: the scripted
+  `link-without-given` scenario, a test that moves no request byte, and C22's remainder, which is separate. ADR 0016 and
+  ADR 0038 are restored to the shared-entry wording, ADR 0038's Decision 7 bullet stating the rule once; F0005,
+  `12-model-boundary.md` and PLAN01 say v7 again. Request bytes: the projection of the reverted tree
+  (`evaluations/request-projection/q26-reverted-after`) equals `q26-after` on all 1833 files, plus the scenario's 23 calls.
+  `q26-followup-after` stays as the evidence of the build the 16 runs and the first screens used.
+
+## Test-track closures (22 November 2026)
+
+Offline; the request projection retaken on the final tree is byte-identical to `q26-after`. User: "implement" on C28's unproven path, C41, C42, C45, C47, C31 and T3.
+
+- **C28.** A real SIGINT raised on a scripted call (`std.posix.raise(.INT)`, `ScriptedWire.interrupt_on_call`) ends the
+  harness's `invoke.run` as `.cancelled` / `.workflow_cancelled` with `publication_check == .not_run`, nothing published,
+  one `run.cancelled` row and the SIGINT disposition restored, on hello-world (call 1) and loan-renewal (call 3).
+  `Interrupt.resetForTest()` (`pub`, still behind `builtin.is_test`) clears the never-reset `requested` flag before and
+  after each raise, so later runs in the binary are unaffected. Tests run serially and the scripted transport bypasses the
+  HTTP adapter's timer. Not proven: a kernel-delivered Ctrl-C to an arbitrary thread, `Io.Threaded` sleeps retried on EINTR
+  under the real adapter, the CLI exit code.
+- **C41.** The driver's merge gates are a `merge_routes` table; `isMerge` accepts only a member of it (compile time),
+  and `unboundMerge` returns the first (operation, owner) pair the compiled graph does not bind. The `gates_bound` block
+  fails the scenario with `GatedRouteNotInGraph`. The check runs at scenario 0 of the existing group: the shipped graph
+  binds all four owners, dropping each owner's merge step returns exactly that owner, and renaming every `merge-repair`
+  step returns the first.
+- **C42.** The hello-world-only production-composition test became both development cases, and two more run through
+  `root.Runtime` and `invoke.run` with only the transport scripted: `.repair` alone ends `.ok` with a unit repair and a
+  prepared publication, and `.repair` with `.failed_repair` and `.repeated_provenance_fault` (matrix scenario 6) ends
+  `.failed` / `.workflow_failed` with `terminal_rejection.kind == .retry_limit`, an `atomic_repair` of a specification unit
+  as its last attempt, nothing published and one `run.failed` row. Loan-renewal fits the 125000-token budget with no
+  builder change.
+- **C45.** `Driver.allowance` reads a request's compiled step from its own identity. The summary, global and disposition
+  sequences derive their calls, ordinals and exhaustion counts from it through a plan (`Calls`, `expand`, `expectShape`,
+  `checkSequence`), and run again on a definition whose three faulted requests have retry limit 3, so four attempts
+  (shipped: limit 2, three attempts); the raised group asserts the driver saw an allowance of 4, so a patch the compiler
+  never took fails it. Property tests cover allowances 2 to 4; the rejected case is a shape expanded for another
+  allowance, which fails.
+- **C47.** `architecture_test.zig` reads every `.zig` file under `src/`, `test/` and `build/` and the root's, takes as
+  roots every `.zig` path `build.zig` spells, and fails when a `*_test.zig`, `*_tests.zig` or `tests.zig` is reached by
+  none (`unreachableTestFiles`, `buildRoots`). Fixtures: a transitive chain and a non-test helper pass; an orphan, a
+  directory `tests.zig`, files a comment or a string merely names, and a second root that imports the orphan. The tree
+  has no orphan. The `record-authoring`, `signal-grouping`, `summary-coverage` and `entity-applicability` calibration
+  directories (no reader, parent runs gone) were deleted (user: "Delete all four").
+- **C31.** Both ledger owners already had allocation-failure sweeps; only the record was stale.
+- **T3.** `provider_compatibility_tests.zig` `.prefix_normalized`: the contract's first malformed opening in front of a
+  schema-valid candidate is assessed `compatible` with the normalization reported, over both development domains.
+  `specification_generation_test.zig` `Fixture.initSources` and a test: a record citing two source files shows each file
+  in corpus order, round-trips through the markdown, and a citation of a file outside the corpus is an invalid
+  specification. A record must name a group's claims in the group's order, so no reversed-order case exists.
+
+## Refactors that leave request bytes unchanged (22 November 2026)
+
+User: "implement" on C25, C31, C22, C37, Q2b and B7. Each item took a request projection before its first edit and
+after its change; all equal `evaluations/request-projection/q26-after`, as does the projection of the final tree
+(`diff -rq` empty, integration 144/144). B7 is the exception in kind, not in bytes: a validation addition the user
+authorized.
+
+- **C31 ledger owner.** `ledger_owner.zig` is `LedgerOwner(Owner, Payload, reference_exhausted)`: begin, seal, retain
+  and release for one chain of owners, each instantiation naming its own exhaustion error. The five builders in
+  `model_request_identity.zig` and `model_attempt_accounting.zig` use it; `retainOwner` and `deinitOwner` stay one-line
+  delegations. Allocation order, cleanup order (arena, then storage) and retain-last are those of the five blocks it
+  replaces, and both allocation-failure sweeps are unchanged. Tests in the module: a chain frees every owner and gives
+  the root back once, an exhausted count is refused with the chain's own error and leaks nothing, two instantiations
+  report their own errors, and an allocation-failure sweep.
+- **C37.** `workflow_retry.Limit` gains `allowance()` (limit + 1, as u64) and `standing(executions)` (exhausted when
+  executions reach the allowance). The retry scope (`countAttempt`, `Exhaustion.init`, `Exhaustion.unchanged`), the
+  runner, the compiled allowance (null on `usize` overflow, as before) and the attempt accounting
+  (`standing(completed_retries +| 1)`, so a saturated count stays exhausted) call it; the kernel's 2x(1 + limit)
+  predicate under ADR 0039 takes only its +1 from it. The four sites enforced one rule. A table covers limits 0, 1, 2,
+  64, 128 and `maxInt(u32)` against executions around each; accounting has limit-1, widest-limit and saturated cases.
+  The fixtures' `Driver.allowance` stays an independent oracle.
+- **C25.** `source_omission_authority.zig` holds the repair-authority derivation; `source_omission_repair.zig` holds
+  `Authorization`, `Replacement` and `Repair`. `source_omission.zig` imports none of the two repair modules or
+  `specification_support.zig`. `architecture_test.zig` pins the direct-import rank of six modules (accepted: lower-ranked
+  or unlisted imports and mentions in comments or strings; rejected: a lower rank importing a higher, same-rank
+  siblings, an A-B-A pair) and says it does not claim transitive acyclicity.
+- **C31 `select`.** One `select` over `Kind` (statement, signal, conflict) and `Part` (selection, text, record) in
+  `reference_reconciliation_repair.zig`. A table test (written against the old `select` first) covers nine parts at two
+  indices per kind, the three insertion points and 24 rejections.
+- **Q2b.** `Collection` is `sequence`, `unique_subset` (`none`, `coverage` or `agree`) or `exact_members` (native or
+  stated count, `distinct`); `IntegerChoice` holds only it, `narrowChoice` takes it whole, and the rule-less calls pass
+  `bare()`. The pairings the runtime used to reject are not expressible; seven test rows that tested exactly those were
+  deleted, every remaining rejection (target, path, `items`, `allowed`, value checks) keeps its rejected test, and the
+  wire schema (from `createSchema` over the `Node` tree) is untouched.
+- **B7.** Readback re-quotes each stored extraction claim from its stored citations with the Unicode normalizer and
+  rejects one that no longer quotes them (`Requote` in `reference_extraction_text.zig`, built on the `Layout.quote` that
+  admission uses; called from `reference_snapshot.validateRecords`; preserved tokens skipped). The `Normalizer` port is
+  threaded through `specification_state` and `incomplete_specification` and bound by the composition root to the four
+  actions that read a state back. `specification-state/v28` is unchanged (user: "Authorize, no version advance"; the
+  `foreign_exact` readback rule is the precedent), so an earlier build's state whose claim text predates the current
+  quote rules stops reading back with `InvalidSpecificationState`. ADR 0036's Persistence bullet and a clause of
+  24-workflow-state.md say so. A stored claim whose cited lines span two top-level list items is rejected too, by the
+  `spansItems` rule admission's `quotes` uses (ADR 0038). Tests: accepted a decomposed (non-NFC) source line, a
+  two-item list split, fenced code, a `scope_guard` claim, a claim of two runs joined by an ellipsis line and a run
+  across a blank line; rejected claims swapped, text cut by a byte, a shifted citation, an extra node and one claim
+  over two list items. With the check off the swap test fails. The stored-title and edge-case link readbacks are the
+  unchanged members of the class. A stored citation was already bound to its claim's chunk and to the source's bytes:
+  `reference_support.snapshot`, which `validateRecords` runs, builds the claim items through
+  `reference_claim_items.build`, which validates each stored citation with `source_citations.validate` (source, block,
+  span, quoted bytes) and re-checks a preserved token against a fresh extraction. A contract review's finding that
+  readback did not bind them was wrong; a test now pins it: a citation retargeted to another source or block, or given
+  other quoted bytes, with its span untouched, is rejected, and the test fails when that builder skips the source or
+  block binding or a model claim's quoted bytes. No second call to the validator was added, since it would duplicate
+  the admission policy; ADR 0036's Persistence bullet and 24-workflow-state.md now say readback validates each stored
+  citation, as decided (`specification-state/v28` unchanged).
+- **C22.** `Operations` is the struct of the 108 operation fields, declared in the old row order; `Assembly` is
+  `{ ops, model_requests, entries, registry }` with `entries` derived by `shapeOf`, `register` and `registered` (an
+  `Action` registers as a step, a shell contract as a variant, any other `contract` directly, a type with neither does
+  not compile). The 108 hand rows and the literal count are gone, and `ParseInvocation` declares `kind` and
+  `outcomes`, which `entry` reads like its other declarations. The 118 registered ids come out in the same order. The
+  three architecture pins that named hand rows are typed checks over `Operations` (the four generic repair shells, none of
+  the owner repair types, the four scenario-generation types once each), and the guard in
+  `test/harness/integration/tests.zig` is smaller (its check of `model_request.Assembly` is the one "C22 remainder" describes).
+
+## C42 and C45. The matrix runs through `Runtime` only, and its typed limits derive from the compiled step (22 November 2026)
+
+User: "implement C42 and C45" (decided 22 November 2026). The request projection of the final tree is byte-identical to
+`q26-after`, checked after each stage (integration 146/146).
+
+- **C45.** The scenarios-step exhaustion computes `allowed = driver.allowance(<last accounted op>.id.model_request_id)`
+  and asserts `limit.value == allowed - 1` and `completed_executions`, `scenario_calls` and `fault_calls == allowed`; the
+  `foreign_content_always` repair exhaustion and the repeated-scenario exhaustion derive their attempts, limit and executions
+  the same way. The disposition sequence's `3 + allowed` was replaced by ledger structure (every operation before the last
+  `allowed` has attempt 1; the last `allowed` are one request with attempts 1..`allowed`) because the three fixed calls do not
+  follow from the limit: the step traces show extract content 1, extract classifications 1 and reconcile summary 1 at both
+  the shipped and the raised limit, and the old comment about content's two attempts was false. The `raised_retry_limit`
+  group gained the two scenarios-write exhaustion scenarios through a fourth text patch (without it the group failed) and
+  asserts the independent literal `allowed == 4`. The fixtures' expected value is always the compiled step's declared
+  limit, never the exhaustion it checks.
+- **C42.** The five hand copies of `Runtime.init`'s wiring in `test/integration/workflow_tests.zig` are gone:
+  `inspectToolchainRun` with its six tests, the two-root feature preflight test, the feature inspection test, the main
+  matrix (166 runs in nine tests) and its reboot, and the registry-extension test. Each uses `composition.Runtime.init`
+  and `runtime.invocation(...)`, and overrides only public fields: `native.ops.prepare_reference_evidence.action.identities`
+  (the counted IDs), `invocation.provider_bootstrap` (the test provider's services) with `invocation.provider_runtime = null`,
+  `runner.provider_clock`, `native.model_requests.stages.prepare_authorization.action` and `invoke_model.action`, `Runtime.control`
+  and the null credential snapshots. The registry-extension test installs its operations through `Runtime.initWith(..,
+  BeforeStartup)`, a declaration behind `if (!builtin.is_test) @compileError`; `init` runs the private `assemble` and
+  `startup` in sequence and `initWith` runs the hook between them, so production holds no hook parameter or branch. An
+  architecture pin requires the matrix file to name `composition.Runtime` and never `native_workflow_operations` or the
+  bind calls, and `runtimeSeamViolation` pins the guard, two callers of each phase, one hook call and no optional hook
+  (rejected fixtures for each; a code mention of the assembly module is rejected, a comment or string is not). The
+  matrix does not use `invoke.run`, which
+  the user decided not to build: its frozen projection embeds the fake provider's identity, so a real provider contract
+  would change every byte, and the driver's faults live in fake-provider hooks. No Bedrock slot runs through the production
+  composition, and the matrix still overrides the provider bootstrap.
+- **Contract review.** No blocker. Fixed: the disposition check keeps the three earlier requests as their own literal
+  (they do not follow from the limit, and an engine change that adds or drops one now fails there), the dispositions rows
+  of the raised group assert `allowed == 4`, the reboot sets the same provider clock as the first run, an unused import
+  went, and the seam pin got its rejected fixtures. Noted, not changed: the driver finalizes through its own finalizer and
+  not `runner.finish`, and production builds the provider bootstrap without `control`, so a cancellation boundary count
+  excludes it (both pre-date this change).
+
+## C41. A failed check in a scripted step hook fails its scenario (22 November 2026)
+
+User: "implement C41" (decided 22 November 2026). The request projection is byte-identical to `q26-after` (integration
+147/147).
+
+All 98 `catch unreachable` and the 3 `std.debug.panic` sites in `spec_generation_driver.zig` are gone. In `beforeInvoke`, a
+`void` hook, each became `catch |err| return self.hookFailed(err)`, and `hookFailed` keeps the first failure for `run` to
+return. `step` returns an applied outcome, so two helpers record a failure and keep the engine going: `failed(err, result)`
+returns the step's own result unchanged, and `failedBefore(err, id)` records the failure and still runs the real step for a
+check made before it. A panic's printed message is kept as a `std.debug.print` followed by `failed`. `authorityInputs` now
+returns an error union. Every converted check keeps its condition and its place; no scripted answer, order or count changed.
+`else => unreachable` in one exhaustive switch, `.?` and `std.debug.assert` stay, since they are not a swallowed error.
+An architecture pin requires the driver to contain no `unreachable`, `@panic(` or `std.debug.panic(` in code (it failed on
+the unconverted driver first; rejected fixtures for `catch unreachable`, `orelse unreachable`, `else => unreachable`,
+`@panic(` and `std.debug.panic(`; a comment mention is accepted, a string mention is not). The last `else => unreachable`
+in `beforeInvoke` became `hookFailed(error.UnscriptedRequestOwner)`. A test shows `hookFailed` keeps the first failure
+and `failed` returns `.ok`, `.invalid` or `.more` unchanged. Left alone in `test/integration/workflow_tests.zig`: five
+`catch unreachable` that are not step hooks (the matrix provider-bootstrap binding, a matrix-body `readCurrent`, a
+compile-time shortcode parse and two allocations in a probe-test helper).
+A contract review found that nothing exercised `run`'s return of the recorded failure, so three end-to-end cases of
+`SpecificationCases` run the single brief scenario with a fault injected into a hook: a step trace on a
+`FailingAllocator` (`run` returns `OutOfMemory`), a pre-seeded foreign `brief_references` pointer (`run` returns
+`TestUnexpectedResult`), and both (`run` returns the first, `OutOfMemory`). Deleting the return from `run` fails exactly
+these, and making first-failure-wins last-failure-wins fails the third. It also found that `afterInvoke` freed the arena
+a later call's provider could still read when its hook returned early; `afterInvoke` now clears the plan's content with
+the arena, with a test. Not covered, and not claimed: the `.?` unwraps and `std.debug.assert` in the driver still
+abort, and the `Recorder` in `request_projection.zig` still `std.debug.panic`s on a sink failure; neither is a driver
+step-hook error. A single `try`-based conversion point for the 140-odd identical `hookFailed` lines was declined: it
+rewrites every hook site, and the spelling pin guards the pattern.
+
+## E3 feature logging, E6 prior-run crash finalization and E7 Stage 1 (22 November 2026)
+
+User: "preflight and implement" on E6, E3's feature logging and E7 with C8 and C49. The preflight stopped on missing
+decisions; the user approved them (E3: all four; E6: all five; E7: Stage 1 only; then `blocked` through the profile
+widening). The request projection of the final tree is byte-identical to `q26-after` (integration 146/146), no report,
+step-event, debug or state version moved, and no log event or `FailureCode` was added.
+
+- **E3.** Feature logging is five ADR 0032 routines in `src/application/` (`feature_log_persist_routine`,
+  `_prepare_`, `_close_`, `_retention_`, `_failure_`), each with a closed `Step` enum, one `run`, acquire, work and release
+  in one straight line, and one port per step; their pure steps are `domain/feature_log_stop.zig` (the stop mappings and the
+  two release merges), `feature_log_decisions.zig`, `feature_log_rows.zig`, `feature_log_stream.zig` and
+  `feature_log_format.zig` `emergencyLine`. `feature_log_runtime_lifecycle.zig` is the only caller; `feature_log_runner.zig`
+  holds only the typed state and ports. Deleted: the 26 `src/actions/log/*`, the orchestrator, both coordinators, the
+  three `feature_log_*child_bindings.zig`, both runners, `feature_log_actions.zig` and the 20 logging `DataKey`s (they
+  appear in no JSON, YAML, report or projection). Routines poll no `NodeRuntime`: cancellation reaches them only as the
+  sink's `Cancelled`, so finalization after a cancelled run still closes the streams (ADR 0032 says so). Persist, prepare
+  and close let a release failure outrank the earlier stop; retention keeps the prune stop. A golden test pins the exact
+  bytes of four segments and the console mirror (rows, rotation in each stream, mirror, close) on the unconverted and the
+  converted code, and an emergency-site table pins the writer and reporter sites (the lifecycle, composition's
+  `Assembly.fail`, `log_service.zig` and `model_exchange_capture.zig`). T4's logging pins are contract-shape rules (walks
+  over non-test `src` for stabilization and for adapter and filesystem authority in `src/application`, an allowlist of
+  the four surviving `*_child_bindings.zig`, the routine-caller table); the pins that named deleted files went with them.
+  **Evidence:** offline; ADR 0032 makes live evidence unnecessary and the user approved recording that, as for startup
+  (`zig build smoke` covers packaged activation).
+- **E6.** A sixth routine, `feature_log_prior_finalization_routine` (steps `read_clock`, `acquire`, `check_open`,
+  `recover_tail`, `serialize_trailer`, `close_stream`, `verify_closed`, `release`), finalizes one tail per call, and
+  composition loops over the tails `Discovery` now returns, after `logs.activate` and before retention and `run.started`
+  (§14.10 is rewritten to this order). It recovers the tail to its last complete row and appends one trailer stamped with
+  the finalization time, through the sibling adapter `feature_log_historical_tail.zig` (lock, read, recover, close and
+  release only; the retention adapter keeps its lock, prune and release pin) and a `TailInspector` port for the two
+  under-lock checks. A headerless torn segment is neither finalized, deleted nor blocking, so its run stays whole, and any
+  prior open tail is treated as crashed (concurrent same-feature runs are unsupported, ADR 0026). A lock timeout blocks.
+  A crashed headered run now prunes after the retention window. The renamed layout tests changed only what pinned
+  keep-whole for a headered open tail. Tests: fake-port routine tests, real-filesystem layout tests (both streams, partial
+  row, partial trailer, rotated tail, a different policy, a second activation writing nothing, blocking shapes that leave
+  bytes unchanged, cancellation at every lock, truncate, trailer and flush call with a retry that closes once).
+  ADR 0026, ADR 0032, §14.10, §26.5, 13-02, 13-09 and F0002 are amended. It reduces no published-output defect class: it
+  bounds log growth after a crash.
+- **E7 Stage 1.** `domain/clarification_form_rejection.zig` holds a closed `Reason` (14 members: `form_missing`,
+  `form_without_record`, `form_structure`, `engine_text_changed`, `requested_status_invalid`, `answer_text_invalid`,
+  `cancel_reason_missing`, `option_unknown`, `option_duplicate`, `selection_count`, `audit_changed`, `saved_form_changed`,
+  `answer_changed`, `status_contradicts_record`), each typing one existing failure site of the form validation, and a
+  `FormRejections` list (up to 297 forms). `PrepareInputs` declares `{ok, blocked, failed}` and returns `blocked` with an
+  `InvalidClarificationInput` diagnostic when forms are rejected; registry-level failures still end `failed`. `.blocked`
+  was added to `core.feature-input-read@1`'s allowed terminals (the user's decision) with `blocked: end.blocked` edges in
+  the Spec workflow and the two fixtures. The CLI prints one `S01: reason` line per form; no report member carries them.
+  No validation rule was added or removed, and the unsubmitted-draft exemption is unchanged. A harness test on the
+  production composition (both development cases) shows a closed form of no record ends `blocked` with zero model calls,
+  nothing published and the form byte-unchanged. ADR 0025, §17.4 and 13-02 say the reasons and the outcome are built.
+  Stages 2 and later are open (SPEC01 §5 E7); C8 and C49 are untouched.
+- **Contract review.** No blocker; nine findings fixed. After a rotation that landed, the persist routine's cached segment
+  stayed the old one when the following append stopped, so the close failed its size check; the slot now follows the
+  rotation (a test failed first with the old ordinal; cancellation still drops the slot; the deleted runner's behaviour
+  could not be read, and only this failure path changed). The flush policy has per-trigger accepted and rejected cases
+  and the persist routine asserts the flush it appends. The prior-finalization inspection refuses a tail torn before its
+  header row is complete before any write (the truncate path in `feature_log_recovery.zig` cut it to its heading and
+  then failed), and the layout test covers an empty file, a heading alone and a heading with a partial header row.
+  `audit_changed` and `status_contradicts_record` have rejected cases. Two integration tests that passed on the terminal
+  ceiling assert their own rejection step and rule (with the capability check disabled exactly those two fail). Every
+  routine has step-level tests and `feature_log_stop.zig` and `feature_log_rows.zig` have their own. Composition's
+  `Assembly.fail` is named as the failure routine's second caller, and the routine-import exemption for composition is
+  narrowed to `feature_logging_runtime.zig`. ADR 0026 states that a crashed tail that cannot be written blocks every later
+  run and that discovery reads each prior segment twice per activation. Stale prose about the deleted orchestrator and
+  actions is fixed.
+
+## Two sets on the batch of 22 November 2026, and the keep
+
+**Kept** 22 November 2026: the test-track closures, the refactors that leave request bytes unchanged, E3's feature
+logging, E6, E7 Stage 1, C41, C42 and C45 (recorded on the user's instruction, "preflight and implement", on the
+recommendation to record the sets and the keep). The projections of those items equal `q26-after` (above); neither set's
+tree was projected itself, so the sets test for harm and claim no benefit, since published output is not expected to
+change. **Implementation complete:** yes. **Mechanical checks:** the last full `zig build verify` was 146 of 146 steps
+and 2449 of 2449 tests. **Brittleness:** reduced structurally (the startup, provider, logging and crash-finalization
+routines, the matrix through `Runtime`, typed form rejections); no live run measures it. **Scope:** no run reaches
+E7's `blocked` outcome or prior-run finalization, so only offline tests cover them; three runs per case per set.
+
+| Set | Runs | Build (modified) | Source | Hello-world | Loan-renewal |
+| --- | --- | --- | --- | --- | --- |
+| A | `2026-11-22T03-56-29Z` to `04-01-56Z` | `b8f50364…` | `e539e10f…` | 100, 100, 96.43 | 96.43, 96.43, 89.29 |
+| B | `2026-11-22T06-36-44Z` to `06-54-55Z` | `4415163b…` | `deffe138…` | 100, 100, 100 | 92.86, 92.86, 92.86 |
+
+All 12 runs published natively and were adjudicated as passed (skill `2b3fb8de…`, `claude-haiku-5-5`, none retried).
+Content-basis lost source requirement, weakened obligation and contradiction were 0 in every run. Set B's adjudications are
+`adjudication-3174ad9e…`, `-ed7b0b1a…`, `-c8b696dd…` (hello-world) and `-a716e966…`, `-a86175cc…`, `-4d682e35…`
+(loan-renewal); set A's are under `evaluations/e2e/<run>/`.
+
+- **Unsupported addition:** hello-world 0 in both sets. Loan-renewal 1, 2 and 2 in set A and 2, 1 and 3 in set B, each a
+  generic-precondition Given ("…with an existing due date", "and its due date is known"), so 5 and 6 of 15 criteria and
+  every unsupported addition of either set; each also counts once as a link-basis defect. They cap loan-renewal's
+  source-grounding at 3 in every loan-renewal run.
+- **Given continuity:** hello-world omitted the Given on 9 of 9 criteria in each set, with no filler; loan-renewal kept
+  one on 15 of 15 in each set. One Given repeated its When in each set (A `04-01-56Z` AC-004, B `06-52-17Z` AC-004),
+  and none dropped a Given its source states. No run wrote an edge case.
+- **Other classes** (organization or clarity only): set A hello-world `restatement` 1 (`04-01-08Z`), loan-renewal
+  `restatement` 1 and `ambiguity` 1 (`04-01-56Z`); set B `ambiguity` 1 (`06-52-17Z`) and `restatement` 3 (`06-53-38Z` 1,
+  `06-54-55Z` 2).
+- **Set B repairs:** two, both graded helpful. `06-53-38Z` replaced AC-002's Then, which carried a foreign
+  `Renewal refused.`; `06-54-55Z` replaced AC-001's Then, removing a foreign `Loan renewed!` and keeping the extension.
+  Neither touched a Given. One protocol correction (`06-52-17Z`: a duplicate `validation` claim rejected by the schema
+  agreement check); re-sends, runaways and normalizations 0. The feature log and evidence showed no anomaly.
+- **A claim labelled `design`:** `06-54-55Z`'s story omits "A loan may be renewed only once." because extraction call 1
+  labelled that claim `design`; runs `06-52-17Z` and `06-53-38Z` labelled it `business`. FR-003 and AC-004 state the
+  limit, so no defect was filed (read as a lost requirement the run would score 89.29%). It is the first scored run to
+  show the class at SPEC01 §3 ("A behaviour claim extraction labels non-business"), and that item's reopening condition,
+  a content-basis defect traced to it, is not met.
+- **Comparison:** both sets were scored on `2b3fb8de…`; Q26's three sets stay on `69c55877…` until the reference is
+  re-scored (SPEC01 §2 rule 5), so a difference between them is orientation only.
+
+## E7 stage 4. Authenticated acceptance, the registry and the valid cancel (23 November 2026)
+
+User: "implement stage 4", on the decisions recorded in SPEC01 §5 E7 (22 and 23 November 2026; stage 3 was folded into
+this stage). A valid closed form or `cancel` is authenticated, recorded as a response with its evidence, and published
+with the run; a `defer` is ignored. Nothing consumes an accepted answer before stage 6, so no published-output defect
+class moves: the change is correct recovery plumbing, which no live run has measured.
+
+- **Chain.** The Spec workflow runs `logging`, `actor-evidence`, `authenticate`, then `extract`. `prepare-actor-evidence`
+  (stage action, `filesystem_read`: capture, parse, validate the registry against the clarification state) feeds a loop of
+  `plan`, `check`, `authenticate-actor`, `advance` over the forms that await an account, one runner-issued lease each,
+  then `accept-clarification-responses` (stage action, `none`: bind each form to its captured bytes, record the evidence in
+  one registry revision, build the responses, check the join) and `check-clarification-cancellation`. `authenticate-actor`
+  is the only action with the new `actor_authentication` side effect and the `actor-authentication` capability, which the
+  registry, the graph validator and the runner require together. The runner owns the lease (`actor_authentication_lease`):
+  issued before the step, consumed by the port before it reads the account, finalized on every path by a `defer`;
+  `authentication_unconsumed` and `authentication_lease_unavailable` are the new authority reasons (06-pipeline-nodes.md).
+  The account is `getpwuid_r(getuid())` through `std.c` on Linux, macOS and the BSDs, else `UnsupportedPlatform`; libc was
+  already linked (`build.zig:42`, `:51`). The registry is `actor-evidence-registry/v1` at `state/actor-evidence.json`, written
+  before the clarification state, with exact-prior preconditions. `clarification-state/v3` requires each response to join
+  its entry; `specification-state/v29`, `spec-e2e-case/v4` (fifth artifact) and `spec-e2e-report/v26`.
+- **Cancel.** `TerminalOutcome` gained `cancelled`. `check-clarification-cancellation` (`.preserve` on `clarification_inputs`)
+  and `prepare-cancelled-clarification-output` (`.preserve` to `prepared_workflow_output`) carry the observation to the
+  publisher, so `permitsPublication` admits it and the run ends `cancelled` before any model call, having published the
+  forms, the registry and the clarification state and no `spec.md`, reference context or workflow state. The publisher's
+  outcomes gained `cancelled`, which forced a `cancelled` edge up every call chain that reaches a publisher (YAML only).
+  The runner accepts a `cancelled` finalizer answer only for a cancelled prepared output, and a cancelled log stop no longer
+  leaves a cancelled output publishable (`feature_log_stop.keepsOutcome`).
+- **Deviations from the record.** `specification-state/v29` adds no member: the recorded "adds the registry revision to the
+  clarification binding" was an inference marked to confirm, and the binding already changes with the responses. The cancel
+  decision is its own pure check action, not an outcome of the accept stage, because ADR 0031 fixes a stage action's
+  association to `independent` and routes no outcome. `actor_observation` is `captured` retention: with the default
+  `current`, the second pass's `advance` found the progress dependent on the invalidated first observation and ended in
+  `iteration_contract` (a two-form scenario exposed it; a one-form scenario had hidden it). A deferred form no longer ends
+  `blocked` (`clarification_refresh.zig`); a cancel not accepted before refresh still does.
+- **Records.** ADR 0025 (status, flow, contract, persistence, tests), 0009, 0041 (reservation moves to v30), design.md
+  invariant 31, contracts 13-02, 13-05 (the chain is seven operations; the per-step actions are internal), 14, 16, 17, 24,
+  25, 28, F0005, F0100, e2e.md and acceptance.md, PLAN01's artifact counts and versions. SPEC01 E7 keeps stages 5 to 8.
+  The retained v25 run directories are unreadable by this build's measures tool (SPEC01 §1, "Retained runs").
+- **Evidence.** The request projection of the final tree is identical to `q26-reverted-after` (`diff -rq`, integration
+  156/156 under `SDDE_REQUEST_PROJECTION`), so rule 10 holds for this stage. `zig build verify` was 146 of 146 steps and
+  2494 of 2494 tests; the scenarios run through the production composition with a fake account (the host's name may be
+  outside the token syntax): accept and rerun, a cancel beside an answered form (two passes, two leases), four typed account
+  failures that end `failed` with nothing published, a run that fails after acceptance and publishes nothing followed by a
+  run that accepts again, and the registry writer's preconditions and order. Rule 10's one live run per case ran in the set
+  of 23 November 2026 (user: "perform 3 live run and evaluation per test case"): hello-world and loan-renewal, three each,
+  all published and accepted, `evaluations/e2e/2026-11-23T02-49-26Z…` to `02-59-26Z…`.
+- **Contract review.** No blocker; one major (the registry's writer had no negative tests: four cases added at the adapter
+  and `validateShape`, plus a foreign change after the run's own write) and ten minor, fixed: a cancelled log close no longer
+  lets a cancelled output publish; the architecture pins that proved less than they said (a tautology, a file list), now a
+  walk of every layer for the lease table; the two host-dependent scenarios (they skipped) now inject the account through
+  `invoke.Options.authenticator`; a failure test for each accept step and an allocation-failure sweep for both stages;
+  `max_leases` reads `max_forms`; the evidence's UTC check is the feature log's; the adapter's `run_id` is cleared on
+  `deinit`. Not changed: `State.permitsPublication(.cancelled)` and `validateShape` do not tie `cancelled` to a file set, as
+  for `needs_user` (parity); the lease's `table` and `slot` stay public fields. Not verified: the account lookup under glibc
+  NSS, static builds and containers with no passwd entry; a Linux cross-compile stops earlier on `std.c.fstat` in
+  `file_access.zig` and `file_identity.zig`, files this change did not touch.
+- **Reported separately.** Implementation complete: yes. Mechanical checks passed: yes. Semantic benefit: not demonstrated
+  (no consumer before stage 6). Brittleness reduced: the account and the evidence are typed and tested, not measured live.
+  Scope: the development cases have no responses, so no run reaches the chain's accept or cancel path; offline scenarios
+  alone cover them.
+
+## E7 stage 5 precondition: the signals drift screen (23 November 2026)
+
+User: "action the preconditions for stage 5", on SPEC01 §1's decision of 23 November 2026. The retained runs the record
+named (`06-52-17Z`, the follow-up set) carry `spec-e2e-case/v3`, which this build rejects (`e2e-call` ended
+`InvalidE2ECase`, nothing sent). The screen replayed call 5 (`g8-validate-request-signals`) of loan-renewal run
+`2026-11-23T02-52-01Z`, whose `request.json` is byte-identical to `06-52-17Z` call 6 (`diff -q`) and whose captured
+model and effort are the same (`claude-haiku-5-5`, low): `zig-out/e2e-call/2026-11-23T06-18-45Z-cb4d08d588019738ab661fddd0ba4abb`,
+10 trials, one invocation, no retry, all valid. Four signals (`[1,4]`, `[2]`, `[3]`, `[5]`) in 2 trials (3, 8), three
+(`[1,4,5]`, `[2]`, `[3]`) in 5 (1, 2, 4, 7, 9), two (`[1,4,5]`, `[2,3]`) in 3 (5, 6, 10). The 22 November screen
+gave 3, 5 and 2. The grouping is not deterministic for this request, and the two screens do not show a shift between
+them (10 trials each). Protocol checks only; the semantic quality of the signals was not assessed.
+
+## E7 stage 5. Source-derived clarification subjects (23 November 2026; kept 24 November 2026)
+
+User: "action the preconditions for stage 5", then "approved A, B, D and implement stage 5" on the preflight's decisions A
+(the selector), B (what changes with it) and D (the amendments). C, the measure of stage 5's set, and the recommendations the
+review raised were approved the next request ("update documents with recommendations"): stage 5's set is a rule 6 hygiene
+set, the authority builder will consolidate needs of one subject (SPEC01 stage 5b, unbuilt), and the selector stays until
+stage 7's case. The defect class is an invariant breach (design.md §3.3 item 31: a rerun minted another record for the
+same gap), not a published-output class: the development cases raise no clarification, so no run has shown it.
+
+- **Change.** `Subject` gains `sources`, the canonical source text a need is about (`SourceSpan`: a source's normalized
+  relative path and its exact lines, or the whole source), and the state is `clarification-state/v4` (a v3 state is rejected
+  without a reader). `clarification_subject.zig` derives it from the engine's citations for both producers: a records need
+  names the lines cited by its bound signal's claims, an authority gap on a signal, a conflict or a token names the lines its
+  claims cite, and one on a source names the whole source. The authority requirement names its kind without the contract
+  version, and the unit its kind without an ordinal. `record` and `decision` units, which no Spec workflow produces, keep
+  their ordinal. The first form also removed the model's `record_kind` (`Need.record_kind`, the `unit_kind` check on a
+  clarification and the schema's `record_clarification` definition) so that a clarification was a reason and a question; **that
+  part was reverted the same day** after the screen below, and the model still names the family, which the engine validates and
+  never reads for identity. ADR 0025 (the clarification subject, Decisions 5 and 6), 17-specify.md, F0100 and 13-05 say so,
+  and 24-workflow-state.md says the subject is the selector.
+- **Deviation from the approved recommendation** (accepted 23 November 2026, user: "update documents with recommendations").
+  `specification-state` is not advanced to v30. The recommendation said "a version advance only, as stage 4 did", but
+  `specification_state.zig:20` binds the clarification state by ordinal and revision only, so its contract does not change.
+  ADR 0041's reservation of v30 stays.
+- **Limits accepted** (ADR 0025, "Limits this accepts"; both found by the contract review, neither shown by a run). The
+  subject is the lines, so two needs of one stage whose cited lines coincide (two signals over one line; this entry's first
+  example, a sentence and a token, was wrong, since their requirement kinds differ) are one subject: the refresh rejects them with `InvalidClarificationInput`, which
+  `clarification_refresh_workflow.zig:60` does not map to `blocked`, so the run ends `failed` on every rerun of those sources.
+  Ordinals used to keep them apart. `required_authority_test.zig` pins the coincidence. And a subject is stable only while the
+  claims, citations and signal grouping are, which come from the model: the drift screen's three groupings of one request
+  show a rerun can name another subject and orphan a protected answer. SPEC01 E7 records the decisions: consolidate the
+  collision (stage 5b), keep the selector until stage 7's case.
+- **Evidence.** Before the revert, the request projection differed from `q26-reverted-after` in 211 of 1857 requests, each
+  only in the records call's response schema (`record_kind` removed from the clarification variant, `required` 4 to 3; two
+  also carry it in a rendered guidance block), stated before landing; after it, none differ. `zig build verify` before the
+  revert was 146 of 146 steps and 2502 of 2502 tests (2339 in the repository suite, which holds the 273 architecture pins, 156
+  in integration and 7 in smaller steps), lint clean (the final run is in "Evidence after the revert" below). New tests: the canonical selector (accepted and
+  rejected shapes), its total order, a state at the depth bound that round-trips, a rerun that reuses the ID whatever
+  wording and reference state it draws, the pure merge, a records clarification's subject, and the authority subject for a
+  signal, a conflict, a token, a source, the feature and a decision.
+- **Contract review.** No blocker; two major findings and five minor. Major: the first draft of ADR 0025, 17-specify and F0100
+  claimed the subject came "from the sources and nothing else" and was stable "whatever the model drew", though its lines
+  depend on model-proposed citations and a model grouping of signals (reworded, and the limit recorded above); and the
+  collision ends the run `failed` rather than `blocked` and covers more than a sentence and its token (recorded above;
+  decided afterwards: consolidate, stage 5b). Minor, fixed: `merged` validated its own input only by the final check, so a malformed range inside a
+  covering one was absorbed (it now refuses an item with a zero or inverted line, tested); `max_subject_spans` and its outcome
+  were in no ADR (named in ADR 0025); the records test proved only that some lines were named (it now pins the path and the
+  line, and the rejected citations, source and empty set); `merged` had no allocation-failure sweep (added); no `refresh` test
+  separated two needs by unit alone (added); `subjectFor` read the unit in two switches (one now); 24-workflow-state.md listed
+  v4 among the causes of `specification-state` v29, ADR 0025 said "all four" of five decisions and called the state version
+  advance unqualified, and design.md still indexed ADR 0025 as not implemented (all corrected); the ADR's limits now name the
+  line shift on a source edit and the §14 citation names §14.14 and §24.3. Not changed: `record` and `decision` units keep
+  their ordinal, as approved (B), though no Spec workflow produces them.
+- **Live set** (23 November 2026, user: "perform 3 live runs per test case"; `evaluations/e2e/2026-11-23T07-32-15Z…` to
+  `07-47-56Z…`; one build, revision `5fdfe883…` modified, source `19167d3a…`). Hello-world and loan-renewal, three each:
+  6 of 6 published and accepted, 100, 89.29 and 100% and 92.86, 85.71 and 92.86%, no critical failure. Content-basis accuracy
+  defects: lost source requirement 0, weakened obligation 1 (loan-renewal FR-001 "can renew"), unsupported addition 4 (generic
+  Givens: one in hello-world, three in loan-renewal), contradiction 1 (loan-renewal FR-003, whose trigger excludes its own
+  refusal condition). Hello-world's third run named one of its three claims in its records, filed as a minor `ambiguity`
+  under the story-quoted ruling; a stricter reading files two `lost_source_requirement` and the run `critical_failed`. The
+  four repairs were all graded helpful, and one protocol correction (an extraction retry) occurred. Signals drawn:
+  hello-world one signal in all three runs; loan-renewal `[1,4,5]` and `[2,3]`, then `[1,4]`, `[2]`, `[3]` and `[5]`, then
+  `[1,4,5]`, `[2]` and `[3]`, so three groupings in three runs. Calls: hello-world 9 each (38,129 to 40,391 tokens),
+  loan-renewal 12, 17 and 15 (66,931 to 105,896). Against the §2 rule 6 guards the set shows no lost source requirement under
+  that ruling and a publication rate of 6 of 6, and nothing here attributes a difference from the earlier set to stage 5
+  (one set each, on different builds, with the signals drifting). **Kept** 24 November 2026 (user: "keep stage 5").
+- **Reported separately.** Implementation complete: yes. Mechanical checks passed: yes. Semantic benefit: not demonstrated
+  (nothing consumes an accepted answer before stage 6, and the development cases raise no clarification). Brittleness
+  reduced: the model-picked record family, the per-run ordinals and the contract version leave the key, and the subject is
+  typed, canonical and tested; its stability against a model's regrouping is not achieved, and no subject was measured live.
+  Scope: both producers; the live set above is a hygiene set under SPEC01 §1 and E7.
+
+## E7 stage 5 screen: the records call with and without `record_kind` (23 November 2026)
+
+User: "approved", on the replay of SPEC01 §1. Per case, 10 replays of one records call in each of two arms, the arms started
+seconds apart (`08-13-06Z`/`08-13-07Z`, `08-14-56Z`/`08-14-59Z`), `claude-haiku-5-5` at low effort, 40 provider calls, no retry.
+Requests: hello-world, call 8 of `2026-11-23T02-49-26Z` (all three claims in one signal); loan-renewal, call 8 of
+`2026-11-23T02-59-26Z` (the group of claims 1, 4 and 5). The captured arm sends the request as captured (the schema before stage
+5); the changed arm sends it with `--edit` (`zig-out/q26-followup-screens/stage5-<case>.edit.json`), whose schema equals the stage 5
+build's. The requests actually sent differ only in `record_kind`, in the output schema and its copy in the system text; messages,
+model and limits are equal (first trial of each pair, by text diff). Reports: `zig-out/e2e-call/2026-11-23T08-13-06Z-eb64…` and
+`08-13-07Z-dae6…` (hello-world, captured and changed), `08-14-56Z-2281…` and `08-14-59Z-14a3…` (loan-renewal).
+
+- **Hello-world.** Captured: 1 of 10 trials named only the greeting claim (T09); one more (T05) named all three claims in one
+  record that states no startup requirement. Changed: 5 of 10 named only the greeting claim (T01, T04, T07, T09, T10).
+- **Loan-renewal.** Captured: 9 valid trials with no weakened, missing or contradicting record, and one `protocol_invalid`
+  trial (schema-invalid, and it named no claim 4). Changed: 10 valid trials, one with "can renew" for "must be able to" (T03).
+  Sentences joined without a separator ("renewed.Renewal") appeared in 4 of 10 captured trials and in none of the changed ones; the
+  rule's classes do not include it.
+- **Test.** The rule's one-sided exact test, pooled, with p ≤ 0.10 for "clearly worse": p = 0.053 (6 of 20 changed, 1 of 19 captured)
+  when the invalid trial is a failed trial left out of the defect counts, and p = 0.118 (6 of 20, 2 of 20) when it is a defect.
+  Hello-world alone gives p = 0.070 and loan-renewal alone p = 0.76. How to count the invalid trial was not fixed before the results,
+  so the pooled result straddles the threshold. No mechanism by which the removal changes ordinary records answers is shown in
+  the code; if the effect is real, constrained decoding over the changed schema is the speculative route.
+- **Outcome.** Inconclusive by the rule's threshold, with the direction against the removal in hello-world. **Decided** 23
+  November 2026 (user: "no, running more will not change", then "action"): the removal is reverted, with no further batch. The
+  schema, `Need.record_kind` and the `unit_kind` check are restored; the engine validates the family and never reads it for the
+  subject; ADR 0025 records the exception (Decision 6). The request projection is byte-identical to `q26-reverted-after` again
+  (1857 files compared, none differing, manifest present), so the model sees what it saw before stage 5, and the subject work
+  (the selector, `clarification-state/v4`, the authority producer) is kept. Stage 5b does not depend on it.
+- **Evidence after the revert.** `zig build verify` was 146 of 146 steps and 2502 of 2502 tests (2339 in the repository suite,
+  which holds the 273 architecture pins, 156 in integration and 7 in smaller steps), lint clean. The tests restored: the schema test (a clarification may name each family the
+  records step authors, never the entity, and no other step's clarification names one), the wire cases, and the two
+  `record_kind` sites of the generation tests. The stage 5 records test now also proves that every family names the same
+  subject, that the entity and a family on another unit are refused, and that a records clarification with no family is neither
+  admitted nor built.
+
+## E7 stage 5b: one need for one subject (23 November 2026)
+
+User: "implement stage 5b" (decided 23 November 2026, "update documents with recommendations"). Offline; no model request
+changes.
+
+- **Defect class.** Gaps of one stage whose cited lines coincide have one subject (stage 5; ADR 0025 "Limits this accepts"),
+  and the refresh rejects two needs of one stage and subject with `InvalidClarificationInput`
+  (`clarification_refresh.zig:94`), which no workflow maps to `blocked`, so the run ended `failed` on every rerun of those
+  sources. No retained run showed it; stage 5's tests found it, from two signals over one line.
+- **Change.** The authority builder (`required_authority_clarifications.zig`) first builds one `Part` per gap, with the logic it
+  had, then `consolidate` makes one need for each stage and subject (`c.sameSubject`), in the order each is first named. The
+  need asks each distinct question and gives each distinct reason (exact bytes, the ledger's order, joined by a line feed),
+  binds the union of the authorities and cites the union of the evidence. A part that names only sources beside a part that
+  cites expands to the citations of those sources, since `prepare` uses citations when any are given and sources
+  otherwise; a lone part reduces to the old need. A merged question or reason over `c.max_text_bytes`, authorities over a
+  record's bound (`c.max_record_authorities`, which replaces the literal 64 of the state validation) and one canonical record
+  at two revisions (`Authority.sameRecord`, extracted from the state validation and the ledger's authority check, which now
+  share it) fail `InvalidRequiredAuthority` for every group size; nothing is truncated or dropped. That ends the run
+  `blocked`, the builder's existing mapping (`clarification_refresh_workflow.zig:116`), not `failed`. The refresh keeps its
+  own check. The records builder is unchanged: it names one need per generation unit, so it cannot collide.
+- **Tests.** `required_authority_test.zig`: the real same-line signals fixture (three gaps, two needs; the pair's question and
+  reason carry both, the other source's carries its own, one bound authority, two open forms, and a rerun with the evidence
+  reordered and reworded keeps both IDs); a pure test over a conflict subject with two spans (another stage and another lines
+  stay their own needs; distinct questions, reasons and authorities merge once; the same canonical record at another
+  revision, a merged question, a merged reason and authorities over a record's each fail, where each part alone passes); and a
+  test that a part naming only a source keeps its quotation beside a citing part. `clarification_inputs_test.zig`:
+  `sameRecord` and the record's authority bounds, accepted and rejected.
+- **Records.** ADR 0025 (second limit), 14-orchestration.md, 13-05 and §12.7 (its next sentence, that shared citations across
+  subjects resolve nothing, stands), SPEC01 (engine track, E7 paragraph).
+- **Evidence.** On the final code tree: lint clean; `test-architecture` 273 of 273; `test-required-authority` 353 of 353;
+  `test-clarification-inputs` 154 of 154; `test-specification-generation` 487 of 487; `zig build verify` 146 of 146 steps and
+  2506 of 2506 tests (the 2502 of the stage 5 revert and the four new tests). The request projection of the tree
+  (`SDDE_REQUEST_PROJECTION`, integration 156 of 156) is identical to `q26-reverted-after` (`diff -rq`), so rule 10 holds.
+- **Contract review.** No blocker; one major and seven minor. Major: ADR 0025 said an overflow ends the run `failed`, but
+  `InvalidRequiredAuthority` maps to `blocked` (reworded; the class is a merged text beyond the bound, which a rerun does
+  not clear). Minor, fixed: the ADR's example of a signal and a token sharing a subject (they cannot, their requirement kinds
+  differ), and its claim that stage 6 binds the answer to the gaps (now stage 6's open decision); a stale line citation in
+  SPEC01; the same-record predicate duplicated in the ledger's authority check (now `Authority.sameRecord`, one owner); a
+  branch that applied another rule to a lone part (removed: one rule for every group size, and a seed's authorities are
+  already unique, `required_authority.zig:197`); a test named for unit kinds it did not vary (renamed) with no merged-reason
+  overflow case (added); `consolidate` doing the grouping and the merge (the merge is now `merged`) and no arena note (added).
+- **Not shown.** No live run was made; the development cases raise no clarification, so stage 5b has no effect on a published
+  specification. A merged form asks several questions and takes one answer; what that answer decides for each gap is stage
+  6's open decision (ADR 0025). A merged text beyond the form's bound ends the run `blocked` on every rerun of those sources,
+  which no run has shown: a review detail may be 2000 bytes, so two or three long details over one subject reach it (likely).
+
+## E7 stage 6a: the answer to a conflict (24 November 2026)
+
+User: "implement stage 6", then, after the preflight and a recommendation I corrected twice, "approved A, implement it".
+Offline; no model request changes.
+
+- **Defect class.** An accepted answer had no consumer: the form of a conflict took free text, nothing read it, and a rerun
+  raised the same need again and ended `blocked` with `ProtectedClarification`, so a conflict could never be closed.
+- **Decision history.** The first recommendation (D1 to D6, approved with "continue") had records cite response IDs and
+  generation receive the answer. Reading the code showed that a claim is usable only if its disposition is `retained`, that
+  contradictory bullets are `conflicting` and sit in no signal, and that records are authored per signal, so an answer needed
+  a claim made usable. The second recommendation (D7) made the chosen claim eligible while the others stayed `conflicting`
+  and records cite the response; it was withdrawn when the persisted reference snapshot proved unable to hold it:
+  `reference_snapshot.zig` `validateRecords` checks dispositions, signals and conflicts against the reconciliation rules, and
+  `specification_state.zig` binds the clarification state by ordinal and revision only, so a readback cannot know the
+  answers. Option A, approved, applies the answer to the reconciliation. It amends approved D4 (no `Authority` variant, no
+  deterministic evidence, no review-loop change), D7, and D2 (no response ID on a record), and drops "response ID cited"
+  from stage 7's adjudication.
+- **Change.**
+  - `clarification_resolution.zig`: the option of each claim of a conflict (a key naming the cited lines, labelled with the
+    quotation), the claim a key selects, and the choices of the resolved Specify conflict forms.
+  - The authority need builder gives a conflict's gap a select-one form; two conflicts of one subject offer their options
+    once each, and a mixture of answer kinds, a relabelled key or more than `max_options` fails.
+  - `answered_reconciliation.zig` and `apply-clarification-answers` (a step between `validate` and `check-references`,
+    writing `answered_reference_reconciliation_records`, which the completeness check now reads): the chosen claim is
+    retained with a signal of its own, the others are superseded by it, the conflict is dropped and the later ones are
+    renumbered. The chain is rebuilt in its owner (`RecordAssignments.rebuilt`). A conflict with a preserved-token claim,
+    claims of two kinds, or a claim in another conflict is not answered.
+  - The runner: `Origin.replaced` and one generalization of the replacement self-input rule, because
+    `accept-clarification-responses` replaces two keys in one step and the new `clarification_inputs` recorded the old
+    `actor_evidence_registry` as a stale input. A step's prior revision of another key it replaced is exempt only while that
+    key still holds what the step wrote. The authentication progress, iteration bookkeeping, is now `execution_control`.
+- **Tests.** `clarification_resolution_test.zig`, `answered_reconciliation_test.zig` (the result passes the completeness
+  check, the disposition graph, `contentIssue`, `signalCoverage` and `conflictCoverage`; the conflict seed is gone; an answer
+  that cannot be applied, and a conflict that shares a claim, leave the conflict; every allocation failure),
+  `required_authority_test.zig` (a conflict's need and the merge rules, accepted and rejected) and `pipeline_data_test.zig`
+  (a step replacing two keys, and a later change to one making the other stale). Three pins changed deliberately: the
+  completeness action's `requires` (`architecture_test.zig`) and the two frozen dependents lists
+  (`repair_operations_test.zig`), which now name the new key.
+- **Records.** ADR 0025 ("The answer to a conflict", Decision 7, status, limits), 13-03, 13-05, 14-orchestration, 12-model-boundary
+  (the self-input bullet), F0005, SPEC01 (stage 6a, stage 7's answer is an option key).
+- **Contract review.** One blocker, three major, six minor. Blocker, fixed: `apply` wrote the proposal copy by claim ordinal,
+  but the proposal lists the model's dispositions in its own order with the preserved tokens after them, so a token below a
+  conflicting claim, or an out-of-order proposal, made the completeness check fail and the run `failed` (it is now found by
+  claim; tested with the proposal reversed). Major, fixed: a choice was matched by key only, so a text edited in place under
+  the same lines would have been applied to text the user never saw (the stored label must now equal the claim's current
+  quotation); and the snapshot's readback validation was claimed, not run (the test now builds the snapshot of the answered
+  reconciliation and validates it). Major, decided 24 November 2026 (user: "update documentation with the above 3
+  recommendations"; ADR 0025 Decision 8): a conflict whose options cannot be built (two claims citing the same lines, a path
+  character a key cannot hold, a key over 128 bytes) now ends `blocked` where it used to pause for a text answer, which is
+  accepted; the runner change stands; and the offline scenario that joins run 1, run 2, the gate, generation and publication
+  is built (below). Minor, fixed: a key two claims carry selects none; the literal 32 in `selected_options`; the label
+  fallback (a claim with no quotation is not an option); the arena requirement in `apply`'s comment; stale SPEC01 lines;
+  the superseded "Resolved responses" bullet, deleted; F0100's operation table. Tests added: the three-claim conflict, two
+  conflicts with one answered (the other renumbered and still conflicting), the reversed proposal, a stale label.
+- **Evidence.** Lint clean; `zig build verify` 146 of 146 steps and 2518 of 2518 tests (the 2506 of stage 5b and twelve new
+  tests); the request projection of the final tree (`SDDE_REQUEST_PROJECTION`, integration 156 of 156) is identical to
+  `q26-reverted-after`, so rule 10 holds.
+- **Scenario.** `test/harness/integration/tests.zig` "a conflict's form is answered by option key, the next run applies the
+  choice and publishes, and a rerun reuses it" runs the production composition with a fake account and the scripted
+  transport (new option `conflict` in `spec_generation_responses.zig`: a conflict between the first two business claims, the
+  source review raising it and no other requirement). Two source files give two claims, since the scripted extraction answers
+  one claim per chunk. Run 1 ends `needs_user` with one form offering both claims; the user's key goes into the closed form;
+  run 2 authenticates once, applies the choice and publishes, and the specification holds the chosen claim and not the
+  superseded one; run 3 reads the published state back and reuses the response with no second observation and no new registry
+  entry. It passes through the runner change without a lineage rejection, which the unit test alone did not show.
+- **Not shown.** No live run was made. The scenario scripts the model, so it does not show how a model extracts, reconciles
+  or reviews a real contradiction, or whether the form's reviewer question suits a selection. A preserved-token claim never
+  reaches `apply` in the tests (such a conflict is not answered). The development cases raise no clarification, so none of this changes a published
+  specification. The question a conflict's form carries is the reviewer's free-text question, which may ask for text where
+  the form asks for an option key (not measured).
+- **Limits.** An answer applies to a conflict only (every other answer stays protected and unused, so a re-raised need
+  still ends `blocked`); a conflict with a token claim, a claim in two conflicts or mixed claim kinds is not answered; a
+  user who accepts none of the options can only cancel; and no record cites the response.
+
+## E7 stage 7: the harness two-leg flow (24 November 2026)
+
+User: "implement" the offline scenario and stage 7, then "action with recommendations" on stage 7's D1 to D5 (SPEC01 E7, ADR 0025
+Decision 8). Offline; no live run was made.
+
+- **Defect class.** The harness could run a case once. A case that pauses on a form could not be answered and continued, so
+  the first run that joins the form, the answer, the gate and publication would have been a billed, unanswered one.
+- **Change.** `spec-e2e-case/v5` adds a closed `answers` (empty, or exactly one option key for a case that expects
+  `clarification_then_publication`); `spec-e2e-report/v27` adds `continued_from` and the status `answer_unavailable`. The CLI
+  runs a launch as legs (`cli.zig` `leg`): leg 1 is an ordinary run that expects `clarification`; `answer.zig` `prepare` reads
+  its retained project (never writing it) and, only for exactly one open select-one form that offers the key, renders the closed
+  form with the key in its answer region; leg 2 starts from a copy of leg 1's project with that form written over the form
+  (`continueProject`), expects `publication`, and names leg 1. Anything else ends the launch with leg 1's report
+  (`answer_unavailable` plus a diagnostic code, or the ordinary unexpected outcome). Acceptance changed only to say that a
+  leg's report never carries the combined outcome and that `answer_unavailable` fails.
+- **The case.** `test/e2e/wf-003-loan-renewal-conflict/`: the loan-renewal stories with the limit bullets "only once" (line 8)
+  and "up to twice" (line 9) contradicting each other and the refusal bullet reworded to name neither limit; the answer
+  `stories.md.8`; a rubric with a `conflict-resolution` criterion (chosen bullet kept, the other and any invented resolution
+  absent, minimum 3) beside the loan-renewal criteria. It is neither a reserved qualification feature nor a tuning target. Its
+  grading-qualification members point at the loan-renewal calibration files, since no panel exists for the derivative.
+- **Tests.** Closed-case rows (the v4 case rejected; an answer on a case that answers none, a missing `answers`, a combined case
+  with none, two, an empty or a malformed key rejected; one accepted), a test that parses the new case and checks its answer
+  against its stories, the acceptance cases for each leg, and the conflict scenario now writing the answer through
+  `answer.zig` with its rejected cases (a key the form does not offer, a project with no state, no open form after the form is
+  resolved, a project entry that is neither a file nor a directory) and its copy, which keeps every entry's permissions (the
+  engine reads feature log history only while it is owner-only).
+- **Measures of a second leg.** A second leg's copied project holds both engine runs' feature logs, which `e2e-measures`
+  rightly treats as ambiguous. A report that names `continued_from` now measures only the engine run the leg added, by dropping
+  the owners the named first-leg directory holds, which is the measured run's sibling wherever the pair sits (the review caught
+  a first version that looked beside the root); a missing first leg is unreadable, a name that is a path is an invalid report, and a run with two engine runs and no
+  `continued_from` stays ambiguous. Tests: the accepted second leg, an orphan and an unnamed run.
+- **Records.** e2e.md ("Case and publication contract", the one-project line, the formats), acceptance.md (the outcome, the
+  versions), ADR 0025 Decisions 8 and 9, the live-e2e skill (steps 2, 5 and 9; its name example is `hello-world`, since
+  `loan-renewal` now matches two cases), SPEC01 E7. The evaluate-e2e skill is unchanged, so its hash and the comparability of its
+  evaluations stand: leg 1 is `awaiting_clarification`, which the skill already leaves ungraded, and the answer is counted as
+  source in the rubric.
+- **Evidence.** Lint and `test-architecture` clean; `zig build verify` 146 of 146 steps and 2521 of 2521 tests, and integration
+  158 of 158; `build-e2e-harness` and the harness smoke pass. The request projection of `test-integration` is identical to
+  `evaluations/request-projection/q26-reverted-after`.
+- **Open.** The approval hook matches a case name by substring, so `/live-e2e loan-renewal` now fails closed as ambiguous; name
+  the case path or `loan-renewal-conflict`. The hook is policy and was not changed. A second leg re-captures the case and rubric
+  without cross-checking them against the first leg's.
+- **Not shown.** No live run, so nothing shows whether a model extracts the two bullets as two claims that each cite their own
+  line (the key `stories.md.8` needs the claim of line 8 to cite exactly that line), raises one form for the conflict, or
+  carries the answer through to a publication that keeps "only once". Any other result is reported as an unmet criterion.
+
 ## Decisions that changed nothing (15 November 2026)
 
 User: "update the best options recommendations", then "yes". Each took the recommended option, from a
@@ -2177,8 +3781,8 @@ Later that day, user: "update with recommendation", after a read-only check:
 - **The no-value test deletions are intended** (user, in a unit-test review session: "yes delete the
   high-confidence items"): three startup assertions in `workflow_tests.zig` and the unit test in
   `toolchain_service.zig` compared a getter with itself or repeated a compile-time field check, and
-  `architecture_test.zig:2394` keeps the same `!@hasField(BootstrapServices, "toolchain")` pin. Nothing is
-  restored; the service's own fate is SPEC01 C27.
+  `architecture_test.zig:2410` keeps the same `!@hasField(BootstrapServices, "toolchain")` pin. Nothing is
+  restored; the service was deleted 20 November 2026 (above).
 
 ## R-A1. Engine-owned release is not adopted
 

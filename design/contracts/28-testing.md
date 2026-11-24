@@ -245,15 +245,15 @@ Generate large path/task/requirement spaces to prove invariants:
 
 Use spy child nodes; no real filesystem/model ports are available to the orchestrator.
 
-[ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup and provider
-bootstrap; feature logging not yet) replaces the spy-binding
-tests below with routine tests once each sequence converts. This covers the bootstrap,
-provider-bootstrap and feature-logging cases. Each converted engine routine is tested with fake
+[ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup, provider
+bootstrap and feature logging) replaces the spy-binding
+tests below with routine tests. This covers the bootstrap, provider-bootstrap and
+feature-logging cases. Each engine routine is tested with fake
 ports for:
 
 - step order and every branch;
 - failure propagation with the exact public code;
-- cancellation and deadline between each pair of steps;
+- cancellation between each pair of steps;
 - cleanup on every path;
 - for logging, lock release on every path, one emergency line and idempotent finalization.
 
@@ -306,7 +306,8 @@ survive. The `specify` invocation cases become ADR 0031 stage-action tests.
 - open clarification prefix gates return nonzero `ERROR` before downstream model/write children (`S` blocks plan, `S/P` blocks tasks, and `S/P/T` blocks implement);
 - clarification reruns:
   - reuse exact subject identities and reconsider current allowed authorities/controlled answers;
-  - commit resolution before regeneration;
+  - accept authenticated answers before regeneration and publish them only with the run's own
+    publication, so a failed run publishes none and the next run accepts the same forms again;
   - invoke every owning-stage generation child again, retaining no partial candidates;
 - one invalid filename creates one repair request for one pointer;
 - valid sibling units are retained across repairs;
@@ -412,8 +413,10 @@ Tests verify schema validity, detection ambiguity, roots, extensions, naming, pl
 - Markdown escaping and code-fence safety;
 - exact token/copy preservation;
 - fixed heading order;
-- exact compact `Given`/`When`/`Then` acceptance-criterion rendering and
-  parser rejection of unlabeled, free-form, wrong-case, missing,
+- exact compact `Given`/`When`/`Then` acceptance-criterion rendering, the `When`/`Then`
+  pair of a criterion with no Given, and
+  parser rejection of unlabeled, free-form, wrong-case, missing (a missing `When` or `Then`,
+  or a `Given` label with no text),
   duplicate, additional, and reordered criterion fields;
 - correct engine-derived checklist/progress state;
 - no `tasks.md` during plan;

@@ -4,7 +4,7 @@ const session = @import("../../domain/specification_session.zig");
 const packets = @import("../../domain/model_input_packet.zig");
 const principle_context = @import("../../domain/specification_principles.zig");
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "build-specification-model-input", .kind = .action, .requires = &.{ .specification_generation_session, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .packet_guidance, .principle_registry }, .produces = &.{.model_input_packet}, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "build-specification-model-input", .kind = .action, .requires = &.{ .specification_generation_session, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .packet_guidance, .principle_registry }, .produces = &.{.model_input_packet}, .side_effect = .none };
     /// The request of the unit in flight: a brief, entities or records unit, or while scenarios are
     /// written (ADR 0038 Decision 3), the numbered slots of the next group. The records request
     /// also carries the project's principles (D17.1).

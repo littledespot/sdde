@@ -95,21 +95,6 @@ pub fn promptCaptureEnabled(policy_value: CompiledLoggingPolicy) bool {
     return isEmitted(policy_value, .debug);
 }
 
-pub fn transitionCompatible(current: CompiledLoggingPolicy, next: CompiledLoggingPolicy) bool {
-    return current.timestamp_enabled == next.timestamp_enabled and
-        current.file_enabled == next.file_enabled and
-        current.max_record_bytes == next.max_record_bytes and
-        current.max_segment_bytes == next.max_segment_bytes and
-        current.max_segments == next.max_segments and
-        current.retention_days == next.retention_days and
-        current.flush_at_or_above == next.flush_at_or_above and
-        current.lower_level_flush_records == next.lower_level_flush_records and
-        current.lower_level_flush_interval_ms == next.lower_level_flush_interval_ms and
-        current.max_prompt_content_bytes == next.max_prompt_content_bytes and
-        current.stream_lock_deadline_ms == next.stream_lock_deadline_ms and
-        current.stream_lock_attempt_count == next.stream_lock_attempt_count;
-}
-
 fn ownerStorage(owner: *Owner) *OwnerStorage {
     return @ptrCast(@alignCast(owner));
 }
@@ -136,19 +121,6 @@ test "canonical level aliases have one owner and threshold comparison is exhaust
             );
         }
     }
-}
-
-test "policy transitions permit user choices but preserve hard logging contracts" {
-    const current: CompiledLoggingPolicy = .{
-        .level = .{ .threshold = .info, .alias_evidence = .none },
-        .console = false,
-    };
-    var next = current;
-    next.level.threshold = .debug;
-    next.console = true;
-    try std.testing.expect(transitionCompatible(current, next));
-    next.max_segments -= 1;
-    try std.testing.expect(!transitionCompatible(current, next));
 }
 
 test "only debug and trace enable complete prompt bodies" {

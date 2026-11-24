@@ -10,8 +10,13 @@
   ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7, 8 November 2026) took v24,
   and the engine-derived title ([ADR 0048](0048-engine-derived-specification-title.md),
   11 November 2026) took v25, and the engine-owned model request
-  ([ADR 0030](0030-engine-owned-model-request.md), 13 November 2026) took v26, so when this ADR
-  resumes it takes v27. Since
+  ([ADR 0030](0030-engine-owned-model-request.md), 13 November 2026) took v26, and the edge
+  case's own given ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7,
+  implemented 21 November 2026) took v27, and the acceptance criterion's optional given
+  ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 3, 22 November 2026)
+  took v28, and the authenticated clarification responses
+  ([ADR 0025](0025-clarification-answer-authentication.md), `clarification-state/v3`) took v29, so when
+  this ADR resumes it takes v30. Since
   post-generation review was removed (SPEC01 D13.1, 1 November 2026), "review" leaves the
   checks a failed view lists as not completed.
 - **Date:** 2026-10-26
@@ -44,7 +49,7 @@
     fatal to model work, but publishes this projection;
   - §3.3 (invariant on failed publication), §12.8.1 (the terminal-error rows), §17,
     §22.6 (uncorrectable JSON/schema rejection), §23.2 and §25 (the published set),
-    §24 (`specification-state/v27`), §27 and F0002 (the `run.incomplete_published`
+    §24 (`specification-state/v30`), §27 and F0002 (the `run.incomplete_published`
     event), §31.15, F0100 §5.5, the [E2E harness](../harness/e2e.md) and the §32 index;
   - §23.2 ("blocked … executions publish no new specification") and the §12.8.1
     administrative-block row, for blocked runs;
@@ -94,8 +99,8 @@ incomplete specification when a run pauses for clarification.
    - logging and model-capture failures (`logging`, `model_capture`), because the
      publication couldn't be recorded;
    - configuration, bootstrap, allocation and invariant failures (`operation_failed`);
-   - the run deadline (`deadline_exhausted`); a single request's timeout is a YAML
-     `failed` and publishes;
+   - an expired authorization lease (`deadline_exhausted`); a single request's timeout is a
+     YAML `failed` and publishes;
    - a failure before the reference snapshot validated, because nothing validated
      exists to publish.
 2. **What is published.** Only content that passed every check that applies to it on
@@ -181,7 +186,7 @@ incomplete specification when a run pauses for clarification.
    5. **Eligible operations.** The registered operation contract carries a typed
       failure-output eligibility flag, which the compiler checks for every failure-output
       step; no step may hold a model capability.
-   6. **Cancellation and deadline.** The runner's checks still apply in failure-output
+   6. **Cancellation and lease deadline.** The runner's checks still apply in failure-output
       mode; the engine returns the original failure, and ADR 0009's rule covers files
       already written.
    7. **Tests.** The publishing list's "authority block" is a YAML administrative block;
@@ -234,7 +239,7 @@ incomplete specification when a run pauses for clarification.
 
 ## Consequences
 
-- **Persistence.** `specification-state` advances to v27 for the new variant. Earlier
+- **Persistence.** `specification-state` advances to v30 for the new variant. Earlier
   states reject without migration. Workflow definitions advance to `workflow/v2`; a
   project holding a copied `workflow/v1` definition must replace it.
 - **Risks.**
@@ -255,7 +260,7 @@ incomplete specification when a run pauses for clarification.
     `RunawayRepeated`, protocol exhaustion, `RepairNoProgress`, the token budget, a
     coverage block, an authority block, and a unit invalid with no repair left.
   - Each excluded class publishes nothing: cancellation, logging, authority, gate,
-    `operation_failed`, the run deadline, and any failure before the snapshot.
+    `operation_failed`, an expired lease, and any failure before the snapshot.
   - Only validated units appear, without final requirement IDs: a unit mid-correction,
     mid-repair, rejected or with an unresolved candidate outcome is absent; sections the
     run didn't produce are marked not generated.

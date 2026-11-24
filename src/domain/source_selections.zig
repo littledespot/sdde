@@ -9,13 +9,8 @@ pub const Id = struct {
 };
 pub const Selection = struct { first: Id, last: Id };
 pub const Choice = struct { id: Id, text: []const u8 };
-pub const Issue = struct {
-    reason: enum { missing_selection, unknown_selection, reversed_selection },
-    index: usize,
-    rejected: ?Selection,
-    available: Selection,
-};
-pub const Result = union(enum) { valid: evidence.ValidatedCitations, invalid: Issue };
+/// A selection of no lines, of a line the scope doesn't supply, or whose last line precedes its first.
+pub const Error = evidence.Error || error{InvalidSelection};
 
 /// One supplied line: its ID, exact source span and bytes, line ending included.
 pub const Line = struct { id: Id, span: source.Span, text: []const u8 };
@@ -59,25 +54,19 @@ pub fn citable(text: []const u8) bool {
     return std.mem.trim(u8, text, " \t\r\n").len != 0;
 }
 
-pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, scope: evidence.Scope, selections: []const Selection) evidence.Error!Result {
+pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, scope: evidence.Scope, selections: []const Selection) Error!evidence.ValidatedCitations {
     const view = try evidence.resolve(inputs, scope);
     const units = try lines(a, inputs, scope);
     defer a.free(units);
     if (units.len == 0) return error.InvalidSourceCitation;
-    const available: Selection = .{ .first = units[0].id, .last = units[units.len - 1].id };
-    if (selections.len == 0) return .{ .invalid = .{ .reason = .missing_selection, .index = 0, .rejected = null, .available = available } };
+    const last_available = units[units.len - 1].id.ordinal;
+    if (selections.len == 0) return error.InvalidSelection;
     const proposals = try a.alloc(evidence.CitationProposal, selections.len);
     defer a.free(proposals);
-    for (selections, proposals, 0..) |selection, *proposal, index| {
-        const reason: ?@FieldType(Issue, "reason") = if (selection.first.ordinal == 0 or selection.last.ordinal == 0 or selection.first.ordinal > available.last.ordinal or selection.last.ordinal > available.last.ordinal)
-            .unknown_selection
-        else if (selection.first.ordinal > selection.last.ordinal)
-            .reversed_selection
-        else
-            null;
-        if (reason) |value| return .{ .invalid = .{ .reason = value, .index = index, .rejected = selection, .available = available } };
+    for (selections, proposals) |selection, *proposal| {
+        if (selection.first.ordinal == 0 or selection.last.ordinal == 0 or selection.first.ordinal > last_available or selection.last.ordinal > last_available or selection.first.ordinal > selection.last.ordinal) return error.InvalidSelection;
         const span: source.Span = .{ .start = units[selection.first.ordinal - 1].span.start, .end = units[selection.last.ordinal - 1].span.end };
         proposal.* = .{ .source_id = view.source.id, .block_id = view.chunk.block_id, .location = span, .verbatim = view.source.bytes[span.start.byte..span.end.byte] };
     }
-    return .{ .valid = try @import("source_citations.zig").validate(a, inputs, .{ .scope = scope, .entries = proposals }) };
+    return @import("source_citations.zig").validate(a, inputs, .{ .scope = scope, .entries = proposals });
 }

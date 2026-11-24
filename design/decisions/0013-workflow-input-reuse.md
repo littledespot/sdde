@@ -70,8 +70,8 @@
 
 - Named local definitions that are complete result shapes can also be selected from the
   same compiled resource.
-- An explicit originating request parameter opts into selection from the input packet's
-  typed result-definition identity.
+- A request whose input is a native packet selects that packet's typed result-definition
+  identity; a static or absent input selects nothing (user decision, 21 November 2026).
 - The packet's producer supplies that identity from its current typed unit or authorized
   repair target; the model never selects it. A Spec-owned producer names the definition by a
   member of a closed enum declared for its schema resource

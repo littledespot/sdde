@@ -4,7 +4,7 @@
 - **Date:** 2026-09-19
 - **Decision authority:** Explicit user direction that debug logging retain every full LLM prompt and output for tuning, including the production execution path.
 - **Amends:** Design §§9, 13.4, 26.5, 27, 31.8 and 31.34; F0001's logging configuration, F0002's capture/sanitization/verification contracts and F0006's provider observation boundary.
-- **Amended by:** [ADR 0032](0032-engine-routines.md) (22 October 2026, feature logging not yet implemented). The fixed logging orchestration it retains under §13.9 becomes a typed engine routine once its preconditions are met. Finalization keeps one idempotent owner that preserves the first failure.
+- **Amended by:** [ADR 0032](0032-engine-routines.md) (22 October 2026, implemented). The fixed logging orchestration it retains under §13.9 is a set of typed engine routines that the runtime logging lifecycle runs. Finalization keeps one idempotent owner that preserves the first failure.
 
 ## Decision
 
@@ -43,7 +43,7 @@ runner binds its request identity and lifetime before invoking the action. The
 adapter may submit only borrowed body bytes, typed provenance and credential values
 needed for redaction; it receives no logger, log-sink, child binding, action selector
 or workflow transition capability. The execution-owned capture runner and active
-logging lifecycle retain the fixed logging orchestration under §13.9. Actions and
+logging lifecycle retain the fixed logging sequences under §13.9. Actions and
 the model receive no capture or child-execution capability. This does not amend the
 action/orchestrator invariants or give the provider control of a business graph.
 

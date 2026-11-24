@@ -56,6 +56,8 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         // The engine composes the story, so it has no review purpose (ADR 0047).
         .{ .object = &.{"feature_purposes"}, .key = "primary_user_story", .value = text },
         .{ .object = &.{"record_fields"}, .key = "text", .value = text },
+        // An edge case's one field is its `given` (ADR 0038 Decision 7): `condition` is no entry.
+        .{ .object = &.{"record_fields"}, .key = "condition", .value = text },
         .{ .object = &.{"review_scope"}, .key = "instruction", .value = text },
         // Review scopes of the removed post-generation review are not entries.
         .{ .object = &.{"review_scope"}, .key = "collection", .value = text },
@@ -76,6 +78,8 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         .{ .object = &.{ "support_evidence", "question" }, .key = "omitted", .value = .{ .string = "MOCK\u{85}omitted" } },
         // Unsupported version.
         .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v3" } },
+        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v6" } },
+        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v8" } },
     }) |change| {
         var document = try std.json.parseFromSliceLeaky(std.json.Value, a, valid, .{});
         var target = &document;
@@ -84,14 +88,14 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         const changed = try std.json.Stringify.valueAlloc(a, document, .{});
         try std.testing.expectError(error.InvalidPacketGuidance, guidance.compile(a, changed));
     }
-    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v6\",", "{\"schema\":\"packet-guidance/v6\",\"schema\":\"packet-guidance/v6\",");
+    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v7\",", "{\"schema\":\"packet-guidance/v7\",\"schema\":\"packet-guidance/v7\",");
     try std.testing.expect(!std.mem.eql(u8, duplicate, valid));
     for ([_][]const u8{
         duplicate,
         "",
         "[]",
         "null",
-        "\"packet-guidance/v6\"",
+        "\"packet-guidance/v7\"",
         try std.mem.concat(a, u8, &[_][]const u8{ "[", valid, "]" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "{}" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "x" }),
@@ -275,8 +279,7 @@ test "capture publishes its bound compiled guidance as owned run data and reject
     const contract = flow.Capture.Action.contract;
     var step: compilation.CompiledStep = .{ .id = .{ .bytes = "guidance" }, .operation_id = .{ .bytes = contract.id }, .parameters = &.{.{ .id = .{ .bytes = "guidance" }, .value = .{ .resource = .{ .bytes = "packet-guidance" } } }}, .requires = contract.requires, .produces = contract.produces, .replaces = contract.replaces, .invalidates = contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
     var node: flow.Capture = .{ .allocator = std.testing.allocator };
-    const log: pipeline.WorkflowLog = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("GUID"));
-    const captured = try flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } });
+    const captured = try flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null } });
     try std.testing.expectEqual(.ok, captured.outcome);
     const value = captured.delta.data_writes[@intFromEnum(flow.schema.key)].?;
     defer values.destroy(value);
@@ -284,9 +287,9 @@ test "capture publishes its bound compiled guidance as owned run data and reject
     try std.testing.expectEqualDeep(compiled.guidance, published.*);
     try std.testing.expect(published.summary_purpose.ptr != compiled.guidance.summary_purpose.ptr);
     step.parameters = &.{.{ .id = .{ .bytes = "guidance" }, .value = .{ .resource = .{ .bytes = "prompt" } } }};
-    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } }));
+    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null } }));
     step.parameters = &.{};
-    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null, .log = log } }));
+    try std.testing.expectError(error.GuidanceResourceInvalid, flow.Capture.invoke(&node, .{ .step = .{ .data = .{}, .step = &step, .resources = &resources, .model_binding = null } }));
 }
 
 test "the compiler binds packet guidance only through its capture step and checked resource" {
@@ -378,7 +381,7 @@ const guided_registry: operations.Registry = .{
 fn compileGuided(a: std.mem.Allocator, yaml: []const u8, resources: []const Resource) !compilation.CompiledWorkflow {
     var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
     const raw = try @import("application/startup_routine.zig").steps.parseWorkflows(parser.parser(), a, &.{.{ .ordinal = 1, .bytes = yaml }});
-    const definitions = try @import("domain/workflow_definition_schema.zig").validate(a, raw);
+    const definitions = try @import("domain/workflow_definition_schema.zig").validate(a, raw, null);
     const descriptors = try a.alloc(inventory.InventoryDescriptor, resources.len + 1);
     const accounts = try a.alloc(inventory.InventoryAccount, resources.len + 1);
     const resource_ordinals = try a.alloc(u16, resources.len);
@@ -393,10 +396,10 @@ fn compileGuided(a: std.mem.Allocator, yaml: []const u8, resources: []const Reso
         captures[index] = .{ .ordinal = ordinal, .bytes = resource.bytes };
     }
     const source: inventory.Inventory = .{ .capability = undefined, .descriptors = descriptors, .accounts = accounts, .definition_ordinals = &.{1}, .resource_ordinals = resource_ordinals };
-    const manifest = try @import("domain/workflow_resource_binding.zig").resolve(a, source, definitions);
+    const manifest = try @import("domain/workflow_resource_binding.zig").resolve(a, source, definitions, null);
     var schemas: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&guided_registry, schemas.compiler(), a, definitions, source, manifest, captures);
-    _ = try @import("domain/workflow_graph_validation.zig").validate(a, graphs, &guided_registry);
+    const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&guided_registry, schemas.compiler(), a, definitions, source, manifest, captures, null);
+    _ = try @import("domain/workflow_graph_validation.zig").validate(a, graphs, &guided_registry, null);
     return graphs[0];
 }
 

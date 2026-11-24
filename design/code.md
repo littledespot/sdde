@@ -133,8 +133,8 @@ AppliedChildOutcome {
 ## 2. Capability-free node runtime
 
 Implemented as `NodeRuntime` in [pipeline.zig](../src/domain/pipeline.zig): one
-`status()` reporting `active`, `cancelled` or `deadline_exhausted`, which carries
-the sample's cancellation token and deadline. Kept here, flagged: the native type
+`status()` reporting `active` or `cancelled`, which carries the sample's
+cancellation token. Kept here, flagged: the native type
 has no `correlationContext` or `traceContext`.
 
 - The runtime carries no operation capabilities.
@@ -270,8 +270,8 @@ Native owners:
   [F0002 §6.2](features/F0002-LogService.md#62-levels-and-content-safety) registry,
   whose payload is exactly that row's fields; F0002 §4 owns the fact shape and what
   a fact may not contain. `model.prompt_fragment` is not a fact. The native
-  `TelemetryFact` in [telemetry.zig](../src/domain/telemetry.zig) doesn't meet that
-  shape yet (SPEC01 "F0002 event registry").
+  `TelemetryFact` in [telemetry.zig](../src/domain/telemetry.zig) has that shape: its
+  `row` names each event's fields and the registry rejects a prompt-fragment variant.
 
 Kept here, flagged, because the native types lack them:
 
@@ -301,7 +301,7 @@ Current native types and their governing documentation:
 | Configured path validation | [configured_path_policy.zig](../src/domain/configured_path_policy.zig) | [F0004](features/F0004-BootstrapRootRegistryService.md) |
 | Workflow definitions | [workflow_definition.zig](../src/domain/workflow_definition.zig) | [F0005](features/F0005-WorkflowDefinitionRegistryService.md) |
 | Compiled workflow registry | [workflow_registry.zig](../src/domain/workflow_registry.zig) | [ADR 0003](decisions/0003-generic-workflow-engine.md) |
-| Toolchain policy | [toolchain.zig](../src/domain/toolchain.zig) | [F0003](features/F0003-ToolChainService.md) |
+| Toolchain policy | [toolchain.zig](../src/domain/toolchain.zig) | [F0003](features/F0003-Toolchain.md) |
 | Provider registry and binding | [F0006 source references](features/F0006-LLMProviderInterface.md) | [ADR 0004](decisions/0004-model-provider-bootstrap.md) |
 | Request identity and handoff | [model_request_identity.zig](../src/domain/model_request_identity.zig), [model_request_handoff.zig](../src/domain/model_request_handoff.zig) | [ADR 0012](decisions/0012-workflow-owned-model-request.md) |
 | Feature directory and artifact paths | [feature_directory.zig](../src/domain/feature_directory.zig), [workflow_artifact_registry.zig](../src/domain/workflow_artifact_registry.zig) | [ADR 0010](decisions/0010-explicit-feature-directory.md) |
@@ -494,7 +494,7 @@ ClarificationOwnershipRegistry {
 
 ## 7. Specification IR
 
-This illustrative sample describes canonical `specification/v6` under
+This illustrative sample describes canonical `specification/v8` under
 [ADR 0020](decisions/0020-derived-exact-reference-lineage.md). The display name is native
 text, the sources' level-1 heading ([ADR 0048](decisions/0048-engine-derived-specification-title.md)). Initial narrative
 responses select current whole groups through `signal_ids`; non-entity record
@@ -511,7 +511,8 @@ association and return content only. Earlier shapes have no reader.
 Implemented in [specification.zig](../src/domain/specification.zig) as `Provenance`,
 `AttributedValue`, `RecordProposal`, `ContentProposal`, the `Content` record union,
 `IdentifiedRecord` (whose `outcome_of` links an edge case to the criterion whose
-Then it prints, ADR 0038 Decision 7) and `IdentifiedContent`; the initial-response
+Given (where it holds one), When and Then it prints around its own given, ADR 0038 Decision 7) and
+`IdentifiedContent`; the initial-response
 forms are `AuthoringValue` (`signal_ids`), `AuthoringRecord` (`claim_ids`, non-entity
 records) and `AuthoringEntity` in
 [specification_generation.zig](../src/domain/specification_generation.zig). The
@@ -546,9 +547,11 @@ record is nested under `User Scenarios & Testing` in
 ### Acceptance Criteria
 
 - **AC-001**: **Given** <nonempty `given` value>, **When** <nonempty `when` value>, **Then** <nonempty `then` value>
+- **AC-002**: **When** <nonempty `when` value>, **Then** <nonempty `then` value>
 ```
 
-- Render the heading once, then each `AC-*` identity and labeled triplet.
+- Render the heading once, then each `AC-*` identity and labeled triplet, or labeled pair
+  where the criterion holds no `given` (ADR 0038 Decision 3).
 - The renderer owns label spelling, title case and order. The parser rejects
   free-form, missing, partial, duplicate, reordered or incorrectly cased labels.
 - Omit empty optional sections under F0100 §5.4; mandatory content remains a
@@ -1267,7 +1270,7 @@ provider-owned call limits.
 
 See [§9.1](contracts/09-configuration.md#91-required-configuration-shape) for
 configured roots and engine-derived children,
-[F0003](features/F0003-ToolChainService.md) for mechanical project policy,
+[F0003](features/F0003-Toolchain.md) for mechanical project policy,
 and [F0006](features/F0006-LLMProviderInterface.md) for provider catalogue joins.
 Templates remain inert; `init` is outside the initial suite.
 
@@ -1278,7 +1281,7 @@ Templates remain inert; `init` is outside the initial suite.
 ## 15. Preset identity and composition
 
 Samples 15–20 illustrate proposed compiled policy concepts, not the current
-authored preset YAML. [F0003 §3](features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+authored preset YAML. [F0003 §3](features/F0003-Toolchain.md#3-closed-loading-and-publication-contract)
 owns the accepted project/preset document shape, composition and safety gate.
 These examples do not add runtime fields or imply environment/parser/command
 features are implemented.
@@ -1787,14 +1790,10 @@ PipelineRunner
 │       │   ├── free-text principles ingestion/indexing actions
 │       │   └── repository discovery actions
 │       └── follow typed transitions; each YAML-selected operation uses a runner-owned binding
-└── FeatureLoggingOrchestrator (runner observer; instrumentation-internal)
-    ├── severity/field projection actions
-    ├── threshold/redaction/safety actions
-    ├── sequence/serialize/rotate/append actions
-    └── FeatureLoggingFailureOrchestrator
-        ├── transient-handle destruction action
-        ├── one emergency-record action
-        └── fail-closed runner-control action
+└── runtime logging lifecycle (runner observer; instrumentation-internal; ADR 0032)
+    ├── persist routine (validate, threshold/capture, sequence/serialize/rotate/append)
+    ├── prepare, close and retention routines
+    └── failure routine (one bounded emergency record)
 
 Project workflow graphs are not registered in source. The compiler constructs
 each graph solely from one validated workflow YAML definition:

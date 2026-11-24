@@ -7,6 +7,11 @@ const paths = @import("../../domain/relative_directory_path.zig");
 const directories = @import("directory_access.zig");
 const files = @import("file_access.zig");
 
+/// What a failed directory call is to this port: a cancellation, or an unavailable reference.
+fn unavailable(err: anyerror) source.Error {
+    return if (directories.isCancellation(err)) error.Cancelled else error.ReferenceUnavailable;
+}
+
 pub const Adapter = struct {
     io: std.Io,
     project_root: std.Io.Dir,
@@ -22,9 +27,9 @@ pub const Adapter = struct {
         const project_path = try std.mem.concat(allocator, u8, &.{ binding.project_relative_path, "/", observed.selector.bytes });
         defer allocator.free(project_path);
         if (!std.mem.eql(u8, project_path, observed.project_relative_path) or !binding.physical_identity.eql(observed.root_identity)) return error.ReferenceUnavailable;
-        const root = (directories.openObserved(self.io, self.project_root, binding.project_relative_path, .{ .directory = binding.physical_identity }) catch return error.ReferenceUnavailable) orelse return error.ReferenceUnavailable;
+        const root = (directories.openObserved(self.io, self.project_root, binding.project_relative_path, .{ .directory = binding.physical_identity }) catch |err| return unavailable(err)) orelse return error.ReferenceUnavailable;
         defer root.close(self.io);
-        return (directories.openObserved(self.io, root, observed.selector.bytes, .{ .directory = observed.directory_identity }) catch return error.ReferenceUnavailable) orelse return error.ReferenceUnavailable;
+        return (directories.openObserved(self.io, root, observed.selector.bytes, .{ .directory = observed.directory_identity }) catch |err| return unavailable(err)) orelse return error.ReferenceUnavailable;
     }
     fn enumerate(context: *anyopaque, capability: *const roots.ReferenceContentReadCapability, allocator: std.mem.Allocator, observed: selection.Directory) source.Error!reference.RawInventory {
         const self: *Adapter = @ptrCast(@alignCast(context));
@@ -38,6 +43,7 @@ pub const Adapter = struct {
             error.OutOfMemory => error.OutOfMemory,
             error.SourceLimitExceeded => error.ReferenceLimitExceeded,
             error.SourceUnavailable => error.ReferenceUnavailable,
+            error.Cancelled => error.Cancelled,
         };
     }
     fn capture(context: *anyopaque, capability: *const roots.ReferenceContentReadCapability, allocator: std.mem.Allocator, inventory: reference.Inventory) source.Error!reference.CapturedCorpus {
@@ -72,9 +78,10 @@ pub const Adapter = struct {
                     revision += 1;
                     item.debit = .{ .reserved = reserved, .outcome = .{ .released = {} } };
                     item.source = .{ .blocked = .source_capture };
-                    const parent = self.openParent(root, inventory, entry.raw_path) catch break :file;
+                    // A source that cannot be captured is recorded as blocked; a cancellation stops the corpus.
+                    const parent = self.openParent(root, inventory, entry.raw_path) catch |err| if (err == error.Cancelled) return error.Cancelled else break :file;
                     defer if (parent.owned) parent.directory.close(self.io);
-                    const bytes = files.capture(self.io, allocator, parent.directory, std.fs.path.basename(entry.raw_path), expected, reserved) catch break :file;
+                    const bytes = files.capture(self.io, allocator, parent.directory, std.fs.path.basename(entry.raw_path), expected, reserved) catch |err| if (err == error.Cancelled) return error.Cancelled else break :file;
                     item.source = .{ .bytes = bytes orelse break :file };
                     item.debit = .{ .reserved = reserved, .outcome = .{ .committed = reserved } };
                     total += reserved;
@@ -106,7 +113,7 @@ pub const Adapter = struct {
                 if (std.mem.eql(u8, entry.raw_path, path[0..slash])) break entry;
             } else return error.ReferenceUnavailable;
             if (prior.observation != .directory) return error.ReferenceUnavailable;
-            const next = (directories.openObserved(self.io, current, path[offset..slash], .{ .directory = prior.observation.directory }) catch return error.ReferenceUnavailable) orelse return error.ReferenceUnavailable;
+            const next = (directories.openObserved(self.io, current, path[offset..slash], .{ .directory = prior.observation.directory }) catch |err| return unavailable(err)) orelse return error.ReferenceUnavailable;
             if (owned) current.close(self.io);
             current = next;
             owned = true;

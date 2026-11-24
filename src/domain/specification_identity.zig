@@ -6,7 +6,7 @@ pub const Ledger = struct {
     next: [std.meta.tags(spec.Kind).len]u32 = @splat(1),
 };
 pub const Assigned = struct { content: spec.IdentifiedContent, ledger: Ledger };
-/// An edge case's link to the acceptance criterion whose Then it prints, as indexes into the
+/// An edge case's link to the acceptance criterion whose scenario it prints, as indexes into the
 /// records `assign` receives (`scenario_link.zig`).
 pub const Outcome = struct { edge_case: usize, criterion: usize };
 /// `outcomes` holds exactly one link for each edge case of `candidate`, to a criterion
@@ -26,7 +26,7 @@ pub fn assign(allocator: std.mem.Allocator, candidate: spec.ContentProposal, pri
         const index = @intFromEnum(kind);
         const ordinal = next.next[index];
         next.next[index] = std.math.add(u32, ordinal, 1) catch return error.InvalidSpecification;
-        if (kind.showsOutcome()) edge_cases += 1;
+        if (kind.showsScenario()) edge_cases += 1;
         record.* = .{ .id = .{ .kind = kind, .ordinal = ordinal }, .proposal = proposal, .outcome_of = null };
     }
     if (outcomes.len != edge_cases) return error.InvalidSpecification;
@@ -34,7 +34,7 @@ pub fn assign(allocator: std.mem.Allocator, candidate: spec.ContentProposal, pri
     for (outcomes) |outcome| {
         if (outcome.edge_case >= records.len or outcome.criterion >= records.len) return error.InvalidSpecification;
         const edge = &records[outcome.edge_case];
-        if (!edge.id.kind.showsOutcome() or edge.outcome_of != null) return error.InvalidSpecification;
+        if (!edge.id.kind.showsScenario() or edge.outcome_of != null) return error.InvalidSpecification;
         const criterion = records[outcome.criterion];
         if (!@import("scenario_link.zig").candidate(edge.proposal, criterion.proposal)) return error.InvalidSpecification;
         edge.outcome_of = criterion.id;

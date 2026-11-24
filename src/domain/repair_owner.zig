@@ -82,7 +82,6 @@ pub const RepairOwner = enum {
     source_omission_reconciliation,
     specification_unit,
     specification_support,
-    specification_coverage,
 
     /// The stable dashed value a workflow names in its `owner` parameter.
     pub fn id(self: RepairOwner) []const u8 {
@@ -105,22 +104,22 @@ pub const RepairOwner = enum {
     pub fn serves(self: RepairOwner, operation: Operation) bool {
         return switch (operation) {
             .authorize => switch (self) {
-                .reference_text, .reference_extraction, .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission, .specification_unit, .specification_support, .specification_coverage => true,
+                .reference_text, .reference_extraction, .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission, .specification_unit, .specification_support => true,
                 .reference_reconciliation, .source_omission_extraction, .source_omission_reconciliation => false,
             },
             .build_input, .parse => switch (self) {
                 .reference_text, .reference_extraction, .reference_reconciliation, .source_omission, .specification_unit, .specification_support => true,
-                .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation, .specification_coverage => false,
+                .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission_extraction, .source_omission_reconciliation => false,
             },
             .merge => switch (self) {
                 .reference_text, .reference_extraction, .reference_reconciliation, .source_omission_extraction, .source_omission_reconciliation, .specification_unit, .specification_support => true,
-                .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission, .specification_coverage => false,
+                .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission => false,
             },
         };
     }
 };
 
-/// What the 13 owners' merges accept as their `retry-limit` (ADR 0033 derived choice 6, user decision
+/// What the 12 owners' merges accept as their `retry-limit` (ADR 0033 derived choice 6, user decision
 /// DE4 6, 13 November 2026): each owner's maximum is the value its YAML step declares today. Null
 /// means the owner's merge forbids a `retry-limit` (the text and extraction merges, as today), and an
 /// owner without a merge has none to bound. The native key population stays the one in
@@ -131,7 +130,7 @@ pub fn retryMaximum(owner: RepairOwner) ?u32 {
         .source_omission_extraction, .source_omission_reconciliation => 1,
         .specification_unit => 64,
         .specification_support => 2,
-        .reference_text, .reference_extraction, .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission, .specification_coverage => null,
+        .reference_text, .reference_extraction, .reference_summary, .reference_dispositions, .reference_signals, .reference_conflicts, .source_omission => null,
     };
 }
 
@@ -142,7 +141,7 @@ pub fn unreachableOutcome(operation: Operation, owner: RepairOwner) ?@import("wo
     return switch (operation) {
         .authorize => switch (owner) {
             .reference_dispositions => .more,
-            .reference_text, .reference_extraction, .reference_summary, .reference_signals, .reference_conflicts, .reference_reconciliation, .source_omission, .source_omission_extraction, .source_omission_reconciliation, .specification_unit, .specification_support, .specification_coverage => null,
+            .reference_text, .reference_extraction, .reference_summary, .reference_signals, .reference_conflicts, .reference_reconciliation, .source_omission, .source_omission_extraction, .source_omission_reconciliation, .specification_unit, .specification_support => null,
         },
         .build_input, .parse, .merge => null,
     };

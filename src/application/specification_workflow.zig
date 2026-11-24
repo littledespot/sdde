@@ -31,7 +31,7 @@ pub const SourceReadiness = struct {
             const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
             var arena: std.heap.ArenaAllocator = .init(self.allocator);
             defer arena.deinit();
-            const pending = @import("../domain/source_omission.zig").pendingReview(arena.allocator(), permit, sources.corpus.feature_id, sources.corpus.state_id) catch |err| switch (err) {
+            const pending = @import("../domain/source_omission_authority.zig").pendingReview(arena.allocator(), permit, sources.corpus.feature_id, sources.corpus.state_id) catch |err| switch (err) {
                 error.OutOfMemory => return error.OutOfMemory,
                 error.InvalidRequiredAuthority => return .{ .outcome = .invalid, .delta = .{}, .diagnostic = error.InvalidRequiredAuthority },
             };
@@ -222,10 +222,9 @@ pub const Assemble = struct {
     }
 };
 pub const ValidateCoverage = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage, .result = .specification_coverage } };
-    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/validate_specification_coverage.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
+    // A coverage defect has no independently supported repair target: the step blocks itself.
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -239,7 +238,7 @@ pub const ValidateCoverage = struct {
             .valid => |value| .{ .coverage = value },
             .invalid => |value| .{ .coverage_rejected = value },
         };
-        return publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .invalid);
+        return publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .blocked);
     }
 };
 
@@ -252,7 +251,6 @@ pub fn readContext(view: *const data.View) operations.Error!p.Context {
         .references = references.payload().reconciliation_accounted,
         .inputs = (values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error).*,
         .registry = (values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error).*,
-        .current = values.read(view, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch |operation_error| return operation_error,
     };
 }
 fn publish(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner, outcome: @import("../domain/workflow.zig").OutcomeTag) operations.Error!execution.Candidate {

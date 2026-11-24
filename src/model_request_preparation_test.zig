@@ -134,6 +134,45 @@ fn prosePacketAllocation(a: std.mem.Allocator) !void {
     try std.testing.expectError(error.InvalidModelInputPacket, packets.withPresentationOmissions(a, packet, &.{ .{ .requires = .exact_copy, .path = &.{.{ .property = "catalogue" }} }, .{ .requires = .passive, .path = &.{.{ .property = "catalogue" }} } }));
 }
 
+test "packets projected from one another share one source witness that outlives the packet which named it" {
+    const a = std.testing.allocator;
+    const packets = @import("domain/model_input_packet.zig");
+    var bytes = "Original source.".*;
+    const base = try packets.create(a, "{\"input\":\"original\"}", .workflow_step, .initial_generation, null);
+    const witnessed = try packets.withOriginalSourceTexts(a, base, &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = &bytes }});
+    packets.release(base);
+    // The witness holds its own copy of what the caller named.
+    bytes[0] = 'X';
+    try std.testing.expectEqualStrings("Original source.", witnessed.originalSources()[0].bytes);
+    const projected = try packets.withRestrictions(a, witnessed, &.{}, &.{});
+    packets.release(witnessed);
+    defer packets.release(projected);
+    // The projection reads the sources after the packet that named them is gone.
+    try std.testing.expectEqualStrings("Original source.", projected.originalSources()[0].bytes);
+    const again = try packets.withRestrictions(a, projected, &.{}, &.{});
+    defer packets.release(again);
+    // A later projection shares the bytes instead of copying them.
+    try std.testing.expect(again.originalSources()[0].bytes.ptr == projected.originalSources()[0].bytes.ptr);
+    // Naming other sources replaces the witness for that packet alone.
+    const renamed = try packets.withOriginalSourceTexts(a, projected, &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = "Other source." }});
+    defer packets.release(renamed);
+    try std.testing.expectEqualStrings("Other source.", renamed.originalSources()[0].bytes);
+    try std.testing.expectEqualStrings("Original source.", projected.originalSources()[0].bytes);
+    // A projection made with another allocator keeps its own copy, so it never reads memory the first one frees.
+    var other: std.heap.ArenaAllocator = .init(a);
+    const foreign = try packets.withRestrictions(other.allocator(), projected, &.{}, &.{});
+    try std.testing.expect(foreign.originalSources()[0].bytes.ptr != projected.originalSources()[0].bytes.ptr);
+    try std.testing.expectEqualStrings("Original source.", foreign.originalSources()[0].bytes);
+    packets.release(foreign);
+    other.deinit();
+    // A packet that names no sources carries none.
+    const empty = try packets.create(a, "{\"input\":\"original\"}", .workflow_step, .initial_generation, null);
+    defer packets.release(empty);
+    const empty_projection = try packets.withRestrictions(a, empty, &.{}, &.{});
+    defer packets.release(empty_projection);
+    try std.testing.expectEqual(@as(usize, 0), empty_projection.originalSources().len);
+}
+
 test "native original-source witness is owned bound and absent from provider content" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);

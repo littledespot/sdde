@@ -6,4 +6,4 @@ invoke: specify-invocation
 policy: core.feature-input-read@1
 start: inputs
 steps:
-  inputs: { use: prepare-inputs, on: { ok: end.ok, failed: end.failed } }
+  inputs: { use: prepare-inputs, on: { ok: end.ok, blocked: end.blocked, failed: end.failed } }

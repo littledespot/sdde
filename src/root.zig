@@ -3,6 +3,7 @@ const composition = @import("composition/root.zig");
 
 pub const config = @import("domain/config.zig");
 pub const RunReport = @import("domain/run_outcome.zig").Report;
+pub const definition_rejection = @import("domain/definition_rejection.zig");
 pub const debugRequests = @import("composition/request_debugger.zig").run;
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) !RunReport {
@@ -26,10 +27,14 @@ test {
     _ = @import("domain/exact_value_boundary.zig");
     _ = @import("domain/source_coordinates.zig");
     _ = @import("domain/model_exact_values.zig");
+    _ = @import("domain/ledger_revision.zig");
+    _ = @import("domain/ledger_owner.zig");
+    _ = @import("domain/clarification_form_rejection.zig");
     _ = @import("provider_conformance_test.zig");
     _ = @import("model_log_redaction_test.zig");
     _ = @import("model_exchange_capture_test.zig");
     _ = @import("request_debugger_test.zig");
+    _ = @import("adapter_cancellation_test.zig");
     _ = @import("feature_log_layout_test.zig");
     _ = @import("required_authority_test.zig");
     _ = @import("specification_contract_test.zig");
@@ -59,6 +64,13 @@ test {
     _ = @import("llm_provider_interface_test.zig");
     _ = @import("model_provider_bootstrap_test.zig");
     _ = @import("startup_routine_test.zig");
+    _ = @import("feature_log_retention_routine_test.zig");
+    _ = @import("feature_log_close_routine_test.zig");
+    _ = @import("feature_log_prepare_routine_test.zig");
+    _ = @import("feature_log_persist_routine_test.zig");
+    _ = @import("feature_log_failure_routine_test.zig");
+    _ = @import("feature_log_prior_finalization_routine_test.zig");
+    _ = @import("feature_log_rows_test.zig");
     _ = @import("model_request_orchestrator_test.zig");
     _ = @import("repair_operations_test.zig");
     _ = @import("repair_routes_test.zig");

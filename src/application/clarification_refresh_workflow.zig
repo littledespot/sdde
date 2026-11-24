@@ -16,7 +16,7 @@ pub const views_schema = values.schema(.clarification_views, []const views.View,
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ needs_schema, state_schema, views_schema };
 
 pub const BuildSpecificationNeed = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .clarification_route = .{ .kind = .candidate, .subject = .validated_specification_unit, .evidence = .validated_specification_unit, .result = .clarification_needs } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .clarification_route = .{ .kind = .candidate, .subject = .validated_specification_unit, .evidence = .validated_specification_unit, .result = .clarification_needs, .route_reader = .specification_unit } };
     pub const Action = @import("../actions/clarification/build_specification_clarification_need.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -96,7 +96,7 @@ pub const Check = struct {
 };
 
 pub const BuildAuthorityNeeds = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .clarification_route = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_result, .result = .clarification_needs } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .clarification_route = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_result, .result = .clarification_needs, .route_reader = .required_authority } };
     pub const Action = @import("../actions/clarification/build_required_authority_clarification_needs.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,

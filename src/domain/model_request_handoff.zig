@@ -8,7 +8,6 @@ const packets = @import("model_input_packet.zig");
 const composition = @import("json_composition_runtime.zig");
 const retry = @import("model_protocol_retry.zig");
 pub const Input = union(enum) { resource: compilation.CompiledResource, packet: *const packets.Packet };
-pub const ResultSelection = enum { resource, input };
 pub const ContentBuffer = [3]provider.ModelVisibleContent;
 
 /// One immutable association, carried by typed pipeline keys. Canonical IDs are
@@ -190,7 +189,6 @@ pub const Selection = struct {
     result: compilation.CompiledResource,
     input: ?Input,
     protocol_prompt: ?compilation.CompiledResource,
-    result_selection: ResultSelection,
     composition: ?composition.Binding = null,
 
     pub fn unit(self: Selection) identity.ImmutableUnitOwnerId {
@@ -204,81 +202,7 @@ pub const Selection = struct {
     pub fn bind(self: Selection, allocator: std.mem.Allocator, assignment: identity.Assignment) Error!*Request {
         return assign(allocator, assignment.owner, assignment.model_request_id, self);
     }
-
-    /// Compare one actual accepted semantic assignment with its current native
-    /// selection. The pure admission step may differ from the producing inference
-    /// step; its workflow/version and complete semantic selection must agree.
-    /// This creates no request or origin; the caller still owns current finding
-    /// admission. Composed and resource inputs have no retention contract here.
-    pub fn acceptsRetained(self: Selection, allocator: std.mem.Allocator, ledger: *const identity.ModelRequestIdentityLedger, request: *const Request, origin: @import("model_candidate_origin.zig").Origin) Error!bool {
-        const prior = storage(request);
-        const current = self.input orelse return false;
-        const old = prior.input orelse return false;
-        if (self.composition != null or prior.composition != null or current != .packet or old != .packet or
-            current.packet.purpose() != .semantic_review or old.packet.purpose() != .semantic_review or
-            self.result_selection != .input or prior.result_definition == null or prior.phase != .prepared or
-            current.packet.repairPermit() != null or current.packet.repairOrigin() != null or
-            old.packet.repairPermit() != null or old.packet.repairOrigin() != null) return false;
-        if (!ledger.stageRunEpochId().eql(request.id().stage_run_epoch_id) or origin.kind != .inference) return false;
-        const record = ledger.record(request.id()) orelse return false;
-        if (record.status != .terminal or record.terminal_reason != .accepted or
-            origin.request.value != (ledger.indexOf(request.id()) orelse return false).value) return false;
-        const accepted_attempt: u32 = if (request.retriedAttempt()) |previous|
-            std.math.add(u32, previous.model_attempt_ordinal.value, 1) catch return false
-        else
-            1;
-        var comparable_binding = self.binding.bindingId();
-        comparable_binding.operation_id.workflow_step_id = prior.binding.operation_id.workflow_step_id;
-        if (origin.attempt.value != accepted_attempt or !self.binding.operation_id.isValid() or
-            self.binding.registry_entry != prior.binding.registry_entry or
-            !comparable_binding.eql(prior.binding.bindingId())) return false;
-        _ = identity.validateBinding(ledger, ledger.revision(), request.id(), self.unit(), prior.binding.operation_id, self.purpose()) catch return false;
-        if (!resourceEql(self.prompt, prior.prompt) or !optionalResourceEql(self.context, prior.context) or
-            !optionalResourceEql(self.protocol_prompt, prior.protocol_prompt) or
-            self.result.content != .result_schema or !std.mem.eql(u8, self.result.id.bytes, prior.result.id.bytes) or
-            !optionalBytesEql(self.result.source_path, prior.result.source_path)) return false;
-        const definition = current.packet.resultDefinition() orelse return false;
-        if (!std.mem.eql(u8, definition.bytes, prior.result_definition.?.bytes) or
-            !std.mem.eql(u8, current.packet.body(), old.packet.body())) return false;
-        if (!@import("model_exact_values.zig").same(current.packet.exactScope(), old.packet.exactScope())) return false;
-        const canonical = self.result.content.result_schema.select(definition) orelse return false;
-        if (canonical != prior.result.content.result_schema) return false;
-        const Restrictions = struct {
-            excluded: []const @import("model_result_schema.zig").ExcludedVariant,
-            choices: []const @import("model_result_schema.zig").IntegerChoice,
-            fields: []const @import("model_text_field.zig").Binding,
-            omissions: []const @import("model_field_presentation.zig").Omission,
-        };
-        const codec = @import("canonical_json.zig");
-        const current_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = current.packet.excludedVariants(), .choices = current.packet.integerChoices(), .fields = current.packet.fieldPolicies(), .omissions = current.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
-        defer allocator.free(current_restrictions);
-        const old_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = old.packet.excludedVariants(), .choices = old.packet.integerChoices(), .fields = old.packet.fieldPolicies(), .omissions = old.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
-        defer allocator.free(old_restrictions);
-        if (!std.mem.eql(u8, current_restrictions, old_restrictions)) return false;
-        const effective = if (current.packet.excludedVariants().len != 0 or current.packet.integerChoices().len != 0 or current.packet.fieldPolicies().len != 0)
-            @import("model_result_schema.zig").restrictFieldPolicies(allocator, canonical, current.packet.excludedVariants(), current.packet.integerChoices(), current.packet.fieldPolicies()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false
-        else
-            null;
-        defer if (effective) |restricted| restricted.release();
-        const expected_schema = if (effective) |restricted| restricted.selected() else canonical;
-        return std.mem.eql(u8, expected_schema.modelBytes(), prior.phase.prepared.request.response_schema.modelBytes());
-    }
 };
-
-fn optionalBytesEql(left: ?[]const u8, right: ?[]const u8) bool {
-    if (left == null or right == null) return left == null and right == null;
-    return std.mem.eql(u8, left.?, right.?);
-}
-
-fn resourceEql(left: compilation.CompiledResource, right: compilation.CompiledResource) bool {
-    return left.kind() == right.kind() and std.mem.eql(u8, left.id.bytes, right.id.bytes) and
-        optionalBytesEql(left.source_path, right.source_path) and std.mem.eql(u8, left.bytes(), right.bytes());
-}
-
-fn optionalResourceEql(left: ?compilation.CompiledResource, right: ?compilation.CompiledResource) bool {
-    if (left == null or right == null) return left == null and right == null;
-    return resourceEql(left.?, right.?);
-}
 
 pub const Prepared = struct {
     owner: *identity.Owner,
@@ -316,8 +240,10 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
     const result = selected.result;
     const input = selected.input;
     const protocol_prompt = selected.protocol_prompt;
-    const selection = selected.result_selection;
     const part_binding = selected.composition;
+    // The result the packet names is the one the request asks for. A static or absent input sends the whole
+    // resource, and a composition part carries its own schema.
+    const selects_definition = part_binding == null and input != null and input.? == .packet;
     if (selected.context) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (protocol_prompt) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (prompt.content != .prompt or result.content != .result_schema or
@@ -330,15 +256,15 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
     };
     var bound_result = result;
     if (part_binding) |part| {
-        if (selection != .resource or !part.valid() or result.content.result_schema != part.plan.resultSchema() or
+        if (!part.valid() or result.content.result_schema != part.plan.resultSchema() or
             !std.mem.eql(u8, result.id.bytes, part.plan.resultAlias().bytes) or
             !part.epoch.eql(identity.ledger(ledger_owner).stageRunEpochId())) return error.ModelRequestAssociationInvalid;
         const current = identity.ledger(ledger_owner);
         _ = identity.validateBinding(current, current.revision(), id, part.base.unit(), selected.binding.operation_id, part.base.purpose()) catch return error.ModelRequestAssociationInvalid;
     }
-    if (selection == .input) {
-        const packet = input orelse return error.ModelRequestAssociationInvalid;
-        if (packet != .packet or result.content != .result_schema) return error.ModelRequestAssociationInvalid;
+    if (selects_definition) {
+        const packet = input.?;
+        if (result.content != .result_schema) return error.ModelRequestAssociationInvalid;
         const definition_id = packet.packet.resultDefinition() orelse return error.ModelRequestAssociationInvalid;
         bound_result.content = .{ .result_schema = result.content.result_schema.select(definition_id) orelse return error.ModelRequestAssociationInvalid };
     }
@@ -367,7 +293,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .context = selected.context,
         .protocol_prompt = protocol_prompt,
         .result = bound_result,
-        .result_definition = if (selection == .input) input.?.packet.resultDefinition() else null,
+        .result_definition = if (selects_definition) input.?.packet.resultDefinition() else null,
         .input = input,
         .presented_input = presented,
         .composition = part_binding,

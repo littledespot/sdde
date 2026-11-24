@@ -39,10 +39,12 @@ pub const Structure = struct {
 };
 
 /// A claim's quote as one paragraph, read from its cited source lines: blank and
-/// heading lines dropped, each other line's indentation and list marker removed, and
-/// the lines joined by one space. A code line keeps its words as text. Runs cited
-/// apart keep the quote's ellipsis between them. Null when no line has words, as for a
-/// quote of headings alone.
+/// heading lines dropped (a Setext heading's text included), and the lines that are
+/// Markdown structure with no wording of their own: a code fence's opening and closing
+/// lines, table delimiter rows, thematic breaks and Setext underlines. Each other line's
+/// indentation and list marker is removed, and the lines are joined by one space. A code
+/// line and a table row keep their words as text. Runs cited apart keep the quote's
+/// ellipsis between them. Null when no line has words, as for a quote of headings alone.
 pub fn paragraph(a: std.mem.Allocator, structure: *Structure, item: r.Item) Error!?[]const u8 {
     const source_index = try structure.position(item);
     const source = structure.inputs.corpus.sources[source_index];
@@ -54,7 +56,7 @@ pub fn paragraph(a: std.mem.Allocator, structure: *Structure, item: r.Item) Erro
         var run: std.ArrayList(u8) = .empty;
         for (lines) |line| {
             const end = std.mem.indexOfAnyPos(u8, source.bytes, line.start, "\r\n") orelse source.bytes.len;
-            if (line.start >= span.end.byte or end < span.start.byte or line.heading) continue;
+            if (line.start >= span.end.byte or end < span.start.byte or line.heading or line.markup) continue;
             const from = @max(line.start + line.wording, span.start.byte);
             const to = @min(end, span.end.byte);
             if (from >= to) continue;

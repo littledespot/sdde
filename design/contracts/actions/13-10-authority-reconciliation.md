@@ -55,14 +55,6 @@ into clarification needs is `build-required-authority-clarification-needs`
   bound evidence.
 - **Rejects:** none beyond allocation failure.
 
-## `ParseRequiredAuthorityObservationsAction` (`parse-required-authority-observations`)
-
-- **Owner:** [`src/actions/authority/parse_required_authority_observations.zig`](../../../src/actions/authority/parse_required_authority_observations.zig)
-- **Reads:** `raw_required_authority_observations` · **Writes:** `required_authority_observations` · **Side effect:** `none`
-- **Does:** Strictly decode an observation document; observations may reference evidence IDs
-  but never create the evidence registry. The Spec workflow doesn't use it.
-- **Rejects:** `InvalidRequiredAuthority` for any document that isn't the closed shape.
-
 ## `ReconcileRequiredAuthoritiesAction` (`reconcile-required-authorities`)
 
 - **Owner:** [`src/actions/authority/reconcile_required_authorities.zig`](../../../src/actions/authority/reconcile_required_authorities.zig)
@@ -79,8 +71,7 @@ into clarification needs is `build-required-authority-clarification-needs`
 - **Reads:** `required_authority_inputs`, `required_authority_observations`,
   `required_authority_result` · **Writes:** `required_authority_gate` · **Side effect:** `none`
 - **Does:** Rebuild the result from current native inputs and compare it, so no earlier ledger
-  or result certifies a newer revision; it is the sole issuer of the `required-authority@1`
-  gate.
+  or result certifies a newer revision; it is the sole writer of `required_authority_gate`.
 - **Rejects:** outcome `invalid` for a candidate defect, `needs-user` for clarification gaps,
   `blocked` for upstream rework, an administrative block or `InvalidRequiredAuthority`.
 

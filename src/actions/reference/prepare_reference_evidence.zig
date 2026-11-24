@@ -24,11 +24,13 @@ pub const Step = enum {
 };
 
 /// Stage-owned diagnostic slot: the step a failing run stopped at, or the step a cancelled run
-/// did not start. The binding hands it to the runner (ADR 0031).
-pub const Diagnostic = struct { step: ?Step = null };
+/// did not start, and, when the error is one entry's own reason, that entry's display path. The
+/// binding hands it to the runner (ADR 0031).
+pub const Diagnostic = struct { step: ?Step = null, entry_path: ?pipeline.StageEntryPath = null };
 
-/// The failure representation of the eight absorbed actions, unchanged. `Cancelled` means the
-/// runtime stopped being active; the runner reports which stop it was.
+/// The failure representation of the eight absorbed actions, with `validateAccounting` failing an entry that could
+/// not be read or decoded as its own `reference.Failure`. `Cancelled` means the
+/// runtime stopped being active or a port call was cancelled; the runner reports the cancellation.
 pub const Error = corpus_port.Error || reference.Error || evidence.Error || identity_port.Error || error{Cancelled};
 
 /// One stage: enumerate, validate, capture and decode the selected reference directory, check the
@@ -60,7 +62,10 @@ pub const Action = struct {
         try checkpoint(diagnostic, runtime, .decode_markdown);
         const decoded = steps.decodeMarkdown(self.decoder, scratch, captured) catch |err| return stopped(diagnostic, .decode_markdown, err);
         try checkpoint(diagnostic, runtime, .validate_accounting);
-        const inputs = steps.validateAccounting(scratch, decoded) catch |err| return stopped(diagnostic, .validate_accounting, err);
+        const inputs = steps.validateAccounting(scratch, decoded) catch |err| {
+            diagnostic.entry_path = failingEntryPath(decoded, err);
+            return stopped(diagnostic, .validate_accounting, err);
+        };
         try checkpoint(diagnostic, runtime, .assign_identities);
         const corpus = steps.assignIdentities(self.identities, scratch, inputs, feature) catch |err| return stopped(diagnostic, .assign_identities, err);
         try checkpoint(diagnostic, runtime, .build_chunks);
@@ -73,6 +78,29 @@ pub const Action = struct {
 fn stopped(diagnostic: *Diagnostic, step: Step, err: Error) Error {
     diagnostic.step = step;
     return err;
+}
+
+/// The display path of the first entry the capturer or decoder blocked, when `err` is that entry's own reason
+/// (`validateAccounting` stops at it). Any other error is a fault of the books or the inventory, which names no
+/// entry; a symlink names its own entry path and no target, which the inventory never kept. The path is built in a
+/// buffer of the bound's size, so the only way to name none is a path that does not fit it: no allocation can fail.
+fn failingEntryPath(candidate: reference.DecodedCorpus, err: Error) ?pipeline.StageEntryPath {
+    if (candidate.captured.entries.len != candidate.entries.len) return null;
+    for (candidate.captured.entries, candidate.entries) |captured, decoded| {
+        const failure = switch (captured.source) {
+            .blocked => |reason| reason,
+            else => switch (decoded.result) {
+                .blocked => |reason| reason,
+                else => continue,
+            },
+        };
+        if (reference.failureError(failure) != err) return null;
+        var buffer: [@typeInfo(@FieldType(pipeline.StageEntryPath, "buffer")).array.len]u8 = undefined;
+        var fixed: std.heap.FixedBufferAllocator = .init(&buffer);
+        const display = reference.displayPath(fixed.allocator(), .{ .bytes = candidate.captured.inventory.directory.project_relative_path }, captured.entry.path) catch return null;
+        return pipeline.StageEntryPath.init(display);
+    }
+    return null;
 }
 
 fn checkpoint(diagnostic: *Diagnostic, runtime: pipeline.NodeRuntime, next: Step) Error!void {
@@ -104,32 +132,29 @@ pub const steps = struct {
         var total: usize = 0;
         var revision: u32 = 0;
         for (captured.entries, 0..) |item, index| {
-            var entry: reference.DecodedEntry = .{ .captured = item, .result = .{ .blocked = .decoder_failure }, .debit = null };
-            switch (item.source) {
-                .directory => entry.result = .{ .directory = {} },
-                .blocked => |failure| entry.result = .{ .blocked = failure },
+            entries[index] = switch (item.source) {
+                .directory => .{ .captured = item, .result = .{ .directory = {} }, .debit = null },
+                .blocked => |failure| .{ .captured = item, .result = .{ .blocked = failure }, .debit = null },
                 .bytes => |bytes| decode: {
-                    if (bytes.len > reference.limits.decoded_corpus_bytes - total) {
-                        entry.result = .{ .blocked = .decoded_budget };
-                        break :decode;
-                    }
+                    if (bytes.len > reference.limits.decoded_corpus_bytes - total)
+                        break :decode .{ .captured = item, .result = .{ .blocked = .decoded_budget }, .debit = null };
                     revision += 1;
-                    entry.debit = .{ .reserved = bytes.len, .outcome = .{ .released = {} } };
-                    const decoded = decoder.decode(allocator, item.entry.path, bytes, bytes.len) catch |err| {
-                        entry.result = .{ .blocked = switch (err) {
-                            error.OutOfMemory => return error.OutOfMemory,
-                            error.UnsupportedMedia => .unsupported_media,
-                            error.MalformedText => .malformed_text,
-                            error.DecodeLimitExceeded => .decoded_budget,
-                        } };
-                        break :decode;
-                    };
-                    entry.result = if (bytes.len == 0) .{ .empty = decoded } else .{ .decoded = decoded };
-                    entry.debit = .{ .reserved = bytes.len, .outcome = .{ .committed = bytes.len } };
+                    // A decoder that blocks the entry leaves this debit released.
+                    const released: reference.Debit = .{ .reserved = bytes.len, .outcome = .{ .released = {} } };
+                    const decoded = decoder.decode(allocator, item.entry.path, bytes, bytes.len) catch |err| break :decode .{ .captured = item, .result = .{ .blocked = switch (err) {
+                        error.OutOfMemory => return error.OutOfMemory,
+                        error.UnsupportedMedia => .unsupported_media,
+                        error.MalformedText => .malformed_text,
+                        error.DecodeLimitExceeded => .decoded_budget,
+                    } }, .debit = released };
                     total += bytes.len;
+                    break :decode .{
+                        .captured = item,
+                        .result = if (bytes.len == 0) .{ .empty = decoded } else .{ .decoded = decoded },
+                        .debit = .{ .reserved = bytes.len, .outcome = .{ .committed = bytes.len } },
+                    };
                 },
-            }
-            entries[index] = entry;
+            };
         }
         return .{ .captured = captured, .entries = entries, .decoded_bytes = total, .budget_revision = revision };
     }
@@ -151,10 +176,15 @@ pub const steps = struct {
                     continue;
                 },
                 .file => {},
-                .symlink, .special, .unreadable => return error.InvalidReferenceAccounting,
+                // The capturer blocks an entry it observed as no file, with its reason: one it did not block is a fault of the books.
+                .symlink, .special, .unreadable => if (captured.source != .blocked) return error.InvalidReferenceAccounting,
             }
+            if (captured.source == .blocked) return reference.failureError(captured.source.blocked);
             if (captured.source != .bytes or decoded.captured.source != .bytes) return error.InvalidReferenceAccounting;
             const bytes = captured.source.bytes;
+            // A decoder that blocked the entry released its debit, and may have blocked it on a corpus limit the
+            // checks below apply too, so its reason is read before the books are.
+            if (decoded.result == .blocked) return reference.failureError(decoded.result.blocked);
             if (!std.mem.eql(u8, bytes, decoded.captured.source.bytes) or bytes.len != entry.observation.file.size or
                 bytes.len > reference.limits.source_file_bytes or bytes.len > reference.limits.source_corpus_bytes - source_total or
                 bytes.len > reference.limits.decoded_corpus_bytes - decoded_total) return error.InvalidReferenceAccounting;

@@ -13,7 +13,7 @@ pub const Adapter = struct {
     }
     fn writeConsole(context: *anyopaque, bytes: []const u8) console_port.Error!void {
         const self: *Adapter = @ptrCast(@alignCast(context));
-        std.Io.File.stderr().writeStreamingAll(self.io, bytes) catch return error.ConsoleWriteFailure;
+        std.Io.File.stderr().writeStreamingAll(self.io, bytes) catch |err| return if (err == error.Canceled) error.Cancelled else error.ConsoleWriteFailure;
     }
     fn writeEmergency(context: *anyopaque, bytes: []const u8) emergency_port.Error!void {
         const self: *Adapter = @ptrCast(@alignCast(context));

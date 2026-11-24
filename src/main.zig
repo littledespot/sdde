@@ -42,6 +42,16 @@ pub fn main(init: std.process.Init) !void {
             .invalid, .blocked, .failed, .cancelled => {
                 try writeFailure(init.io, @tagName(execution));
                 if (report.last_operation_rejection) |rejection| try writeFailure(init.io, @tagName(rejection.cause));
+                // One line for each clarification form the inputs stage rejected, with the rule it broke (ADR 0025).
+                for (report.form_rejections) |form| {
+                    const name = form.id.filename();
+                    try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "{s}: {s}", .{ name[0..3], @tagName(form.reason) }));
+                }
+                if (report.provider_failure) |detail| {
+                    var line: std.Io.Writer.Allocating = .init(init.arena.allocator());
+                    try detail.write(&line.writer);
+                    try writeFailure(init.io, line.written());
+                }
                 if (report.candidate_error) |diagnostic| try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), diagnostic, .{}));
                 std.process.exit(1);
             },
@@ -51,6 +61,7 @@ pub fn main(init: std.process.Init) !void {
             var stderr_file_writer: std.Io.File.Writer = .init(.stderr(), init.io, &stderr_buffer);
             const stderr = &stderr_file_writer.interface;
             try stderr.writeAll(failure.text());
+            if (report.bootstrap_detail) |detail| try sdde.definition_rejection.write(detail, stderr);
             try stderr.writeByte('\n');
             try stderr.flush();
             std.process.exit(1);
@@ -61,7 +72,9 @@ pub fn main(init: std.process.Init) !void {
                 try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "{s}: {s}; retry-limit={d}; completed executions={d}", .{ reason.diagnostic(), failure.operation().bytes, failure.limit.value, failure.completed_executions }));
                 if (failure.defect) |defect| try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), defect, .{}));
             } else {
-                try writeFailure(init.io, reason.diagnostic());
+                if (report.reference_entry_path) |*path| {
+                    try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "{s}: {s}", .{ reason.diagnostic(), path.text() }));
+                } else try writeFailure(init.io, reason.diagnostic());
                 if (reason == .model_capture) try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), reason.model_capture, .{}));
             }
             std.process.exit(1);

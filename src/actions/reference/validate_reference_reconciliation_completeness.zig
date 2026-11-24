@@ -2,10 +2,10 @@ const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
 const r = @import("../../domain/reference_reconciliation.zig");
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "validate-reference-reconciliation-completeness", .kind = .action, .requires = &.{.reference_reconciliation_records}, .produces = &.{.accounted_reference_reconciliation}, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "validate-reference-reconciliation-completeness", .kind = .action, .requires = &.{.answered_reference_reconciliation_records}, .produces = &.{.accounted_reference_reconciliation}, .side_effect = .none };
     pub fn execute(_: Action, allocator: std.mem.Allocator, records: r.Records) r.Error!r.Accounted {
         const assigned = records.assignments;
-        const global = assigned.checked.prior.prior;
+        const global = assigned.global();
         try @import("../../domain/reference_reconciliation_validation.zig").history(allocator, global.input.progress);
         if (global.input.purpose != .global or global.input.partition.id.ordinal != global.input.progress.plan.partitions.len or
             global.dispositions.len != global.input.progress.plan.layout.items.entries.len or global.proposal.claim_dispositions.len != global.dispositions.len or

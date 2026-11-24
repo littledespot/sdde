@@ -4,12 +4,13 @@ const fixture = @import("../e2e/fixture.zig");
 const oracle = @import("../e2e/oracle.zig");
 const run_directory = @import("../e2e/run_directory.zig");
 const artifacts = @import("../../../src/domain/workflow_artifact_registry.zig");
-const expected = [_]c.Artifact{ .specification, .reference_context, .clarification_state, .workflow_state };
+const expected = [_]c.Artifact{ .specification, .reference_context, .clarification_state, .workflow_state, .actor_evidence };
 const selected: c.Case = .{
-    .schema = "spec-e2e-case/v3",
+    .schema = "spec-e2e-case/v5",
     .id = "one-reference",
     .workflow_id = "spec-generation",
     .expected_outcome = .publication,
+    .answers = &.{},
     .feature = "chosen",
     .reference = "first",
     .config = "config.json",
@@ -22,6 +23,8 @@ const selected: c.Case = .{
 test {
     _ = @import("../e2e/acceptance_test.zig");
 }
+
+const materializeQuiet = @import("quiet_project.zig").materialize;
 
 test "E2E command selects one live case and rejects mock modes and extra cases" {
     const parse = @import("../e2e/cli.zig").parse;
@@ -41,7 +44,11 @@ test "E2E case is closed and cannot preseed arbitrary destination collisions" {
     const valid = try std.json.Stringify.valueAlloc(a, selected, .{});
     _ = try c.parse(a, valid);
     for ([_][2][]const u8{
-        .{ "\"spec-e2e-case/v3\"", "\"spec-e2e-case/v2\"" },
+        .{ "\"spec-e2e-case/v5\"", "\"spec-e2e-case/v4\"" },
+        // An answer belongs to a case that answers a form, exactly one of it, and a key the form can carry.
+        .{ "\"answers\":[]", "\"answers\":[{\"key\":\"a.md.1\"}]" },
+        .{ "\"answers\":[],", "" },
+        .{ "\"expected_outcome\":\"publication\"", "\"expected_outcome\":\"clarification_then_publication\"" },
         // A retired judge configuration is not accepted case content.
         .{ "\"id\":", "\"evaluation_config\":\"evaluation.json\",\"id\":" },
         .{ "\"expected_outcome\":\"publication\",", "" },
@@ -61,6 +68,16 @@ test "E2E case is closed and cannot preseed arbitrary destination collisions" {
             error.InvalidE2ECase, error.InvalidEvaluationContract => {},
             else => return err,
         }
+    }
+    // A case that answers a form declares exactly one answer, and its legs state their own outcomes (never the combined one).
+    var answering = selected;
+    answering.expected_outcome = .clarification_then_publication;
+    answering.answers = &.{.{ .key = "stories.md.8" }};
+    const accepted = try c.parse(a, try std.json.Stringify.valueAlloc(a, answering, .{}));
+    try std.testing.expectEqual(c.ExpectedOutcome.clarification_then_publication, accepted.expected_outcome);
+    for ([_][]const c.Answer{ &.{}, &.{ .{ .key = "a.md.1" }, .{ .key = "a.md.2" } }, &.{.{ .key = "has space" }}, &.{.{ .key = "" }} }) |bad| {
+        answering.answers = bad;
+        try std.testing.expectError(error.InvalidE2ECase, c.parse(a, try std.json.Stringify.valueAlloc(a, answering, .{})));
     }
     var collision = selected;
     collision.files = &.{
@@ -92,6 +109,37 @@ fn preparedOutput(allocator: std.mem.Allocator, paths: artifacts.FeaturePaths) !
         .prior_workflow_state = .{ .captured = null },
         .files = files,
     };
+}
+
+test "the clarification-expected case answers one form, holds exactly one pair of contradictory bullets, and binds its rubric to the same source bytes" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-003-loan-renewal-conflict/workflow.case.json"));
+    try std.testing.expectEqual(c.ExpectedOutcome.clarification_then_publication, choice.expected_outcome);
+    try std.testing.expectEqual(@as(usize, 1), choice.answers.len);
+    const captured = try fixture.capture(std.testing.io, a, .cwd(), choice);
+    try fixture.validateEvaluationSources(a, captured, "references", choice.reference);
+    const stories = captured.evaluation.sources[0].text;
+    // The answer names the line of the bullet it keeps, the key the form of that bullet offers (the source's path in the
+    // reference directory, then the line), and that line holds the bullet the rubric says the user kept.
+    var lines = std.mem.splitScalar(u8, stories, '\n');
+    var number: usize = 0;
+    var kept: ?[]const u8 = null;
+    var bullets: usize = 0;
+    while (lines.next()) |line| {
+        number += 1;
+        if (std.mem.startsWith(u8, line, "- A loan may be renewed")) bullets += 1;
+        if (number == 8) kept = line;
+    }
+    try std.testing.expectEqualStrings("stories.md.8", choice.answers[0].key);
+    try std.testing.expectEqualStrings("- A loan may be renewed only once.", kept.?);
+    // Exactly two bullets state a renewal limit, and they contradict each other.
+    try std.testing.expectEqual(@as(usize, 2), bullets);
+    try std.testing.expect(std.mem.indexOf(u8, stories, "- A loan may be renewed up to twice.") != null);
+    var named = false;
+    for (captured.evaluation.rubric.criteria) |criterion| named = named or std.mem.eql(u8, criterion.id, "conflict-resolution");
+    try std.testing.expect(named);
 }
 
 test "explicit loan renewal case binds generation and rubric to the same source bytes" {
@@ -126,7 +174,8 @@ test "shipped workflow conforms to native registrations and rejects contract dri
         .{ "use: collect-specification-support", "use: unregistered-support-reader" },
         .{ "use: collect-specification-support", "use: apply-specification-support" },
         .{ "retry-limit: 1", "retry-limit: -1" },
-        .{ "selection: input", "selection: missing-definition" },
+        // The selection is derived from the input packet: a definition declaring it is an unknown parameter.
+        .{ "result-schema: extraction-schema, retry-limit: 1", "result-schema: extraction-schema, result-selection: input, retry-limit: 1" },
         .{ "composition-part: content", "composition-part: classifications" },
         // A registered operation in a part's retention position: the composition flow rejects it, not the registry.
         .{ "use: retain-json-part", "use: release-model-request" },
@@ -139,11 +188,13 @@ test "shipped workflow conforms to native registrations and rejects contract dri
         // scenario and link steps unreachable. That assembly needs the criteria and the links is
         // proven by every scripted run, whose steps see only the data their contracts declare.
         .{ "  generate:\n    call: generate-specification\n    on:\n      ok: scenarios", "  generate:\n    call: generate-specification\n    on:\n      ok: assemble" },
+        // Routing both of the preservation policy's outcomes to generation leaves its requirements step unreachable.
+        .{ "ok: preservation-requirements, more: generate, invalid: end.invalid", "ok: generate, more: generate, invalid: end.invalid" },
     };
     for (0..mutations.len + 1) |index| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
+        try materializeQuiet(io, project.dir, captured);
         if (index > 0) {
             const change = mutations[index - 1];
             const changed = try std.mem.replaceOwned(u8, a, workflow_file.bytes, change[0], change[1]);
@@ -158,6 +209,49 @@ test "shipped workflow conforms to native registrations and rejects contract dri
             // Exercise the existing registry's cross-owner checks, with no model
             // provider or workflow invocation. No parallel contract is constructed.
             try std.testing.expect(runtime.native.registry.validate());
+            // Every operation implementation the assembly holds is registered exactly once, bound to that very
+            // implementation, and no two share an id.
+            inline for (std.meta.fields(@TypeOf(runtime.native.ops))) |field| {
+                const id = comptime if (@hasDecl(field.type, "Action")) field.type.Action.contract.id else field.type.contract.id;
+                var registered: usize = 0;
+                for (runtime.native.entries) |entry| {
+                    if (!std.mem.eql(u8, entry.contract.id, id)) continue;
+                    registered += 1;
+                    try std.testing.expect(entry.binding.context == @as(?*anyopaque, &@field(runtime.native.ops, field.name)));
+                }
+                try std.testing.expectEqual(@as(usize, 1), registered);
+            }
+            // The request operations keep their own tables, derived from their structs: a selectable operation has
+            // one entry row and a stage context one stage row, each bound to that very field, and no implementation
+            // is in the other table. The stage rows follow the kernel's stages in order.
+            const requests = &runtime.native.model_requests;
+            inline for (std.meta.fields(@TypeOf(requests.selectable))) |field| {
+                const id = comptime field.type.contract.id;
+                const address: ?*anyopaque = &@field(requests.selectable, field.name);
+                var registered: usize = 0;
+                for (requests.entries) |row| {
+                    if (!std.mem.eql(u8, row.contract.id, id)) continue;
+                    registered += 1;
+                    try std.testing.expect(row.binding.context == address);
+                }
+                try std.testing.expectEqual(@as(usize, 1), registered);
+                for (requests.request_stages) |row| try std.testing.expect(!std.mem.eql(u8, row.contract.id, id));
+            }
+            const kernel_stages = std.enums.values(@import("../../../src/domain/model_request_kernel.zig").Stage);
+            inline for (std.meta.fields(@TypeOf(requests.stages))) |field| {
+                const id = comptime field.type.contract.id;
+                const address: ?*anyopaque = &@field(requests.stages, field.name);
+                var registered: usize = 0;
+                for (requests.request_stages) |row| {
+                    if (!std.mem.eql(u8, row.contract.id, id)) continue;
+                    registered += 1;
+                    try std.testing.expect(row.binding.context == address);
+                    try std.testing.expectEqualStrings(field.name, @tagName(row.stage));
+                }
+                try std.testing.expectEqual(@as(usize, 1), registered);
+                for (requests.entries) |row| try std.testing.expect(!std.mem.eql(u8, row.contract.id, id));
+            }
+            for (kernel_stages, requests.request_stages) |stage_tag, row| try std.testing.expectEqual(stage_tag, row.stage);
             const graph = runtime.boot.ready.workflows.registry().resolve(.{ .bytes = choice.workflow_id }).?;
             // A registered native request remains forbidden inside active
             // composition, even when its ordinary data contract still matches.
@@ -185,7 +279,7 @@ test "shipped workflow conforms to native registrations and rejects contract dri
                     if (changed_part) break;
                 }
                 try std.testing.expect(changed_part);
-                try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("../../../src/domain/workflow_graph_validation.zig").validate(a, &.{invalid_graph}, &runtime.native.registry));
+                try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("../../../src/domain/workflow_graph_validation.zig").validate(a, &.{invalid_graph}, &runtime.native.registry, null));
             }
             const protocol = for (captured.files) |file| {
                 if (std.mem.eql(u8, file.mapping.source, "design/workflows/spec/protocol.prompt.md")) break file.bytes;
@@ -226,7 +320,7 @@ test "shared production runtime preserves deferred environment capture and isola
     const captured = try fixture.capture(io, a, .cwd(), choice);
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
-    try fixture.materialize(io, project.dir, captured);
+    try materializeQuiet(io, project.dir, captured);
     const target = try configured(a, captured);
     const variable = @import("../../../src/adapters/system/provider_api_key_source.zig").variable(target.family);
     for ([_]?[]const u8{ null, "", "invalid key", "isolated-credential" }) |raw| {
@@ -290,7 +384,7 @@ test "production E2E binding honors configured models and cannot succeed without
         const captured = try fixture.capture(io, a, .cwd(), choice);
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
+        try materializeQuiet(io, project.dir, captured);
         var model_config = try std.json.parseFromSliceLeaky(std.json.Value, a, captured.config, .{});
         for (model_config.object.get("models").?.object.get("slots").?.object.values()) |*slot| {
             try slot.object.put(a, "provider", .{ .string = provider });
@@ -298,8 +392,9 @@ test "production E2E binding honors configured models and cannot succeed without
             // Omitted effort is valid for every registered model.
             _ = slot.object.swapRemove("reasoningEffort");
         }
+        try model_config.object.getPtr("logs").?.object.put(a, "console", .{ .bool = false });
         try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config, .{}) });
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+        var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
         var evidence_run = std.testing.tmpDir(.{});
         defer evidence_run.cleanup();
         const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{} };
@@ -381,7 +476,7 @@ test "publication handoff captures poor output for adjudication without changing
     const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
     const captured = try fixture.capture(io, a, .cwd(), choice);
     const evaluation = @import("../e2e/evaluation.zig");
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "2026-09-11T00:00:00Z", .execution_id = "run-123", .expected_outcome = .publication, .evaluation_case_id = captured.evaluation.case.id, .status = .generated, .workflow_outcome = .ok, .publication_check = .passed, .specification = "specs/hello-world/spec.md", .models = &.{.{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }} };
+    var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .execution_id = "run-123", .expected_outcome = .publication, .evaluation_case_id = captured.evaluation.case.id, .status = .generated, .workflow_outcome = .ok, .publication_check = .passed, .specification = "specs/hello-world/spec.md", .models = &.{.{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }} };
     const inputs = try evaluation.inputs(a, report, captured.evaluation, "Readable but poor output.", "run-123");
     report.evaluation_inputs = inputs;
     try std.testing.expectEqualStrings("Readable but poor output.", inputs.specification);
@@ -432,7 +527,7 @@ test "fixture copy preserves declared reference bytes and rejects preseeded outp
     try repository.dir.writeFile(io, .{ .sub_path = "source.md", .data = "The library renews a loan.\n" });
     try writeEvaluation(io, repository.dir);
     const captured = try fixture.capture(io, a, repository.dir, selected);
-    try fixture.materialize(io, project.dir, captured);
+    try materializeQuiet(io, project.dir, captured);
     const copy = try project.dir.readFileAlloc(io, "references/first/source.md", a, .limited(1024));
     try std.testing.expectEqualStrings("The library renews a loan.\n", copy);
     try fixture.verifySources(io, a, repository.dir, captured);
@@ -502,7 +597,7 @@ test "clarification reports are ungraded normal pauses with registered IDs and p
     const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const id = @import("../../../src/domain/clarification_inputs.zig").Id.parse("S02").?;
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "2026-09-16T00:00:00Z", .expected_outcome = .clarification, .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed, .specification = "outputs/chosen/spec.md", .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured }, .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
+    const report: c.Report = .{ .started_at_utc = "2026-09-16T00:00:00Z", .expected_outcome = .clarification, .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed, .specification = "outputs/chosen/spec.md", .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured }, .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
     try output.save(io, a, report);
     const bytes = try @import("../files.zig").read(io, a, dir.dir, "report.json");
     const retained = try @import("../contracts.zig").decode(c.Report, a, bytes);
@@ -535,7 +630,6 @@ test "failure reports preserve separate engine provider and model evidence" {
     const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v20",
         .started_at_utc = "2026-09-11T00:00:00Z",
         .execution_id = "run-failed",
         .case_source = "chosen.case.json",
@@ -595,7 +689,6 @@ test "completed E2E reports retain the exact captured adjudication inputs" {
     captured.evaluation.rubric.pass_threshold_percent = 75.5;
     captured.evaluation.rubric_bytes = try std.json.Stringify.valueAlloc(a, captured.evaluation.rubric, .{});
     var report: c.Report = .{
-        .schema = .@"spec-e2e-report/v20",
         .started_at_utc = "2026-10-11T00:00:00Z",
         .execution_id = "MOCK-published-run",
         .expected_outcome = .publication,
@@ -658,7 +751,7 @@ test "E2E report finalization preserves workflow outcomes and exposes write and 
             else if (status == .generated)
                 try @import("../e2e/acceptance_test.zig").completed(a)
             else
-                .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "2026-10-11T00:00:00Z", .expected_outcome = .publication, .status = .workflow_failed, .workflow_outcome = .failed, .diagnostic = "WorkflowTokenBudgetExceeded", .terminal_rejection = .{ .kind = .token_budget, .detail = "WorkflowTokenBudgetExceeded" } };
+                .{ .started_at_utc = "2026-10-11T00:00:00Z", .expected_outcome = .publication, .status = .workflow_failed, .workflow_outcome = .failed, .diagnostic = "WorkflowTokenBudgetExceeded", .terminal_rejection = .{ .kind = .token_budget, .detail = "WorkflowTokenBudgetExceeded" } };
             // Override only the standard file-sync operation; all other I/O
             // retains its real test implementation and original context.
             var vtable = io.vtable.*;
@@ -704,7 +797,7 @@ test "retired protocol rejection stays associated with its call across later fai
     const a = arena.allocator();
     var snapshot: @import("../e2e/observation.zig").LastModelRejection = .{};
     defer snapshot.deinit(std.testing.allocator);
-    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
+    const empty: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
     var rejected = empty;
     rejected.model_diagnostic = "InvalidModelEnvelope";
     rejected.last_model_origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
@@ -758,7 +851,7 @@ test "composition reports retain every field across retirement rendering and lat
     const a = arena.allocator();
     var snapshot: @import("../e2e/observation.zig").LastModelRejection = .{};
     defer snapshot.deinit(std.testing.allocator);
-    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
+    const empty: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
     var rejected = empty;
     rejected.model_diagnostic = "InvalidModelEnvelope";
     rejected.last_model_call = 13;
@@ -809,7 +902,6 @@ test "candidate rejection reports retain the producing call separately from the 
     defer arena.deinit();
     const a = arena.allocator();
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v20",
         .started_at_utc = "2026-09-12T00:00:00Z",
         .status = .workflow_failed,
         .candidate_error = .{ .token_classifications = .{
@@ -847,10 +939,9 @@ test "later budget transport and capture stops retain separate protocol and exch
     for (&calls, 1..) |*call, ordinal| call.* = .{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = @intCast(ordinal) } }, .step = "repair", .raw_response_available = true, .output = if (ordinal < 35) .available else .not_projected };
     var retained: obs.LastModelRejection = .{};
     defer retained.deinit(std.testing.allocator);
-    try retained.observe(std.testing.allocator, 34, .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = calls[33].origin, .model_diagnostic = "SyntaxError", .json_error = .{ .reason = .SyntaxError } });
+    try retained.observe(std.testing.allocator, 34, .{ .started_at_utc = "", .status = .workflow_failed, .last_model_origin = calls[33].origin, .model_diagnostic = "SyntaxError", .json_error = .{ .reason = .SyntaxError } });
     for (0..4) |stop| {
         var report: c.Report = .{
-            .schema = .@"spec-e2e-report/v20",
             .started_at_utc = "",
             .status = .workflow_failed,
             .workflow_outcome = .failed,
@@ -897,10 +988,10 @@ test "provider cause survives request release without inventing a candidate reje
         .exception = "AccessDeniedException",
         .request_id = "request-1",
     }};
-    var observed: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .provider_origin = calls[0].origin, .last_model_origin = calls[0].origin };
+    var observed: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .provider_origin = calls[0].origin, .last_model_origin = calls[0].origin };
     try obs.correlate(a, &calls, &observed);
     // The next projection has no active request or provider observation slots.
-    var released: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .usage_complete = false };
+    var released: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .usage_complete = false };
     try obs.correlate(a, &calls, &released);
     try std.testing.expectEqual(@as(usize, 1), released.last_model_call.?);
     try std.testing.expectEqualStrings("authorization_denied", released.provider_diagnostic.?);
@@ -924,7 +1015,7 @@ test "unrepairable responses preserve complete production logs and forbid public
         const captured = try fixture.capture(io, a, .cwd(), choice);
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
+        try materializeQuiet(io, project.dir, captured);
         const cf = @import("../../../src/test_fixtures/clarification_inputs.zig");
         var bootstrap: @import("../../../src/composition/root.zig").Runtime = undefined;
         bootstrap.init(io, std.testing.allocator, project.dir, .{});
@@ -946,7 +1037,7 @@ test "unrepairable responses preserve complete production logs and forbid public
             try project.dir.createDirPath(io, std.fs.path.dirname(file.path).?);
             try project.dir.writeFile(io, .{ .sub_path = file.path, .data = file.bytes });
         }
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed };
+        var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
         {
             var runtime: @import("../../../src/composition/root.zig").Runtime = undefined;
             runtime.init(io, std.testing.allocator, project.dir, .{});
@@ -1074,6 +1165,17 @@ const kernel_workflow =
 ;
 const kernel_schema = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":20000}},\"required\":[\"answer\"],\"additionalProperties\":false}";
 
+fn installKernelWorkflow(io: std.Io, project: std.Io.Dir) !void {
+    for ([_]struct { path: []const u8, bytes: []const u8 }{
+        .{ .path = ".sddtoolkit/workflows/kernel.workflow.yaml", .bytes = kernel_workflow },
+        .{ .path = ".sddtoolkit/workflows/kernel/prompt.md", .bytes = "Return the requested object." },
+        .{ .path = ".sddtoolkit/workflows/kernel/result.json", .bytes = kernel_schema },
+    }) |file| {
+        try project.createDirPath(io, std.fs.path.dirname(file.path).?);
+        try project.writeFile(io, .{ .sub_path = file.path, .data = file.bytes });
+    }
+}
+
 test "the E2E report reads a kernel request's authorization failure from recorded history, after the step dropped it" {
     const Runtime = @import("../../../src/composition/root.zig").Runtime;
     const io = std.testing.io;
@@ -1084,15 +1186,8 @@ test "the E2E report reads a kernel request's authorization failure from recorde
     const captured = try fixture.capture(io, a, .cwd(), choice);
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
-    try fixture.materialize(io, project.dir, captured);
-    for ([_]struct { path: []const u8, bytes: []const u8 }{
-        .{ .path = ".sddtoolkit/workflows/kernel.workflow.yaml", .bytes = kernel_workflow },
-        .{ .path = ".sddtoolkit/workflows/kernel/prompt.md", .bytes = "Return the requested object." },
-        .{ .path = ".sddtoolkit/workflows/kernel/result.json", .bytes = kernel_schema },
-    }) |file| {
-        try project.dir.createDirPath(io, std.fs.path.dirname(file.path).?);
-        try project.dir.writeFile(io, .{ .sub_path = file.path, .data = file.bytes });
-    }
+    try materializeQuiet(io, project.dir, captured);
+    try installKernelWorkflow(io, project.dir);
     var runtime: Runtime = undefined;
     runtime.init(io, std.testing.allocator, project.dir, .{});
     defer runtime.deinit();
@@ -1117,7 +1212,7 @@ test "the E2E report reads a kernel request's authorization failure from recorde
     // the current envelope; the report still names the failure, and it belongs to no call.
     const runner = &invocation.pipeline_runner.?;
     try std.testing.expect(runner.envelope.slots[@intFromEnum(@import("../../../src/domain/pipeline.zig").DataKey.provider_authorization_result)] == null);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.executionStatus() };
+    var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.executionStatus() };
     try @import("../e2e/observation.zig").capture(a, runner, &report);
     try trace.correlate(a, &report);
     try std.testing.expectEqualStrings("authentication_failed", report.provider_diagnostic.?);
@@ -1129,7 +1224,7 @@ test "the E2E report reads a kernel request's authorization failure from recorde
     try std.testing.expect(report.first_cause == null);
     const execution = @import("../../../src/domain/workflow_execution.zig");
     runner.first_cause = .{ .authority = .authorization_denied };
-    var replaced: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .blocked };
+    var replaced: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .blocked };
     try @import("../e2e/observation.zig").capture(a, runner, &replaced);
     try std.testing.expectEqualDeep(c.FirstCause{ .kind = .authority, .reason = .authorization_denied }, replaced.first_cause.?);
     const terminal: execution.Rejection = .{ .logging = .LOG_SINK_FAILURE };
@@ -1152,7 +1247,7 @@ test "the E2E report reads a kernel request's authorization failure from recorde
     // An exhaustion that a later failure replaced carries the facts a terminal one carries in
     // `retry_error`, in the report, in both views and in the step event.
     runner.first_cause = .{ .retry_limit = @import("../../../src/domain/workflow_retry.zig").Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).?.atStage(.advance_attempt) };
-    var exhausted: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .blocked, .terminal_rejection = c.TerminalRejection.fromNative(terminal) };
+    var exhausted: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .blocked, .terminal_rejection = c.TerminalRejection.fromNative(terminal) };
     try @import("../e2e/observation.zig").capture(a, runner, &exhausted);
     const facts = exhausted.first_cause.?.exhaustion.?;
     try std.testing.expectEqualStrings("account", facts.operation_instance_id.bytes);
@@ -1169,6 +1264,66 @@ test "the E2E report reads a kernel request's authorization failure from recorde
     try std.testing.expectEqual(@as(i64, 2), event_facts.get("completed_executions").?.integer);
 }
 
+test "the E2E report keeps a diagnostic of the assembled candidate without provider evidence, and rejects one that names a call the run has no evidence of" {
+    const Runtime = @import("../../../src/composition/root.zig").Runtime;
+    const values = @import("../../../src/application/pipeline_values.zig");
+    const owned = @import("../../../src/application/specification_values.zig").storage;
+    const session_schema = @import("../../../src/application/specification_workflow.zig").session_schema;
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try materializeQuiet(io, project.dir, captured);
+    try installKernelWorkflow(io, project.dir);
+    var runtime: Runtime = undefined;
+    runtime.init(io, std.testing.allocator, project.dir, .{});
+    defer runtime.deinit();
+    try std.testing.expect(runtime.boot == .ready);
+    var invocation = runtime.invocation(&.{"kernel-request"}, .{ .snapshots = .initFill(null) });
+    defer invocation.deinit();
+    const bindings = invocation.bindings();
+    try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+    try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+    try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+    try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+    // No step has run, so the run made no model call and holds no provider evidence.
+    const runner = &invocation.pipeline_runner.?;
+    try std.testing.expectEqual(@as(usize, 0), runner.tokenLedger().accounted_operations.items.len);
+    try std.testing.expect(runner.model_accounting == null);
+    const slot = &runner.envelope.slots[@intFromEnum(session_schema.key)];
+    try std.testing.expect(slot.* == null);
+    defer slot.* = null;
+    // The two rejections differ only in the call they name: the engine found the first in the assembled
+    // candidate, so it names none, and the second belongs to a response.
+    const without_call: @import("../../../src/domain/specification_source_binding.zig").Rejection = .{ .state_id = .{ .bytes = "state" }, .partition_id = .{ .ordinal = 0 }, .revision = 1, .origin = null, .eligible_signals = &.{} };
+    var named_call = without_call;
+    named_call.origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    for ([_]@TypeOf(without_call){ without_call, named_call }) |rejection| {
+        const value = value: {
+            const owner = try owned.create(std.testing.allocator, .{});
+            errdefer owned.destroy(owner);
+            owner.payload = .{ .binding_rejected = rejection };
+            break :value try values.adopt(std.testing.allocator, session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+        };
+        defer values.destroy(value);
+        slot.* = value;
+        var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
+        if (rejection.origin == null) {
+            try @import("../e2e/observation.zig").capture(a, runner, &report);
+            try std.testing.expect(report.candidate_error.?.attribution() == .candidate);
+            try std.testing.expectEqualDeep(without_call, report.candidate_error.?.source_catalogue);
+            try std.testing.expectEqual(@as(usize, 0), report.attempts.len);
+            try std.testing.expect(report.last_model_origin == null);
+        } else {
+            try std.testing.expectError(error.MissingProviderEvidence, @import("../e2e/observation.zig").capture(a, runner, &report));
+        }
+    }
+}
+
 test "the first native rejection is the first cause a later failure replaced, else the terminal rejection" {
     const execution = @import("../../../src/domain/workflow_execution.zig");
     const Progress = @import("../e2e/progress.zig").Progress;
@@ -1177,7 +1332,7 @@ test "the first native rejection is the first cause a later failure replaced, el
     const a = arena.allocator();
     const terminal: execution.Rejection = .{ .logging = .LOG_SINK_FAILURE };
     const first: execution.FirstCause = .{ .authority = .authorization_denied };
-    const replaced: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .terminal_rejection = c.TerminalRejection.fromNative(terminal), .first_cause = try c.FirstCause.fromNative(a, first) };
+    const replaced: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .terminal_rejection = c.TerminalRejection.fromNative(terminal), .first_cause = try c.FirstCause.fromNative(a, first) };
     // A later failure replaced a rejection within the step: the replaced one came first.
     var progress = Progress.init(std.testing.allocator);
     defer progress.deinit();
@@ -1233,7 +1388,6 @@ test "reports retain scoped retry history and rejected-content usage after owner
     try std.testing.expectEqual(@as(usize, 3), counts.defects.len);
     var calls = [_]@import("../e2e/observation.zig").Call{.{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .step = "repair", .raw_response_available = true, .status = 200 }};
     var observed: c.Report = .{
-        .schema = .@"spec-e2e-report/v20",
         .started_at_utc = "",
         .status = .workflow_failed,
         .workflow_outcome = .failed,
@@ -1248,7 +1402,7 @@ test "reports retain scoped retry history and rejected-content usage after owner
         },
     };
     try @import("../e2e/observation.zig").correlate(a, &calls, &observed);
-    var retained: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
+    var retained: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
     try @import("../e2e/observation.zig").correlate(a, &calls, &retained);
     try std.testing.expectEqual(@as(u64, 932), retained.last_model_usage.?.total_tokens);
     try std.testing.expectEqual(@as(usize, 0), retained.repairs.len);
@@ -1296,7 +1450,6 @@ test "input failure report explains environment setup and escapes untrusted labe
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v20",
         .started_at_utc = "2026-09-12T00:00:00Z",
         .case_id = "<script> [click](untrusted)",
         .status = .input_invalid,
@@ -1325,7 +1478,6 @@ test "step events keep the newer exchange usage separate from an older rejected 
         .{ .origin = repair, .step = "repair", .output = .available },
     };
     var report: c.Report = .{
-        .schema = .@"spec-e2e-report/v20",
         .started_at_utc = "",
         .status = .workflow_failed,
         .last_model_origin = repair,
@@ -1347,7 +1499,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
     try std.testing.expectEqual(@as(u64, 340), report.last_model_usage.?.total_tokens);
     const event = try @import("../e2e/trace.zig").Trace.stepEvent(a, 91, .{ .bytes = "validate-selections" }, .{ .outcome = .invalid }, report);
     const tree = try std.json.parseFromSlice(std.json.Value, a, event, .{});
-    try std.testing.expectEqualStrings("e2e-step-event/v5", tree.value.object.get("schema").?.string);
+    try std.testing.expectEqualStrings(@import("../e2e/trace.zig").step_event_schema, tree.value.object.get("schema").?.string);
     const exchange = tree.value.object.get("exchange").?.object;
     const candidate = tree.value.object.get("candidate_source").?.object;
     try std.testing.expectEqual(@as(i64, 2), exchange.get("call").?.integer);
@@ -1423,7 +1575,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         const rejected = (try references.validate_dispositions.execute(scratch, .{ .input = global, .proposal = .{ .global = bad }, .source = .{ .origin = origin } })).invalid;
         retained[0] = try (Diagnostic{ .reconciliation = rejected }).copy(a);
         const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
-        const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry, .current = input.context().current };
+        const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry };
         const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted);
         var omission_inputs = review_inputs;
         omission_inputs.review_origin = origin;
@@ -1444,7 +1596,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .brief = .{ .description = unsupported, .primary_goal = unsupported } } } })).invalid;
         retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
         const extraction_action = @import("../../../src/actions/reference/validate_reference_extraction_text.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
-        const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;
+        const lexical = (try extraction_action.execute(scratch, context.registry, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;
         retained[2] = try (Diagnostic{ .extraction_text = lexical }).copy(a);
         var partial = context;
         partial.references.records.signals = &.{};
@@ -1455,14 +1607,14 @@ test "reports preserve native extraction reconciliation authoring coverage speci
     }
     // ADR 0048: a title block enters the report as the candidate's, with no model origin.
     {
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked, .terminal_step = "initialize-specification-generation", .candidate_error = title_block };
+        const report: c.Report = .{ .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked, .terminal_step = "initialize-specification-generation", .candidate_error = title_block };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expect(decoded.candidate_error.?.origin() == null);
         try std.testing.expectEqual(.conflicting_title_headings, decoded.candidate_error.?.source_catalogue.reason);
     }
     for (retained) |diagnostic| {
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = if (diagnostic == .source_catalogue) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .source_catalogue) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
+        const report: c.Report = .{ .started_at_utc = "", .status = if (diagnostic == .source_catalogue) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .source_catalogue) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqualDeep(origin, decoded.candidate_error.?.origin().?);
@@ -1510,7 +1662,7 @@ test "events and reports preserve native repair changes and text spans after rel
     }
     try std.testing.expectEqual(.invalid_scalar, retained.reconciliation.issue.expected.text_issue.reason);
     for (merged, 0..) |merge, index| {
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = if (index == 0) .invalid else .ok, .terminal_step = "validate-signals", .candidate_error = if (index == 0) retained else null, .repairs = &.{merge} };
+        const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = if (index == 0) .invalid else .ok, .terminal_step = "validate-signals", .candidate_error = if (index == 0) retained else null, .repairs = &.{merge} };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqual(index == 1, decoded.repairs[0].changed);
@@ -1590,7 +1742,7 @@ test "a terminal rejection names its authority reason, and only an authority rej
         // As the terminal rejection, and as the first cause it replaced, through the report's writer and
         // strict reader: a capture failure is never a first cause, and a lone failure has none.
         const first = execution.FirstCause.replacedBy(native, later);
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .terminal_rejection = value, .first_cause = if (first) |cause| try c.FirstCause.fromNative(a, cause) else null };
+        const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .terminal_rejection = value, .first_cause = if (first) |cause| try c.FirstCause.fromNative(a, cause) else null };
         const readback = try strict.decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}), .{ .maximum_depth = 64 });
         try std.testing.expectEqualDeep(report.terminal_rejection, readback.terminal_rejection);
         try std.testing.expectEqualDeep(report.first_cause, readback.first_cause);
@@ -1640,10 +1792,10 @@ test "provider content rejection survives retirement and projects exact native e
     defer retained.deinit(std.testing.allocator);
     var reason = "missing_final_text".*;
     const origin: @import("../../../src/domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 8 }, .attempt = .{ .value = 2 } };
-    const observed: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = origin, .provider_origin = origin, .provider_diagnostic = &reason, .provider_content_diagnostic = .missing_final_text };
+    const observed: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .last_model_origin = origin, .provider_origin = origin, .provider_diagnostic = &reason, .provider_content_diagnostic = .missing_final_text };
     try retained.observe(std.testing.allocator, 11, observed);
     @memset(&reason, 'x');
-    var terminal: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed };
+    var terminal: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
     try retained.observe(std.testing.allocator, 12, terminal);
     try retained.project(a, 12, &terminal);
     retained.deinit(std.testing.allocator);
@@ -1678,7 +1830,7 @@ test "native correction links retain first observation invalidation rebuild and 
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .last_operation_rejection = .{ .cause = .UnsafeSpecificationRepair, .outcome = .blocked } };
+    var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .last_operation_rejection = .{ .cause = .UnsafeSpecificationRepair, .outcome = .blocked } };
     try progress.observe(2, "authorize", report, null);
     report.last_operation_rejection = null;
     const permit: @import("../../../src/domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
@@ -1703,20 +1855,20 @@ test "native correction links retain first observation invalidation rebuild and 
     const removed_label = "first_" ++ "observed_defect";
     const obsolete = try std.mem.replaceOwned(u8, a, renamed, "first_native_rejection", removed_label);
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, obsolete));
-    const old_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v20", "spec-e2e-report/v2");
+    const old_version = try std.mem.replaceOwned(u8, a, renamed, @tagName(c.report_schema), "spec-e2e-report/v2");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, old_version));
-    const previous_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v20", "spec-e2e-report/v19");
+    const previous_version = try std.mem.replaceOwned(u8, a, renamed, @tagName(c.report_schema), "spec-e2e-report/v24");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, previous_version));
     // Every member is required: the previous version's shape, which has no first cause, is not readable
     // under the current name either.
     const previous_shape = try std.mem.replaceOwned(u8, a, renamed, "\"first_cause\":null,", "");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, previous_shape));
-    const missing_version = try std.mem.replaceOwned(u8, a, renamed, "\"schema\":\"spec-e2e-report/v20\",", "");
+    const missing_version = try std.mem.replaceOwned(u8, a, renamed, "\"schema\":\"" ++ @tagName(c.report_schema) ++ "\",", "");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, missing_version));
     const text = try @import("../e2e/report.zig").renderMarkdown(a, readback);
     try std.testing.expect(std.mem.indexOf(u8, text, "First native rejection") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "not proven root cause") != null);
-    var fresh: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed };
+    var fresh: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
     try progress.project(a, &fresh);
     try std.testing.expect(fresh.first_native_rejection == null and fresh.corrections.len == 0 and fresh.outstanding_work.len == 0);
 }
@@ -1948,7 +2100,7 @@ test "production workflow enforces one global token budget and fails required st
         }
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
+        try materializeQuiet(io, project.dir, captured);
         var runtime: Runtime = undefined;
         runtime.init(io, std.testing.allocator, project.dir, .{});
         defer runtime.deinit();
@@ -1964,13 +2116,13 @@ test "production workflow enforces one global token budget and fails required st
         var clock: @import("../../../src/provider_authorization_test_fixture.zig").TestClock = .{};
         runner.provider_clock = clock.port();
         var authorization: @import("../../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = std.testing.allocator };
-        runtime.native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
+        runtime.native.model_requests.stages.prepare_authorization.action = .{ .authorization = authorization.port() };
         var fake: @import("../../../src/adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{
             .allocator = std.testing.allocator,
             .authorization_leases = .{ .context = @ptrCast(runner), .clock = runner.provider_clock.?, .runtime = runner.runtime, .consume_fn = ProductionRun.consumeLease },
             .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 5, .output_tokens = 2 } },
         };
-        runtime.native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
+        runtime.native.model_requests.stages.invoke_model.action = .{ .provider = fake.interface() };
         var tracker: admission.Tracker = .init(std.testing.allocator);
         defer tracker.deinit();
         var scripted: ProductionRun = .{ .allocator = a, .runner = runner, .base = bindings, .fake = &fake, .tracker = &tracker, .mode = mode };
@@ -1992,7 +2144,7 @@ test "production workflow enforces one global token budget and fails required st
         try std.testing.expectEqual(@as(usize, @intFromBool(required_stop)), resent);
         try std.testing.expectEqual(@as(usize, @intFromBool(required_stop)), scripted.resend_sends);
         // The E2E report marks each re-send and the attempt it repeats.
-        var report: @import("../e2e/contracts.zig").Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed };
+        var report: @import("../e2e/contracts.zig").Report = .{ .started_at_utc = "", .status = .workflow_failed };
         try @import("../e2e/observation.zig").capture(a, runner, &report);
         var marked: usize = 0;
         for (report.attempts) |entry| if (entry.resends) |repeated| {
@@ -2139,6 +2291,7 @@ fn twoProviderProject(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, cap
         const binding = if (std.mem.eql(u8, name, "spec_generation")) generation else if (std.mem.eql(u8, name, "repair")) repair else bedrock_slot;
         value.* = try std.json.parseFromSliceLeaky(std.json.Value, a, binding, .{});
     }
+    try config.object.getPtr("logs").?.object.put(a, "console", .{ .bool = false });
     try project.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, config, .{}) });
     try project.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = two_provider_catalogue });
 }
@@ -2187,12 +2340,14 @@ test "configuration alone selects Claude, Bedrock or both per slot and reads onl
     }
 }
 
-/// Answers every Messages request with one valid envelope and records targets.
+/// Answers every Messages request with one valid envelope and records targets. The first `texts.len`
+/// requests take their own answer from `texts`; every later one takes `text`.
 const MessagesWire = struct {
     calls: usize = 0,
     foreign_targets: usize = 0,
     bodies: std.ArrayList([]u8) = .empty,
     text: []const u8,
+    texts: []const []const u8 = &.{},
 
     fn port(self: *MessagesWire) @import("../../../src/adapters/provider/model_http_transport.zig").Port {
         return .{ .context = @ptrCast(self), .exchange_fn = exchange };
@@ -2208,22 +2363,27 @@ const MessagesWire = struct {
         self.calls += 1;
         if (request.target != .anthropic) self.foreign_targets += 1;
         try self.bodies.append(std.testing.allocator, try std.testing.allocator.dupe(u8, request.body));
-        const body = try std.json.Stringify.valueAlloc(allocator, .{
-            .id = "msg_offline",
-            .type = "message",
-            .role = "assistant",
-            .model = "claude-haiku-5-5",
-            .content = .{.{ .type = "text", .text = self.text, .citations = null }},
-            .stop_reason = "end_turn",
-            .stop_sequence = null,
-            .stop_details = null,
-            .usage = .{ .input_tokens = 884, .output_tokens = 48, .cache_creation_input_tokens = null, .cache_read_input_tokens = null, .cache_creation = null, .output_tokens_details = null, .server_tool_use = null, .service_tier = "standard", .inference_geo = null, .speed = null },
-            .container = null,
-            .diagnostics = null,
-        }, .{});
-        return .{ .received = .{ .status = 200, .request_id = "req_offline", .body = body } };
+        return messagesResponse(allocator, if (self.calls <= self.texts.len) self.texts[self.calls - 1] else self.text);
     }
 };
+
+/// One valid Messages envelope whose only content is `text`.
+fn messagesResponse(allocator: std.mem.Allocator, text: []const u8) provider_transport.Error!provider_transport.Response {
+    const body = try std.json.Stringify.valueAlloc(allocator, .{
+        .id = "msg_offline",
+        .type = "message",
+        .role = "assistant",
+        .model = "claude-haiku-5-5",
+        .content = .{.{ .type = "text", .text = text, .citations = null }},
+        .stop_reason = "end_turn",
+        .stop_sequence = null,
+        .stop_details = null,
+        .usage = .{ .input_tokens = 884, .output_tokens = 48, .cache_creation_input_tokens = null, .cache_read_input_tokens = null, .cache_creation = null, .output_tokens_details = null, .server_tool_use = null, .service_tier = "standard", .inference_geo = null, .speed = null },
+        .container = null,
+        .diagnostics = null,
+    }, .{});
+    return .{ .received = .{ .status = 200, .request_id = "req_offline", .body = body } };
+}
 
 test "a Claude-only Spec run sends every call through the shared adapter to the Messages endpoint" {
     const io = std.testing.io;
@@ -2292,6 +2452,759 @@ test "a Claude-only Spec run sends every call through the shared adapter to the 
     try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "\"model\":\"claude-haiku-5-5\"") != null);
 }
 
+test "a whole-workflow run reports every repair merge it made, including the one a later merge replaced" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try materializeQuiet(io, project.dir, captured);
+    // Two sources that state nothing about the feature and hold no exact value, so each chunk's answer is a
+    // no-feature-claim reason and its classifications are empty.
+    try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = "Reading notes.\n" });
+    try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/more.md", .data = "More reading notes.\n" });
+    // Each chunk's answer holds a control character, which response admission accepts and the text
+    // validation rejects. A no-feature-claim answer's classifications are forced natively, so each chunk takes
+    // one request, and the next two repair the chunks one after the other. Both merges are on the one
+    // extraction candidate, so the second replaces the first in the state the run ends with. One repaired
+    // chunk would not show it: its merge is still in the final state.
+    const parser = @import("../../../src/domain/reference_extraction_parser.zig");
+    const codec = @import("../../../src/domain/model_candidate_json.zig");
+    const rejected = try codec.encode(parser.Response, a, .{ .no_feature_claim = .{ .reason = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} }, .token_classifications = &.{} } });
+    const repaired = try codec.encodeSelected(@import("../../../src/domain/reference_extraction_text_repair.zig").Replacement, a, .{ .reference = .{ .nodes = &.{.{ .literal = .{ .value = "The text is reading notes." } }} } });
+    // The extraction composition asks for the content as its own part, without the classifications.
+    const whole = try std.json.parseFromSliceLeaky(std.json.Value, a, rejected, .{});
+    var content = try whole.object.clone(a);
+    _ = content.swapRemove("token_classifications");
+    const content_part = try std.json.Stringify.valueAlloc(a, std.json.Value{ .object = content }, .{});
+    const parts = [_][]const u8{ content_part, content_part, repaired, repaired };
+    // Every later request is malformed, so the run ends at the first one that follows the repairs.
+    var wire: MessagesWire = .{ .text = "{", .texts = &parts };
+    defer wire.deinit();
+    var keys: @import("../environment.zig").GenerationKeys = .initFill(null);
+    keys.set(.anthropic, "offline-anthropic-credential");
+    var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var evidence_run = std.testing.tmpDir(.{});
+    defer evidence_run.cleanup();
+    const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{"offline-anthropic-credential"} };
+    _ = try @import("../e2e/invoke.zig").run(io, a, project.dir, choice, captured, keys, store, &report, .{ .purpose = .whole_workflow, .transport = wire.port() });
+    // Both repairs happened and the run went on past them.
+    try std.testing.expect(wire.calls > parts.len);
+    try std.testing.expectEqual(@as(usize, 0), wire.foreign_targets);
+    // The report lists both merges once, in the order they were made, though the run's final state keeps
+    // only the later one.
+    try std.testing.expectEqual(@as(usize, 2), report.repairs.len);
+    const first = report.repairs[0];
+    const second = report.repairs[1];
+    try std.testing.expect(!std.mem.eql(u8, first.authorization.bytes, second.authorization.bytes));
+    try std.testing.expect(first.operation == .replace and second.operation == .replace);
+    try std.testing.expect(first.changed and second.changed);
+    // The second merge took the candidate the first left, and each repaired its own chunk.
+    try std.testing.expectEqual(first.revision_after, second.revision_before);
+    try std.testing.expect(!@import("../../../src/domain/model_request_identity.zig").unitOwnerEql(first.owner, second.owner));
+}
+
+test "every Spec case installs the workflow definition and exactly the resources it names" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const resources = comptime @import("../../../src/test_fixtures/workflow_resources.zig").paths(@embedFile("../../../design/workflows/spec.workflow.yaml"));
+    for ([_][]const u8{
+        @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"),
+        @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json"),
+        @embedFile("../../integration/fixtures/baseline/protocol.workflow.case.json"),
+    }) |bytes| {
+        const choice = try c.parse(a, bytes);
+        var installed: usize = 0;
+        for (choice.files) |file| {
+            if (!std.mem.startsWith(u8, file.source, "design/workflows/")) continue;
+            installed += 1;
+            // Each asset lands at the path the definition resolves, beside the definition.
+            try std.testing.expectEqualStrings(".sddtoolkit/workflows/", file.destination[0..".sddtoolkit/workflows/".len]);
+            try std.testing.expectEqualStrings(file.source["design/workflows/".len..], file.destination[".sddtoolkit/workflows/".len..]);
+        }
+        try std.testing.expectEqual(resources.len + 1, installed);
+        for (resources) |path| {
+            var found = false;
+            for (choice.files) |file| {
+                if (std.mem.startsWith(u8, file.source, "design/workflows/") and std.mem.eql(u8, file.source["design/workflows/".len..], path)) found = true;
+            }
+            try std.testing.expect(found);
+        }
+    }
+}
+
+/// Answers every Messages request as the scripted matrix answers the fake provider: from the state the
+/// runner holds as the request is sent, so a run through the production composition can finish. The
+/// answers come from the one builder the matrix uses; only the transport is scripted.
+const ScriptedWire = struct {
+    runner: ?*const ?@import("../../../src/application/workflow_pipeline_runner.zig").Runner = null,
+    calls: usize = 0,
+    foreign_targets: usize = 0,
+    /// The first request the scripted answers could not be built for; the exchange then fails.
+    failure: ?anyerror = null,
+    /// The builder's fault shape; the attempt is read from the ledger as each request is answered.
+    options: @import("../../../src/test_fixtures/spec_generation_responses.zig").Options = .{},
+    /// Raises the operator's interrupt (a real SIGINT) while this request is in flight, then answers it.
+    interrupt_on_call: ?usize = null,
+
+    fn port(self: *ScriptedWire) provider_transport.Port {
+        return .{ .context = @ptrCast(self), .exchange_fn = exchange };
+    }
+
+    fn exchange(context: *provider_transport.Context, allocator: std.mem.Allocator, request: provider_transport.Request) provider_transport.Error!provider_transport.Response {
+        const self: *ScriptedWire = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        if (request.target != .anthropic) self.foreign_targets += 1;
+        if (self.interrupt_on_call == self.calls) std.posix.raise(.INT) catch |err| {
+            if (self.failure == null) self.failure = err;
+            return error.Cancelled;
+        };
+        var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer scratch.deinit();
+        const scripted = self.answer(scratch.allocator()) catch |err| {
+            if (self.failure == null) self.failure = err;
+            return error.Cancelled;
+        };
+        return messagesResponse(allocator, scripted);
+    }
+
+    fn answer(self: *const ScriptedWire, allocator: std.mem.Allocator) ![]const u8 {
+        const slot = self.runner orelse return error.RunnerNotObserved;
+        const runner = if (slot.*) |*prepared| prepared else return error.RunnerNotPrepared;
+        const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+        const attempt = @import("../../../src/domain/model_attempt_accounting.zig").latestAttempt(runner.model_accounting.?.attempts).ordinal().value;
+        var options = self.options;
+        options.attempt = attempt;
+        return @import("../../../src/test_fixtures/spec_generation_responses.zig").build(allocator, view, options);
+    }
+};
+
+/// One offline Spec run through the harness's `invoke.run` and the production composition, with only the
+/// transport scripted. It owns the materialized project and the evidence directory the run writes.
+const OfflineRun = struct {
+    arena: std.heap.ArenaAllocator,
+    project: std.testing.TmpDir,
+    evidence: std.testing.TmpDir,
+    choice: c.Case,
+    captured: fixture.Capture,
+    report: c.Report,
+    specification: ?[]const u8,
+    /// The account the engine authenticates; the operating-system account when none is set.
+    authenticator: ?@import("../../../src/ports/actor_authentication.zig").Port = null,
+
+    const hello_world = @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json");
+    const loan_renewal = @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json");
+    const credential = "offline-anthropic-credential";
+
+    fn init(self: *OfflineRun, io: std.Io, case_bytes: []const u8) !void {
+        self.arena = .init(std.testing.allocator);
+        errdefer self.arena.deinit();
+        const a = self.arena.allocator();
+        self.choice = try c.parse(a, case_bytes);
+        self.captured = try fixture.capture(io, a, .cwd(), self.choice);
+        self.project = std.testing.tmpDir(.{});
+        errdefer self.project.cleanup();
+        try materializeQuiet(io, self.project.dir, self.captured);
+        self.evidence = std.testing.tmpDir(.{});
+        self.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+        self.specification = null;
+        self.authenticator = null;
+    }
+
+    fn deinit(self: *OfflineRun) void {
+        self.evidence.cleanup();
+        self.project.cleanup();
+        self.arena.deinit();
+    }
+
+    /// Runs the case. Every request must reach the configured provider and be answered, and the report counts
+    /// each one.
+    fn execute(self: *OfflineRun, io: std.Io, wire: *ScriptedWire) !void {
+        try self.run(io, wire);
+        try std.testing.expect(wire.calls > 0);
+        try std.testing.expectEqual(@as(usize, 0), wire.foreign_targets);
+        try std.testing.expectEqual(@as(?usize, wire.calls), self.report.last_model_call);
+    }
+
+    /// Runs a case that must end before its first request: the provider is never reached and no call is counted.
+    fn executeWithoutModel(self: *OfflineRun, io: std.Io, wire: *ScriptedWire) !void {
+        try self.run(io, wire);
+        try std.testing.expectEqual(@as(usize, 0), wire.calls);
+        try std.testing.expectEqual(@as(?usize, null), self.report.last_model_call);
+        try std.testing.expectEqual(@as(usize, 0), self.report.model_calls);
+    }
+
+    fn run(self: *OfflineRun, io: std.Io, wire: *ScriptedWire) !void {
+        const a = self.arena.allocator();
+        var keys: @import("../environment.zig").GenerationKeys = .initFill(null);
+        keys.set(.anthropic, credential);
+        const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = self.evidence.dir, .secrets = &.{credential} };
+        self.specification = try @import("../e2e/invoke.zig").run(io, a, self.project.dir, self.choice, self.captured, keys, store, &self.report, .{ .purpose = .whole_workflow, .transport = wire.port(), .runner_view = &wire.runner, .authenticator = self.authenticator });
+        if (wire.failure) |failure| std.debug.print("scripted answer unavailable: {s}\n", .{@errorName(failure)});
+        try std.testing.expect(wire.failure == null);
+    }
+
+    /// Neither the specification nor the workflow state exists, and the harness read none.
+    fn expectNothingPublished(self: *OfflineRun, io: std.Io) !void {
+        const a = self.arena.allocator();
+        var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, self.captured.config);
+        defer config.deinit();
+        const paths = config.value().paths;
+        try std.testing.expect(self.specification == null);
+        try std.testing.expect(self.report.specification == null);
+        try std.testing.expectEqual(.not_run, self.report.publication_check);
+        for ([_][]const u8{
+            try std.fs.path.join(a, &.{ paths.specs, self.choice.feature, artifacts.specification_filename }),
+            try std.fs.path.join(a, &.{ paths.workflows, "features", self.choice.feature, "state", artifacts.workflow_state_filename }),
+        }) |path| try std.testing.expectError(error.FileNotFound, self.project.dir.access(io, path, .{}));
+    }
+
+    /// The production feature log's rows that end a run: a published run logs `publication.prepared` as its
+    /// finalizer's reason, and a run that ends otherwise logs its own terminal row.
+    fn terminalRows(self: *OfflineRun, io: std.Io) !struct { published: usize, failed: usize, cancelled: usize } {
+        const a = self.arena.allocator();
+        return .{
+            .published = try featureLogRows(io, a, self.project.dir, "|publication.prepared|", "|"),
+            .failed = try featureLogRows(io, a, self.project.dir, "|run.failed|", "|"),
+            .cancelled = try featureLogRows(io, a, self.project.dir, "|run.cancelled|", "|"),
+        };
+    }
+};
+
+test "an offline Spec run of each development case reaches publication through the production composition and the harness oracle" {
+    const io = std.testing.io;
+    // The control of the interrupt test below: no interrupt is raised, so the flag the other tests clear stays clear.
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    for ([_][]const u8{ OfflineRun.hello_world, OfflineRun.loan_renewal }) |case_bytes| {
+        var offline: OfflineRun = undefined;
+        try offline.init(io, case_bytes);
+        defer offline.deinit();
+        var wire: ScriptedWire = .{};
+        errdefer std.debug.print("offline run of {s}\n", .{offline.choice.id});
+        try offline.execute(io, &wire);
+        // The harness's success path: the workflow completed, published, and the oracle found every expected file.
+        try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .ok), offline.report.workflow_outcome);
+        try std.testing.expectEqual(c.Status.generated, offline.report.status);
+        try std.testing.expectEqual(.passed, offline.report.publication_check);
+        try std.testing.expect(offline.report.missing_artifact == null);
+        try std.testing.expect(offline.specification != null and offline.specification.?.len != 0);
+        try std.testing.expect(offline.report.specification != null and std.mem.indexOf(u8, offline.report.specification.?, offline.choice.feature) != null);
+        const rows = try offline.terminalRows(io);
+        try std.testing.expectEqual(@as(usize, 1), rows.published);
+        try std.testing.expectEqual(@as(usize, 0), rows.failed + rows.cancelled);
+    }
+}
+
+test "an invalid closed clarification form blocks the Spec workflow before its first request and publishes nothing" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const clarification = @import("../../../src/test_fixtures/clarification_inputs.zig");
+    for ([_][]const u8{ OfflineRun.hello_world, OfflineRun.loan_renewal }) |case_bytes| {
+        var offline: OfflineRun = undefined;
+        try offline.init(io, case_bytes);
+        defer offline.deinit();
+        const a = offline.arena.allocator();
+        var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+        defer config.deinit();
+        // A closed form of no record: it holds a submission nothing can take, so the run accepts no answer.
+        const directory = try std.fs.path.join(a, &.{ config.value().paths.specs, offline.choice.feature, "clarify" });
+        try offline.project.dir.createDirPath(io, directory);
+        const form_path = try std.fs.path.join(a, &.{ directory, "S01.md" });
+        const bytes = try forms.render(a, clarification.record("S01"), .{ .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .status = .open }, .closed, "An answer.");
+        try offline.project.dir.writeFile(io, .{ .sub_path = form_path, .data = bytes });
+        var wire: ScriptedWire = .{};
+        errdefer std.debug.print("blocked run of {s}\n", .{offline.choice.id});
+        try offline.executeWithoutModel(io, &wire);
+        // The run is blocked, distinct from failed and cancelled, and publishes nothing.
+        try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .blocked), offline.report.workflow_outcome);
+        try std.testing.expectEqual(c.Status.workflow_blocked, offline.report.status);
+        try offline.expectNothingPublished(io);
+        try std.testing.expectEqualStrings(bytes, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(16 * 1024)));
+    }
+}
+
+/// The account the engine authenticates in these scenarios, in place of the operating system's: the host's own name may be
+/// outside the stored-identifier syntax, and a test must not depend on it. It counts each observation, one for each lease.
+const FakeAccount = struct {
+    actor: []const u8 = "tester",
+    failure: ?@import("../../../src/ports/actor_authentication.zig").Error = null,
+    observations: usize = 0,
+
+    fn port(self: *FakeAccount) @import("../../../src/ports/actor_authentication.zig").Port {
+        return .{ .context = @ptrCast(self), .observe_fn = observe };
+    }
+
+    fn observe(context: *@import("../../../src/ports/actor_authentication.zig").Context, allocator: std.mem.Allocator) @import("../../../src/ports/actor_authentication.zig").Error!@import("../../../src/domain/actor_evidence.zig").Observation {
+        const self: *FakeAccount = @ptrCast(@alignCast(context));
+        self.observations += 1;
+        if (self.failure) |failure| return failure;
+        return .{ .provider = .os_account, .actor_id = try allocator.dupe(u8, self.actor), .assurance = .invoking_account, .run_id = "RUN-fake", .occurred_at = "2026-11-23T08:15:00Z".* };
+    }
+};
+
+test "an authenticated closed clarification form is accepted, published with its evidence, and reused by the rerun" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const fixtures = @import("../../../src/test_fixtures/clarification_inputs.zig");
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const evidence = @import("../../../src/domain/actor_evidence.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.hello_world);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // One open record and the closed form a user answered it with.
+    const record = fixtures.record("S01");
+    const records = [_]cl.Record{record};
+    var seeded = fixtures.state(&records);
+    seeded.feature_id = feature;
+    const form_directory = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify" });
+    const state_directory = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state" });
+    try offline.project.dir.createDirPath(io, form_directory);
+    try offline.project.dir.createDirPath(io, state_directory);
+    const form_path = try std.fs.path.join(a, &.{ form_directory, "S01.md" });
+    const state_path = try std.fs.path.join(a, &.{ state_directory, artifacts.clarification_state_filename });
+    const registry_path = try std.fs.path.join(a, &.{ state_directory, artifacts.actor_evidence_filename });
+    const form = try forms.render(a, record, fixtures.binding(seeded, record), .closed, "Approved theme.");
+    try offline.project.dir.writeFile(io, .{ .sub_path = form_path, .data = form });
+    try offline.project.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, seeded, .{}) });
+
+    var wire: ScriptedWire = .{};
+    errdefer std.debug.print("accepting run of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &wire);
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(.passed, offline.report.publication_check);
+    // The published state holds the response and the registry the evidence it joins, naming the observed account.
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqualStrings(cl.schema_version, published.schema);
+    try std.testing.expectEqual(@as(usize, 1), published.responses.len);
+    try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, published.records[0].status);
+    try std.testing.expectEqualStrings("AE-1", published.responses[0].authentication_evidence_id);
+    try std.testing.expectEqualStrings(account.actor, published.responses[0].actor_id);
+    // One lease, so one observation, for the one form.
+    try std.testing.expectEqual(@as(usize, 1), account.observations);
+    try std.testing.expectEqualStrings(form, published.responses[0].submitted_form_bytes);
+    const registry_limits: strict_json.Limits = .{ .maximum_bytes = evidence.max_bytes, .maximum_depth = evidence.max_depth };
+    const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
+    try std.testing.expectEqual(@as(u64, 1), registry.revision);
+    try std.testing.expectEqual(@as(usize, 1), registry.entries.len);
+    try std.testing.expectEqualStrings(account.actor, registry.entries[0].actor_id);
+    try std.testing.expectEqualStrings(published.responses[0].answered_at, registry.entries[0].occurred_at);
+    try evidence.validateJoin(registry, published);
+    // The user's closed form is preserved byte for byte.
+    try std.testing.expectEqualStrings(form, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+
+    // The rerun reuses the response: nothing awaits an account, no entry is appended, and the form is still protected.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var rerun: ScriptedWire = .{};
+    try offline.execute(io, &rerun);
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .ok), offline.report.workflow_outcome);
+    const reused = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
+    try std.testing.expectEqual(@as(u64, 1), reused.revision);
+    try std.testing.expectEqual(@as(usize, 1), reused.entries.len);
+    try std.testing.expectEqualStrings(form, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+}
+
+test "a conflict's form is answered by option key, the next run applies the choice and publishes, and a rerun reuses it" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const evidence = @import("../../../src/domain/actor_evidence.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    const workflow = @import("../../../src/domain/workflow.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.loan_renewal);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // Two sources make two claims (the scripted extraction answers one claim for each chunk), and the scripted
+    // reconciliation holds them in conflict. The sources are read in path order, so "twice" is the first claim.
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "a-twice.md" }), .data = "A loan may be renewed twice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "stories.md" }), .data = "# Library Loan Renewal\n\nA loan may be renewed once.\n" });
+    const form_path = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", "S01.md" });
+    const state_path = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", artifacts.clarification_state_filename });
+    const registry_path = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", artifacts.actor_evidence_filename });
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+
+    // Run 1 raises one form that offers each claim as an option, and publishes no specification.
+    var first: ScriptedWire = .{ .options = .{ .conflict = true } };
+    errdefer std.debug.print("conflict run 1 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &first);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .needs_user), offline.report.workflow_outcome);
+    try std.testing.expect(offline.specification == null);
+    const raised = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqual(@as(usize, 1), raised.records.len);
+    try std.testing.expectEqual(cl.EngineStatus.open, raised.records[0].status);
+    const options = raised.records[0].answer_schema.select_one;
+    try std.testing.expectEqual(@as(usize, 2), options.len);
+    try std.testing.expectEqualStrings("A loan may be renewed twice.", options[0].label);
+    try std.testing.expect(!std.mem.eql(u8, options[0].label, options[1].label));
+    try std.testing.expectEqual(@as(usize, 0), account.observations);
+
+    // The user chooses the first claim by its key; run 2 authenticates the account, applies the choice and publishes.
+    const chosen = options[0].key;
+    const answer = @import("../e2e/answer.zig");
+    // The harness's own answer: a key the form does not offer, and a project with no state, are not answered.
+    try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.prepare(io, a, offline.project.dir, paths.specs, paths.workflows, feature, "no.such.key")).unavailable);
+    var empty = std.testing.tmpDir(.{});
+    defer empty.cleanup();
+    try std.testing.expectEqual(answer.Unavailable.no_clarification_state, (try answer.prepare(io, a, empty.dir, paths.specs, paths.workflows, feature, chosen)).unavailable);
+    const prepared = (try answer.prepare(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen)).ready;
+    try std.testing.expectEqualStrings(form_path, prepared.path);
+    const answered = prepared.bytes;
+    // The first leg's project is evidence: the second leg starts from a copy of it with the answered form written over the form.
+    var continued = std.testing.tmpDir(.{});
+    {
+        var source = try offline.project.dir.openDir(io, ".", .{ .iterate = true });
+        defer source.close(io);
+        try answer.continueProject(io, a, source, continued.dir, prepared);
+        // Every entry keeps its permissions, which the engine's feature log history demands: owner-only.
+        var walker = try source.walk(a);
+        defer walker.deinit();
+        var entries: usize = 0;
+        while (try walker.next(io)) |entry| {
+            const before = try entry.dir.statFile(io, entry.basename, .{ .follow_symlinks = false });
+            const after = try continued.dir.statFile(io, entry.path, .{ .follow_symlinks = false });
+            try std.testing.expectEqual(before.permissions.toMode(), after.permissions.toMode());
+            if (std.mem.indexOf(u8, entry.path, "/logs/") != null) try std.testing.expectEqual(@as(u32, 0), @as(u32, @intCast(after.permissions.toMode() & 0o077)));
+            entries += 1;
+        }
+        try std.testing.expect(entries > 0);
+    }
+    try std.testing.expectEqualStrings(answered, try continued.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+    // The first leg's project is untouched, and the second leg runs on the copy.
+    try std.testing.expect(!std.mem.eql(u8, answered, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes))));
+    offline.project.cleanup();
+    offline.project = continued;
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var second: ScriptedWire = .{ .options = .{ .conflict = true } };
+    errdefer std.debug.print("conflict run 2 of {s}: outcome {any}, step {?s}, diagnostic {?s}\n", .{ offline.choice.id, offline.report.workflow_outcome, offline.report.terminal_step, offline.report.diagnostic });
+    try offline.execute(io, &second);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(.passed, offline.report.publication_check);
+    try std.testing.expectEqual(@as(usize, 1), account.observations);
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, published.records[0].status);
+    try std.testing.expectEqual(@as(usize, 1), published.responses.len);
+    try std.testing.expectEqualStrings(chosen, published.responses[0].answer.selected_option);
+    // With the form resolved, no open form is left to answer; and a project holding anything but directories and files is
+    // not copied.
+    try std.testing.expectEqual(answer.Unavailable.answer_form_count, (try answer.prepare(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen)).unavailable);
+    {
+        var odd = std.testing.tmpDir(.{ .iterate = true });
+        defer odd.cleanup();
+        var target = std.testing.tmpDir(.{});
+        defer target.cleanup();
+        try odd.dir.symLink(io, "elsewhere", "link", .{});
+        try std.testing.expectError(error.UnsupportedProjectEntry, answer.continueProject(io, a, odd.dir, target.dir, prepared));
+    }
+    // The specification holds the claim the user chose and not the one the answer superseded.
+    const text = offline.specification.?;
+    try std.testing.expect(std.mem.indexOf(u8, text, "renewed twice") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "renewed once") == null);
+    // The form is protected byte for byte.
+    try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+
+    // A rerun reads the published state back (validating its reference snapshot), reuses the response and publishes again.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var third: ScriptedWire = .{ .options = .{ .conflict = true } };
+    errdefer std.debug.print("conflict run 3 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &third);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(.passed, offline.report.publication_check);
+    try std.testing.expectEqual(@as(usize, 1), account.observations);
+    const registry_limits: strict_json.Limits = .{ .maximum_bytes = evidence.max_bytes, .maximum_depth = evidence.max_depth };
+    const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
+    try std.testing.expectEqual(@as(u64, 1), registry.revision);
+    try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+}
+
+test "a valid cancel beside an answered form ends the run cancelled before its first request and publishes only the clarification state and its evidence" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const fixtures = @import("../../../src/test_fixtures/clarification_inputs.zig");
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const evidence = @import("../../../src/domain/actor_evidence.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.hello_world);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // Three open records: the first answered, the second cancelled, and the third left as it was.
+    const records = [_]cl.Record{ fixtures.record("S01"), fixtures.record("S02"), fixtures.record("S03") };
+    var seeded_records = records;
+    for (&seeded_records, 1..) |*record, index| record.subject.slot = ([_][]const u8{ "appearance", "colour", "layout" })[index - 1];
+    var seeded = fixtures.state(&seeded_records);
+    seeded.feature_id = feature;
+    const form_directory = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify" });
+    const state_directory = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state" });
+    try offline.project.dir.createDirPath(io, form_directory);
+    try offline.project.dir.createDirPath(io, state_directory);
+    const state_path = try std.fs.path.join(a, &.{ state_directory, artifacts.clarification_state_filename });
+    const registry_path = try std.fs.path.join(a, &.{ state_directory, artifacts.actor_evidence_filename });
+    const answered = try forms.render(a, seeded_records[0], fixtures.binding(seeded, seeded_records[0]), .closed, "Approved theme.");
+    const withdrawn = try forms.render(a, seeded_records[1], fixtures.binding(seeded, seeded_records[1]), .cancel, "cancel: No longer needed.");
+    const waiting = try forms.render(a, seeded_records[2], fixtures.binding(seeded, seeded_records[2]), .open, "");
+    const names = [_][]const u8{ "S01.md", "S02.md", "S03.md" };
+    for (names, [_][]const u8{ answered, withdrawn, waiting }) |name, bytes| {
+        try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ form_directory, name }), .data = bytes });
+    }
+    try offline.project.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, seeded, .{}) });
+
+    var wire: ScriptedWire = .{};
+    errdefer std.debug.print("cancelling run of {s}\n", .{offline.choice.id});
+    try offline.executeWithoutModel(io, &wire);
+    // The run is cancelled, distinct from blocked and failed, and the harness read no specification.
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .cancelled), offline.report.workflow_outcome);
+    try std.testing.expectEqual(c.Status.workflow_cancelled, offline.report.status);
+    try std.testing.expect(offline.specification == null);
+    try std.testing.expectEqual(.not_run, offline.report.publication_check);
+    // Its output is the clarification state and its evidence; no specification, reference context or workflow state exists.
+    for ([_][]const u8{ artifacts.specification_filename, artifacts.reference_context_filename }) |name| {
+        try std.testing.expectError(error.FileNotFound, offline.project.dir.access(io, try std.fs.path.join(a, &.{ paths.specs, feature, name }), .{}));
+    }
+    try std.testing.expectError(error.FileNotFound, offline.project.dir.access(io, try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", artifacts.workflow_state_filename }), .{}));
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqual(@as(usize, 2), published.responses.len);
+    try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, published.records[0].status);
+    try std.testing.expectEqual(cl.EngineStatus.cancelled_by_user, published.records[1].status);
+    try std.testing.expectEqual(cl.EngineStatus.open, published.records[2].status);
+    try std.testing.expectEqualStrings(answered, published.responses[0].submitted_form_bytes);
+    try std.testing.expectEqualStrings(withdrawn, published.responses[1].submitted_form_bytes);
+    try std.testing.expectEqualStrings("No longer needed.", published.responses[1].answer.cancel_reason);
+    for (published.responses) |response| try std.testing.expectEqualStrings(account.actor, response.actor_id);
+    // The loop ran two passes under two leases: one observation for each form that awaited an account, none for the form left open.
+    try std.testing.expectEqual(@as(usize, 2), account.observations);
+    const registry_limits: strict_json.Limits = .{ .maximum_bytes = evidence.max_bytes, .maximum_depth = evidence.max_depth };
+    const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
+    try std.testing.expectEqual(@as(usize, 2), registry.entries.len);
+    try evidence.validateJoin(registry, published);
+    // The user's closed form is preserved byte for byte.
+    try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ form_directory, names[0] }), a, .limited(cl.max_form_bytes)));
+    // The run logged its publication, as any run that publishes does, and no failure.
+    const rows = try offline.terminalRows(io);
+    try std.testing.expectEqual(@as(usize, 1), rows.published);
+    try std.testing.expectEqual(@as(usize, 0), rows.failed + rows.cancelled);
+}
+
+/// One open record with the closed form a user answered it with, and the state that names it, written where the feature's
+/// inputs are read. Returns the form's bytes and the paths of the state and the registry.
+const SeededAnswer = struct { form: []const u8, form_path: []const u8, state_path: []const u8, registry_path: []const u8, state_bytes: []const u8 };
+
+fn seedAnsweredForm(io: std.Io, offline: *OfflineRun) !SeededAnswer {
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const fixtures = @import("../../../src/test_fixtures/clarification_inputs.zig");
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    const record = fixtures.record("S01");
+    const records = [_]cl.Record{record};
+    var seeded = fixtures.state(&records);
+    seeded.feature_id = feature;
+    const form_directory = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify" });
+    const state_directory = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state" });
+    try offline.project.dir.createDirPath(io, form_directory);
+    try offline.project.dir.createDirPath(io, state_directory);
+    const result: SeededAnswer = .{
+        .form = try forms.render(a, record, fixtures.binding(seeded, record), .closed, "Approved theme."),
+        .form_path = try std.fs.path.join(a, &.{ form_directory, "S01.md" }),
+        .state_path = try std.fs.path.join(a, &.{ state_directory, artifacts.clarification_state_filename }),
+        .registry_path = try std.fs.path.join(a, &.{ state_directory, artifacts.actor_evidence_filename }),
+        .state_bytes = try std.json.Stringify.valueAlloc(a, seeded, .{}),
+    };
+    try offline.project.dir.writeFile(io, .{ .sub_path = result.form_path, .data = result.form });
+    try offline.project.dir.writeFile(io, .{ .sub_path = result.state_path, .data = result.state_bytes });
+    return result;
+}
+
+test "an account the engine cannot read or cannot name ends the run failed before its first request and accepts nothing" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const OutcomeTag = @import("../../../src/domain/workflow.zig").OutcomeTag;
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    // An unreadable account, an unsupported platform, a failing clock and a name outside the stored-identifier syntax are
+    // each typed: the user cannot fix them by editing forms, so the run ends failed, never blocked and never accepted.
+    for ([_]FakeAccount{
+        .{ .failure = error.AccountUnavailable },
+        .{ .failure = error.UnsupportedPlatform },
+        .{ .failure = error.ClockUnavailable },
+        .{ .actor = "ada lovelace" },
+    }) |scenario| {
+        var account = scenario;
+        var offline: OfflineRun = undefined;
+        try offline.init(io, OfflineRun.hello_world);
+        defer offline.deinit();
+        offline.authenticator = account.port();
+        const a = offline.arena.allocator();
+        const seeded = try seedAnsweredForm(io, &offline);
+        var wire: ScriptedWire = .{};
+        errdefer std.debug.print("unauthenticated run with {any} / {s}\n", .{ account.failure, account.actor });
+        try offline.executeWithoutModel(io, &wire);
+        try std.testing.expectEqual(@as(?OutcomeTag, .failed), offline.report.workflow_outcome);
+        try std.testing.expectEqual(c.Status.workflow_failed, offline.report.status);
+        try std.testing.expectEqual(@as(usize, 1), account.observations);
+        // Nothing was published: the user's form and the state are as they were, and no registry was written.
+        try std.testing.expectEqualStrings(seeded.form, try offline.project.dir.readFileAlloc(io, seeded.form_path, a, .limited(cl.max_form_bytes)));
+        try std.testing.expectEqualStrings(seeded.state_bytes, try offline.project.dir.readFileAlloc(io, seeded.state_path, a, .limited(cl.max_state_bytes)));
+        try std.testing.expectError(error.FileNotFound, offline.project.dir.access(io, seeded.registry_path, .{}));
+        try offline.expectNothingPublished(io);
+    }
+}
+
+test "a run that fails after accepting a form publishes nothing, and the next run accepts the same form again" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const OutcomeTag = @import("../../../src/domain/workflow.zig").OutcomeTag;
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const evidence = @import("../../../src/domain/actor_evidence.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.hello_world);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    const seeded = try seedAnsweredForm(io, &offline);
+    // Run 1 authenticates and accepts the form, then fails in generation: a repair that never converges.
+    var failing: ScriptedWire = .{ .options = .{ .repair = true, .failed_repair = true, .repeated_provenance_fault = true } };
+    errdefer std.debug.print("failing run of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &failing);
+    try std.testing.expectEqual(@as(?OutcomeTag, .failed), offline.report.workflow_outcome);
+    try std.testing.expectEqual(@as(usize, 1), account.observations);
+    try std.testing.expectEqualStrings(seeded.form, try offline.project.dir.readFileAlloc(io, seeded.form_path, a, .limited(cl.max_form_bytes)));
+    try std.testing.expectEqualStrings(seeded.state_bytes, try offline.project.dir.readFileAlloc(io, seeded.state_path, a, .limited(cl.max_state_bytes)));
+    try std.testing.expectError(error.FileNotFound, offline.project.dir.access(io, seeded.registry_path, .{}));
+    // Run 2 finds the form as the user left it, authenticates it again and publishes it with one entry of evidence.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var succeeding: ScriptedWire = .{};
+    try offline.execute(io, &succeeding);
+    try std.testing.expectEqual(@as(?OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(@as(usize, 2), account.observations);
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, seeded.state_path, a, .limited(cl.max_state_bytes)), .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth });
+    try std.testing.expectEqual(@as(usize, 1), published.responses.len);
+    const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, seeded.registry_path, a, .limited(evidence.max_bytes)), .{ .maximum_bytes = evidence.max_bytes, .maximum_depth = evidence.max_depth });
+    try std.testing.expectEqual(@as(u64, 1), registry.revision);
+    try std.testing.expectEqual(@as(usize, 1), registry.entries.len);
+    try evidence.validateJoin(registry, published);
+}
+
+test "an operator interrupt raised while a request is in flight cancels the harness run and publishes nothing" {
+    const io = std.testing.io;
+    const Interrupt = @import("../../../src/composition/root.zig").Interrupt;
+    // The raised interrupt sets a process-wide flag the production code never clears; clear it before the run and
+    // after it, so no other run in this binary starts cancelled.
+    Interrupt.resetForTest();
+    defer Interrupt.resetForTest();
+    for ([_]struct { []const u8, usize }{
+        .{ OfflineRun.hello_world, 1 },
+        .{ OfflineRun.loan_renewal, 3 },
+    }) |case| {
+        var before: std.posix.Sigaction = undefined;
+        std.posix.sigaction(.INT, null, &before);
+        var offline: OfflineRun = undefined;
+        try offline.init(io, case[0]);
+        defer offline.deinit();
+        var wire: ScriptedWire = .{ .interrupt_on_call = case[1] };
+        errdefer std.debug.print("interrupted run of {s} on call {d}\n", .{ offline.choice.id, case[1] });
+        try offline.execute(io, &wire);
+        // The request in flight finished, and the run stopped at its next boundary: it sent no request after it.
+        try std.testing.expectEqual(case[1], wire.calls);
+        try std.testing.expectEqual(@as(?@import("../../../src/domain/workflow.zig").OutcomeTag, .cancelled), offline.report.workflow_outcome);
+        try std.testing.expectEqual(c.Status.workflow_cancelled, offline.report.status);
+        try offline.expectNothingPublished(io);
+        // Cancelled stays distinct from failed and completed in the production feature log.
+        const rows = try offline.terminalRows(io);
+        try std.testing.expectEqual(@as(usize, 1), rows.cancelled);
+        try std.testing.expectEqual(@as(usize, 0), rows.failed + rows.published);
+        // `invoke.run` restored the disposition it replaced, though the one-shot handler had already reset it.
+        var after: std.posix.Sigaction = undefined;
+        std.posix.sigaction(.INT, null, &after);
+        try std.testing.expect(after.handler.handler == before.handler.handler);
+        Interrupt.resetForTest();
+    }
+}
+
+test "an answer repaired once publishes, and a repair that never converges fails the run through the production composition without publishing" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const responses = @import("../../../src/test_fixtures/spec_generation_responses.zig");
+    const OutcomeTag = @import("../../../src/domain/workflow.zig").OutcomeTag;
+    for ([_]struct { responses.Options, OutcomeTag }{
+        .{ .{ .repair = true }, .ok },
+        .{ .{ .repair = true, .failed_repair = true, .repeated_provenance_fault = true }, .failed },
+    }) |row| {
+        var offline: OfflineRun = undefined;
+        try offline.init(io, OfflineRun.hello_world);
+        defer offline.deinit();
+        var wire: ScriptedWire = .{ .options = row[0] };
+        errdefer std.debug.print("repair run expecting {s}\n", .{@tagName(row[1])});
+        try offline.execute(io, &wire);
+        try std.testing.expectEqual(@as(?OutcomeTag, row[1]), offline.report.workflow_outcome);
+        const rows = try offline.terminalRows(io);
+        try std.testing.expectEqual(@as(usize, 0), rows.cancelled);
+        // Both runs repaired one specification unit through the repair slot.
+        var repairs: usize = 0;
+        for (offline.report.attempts) |attempt| {
+            if (attempt.purpose == .atomic_repair and attempt.owner_kind == .specification_unit) repairs += 1;
+        }
+        try std.testing.expect(repairs >= 1);
+        if (row[1] == .ok) {
+            try std.testing.expectEqual(c.Status.generated, offline.report.status);
+            try std.testing.expectEqual(.passed, offline.report.publication_check);
+            try std.testing.expectEqual(@as(usize, 1), rows.published);
+            try std.testing.expectEqual(@as(usize, 0), rows.failed);
+        } else {
+            try std.testing.expectEqual(c.Status.workflow_failed, offline.report.status);
+            try std.testing.expect(offline.report.terminal_rejection != null);
+            try std.testing.expectEqual(.retry_limit, offline.report.terminal_rejection.?.kind);
+            // The request that exhausted the allowance is a repair of one specification unit, and the run ended there.
+            const last = offline.report.attempts[offline.report.attempts.len - 1];
+            try std.testing.expectEqual(.atomic_repair, last.purpose);
+            try std.testing.expectEqual(.specification_unit, last.owner_kind);
+            try offline.expectNothingPublished(io);
+            try std.testing.expectEqual(@as(usize, 1), rows.failed);
+            try std.testing.expectEqual(@as(usize, 0), rows.published);
+        }
+    }
+}
+
 test "a request-model retry exhaustion names its stage in the report and the step event, and another step names none" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -2302,12 +3215,12 @@ test "a request-model retry exhaustion names its stage in the report and the ste
     const plain = Exhaustion.init(.{ .bytes = "account" }, .{ .value = 2 }, 3).?;
     for ([_]struct { Exhaustion, ?[]const u8 }{ .{ kernel, "advance-attempt" }, .{ plain, null } }) |case| {
         const described = try case[0].describe(a);
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v20", .started_at_utc = "", .status = .workflow_failed, .retry_error = described };
+        const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .retry_error = described };
         const readback = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report.retry_error, readback.retry_error);
         const event = try trace.Trace.stepEvent(a, 1, .{ .bytes = "extract" }, .{ .rejected = .{ .retry_limit = case[0] } }, report);
         const tree = try std.json.parseFromSlice(std.json.Value, a, event, .{});
-        try std.testing.expectEqualStrings("e2e-step-event/v5", tree.value.object.get("schema").?.string);
+        try std.testing.expectEqualStrings(@import("../e2e/trace.zig").step_event_schema, tree.value.object.get("schema").?.string);
         const member = tree.value.object.get("retry_error").?.object.get("stage").?;
         if (case[1]) |name| try std.testing.expectEqualStrings(name, member.string) else try std.testing.expect(member == .null);
     }

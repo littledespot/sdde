@@ -60,6 +60,23 @@ test "inference preserves immutable lifecycle snapshots" {
     try std.testing.expectError(error.ProviderOperationNotInvoked, fixture.ledger().requireInvoked(fixture.id(.inference)));
 }
 
+test "an assignment is the request's binding, input and sampling, and each differs from another" {
+    var fixture: AuthorizationFixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const assigned = lifecycle.Assignment.of(&fixture.request);
+    try std.testing.expect(assigned.eql(fixture.assignment()));
+    var other = assigned;
+    other.model_visible_input_id = .{ .bytes = "another-input" };
+    try std.testing.expect(!assigned.eql(other));
+    other = assigned;
+    other.binding_id.slot_id = .{ .bytes = "another-slot" };
+    try std.testing.expect(!assigned.eql(other));
+    other = assigned;
+    other.sampling = .runaway_resend;
+    try std.testing.expect(!assigned.eql(other));
+}
+
 test "inference assignment owns immutable binding input facts" {
     var fixture = try Fixture.init(std.testing.allocator);
     defer fixture.deinit();
@@ -70,7 +87,7 @@ test "inference assignment owns immutable binding input facts" {
     _ = try fixture.change(.inference, .{ .assign_inference = assignment });
     input[0] = 'X';
     try std.testing.expect(before.record(fixture.id(.inference)) == null);
-    try std.testing.expectEqualStrings("input", fixture.ledger().record(fixture.id(.inference)).?.model_visible_input_id.bytes);
+    try std.testing.expectEqualStrings("input", fixture.ledger().record(fixture.id(.inference)).?.assignment.model_visible_input_id.bytes);
     try fixture.invokeRequest();
     _ = try fixture.change(.inference, .{ .invoke = invocation });
     _ = try fixture.change(.inference, .{ .terminate = .completed });
@@ -261,8 +278,8 @@ test "lifecycle owns assignment bytes and isolates executions" {
     const record = try fixture.change(.inference, .{ .assign_inference = assigned_facts });
     @memset(&slot, 'x');
     @memset(&input, 'x');
-    try std.testing.expectEqualStrings("slot", fixture.ledger().record(fixture.id(.inference)).?.binding_id.slot_id.bytes);
-    try std.testing.expectEqualStrings("input", record.model_visible_input_id.bytes);
+    try std.testing.expectEqualStrings("slot", fixture.ledger().record(fixture.id(.inference)).?.assignment.binding_id.slot_id.bytes);
+    try std.testing.expectEqualStrings("input", record.assignment.model_visible_input_id.bytes);
     try std.testing.expectEqual(@as(u64, 0), other.ledger().revision().value);
     try std.testing.expect(other.ledger().record(fixture.id(.inference)) == null);
 }

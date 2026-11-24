@@ -12,25 +12,25 @@ test "native iteration contracts require finite progress ownership without retry
         .{ .contract = .{
             .id = "test.initialize",
             .kind = .step,
-            .requires = &.{.raw_engine_config},
-            .produces = &.{.engine_config},
+            .requires = &.{.workflow_operation_registry},
+            .produces = &.{.workflow_definition_registry},
             .outcomes = &.{.ok},
             .side_effect = .none,
-            .iteration = .{ .kind = .initialize, .scope = .raw_engine_config, .progress = .engine_config },
+            .iteration = .{ .kind = .initialize, .scope = .workflow_operation_registry, .progress = .workflow_definition_registry },
         }, .binding = bindings.bind(void, null, fixture.unused) },
         .{ .contract = .{
             .id = "test.advance",
             .kind = .step,
-            .requires = &.{ .raw_engine_config, .engine_config },
-            .replaces = &.{.engine_config},
+            .requires = &.{ .workflow_operation_registry, .workflow_definition_registry },
+            .replaces = &.{.workflow_definition_registry},
             .outcomes = &.{.ok},
             .side_effect = .none,
-            .iteration = .{ .kind = .advance, .scope = .raw_engine_config, .progress = .engine_config },
+            .iteration = .{ .kind = .advance, .scope = .workflow_operation_registry, .progress = .workflow_definition_registry },
         }, .binding = bindings.bind(void, null, fixture.unused) },
     };
     const registry: Registry = .{ .operations = &entries, .policies = &.{}, .gates = &.{}, .data_schemas = &.{
-        .{ .key = .raw_engine_config, .version = 1, .type_name = "finite-scope", .maximum_bytes = null },
-        .{ .key = .engine_config, .version = 1, .type_name = "finite-progress", .maximum_bytes = null },
+        .{ .key = .workflow_operation_registry, .version = 1, .type_name = "finite-scope", .maximum_bytes = null },
+        .{ .key = .workflow_definition_registry, .version = 1, .type_name = "finite-progress", .maximum_bytes = null },
     } };
     try std.testing.expect(registry.validate());
     for (entries, 0..) |_, index| for (0..9) |fault| {
@@ -38,13 +38,13 @@ test "native iteration contracts require finite progress ownership without retry
         const contract = &changed[index].contract;
         switch (fault) {
             0 => contract.requires = &.{},
-            1 => contract.iteration.?.scope = .engine_config,
+            1 => contract.iteration.?.scope = .workflow_definition_registry,
             2 => contract.iteration.?.outcome = .more,
             3 => contract.iteration.?.outcome = .failed,
             4 => contract.retry_limit = .{ .maximum = 1 },
             5 => contract.repair_role = .validate,
             6 => contract.side_effect = .model_call,
-            7 => contract.invalidates = &.{.raw_engine_config},
+            7 => contract.invalidates = &.{.workflow_operation_registry},
             8 => if (index == 0) {
                 contract.produces = &.{};
             } else {

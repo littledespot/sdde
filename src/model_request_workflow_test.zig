@@ -40,6 +40,7 @@ const payload_validation = @import("domain/model_payload_schema.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const lease_port = @import("ports/provider_authorization_lease.zig");
 const protocol_retry = @import("application/model_protocol_retry_workflow.zig");
+const retry_domain = @import("domain/model_protocol_retry.zig");
 const model_origin = @import("domain/model_candidate_origin.zig").Origin;
 
 const yaml =
@@ -62,6 +63,12 @@ const yaml =
 const prompt_bytes = "Return the requested object.";
 const schema_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":20000}},\"required\":[\"answer\"],\"additionalProperties\":false}";
 const input_bytes = "x" ** 16_384;
+
+/// A result schema holding the whole of `bytes` as its `answer` definition, which a native packet naming `answer`
+/// selects: a packet that reaches a `result-schema` step must name the definition it asks for.
+fn answerSchema(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const u8 {
+    return std.fmt.allocPrint(allocator, "{{\"$defs\":{{\"answer\":{s}}},\"$ref\":\"#/$defs/answer\"}}", .{bytes});
+}
 const context_bytes = "{\"answer\":\"One source-grounded answer, never an invented default.\"}";
 
 /// The request stages a workflow could once select, bound to the same stage contexts the kernel holds:
@@ -127,11 +134,11 @@ test "static JSON guidance stays separate from dynamic input and source capture"
         const source = try withStaticContext(a, yaml);
         const packet_source = try std.mem.replaceOwned(u8, a, source, ", input: input }", " }");
         const dynamic_source = try std.mem.replaceOwned(u8, a, packet_source, ", input: input.txt", "");
-        const graph = try fixture.compileWithContext(dynamic_source, false);
+        const graph = try fixture.compileResources(dynamic_source, try answerSchema(a, schema_bytes), false, null, context_bytes);
         for ([_][]const u8{ "{\"source\":\"Display UTC time.\"}", "{\"source\":\"Renew eligible loans.\"}" }) |body| {
             var runner = fixture.runner(graph, std.testing.allocator);
             defer runner.deinit();
-            const packet = try packets.create(std.testing.allocator, body, .workflow_step, .initial_generation, null);
+            const packet = try packets.create(std.testing.allocator, body, .workflow_step, .initial_generation, .{ .bytes = "answer" });
             runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
             var harness: Harness = .{ .runner = &runner };
             try std.testing.expectEqual(.ok, harness.run());
@@ -192,7 +199,7 @@ test "protocol corrections retain static context dynamic input and registered co
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         fake.invocation_plan.complete.content = malformed_protocol_items;
         try prepareProtocolAttempt(&runner, false);
         const original = (try currentRequest(&runner)).id();
@@ -220,7 +227,7 @@ test "preparation publishes the request, its binding evidence and the selected s
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const a = fixture.arena.allocator();
-        const selection = if (packet_input) try std.mem.replaceOwned(u8, a, yaml, "input: input }", "result-selection: input }") else yaml;
+        const selection = if (packet_input) try std.mem.replaceOwned(u8, a, yaml, ", input: input }", " }") else yaml;
         const source = if (packet_input) try std.mem.replaceOwned(u8, a, selection, ", input: input.txt", "") else selection;
         const graph = try fixture.compileWithAssets(source, if (packet_input) selected_schema else schema_bytes, !packet_input);
         var runner = fixture.runner(graph, std.testing.allocator);
@@ -294,10 +301,13 @@ test "failed preparation selection publishes neither a ledger successor nor part
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
     const a = fixture.arena.allocator();
-    const source = try std.mem.replaceOwned(u8, a, yaml, "result-schema: result", "result-schema: result, result-selection: input");
-    const graph = try fixture.compile(source);
+    // A packet that names no result definition cannot select one, so the step fails before it prepares anything.
+    const source = try std.mem.replaceOwned(u8, a, try std.mem.replaceOwned(u8, a, yaml, ", input: input }", " }"), ", input: input.txt", "");
+    const graph = try fixture.compileWithAssets(source, schema_bytes, false);
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
+    const packet = try @import("domain/model_input_packet.zig").create(std.testing.allocator, "{\"selected\":\"loan\"}", .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "reference" }, .chunk_id = .{ .bytes = "chunk" } } }, .initial_generation, null);
+    runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
     try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "initialize" }).outcome);
     const initial = try requestLedger(&runner);
@@ -356,15 +366,15 @@ test "native domain packets traverse generic fake provider execution without res
         defer fixture.deinit();
         const definition = try std.mem.replaceOwned(u8, fixture.arena.allocator(), try requestCompletionYaml(&fixture), ", input: input }", " }");
         const no_static_resource = try std.mem.replaceOwned(u8, fixture.arena.allocator(), definition, ", input: input.txt", "");
-        const graph = try fixture.compileWithAssets(no_static_resource, schema_bytes, false);
+        const graph = try fixture.compileWithAssets(no_static_resource, try answerSchema(fixture.arena.allocator(), schema_bytes), false);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         const unit: identity.ImmutableUnitOwnerId = .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "current-reference" }, .chunk_id = .{ .bytes = "selected-chunk" } } };
-        const packet = try packets.create(std.testing.allocator, "{\"text\":\"Only the selected chunk.\"}", unit, .initial_generation, null);
+        const packet = try packets.create(std.testing.allocator, "{\"text\":\"Only the selected chunk.\"}", unit, .initial_generation, .{ .bytes = "answer" });
         runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = body;
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         const expected: workflow.OutcomeTag = if (std.mem.eql(u8, body, "{}")) .invalid else .ok;
         try prepareRequestClosure(&runner, expected);
         const request = try currentRequest(&runner);
@@ -379,7 +389,7 @@ test "native domain packets traverse generic fake provider execution without res
             try std.testing.expectError(error.CandidateNotAdmitted, candidate_handoff.read(&view));
         }
         // Equal bytes do not authorize substituting another packet identity.
-        const foreign = try packets.create(std.testing.allocator, packet.body(), unit, .initial_generation, null);
+        const foreign = try packets.create(std.testing.allocator, packet.body(), unit, .initial_generation, .{ .bytes = "answer" });
         const foreign_value = try requests.adoptPacket(std.testing.allocator, foreign);
         defer values.destroy(foreign_value);
         var changed = view;
@@ -559,7 +569,7 @@ test "consumer contracts cannot replace retained resources controls or retired s
 fn allocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow) !void {
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
@@ -733,7 +743,7 @@ test "runner rejects tampered accounting permissions and registry rejects hidden
         step.runner_accounting = .none;
     };
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
     var runner = fixture.runner(&tampered, std.testing.allocator);
     defer runner.deinit();
     var harness: Harness = .{ .runner = &runner };
@@ -782,7 +792,7 @@ const FaultyAdvance = struct {
             .missing_transition => delta.runner_accounting_transition = null,
             .wrong_ordinal => delta.runner_accounting_transition.?.increment_model_attempt.next_request_value += 1,
             .stale_revision => delta.runner_accounting_transition.?.increment_model_attempt.expected_revision.value += 1,
-            .undeclared_write => delta.data_writes[@intFromEnum(pipeline.DataKey.raw_engine_config)] = values.create(std.testing.allocator, values.schema(.raw_engine_config, bool, 1, 1), bool, true) catch return error.InvocationFailureUnrecorded,
+            .undeclared_write => delta.data_writes[@intFromEnum(pipeline.DataKey.workflow_operation_registry)] = values.create(std.testing.allocator, values.schema(.workflow_operation_registry, bool, 1, 1), bool, true) catch return error.InvocationFailureUnrecorded,
             .cancel_after_action => self.cancelled = true,
             .foreign_retry => if (facts.attempt == .retry) {
                 delta.runner_accounting_transition.?.increment_model_attempt.attempt.retry.authority.operation_instance_id = .{ .bytes = "origin" };
@@ -915,7 +925,7 @@ test "assignment registration and compiled graphs reject hidden authority" {
             if (remove_permission) step.runner_accounting = .none else step.parameters = &.{.{ .id = .{ .bytes = "kind" }, .value = .{ .enumeration = "inference" } }};
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         var harness: Harness = .{ .runner = &runner };
@@ -982,7 +992,7 @@ test "assigned evidence retains its canonical record and request until destroyed
     runner.deinit();
     alive = false;
     try std.testing.expectEqualStrings("origin", evidence.record().id.model_request_id.model_operation_id.workflow_step_id.bytes);
-    try std.testing.expectEqualStrings("selected", evidence.record().binding_id.slot_id.bytes);
+    try std.testing.expectEqualStrings("selected", evidence.record().assignment.binding_id.slot_id.bytes);
     try std.testing.expectEqual(.assigned, evidence.record().state);
 }
 
@@ -1022,8 +1032,8 @@ const FaultyAssignment = struct {
             .stale_revision => transition.expected_revision.value += 1,
             .unassigned_invoke => transition.command = .{ .invoke = .{ .deadline_monotonic_ms = 100 } },
             .undeclared_write, .forged_evidence => {
-                const key: pipeline.DataKey = if (self.fault == .undeclared_write) .raw_engine_config else .assigned_provider_operation;
-                delta.data_writes[@intFromEnum(key)] = values.create(std.testing.allocator, values.schema(.raw_engine_config, bool, 1, 1), bool, true) catch return error.InvocationFailureUnrecorded;
+                const key: pipeline.DataKey = if (self.fault == .undeclared_write) .workflow_operation_registry else .assigned_provider_operation;
+                delta.data_writes[@intFromEnum(key)] = values.create(std.testing.allocator, values.schema(.workflow_operation_registry, bool, 1, 1), bool, true) catch return error.InvocationFailureUnrecorded;
             },
             .cancel_after_action => self.cancelled = true,
         }
@@ -1062,7 +1072,7 @@ test "YAML authorization prepares one private lease for the assigned operation a
 }
 
 test "authorization failure facts and cancellation stay distinct and follow declared outcomes" {
-    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .authentication_failed }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
+    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .{ .authentication_failed = .missing } }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -1073,6 +1083,10 @@ test "authorization failure facts and cancellation stay distinct and follow decl
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(@as(workflow.OutcomeTag, if (plan == .cancelled) .cancelled else .failed), harness.run());
         const result = (try authorizationResult(&runner)).outcome();
+        // A call that is never sent fails in its authorization: that closed cause is the run's, and a cancellation is none.
+        if (plan == .failed) {
+            try std.testing.expectEqualDeep(@import("domain/provider_failure_detail.zig").Detail{ .cause = std.meta.stringToEnum(provider.ProviderFailureCause, @tagName(plan.failed)).?, .retry_class = .never, .delivery = .not_sent, .credential = if (plan.failed == .authentication_failed) plan.failed.authentication_failed else null }, runner.last_provider_failure.?);
+        } else try std.testing.expect(runner.last_provider_failure == null);
         if (plan == .failed) {
             try std.testing.expectEqual(@as(provider.ProviderFailureCause, if (plan.failed == .authentication_failed) .authentication_failed else .authorization_denied), result.failed.cause);
             try std.testing.expectEqual(.not_sent, result.failed.delivery);
@@ -1120,7 +1134,7 @@ test "authorization guards expiration overflow unavailable clocks and absent ada
             0 => fixture.clock.now_ms = std.math.maxInt(u64),
             1 => fixture.clock.unavailable = true,
             2 => runner.provider_clock = null,
-            3 => fixture.native.prepare_authorization.action = null,
+            3 => fixture.native.stages.prepare_authorization.action = null,
             4 => {},
             else => unreachable,
         }
@@ -1188,7 +1202,7 @@ test "authorization binds each slot's catalogue entry deadline so two entries ge
         fixture.services.deinit();
         fixture.services = try deadlineServices(std.testing.allocator, &two_deadlines);
         var recorder: DeadlineRecorder = .{ .inner = fixture.authorization.port(), .clock = &fixture.clock };
-        fixture.native.prepare_authorization.action = .{ .authorization = recorder.port() };
+        fixture.native.stages.prepare_authorization.action = .{ .authorization = recorder.port() };
         const source = try authorizationYaml(&fixture);
         const bound = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "slot: selected", try std.fmt.allocPrint(fixture.arena.allocator(), "slot: {s}", .{case.slot}));
         const graph = try fixture.compile(bound);
@@ -1230,7 +1244,7 @@ test "authorization binds the selected entry deadline to every provider operatio
     fixture.services.deinit();
     fixture.services = try deadlineServices(std.testing.allocator, &two_deadlines);
     var recorder: DeadlineRecorder = .{ .inner = fixture.authorization.port(), .clock = &fixture.clock };
-    fixture.native.prepare_authorization.action = .{ .authorization = recorder.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = recorder.port() };
     const source = try protocolRetryYaml(&fixture);
     const bound = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "slot: selected", "slot: other");
     try std.testing.expect(!std.mem.eql(u8, source, bound));
@@ -1238,7 +1252,7 @@ test "authorization binds the selected entry deadline to every provider operatio
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     fake.invocation_plan.complete.content = "{\"foreign\":true}";
     // The initial operation and both protocol corrections each bind the
     // entry's 2500 ms from their own authorization time.
@@ -1287,7 +1301,7 @@ test "authorization validates deposited facts and releases backing after mid-pre
         defer fixture.deinit();
         const graph = try fixture.compile(try authorizationYaml(&fixture));
         var spy: AuthorizationSpy = .{ .fixture = &fixture, .fault = fault };
-        fixture.native.prepare_authorization.action = .{ .authorization = spy.port() };
+        fixture.native.stages.prepare_authorization.action = .{ .authorization = spy.port() };
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         runner.runtime = .{ .context = &spy, .status_fn = AuthorizationSpy.status };
@@ -1308,7 +1322,7 @@ test "forged authorization results and rejected deltas publish no lease and dest
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try authorizationYaml(&fixture));
-        var faulty: FaultyAuthorization = .{ .prepare = fixture.native.prepare_authorization, .fault = fault };
+        var faulty: FaultyAuthorization = .{ .prepare = fixture.native.stages.prepare_authorization, .fault = fault };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, authorization_workflow.Prepare.contract.id)) {
             entry.binding = bindings.bind(FaultyAuthorization, &faulty, FaultyAuthorization.invoke);
         };
@@ -1336,12 +1350,12 @@ test "authorization compiler and registry reject hidden producers and a forged d
                 0 => step.capabilities = &.{},
                 // The retired YAML deadline cannot be forged into a compiled step.
                 1 => step.parameters = &.{.{ .id = workflow.WorkflowParameterId.parse("timeout-ms").?, .value = .{ .integer = 1000 } }},
-                2 => step.produces = &.{ .provider_authorization_result, .raw_engine_config },
+                2 => step.produces = &.{ .provider_authorization_result, .workflow_operation_registry },
                 else => unreachable,
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         var harness: Harness = .{ .runner = &runner };
@@ -1421,7 +1435,7 @@ const FaultyAuthorization = struct {
         var candidate = try authorization_workflow.Prepare.invoke(&self.prepare, input);
         const key = @intFromEnum(authorization_workflow.schema.key);
         if (self.fault == .undeclared_write) {
-            candidate.delta.data_writes[@intFromEnum(pipeline.DataKey.raw_engine_config)] = values.create(std.testing.allocator, values.schema(.raw_engine_config, bool, 1, 1), bool, true) catch return error.InvocationFailureUnrecorded;
+            candidate.delta.data_writes[@intFromEnum(pipeline.DataKey.workflow_operation_registry)] = values.create(std.testing.allocator, values.schema(.workflow_operation_registry, bool, 1, 1), bool, true) catch return error.InvocationFailureUnrecorded;
             return candidate;
         }
         values.destroy(candidate.delta.data_writes[key].?);
@@ -1512,7 +1526,7 @@ fn prepareRequestTermination(runner: *runner_module.Runner, cancelled: bool, inv
 }
 
 test "YAML pre-call request closure preserves failure and cancellation without provider calls" {
-    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .authentication_failed }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
+    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .{ .authentication_failed = .missing } }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -1521,7 +1535,7 @@ test "YAML pre-call request closure preserves failure and cancellation without p
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         const expected: workflow.OutcomeTag = if (plan == .cancelled) .cancelled else .failed;
         try std.testing.expectEqual(expected, harness.run());
@@ -1546,7 +1560,7 @@ test "pre-call request closure maps both request states and retains immutable ow
             try fixture.init(std.testing.allocator);
             defer fixture.deinit();
             var spy: RejectedDeposit = .{ .fixture = &fixture, .cancelled = cancelled };
-            fixture.native.prepare_authorization.action = .{ .authorization = spy.port() };
+            fixture.native.stages.prepare_authorization.action = .{ .authorization = spy.port() };
             const graph = try fixture.compile(try requestTerminationYaml(&fixture));
             var runner = fixture.runner(graph, std.testing.allocator);
             var active = true;
@@ -1609,13 +1623,13 @@ test "YAML pre-call request closure after inference preserves its response and s
             .{routed},
         );
         var sequence: AuthorizationAfterInference = .{ .fixture = &fixture, .cancelled = cancelled };
-        fixture.native.prepare_authorization.action = .{ .authorization = sequence.port() };
+        fixture.native.stages.prepare_authorization.action = .{ .authorization = sequence.port() };
         const graph = try fixture.compile(bytes);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = "{\"answer\":\"retained\"}";
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(@as(workflow.OutcomeTag, if (cancelled) .cancelled else .failed), harness.run());
         const request = try currentRequest(&runner);
@@ -1655,7 +1669,7 @@ test "runtime cancellation before pre-call request closure leaves no hidden ledg
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
-    fixture.authorization.plan = .{ .failed = .authentication_failed };
+    fixture.authorization.plan = .{ .failed = .{ .authentication_failed = .missing } };
     const graph = try fixture.compile(try requestTerminationYaml(&fixture));
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
@@ -1673,7 +1687,7 @@ test "pre-call request closure rejects missing foreign stale duplicate and prepa
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
-        fixture.authorization.plan = if (cancelled) .cancelled else .{ .failed = .authentication_failed };
+        fixture.authorization.plan = if (cancelled) .cancelled else .{ .failed = .{ .authentication_failed = .missing } };
         const graph = try fixture.compile(try requestTerminationYaml(&fixture));
         var first = fixture.runner(graph, std.testing.allocator);
         defer first.deinit();
@@ -1745,7 +1759,7 @@ test "pre-call request closure requires every operation terminal" {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
-        fixture.authorization.plan = .{ .failed = .authentication_failed };
+        fixture.authorization.plan = .{ .failed = .{ .authentication_failed = .missing } };
         const graph = try fixture.compile(try requestTerminationYaml(&fixture));
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
@@ -1755,7 +1769,7 @@ test "pre-call request closure requires every operation terminal" {
         const prepared = (try currentRequest(&runner)).prepared().?;
         try openRetryOperation(&runner, invoke);
         try std.testing.expectEqual(execution.Rejection{ .authority = .lifecycle_evidence }, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
-        try std.testing.expectError(error.ProviderOperationStillOpen, fixture.native.terminate_request.action.execute(ledger, state.current_operations, ledger.revision(), prepared.model_request_id, if (invoke) .invoked else .assigned, .{ .terminal = if (invoke) .failed else .not_invoked_authorization_failure }));
+        try std.testing.expectError(error.ProviderOperationStillOpen, fixture.native.stages.terminate_request.action.execute(ledger, state.current_operations, ledger.revision(), prepared.model_request_id, if (invoke) .invoked else .assigned, .{ .terminal = if (invoke) .failed else .not_invoked_authorization_failure }));
         try std.testing.expect(ledger == try requestLedger(&runner));
     }
 }
@@ -1803,12 +1817,12 @@ test "pre-call request closure rejects forged successors and cancellation before
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
-        fixture.authorization.plan = .{ .failed = .authentication_failed };
+        fixture.authorization.plan = .{ .failed = .{ .authentication_failed = .missing } };
         const graph = try fixture.compile(try requestTerminationYaml(&fixture));
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         try prepareRequestTermination(&runner, false, true);
-        var spy: Spy = .{ .inner = &fixture.native.terminate_request, .fault = fault };
+        var spy: Spy = .{ .inner = &fixture.native.stages.terminate_request, .fault = fault };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, request_termination.Terminate.contract.id)) {
             entry.binding = bindings.bind(Spy, &spy, Spy.invoke);
         };
@@ -1844,12 +1858,12 @@ fn requestTerminationAllocationCase(allocator: std.mem.Allocator, fixture: *Fixt
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
     var spy: RejectedDeposit = .{ .fixture = fixture, .cancelled = cancelled };
-    fixture.native.prepare_authorization.action = .{ .authorization = spy.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = spy.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const result = harness.result();
     const actual = result.executionStatus().?;
@@ -1886,7 +1900,7 @@ test "pre-call request closure refuses a forged compiled contract where it runs"
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
@@ -1894,7 +1908,7 @@ test "pre-call request closure refuses a forged compiled contract where it runs"
 }
 
 test "YAML pre-call termination preserves authorization failure and cancellation" {
-    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .authentication_failed }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
+    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .{ .authentication_failed = .missing } }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -1903,7 +1917,7 @@ test "YAML pre-call termination preserves authorization failure and cancellation
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         const expected: workflow.OutcomeTag = if (plan == .cancelled) .cancelled else .failed;
         try std.testing.expectEqual(expected, harness.run());
@@ -1981,7 +1995,7 @@ test "pre-call termination rejects foreign inputs and invalid authorization fact
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
-        fixture.authorization.plan = if (cancelled) .cancelled else .{ .failed = .authentication_failed };
+        fixture.authorization.plan = if (cancelled) .cancelled else .{ .failed = .{ .authentication_failed = .missing } };
         const graph = try fixture.compile(try terminationYaml(&fixture));
         var first = fixture.runner(graph, std.testing.allocator);
         defer first.deinit();
@@ -2037,7 +2051,7 @@ test "pre-call termination and terminal-result consumers require no clock or pro
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         const expected: workflow.OutcomeTag = if (cancelled) .cancelled else .failed;
         try prepareTermination(&runner, expected);
         const original_request = try requestLedger(&runner);
@@ -2092,7 +2106,7 @@ test "pre-call termination releases deposited backing once and retains evidence 
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         var spy: RejectedDeposit = .{ .fixture = &fixture, .cancelled = cancelled };
-        fixture.native.prepare_authorization.action = .{ .authorization = spy.port() };
+        fixture.native.stages.prepare_authorization.action = .{ .authorization = spy.port() };
         const graph = try fixture.compile(try terminationYaml(&fixture));
         var runner = fixture.runner(graph, std.testing.allocator);
         var active = true;
@@ -2133,7 +2147,7 @@ const RejectedDeposit = struct {
     fn prepare(context: *authorization_port.Context, facts: authorization_port.Facts, slot: authorization_port.Slot) authorization_port.Error!authorization_port.Observation {
         const self: *@This() = @ptrCast(@alignCast(context));
         _ = try self.fixture.authorization.port().prepare(facts, slot);
-        return if (self.cancelled) error.Cancelled else .{ .failed = .authentication_failed };
+        return if (self.cancelled) error.Cancelled else .{ .failed = .{ .authentication_failed = .missing } };
     }
 };
 
@@ -2142,7 +2156,7 @@ test "runtime cancellation abandons authorization without hidden pre-call termin
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
     var spy: AuthorizationSpy = .{ .fixture = &fixture, .fault = .cancel };
-    fixture.native.prepare_authorization.action = .{ .authorization = spy.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = spy.port() };
     const graph = try fixture.compile(try terminationYaml(&fixture));
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
@@ -2168,7 +2182,7 @@ test "pre-call termination rejects forged deltas and cancellation before publica
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         try prepareTermination(&runner, .failed);
-        var spy: Spy = .{ .inner = &fixture.native.terminate_operation, .fault = fault };
+        var spy: Spy = .{ .inner = &fixture.native.stages.terminate_operation, .fault = fault };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, termination_workflow.Terminate.contract.id)) {
             entry.binding = bindings.bind(Spy, &spy, Spy.invoke);
         };
@@ -2208,12 +2222,12 @@ fn terminationAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, gr
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
     var spy: RejectedDeposit = .{ .fixture = fixture, .cancelled = cancelled };
-    fixture.native.prepare_authorization.action = .{ .authorization = spy.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = spy.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const result = harness.result();
     const actual = result.executionStatus().?;
@@ -2249,7 +2263,7 @@ test "pre-call termination refuses a forged compiled contract where it runs" {
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "terminate" }).rejected);
@@ -2373,7 +2387,7 @@ test "forged lifecycle successors and rejected deltas never publish request invo
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try requestLifecycleYaml(&fixture));
-        var faulty: FaultyRequestLifecycle = .{ .advance = fixture.native.advance_request, .fault = fault, .clock = &fixture.clock };
+        var faulty: FaultyRequestLifecycle = .{ .advance = fixture.native.stages.advance_request, .fault = fault, .clock = &fixture.clock };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, request_lifecycle_workflow.Advance.contract.id)) {
             entry.binding = bindings.bind(FaultyRequestLifecycle, &faulty, FaultyRequestLifecycle.invoke);
         };
@@ -2419,7 +2433,7 @@ test "request lifecycle cancellation allocation faults and compiler tampering fa
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     fixture.native.init(std.testing.allocator);
     fixture.authorization.allocator = std.testing.allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(&fixture.entries, &fixture.native);
     for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, request_lifecycle_workflow.Advance.contract.id)) {
         const original = entry.*;
@@ -2436,7 +2450,7 @@ test "request lifecycle cancellation allocation faults and compiler tampering fa
         step.parameters = &.{};
     };
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
 }
 
 const FaultyRequestLifecycle = struct {
@@ -2455,7 +2469,7 @@ const FaultyRequestLifecycle = struct {
             .failed_outcome => candidate.outcome = .failed,
             .cancel => self.cancelled = true,
             .expire => self.clock.now_ms = 1001,
-            .undeclared_write => candidate.delta.data_writes[@intFromEnum(pipeline.DataKey.raw_engine_config)] = values.create(std.testing.allocator, values.schema(.raw_engine_config, bool, 1, 1), bool, true) catch return error.InvocationFailureUnrecorded,
+            .undeclared_write => candidate.delta.data_writes[@intFromEnum(pipeline.DataKey.workflow_operation_registry)] = values.create(std.testing.allocator, values.schema(.workflow_operation_registry, bool, 1, 1), bool, true) catch return error.InvocationFailureUnrecorded,
             else => {
                 const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.InvocationFailureUnrecorded;
                 const id = (try requests.readCurrent(&input.step.data, requests.prepared_schema)).id();
@@ -2619,7 +2633,7 @@ test "provider invocation rejects forged transitions and deltas without publishi
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try operationLifecycleYaml(&fixture));
-        var faulty: FaultyOperationLifecycle = .{ .advance = fixture.native.advance_operation, .fault = fault, .clock = &fixture.clock };
+        var faulty: FaultyOperationLifecycle = .{ .advance = fixture.native.stages.advance_operation, .fault = fault, .clock = &fixture.clock };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, operation_lifecycle_workflow.Advance.contract.id)) {
             entry.binding = bindings.bind(FaultyOperationLifecycle, &faulty, FaultyOperationLifecycle.invoke);
         };
@@ -2695,7 +2709,7 @@ test "provider invocation cancellation allocation failures and retained evidence
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     fixture.native.init(std.testing.allocator);
     fixture.authorization.allocator = std.testing.allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, std.testing.allocator);
     try prepareInvocable(&runner);
@@ -2745,7 +2759,7 @@ test "provider invocation accounting permission and exact compiled profile canno
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try prepareInvocable(&runner);
@@ -2771,7 +2785,7 @@ test "provider invocation rechecks cancellation and lease deadline after allocat
             runner.runtime = .{ .context = &guard, .status_fn = PublicationGuard.status };
             const result = runner.bindings().invokeStep(.{ .bytes = "advance-operation" });
             try std.testing.expectEqual(@as(execution.Rejection, switch (fault) {
-                .expire, .deadline => .deadline_exhausted,
+                .expire => .deadline_exhausted,
                 .cancel => .cancelled,
                 .clock => .{ .authority = .authorization_clock_unavailable },
             }), result.rejected);
@@ -2784,7 +2798,7 @@ test "provider invocation rechecks cancellation and lease deadline after allocat
 }
 
 const PublicationGuard = struct {
-    const Fault = enum { expire, cancel, deadline, clock };
+    const Fault = enum { expire, cancel, clock };
     allocations: *std.testing.FailingAllocator,
     before: usize,
     fault: Fault,
@@ -2803,7 +2817,6 @@ const PublicationGuard = struct {
         if (!self.checked_after_allocation) return .active;
         return switch (self.fault) {
             .cancel => .cancelled,
-            .deadline => .deadline_exhausted,
             .expire, .clock => .active,
         };
     }
@@ -2838,8 +2851,8 @@ const FaultyOperationLifecycle = struct {
             .cancel => self.cancelled = true,
             .expire => self.clock.now_ms = 1001,
             .undeclared_write, .injected_evidence => {
-                const key: pipeline.DataKey = if (self.fault == .undeclared_write) .raw_engine_config else .invoked_provider_operation;
-                const descriptor = if (self.fault == .undeclared_write) values.schema(.raw_engine_config, bool, 1, 1) else values.schema(.invoked_provider_operation, bool, 1, 1);
+                const key: pipeline.DataKey = if (self.fault == .undeclared_write) .workflow_operation_registry else .invoked_provider_operation;
+                const descriptor = if (self.fault == .undeclared_write) values.schema(.workflow_operation_registry, bool, 1, 1) else values.schema(.invoked_provider_operation, bool, 1, 1);
                 candidate.delta.data_writes[@intFromEnum(key)] = values.create(std.testing.allocator, descriptor, bool, true) catch return error.InvocationFailureUnrecorded;
             },
         }
@@ -2875,7 +2888,7 @@ test "native YAML invokes one model call and retains unparsed output and actual 
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
@@ -2912,7 +2925,7 @@ test "YAML invocation preserves every stopped outcome and charges its actual usa
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = 8, .output_tokens = 3 } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.failed, harness.run());
         try std.testing.expectEqual(reason, (try invocationResult(&runner)).outcome().?.observation.completed.raw_result.stopped.reason);
@@ -2936,26 +2949,27 @@ test "runner logs every provider-applied stop with its exact reason and stops on
         completed_outcome: ?telemetry.EventOutcome = null,
         fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
             const self: *@This() = @ptrCast(@alignCast(context));
-            defer self.previous = fact.fact.event_type;
+            defer self.previous = telemetry.eventOf(fact.fact);
             const definition = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch {
                 self.invalid = true;
                 return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             };
-            if (fact.fact.event_type == .model_completed) {
-                const correlation = fact.fact.correlation_id.?.bytes;
+            const common = telemetry.commonOf(fact.fact);
+            if (telemetry.eventOf(fact.fact) == .model_completed) {
+                const correlation = common.correlation_id.?.bytes;
                 @memcpy(self.completed_correlation[0..correlation.len], correlation);
                 self.completed_correlation_len = correlation.len;
-                self.completed_outcome = fact.fact.fields.outcome;
+                self.completed_outcome = telemetry.fieldOf(fact.fact, .outcome);
             }
-            if (fact.fact.event_type == .model_provider_stopped) {
+            if (telemetry.eventOf(fact.fact) == .model_provider_stopped) {
                 self.count += 1;
-                const fields = fact.fact.fields;
-                if (definition.level != .warning or fact.fact.correlation_id == null or fact.fact.attempt != 1 or self.expected_code == null or
-                    !std.mem.eql(u8, fields.diagnostic_code.?.bytes, self.expected_code.?) or
-                    fields.input_tokens != 8 or fields.output_tokens != 3 or
+                const ended = telemetry.fieldOf(fact.fact, .outcome);
+                if (definition.level != .warning or common.correlation_id == null or common.attempt != 1 or self.expected_code == null or
+                    !std.mem.eql(u8, telemetry.fieldOf(fact.fact, .diagnostic_code).?.bytes, self.expected_code.?) or
+                    telemetry.fieldOf(fact.fact, .input_tokens) != 8 or telemetry.fieldOf(fact.fact, .output_tokens) != 3 or
                     self.previous != .model_completed or
-                    !std.mem.eql(u8, fact.fact.correlation_id.?.bytes, self.completed_correlation[0..self.completed_correlation_len]) or
-                    fields.outcome == null or !std.meta.eql(fields.outcome, self.completed_outcome)) self.invalid = true;
+                    !std.mem.eql(u8, common.correlation_id.?.bytes, self.completed_correlation[0..self.completed_correlation_len]) or
+                    ended == null or !std.meta.eql(ended, self.completed_outcome)) self.invalid = true;
                 if (self.fail) return .{ .blocked = .LOG_FLUSH_FAILURE };
             }
             return .dropped;
@@ -2987,7 +3001,7 @@ test "runner logs every provider-applied stop with its exact reason and stops on
         var fake = invocationProvider(&runner, std.testing.allocator);
         // A complete response is the control: it records no provider stop.
         if (selected) |reason| fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = 8, .output_tokens = 3 } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         const result = harness.result();
         try std.testing.expect(!spy.invalid);
@@ -3012,7 +3026,7 @@ test "YAML invocation preserves failures and blocks further calls when usage is 
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .failed = .{ .cause = .request_rejected, .retry_class = .policy_eligible, .delivery = delivery } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.failed, harness.run());
         const failure = (try invocationResult(&runner)).outcome().?.observation.failed;
@@ -3041,7 +3055,7 @@ test "YAML invocation accounts exact budget exhaustion and overshoot before bloc
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 + overshoot } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         const first = runner.bindings().invokeStep(.{ .bytes = "call" });
         if (overshoot == 0) {
             try std.testing.expectEqual(.ok, first.outcome);
@@ -3068,7 +3082,7 @@ test "YAML invocation cancellation stays distinct without fabricated usage" {
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan = .cancelled;
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.cancelled, harness.run());
     try std.testing.expectEqual(.cancelled, std.meta.activeTag((try invocationResult(&runner)).outcome().?.*));
@@ -3098,7 +3112,7 @@ test "workflow result retains the exact budget rejection and does not follow a Y
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = fixture.token_budget.value, .output_tokens = 1 } };
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.result();
     try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, outcome.execution_rejected.token_budget);
@@ -3119,12 +3133,12 @@ test "YAML call guards cancellation expiry and absent adapters before effects" {
             try prepareInvocable(&runner);
             try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
             var fake = invocationProvider(&runner, std.testing.allocator);
-            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
             switch (fault) {
                 0 => fixture.clock.now_ms = 1001,
                 1 => runner.runtime = .{ .status_fn = alwaysCancelled },
                 2 => fixture.clock.unavailable = true,
-                4 => fixture.native.invoke_model.action = null,
+                4 => fixture.native.stages.invoke_model.action = null,
                 else => unreachable,
             }
             const outcome = runner.bindings().invokeStep(.{ .bytes = "call" });
@@ -3158,7 +3172,7 @@ test "post-call cancellation deadlines malformed associations and usage fail wit
         var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = fault };
         runner.runtime = .{ .context = &spy, .status_fn = InvocationSpy.status };
         fake.authorization_leases.runtime = runner.runtime;
-        fixture.native.invoke_model.action = .{ .provider = spy.port() };
+        fixture.native.stages.invoke_model.action = .{ .provider = spy.port() };
         var harness: Harness = .{ .runner = &runner };
         const outcome = harness.result();
         switch (fault) {
@@ -3187,8 +3201,8 @@ test "rejected invocation deltas retain actual usage without publishing candidat
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-        var spy: InvocationDeltaSpy = .{ .inner = &fixture.native.invoke_model, .wrong_outcome = wrong_outcome };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
+        var spy: InvocationDeltaSpy = .{ .inner = &fixture.native.stages.invoke_model, .wrong_outcome = wrong_outcome };
         // The spy stands in for the `invoke-model` operation, not for the `request-model` kernel.
         for (&fixture.entries) |*entry| if (entry.contract.side_effect == .model_call and entry.request_stages.len == 0) {
             entry.binding = bindings.bind(InvocationDeltaSpy, &spy, InvocationDeltaSpy.invoke);
@@ -3216,10 +3230,12 @@ fn InvocationErrorSpy(comptime cause: execution.OperationError) type {
 }
 
 /// A logging sink that accepts every event until `at`, then fails: the first event with
-/// `LOG_FLUSH_FAILURE` and, when `persistent`, every later one with `LOG_SINK_FAILURE`.
+/// `LOG_FLUSH_FAILURE` and, when `persistent`, every later one with `LOG_SINK_FAILURE`. With `cancel`
+/// the first event is a cancellation under the log instead, which is no logging failure.
 const FailingEvents = struct {
     at: @import("domain/telemetry.zig").EventType,
     persistent: bool,
+    cancel: bool = false,
     failed: bool = false,
 
     fn barrier(self: *@This()) @import("ports/telemetry_barrier.zig").Barrier {
@@ -3228,9 +3244,9 @@ const FailingEvents = struct {
     fn process(context: *anyopaque, fact: @import("domain/telemetry.zig").WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
         const self: *@This() = @ptrCast(@alignCast(context));
         if (self.failed) return if (self.persistent) .{ .blocked = .LOG_SINK_FAILURE } else .dropped;
-        if (fact.fact.event_type != self.at) return .dropped;
+        if (@import("domain/telemetry.zig").eventOf(fact.fact) != self.at) return .dropped;
         self.failed = true;
-        return .{ .blocked = .LOG_FLUSH_FAILURE };
+        return if (self.cancel) .cancelled else .{ .blocked = .LOG_FLUSH_FAILURE };
     }
 };
 
@@ -3243,9 +3259,9 @@ test "a call that errors and then fails its completion event keeps its own failu
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         const Spy = InvocationErrorSpy(error.InvalidCandidatePayload);
-        var spy: Spy = .{ .inner = &fixture.native.invoke_model };
+        var spy: Spy = .{ .inner = &fixture.native.stages.invoke_model };
         for (&fixture.entries) |*entry| if (entry.contract.side_effect == .model_call and entry.request_stages.len == 0) {
             entry.binding = bindings.bind(Spy, &spy, Spy.invoke);
         };
@@ -3276,8 +3292,8 @@ test "a result the runner refuses that also overshoots the budget keeps its own 
         var fake = invocationProvider(&runner, std.testing.allocator);
         // Usage that crosses the budget by one token, on an answer whose outcome the runner refuses.
         fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = fixture.token_budget.value, .output_tokens = 1 } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-        var spy: InvocationDeltaSpy = .{ .inner = &fixture.native.invoke_model, .wrong_outcome = true };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
+        var spy: InvocationDeltaSpy = .{ .inner = &fixture.native.stages.invoke_model, .wrong_outcome = true };
         for (&fixture.entries) |*entry| if (entry.contract.side_effect == .model_call and entry.request_stages.len == 0) {
             entry.binding = bindings.bind(InvocationDeltaSpy, &spy, InvocationDeltaSpy.invoke);
         };
@@ -3313,7 +3329,7 @@ test "a step's own rejection whose end event cannot be logged is kept as the fir
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     try prepareInvocable(&runner);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "call" }).outcome);
@@ -3331,6 +3347,50 @@ test "a step's own rejection whose end event cannot be logged is kept as the fir
     // ...and the refusal itself is the first cause.
     try std.testing.expectEqual(execution.AuthorityReason.authorization_denied, runner.first_cause.?.authority);
     try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+}
+
+test "a log cancellation while a step's end event is recorded ends the step cancelled and keeps its rejection as the first cause" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try invocationYaml(&fixture));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
+    try prepareInvocable(&runner);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "call" }).outcome);
+    values.destroy(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)].?);
+    runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] = null;
+    try activateEvents(&runner);
+    var events: FailingEvents = .{ .at = .action_failed, .persistent = false, .cancel = true };
+    runner.barrier = events.barrier();
+    const stopped = runner.bindings().invokeStep(.{ .bytes = "call" });
+    // The log observing a cancellation ends the step as the run's own cancellation, not a logging rejection...
+    try std.testing.expect(stopped.rejected == .cancelled);
+    try std.testing.expectEqual(workflow.OutcomeTag.cancelled, stopped.status());
+    // ...and the refusal it replaced is still the first cause.
+    try std.testing.expectEqual(execution.AuthorityReason.authorization_denied, runner.first_cause.?.authority);
+}
+
+test "a log cancellation at an exhausted retry allowance ends the run cancelled and keeps the exhaustion as the first cause" {
+    const limit: u32 = 1;
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try accountingYaml(&fixture, limit, true));
+    fixture.observer.retry_until = limit + 2;
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    try activateEvents(&runner);
+    var events: FailingEvents = .{ .at = .retry_exhausted, .persistent = false, .cancel = true };
+    runner.barrier = events.barrier();
+    var harness: Harness = .{ .runner = &runner };
+    const outcome = harness.result();
+    try std.testing.expect(outcome.execution_rejected == .cancelled);
+    try std.testing.expectEqual(workflow.OutcomeTag.cancelled, outcome.executionStatus().?);
+    try std.testing.expectEqual(limit, runner.first_cause.?.retry_limit.limit.value);
 }
 
 test "an exhausted retry allowance whose event cannot be logged is kept as the first cause" {
@@ -3364,7 +3424,7 @@ test "YAML invocation owners and token usage are isolated between executions" {
     var first_live = true;
     defer if (first_live) first.deinit();
     var fake_first = invocationProvider(&first, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake_first.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake_first.interface() };
     var one: Harness = .{ .runner = &first };
     try std.testing.expectEqual(.ok, one.run());
     const first_result = try invocationResult(&first);
@@ -3378,7 +3438,7 @@ test "YAML invocation owners and token usage are isolated between executions" {
     defer second.deinit();
     try std.testing.expectEqual(@as(u128, 0), second.tokenLedger().committed());
     var fake_second = invocationProvider(&second, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake_second.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake_second.interface() };
     var two: Harness = .{ .runner = &second };
     try std.testing.expectEqual(.ok, two.run());
     const second_id = (try invocationResult(&second)).operationId();
@@ -3400,12 +3460,12 @@ test "YAML invocation allocation failures release pending responses and consumed
 fn invocationAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow) !void {
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.run();
     try std.testing.expect(fake.effect_count <= 1);
@@ -3502,7 +3562,7 @@ test "response admission preserves selected requests captured authority and seri
         defer fixture.deinit();
         const allocator = fixture.arena.allocator();
         const base = try payloadYaml(&fixture);
-        const selection = if (selected) try std.mem.replaceOwned(u8, allocator, base, "input: input }", "result-selection: input }") else base;
+        const selection = if (selected) try std.mem.replaceOwned(u8, allocator, base, ", input: input }", " }") else base;
         const source = if (selected) try std.mem.replaceOwned(u8, allocator, selection, ", input: input.txt", "") else selection;
         const graph = try fixture.compileWithAssets(source, if (selected) selected_schema else schema_bytes, !selected);
         var runner = fixture.runner(graph, std.testing.allocator);
@@ -3513,7 +3573,7 @@ test "response admission preserves selected requests captured authority and seri
         }
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = if (selected) "{\"approved\":true}" else "{\"answer\":\"valid\"}";
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.ok, harness.run());
         try expectResponseAccounting(&runner, &fake, 7);
@@ -3565,7 +3625,7 @@ test "response admission rejects missing and foreign observation authority witho
     for ([_]*runner_module.Runner{ &first, &second }) |runner| {
         var fake = invocationProvider(runner, std.testing.allocator);
         fake.invocation_plan.complete.content = "{\"answer\":\"valid\"}";
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         try prepareInvocable(runner);
         for ([_][]const u8{ "advance-operation", "call", "validate-response" }) |step|
             try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
@@ -3596,11 +3656,11 @@ test "outcome projection rejects replayed sealed admission outputs from a prior 
         defer foreign.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         var foreign_fake = invocationProvider(&foreign, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = foreign_fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = foreign_fake.interface() };
         try prepareProtocolAttempt(&foreign, false);
         try std.testing.expectEqual(.ok, foreign.bindings().invokeStep(.{ .bytes = "call" }).outcome);
 
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         fake.invocation_plan.complete.content = "{";
         try prepareProtocolAttempt(&runner, false);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "call" }).outcome);
@@ -3611,17 +3671,16 @@ test "outcome projection rejects replayed sealed admission outputs from a prior 
             .step = &graph.authority.steps[0],
             .resources = &.{},
             .model_binding = request.binding(),
-            .log = .init(graph.shortcode),
             .provider_invocation = .{ .request = request.prepared().?, .provider_binding = request.binding(), .operations = runner.model_accounting.?.current_operations, .operation_id = operation },
         } };
         // The native validator seals the first operation's rejected result;
         // no provider call or fabricated result owner is needed for replay.
         input.step.data.slots[@intFromEnum(model_invocation.schema.key)] = foreign.envelope.slots[@intFromEnum(model_invocation.schema.key)];
-        var rejected = try observation_workflow.Validate.invoke(&fixture.native.validate_observation, input);
+        var rejected = try observation_workflow.Validate.invoke(&fixture.native.stages.validate_observation, input);
         defer runner.envelope.discard(&rejected.delta);
         try std.testing.expectEqual(.failed, rejected.outcome);
         input.step.data.slots[@intFromEnum(observation_workflow.schema.key)] = rejected.delta.data_writes[@intFromEnum(observation_workflow.schema.key)];
-        var replay = try payload_workflow.Admit.invoke(&fixture.native.admit_response, input);
+        var replay = try payload_workflow.Admit.invoke(&fixture.native.stages.admit_response, input);
         defer runner.envelope.discard(&replay.delta);
 
         for ([_][]const u8{ "validate-response", "complete-operation" }) |step|
@@ -3661,7 +3720,7 @@ test "stale sealed protocol correction cannot authorize a later rejected attempt
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = "{";
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         const key = @intFromEnum(requests.prepared_schema.key);
         var stale: ?*@import("domain/pipeline_data.zig").Value = null;
         defer if (stale) |value| values.destroy(value);
@@ -3793,7 +3852,7 @@ test "runner preserves failed native closure when compiled control flow is forge
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan = .{ .failed = .{ .cause = .request_rejected, .retry_class = .never, .delivery = .not_sent } };
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.failed, harness.run());
     try std.testing.expectEqual(.terminal, (try requestLedger(&runner)).latestRecord().?.status);
@@ -3863,7 +3922,7 @@ test "runner rejects an unrelated model call before provider invocation" {
     var runner = fixture.runner(&tampered, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqualDeep(execution.Rejection{ .operation_failed = error.UnresolvedOperationOutcome }, harness.result().execution_rejected);
     try std.testing.expectEqual(@as(usize, 0), fake.effect_count);
@@ -3935,11 +3994,11 @@ test "bounded protocol assignments continue many valid units and stop repeated o
         }};
         fixture.registry.operations = &entries;
         fixture.token_budget = .{ .value = 10000 };
-        const graph = try fixture.compileWithAssets(source, example.schema, false);
+        const graph = try fixture.compileWithAssets(source, try answerSchema(a, example.schema), false);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "initialize" }).outcome);
         // The collection's capacity is 128; correction is bounded independently
@@ -4001,7 +4060,7 @@ const ProtocolUnits = struct {
         self.next += 1;
         var name: [32]u8 = undefined;
         const unit: identity.ImmutableUnitOwnerId = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = std.fmt.bufPrint(&name, "partition-{d}", .{self.next}) catch return error.InvocationFailureUnrecorded } } };
-        const packet = @import("domain/model_input_packet.zig").create(std.testing.allocator, self.input, unit, .initial_generation, null) catch return error.InvocationFailureUnrecorded;
+        const packet = @import("domain/model_input_packet.zig").create(std.testing.allocator, self.input, unit, .initial_generation, .{ .bytes = "answer" }) catch return error.InvocationFailureUnrecorded;
         defer @import("domain/model_input_packet.zig").release(packet);
         const narrowed = @import("domain/model_input_packet.zig").withExcludedVariants(std.testing.allocator, packet, self.exclusions) catch return error.InvocationFailureUnrecorded;
         defer @import("domain/model_input_packet.zig").release(narrowed);
@@ -4076,12 +4135,12 @@ test "native repair progress permits independent requests while retaining the gl
     }};
     fixture.registry.operations = &entries;
     fixture.token_budget = .{ .value = 21 };
-    const graph = try fixture.compileWithAssets(source, schema_bytes, false);
+    const graph = try fixture.compileWithAssets(source, try answerSchema(a, schema_bytes), false);
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan.complete.content = "{\"answer\":\"repaired\"}";
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "initialize" }).outcome);
     for (0..3) |index| {
@@ -4129,7 +4188,7 @@ const RepairSequence = struct {
         std.crypto.hash.sha2.Sha256.hash(&authorization, &digest, .{});
         const permit: @import("domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(self.selected), .family = @splat(2) }, .authorization = digest, .revision = self.selected, .maximum_targets = 4 };
         const unit: identity.ImmutableUnitOwnerId = .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "repair-state" }, .chunk_id = .{ .bytes = "repair-chunk" } } };
-        const packet = @import("domain/model_input_packet.zig").createRepair(std.testing.allocator, "{}", unit, .{ .atomic_repair = .{ .bytes = &authorization } }, null, permit, null) catch return error.InvocationFailureUnrecorded;
+        const packet = @import("domain/model_input_packet.zig").createRepair(std.testing.allocator, "{}", unit, .{ .atomic_repair = .{ .bytes = &authorization } }, .{ .bytes = "answer" }, permit, null) catch return error.InvocationFailureUnrecorded;
         var result = try requests.publishPacket(std.testing.allocator, packet);
         result.delta.repair_transition = .{ .authorized = permit };
         return result;
@@ -4173,7 +4232,7 @@ test "dependent reviews retain parent allowances through initial protocol correc
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         fake.invocation_plan.complete.content = "{";
         try prepareProtocolAttempt(&runner, false);
         const initial_id = (try currentRequest(&runner)).id();
@@ -4279,7 +4338,7 @@ test "protocol retries retain only latest repeated or alternating decoder reject
             var runner = fixture.runner(graph, std.testing.allocator);
             defer runner.deinit();
             var fake = invocationProvider(&runner, std.testing.allocator);
-            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
             var original_id: ?*const identity.ModelRequestId = null;
             for (responses, 0..) |body, index| {
                 fake.invocation_plan.complete.content = body;
@@ -4308,7 +4367,7 @@ test "protocol retries retain only latest repeated or alternating decoder reject
                 try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
                 try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
                 const repeated = index > 0 and std.mem.eql(u8, responses[index - 1], body);
-                const expected_prompt = if (repeated) prompt_bytes ++ "\nThe previous correction still failed this validation." else prompt_bytes;
+                const expected_prompt = if (repeated) prompt_bytes ++ "\n" ++ retry_domain.repetition_notice else prompt_bytes;
                 try std.testing.expectEqualStrings(expected_prompt, correction.content[2].guidance);
                 var guidance = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, correction.content[3].guidance, .{});
                 defer guidance.deinit();
@@ -4359,7 +4418,7 @@ test "selected review nesting and sibling loss retain correction scope through r
                 var runner = fixture.runner(graph, std.testing.allocator);
                 defer runner.deinit();
                 var fake = invocationProvider(&runner, std.testing.allocator);
-                fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+                fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
                 const responses = [_][]const u8{ try std.mem.concat(a, u8, &.{ case.invalid, "}" }), case.invalid, if (recover) case.corrected else case.dropped };
                 var original: ?*const identity.ModelRequestId = null;
                 for (responses, 0..) |body, index| {
@@ -4393,7 +4452,7 @@ test "selected review nesting and sibling loss retain correction scope through r
                         try std.testing.expectEqual(@as(usize, 5), correction.content.len);
                         try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
                         try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
-                        try std.testing.expectEqual(@as(usize, if (index == 2) 1 else 0), std.mem.count(u8, correction.content[2].guidance, "The previous correction still failed this validation."));
+                        try std.testing.expectEqual(@as(usize, if (index == 2) 1 else 0), std.mem.count(u8, correction.content[2].guidance, retry_domain.repetition_notice));
                         const latest = try std.json.parseFromSlice(std.json.Value, a, correction.content[4].evidence, .{});
                         try std.testing.expectEqualStrings(body, latest.value.object.get("rejected_response").?.string);
                     }
@@ -4424,7 +4483,7 @@ test "protocol repetition requires the current correction association and same t
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var original: ?*const handoff.Request = null;
     var prior: ?*const @import("domain/provider_invocation_validation.zig").Evidence = null;
     var prior_correction: ?provider.ProviderOperationId = null;
@@ -4457,9 +4516,8 @@ test "protocol repetition requires the current correction association and same t
         prior_correction = correction_origin;
         const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .converse, .{ .tokens = 16000 });
         defer std.testing.allocator.free(wire);
-        try std.testing.expectEqual(@as(usize, if (index == 1) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
-        try std.testing.expect(std.mem.indexOf(u8, wire, "identical response") == null);
-        try std.testing.expect(std.mem.indexOf(u8, wire, "Schema validation failed: this property is not allowed") != null);
+        try std.testing.expectEqual(@as(usize, if (index == 1) 1 else 0), std.mem.count(u8, wire, retry_domain.repetition_notice));
+        try std.testing.expect(std.mem.indexOf(u8, wire, diagnostic.schema.explanation()) != null);
         try std.testing.expectEqual(@as(u128, (index + 1) * 7), runner.tokenLedger().committed());
     }
     try std.testing.expectEqual(@as(u64, 3), runner.bindings().invokeStep(.{ .bytes = "account" }).rejected.retry_limit.completed_executions);
@@ -4491,7 +4549,7 @@ test "a repeated correction of an integer choice is confirmed only for the same 
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         for ([_][]const u8{ "{\"value\":3}", case.second }, 0..) |body, index| {
             fake.invocation_plan.complete.content = body;
             try prepareProtocolAttempt(&runner, index != 0);
@@ -4514,7 +4572,7 @@ test "a repeated correction of an integer choice is confirmed only for the same 
             const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .converse, .{ .tokens = 16000 });
             defer std.testing.allocator.free(wire);
             // The notice is the handoff's repetition, which the builder renders and never decides.
-            try std.testing.expectEqual(@as(usize, if (index == 1 and case.repeated) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
+            try std.testing.expectEqual(@as(usize, if (index == 1 and case.repeated) 1 else 0), std.mem.count(u8, wire, retry_domain.repetition_notice));
         }
     }
 }
@@ -4532,13 +4590,13 @@ test "correction handoff releases copied rejection context at every allocation f
 fn correctionAllocation(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, body: []const u8) !void {
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, allocator);
     fake.invocation_plan.complete.content = body;
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     const invocation = runner.bindings().invokeInvocation();
     if (invocation != .outcome or invocation.outcome != .ok) return error.OutOfMemory;
     for ([_][]const u8{
@@ -4551,7 +4609,7 @@ fn correctionAllocation(allocator: std.mem.Allocator, fixture: *Fixture, graph: 
         try std.testing.expectEqual(expected, result.outcome);
     }
     const request = (try currentRequest(&runner)).prepared().?;
-    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, request.content[2].guidance, "The previous correction still failed this validation."));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, request.content[2].guidance, retry_domain.repetition_notice));
     try std.testing.expectEqual(@as(u128, 14), runner.tokenLedger().committed());
 }
 
@@ -4570,7 +4628,7 @@ test "metadata and diagnostic echoes exhaust protocol retries without acceptance
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     for ([_][]const u8{ "{\"index\":1,\"unit\":\"signals\"}", "{\"kind\":\"count\",\"count\":2}", "{\"index\":1,\"unit\":\"signals\"}" }, 0..) |body, index| {
         fake.invocation_plan.complete.content = body;
         try prepareProtocolAttempt(&runner, index != 0);
@@ -4615,7 +4673,7 @@ test "a decode result that disagrees with the response it decodes is refused" {
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan.complete.content = "{\"answer\":\"valid\"}";
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     try prepareInvocable(&runner);
     for ([_][]const u8{ "advance-operation", "call", "validate-response" }) |step|
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
@@ -4635,7 +4693,7 @@ test "a protocol correction needs the protocol prompt its request declared" {
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     fake.invocation_plan = unparsable_plan;
     try prepareProtocolAttempt(&runner, false);
     try rejectProtocolResponse(&runner);
@@ -4650,7 +4708,7 @@ test "a protocol correction is built only for a response a correction applies to
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     // The output stopped at its limit: a re-send answers it, and no correction describes it.
     fake.invocation_plan = runaway_plan;
     try prepareProtocolAttempt(&runner, false);
@@ -4666,7 +4724,7 @@ test "a first runaway is re-sent once, even at retry-limit 0, and its admitted r
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     fake.invocation_plan = runaway_plan;
     try prepareProtocolAttempt(&runner, false);
     const original = try std.json.Stringify.valueAlloc(fixture.arena.allocator(), (try currentRequest(&runner)).prepared().?.content, .{});
@@ -4698,17 +4756,17 @@ test "every runaway re-send is logged before it is sent, and a logging rejection
         previous: ?telemetry.EventType = null,
         fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
             const self: *@This() = @ptrCast(@alignCast(context));
-            defer self.previous = fact.fact.event_type;
+            defer self.previous = telemetry.eventOf(fact.fact);
             const definition = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch {
                 self.invalid = true;
                 return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             };
-            if (fact.fact.event_type != .model_runaway_resent) return .dropped;
+            if (telemetry.eventOf(fact.fact) != .model_runaway_resent) return .dropped;
             self.resent += 1;
-            const fields = fact.fact.fields;
             // The runaway attempt, its stop reason and its reported usage.
-            if (definition.level != .warning or fact.fact.attempt != 1 or !std.mem.eql(u8, fields.diagnostic_code.?.bytes, "OUTPUT_LIMIT") or
-                fields.input_tokens != 5 or fields.output_tokens != 2048) self.invalid = true;
+            if (definition.level != .warning or telemetry.commonOf(fact.fact).attempt != 1 or
+                !std.mem.eql(u8, telemetry.fieldOf(fact.fact, .diagnostic_code).?.bytes, "OUTPUT_LIMIT") or
+                telemetry.fieldOf(fact.fact, .input_tokens) != 5 or telemetry.fieldOf(fact.fact, .output_tokens) != 2048) self.invalid = true;
             return if (self.fail) .{ .blocked = .LOG_FLUSH_FAILURE } else .dropped;
         }
     };
@@ -4728,7 +4786,7 @@ test "every runaway re-send is logged before it is sent, and a logging rejection
         var spy: Spy = .{ .fail = fail };
         runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         fake.invocation_plan = runaway_plan;
         try prepareProtocolAttempt(&runner, false);
         try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
@@ -4758,7 +4816,7 @@ test "a re-send refused before it is sent is not logged as re-sent" {
         resent: usize = 0,
         fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
             const self: *@This() = @ptrCast(@alignCast(context));
-            if (fact.fact.event_type == .model_runaway_resent) self.resent += 1;
+            if (telemetry.eventOf(fact.fact) == .model_runaway_resent) self.resent += 1;
             return .dropped;
         }
     };
@@ -4777,7 +4835,7 @@ test "a re-send refused before it is sent is not logged as re-sent" {
     var spy: Spy = .{};
     runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     // The runaway spends the whole budget, so the re-send's send is refused.
     fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = fixture.token_budget.value - 5 } };
     try prepareProtocolAttempt(&runner, false);
@@ -4799,7 +4857,7 @@ test "the runner refuses a second re-send of one attempt" {
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     fake.invocation_plan = runaway_plan;
     try prepareProtocolAttempt(&runner, false);
     try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
@@ -4820,7 +4878,7 @@ test "a re-send keeps the full prepared identity of the attempt it repeats" {
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     fake.invocation_plan = runaway_plan;
     try prepareProtocolAttempt(&runner, false);
     try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
@@ -4856,9 +4914,9 @@ test "a first runaway is not logged as a missing final answer, and a missing fin
         validation: usize = 0,
         fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
             const self: *@This() = @ptrCast(@alignCast(context));
-            const code = fact.fact.fields.diagnostic_code orelse return .dropped;
+            const code = telemetry.fieldOf(fact.fact, .diagnostic_code) orelse return .dropped;
             if (!std.mem.eql(u8, code.bytes, "MISSING_FINAL_TEXT")) return .dropped;
-            switch (fact.fact.event_type) {
+            switch (telemetry.eventOf(fact.fact)) {
                 .model_protocol_failed => self.protocol += 1,
                 .validation_failed => self.validation += 1,
                 else => {},
@@ -4883,7 +4941,7 @@ test "a first runaway is not logged as a missing final answer, and a missing fin
         var spy: Spy = .{};
         runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         fake.invocation_plan = plan;
         try prepareProtocolAttempt(&runner, false);
         try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
@@ -4900,7 +4958,7 @@ test "a runaway on the re-send fails a required request with its typed diagnosti
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     fake.invocation_plan = runaway_plan;
     try prepareProtocolAttempt(&runner, false);
     try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
@@ -4923,7 +4981,7 @@ test "a re-sent response passes the same admission and its rejection takes a cor
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         fake.invocation_plan = runaway_plan;
         try prepareProtocolAttempt(&runner, false);
         try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
@@ -4951,7 +5009,7 @@ test "a protocol correction that runs away is re-sent once with its correction i
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     fake.invocation_plan = .{ .complete = .{ .content = "{", .input_tokens = 5, .output_tokens = 2 } };
     try prepareProtocolAttempt(&runner, false);
     try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .ok));
@@ -4983,7 +5041,7 @@ test "protocol retry budget overshoot charges the response before decoding and b
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan.complete.content = malformed_protocol_items;
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     try prepareProtocolAttempt(&runner, false);
     try rejectProtocolResponse(&runner);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
@@ -5013,7 +5071,7 @@ test "corrected protocol responses pass schema validation before request closure
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = malformed_protocol_items;
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         try prepareProtocolAttempt(&runner, false);
         try rejectProtocolResponse(&runner);
         for ([_][]const u8{ "{}", corrected }, 0..) |body, index| {
@@ -5054,7 +5112,7 @@ test "YAML request closure accepts only the schema-valid candidate and preserves
             defer runner.deinit();
             var fake = invocationProvider(&runner, std.testing.allocator);
             fake.invocation_plan.complete.content = body;
-            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
             const expected: workflow.OutcomeTag = if (std.mem.indexOf(u8, body, "candidate") != null) .ok else .invalid;
             var harness: Harness = .{ .runner = &runner };
             try std.testing.expectEqual(expected, harness.run());
@@ -5091,7 +5149,7 @@ fn checkRequestClosureOutcome(plan: fake_provider.InvocationPlan, invalid_utf8: 
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan = plan;
     var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = .utf8 };
-    fixture.native.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     // A runaway is re-sent once with the same plan, and its repeated runaway
     // fails the request (ADR 0039).
@@ -5128,7 +5186,7 @@ test "request closure rejects every missing input stale ledger and duplicate clo
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan.complete.content = "{\"answer\":\"value\"}";
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     try prepareRequestClosure(&runner, .ok);
     const original = try values.retain(runner.envelope.slots[@intFromEnum(requests.ledger_schema.key)].?);
     defer values.destroy(original);
@@ -5168,7 +5226,7 @@ test "request closure rejects foreign payload terminal attempt and request evide
         var fake_second = invocationProvider(&second, std.testing.allocator);
         for ([_]*runner_module.Runner{ &first, &second }, [_]*fake_provider.FakeLLMProvider{ &fake_first, &fake_second }) |runner, fake| {
             fake.invocation_plan.complete.content = body;
-            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
             try prepareRequestClosure(runner, if (body.len == 1) .invalid else .ok);
         }
         for (request_completion.Complete.contract.requires) |key| {
@@ -5197,14 +5255,14 @@ test "request closure refuses an additional assigned or invoked operation despit
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = "{\"answer\":\"value\"}";
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         try prepareRequestClosure(&runner, .ok);
         const state = &runner.model_accounting.?;
         const ledger = try requestLedger(&runner);
         const prepared = (try currentRequest(&runner)).prepared().?;
         try openRetryOperation(&runner, invoke);
         try std.testing.expectEqual(execution.Rejection{ .authority = .lifecycle_evidence }, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
-        try std.testing.expectError(error.ProviderOperationStillOpen, fixture.native.complete_request.action.execute(ledger, state.current_operations, ledger.revision(), prepared.model_request_id, .invoked, .{ .terminal = .accepted }));
+        try std.testing.expectError(error.ProviderOperationStillOpen, fixture.native.stages.close_request.action.execute(ledger, state.current_operations, ledger.revision(), prepared.model_request_id, .invoked, .{ .terminal = .accepted }));
         try std.testing.expect(ledger == try requestLedger(&runner));
     }
 }
@@ -5220,7 +5278,7 @@ test "request closure needs no live lease deadline or remaining token budget and
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan.complete.content = "{\"answer\":\"value\"}";
     fake.invocation_plan.complete.input_tokens = fixture.token_budget.value - 2;
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     try prepareRequestClosure(&runner, .ok);
     const result = try payloadResult(&runner);
     const previous = try requestLedger(&runner);
@@ -5260,9 +5318,9 @@ test "request closure rejects forged successors suppressed outcomes and cancelle
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .stopped = .{ .reason = .content_filtered, .input_tokens = 5, .output_tokens = 2 } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         try prepareRequestClosure(&runner, .failed);
-        var spy: Spy = .{ .inner = &fixture.native.complete_request, .fault = fault };
+        var spy: Spy = .{ .inner = &fixture.native.stages.close_request, .fault = fault };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, request_completion.Complete.contract.id)) {
             entry.binding = bindings.bind(Spy, &spy, Spy.invoke);
         };
@@ -5356,13 +5414,13 @@ test "request closure releases owned ledgers and responses on allocation failure
 fn requestClosureAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, plan: fake_provider.InvocationPlan) !void {
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, allocator);
     fake.invocation_plan = plan;
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.run();
     // A runaway takes its one re-send before the request closes (ADR 0039).
@@ -5405,7 +5463,7 @@ test "request closure refuses a forged compiled contract where it runs" {
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
@@ -5427,7 +5485,7 @@ test "YAML provider completion closes only the operation independently of payloa
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = case.body;
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(case.outcome, harness.run());
         const terminal = try completedOperation(&runner);
@@ -5470,7 +5528,7 @@ fn checkCompletionOutcome(plan: fake_provider.InvocationPlan, invalid_utf8: bool
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan = plan;
     var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = .utf8 };
-    fixture.native.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const expected: workflow.OutcomeTag = if (plan == .cancelled) .cancelled else .failed;
     try std.testing.expectEqual(if (invalid_utf8) expected else admittedOutcome(plan), harness.run());
@@ -5504,7 +5562,7 @@ test "YAML completion needs no live lease and works at exact token exhaustion" {
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 } };
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     try prepareCompletable(&runner);
     fixture.clock.now_ms = std.math.maxInt(u64);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "complete-operation" }).outcome);
@@ -5525,7 +5583,7 @@ test "YAML completion releases unused authorization after provider-side cancella
     var fake = invocationProvider(&runner, std.testing.allocator);
     // Cancel before entering the lease port, whose own rejection already cleans up.
     var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = .cancel_before_lease };
-    fixture.native.invoke_model.action = .{ .provider = spy.port() };
+    fixture.native.stages.invoke_model.action = .{ .provider = spy.port() };
     try prepareInvocable(&runner);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
     for ([_][]const u8{ "call", "validate-response" }) |step| try std.testing.expectEqual(.cancelled, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
@@ -5551,7 +5609,7 @@ test "YAML completion rejects duplicate stale and missing evidence without alter
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     try prepareCompletable(&runner);
     const state = &runner.model_accounting.?;
     const original = state.current_operations;
@@ -5588,7 +5646,7 @@ test "YAML completion rejects foreign observation and invocation evidence" {
         var fake_first = invocationProvider(&first, std.testing.allocator);
         var fake_second = invocationProvider(&second, std.testing.allocator);
         for ([_]*runner_module.Runner{ &first, &second }, [_]*fake_provider.FakeLLMProvider{ &fake_first, &fake_second }) |runner, fake| {
-            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
             try prepareCompletable(runner);
         }
         std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[@intFromEnum(key)], &second.envelope.slots[@intFromEnum(key)]);
@@ -5615,7 +5673,7 @@ test "terminal evidence cannot authorize a consumer in another execution" {
     var fake_second = invocationProvider(&second, std.testing.allocator);
     for ([_]*runner_module.Runner{ &first, &second }, [_]*fake_provider.FakeLLMProvider{ &fake_first, &fake_second }) |runner, fake| {
         fake.invocation_plan.complete.content = "{\"answer\":\"value\"}";
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = runner };
         try std.testing.expectEqual(.ok, harness.run());
     }
@@ -5635,7 +5693,7 @@ test "YAML completion evidence and response owners survive runner cleanup" {
     defer if (active) runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan.complete.content = "{\"answer\":\"retained\"}";
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     const retained_terminal = try values.retain(runner.envelope.slots[@intFromEnum(attempt_values.terminal_schema.key)].?);
@@ -5665,7 +5723,7 @@ test "YAML completion rejects unvalidated response associations without inventin
     var fake_first = invocationProvider(&first, std.testing.allocator);
     var fake_second = invocationProvider(&second, std.testing.allocator);
     for ([_]*runner_module.Runner{ &first, &second }, [_]*fake_provider.FakeLLMProvider{ &fake_first, &fake_second }) |runner, fake| {
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         try prepareInvocable(runner);
         for ([_][]const u8{ "advance-operation", "call" }) |step| try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
     }
@@ -5692,8 +5750,8 @@ test "YAML completion rejects fabricated terminal facts suppressed failures and 
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .stopped = .{ .reason = .content_filtered, .input_tokens = 5, .output_tokens = 2 } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-        var spy: CompletionDeltaSpy = .{ .inner = &fixture.native.complete_operation, .fault = fault };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
+        var spy: CompletionDeltaSpy = .{ .inner = &fixture.native.stages.complete_operation, .fault = fault };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, completion_workflow.Complete.contract.id)) {
             entry.binding = bindings.bind(CompletionDeltaSpy, &spy, CompletionDeltaSpy.invoke);
         };
@@ -5775,13 +5833,13 @@ test "YAML completion releases all retained owners on every allocation failure a
 fn completionAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, plan: fake_provider.InvocationPlan) !void {
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, allocator);
     fake.invocation_plan = plan;
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.run();
     try std.testing.expect(fake.effect_count <= 1);
@@ -5817,7 +5875,7 @@ test "provider completion refuses a forged compiled contract where it runs" {
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "complete-operation" }).rejected);
@@ -5837,10 +5895,11 @@ test "runner logs normalization once with call provenance and stops on log failu
                 self.invalid = true;
                 return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
             };
-            if (fact.fact.event_type == .model_response_normalized) {
+            if (telemetry.eventOf(fact.fact) == .model_response_normalized) {
                 self.count += 1;
-                if (fact.fact.correlation_id == null or fact.fact.attempt != 1 or
-                    !std.mem.eql(u8, fact.fact.fields.diagnostic_code.?.bytes, self.expected_code)) self.invalid = true;
+                const common = telemetry.commonOf(fact.fact);
+                if (common.correlation_id == null or common.attempt != 1 or
+                    !std.mem.eql(u8, telemetry.fieldOf(fact.fact, .diagnostic_code).?.bytes, self.expected_code)) self.invalid = true;
                 if (self.fail) return .{ .blocked = .LOG_FLUSH_FAILURE };
             }
             return .dropped;
@@ -5876,7 +5935,7 @@ test "runner logs normalization once with call provenance and stops on log failu
         runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = body;
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         const result = harness.result();
         if (fail) {
@@ -5907,7 +5966,7 @@ test "approved repeated and partial field prefixes avoid protocol correction" {
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = body;
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.ok, harness.run());
         try std.testing.expectEqual(case.normalization, (try payloadResult(&runner)).outcome().valid.candidate().normalization());
@@ -5937,7 +5996,7 @@ test "normalization never bypasses schema rejection or the protocol retry allowa
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = body;
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         const exhausted = harness.result().execution_rejected.retry_limit;
         try std.testing.expectEqual(@as(u32, 2), exhausted.limit.value);
@@ -5978,7 +6037,7 @@ test "YAML payload validation uses each exact compiled schema and retains the sa
             defer runner.deinit();
             var fake = invocationProvider(&runner, std.testing.allocator);
             fake.invocation_plan.complete.content = case.body;
-            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
             var harness: Harness = .{ .runner = &runner };
             try std.testing.expectEqual(@as(workflow.OutcomeTag, if (case.rejection != null) .invalid else .ok), harness.run());
             const result = try payloadResult(&runner);
@@ -6023,7 +6082,7 @@ fn checkUnvalidatedPayload(plan: fake_provider.InvocationPlan, invalid_utf8: boo
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan = plan;
     var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = .utf8 };
-    fixture.native.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const expected: workflow.OutcomeTag = if (plan == .complete and !invalid_utf8) .invalid else if (invalid_utf8) .failed else admittedOutcome(plan);
     try std.testing.expectEqual(expected, harness.run());
@@ -6066,7 +6125,7 @@ test "YAML schema evidence retains the tree request and response after all upstr
             defer if (active) runner.deinit();
             var fake = invocationProvider(&runner, std.testing.allocator);
             fake.invocation_plan.complete.content = body;
-            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
             var harness: Harness = .{ .runner = &runner };
             try std.testing.expectEqual(@as(workflow.OutcomeTag, if (body.len > 2) .ok else .invalid), harness.run());
             const retained = try values.retain(runner.envelope.slots[@intFromEnum(payload_workflow.schema.key)].?);
@@ -6106,13 +6165,13 @@ test "YAML payload validation allocation failures release retained candidates on
 fn payloadAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, body: []const u8) !void {
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(&fixture.entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, allocator);
     fake.invocation_plan.complete.content = body;
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.run();
     try std.testing.expect(fake.effect_count <= 1);
@@ -6136,7 +6195,7 @@ test "YAML payload validation remains available at the token budget without anot
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.ok, harness.run());
         try std.testing.expectEqual(.exhausted, runner.tokenLedger().status());
@@ -6159,8 +6218,8 @@ test "YAML payload publication rejection and cancellation release evidence witho
             defer runner.deinit();
             var fake = invocationProvider(&runner, std.testing.allocator);
             fake.invocation_plan.complete.content = "{\"answer\":\"value\"}";
-            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-            var spy: PayloadDeltaSpy = .{ .inner = &fixture.native.admit_response, .cancel = cancel };
+            fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
+            var spy: PayloadDeltaSpy = .{ .inner = &fixture.native.stages.admit_response, .cancel = cancel };
             for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, payload_workflow.Admit.contract.id)) {
                 entry.binding = bindings.bind(PayloadDeltaSpy, &spy, PayloadDeltaSpy.invoke);
             };
@@ -6215,7 +6274,7 @@ test "compiled payload validation cannot bypass its candidate or add effects" {
                 }
             };
             tampered.authority.steps = steps;
-            try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
             var runner = fixture.runner(&tampered, std.testing.allocator);
             defer runner.deinit();
             try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).rejected);
@@ -6231,7 +6290,7 @@ test "YAML validates a complete observation without decoding or charging tokens 
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     const result = try observationResult(&runner);
@@ -6259,9 +6318,13 @@ test "YAML observation validation preserves every stop and provider failure with
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = 8, .output_tokens = 3 } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
+        // A failure an earlier call left is not this run's once a later call's result replaces it.
+        runner.last_provider_failure = .{ .cause = .timeout, .retry_class = .never, .delivery = .not_sent };
         try std.testing.expectEqual(.failed, harness.run());
+        // A call the provider stopped is not a failed call.
+        try std.testing.expect(runner.last_provider_failure == null);
         try std.testing.expectEqual(reason, (try observationResult(&runner)).outcome().validated.result().stopped);
         try std.testing.expectEqual(@as(u128, 11), runner.tokenLedger().committed());
         try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
@@ -6277,16 +6340,36 @@ test "YAML observation validation preserves every stop and provider failure with
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .failed = .{ .cause = .request_rejected, .retry_class = .policy_eligible, .delivery = delivery } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.failed, harness.run());
         const evidence = (try observationResult(&runner)).outcome().validated;
         try std.testing.expectEqualDeep((try invocationResult(&runner)).outcome().?.observation.failed, evidence.result().failed);
+        // The run reports the call's own closed facts, and nothing else of it.
+        try std.testing.expectEqualDeep(@import("domain/provider_failure_detail.zig").Detail{ .cause = .request_rejected, .retry_class = .policy_eligible, .delivery = delivery }, runner.last_provider_failure.?);
         try std.testing.expect(evidence.usage() == null);
         try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
         try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
         try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
         try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+    }
+    // A body the provider returned but the engine rejects is a failure of the validated call, with its content
+    // diagnostic, though the raw invocation result is a completed one.
+    {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try observationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan = .{ .complete = .{ .content = "\xff", .input_tokens = 5, .output_tokens = 2 } };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.failed, harness.run());
+        const failure = (try observationResult(&runner)).outcome().validated.result().failed;
+        try std.testing.expectEqual(provider.ProviderContentDiagnostic.invalid_content, failure.content.?);
+        try std.testing.expectEqualDeep(@import("domain/provider_failure_detail.zig").Detail{ .cause = .response_invalid, .retry_class = .never, .delivery = .response_received, .content = .invalid_content }, runner.last_provider_failure.?);
     }
 }
 
@@ -6299,7 +6382,7 @@ test "YAML observation validation retains provider cancellation without fabricat
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan = .cancelled;
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.cancelled, harness.run());
     try std.testing.expectEqual(.cancelled, (try observationResult(&runner)).outcome());
@@ -6318,7 +6401,7 @@ test "YAML observation validation rejects unsafe UTF-8 after accounting its repo
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = .utf8 };
-    fixture.native.invoke_model.action = .{ .provider = spy.port() };
+    fixture.native.stages.invoke_model.action = .{ .provider = spy.port() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.failed, harness.run());
     const evidence = (try observationResult(&runner)).outcome().validated;
@@ -6344,7 +6427,7 @@ test "YAML observation consumers reject cross-execution results and stale invoke
     var fake_first = invocationProvider(&first, std.testing.allocator);
     var fake_second = invocationProvider(&second, std.testing.allocator);
     for ([_]*runner_module.Runner{ &first, &second }, [_]*fake_provider.FakeLLMProvider{ &fake_first, &fake_second }) |runner, fake| {
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         try prepareInvocable(runner);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "call" }).outcome);
@@ -6374,7 +6457,7 @@ test "validated observation owns its request and response after source values an
     var active = true;
     defer if (active) runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     const retained = try values.retain(runner.envelope.slots[@intFromEnum(observation_workflow.schema.key)].?);
@@ -6410,8 +6493,8 @@ test "rejected validation deltas and runtime cancellation release evidence witho
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-        var spy: ObservationDeltaSpy = .{ .inner = &fixture.native.validate_observation, .cancel = cancel };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
+        var spy: ObservationDeltaSpy = .{ .inner = &fixture.native.stages.validate_observation, .cancel = cancel };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, observation_workflow.Validate.contract.id)) {
             entry.binding = bindings.bind(ObservationDeltaSpy, &spy, ObservationDeltaSpy.invoke);
         };
@@ -6469,7 +6552,7 @@ test "compiled observation validation cannot hide its dependencies or add a capa
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, runner.bindings().invokeStep(.{ .bytes = "validate-response" }).rejected);
@@ -6548,7 +6631,7 @@ const Observer = struct {
             const evidence = values.read(&input.step.data, attempt_values.operation_schema, lifecycle.AssignedOperation) catch return error.InvocationFailureUnrecorded;
             const record = evidence.record();
             if (record.id.model_request_id != request.id() or record.id.model_attempt_ordinal.value != self.last_attempt or
-                !record.binding_id.eql(request.prepared().?.binding_id) or !record.model_visible_input_id.eql(request.prepared().?.model_visible_input_id) or record.state != .assigned) return error.InvocationFailureUnrecorded;
+                !record.assignment.eql(.of(request.prepared().?)) or record.state != .assigned) return error.InvocationFailureUnrecorded;
             if (self.consume_operation) delta.data_invalidations.insert(.assigned_provider_operation);
         }
         if (input.step.data.contains(.invoked_provider_operation)) {
@@ -6612,7 +6695,7 @@ const address_schema =
     \\{"type":"object","properties":{"address":{"type":"object","properties":{"street":{"type":"string","maxLength":100},"zip":{"type":"string","maxLength":20}},"required":["street","zip"],"additionalProperties":false},"flags":{"type":"array","maxItems":3,"items":{"type":"boolean"}}},"required":["address","flags"],"additionalProperties":false}
 ;
 const address_composition =
-    \\{"schema":"json-composition/v1","result":"result","parts":{"street":{"paths":["/address/street"],"input-context":"street"},"zip":{"paths":["/address/zip"],"requires":["street"],"input-context":"zip"},"flags":{"paths":["/flags"],"input-context":"flags"}}}
+    \\{"schema":"json-composition/v1","result":"result","parts":{"street":{"paths":["/address/street"]},"zip":{"paths":["/address/zip"],"requires":["street"]},"flags":{"paths":["/flags"]}}}
 ;
 const address_contexts = [_]@import("domain/model_input_packet.zig").AssignmentContext{
     .{ .id = .{ .bytes = "street" }, .body = "{\"purpose\":\"Street address\"}" },
@@ -6649,7 +6732,7 @@ test "configured parts keep admitted siblings through protocol recovery and exha
                 .missing_answer = missing_answer,
                 .source_observer = .{ .runner = &runner, .allocator = fixture.arena.allocator(), .snapshots = &snapshots },
             };
-            fixture.native.invoke_model.action = .{ .provider = calls.interface() };
+            fixture.native.stages.invoke_model.action = .{ .provider = calls.interface() };
             var harness: Harness = .{ .runner = &runner };
             try std.testing.expectEqual(@as(workflow.OutcomeTag, if (recover) .ok else .failed), harness.run());
             try std.testing.expectEqual(@as(usize, 5), calls.fake.effect_count);
@@ -6725,17 +6808,14 @@ const CompositionCalls = struct {
         }
         const shape = request.response_schema.modelBytes();
         if (std.mem.indexOf(u8, shape, "\"street\"") != null) {
-            self.consistent = self.consistent and std.mem.indexOf(u8, request.content[1].user, "Street address") != null;
             self.fake.invocation_plan.complete.content = "{\"address\":{\"street\":\"Main St\"}}";
         } else if (std.mem.indexOf(u8, shape, "\"flags\"") != null) {
-            self.consistent = self.consistent and std.mem.indexOf(u8, request.content[1].user, "Address flags") != null;
             self.fake.invocation_plan.complete.content = "{\"flags\":[true,false]}";
         } else {
             if (self.zip_request) |id| {
                 self.consistent = self.consistent and id == request.model_request_id;
             } else self.zip_request = request.model_request_id;
             self.consistent = self.consistent and std.mem.indexOf(u8, request.content[1].user, "\"street\":\"Main St\"") != null and
-                std.mem.indexOf(u8, request.content[1].user, "Postal code") != null and
                 std.mem.indexOf(u8, request.content[1].user, "\"flags\"") == null;
             self.fake.invocation_plan.complete.content = switch (invoked.id.model_attempt_ordinal.value) {
                 1 => "{broken",
@@ -6918,7 +6998,7 @@ test "registered non-Spec typed consumer composes references and enforces its ow
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var calls: AuditCalls = .{ .fake = invocationProvider(&runner, std.testing.allocator), .allocator = a, .business = business.?, .ineligible = mode == .ineligible, .supplement = mode == .optional };
-        fixture.native.invoke_model.action = .{ .provider = calls.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = calls.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(@as(workflow.OutcomeTag, if (mode == .valid or mode == .optional) .ok else .invalid), harness.run());
         try std.testing.expectEqual(@as(usize, 2), calls.fake.effect_count);
@@ -6954,12 +7034,12 @@ fn compositionAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, gr
     input.* = .{ .contexts = &address_contexts };
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
-    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    fixture.native.stages.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
     loadEntries(entries, &fixture.native);
     var runner = fixture.runner(graph, allocator);
     defer runner.deinit();
     var calls: CompositionCalls = .{ .fake = invocationProvider(&runner, allocator), .recover = true, .missing_answer = true };
-    fixture.native.invoke_model.action = .{ .provider = calls.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = calls.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.run();
     if (outcome == .failed) return error.OutOfMemory;
@@ -7003,7 +7083,7 @@ pub const Fixture = struct {
         self.native.init(allocator);
         self.authorization = .{ .allocator = allocator };
         self.clock = .{};
-        self.native.prepare_authorization.action = .{ .authorization = self.authorization.port() };
+        self.native.stages.prepare_authorization.action = .{ .authorization = self.authorization.port() };
         self.observer = .{};
         @memcpy(self.entries[0..core.entries.len], &core.entries);
         loadEntries(&self.entries, &self.native);
@@ -7045,7 +7125,7 @@ pub const Fixture = struct {
         var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
         var schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const raw = try @import("application/startup_routine.zig").steps.parseWorkflows(parser.parser(), allocator, &.{.{ .ordinal = 1, .bytes = bytes }});
-        const definitions = try @import("domain/workflow_definition_schema.zig").validate(allocator, raw);
+        const definitions = try @import("domain/workflow_definition_schema.zig").validate(allocator, raw, null);
         const extra = if (composition_bytes != null) "composition.json" else if (include_static_input) "input.txt" else "context.json";
         const extra_body = composition_bytes orelse if (include_static_input) input_bytes else static_context orelse "";
         const paths = [_][]const u8{ "request.workflow.yaml", "prompt.md", "result.json", extra, "context.json" };
@@ -7064,10 +7144,10 @@ pub const Fixture = struct {
             5 => &.{ 2, 3, 4, 5 },
             else => unreachable,
         } };
-        const manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, inv, definitions);
+        const manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, inv, definitions, null);
         const captures = [_]inventory.Capture{ .{ .ordinal = 2, .bytes = prompt_bytes }, .{ .ordinal = 3, .bytes = result_schema }, .{ .ordinal = 4, .bytes = extra_body }, .{ .ordinal = 5, .bytes = static_context orelse "" } };
-        const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&self.registry, schema_parser.compiler(), allocator, definitions, inv, manifest, captures[0 .. count - 1]);
-        _ = try @import("domain/workflow_graph_validation.zig").validate(allocator, graphs, &self.registry);
+        const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&self.registry, schema_parser.compiler(), allocator, definitions, inv, manifest, captures[0 .. count - 1], null);
+        _ = try @import("domain/workflow_graph_validation.zig").validate(allocator, graphs, &self.registry, null);
         if (self.keep_registry) {
             // What the startup builds from the validated graphs; the registry keeps its own copy. Its
             // inventory is sorted by path, which the fixture's declaration order is not, so the same
@@ -7101,7 +7181,7 @@ pub const Fixture = struct {
             self.registry_owner = try @import("domain/workflow_registry.zig").createValidated(std.testing.allocator, .{
                 .inventory = ordered,
                 .definition_captures = &definition_captures,
-                .resource_manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, ordered, definitions),
+                .resource_manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, ordered, definitions, null),
                 .resource_captures = kept[0 .. count - 1],
                 .definitions = definitions,
                 .graphs = graphs,
@@ -7233,6 +7313,8 @@ const ModelCaptureSink = struct {
     const stream = @import("domain/feature_log_stream.zig");
     allocator: std.mem.Allocator,
     fail_direction: ?prompt.PromptDirection = null,
+    /// The direction whose first fragment observes a cancellation under the log, which is no logging failure.
+    cancel_direction: ?prompt.PromptDirection = null,
     fragments: std.ArrayList(prompt.SanitizedPromptFragment) = .empty,
 
     fn barrier(self: *@This()) @import("ports/telemetry_barrier.zig").Barrier {
@@ -7243,6 +7325,7 @@ const ModelCaptureSink = struct {
     }
     fn process(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) stream.Outcome {
         const self: *@This() = @ptrCast(@alignCast(context));
+        if (self.cancel_direction == fragment.direction) return .cancelled;
         if (self.fail_direction == fragment.direction) return .{ .blocked = .LOG_FLUSH_FAILURE };
         var retained = fragment;
         retained.request_id.bytes = self.allocator.dupe(u8, fragment.request_id.bytes) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
@@ -7285,7 +7368,7 @@ test "production request capture failure records non-delivery and response captu
             try std.testing.expectEqual(.persistence, failure.stage);
             try std.testing.expectEqualDeep(@import("domain/model_capture_failure.zig").Cause{ .sink = .LOG_FLUSH_FAILURE }, failure.cause);
             try std.testing.expectEqual(case.direction, failure.direction);
-            try std.testing.expectEqualDeep(failure, runner.model_capture.failure.?);
+            try std.testing.expectEqualDeep(failure, runner.model_capture.failure().?);
             try std.testing.expectEqualStrings("MODEL_CAPTURE_PERSISTENCE_FAILURE", outcome.execution_rejected.diagnostic());
             // A capture failure is recorded while its call runs, so it is its own first cause: nothing
             // formed from the call's result (a blocked send, an overshoot) is kept beside it.
@@ -7317,6 +7400,48 @@ test "production request capture failure records non-delivery and response captu
             }
         }
     }
+}
+
+test "a cancellation under the log while a body is captured is no capture failure; a request is never sent, a response already was" {
+    for (std.enums.values(contracts.BedrockFamily)) |family| for ([_]ModelCaptureSink.prompt.PromptDirection{ .request, .response }) |direction| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .cancel_direction = direction };
+        runner.model_capture.logs = sink.barrier();
+        try runtime.bind(&runner);
+        var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+        runtime.provider.?.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        const outcome = harness.result();
+        // The run is cancelled, not blocked on a capture failure: no failure is recorded.
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, outcome.executionStatus().?);
+        try std.testing.expect(runner.model_capture.failure() == null);
+        try std.testing.expect(runner.model_capture.stopped.? == .cancelled);
+        try std.testing.expect(runner.model_capture.current == null);
+        // A request whose capture was cancelled is never sent; a response's capture follows an exchange that happened.
+        try std.testing.expectEqual(@as(usize, if (direction == .request) 0 else 1), wire.calls);
+        for (sink.fragments.items) |fragment| try std.testing.expectEqual(.request, fragment.direction);
+        try std.testing.expectEqual(direction == .response, sink.fragments.items.len > 0);
+        // The response's usage is still accounted: the exchange happened, whatever its capture did.
+        if (direction == .response) {
+            const tokens = runner.tokenLedger();
+            try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
+            try std.testing.expect(tokens.accounted_operations.items[0].reconciliation == .exact_usage);
+        }
+    };
 }
 
 test "production source snapshot capture failure preserves its cause and unsent accounting" {
@@ -7357,7 +7482,7 @@ test "production source snapshot capture failure preserves its cause and unsent 
         try std.testing.expectEqual(.source_snapshot, failure.stage);
         try std.testing.expectEqualDeep(@import("domain/model_capture_failure.zig").Cause{ .source_snapshot = .missing_source_chain }, failure.cause);
         try std.testing.expectEqual(.request, failure.direction);
-        try std.testing.expectEqualDeep(failure, runner.model_capture.failure.?);
+        try std.testing.expectEqualDeep(failure, runner.model_capture.failure().?);
         try std.testing.expectEqualStrings("MODEL_CAPTURE_SOURCE_SNAPSHOT_FAILURE", outcome.execution_rejected.diagnostic());
         try std.testing.expectEqual(@as(usize, 0), wire.calls);
         try std.testing.expectEqual(@as(usize, 0), sink.fragments.items.len);
@@ -7393,7 +7518,7 @@ test "production capture accepts an authorized repair packet without a single pr
             .binding = bindings.bind(RepairSequence, &authorization, RepairSequence.authorize),
         }};
         fixture.registry.operations = &entries;
-        var graph = (try fixture.compileWithAssets(source, schema_bytes, false)).*;
+        var graph = (try fixture.compileWithAssets(source, try answerSchema(a, schema_bytes), false)).*;
         graph.source = .{ .path = "request.workflow.yaml", .content = source };
         var environment = try bedrockEnvironment(std.testing.allocator);
         defer environment.deinit();
@@ -7417,7 +7542,7 @@ test "production capture accepts an authorized repair packet without a single pr
         const packet = (try currentRequest(&runner)).packet().?;
         try std.testing.expect(packet.repairPermit() != null);
         try std.testing.expect(packet.repairOrigin() == null);
-        try std.testing.expect(runner.model_capture.failure == null);
+        try std.testing.expect(runner.model_capture.failure() == null);
         try std.testing.expect(runner.model_capture.current == null);
         try std.testing.expectEqual(@as(usize, 1), wire.calls);
         try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());
@@ -7637,14 +7762,15 @@ const PolicyLog = struct {
     fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) stream.Outcome {
         const self: *PolicyLog = @ptrCast(@alignCast(context));
         const definition = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
-        if ((@import("actions/log/evaluate_log_threshold.zig").Action{}).execute(self.policy, definition) == .drop) return .dropped;
-        const diagnostic = if (fact.fact.fields.diagnostic_code) |code| self.allocator.dupe(u8, code.bytes) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE } else "";
-        self.records.append(self.allocator, .{ .event = .{ .event_type = fact.fact.event_type, .attempt = fact.fact.attempt, .diagnostic = diagnostic } }) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        if (@import("domain/feature_log_decisions.zig").emission(self.policy, definition) == .drop) return .dropped;
+        const diagnostic = if (telemetry.fieldOf(fact.fact, .diagnostic_code)) |code| self.allocator.dupe(u8, code.bytes) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE } else "";
+        self.records.append(self.allocator, .{ .event = .{ .event_type = telemetry.eventOf(fact.fact), .attempt = telemetry.commonOf(fact.fact).attempt, .diagnostic = diagnostic } }) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         return .dropped;
     }
     fn select(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) bool {
         const self: *PolicyLog = @ptrCast(@alignCast(context));
-        return (@import("actions/log/evaluate_prompt_log_capture.zig").Action{}).execute(self.policy, fragment) == .capture;
+        _ = fragment;
+        return @import("domain/feature_log_decisions.zig").capture(self.policy) == .capture;
     }
     /// The engine-owned fragment ID names the body's provenance in its third segment
     /// (ADR 0018), for example `inference-request-request_description-utf8-…`.
@@ -7805,15 +7931,6 @@ test "production missing-answer observation retains usage and can close without 
                 try std.testing.expectEqual(provider.ProviderContentDiagnostic.missing_final_text, evidence.result().failed.content.?);
                 try std.testing.expectEqual(@as(u64, 932), evidence.usage().?.total_tokens);
                 try std.testing.expectEqual(.available, tokens.status());
-                const record = runner.envelope.records.items[runner.envelope.records.items.len - 1];
-                const encode = @import("adapters/provider/bedrock_request.zig").encode;
-                const policy = fixture.services.registry().resolveId(evidence.request().binding_id.registry_entry_id).?.facts.bedrockFamily().?;
-                const before = try encode(std.testing.allocator, evidence.request(), policy, .{ .tokens = 16000 });
-                defer std.testing.allocator.free(before);
-                _ = try runner.envelope.place(record.occurrence, record.value, record.origin);
-                const after = try encode(std.testing.allocator, evidence.request(), policy, .{ .tokens = 16000 });
-                defer std.testing.allocator.free(after);
-                try std.testing.expectEqualStrings(before, after);
                 try std.testing.expectEqual(@as(u128, 932), tokens.committed());
                 try std.testing.expectError(error.TokenUsageAlreadyAccounted, @import("domain/workflow_token_accounting.zig").proposeReconciliation(tokens, tokens.revision(), retained.operationId(), .{ .exact_usage = evidence.usage().? }));
             }
@@ -7889,11 +8006,11 @@ test "missing answers share protocol allowance through mixed failure and success
                     try std.testing.expectEqual(@as(usize, if (absent) 5 else 6), correction.content.len);
                     if (absent) {
                         try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "missing_final_text") != null);
-                        try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "Final-answer admission failed: no final answer was received.") != null);
+                        try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, retry_domain.missing_final_text_explanation) != null);
                         for (correction.content) |part| try std.testing.expect(part != .evidence);
                         try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.model_payload_schema_result)] == null);
                     }
-                    try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[3].guidance, "The previous correction still failed this validation."));
+                    try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[3].guidance, retry_domain.repetition_notice));
                 }
             }
             if (sequence != 0) {
@@ -7926,7 +8043,7 @@ test "packet result selection binds one immutable named schema and fails before 
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const a = fixture.arena.allocator();
-        var definition = try std.mem.replaceOwned(u8, a, yaml, ", input: input }", ", result-selection: input }");
+        var definition = try std.mem.replaceOwned(u8, a, yaml, ", input: input }", " }");
         definition = try std.mem.replaceOwned(u8, a, definition, ", input: input.txt", "");
         const graph = try fixture.compileWithAssets(definition, schema_source, false);
         var runner = fixture.runner(graph, std.testing.allocator);
@@ -7947,204 +8064,6 @@ test "packet result selection binds one immutable named schema and fails before 
             try std.testing.expect(std.mem.indexOf(u8, bound.modelBytes(), "$defs") == null);
         }
     }
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
-    defer fixture.deinit();
-    const definition = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "input: input }", "input: input, result-selection: input }");
-    const graph = try fixture.compileWithSchema(definition, schema_source);
-    var runner = fixture.runner(graph, std.testing.allocator);
-    defer runner.deinit();
-    var harness: Harness = .{ .runner = &runner };
-    try std.testing.expectEqual(.failed, harness.run());
-    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-}
-
-const retention_result_schema =
-    \\{"$defs":{"answer":{"type":"object","properties":{"answer":{"type":"string","maxLength":100},"source_ids":{"type":"array","minItems":1,"maxItems":3,"items":{"type":"integer","minimum":1,"maximum":9}},"value":{"oneOf":[{"type":"string","maxLength":40},{"type":"object","properties":{"kind":{"const":"reference"},"id":{"type":"integer","minimum":1,"maximum":9}},"required":["kind","id"],"additionalProperties":false}]}},"required":["answer","source_ids","value"],"additionalProperties":false},"other":{"type":"object","properties":{"answer":{"type":"string","maxLength":100}},"required":["answer"],"additionalProperties":false}},"$ref":"#/$defs/answer"}
-;
-
-fn retentionPacket(allocator: std.mem.Allocator, body: []const u8, definition: []const u8, allowed: []const i64, excluded: bool) !*@import("domain/model_input_packet.zig").Packet {
-    const packets = @import("domain/model_input_packet.zig");
-    const base = try packets.create(allocator, body, .{ .semantic_review = .{
-        .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = "reference-current" }, .feature_id = .{ .bytes = "feature" }, .unit_slot_id = .{ .bytes = "support" } } },
-        .review_slot_id = .{ .bytes = "assigned-record" },
-    } }, .{ .semantic_review = .{ .bytes = "assigned-record" } }, .{ .bytes = definition });
-    defer packets.release(base);
-    return packets.withRestrictions(allocator, base, if (excluded) &.{.{ .kind = "reference" }} else &.{}, &.{.{
-        .target = .{ .path = &.{.{ .property = "source_ids" }} },
-        .definition = .{ .bytes = "answer" },
-        .allowed = allowed,
-    }});
-}
-
-fn retentionResource(graph: *const compilation.CompiledWorkflow, id: workflow.WorkflowResourceId) !compilation.CompiledResource {
-    for (graph.authority.resources) |resource| if (std.mem.eql(u8, resource.id.bytes, id.bytes)) return resource;
-    return error.TestUnexpectedResult;
-}
-
-fn retentionSelection(graph: *const compilation.CompiledWorkflow, request: *const handoff.Request, packet: *const @import("domain/model_input_packet.zig").Packet) !handoff.Selection {
-    const resources = request.sourceResources();
-    return .{
-        .binding = request.binding().*,
-        .prompt = try retentionResource(graph, resources.prompt),
-        .context = if (resources.context) |id| try retentionResource(graph, id) else null,
-        .protocol_prompt = if (resources.protocol_prompt) |id| try retentionResource(graph, id) else null,
-        .result = try retentionResource(graph, resources.result),
-        .input = .{ .packet = packet },
-        .result_selection = .input,
-    };
-}
-
-fn retentionAllocationCase(allocator: std.mem.Allocator, selected: handoff.Selection, ledger: *const identity.ModelRequestIdentityLedger, request: *const handoff.Request, origin: model_origin) !void {
-    try std.testing.expect(try selected.acceptsRetained(allocator, ledger, request, origin));
-}
-
-test "retained semantic assignments require complete current packet request binding and accepted origin" {
-    const packets = @import("domain/model_input_packet.zig");
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
-    defer fixture.deinit();
-    const a = fixture.arena.allocator();
-    var source = try withStaticContext(a, try protocolRetryYaml(&fixture));
-    source = try std.mem.replaceOwned(u8, a, source, ", input: input.txt", "");
-    source = try std.mem.replaceOwned(u8, a, source, ", input: input }", ", result-selection: input }");
-    const graph = try fixture.compileResources(source, retention_result_schema, false, null, context_bytes);
-    var runner = fixture.runner(graph, std.testing.allocator);
-    defer runner.deinit();
-    const body = "{\"subject\":\"Renew eligible loans.\",\"siblings\":[\"No overdue loans.\"],\"sources\":[\"Renew eligible loans.\"]}";
-    const packet = try retentionPacket(std.testing.allocator, body, "answer", &.{1}, true);
-    runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
-    var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-    fake.invocation_plan.complete.content = "{\"answer\":\"supported\",\"source_ids\":[1],\"value\":\"supported\"}";
-    try prepareProtocolAttempt(&runner, false);
-    const request = try currentRequest(&runner);
-    const rebuilt = try retentionPacket(std.testing.allocator, body, "answer", &.{1}, true);
-    defer packets.release(rebuilt);
-    const selected = try retentionSelection(graph, request, rebuilt);
-    const origin: model_origin = .{ .request = (try requestLedger(&runner)).indexOf(request.id()).?, .attempt = .{ .value = 1 } };
-    try std.testing.expect(!try selected.acceptsRetained(std.testing.allocator, try requestLedger(&runner), request, origin));
-    for ([_][]const u8{ "call", "validate-response", "complete-operation", "validate-payload", "close-request" }) |step|
-        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
-    const ledger = try requestLedger(&runner);
-    const records_before = ledger.recordCount();
-    try std.testing.expect(try selected.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    var admission_step = selected;
-    admission_step.binding.operation_id.workflow_step_id = .{ .bytes = "reuse-current-assignment" };
-    try std.testing.expect(try admission_step.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(retentionAllocationCase, .{ selected, ledger, request, origin });
-    try std.testing.expectEqual(records_before, ledger.recordCount());
-    try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
-    for ([_][]const u8{
-        "{\"subject\":\"Renew any loan.\",\"siblings\":[\"No overdue loans.\"],\"sources\":[\"Renew eligible loans.\"]}",
-        "{\"subject\":\"Renew eligible loans.\",\"siblings\":[\"Overdue loans allowed.\"],\"sources\":[\"Renew eligible loans.\"]}",
-        "{\"subject\":\"Renew eligible loans.\",\"siblings\":[\"No overdue loans.\"],\"sources\":[\"Never renew loans.\"]}",
-    }) |changed_body| {
-        const changed = try retentionPacket(std.testing.allocator, changed_body, "answer", &.{1}, true);
-        defer packets.release(changed);
-        var replay = selected;
-        replay.input = .{ .packet = changed };
-        try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    }
-    for ([_]bool{ false, true }) |change_choices| {
-        const changed = try retentionPacket(std.testing.allocator, body, "answer", if (change_choices) &.{2} else &.{1}, change_choices);
-        defer packets.release(changed);
-        var replay = selected;
-        replay.input = .{ .packet = changed };
-        try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    }
-    const other = try retentionPacket(std.testing.allocator, body, "other", &.{1}, true);
-    defer packets.release(other);
-    var other_selection = selected;
-    other_selection.input = .{ .packet = other };
-    try std.testing.expect(!try other_selection.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    for ([_]bool{ false, true }) |change_purpose| {
-        var unit = rebuilt.unit();
-        if (!change_purpose) unit.semantic_review.parent_unit_owner_id.specification_unit.feature_id = .{ .bytes = "foreign-feature" };
-        const changed_base = try packets.create(std.testing.allocator, body, unit, if (change_purpose) .{ .semantic_review = .{ .bytes = "foreign-purpose" } } else rebuilt.purpose(), rebuilt.resultDefinition());
-        defer packets.release(changed_base);
-        const changed = try packets.withRestrictions(std.testing.allocator, changed_base, rebuilt.excludedVariants(), rebuilt.integerChoices());
-        defer packets.release(changed);
-        var replay = selected;
-        replay.input = .{ .packet = changed };
-        try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    }
-    const changed_schema_bytes = try std.mem.replaceOwned(u8, a, retention_result_schema, "\"maxLength\":100", "\"maxLength\":99");
-    const changed_graph = try fixture.compileResources(source, changed_schema_bytes, false, null, context_bytes);
-    var changed_schema = selected;
-    changed_schema.result = try retentionResource(changed_graph, request.sourceResources().result);
-    try std.testing.expect(!try changed_schema.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    for (0..11) |change| {
-        var replay = selected;
-        switch (change) {
-            0 => replay.prompt.content = .{ .prompt = "Different purpose." },
-            1 => replay.context.?.content = .{ .prompt = "Different applicability guidance." },
-            2 => replay.protocol_prompt.?.content = .{ .prompt = "Different correction guidance." },
-            3 => replay.binding.controls.temperatures = if (selected.binding.controls.temperatures == null) @import("test_fixtures/model_temperatures.zig").temperatures else null,
-            4 => replay.binding.reasoning_effort = "low",
-            5 => replay.binding.slot_id = .{ .bytes = "foreign-slot" },
-            6 => replay.binding.operation_id.workflow_id = .{ .bytes = "foreign-workflow" },
-            7 => replay.result.id = .{ .bytes = "foreign-result" },
-            8 => replay.result_selection = .resource,
-            9 => replay.input = .{ .resource = .{ .id = .{ .bytes = "resource-input" }, .content = .{ .data = body } } },
-            10 => replay.binding.operation_id.workflow_version += 1,
-            else => unreachable,
-        }
-        try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    }
-    var foreign_entry = selected.binding.registry_entry.*;
-    foreign_entry.model = .{ .bytes = "foreign-model" };
-    var foreign_binding = selected;
-    foreign_binding.binding.registry_entry = &foreign_entry;
-    try std.testing.expect(!try foreign_binding.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    for ([_]model_origin{
-        .{ .request = .{ .value = origin.request.value + 1 }, .attempt = origin.attempt },
-        .{ .request = origin.request, .attempt = .{ .value = 2 } },
-    }) |foreign_origin| try std.testing.expect(!try selected.acceptsRetained(std.testing.allocator, ledger, request, foreign_origin));
-    var fresh = fixture.runner(graph, std.testing.allocator);
-    defer fresh.deinit();
-    try std.testing.expectEqual(.ok, fresh.bindings().invokeInvocation().outcome);
-    try std.testing.expectEqual(.ok, fresh.bindings().invokeStep(.{ .bytes = "initialize" }).outcome);
-    try std.testing.expect(!try selected.acceptsRetained(std.testing.allocator, try requestLedger(&fresh), request, origin));
-}
-
-test "retained semantic assignments preserve the actual accepted correction attempt" {
-    const packets = @import("domain/model_input_packet.zig");
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
-    defer fixture.deinit();
-    const a = fixture.arena.allocator();
-    var source = try protocolRetryYaml(&fixture);
-    source = try std.mem.replaceOwned(u8, a, source, ", input: input.txt", "");
-    source = try std.mem.replaceOwned(u8, a, source, ", input: input }", ", result-selection: input }");
-    const graph = try fixture.compileWithAssets(source, retention_result_schema, false);
-    var runner = fixture.runner(graph, std.testing.allocator);
-    defer runner.deinit();
-    const packet = try retentionPacket(std.testing.allocator, "{\"subject\":\"Display UTC time.\"}", "answer", &.{1}, true);
-    runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
-    var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-    fake.invocation_plan.complete.content = "{";
-    try prepareProtocolAttempt(&runner, false);
-    const original = (try currentRequest(&runner)).id();
-    try rejectProtocolResponse(&runner);
-    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
-    try prepareProtocolAttempt(&runner, true);
-    fake.invocation_plan.complete.content = "{\"answer\":\"supported\",\"source_ids\":[1],\"value\":\"supported\"}";
-    for ([_][]const u8{ "call", "validate-response", "complete-operation", "validate-payload", "close-request" }) |step|
-        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
-    const request = try currentRequest(&runner);
-    try std.testing.expect(request.id() == original);
-    const ledger = try requestLedger(&runner);
-    const rebuilt = try retentionPacket(std.testing.allocator, "{\"subject\":\"Display UTC time.\"}", "answer", &.{1}, true);
-    defer packets.release(rebuilt);
-    const selected = try retentionSelection(graph, request, rebuilt);
-    const origin: model_origin = .{ .request = ledger.indexOf(request.id()).?, .attempt = .{ .value = 2 } };
-    try std.testing.expect(try selected.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    var rejected_origin = origin;
-    rejected_origin.attempt.value = 1;
-    try std.testing.expect(!try selected.acceptsRetained(std.testing.allocator, ledger, request, rejected_origin));
-    try std.testing.expectEqual(@as(usize, 2), fake.invocation_call_count);
 }
 
 fn restoreCapturedSources(a: std.mem.Allocator, fragments: []const ModelCaptureSink.prompt.SanitizedPromptFragment) ![]@import("domain/request_debugger.zig").Call {
@@ -8182,10 +8101,10 @@ test "a request binds native exclusions to the one canonical schema" {
         const a = fixture.arena.allocator();
         const no_resource = try std.mem.replaceOwned(u8, a, yaml, ", input: input.txt", "");
         const no_input = try std.mem.replaceOwned(u8, a, no_resource, ", input: input", "");
-        const graph = try fixture.compileWithAssets(no_input, alternatives, false);
+        const graph = try fixture.compileWithAssets(no_input, try answerSchema(a, alternatives), false);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
-        const base = try packets.create(std.testing.allocator, "{\"references\":[]}", .workflow_step, .initial_generation, null);
+        const base = try packets.create(std.testing.allocator, "{\"references\":[]}", .workflow_step, .initial_generation, .{ .bytes = "answer" });
         defer packets.release(base);
         const restricted = try packets.withExcludedVariants(std.testing.allocator, base, &.{.{ .kind = "reference" }});
         defer packets.release(restricted);
@@ -8215,10 +8134,10 @@ test "protocol correction retains the selected integer choice and assembly requi
     const a = fixture.arena.allocator();
     const source = try std.mem.replaceOwned(u8, a, try protocolRetryYaml(&fixture), ", input: input.txt", "");
     const definition = try std.mem.replaceOwned(u8, a, source, ", input: input }", " }");
-    const graph = try fixture.compileWithAssets(definition, schema_source, false);
+    const graph = try fixture.compileWithAssets(definition, try answerSchema(a, schema_source), false);
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
-    const base = try packets.create(std.testing.allocator, "{\"reference\":\"MOCK literal\"}", .workflow_step, .initial_generation, null);
+    const base = try packets.create(std.testing.allocator, "{\"reference\":\"MOCK literal\"}", .workflow_step, .initial_generation, .{ .bytes = "answer" });
     defer packets.release(base);
     const requirements = .{
         .scope = @as(enum { assembled_specification }, .assembled_specification),
@@ -8230,7 +8149,7 @@ test "protocol correction retains the selected integer choice and assembly requi
     const original_input = try a.dupe(u8, packet.body());
     runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
     fake.invocation_plan.complete.content = "{\"value\":[{\"kind\":\"reference\",\"reference_id\":74}]}";
     try prepareProtocolAttempt(&runner, false);
     const initial = try currentRequest(&runner);
@@ -8266,7 +8185,7 @@ test "protocol correction retains summary and signal guidance selection bounds c
         defer fixture.deinit();
         const a = fixture.arena.allocator();
         const source = try std.mem.replaceOwned(u8, a, try protocolRetryYaml(&fixture), ", input: input.txt", "");
-        const definition = try std.mem.replaceOwned(u8, a, source, ", input: input }", ", result-selection: input }");
+        const definition = try std.mem.replaceOwned(u8, a, source, ", input: input }", " }");
         const schema_source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited);
         const graph = try fixture.compileWithAssets(definition, schema_source, false);
         var runner = fixture.runner(graph, std.testing.allocator);
@@ -8275,12 +8194,9 @@ test "protocol correction retains summary and signal guidance selection bounds c
         defer evidence.deinit();
         const progress = try references.initialize(a, evidence.inputs, evidence.extracted, 2);
         const current = if (kind == .summary) try references.build_input.execute(a, progress) else try references.summaries(a, progress, evidence.context());
-        const packets = @import("domain/model_input_packet.zig");
-        const packet = if (kind == .summary) summary: {
-            const base = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, current, evidence.inputs, evidence.text.registry, @import("test_fixtures/packet_guidance.zig").marked.summary_purpose);
-            defer packets.release(base);
-            break :summary try packets.withAssignmentContext(std.testing.allocator, base, .{ .bytes = "summary" });
-        } else signals: {
+        const packet = if (kind == .summary)
+            try @import("domain/reference_model_input.zig").reconciliationSummaryPacket(std.testing.allocator, current, evidence.inputs, evidence.text.registry, @import("test_fixtures/packet_guidance.zig").marked.summary_purpose)
+        else signals: {
             var proposal = try references.global(a, current);
             proposal.signals = &.{};
             const parsed: r.Parsed = .{ .phase = .dispositions, .input = current, .proposal = .{ .global = proposal } };
@@ -8290,7 +8206,7 @@ test "protocol correction retains summary and signal guidance selection bounds c
         const collection = if (kind == .summary) "statements" else "signals";
         runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         const semantic = for (current.items) |item| {
             if (item.claim.content == .model) break item.claim.id;
         } else return error.MissingSemanticClaim;
@@ -8321,10 +8237,12 @@ test "protocol correction retains summary and signal guidance selection bounds c
         try std.testing.expect(active.len != 0);
         try std.testing.expectEqual(active.len, visible.get("field_rules").?.array.items.len);
         try std.testing.expect(!visible.get("insertion_fields").?.object.contains("exact_copy"));
-        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Other claims are supporting evidence") != null);
+        // The assignment's selection rule is the owner's text for this scope; only a summary assignment
+        // carries the summary's coverage rule.
+        const selection_rule = @import("domain/reference_reconciliation_diagnostic.zig").Constraint.nonempty_unique_allowed_claims;
+        try std.testing.expect(std.mem.indexOf(u8, packet.body(), selection_rule.descriptionFor(.{ .assignment = if (kind == .summary) .summary else .signals })) != null);
         try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "summary_purpose") != null);
-        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") != null);
-        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "Claims may be combined, split across statements or selected by overlapping statements") != null);
+        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), selection_rule.descriptionFor(.{ .assignment = .summary })) != null);
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "MOCK Renewed!") != null);
         for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
             try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
@@ -8351,7 +8269,7 @@ test "protocol correction retains summary and signal guidance selection bounds c
 test "composition protocol corrections keep complete assignment and grouped defects through recovery or exhaustion" {
     const packets = @import("domain/model_input_packet.zig");
     const text_schema = "{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295}";
-    const result_schema = "{\"$defs\":{\"text\":" ++ text_schema ++ "},\"type\":\"object\",\"properties\":{\"first\":{\"$ref\":\"#/$defs/text\"},\"second\":{\"$ref\":\"#/$defs/text\"}},\"required\":[\"first\",\"second\"],\"additionalProperties\":false}";
+    const result_schema = "{\"$defs\":{\"text\":" ++ text_schema ++ ",\"answer\":{\"type\":\"object\",\"properties\":{\"first\":{\"$ref\":\"#/$defs/text\"},\"second\":{\"$ref\":\"#/$defs/text\"}},\"required\":[\"first\",\"second\"],\"additionalProperties\":false}},\"$ref\":\"#/$defs/answer\"}";
     const invalid = "{\"first\":\"ACTIVE\",\"second\":\"ACTIVE\"}";
     const corrected = "{\"first\":\"Display ACTIVE on request.\",\"second\":\"The user requests the current value.\"}";
     const assignment = "{\"task\":\"Describe both supported conditions.\",\"siblings\":[\"The complete original context.\"],\"eligible_catalogue\":[7]}";
@@ -8370,7 +8288,7 @@ test "composition protocol corrections keep complete assignment and grouped defe
         const graph = try fixture.compileWithAssets(definition, result_schema, false);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
-        const raw = try packets.create(std.testing.allocator, assignment, .workflow_step, .initial_generation, null);
+        const raw = try packets.create(std.testing.allocator, assignment, .workflow_step, .initial_generation, .{ .bytes = "answer" });
         defer packets.release(raw);
         const bound = try packets.withFieldPolicies(std.testing.allocator, raw, field_bindings);
         defer packets.release(bound);
@@ -8380,7 +8298,7 @@ test "composition protocol corrections keep complete assignment and grouped defe
         const scoped = try packets.withExactScope(std.testing.allocator, witnessed, .{ .reference_state = .{ .bytes = "REF-1" }, .occurrences = &.{.{ .claim_id = .{ .ordinal = 7 }, .bytes = "ACTIVE" }} });
         runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, scoped);
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         try prepareProtocolAttempt(&runner, false);
         const original = (try currentRequest(&runner)).prepared().?;
         const schema_owner = original.response_schema;
@@ -8423,7 +8341,7 @@ test "composition protocol corrections keep complete assignment and grouped defe
                     try std.testing.expectEqualStrings(path, field.object.get("path").?.string);
                     try std.testing.expectEqualStrings("reference_only", field.object.get("reason").?.string);
                 }
-                const repeated = std.mem.indexOf(u8, correction.content[2].guidance, "previous correction still failed") != null;
+                const repeated = std.mem.indexOf(u8, correction.content[2].guidance, retry_domain.repetition_notice) != null;
                 try std.testing.expectEqual(index != 0, repeated);
                 try std.testing.expectEqualStrings(assignment, witnessed.body());
             }
@@ -8440,60 +8358,13 @@ test "composition protocol corrections keep complete assignment and grouped defe
     }
 }
 
-test "retained semantic selections bind native exact scope independently of unchanged input bytes" {
-    const packets = @import("domain/model_input_packet.zig");
-    const exact = @import("domain/model_exact_values.zig");
-    const scope: exact.Scope = .{ .reference_state = .{ .bytes = "reference-current" }, .occurrences = &.{ .{ .claim_id = .{ .ordinal = 7 }, .bytes = "ACTIVE" }, .{ .claim_id = .{ .ordinal = 8 }, .bytes = "READY" } } };
-    for ([_]bool{ false, true }) |scoped| {
-        var fixture: Fixture = undefined;
-        try fixture.init(std.testing.allocator);
-        defer fixture.deinit();
-        const a = fixture.arena.allocator();
-        var definition = try withStaticContext(a, try protocolRetryYaml(&fixture));
-        definition = try std.mem.replaceOwned(u8, a, definition, ", input: input.txt", "");
-        definition = try std.mem.replaceOwned(u8, a, definition, ", input: input }", ", result-selection: input }");
-        const graph = try fixture.compileResources(definition, retention_result_schema, false, null, context_bytes);
-        var runner = fixture.runner(graph, std.testing.allocator);
-        defer runner.deinit();
-        const base = try retentionPacket(std.testing.allocator, "{\"input\":\"unchanged\"}", "answer", &.{1}, true);
-        defer packets.release(base);
-        const packet = if (scoped) try packets.withExactScope(std.testing.allocator, base, scope) else try packets.withRestrictions(std.testing.allocator, base, base.excludedVariants(), base.integerChoices());
-        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
-        var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-        fake.invocation_plan.complete.content = "{\"answer\":\"supported\",\"source_ids\":[1],\"value\":\"supported\"}";
-        try prepareProtocolAttempt(&runner, false);
-        for ([_][]const u8{ "call", "validate-response", "complete-operation", "validate-payload", "close-request" }) |step|
-            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
-        const request = try currentRequest(&runner);
-        const ledger = try requestLedger(&runner);
-        const origin: model_origin = .{ .request = ledger.indexOf(request.id()).?, .attempt = .{ .value = 1 } };
-        const selected = try retentionSelection(graph, request, packet);
-        try std.testing.expect(try selected.acceptsRetained(std.testing.allocator, ledger, request, origin));
-        try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(std.testing.allocator, base, .{ .reference_state = .{ .bytes = "REF-2" }, .occurrences = scope.occurrences }));
-        for ([_]?exact.Scope{
-            null,
-            scope,
-            .{ .reference_state = scope.reference_state, .occurrences = scope.occurrences[0..1] },
-            .{ .reference_state = scope.reference_state, .occurrences = &.{.{ .claim_id = .{ .ordinal = 7 }, .bytes = "CHANGED" }} },
-        }) |changed_scope| {
-            const changed = if (changed_scope) |value| try packets.withExactScope(std.testing.allocator, base, value) else try packets.retain(base);
-            defer packets.release(changed);
-            var replay = selected;
-            replay.input = .{ .packet = changed };
-            try std.testing.expectEqualStrings(packet.body(), changed.body());
-            try std.testing.expectEqual(exact.same(packet.exactScope(), changed_scope), try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
-        }
-    }
-}
-
 test "a packet request shares the global budget and overshoot fails the run" {
     for ([_]u64{ 0, 1 }) |overshoot| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const definition = try packetInputYaml(&fixture, try invocationYaml(&fixture));
-        const graph = try fixture.compileWithAssets(definition, schema_bytes, false);
+        const graph = try fixture.compileWithAssets(definition, try answerSchema(fixture.arena.allocator(), schema_bytes), false);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         try installReviewPacket(&runner);
@@ -8502,7 +8373,7 @@ test "a packet request shares the global budget and overshoot fails the run" {
         const limit = fixture.token_budget.value;
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"faithful response\"}", .input_tokens = limit - 2, .output_tokens = 2 + overshoot } };
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         const applied = runner.bindings().invokeStep(.{ .bytes = "call" });
         if (overshoot == 0) {
             try std.testing.expect(applied == .outcome);
@@ -8529,7 +8400,7 @@ test "global exhaustion and unknown usage block a packet request before sending"
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
-        const graph = try fixture.compileWithAssets(try packetInputYaml(&fixture, try completionYaml(&fixture)), schema_bytes, false);
+        const graph = try fixture.compileWithAssets(try packetInputYaml(&fixture, try completionYaml(&fixture)), try answerSchema(fixture.arena.allocator(), schema_bytes), false);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         try installReviewPacket(&runner);
@@ -8543,7 +8414,7 @@ test "global exhaustion and unknown usage block a packet request before sending"
             try std.testing.expectError(error.ProviderTokenUsageUnavailable, runner.token_accounting.reconcile(.initial, prior, .unavailable));
         } else try runner.token_accounting.reconcile(.initial, prior, .{ .exact_usage = provider.ProviderUsage.init(limit, 0, limit).? });
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         const applied = runner.bindings().invokeStep(.{ .bytes = "call" });
         try std.testing.expect(applied == .rejected);
         try std.testing.expectEqual(if (unknown) error.ProviderTokenUsageUnavailable else error.WorkflowTokenBudgetExceeded, applied.rejected.token_budget);
@@ -8565,7 +8436,7 @@ fn packetInputYaml(fixture: *Fixture, source: []const u8) ![]const u8 {
 
 fn installReviewPacket(runner: *runner_module.Runner) !void {
     const packets = @import("domain/model_input_packet.zig");
-    const raw = try packets.create(std.testing.allocator, "{\"subject\":\"business candidate\"}", .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = "REF-1" }, .feature_id = .{ .bytes = "test-feature" }, .unit_slot_id = .{ .bytes = "candidate" } } }, .review_slot_id = .{ .bytes = "assessment" } } }, .{ .semantic_review = .{ .bytes = "assessment" } }, null);
+    const raw = try packets.create(std.testing.allocator, "{\"subject\":\"business candidate\"}", .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = "REF-1" }, .feature_id = .{ .bytes = "test-feature" }, .unit_slot_id = .{ .bytes = "candidate" } } }, .review_slot_id = .{ .bytes = "assessment" } } }, .{ .semantic_review = .{ .bytes = "assessment" } }, .{ .bytes = "answer" });
     errdefer packets.release(raw);
     runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, raw);
 }
@@ -8751,7 +8622,7 @@ test "request-model: an admitted request leaves the consumer's records current a
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     try std.testing.expectEqual(@as(usize, 1), scripted.inner.effect_count);
@@ -8788,7 +8659,7 @@ test "request-model: a rejected response takes one protocol correction inside th
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{ unparsable_plan, valid_plan } };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     try std.testing.expectEqual(@as(usize, 2), scripted.inner.effect_count);
@@ -8809,7 +8680,7 @@ test "request-model: a first runaway is re-sent once outside retry-limit 0 (ADR 
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{ runaway_plan, valid_plan } };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     try std.testing.expectEqual(@as(usize, 2), scripted.inner.effect_count);
@@ -8829,7 +8700,7 @@ test "request-model: a runaway on the re-send fails the request, and the failure
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{runaway_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.failed, harness.run());
     // The original and its one re-send, never a third send.
@@ -8841,7 +8712,7 @@ test "request-model: a runaway on the re-send fails the request, and the failure
 }
 
 test "request-model: an authorization failure or cancellation terminates the operation and the request before any call" {
-    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .authentication_failed }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
+    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .{ .authentication_failed = .missing } }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -8851,7 +8722,7 @@ test "request-model: an authorization failure or cancellation terminates the ope
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var harness: Harness = .{ .runner = &runner };
         const expected: workflow.OutcomeTag = if (plan == .cancelled) .cancelled else .failed;
         try std.testing.expectEqual(expected, harness.run());
@@ -8884,7 +8755,7 @@ test "request-model: a provider cancellation and a runtime cancellation each end
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = if (runtime) &.{valid_plan} else &.{.cancelled} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var cancel: Cancel = .{ .provider = &scripted.inner };
         if (runtime) runner.runtime = .{ .context = &cancel, .status_fn = Cancel.status };
         var harness: Harness = .{ .runner = &runner };
@@ -8903,7 +8774,7 @@ test "request-model: exhausting the retry allowance names the step and the stage
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{unparsable_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     const result = harness.result();
     const exhausted = result.execution_rejected.retry_limit;
@@ -8970,7 +8841,7 @@ test "request-model: a cycle that revisits the step runs past the step count, bo
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     // The initialization, then the request step and its consumer three times. A ceiling that counts
@@ -9001,7 +8872,7 @@ test "request-model: the step's retry authority, not the ceiling, ends a cycle o
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     const result = harness.result();
     // The fourth visit would be the third retry; the limit of 2 allows two, so the step refuses it.
@@ -9024,7 +8895,7 @@ test "request-model: the same cycle ends at the workflow token budget, not at th
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     const result = harness.result();
     try std.testing.expect(result.execution_rejected == .token_budget);
@@ -9047,7 +8918,7 @@ test "request-model: the step spends one execution of the ceiling, and a step it
         var runner = fixture.runner(&capped, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var harness: Harness = .{ .runner = &runner };
         const result = harness.result();
         if (cap == 3) {
@@ -9073,11 +8944,11 @@ test "request-model: a recorded ceiling that leaves out the step's allowance is 
     kernelObserver(&fixture);
     const graph = try fixture.compile(kernel_yaml);
     const validation = @import("domain/workflow_graph_validation.zig");
-    _ = try validation.validate(fixture.arena.allocator(), &.{graph.*}, &fixture.registry);
+    _ = try validation.validate(fixture.arena.allocator(), &.{graph.*}, &fixture.registry, null);
     // The ceiling before the allowance was counted was the step count alone.
     var stale = graph.*;
     stale.authority.maximum_step_executions = graph.authority.steps.len;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{stale}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{stale}, &fixture.registry, null));
 }
 
 test "request-model: the compiler admits a retry limit up to the kernel's one maximum and no further" {
@@ -9216,7 +9087,7 @@ test "request-model: the runner refuses a compiled kernel step whose limit is pa
         var runner = fixture.runner(&retimed, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var harness: Harness = .{ .runner = &runner };
         if (limit <= kernel.maximum_retry_limit) {
             try std.testing.expectEqual(.ok, harness.run());
@@ -9241,7 +9112,7 @@ test "request-model: the workflow token budget stops the step after the call tha
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{unparsable_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     const result = harness.result();
     try std.testing.expect(result.execution_rejected == .token_budget);
@@ -9411,7 +9282,7 @@ test "request-model: the runner refuses a compiled kernel step that is not what 
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var harness: Harness = .{ .runner = &runner };
         const result = harness.result();
         // A kernel step that differs from the registry's own is refused as a contract mismatch; a stage that names another operation is refused as a stage that is not the registered one.
@@ -9487,7 +9358,7 @@ test "request-model: each composition part's response is retained by the next st
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var calls: CompositionCalls = .{ .fake = invocationProvider(&runner, std.testing.allocator), .recover = true };
-    fixture.native.invoke_model.action = .{ .provider = calls.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = calls.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     // The same calls and accounting as the explicit-step composition: street, flags, and a zip that
@@ -9533,24 +9404,24 @@ const KernelEvents = struct {
             self.invalid = true;
             return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
         };
-        const node = fact.fact.node_id orelse return .dropped;
+        const node = telemetry.commonOf(fact.fact).node_id orelse return .dropped;
         if (!std.mem.eql(u8, node.bytes, "request")) return .dropped;
-        var event: Event = .{ .kind = fact.fact.event_type };
-        switch (fact.fact.event_type) {
+        var event: Event = .{ .kind = telemetry.eventOf(fact.fact) };
+        switch (telemetry.eventOf(fact.fact)) {
             .action_started, .action_completed, .action_invalid, .action_failed => {},
             else => return .dropped,
         }
         // DE1c: any action event of a stage names it.
-        if (fact.fact.fields.step_id) |named| {
+        if (telemetry.fieldOf(fact.fact, .step_id)) |named| {
             @memcpy(event.name[0..named.bytes.len], named.bytes);
             event.name_len = named.bytes.len;
         }
-        switch (fact.fact.event_type) {
+        switch (telemetry.eventOf(fact.fact)) {
             .action_started => self.started += 1,
             .action_completed, .action_invalid => self.completed += 1,
             .action_failed => {
                 self.completed += 1;
-                if (fact.fact.fields.step_id != null) {
+                if (telemetry.fieldOf(fact.fact, .step_id) != null) {
                     self.failed_stage = event.name;
                     self.failed_stage_len = event.name_len;
                 }
@@ -9595,7 +9466,7 @@ test "request-model: the release actions retire exactly the keys the kernel keep
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.ok, harness.run());
         const ledger = try requestLedger(&runner);
@@ -9666,7 +9537,7 @@ test "request-model: a stage gate stops the step before a stage, which does not 
         var spy: KernelEvents = .{};
         runner.barrier = .{ .context = &spy, .process_fn = KernelEvents.process };
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var stopper: StageStopper = .{ .target = target, .stop = stop };
         runner.request_stage_gate = .{ .context = &stopper, .stop_fn = StageStopper.gate };
         var harness: Harness = .{ .runner = &runner };
@@ -9760,7 +9631,7 @@ test "request-model: the workflow registry validates a kernel workflow and keeps
     var runner = fixture.runner(kept, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     try expectKernelKeys(&runner, .ok);
@@ -9852,7 +9723,7 @@ test "request-model: a stage set on another operation is rejected at graph valid
     kernelObserver(&fixture);
     const compiled = try fixture.compile(kernel_yaml);
     const validation = @import("domain/workflow_graph_validation.zig");
-    _ = try validation.validate(fixture.arena.allocator(), &.{compiled.*}, &fixture.registry);
+    _ = try validation.validate(fixture.arena.allocator(), &.{compiled.*}, &fixture.registry, null);
     const steps = try fixture.arena.allocator().dupe(compilation.CompiledStep, compiled.authority.steps);
     const request_index = for (steps, 0..) |step, index| {
         if (std.mem.eql(u8, step.id.bytes, "request")) break index;
@@ -9861,7 +9732,7 @@ test "request-model: a stage set on another operation is rejected at graph valid
     steps[request_index].operation_id = .{ .bytes = "invoke-model" };
     var tampered = compiled.*;
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validation.validate(fixture.arena.allocator(), &.{tampered}, &fixture.registry, null));
 }
 
 test "request-model: graph validation checks each stage as the step it is" {
@@ -9885,7 +9756,7 @@ test "request-model: graph validation checks each stage as the step it is" {
     try std.testing.expect(kernel.validProjection(steps[request_index]));
     var tampered = compiled.*;
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(a, &.{tampered}, &fixture.registry));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(a, &.{tampered}, &fixture.registry, null));
 }
 
 test "request-model: a stage whose compiled capabilities are not its registered ones is refused where it runs" {
@@ -9907,7 +9778,7 @@ test "request-model: a stage whose compiled capabilities are not its registered 
     var runner = fixture.runner(&tampered, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(execution.Rejection{ .authority = .step_contract_mismatch }, harness.result().execution_rejected);
     // Every stage before the call ran under its own checks; the refused stage sent nothing.
@@ -9946,7 +9817,7 @@ test "request-model: cancelling as any stage begins ends the step as cancelled a
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var cancel: Cancel = .{ .runner = &runner, .target = stage.name() };
         runner.runtime = .{ .context = &cancel, .status_fn = Cancel.status };
         var harness: Harness = .{ .runner = &runner };
@@ -9993,7 +9864,7 @@ test "request-model: a stage that answers failed ends the step, or is refused wh
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var harness: Harness = .{ .runner = &runner };
         const result = harness.result();
         if (owns_transition) {
@@ -10026,7 +9897,7 @@ fn closingRun(fail_index: ?usize) !ClosingRun {
     var events: KernelEvents = .{};
     runner.barrier = .{ .context = &events, .process_fn = KernelEvents.process };
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     const result = harness.result();
     try std.testing.expect(!events.invalid);
@@ -10194,7 +10065,7 @@ test "request-model: every stage runs through the runner's own events, and a sto
         var spy: Spy = .{};
         runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(@as(workflow.OutcomeTag, if (denied) .failed else .ok), harness.run());
         try std.testing.expect(!spy.invalid);
@@ -10327,7 +10198,7 @@ test "request-model: a corrected request's evidence outlives the step in recorde
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{ unparsable_plan, valid_plan } };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner, .probe_evidence = true };
     try std.testing.expectEqual(.ok, harness.run());
     // The step dropped the evidence from the current envelope; it is all still there as history.
@@ -10345,7 +10216,7 @@ test "request-model: the evidence of the old lifecycle is the same, call by call
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{ unparsable_plan, valid_plan } };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner, .probe_evidence = true };
     try std.testing.expectEqual(.ok, harness.run());
     // The same evidence the kernel step's run leaves, with the same arguments.
@@ -10357,7 +10228,7 @@ test "request-model: the evidence of the old lifecycle is the same, call by call
 }
 
 test "request-model: an authorization failure or cancellation is recorded evidence, and no call was recorded" {
-    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .authentication_failed }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
+    for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .{ .authentication_failed = .missing } }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -10367,7 +10238,7 @@ test "request-model: an authorization failure or cancellation is recorded eviden
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expect(harness.run() != .ok);
         try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.provider_authorization_result)] == null);
@@ -10443,7 +10314,7 @@ test "closing evidence that does not describe a closable request fails with the 
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
-        fixture.authorization.plan = .{ .failed = .authentication_failed };
+        fixture.authorization.plan = .{ .failed = .{ .authentication_failed = .missing } };
         const graph = try fixture.compile(try requestTerminationYaml(&fixture));
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
@@ -10558,7 +10429,7 @@ fn flowYaml(fixture: *Fixture, flow: Flow) ![]const u8 {
 /// expects the operation failure that binding names, which the runner reports as it is. The same row with
 /// the fact supplied runs the step.
 const withheld_rows = .{
-    .{ .cause = "RequestModelBindingMissing", .flow = Flow.origin, .binding = requests.Prepare, .field = "prepare", .fact = Fact.model_binding, .step = "origin" },
+    .{ .cause = "RequestModelBindingMissing", .flow = Flow.origin, .binding = requests.Prepare, .field = "prepare_request", .fact = Fact.model_binding, .step = "origin" },
     .{ .cause = "ModelAttemptFactsMissing", .flow = Flow.account, .binding = @import("application/model_attempt_workflow.zig").Advance, .field = "advance_attempt", .fact = Fact.model_attempt, .step = "account" },
     .{ .cause = "ProviderOperationFactsMissing", .flow = Flow.assign, .binding = @import("application/provider_operation_workflow.zig").Assign, .field = "assign_operation", .fact = Fact.provider_operation, .step = "assign-operation" },
     .{ .cause = "ProviderAuthorizationFactsMissing", .flow = Flow.authorize, .binding = authorization_workflow.Prepare, .field = "prepare_authorization", .fact = Fact.provider_authorization, .step = "authorize" },
@@ -10580,7 +10451,7 @@ test "a binding whose runner-supplied fact is absent fails with the cause that n
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try flowYaml(&fixture, row.flow));
-        var withheld: Wrapped = .{ .inner = @field(fixture.native, row.field), .fact = row.fact };
+        var withheld: Wrapped = .{ .inner = @field(fixture.native.stages, row.field), .fact = row.fact };
         var wrapped = false;
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, row.binding.contract.id)) {
             if (withheld_fact) entry.binding = bindings.bind(Wrapped, &withheld, Wrapped.invoke);
@@ -10629,7 +10500,7 @@ test "request-model: a step whose closing change the generation counter cannot c
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var near: GenerationNearEnd = .{ .runner = &runner, .stage = last };
         if (exhausted) runner.request_stage_gate = .{ .context = &near, .stop_fn = GenerationNearEnd.gate };
         var harness: Harness = .{ .runner = &runner };
@@ -10676,7 +10547,7 @@ test "request-model: a request assignment past the execution's population is ref
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
-        fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const epoch = try @import("domain/execution_reference.zig").create(std.testing.allocator);
@@ -10721,7 +10592,7 @@ test "request-model: a step ended by a rejection leaves its evidence readable fr
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{unparsable_plan} };
-    fixture.native.invoke_model.action = .{ .provider = scripted.interface() };
+    fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expect(std.meta.activeTag(harness.result()) == .execution_rejected);
     // The correction that preceded the refused attempt already retired part of the evidence from the
@@ -10744,7 +10615,7 @@ test "a call step whose authorization did not prepare is refused before any prov
         try prepareInvocable(&runner);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         if (preparation != .prepared) {
             // The result is the call's own operation's and passes the lease checks, which a failed or
             // cancelled preparation holds no lease for: only the runner's refusal of a call stops it.
@@ -10798,7 +10669,7 @@ test "a step that consumes the prepared request is refused when the retained req
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = unparsable_plan;
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fixture.native.stages.invoke_model.action = .{ .provider = fake.interface() };
         // The workflow runs to just before the step; the request is prepared, so the step runs.
         if (std.mem.eql(u8, step, "assign-operation")) {
             try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
