@@ -262,8 +262,9 @@ Indicative, per run of the set; the conflict column is runs A and B.
 - **No request uses the provider's cache** (ADR 0028:116-117), and cached tokens would count in full against
   the budget anyway (ADR 0011:122-124; ADR 0028:145-146).
 
-Each of these costs follows a contract or a decision. None is known to buy output quality: for the principle
-files and the second schema copy no measurement exists, and for the review packet none has been made.
+Each of these costs follows a contract or a decision. None is known to buy output quality, and none is shown to
+lack it: the second schema copy was found to affect the Given rate (§13), the principle files' benefit is unmeasured
+and their leakage is zero (§10 item 6), and for the review packet no measurement has been made.
 
 ## 6. Do repairs help?
 
@@ -414,7 +415,7 @@ The practices are from Anthropic's guidance on
 | Reduce a large corpus in levels | Done for reconciliation (groups of 8, then summaries). Not for review or record generation | 16-reference-ingestion.md:250 |
 | Count before sending | Not done | Ruled out: ADR 0011:52-53, :132-133; design.md:222-223; SPEC01:524 |
 | A limit that tracks the work | One fixed total per project | ADR 0037; "no larger token budget: a budget failure is fixed at its cause, such as review cost" (SPEC01:523-525) |
-| Don't re-send fixed context with every call | The principle files ride every record-generation call, and every schema is sent twice | D17.1 (ADR 0015); 12-model-boundary.md:210-213. **Decision** (§10 items 4 and 6) |
+| Don't re-send fixed context with every call | The principle files ride every record-generation call, and every schema is sent twice | D17.1 (ADR 0015); 12-model-boundary.md:210-213. **Decision** (§10 item 4 reverted; item 6 dropped) |
 | Keep instructions, evidence and the question apart, with the question last | Instructions sit in up to eight places and the review payload opens with the question (§7) | F0100:764-766; ADRs 0016 and 0023. **Decision** (§10 item 5) |
 | Half-price asynchronous batches | Not used; each step needs the previous step's result | ADR 0028:181-183. Cost only |
 
@@ -433,7 +434,7 @@ nothing about output quality.
 | A | Review each contradiction once, not once per conflict kind | Conflict case: −14% | A verdict that depends on the kind is lost | Amend ADR 0022 (§10 item 3) |
 | B | Model view: each source line stated once, no coordinates or engine rules, fixed order | Publishing cases: −6% to −8%. Conflict case: −19% | A dropped field turns out to matter | Amend F0100 and ADRs 0016 and 0023, one call kind at a time (§10 item 5) |
 | C | One schema copy, no limits stated | −13% to −17% on every run | More rejected answers, not measurable until built | Amend ADRs 0006 and 0014; a new build (§10 item 4) |
-| D | Stop sending principle files in Spec | hello-world: −25%. Loan-renewal: −30% to −40% | None shown; D17.1's set found the model ignored them | Reverses the user's decision D17.1 (§10 item 6) |
+| D | Stop sending principle files in Spec. **Dropped 26 November 2026** (§10 item 6) | hello-world: −25%. Loan-renewal: −30% to −40% | Quality: a story naming a principle-defined term would reach the model without its definition | Reverses the user's decision D17.1 |
 | E | Scope a review's evidence to its subject | Conflict case: −2% to −3% | Review misses context | The "bounded" decision (§10 item 7) |
 
 **What each change sends and keeps:**
@@ -443,7 +444,7 @@ nothing about output quality.
 | A | One review call for each conflicting claim group | The group's conflict kinds |
 | B | Numbered source lines, each claim stated once by line number, one instruction text, evidence before the question | Coordinates, extractor and block IDs, wrappers, evidence rules |
 | C | The native schema, with no length limits stated | The complete schema, limits included, as the acceptance check |
-| D | Nothing in place of the principle files | The captured registry |
+| D (dropped) | Nothing in place of the principle files | The captured registry |
 | E | A review subject's own claims | The whole reference |
 
 **Estimated tokens saved per run:**
@@ -453,13 +454,13 @@ nothing about output quality.
 | A | none | none | 17,400–17,800 |
 | B | 2,700 | 5,200–6,400 | 24,300–24,500 |
 | C | 6,600 | 9,200–13,300 | 18,600 |
-| D | 9,700 | 20,300–40,500 | none |
+| D (dropped) | 9,700 | 20,300–40,500 | none |
 | E | none | none | 2,300–3,500 |
 
 | Case | Now | Estimated after |
 | --- | --- | --- |
-| hello-world | 38,654–39,739 | B and C: 29,400–30,400. With D: 19,700–20,800 |
-| loan-renewal | 66,670–101,582 | B and C: 52,300–81,900. With D: 32,000–41,400 |
+| hello-world | 38,654–39,739 | B and C: 29,400–30,400 (D dropped) |
+| loan-renewal | 66,670–101,582 | B and C: 52,300–81,900 (D dropped) |
 | conflict | 126,513–128,678 | A: 109,100–110,900. A and B: 84,800–86,400. A, B and C: 66,200–67,800. All: 63,900–64,300 |
 
 - **Budget.** A alone puts the conflict case about 14,000 to 16,000 tokens under 125,000. A and B put it about
@@ -511,6 +512,8 @@ orders them into phases.
    - **Why a decision:** without a named class, items 3 to 7 are cost-only changes, which AGENTS.md bars.
    - **Recommended:** name that rate as the target, with finding-type accuracy and the two development cases'
      accuracy counts as guards.
+   - **Used by item 9** (decided 25 November 2026), which takes this class and that rate as its target. For the other
+     items it stays a recommendation.
 3. **Change A: one review subject for each conflicting claim group.** **Built** 25 November 2026 (Phase 2 of §12;
    offline checks passed, §13). Not run live.
    - **Class:** item 2's. By code it is also a completion defect of its own: with two records over one claim
@@ -569,13 +572,33 @@ orders them into phases.
    - **Decision value:** replay retained review requests as captured and in the view, about ten each, and
      compare verdicts; then a set on all three cases. Whether the replay tool's `--edit` takes a payload that
      isn't JSON was not checked.
-6. **Change D: no principle files in Spec.**
-   - **Class:** none; cost. It reverses D17.1 (ADR 0015:16-18; 17-specify.md:332-339), so it is the user's.
-   - **Evidence:** D17.1's set found "no content traces to a principle file" in nine runs and reported "the
-     model ignores the principle text" (Z_SPEC01:2143-2158). That set ran on 15 November, before the cases
-     moved to the current route.
-   - **Decision value:** replay a retained record-generation request with and without `principles`, then a
-     set. The same result informs item 8.
+6. **Change D: no principle files in Spec. Dropped. Decided** 26 November 2026 (user: "update the documentation as per
+   recommendation", on the recommendation to keep the files). Nothing built, nothing to revert. The principle files
+   stay in the records request (D17.1; ADR 0015:16-18; 17-specify.md:332-339).
+   - **Why it was proposed.** The files are 68% of a record-generation call's characters (an estimated 9,700 to 11,300
+     tokens a call, §4), and D17.1's set found "no content traces to a principle file" in nine runs and reported "the
+     model ignores the principle text" (Z_SPEC01:2143-2158). That is a cost argument and a leakage measure.
+   - **Why it is dropped.** The goal is output quality, and removal has no quality case:
+     - **Class:** none (cost only), and it reverses the user's decision. AGENTS.md bars a cost-only change.
+     - **Expected quality gain from removal: 0.** Leakage is already 0 in every output observed: Q17's nine runs and 20
+       replays, and the eight publications of 25 November 2026. Spec is built so a principle can't become content: the
+       records prompt says principles "are not sources: they add no requirement or condition of this feature", records
+       cite only source claims and a principle supplies no passive literal or exact value (17-specify.md:337-339), and
+       the rubric scores technical prescription down (`proportionate-business-scope`, `source-grounding`).
+     - **A concrete way removal could lose quality.** A story that names a project term the principles define (a UI
+       principle's colour, say) would reach the model with only the story's words. Today the records call can read the
+       definition and keep the term as a reference; without it the model could weaken the term, invent a value or keep
+       words it can't interpret. No run covers this: AGENTS.md keeps story values out of case principle files, so no case
+       has a story that depends on one. The 37 outputs show that principles don't leak into stories that never reference
+       them, and nothing more.
+     - **What is not measured, either way.** Whether the files prevent invented storage or UI content, and whether
+       removing text the model seems to ignore moves anything. Phase 3 showed the second can happen: the schema text
+       looked redundant and removing it moved the Given rate from 12 of 30 scenarios to 30 of 30 (§13).
+   - **A gap that remains with the files kept.** Only the records call carries them; the scenarios call writes an
+     acceptance criterion for the same requirement without them. Whether that causes defects is unmeasured, and measuring
+     it needs a case the testing rule forbids today. The user's decision, not proposed.
+   - **A later attempt** would need a quality target first (a defect class the files cause or prevent) and a case that
+     can show it, then a paired replay of the records call.
 7. **Change E, and the decision it needs: what "bounded" means for the evidence a call carries.**
    - **Missing authority:** ADR 0013:94-96 and ADR 0016:119-121 keep complete evidence in every packet unless
      "a deterministic rule proves a smaller scope", and no clause defines that rule. design.md:34-35,
@@ -598,21 +621,129 @@ orders them into phases.
      three cases' sources are under 600 characters each.
    - **Order:** last. It saves 2% to 3% on today's cases (§9) and waits for a case with a large source.
 8. **PLAN01 PD8 uses an earlier token figure.** No Spec change. PD8's "about 20 carrying requests" becomes
-   about 11 to 13 at this set's measured request size (§4). The user's when Plan is actioned (ADR 0034).
-9. **Open: one contradiction raises several forms** (found by the 25 November set, §13; independent of Phase 3). The
-   first leg of the conflict case raised 4 and 3 forms in the two launches that reached forms, one for each review subject
-   that returned `conflicting` about the same claims (feature requirements as well as the conflict subject). The launcher
-   continues only on exactly one form (SPEC01 stage 7), so the second leg has still never run. SPEC01 stage 7 calls more
-   than one form "a model limitation"; here it is a model judgement repeated by several subjects together with an engine
-   rule that one verdict makes one form. No step merges forms across subjects (SPEC01:369-373 merges within one).
-   **Decision:** whether forms naming the same claim set become one need (an engine rule over typed claim IDs; it would
-   not group review subjects, SPEC01:537-538), or the criterion is charged as a model limitation as written. Not
-   proposed; one pattern in two launches.
+   about 11 to 13 at this set's measured request size (§4). The user's when Plan is actioned (ADR 0034). Item 6 keeps
+   Spec's principle files, so the figure stands unchanged by it.
+9. **One contradiction raises several forms: conflicts first. Decided** 25 November 2026 (user: "update the
+   documentaion with the recommendations", on the two recommendations below). Not built. Found by the 25 November set
+   (§13); independent of Phase 3. The amendments to F0100, ADR 0023 and 17-specify.md land with the code.
+   - **What happens** (code and the two launches that reached forms):
+     - Any conflict record makes the reconciliation `blocked` (`src/domain/reference_snapshot.zig:25`), so
+       `generationReady` is false (`src/domain/specification_provenance.zig:38-44`) and the workflow takes the full
+       source-readiness review (`spec.workflow.yaml:107-124`): every seed of `projectRecords`
+       (`src/domain/specification_authority.zig:29-56`), which is six feature requirements, each signal, each conflict
+       record and each exact token. That was 14 review calls and about 88,000 tokens in each launch.
+     - A feature-requirement subject sees every source's full text and may return `conflicting` like any other subject
+       (`support.schema.json` `finding`; `support.prompt.md:21-24`). Its flow or description does depend on the undecided
+       limit, so the verdict is a fair reading and not a fault of the model: 3 and 2 feature subjects returned it, beside
+       the conflict subject.
+     - One need is made for each stage and subject, and a subject is `{requirement, unit, slot, sources}` (ADR 0025:152-166;
+       14-orchestration.md:339-345). Each feature slot is its own subject and none is the conflict's, so the forms can't
+       merge. Only the conflict's form is `select_one`; the others are free text
+       (`src/domain/required_authority_clarifications.zig:167-171`).
+   - **Consequences.** The launcher needs exactly one open form (`test/harness/e2e/answer.zig:46-49`), so no second leg
+     runs. For a user, three of four forms ask what the fourth asks; a text answer to them "applies nothing" (ADR 0025:205-207),
+     and publication needs no open form (F0100:1457-1458), so each must still be closed.
+   - **Correction.** This item first said the forms were "about the same claims" and could merge by "an engine rule over
+     typed claim IDs". That was wrong: a feature subject's negative finding holds source IDs and no claim IDs
+     (`src/domain/specification_support_evidence.zig:117`), and merging across subjects is barred
+     (12-model-boundary.md:651-654; design.md:969; 28-testing.md:147-148).
+   - **Authority.** No clause says who owns a source contradiction. For the conflict record: 16-reference-ingestion.md:254
+     ("exactly one conflict-bound `SNN`"), :364-365, 12-model-boundary.md:882-884, 21-validation.md:43. Against any
+     cross-subject sharing: the three clauses above.
+   - **Options weighed.**
+     - *Fold a feature verdict into the conflict's need by claim IDs:* needs the model to select claims, which
+       12-model-boundary.md:849-851 and ADR 0023:138 bar, an approved answer-sharing contract, and a rule for a select
+       answer settling a text gap (ADR 0025:195). Model-dependent, and the review cost stays. No.
+     - *Feature subjects may not return `conflicting`:* the model may return `ambiguous` or `unsupported` instead, which
+       still makes a form (speculative), and a contradiction reconciliation missed would have no route. No.
+     - *Leave conflict lines out of feature packets:* filtering evidence, barred by ADR 0013:94-95, ADR 0016:120 and
+       17-specify.md:458-459. No.
+     - *Leave it as a model limitation* (SPEC01:413-415): needs nothing, but the duplication is the engine's rule applied
+       to a fair verdict, and the second leg never runs. No.
+   - **Recommended: conflicts first.** The readiness projection of a blocked reconciliation is its conflict records and
+     their forced gaps, nothing else. A complete reconciliation with no eligible claim keeps today's projection (it holds
+     no conflict). So the two reasons readiness can fail get two disjoint projections.
+     - **Owner:** `projectRecords`. It has one production caller
+       (`src/actions/authority/build_specification_authority_requirements.zig:7`), and the gate rebuilds the projection
+       through the same function (`src/domain/required_authority.zig:181-184`), so builder and gate can't disagree.
+     - **Why it is safe, checked in code.** While a conflict record exists the gate can't return `all_resolved`: a
+       conflict's forced gap is discharged only by an established `conflicting` finding, which needs the user, or it is a
+       candidate defect, which goes to repair (`required_authority.zig:492-494`, `:513-531`). So in a blocked pass the
+       other subjects' reviews can't lead to generation; they can only add forms or repairs. After the choice is applied
+       (`apply-answers`, before `source-readiness`) the reconciliation is complete, and the run generates with no review,
+       the path every source without a conflict takes today. The incomplete specification of leg 1 lists the eligible
+       claims and doesn't use the other subjects' verdicts (observed in `2026-11-25T08-11-23Z`).
+     - **Fits the rules:** it groups no subjects (SPEC01:537-538), filters no evidence (the conflict subject keeps its
+       whole packet), shares no answer, judges no prose, and sends the decision through the `select_one` form
+       (ADR 0025:189).
+     - **Amends:** F0100:680-683 (what the projection holds), with ADR 0023:46-48 and 17-specify.md stating the rule.
+     - **Expected** (estimates from this set's per-call sizes, not runs): one form for each conflict group; leg 1 at about
+       32,000 tokens for one group and 41,000 for two (today 111,673 to 126,129), so the first leg's budget stop goes
+       without any request text changing; leg 2 about 70,000 if the choice applies.
+   - **Limits found while validating.**
+     - **Leg 2 reconciles again.** It re-runs extraction and reconciliation (`spec.workflow.yaml:80-99`), so the choice
+       applies only if the new reconciliation draws a conflict over the same lines. If it draws none, "the choice is unused
+       and the report does not say so" (ADR 0025:207-208), and both claims would be generated from. If it draws two groups
+       sharing a claim, neither is answerable and the need is re-raised as `ProtectedClarification`. ADR 0025:268 leaves this
+       "until stage 7's case shows whether an answered subject matches on a rerun": conflicts first is what lets that case
+       run.
+     - **It covers the conflict branch only.** In the other branch (no eligible claim) several feature subjects could
+       still each raise a form about one missing decision. No case shows it.
+     - **A gap unrelated to the conflict isn't asked while a conflict is open.** A source without a conflict isn't
+       reviewed for it either.
+     - **A second conflict group still means two forms** (1 of the 3 latest launches), the model limitation SPEC01 names.
+     - **Tests.** About 19 call sites in `src/specification_generation_test.zig` and the scripted conflict scenarios read
+       the projection; `src/test_fixtures/source_loss_calibration.zig:425` does too, and whether a frozen calibration
+       record depends on it must be checked at `/preflight`.
+   - **Proof.** Tests at the owner (blocked: conflicts only; complete with no eligible claim: today's projection). A
+     request-projection freeze before and after: only the conflict scenarios' review requests should go, and the
+     development cases send no review request, so theirs stay byte-identical (SPEC01 rule 10). Then three launches of the
+     conflict case: forms per launch, whether leg 2 runs, and its adjudication.
+   - **Decided (1): adopt conflicts first,** with those amendments. Reasons:
+     - **Need.** Class: completion of a clarification-expected run (item 2). The conflict case has published in none of
+       its launches and its second leg has never run, so answer application and publication after an answer have no live
+       evidence. It is also a defect for a user: one decision asked in 3 or 4 forms, of which only the select answer is
+       applied.
+     - **Cause at its owner.** The verdicts are fair; the duplication comes from reviewing every subject while a conflict is
+       open. One function owns that, and the gate rebuilds from it.
+     - **Deterministic and inside the rules.** It keys on a typed fact, with no prose rule and no reliance on the model; it
+       groups no subjects, filters no evidence and shares no answer.
+     - **No request text changes.** Phase 3 failed because changing request text moved the Given rate. This changes which
+       requests a blocked pass sends, not their content, and the development cases send no review request.
+     - **The alternatives are worse** (above). The lower first-leg cost is a side effect, not the reason.
+   - **Decided (2): the conflict case is the live proof for this change.** Reasons: the development cases never review
+     (§11 finding 3), so they can show only that nothing changed for them; the class is completion of a clarification run, so
+     its measure is this case's own criterion; and the case stays "neither a reserved qualification feature nor a tuning
+     target" (SPEC01:413-415) because its text and rubric don't change and the criteria below are fixed first. It is no
+     exception to AGENTS.md: both development cases still decide that their requests and output are unchanged.
+   - **Fixed before any launch** (SPEC01 rule 6):
+     - **Target:** forms raised by a first leg equal the conflict groups its reconciliation declares; a first leg with
+       one group reaches its second leg; the case's complete-publication rate (zero so far).
+     - **Guards.** Development cases: the request projection byte-identical before and after (offline), and one live run of
+       each that publishes with no `lost_source_requirement`. Second-leg publications, on the case rubric: the chosen bullet
+       kept (`lost_source_requirement`), the other absent (`contradiction`), no invented resolution
+       (`unsupported_addition`), which are E7's guards (SPEC01 §5).
+     - **Watch, reported apart and never retried:** a second leg whose reconciliation draws no conflict, so the choice is
+       unused; a `ProtectedClarification` block; a launch with two conflict groups; item 10's block.
+     - **Runs:** three launches of the conflict case, extended to at most eight with approval; every attempt counts.
+     - **Reporting.** Counts, not a rate claim: fewer than about ten events is "not enough evidence" (SPEC01 rule 6), and one
+       case qualifies the scope to this source. The unrelated member of the class is an offline scripted fixture in another
+       domain; a second live conflict case is not planned.
 10. **Open: a mismatch between `conflict_groups` and the `conflicting` dispositions blocks the run** (one launch, §13). A
     group naming a `retained` claim is rejected at canonical validation, and the `dispositions` unit has no repair route
     (`src/domain/reference_reconciliation_repair.zig:157`, ADR 0046). Not a Phase 2 or Phase 3 effect. **Decision:** derive
     the groups' claims from the dispositions, correct the mismatch at admission as ADR 0046 does for a missing
     disposition, or leave it as a valid model limitation. Not proposed; one run.
+11. **Open: the incomplete specification prints claims with their source markup escaped** (seen in both first legs that
+    published one, `2026-11-25T08-11-23Z` and `08-17-33Z`: 4 of 4 supported requirements each). A claim keeps its source
+    line's list marker and code spans, and the incomplete-specification renderer
+    (`src/domain/incomplete_specification_markdown.zig`) escapes them, so a requirement reads
+    ``- \- A borrower must …`` and ``\`Loan renewed!\```. Class: `rendering_artefact` in the ADR 0017 publication, which no
+    evaluation scores because a first leg is never evaluated. The cause (the claim text keeping the marker, or the escape)
+    was not traced. Not proposed.
+12. **Stale status text.** F0100:28-29, :961-962, :971-972 and :1544, and design.md:1145, still say ADR 0025's answer
+    application isn't implemented; ADR 0025:3-5 says the conflict answer is. A documentation fix for whenever those files
+    are next amended.
 
 **Not proposed.**
 
@@ -653,7 +784,9 @@ search.
 3. **Review requests never occur in the two development cases.** Those cases have no conflict and set
    `sourcePreservationCheck` false (§4), so changes A, B1 and E alter none of their requests. A review-request
    change therefore can't be decided "on both development cases" (AGENTS.md). The conflict case is the only
-   live member, and SPEC01:413-415 says it is not a tuning target.
+   live member, and SPEC01:413-415 says it is not a tuning target. **Decided** 25 November 2026 for conflicts first
+   (§10 item 9): the conflict case is its live proof, and the development cases show only that nothing changed for
+   them. For any other review-path change this is still open.
 4. **One projection serves reconciliation, review and repair** (ADR 0013:93; `src/domain/model_evidence.zig`).
    Stating claims by line number changes the reconciliation requests of all three cases together with the
    review requests.
@@ -671,7 +804,7 @@ search.
 | B2: evidence projection | Feasible, large | `src/domain/model_evidence.zig` and its readers; 56 lines of `src/specification_generation_test.zig` name the members (grep) | Reconciliation in all three cases, and review | Replays for each call kind, then a set | C |
 | B3: field rules | Feasible, medium | `model_field_presentation.zig:78-113` and the packet-guidance contract | Every call kind | A set | C |
 | C | Feasible. One line of layout, wide test impact. **Built and reverted** (§10 item 4, §13) | `layout` (`src/adapters/provider/model_text_request.zig`) and the `guidance` member of `TextSchema` | Every request | A set. No replay can precede it: the replay tool sends its content through the same layout (e2e.md:83-91) | §10 item 1 |
-| D | Feasible and small: it reverts a known change set | `src/domain/specification_principles.zig` (about 25 lines), its call at `src/actions/specification/build_specification_model_input.zig:10-16`, `records.prompt.md:14-15`, and the architecture pin and tests that Z_SPEC01 Q17 lists. Capture stays (ADR 0015) | Record-generation requests | Replays with and without `principles`, then a set | The user's reversal of D17.1 |
+| D | **Dropped 26 November 2026** (§10 item 6). Was: feasible and small, a revert of a known change set | `src/domain/specification_principles.zig` (about 25 lines), its call at `src/actions/specification/build_specification_model_input.zig:10-16`, `records.prompt.md:14-15`, and the architecture pin and tests that Z_SPEC01 Q17 lists. Capture stays (ADR 0015) | Record-generation requests | Replays with and without `principles`, then a set | The user's reversal of D17.1, not made |
 | E | Not yet | Nothing until the "bounded" decision. Its review half overlaps B1 | None yet | None yet | A case with a large source |
 
 - **A's form.** `conflictSelectionAvailable` rejects a second record only when both its kind and its members
@@ -693,11 +826,22 @@ change set for each measured build, on a committed, unmodified build; each repla
 on its own; kept or reverted on accuracy counts, never on cost. A phase that isn't kept is reverted in full.
 Token figures are §9's estimates.
 
+**Order after 25 November 2026** (item 1 is decided, the rest is recommended; Phases 1 and 2 are built and Phase 3 is
+reverted):
+
+1. **Conflicts first** (§10 item 9; decided, not built). It removes the duplicate forms, lets the second leg run for the first time, and takes
+   the first leg under the budget without changing any request text. It comes before Phase 4, whose saving in the review
+   packet matters far less once a blocked pass reviews only the conflict records.
+2. **The group and disposition mismatch** (§10 item 10), which blocked one launch in three.
+3. **Phase 4, 6 and 7** (Phase 5 is dropped), each with a paired replay screen of hello-world's scenarios call first:
+   Phase 3 showed that the Given rate rides on request text (§13).
+4. **One schema copy again** only after the `given` conflict is settled as its own change (§10 item 4).
+
 **Phase 0. Decisions and reference.** No code.
 
 - **Decisions:** the defect class (§10 item 2); the conflict-case question of finding 2, to reword stories 5 or
   to accept two forms as an unmet criterion; what evidence decides a review-request change (finding 3); the
-  reversal of D17.1; and the amendments each later phase names.
+  amendments each later phase names. The reversal of D17.1 is not made (§10 item 6).
 - **Reference:** label the 50 retained review verdicts, and take a request-projection freeze on the base commit
   (e2e.md:758-792).
 - **Exit:** each later phase has its decision or is dropped.
@@ -748,13 +892,9 @@ that was run.
   `clarification`.
 - **Expected:** not sized apart from B2 and B3.
 
-**Phase 5. Change D.** No principle files in Spec. It depends on no other phase and can move earlier once
-decided.
-
-- **Builds:** the revert that Z_SPEC01 Q17 describes, and the amendments to ADR 0015 and 17-specify.md:332-339.
-- **Proof:** replays of a retained record-generation request with and without `principles`; then a set.
-- **Keep if:** no lost requirement, publication doesn't fall and unsupported additions don't rise.
-- **Expected:** a further 9,700 tokens on hello-world and 20,300 to 40,500 on loan-renewal.
+**Phase 5. Change D.** No principle files in Spec. **Dropped 26 November 2026** (§10 item 6): removal has no quality
+case, and the principle files stay. Not scheduled; a later attempt needs a quality target and a case that can show it
+first.
 
 **Phase 6. Changes B2 and B3.** The evidence projection, then the field rules, as two change sets.
 
@@ -767,9 +907,9 @@ decided.
 
 **Phase 7. Change E.** Needs the "bounded" decision (§10 item 7) and a case with a large source. Not scheduled.
 
-**Live cost.** Phase 1 needs one run of each case. Phases 2 to 6 need at least four sets (C, D, B2 and B3),
-two groups of conflict-case launches (A and B1) and three replay batches (B1, D and B2), each with its own
-approval.
+**Live cost.** Phases 1 and 2 are built and live-checked. What remains needs at least two sets (B2 and B3), conflicts
+first's three conflict-case launches (§10 item 9), a group of conflict-case launches for B1, and two replay batches (B1
+and B2), each with its own approval.
 
 ## 13. Build record, Phases 1 to 3
 
@@ -914,8 +1054,8 @@ set**; the keep-if is the one in §12 Phase 3. Every run is evaluated under `eva
   each (Phase 2 held). The criterion is still unmet in all three, and the second leg has never run:
   - leg 1 of `08-11-23Z` raised **four forms** and `08-17-33Z` **three**, one contradiction each. Each form is a
     `conflicting` verdict of a different review subject (three feature requirements and the conflict subject, or two and
-    the conflict subject), with the same question about the same claims. No step merges forms across subjects. The
-    launcher continues on exactly one form;
+    the conflict subject), with the same question about the same contradiction. The feature verdicts name sources, not
+    claims, and forms of different subjects never merge (§10 item 9). The launcher continues on exactly one form;
   - `08-23-17Z` was **blocked** at call 4: the dispositions answer declared a second group (claims 1 and 6) but left
     claim 1 `retained`, which canonical validation rejects (`relationship`), and the `dispositions` unit has no repair route
     (`reference_reconciliation_repair.zig:157`, ADR 0046). Not a Phase 2 or Phase 3 effect by code; one run.
