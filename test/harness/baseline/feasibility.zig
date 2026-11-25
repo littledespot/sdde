@@ -598,7 +598,6 @@ test "budget usage proof binds actual wire controls to the canonical prepared re
         .content = &.{.{ .user = "Retain the source behavior." }},
         .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
         .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
-        .response_mode = .native_schema,
         .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
         .reasoning_effort = "low",
         .operation_kind = .inference,

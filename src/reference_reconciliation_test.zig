@@ -2430,8 +2430,9 @@ test "empty relationship choices block before model dispatch and genuine conflic
     parsed.proposal.global.conflicts = &.{.{ .claim_ids = input.partition.group.claim_ids, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "Outcomes differ." } }} } }};
     const retained = (try f.validate_dispositions.execute(a, parsed)).valid;
     const rejected_conflict = (try f.validate_conflicts.execute(a, (try f.validate_signals.execute(a, retained, fixture.context())).valid, fixture.context())).invalid;
-    try std.testing.expectEqual(@as(usize, 0), rejected_conflict.relations.conflicting_pairs.len);
-    try std.testing.expectEqual(.no_independent_target, (try repair.authorize(a, parsed, fixture.context(), rejected_conflict)).blocked);
+    // A record over claims that are not conflicting cannot come from a validated group: an engine invariant failure.
+    try std.testing.expectEqual(.relationship, rejected_conflict.issue.rule);
+    try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, parsed, fixture.context(), rejected_conflict));
     const dispositions = try a.dupe(r.ClaimDispositionProposal, good.claim_dispositions);
     dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
     dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
@@ -3053,7 +3054,7 @@ fn relationRepairAllocation(allocator: std.mem.Allocator, parsed: r.Parsed, ctx:
     try std.testing.expect(copied.reconciliation.relations.selection.len != 0);
 }
 
-test "conflict selection respects occupied pairs without conflating conflict kinds" {
+test "a second conflict record over the same claims is a duplicate, whatever its kind" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     for ([_][2][]const u8{
         .{ "Show the greeting.\n", "Suppress the greeting.\n" },
@@ -3067,34 +3068,56 @@ test "conflict selection respects occupied pairs without conflating conflict kin
         const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
         const good = try conflicting(a, input);
         const conflicts = try a.dupe(r.ConflictProposal, &.{ good.conflicts[0], good.conflicts[0] });
-        conflicts[1].claim_ids = &.{};
         conflicts[1].summary = .{ .nodes = &.{.{ .literal = .{ .value = "The eligibility conditions differ." } }} };
         if (!same_kind) conflicts[1].kind = .scope_mismatch;
         var parsed: r.Parsed = .{ .input = input, .proposal = .{ .global = good } };
         parsed.proposal.global.conflicts = conflicts;
         const rejected = (try f.finish(a, input, parsed.proposal.global, fixture.context())).invalid;
+        // The record's kind doesn't open its claims to a second record (ADR 0022, amended 25 November 2026),
+        // and a differing summary is a competing entry, not a removable one.
+        try std.testing.expectEqual(.duplicate_conflict, rejected.issue.rule);
         const decision = try repair.authorize(a, parsed, fixture.context(), rejected);
-        if (same_kind) {
-            try std.testing.expect(decision == .blocked);
-            try std.testing.expectEqual(.no_independent_target, decision.blocked);
-            try std.testing.expectEqual(@as(usize, 0), rejected.relations.conflicting_pairs.len);
-        } else {
-            const authorization = decision.model;
-            const packet = try repair.packet(a, parsed, fixture.context(), authorization, packet_guidance.marked.summary_purpose);
-            defer @import("domain/model_input_packet.zig").release(packet);
-            const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
-            const pairs = body.value.object.get("repair").?.object.get("rule").?.object.get("conflicting_pairs").?.array.items;
-            try std.testing.expectEqual(@as(usize, 1), pairs.len);
-            try std.testing.expectEqualStrings("repair_conflict_selection", packet.resultDefinition().?.bytes);
-            try std.testing.expectEqual(.sequence, std.meta.activeTag(packet.integerChoices()[packet.integerChoices().len - 1].collection));
-            try std.testing.expectEqual(@as(usize, 0), body.value.object.get("input").?.object.get("constraints").?.array.items.len);
-            try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, "{\"claim_ids\":[1,2]}"));
-            const wire = "{\"group_id\":1}";
-            const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context()).inputs), parsed, fixture.context(), authorization, try repair.parse(a, authorization, packet, wire), null);
-            try std.testing.expectEqualDeep(conflicts[0], merged.proposal.global.conflicts[0]);
-            try std.testing.expectEqual(.blocked, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
-        }
+        try std.testing.expect(decision == .blocked);
+        try std.testing.expectEqual(.competing_entries, decision.blocked);
     };
+}
+
+test "a conflict group left without a record is restored by one inserted explanation" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Show the greeting.\n", "Suppress the greeting.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    const good = try conflicting(a, input);
+    var parsed: r.Parsed = .{ .input = input, .proposal = .{ .global = good } };
+    parsed.proposal.global.conflicts = &.{};
+    const rejected = (try f.finish(a, input, parsed.proposal.global, fixture.context())).invalid;
+    try std.testing.expectEqual(.conflict_coverage, rejected.issue.rule);
+    const authorization = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
+    const packet = try repair.packet(a, parsed, fixture.context(), authorization, packet_guidance.marked.summary_purpose);
+    defer @import("domain/model_input_packet.zig").release(packet);
+    const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context()).inputs), parsed, fixture.context(), authorization, .{ .conflict_detail = .{ .kind = good.conflicts[0].kind, .summary = good.conflicts[0].summary } }, null);
+    try std.testing.expectEqual(@as(usize, 1), merged.proposal.global.conflicts.len);
+    try std.testing.expectEqual(.blocked, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+}
+
+test "a conflicting claim in no group has no conflict record to insert and stays blocked" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Show the greeting.\n", "Suppress the greeting.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    var parsed: r.Parsed = .{ .input = input, .proposal = .{ .global = try conflicting(a, input) } };
+    parsed.proposal.global.conflicts = &.{};
+    parsed.proposal.global.conflict_groups = &.{};
+    const rejected = (try f.finish(a, input, parsed.proposal.global, fixture.context())).invalid;
+    try std.testing.expectEqual(.conflict_coverage, rejected.issue.rule);
+    try std.testing.expectEqual(.disposition, std.meta.activeTag(rejected.issue.observed));
+    try std.testing.expectEqual(.no_required_member, (try repair.authorize(a, parsed, fixture.context(), rejected)).blocked);
 }
 
 test "repair progress separates restored membership from invalid inserted content" {

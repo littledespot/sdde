@@ -15,7 +15,7 @@ pub const Authorization = struct {
         const self: *Authorization = @ptrCast(@alignCast(context));
         const expected = self.binding;
         if (!std.mem.eql(u8, value.provider, expected.provider) or !std.mem.eql(u8, value.model, expected.model) or !std.meta.eql(value.provider_config, expected.provider_config) or
-            !std.meta.eql(value.controls, expected.controls) or !debug.sameOptional(value.reasoning_effort, expected.reasoning_effort) or value.response_mode != expected.response_mode or value.operation_kind != .inference) return error.ReplayUnauthorized;
+            !std.meta.eql(value.controls, expected.controls) or !debug.sameOptional(value.reasoning_effort, expected.reasoning_effort) or value.operation_kind != .inference) return error.ReplayUnauthorized;
         return (validatedContract(value) catch return error.ReplayUnauthorized).facts;
     }
 };
@@ -31,12 +31,12 @@ fn validatedContract(binding: debug.Description) error{InvalidEvaluationContract
     const model = identities.ModelId.parse(binding.model) orelse return error.InvalidEvaluationContract;
     // The captured configuration names the family whose compiled contract applies.
     const supported = registered.registry.resolve(provider, model, binding.provider_config) orelse return error.InvalidEvaluationContract;
-    if (!supported.capabilities.supports(binding.response_mode, binding.controls) or
+    if (!supported.capabilities.supports(binding.controls) or
         !@import("../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(supported.supported_reasoning_efforts, binding.reasoning_effort)) return error.InvalidEvaluationContract;
     return supported;
 }
 
-/// Retains captured content, schema, controls and response mode. The caller's
+/// Retains captured content, schema and controls. The caller's
 /// explicit selection forms a temporary diagnostic slot, validated through the
 /// ordinary catalogue and repository allowlist owners. No project is modified.
 /// The result borrows captured fields and the requested model/effort slices;
@@ -75,8 +75,7 @@ pub fn rebind(
     defer allowlist_contract.deinitOwner(allowlist_owner);
     const allowed = allowlist_contract.allowlist(allowlist_owner).resolveSlot(slot) orelse return error.InvalidEvaluationContract;
     const entry = registry.resolveId(allowed.registry_entry_id) orelse return error.InvalidEvaluationContract;
-    if (entry.responseMode() != captured.response_mode or !std.meta.eql(allowed.controls, captured.controls) or
-        !entry.capabilities.supports(captured.response_mode, captured.controls)) return error.InvalidEvaluationContract;
+    if (!std.meta.eql(allowed.controls, captured.controls) or !entry.capabilities.supports(captured.controls)) return error.InvalidEvaluationContract;
 
     var selected = captured;
     selected.model = requested_model;

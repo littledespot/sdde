@@ -13,7 +13,6 @@ const description: @import("../../../src/domain/request_debugger.zig").Descripti
     .content = &.{.{ .user = "source" }},
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
-    .response_mode = .native_schema,
     .controls = .{ .temperatures = null },
     .reasoning_effort = null,
     .operation_kind = .inference,

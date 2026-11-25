@@ -51,7 +51,6 @@ pub const Target = union(enum) {
     signal_content: usize,
     signal: usize,
     insert_signal: struct { index: usize, claim: r.ClaimId },
-    conflict_selection: usize,
     conflict_summary: usize,
     conflict: usize,
     insert_conflict: struct { index: usize, claims: []const r.ClaimId },
@@ -102,7 +101,7 @@ pub const Constraint = enum {
     conflict_pair_covered,
 
     /// Presentation scope only; every merged candidate still runs all validators.
-    pub const Scope = union(enum) { all, selection: enum { statement, signal, conflict }, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Stage };
+    pub const Scope = union(enum) { all, selection: enum { statement, signal }, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Stage };
     pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
         const in_purpose = switch (self) {
             .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,
@@ -118,7 +117,6 @@ pub const Constraint = enum {
             .selection => |unit| switch (unit) {
                 .statement => self == .nonempty_unique_allowed_claims,
                 .signal => self == .nonempty_unique_allowed_claims or self == .nonconflicting_claims or self == .unique_members,
-                .conflict => false,
             },
             .summary, .conflict_detail => false,
             .assignment => |assignment| switch (assignment) {
@@ -201,7 +199,6 @@ pub const ContentKind = union(enum) { model: std.meta.Tag(r.extraction.Content),
 pub const Relations = struct {
     content: ?ContentKind = null,
     selection: []const r.ClaimId = &.{},
-    conflicting_pairs: []const struct { left: r.ClaimId, right: r.ClaimId } = &.{},
     redundant: ?usize = null,
 };
 pub const Rejection = struct {

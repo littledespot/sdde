@@ -316,6 +316,10 @@ This is the one list; other documents refer to it.
     configuration carries the entry's deadline (`request_timeout`). Its v2 and v1
     captures stay readable only as historical evidence that grants no current
     authority; keeping the v2 reader was user-approved.
+  - Removing the response mode (25 November 2026; user decision, ADR 0006) advanced
+    `model-request-debug` to v22 and `model-call-evidence` to v4, each without its
+    `response_mode` member, with no compatibility reader: v3 captures are unreadable. The
+    retained v1 and v2 readers keep reading a recorded `response_mode` as history only.
 - **Retained evidence.** Every tool that revalidates retained runs or captures through
   the production registry or an advanced contract (the retained-call replay `e2e-call`,
   the compatibility inspection, the baseline and the frozen binding) rejects those made

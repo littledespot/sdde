@@ -34,8 +34,8 @@ const valid_provider_document =
     \\  "providers": [{
     \\    "provider": "compiled-provider",
     \\    "models": [
-    \\      { "model": "model-a", "json": false, "config": { "requestTimeoutMs": 1000 } },
-    \\      { "model": "model-b", "json": false, "config": { "requestTimeoutMs": 2000 } }
+    \\      { "model": "model-a", "config": { "requestTimeoutMs": 1000 } },
+    \\      { "model": "model-b", "config": { "requestTimeoutMs": 2000 } }
     \\    ]
     \\  }]
     \\}
@@ -148,19 +148,19 @@ test "unsupported duplicate invalid-config and partially valid catalogues publis
     const invalid = [_][]const u8{
         \\{"providers":[{"provider":"unknown-provider","models":[]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000,"extra":true}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"requestTimeoutMs":1000,"extra":true}}]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{}}]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":0}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"requestTimeoutMs":0}}]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":4294967296}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"requestTimeoutMs":4294967296}}]}]}
         ,
         \\{"providers":[{"provider":"compiled-provider","models":[]},{"provider":"compiled-provider","models":[]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}},{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"requestTimeoutMs":1000}},{"model":"model-a","config":{"requestTimeoutMs":1000}}]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}},{"model":"not-compiled","json": false, "config":{"requestTimeoutMs":1000}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"requestTimeoutMs":1000}},{"model":"not-compiled","config":{"requestTimeoutMs":1000}}]}]}
         ,
     };
 
@@ -289,47 +289,43 @@ fn toolkitSuffix() []const u8 {
     ;
 }
 
-test "catalogue JSON selection retains per-model choices and rejects unsupported siblings" {
+test "catalogue entries register against their contracts and the owned snapshot does not reread the candidate" {
     const a = std.testing.allocator;
     var registered_entries = compiled_contracts.entries[0..2].*;
-    registered_entries[0].capabilities.structured_response = .native_json_schema;
     const registered: contracts.Registry = .{ .entries = &registered_entries };
     const bytes =
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json":true,"config":{"requestTimeoutMs":1000}},{"model":"model-b","json":false,"config":{"requestTimeoutMs":1000}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"requestTimeoutMs":1000}},{"model":"model-b","config":{"requestTimeoutMs":1000}}]}]}
     ;
     var decoded = try steps.decodeConfig(a, bytes);
     defer decoded.deinit();
     var candidate = try steps.buildRegistry(&registered, a, decoded.value());
     defer candidate.deinit();
-    try std.testing.expect(candidate.entries[0].json);
-    try std.testing.expect(!candidate.entries[1].json);
     const owner = try registry_contract.createValidated(a, candidate, registered);
     defer registry_contract.deinitOwner(owner);
     const captured = registry_contract.registry(owner);
-    try std.testing.expectEqual(.native_schema, captured.resolveId(.{ .ordinal = 1 }).?.responseMode());
-    try std.testing.expectEqual(.prompt_only, captured.resolveId(.{ .ordinal = 2 }).?.responseMode());
-    candidate.entries[0].json = false;
+    const expected = captured.resolveId(.{ .ordinal = 1 }).?.capabilities;
+    candidate.entries[0].capabilities.temperature = !expected.temperature;
     // The owned invocation snapshot does not reread mutable candidate configuration.
-    try std.testing.expect(captured.resolveId(.{ .ordinal = 1 }).?.json);
-    candidate.entries[1].json = true;
+    try std.testing.expectEqualDeep(expected, captured.resolveId(.{ .ordinal = 1 }).?.capabilities);
+    // A candidate whose capabilities differ from its registered contract is not registered.
     try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
 }
 
 test "Bedrock catalogue entries take every compiled control from the family they name" {
     const registered = @import("composition/provider_model_contracts.zig").registry;
     const model_ids = @import("model_contract_test_fixture.zig").bedrock_model_ids;
-    const Entry = struct { model: []const u8, json: bool, config: struct { region: []const u8, family: []const u8, maxOutputTokens: u32, requestTimeoutMs: u32 } };
+    const Entry = struct { model: []const u8, config: struct { region: []const u8, family: []const u8, maxOutputTokens: u32, requestTimeoutMs: u32 } };
     const Provider = struct { provider: []const u8, models: []const Entry };
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         const contract = for (registered.entries) |*entry| {
             if (entry.facts.bedrockFamily() == family) break entry;
         } else return error.TestUnexpectedResult;
-        for (std.enums.values(contracts.BedrockRegion)) |region| for ([_]bool{ false, true }) |json| {
+        for (std.enums.values(contracts.BedrockRegion)) |region| {
             var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
             defer arena.deinit();
             const a = arena.allocator();
             var models: [model_ids.len]Entry = undefined;
-            for (&models, model_ids) |*model, id| model.* = .{ .model = id, .json = json, .config = .{ .region = @tagName(region), .family = @tagName(family), .maxOutputTokens = 16000, .requestTimeoutMs = 180000 } };
+            for (&models, model_ids) |*model, id| model.* = .{ .model = id, .config = .{ .region = @tagName(region), .family = @tagName(family), .maxOutputTokens = 16000, .requestTimeoutMs = 180000 } };
             const bytes = try std.json.Stringify.valueAlloc(a, .{ .providers = &[_]Provider{.{ .provider = "aws-bedrock", .models = &models }} }, .{});
             var raw = try steps.decodeConfig(a, bytes);
             defer raw.deinit();
@@ -344,13 +340,12 @@ test "Bedrock catalogue entries take every compiled control from the family they
                 try std.testing.expectEqualDeep(contract.capabilities, entry.capabilities);
                 try std.testing.expectEqual(contract.supported_reasoning_efforts.len, entry.supported_reasoning_efforts.len);
                 for (contract.supported_reasoning_efforts, entry.supported_reasoning_efforts) |expected, actual| try std.testing.expectEqualStrings(expected, actual);
-                try std.testing.expectEqual(@as(@TypeOf(entry.responseMode()), if (json) .native_schema else .prompt_only), entry.responseMode());
             }
-        };
+        }
     }
     // The catalogue names a compiled family exactly; it never supplies an encoding.
     const a = std.testing.allocator;
-    const valid = try std.json.Stringify.valueAlloc(a, .{ .providers = &[_]Provider{.{ .provider = "aws-bedrock", .models = &.{Entry{ .model = model_ids[0], .json = true, .config = .{
+    const valid = try std.json.Stringify.valueAlloc(a, .{ .providers = &[_]Provider{.{ .provider = "aws-bedrock", .models = &.{Entry{ .model = model_ids[0], .config = .{
         .region = @tagName(std.enums.values(contracts.BedrockRegion)[0]),
         .family = @tagName(std.enums.values(contracts.BedrockFamily)[0]),
         .maxOutputTokens = 16000,
@@ -375,7 +370,7 @@ test "Bedrock catalogue entries take every compiled control from the family they
         try std.testing.expectError(error.LLMProviderRegistryInvalid, steps.buildRegistry(&registered, a, raw.value()));
     }
     try std.testing.expect(!@hasField(registry_contract.CandidateEntry, "bedrock_request_profile"));
-    const injected = try std.mem.replaceOwned(u8, a, valid, "\"json\":true", "\"json\":true,\"family\":\"converse\"");
+    const injected = try std.mem.replaceOwned(u8, a, valid, "\"config\":{", "\"family\":\"converse\",\"config\":{");
     defer a.free(injected);
     try std.testing.expectError(error.LLMProviderConfigParseError, steps.decodeConfig(a, injected));
 }

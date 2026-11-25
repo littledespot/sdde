@@ -120,10 +120,10 @@ The internal test environment supplies the evaluation selection:
   key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-use.html), reusing
   the production HTTPS transport, endpoint encoding, text request codec, response
   decoding and AWS exception classification.
-- Bedrock grading requires native JSON Schema capability from the existing model
-  registry in addition to the live-test policy. The selection in the table above
-  satisfies both gates. No model or response mode falls back.
-- Unknown, mismatched or schema-incapable selections reject before a provider call;
+- Bedrock grading sends native JSON Schema output, the only response mode, and requires
+  a model registered in the existing model registry in addition to the live-test
+  policy. The selection in the table above satisfies both gates. No model falls back.
+- Unknown or mismatched selections reject before a provider call;
   no model, region, family, credential chain or endpoint is inferred.
 - The compiled Bedrock family
   ([ADR 0029](../decisions/0029-bedrock-model-families.md)) and capability owner admit

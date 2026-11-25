@@ -127,7 +127,7 @@
   rejection, unrelated workflow representatives, per-use
   request/retry isolation, and rejection of invalid boundaries.
 - Schema source/projection lifetime, local-reference failures, exact bounds,
-  compact/native/prompt-only consistency, and selected-variant rejection.
+  compact/native consistency, and selected-variant rejection.
 - Complete citation/claim/token projection, preserved uncertainty, immutable canonical
   evidence, and allocation-failure cleanup.
 - Full fake-provider workflow tests, architecture checks, and clean native packaging

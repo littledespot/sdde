@@ -8,7 +8,6 @@ pub const max_models_total: usize = 256;
 
 pub const RawProviderModelDefinition = struct {
     model: []const u8,
-    json: bool,
     config: std.json.Value,
 };
 

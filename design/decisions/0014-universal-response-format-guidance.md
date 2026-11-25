@@ -16,8 +16,8 @@ Every model request states the engine's existing JSON response framing:
 
 - The provider-neutral response-controls contract owns this one constant.
 - Provider serializers emit it once as system-level guidance for initial calls, semantic
-  review, repair and protocol retries in any workflow, in both `prompt-only` and
-  supported `native-schema` modes.
+  review, repair and protocol retries in any workflow, beside the native JSON-schema
+  output (amended 25 November 2026: native output is the only response mode).
 - Test evaluators reuse the same constant.
 
 - The instruction is serialized beside the existing response schema; it is not appended
@@ -41,7 +41,7 @@ Every model request states the engine's existing JSON response framing:
 ## Acceptance
 
 - Serialized requests contain the shared instruction exactly once, including retries,
-  both response modes and both evaluator providers.
+  and both evaluator providers.
 - Unrelated result schemas retain their complete schema guidance and input bytes; native
   generation constraints follow ADR 0006's registered projection.
 - Malformed JSON still rejects except for the user-approved, logged

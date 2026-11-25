@@ -67,7 +67,7 @@ pub fn validate(value: Config) c.Error!void {
         .openai_responses => if (value.region != null or value.family != null) return error.InvalidEvaluationContract,
         .bedrock_converse => {
             const model = try bedrockContract(value);
-            if (!model.capabilities.supportsResponse(.native_schema) or
+            if (!model.capabilities.isValid() or
                 !contracts.supportsReasoningEffort(model.supported_reasoning_efforts, if (value.reasoning_effort) |effort| @tagName(effort) else null)) return error.InvalidEvaluationContract;
             // The evaluator owns its judge temperature (ADR 0039): a model that
             // takes one requires a value, and one that takes none requires null.

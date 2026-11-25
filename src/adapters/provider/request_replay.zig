@@ -38,9 +38,9 @@ pub const Adapter = struct {
         const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null)) return error.InvalidReplay;
         if (description.exact_scope) |scope| if (!@import("../../domain/model_exact_values.zig").valid(scope)) return error.InvalidReplay;
-        const text_schema: text.TextSchema = switch (description.response_mode) {
-            .prompt_only => .{ .prompt_only = schema.modelBytes() },
-            .native_schema => .{ .native = .{ .guidance = schema.modelBytes(), .structure = @import("../../domain/model_schema_projection.zig").render(a, schema, .native) catch return error.InvalidReplay } },
+        const text_schema: text.TextSchema = .{
+            .guidance = schema.modelBytes(),
+            .structure = @import("../../domain/model_schema_projection.zig").render(a, schema, .native) catch return error.InvalidReplay,
         };
         const effort = text.reasoningEffort(description.reasoning_effort) catch return error.InvalidReplay;
         // The captured family must be the one the authorized binding compiles.

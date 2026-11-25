@@ -62,8 +62,7 @@ pub fn validateDescription(a: std.mem.Allocator, description: Description, wire:
     // A frozen protocol binds the configured temperature it recorded; a
     // runaway re-send's temperature is not part of it (ADR 0039).
     const temperature = if (description.sampling == .configured) if (description.controls.temperature(.configured)) |value| value.wireValue() else null else return error.FrozenBindingRejected;
-    if (!std.mem.eql(u8, @tagName(description.response_mode), @tagName(frozen.response_mode)) or
-        !@import("../../src/domain/request_debugger.zig").sameOptional(description.reasoning_effort, expected.reasoningEffort) or
+    if (!@import("../../src/domain/request_debugger.zig").sameOptional(description.reasoning_effort, expected.reasoningEffort) or
         !std.mem.eql(u8, description.provider, expected.provider) or !std.mem.eql(u8, description.model, expected.model) or
         !std.meta.eql(temperature, @as(?f64, frozen.temperature)) or
         !std.meta.eql(description.provider_config, @import("../../src/domain/llm_provider_contracts.zig").ValidatedProviderConfig{ .aws_bedrock = .{ .region = target.region, .family = frozen.family, .max_output_tokens = frozen.max_output_tokens, .request_timeout = frozen.request_timeout_ms } }) or
@@ -96,7 +95,6 @@ test "frozen slot controls retain each role's effort without substituting genera
             .content = &.{.{ .user = "Use the assigned source evidence." }},
             .protocol_prompt = @import("../../src/domain/model_controls.zig").response_format_guidance,
             .schema = "{}",
-            .response_mode = .native_schema,
             .controls = .{ .temperatures = @import("../../src/test_fixtures/model_temperatures.zig").temperatures },
             .reasoning_effort = example.effort,
             .operation_kind = .inference,

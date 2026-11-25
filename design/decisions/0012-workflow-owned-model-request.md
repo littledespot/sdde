@@ -33,12 +33,13 @@
   schema and optional input resource once. Temperature is configuration-owned
   (§12.5, ADR 0039): the configured `temperature` when the registered model supports
   it, omitted otherwise; workflow temperature parameters reject.
-- The required per-model `json` boolean in `.sddproviders.json` is the sole
-  response-mode selector (user-directed, 2026-09-21). `true` selects
-  native schema output, `false` prompt-only; registered capabilities still constrain
-  support. Workflow `response-mode` is removed and rejected. Binding, preparation,
-  correction, authorization and replay retain/verify the selected mode. Full engine
-  validation, retries and token accounting remain unchanged.
+- The required per-model `json` boolean in `.sddproviders.json` was the sole
+  response-mode selector (user-directed, 2026-09-21). Amended 25 November 2026 (user:
+  "remove the "json": false, it brings limited value and bloats the code base"): native
+  schema output is the only response mode, the catalogue has no `json` member and no
+  request, binding, lease or description records a mode. Workflow `response-mode` is
+  removed and rejected. Full engine validation, retries and token accounting remain
+  unchanged.
 - Registered identity, binding-validation and request-building operations exchange
   immutable typed pipeline values. `prepare-model-request` (user-approved,
   2026-09-18) may also reuse those domain owners and publish

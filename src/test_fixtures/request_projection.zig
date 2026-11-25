@@ -28,7 +28,6 @@ pub const Projection = struct {
     content: Member("content"),
     protocol_prompt: Member("protocol_prompt"),
     schema: Member("schema"),
-    response_mode: Member("response_mode"),
     controls: Member("controls"),
     sampling: Member("sampling"),
     reasoning_effort: Member("reasoning_effort"),

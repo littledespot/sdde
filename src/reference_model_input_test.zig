@@ -98,7 +98,6 @@ test "no rule text the model reads carries engine vocabulary" {
         .conflict_detail,
         .{ .selection = .statement },
         .{ .selection = .signal },
-        .{ .selection = .conflict },
         .{ .disposition = .rules },
         .{ .assignment = .summary },
         .{ .assignment = .dispositions },
@@ -442,6 +441,55 @@ test "a dispositions assignment binds every semantic claim natively and states n
         try std.testing.expectEqual(bound.?.allowed[0], omission.member.?);
         try std.testing.expectEqualStrings("/claim_dispositions", (try omission.describe(a)).path);
     }
+}
+
+test "a conflicts answer names every declared group once and a repeat or omission is corrected as the whole answer" {
+    const stage = @import("domain/reference_reconciliation_stage.zig");
+    const r = reconciliation.r;
+    const schema = @import("domain/model_result_schema.zig");
+    const envelope = @import("domain/model_envelope.zig");
+    const payload = @import("domain/model_payload_schema.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try @import("reference_reconciliation_test.zig").prepare(a, &.{ "Display the greeting.\n", "Suppress the greeting.\n" });
+    defer fixture.deinit();
+    const global = try reconciliation.summaries(a, try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    var candidate: r.Parsed = .{ .phase = .signals, .input = global, .proposal = .{ .global = try @import("reference_reconciliation_test.zig").conflicting(a, global) } };
+    candidate.proposal.global.conflicts = &.{};
+    const checked = (try reconciliation.validate_signals.execute(a, (try reconciliation.validate_dispositions.execute(a, candidate)).valid, fixture.context())).valid;
+    const packet = try stage.packet(std.testing.allocator, .{ .conflicts = checked }, fixture.inputs, fixture.text.registry);
+    defer packets.release(packet);
+    // One native exact-members choice over the declared groups (ADR 0022, amended 25 November 2026).
+    var bound: ?schema.IntegerChoice = null;
+    for (packet.integerChoices()) |choice| if (choice.collection == .exact_members) {
+        try std.testing.expect(bound == null);
+        bound = choice;
+    };
+    try std.testing.expectEqual(.native, bound.?.collection.exact_members.count);
+    try std.testing.expectEqualDeep(&[_]schema.ChoiceStep{ .{ .property = "conflicts" }, .items, .{ .property = "group_id" } }, bound.?.target.path);
+    try std.testing.expectEqualSlices(i64, &.{1}, bound.?.allowed);
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const resource = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
+    const native = try schema.restrict(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+    defer native.release();
+    const text_body = "{\"nodes\":\"The sources disagree.\"}";
+    const once = "{\"conflicts\":[{\"group_id\":1,\"kind\":\"value_mismatch\",\"summary\":" ++ text_body ++ "}]}";
+    const twice = "{\"conflicts\":[{\"group_id\":1,\"kind\":\"value_mismatch\",\"summary\":" ++ text_body ++ "},{\"group_id\":1,\"kind\":\"precedence_missing\",\"summary\":" ++ text_body ++ "}]}";
+    var accepted = try envelope.parseContent(std.testing.allocator, once, null);
+    defer accepted.deinit();
+    try std.testing.expect(payload.validateValue(envelope.value(&accepted.parsed.value), native.selected().root()) == null);
+    // A second kind for one group repeats a member.
+    var repeated = try envelope.parseContent(std.testing.allocator, twice, null);
+    defer repeated.deinit();
+    const repeat = payload.validateValue(envelope.value(&repeated.parsed.value), native.selected().root()).?;
+    try std.testing.expectEqual(.duplicate_member, repeat.reason);
+    // An empty answer omits the group, and its correction names it.
+    var empty = try envelope.parseContent(std.testing.allocator, "{\"conflicts\":[]}", null);
+    defer empty.deinit();
+    const omission = payload.validateValue(envelope.value(&empty.parsed.value), native.selected().root()).?;
+    try std.testing.expectEqual(.missing_member, omission.reason);
+    try std.testing.expectEqual(@as(i64, 1), omission.member.?);
 }
 
 test "shared text choice refresh retains unrelated restrictions and replaces stale text IDs" {

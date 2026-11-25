@@ -615,10 +615,11 @@ revision and exact accepted content; final full validation remains mandatory.
     or coupled conflict members. Semantic conflicts remain model-assisted.
   - Different exact scalars cannot be declared duplicates.
 - Conflict explanations select an accepted native `group_id`, a closed conflict
-  kind and typed `summary`. Native code attaches membership and unresolved status.
+  kind and typed `summary`, one explanation for each declared group (ADR 0022, amended 25 November 2026).
+  Native code attaches membership and unresolved status.
 
-  - Overlapping conflicts retain all relationship coverage; duplicate conflict groups of
-    the same kind fail.
+  - Overlapping conflicts retain all relationship coverage; a second conflict record over one
+    claim set fails, whatever its kind.
   - Conflicting claims cannot be projected as resolved signals.
   - No source-precedence authority is currently registered, so model-proposed precedence
     or user resolution is rejected.
@@ -651,7 +652,7 @@ revision and exact accepted content; final full validation remains mandatory.
   choices.
 - Mixed claim kinds cannot receive a content-only assignment; an eligible selection can
   be repaired first, followed by an existing missing-member insertion when needed.
-- Empty signal selections or absent conflicting pairs block before a model call.
+- Empty signal selections block before a model call.
 - Every member must still be accounted for before acceptance.
 - Redundancy uses validated, normalized text together with identical claim evidence and
   obligations; adjacent literal segmentation alone does not create a competing claim.

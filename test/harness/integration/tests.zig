@@ -2271,10 +2271,10 @@ const ProviderWire = struct {
 const two_provider_catalogue =
     \\{"providers":[
     \\{"provider":"anthropic","models":[
-    \\{"model":"claude-haiku-5-5","json":false,"config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}},
-    \\{"model":"claude-opus-5-5","json":true,"config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}}]},
+    \\{"model":"claude-haiku-5-5","config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}},
+    \\{"model":"claude-opus-5-5","config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}}]},
     \\{"provider":"aws-bedrock","models":[
-    \\{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16384,"requestTimeoutMs":180000}}]}]}
+    \\{"model":"openai.gpt-oss-20b-1:0","config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16384,"requestTimeoutMs":180000}}]}]}
 ;
 
 const claude_slot = "{\"provider\":\"anthropic\",\"model\":\"claude-haiku-5-5\",\"reasoningEffort\":\"low\"}";
@@ -2436,8 +2436,8 @@ test "a Claude-only Spec run sends every call through the shared adapter to the 
         try std.testing.expectEqualStrings("claude-haiku-5-5", sent.value.object.get("model").?.string);
         try std.testing.expectEqual(@as(i64, 128000), sent.value.object.get("max_tokens").?.integer);
         try std.testing.expectEqualStrings("low", sent.value.object.get("output_config").?.object.get("effort").?.string);
-        // The catalogue selects prompt-only for this model: no native format.
-        try std.testing.expect(sent.value.object.get("output_config").?.object.get("format") == null);
+        // Native JSON-schema output is the only mode.
+        try std.testing.expectEqualStrings("json_schema", sent.value.object.get("output_config").?.object.get("format").?.object.get("type").?.string);
         try std.testing.expect(std.mem.indexOf(u8, body, "offline-anthropic-credential") == null);
     }
     try std.testing.expectEqual(@as(u64, 3), outcome.execution_rejected.retry_limit.completed_executions);

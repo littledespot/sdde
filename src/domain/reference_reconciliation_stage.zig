@@ -78,7 +78,10 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, current.items), null, true);
     const ids = try scratch.alloc(i64, conflict_catalogue.len);
     for (ids, conflict_catalogue) |*id, group| id.* = group.group_id.ordinal;
-    return packets.withIntegerChoices(a, inherited, &.{.{ .target = .{ .path = &.{ .{ .property = "conflicts" }, .{ .items = {} }, .{ .property = "group_id" } } }, .definition = result.resultDefinition(), .allowed = ids }});
+    // One explanation for every declared group (ADR 0022, amended 25 November 2026): admission rejects an omitted or
+    // repeated group and corrects the whole assignment, as ADR 0046 does for dispositions. The schema states no count,
+    // so the request is unchanged.
+    return packets.withIntegerChoices(a, inherited, &.{.{ .target = .{ .path = &.{ .{ .property = "conflicts" }, .{ .items = {} }, .{ .property = "group_id" } } }, .definition = result.resultDefinition(), .allowed = ids, .collection = .{ .exact_members = .{ .count = .native } } }});
 }
 pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet, body: []const u8, origin: @import("model_candidate_origin.zig").Origin) r.Error!r.Parsed {
     const current = input(prior);

@@ -35,16 +35,12 @@
     "model": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model", "json", "config"],
+      "required": ["model", "config"],
       "properties": {
         "model": {
           "type": "string",
           "minLength": 1,
           "maxLength": 512
-        },
-        "json": {
-          "type": "boolean",
-          "description": "Response-mode selector: true selects native JSON-schema output, which requires registered provider support; false selects prompt-only schema guidance."
         },
         "config": {
           "type": "object",

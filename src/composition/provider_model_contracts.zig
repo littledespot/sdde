@@ -8,12 +8,11 @@ pub const anthropic_implementation: contracts.RegisteredProviderImplementationId
 // API or Bedrock Converse. Each Messages API model still needs
 // its own approved compatibility probe before live use.
 const anthropic_efforts: []const []const u8 = &.{ "low", "medium", "high", "xhigh", "max" };
-const anthropic_capabilities: @import("../domain/model_capabilities.zig").Capabilities = .{ .inference = true, .structured_response = .native_json_schema, .temperature = false };
+const anthropic_capabilities: @import("../domain/model_capabilities.zig").Capabilities = .{ .inference = true, .temperature = false };
 
-/// Bedrock family capabilities: Converse inference in either response mode, the
-/// catalogue's `json` flag choosing one (ADR 0029).
+/// Bedrock family capabilities: Converse inference with native JSON-schema output (ADR 0029).
 fn bedrockCapabilities(temperature: bool) @import("../domain/model_capabilities.zig").Capabilities {
-    return .{ .inference = true, .structured_response = .native_json_schema, .temperature = temperature };
+    return .{ .inference = true, .temperature = temperature };
 }
 
 // Support, not defaults. A Bedrock family contract covers every catalogue model

@@ -408,8 +408,8 @@ safe boundaries require their own dependency/coverage analysis using this contra
   overlap, missing ownership, cycles, ambiguous variants/presence and graph overflow.
   Reused `$defs` at different destinations retain distinct values/producers; a split
   that removes a discriminator needed to distinguish unequal branches rejects.
-- Each projected schema derives from the exact complete schema; native/prompt
-  provider modes and correction retain the same part association and constraints.
+- Each projected schema derives from the exact complete schema; native output and
+  correction retain the same part association and constraints.
   Release compiler/capture owners, then prepare, correct, retain and assemble through
   the surviving registry; every projection still binds its canonical schema owner.
   Reject a correct shape bound to the wrong composition/part. Initial and correction

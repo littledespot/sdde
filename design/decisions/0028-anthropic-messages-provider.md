@@ -111,8 +111,8 @@ implements the dated wire manifest, including the error table.
     `user` message.
   - **Effort:** `reasoningEffort` maps to `output_config.effort`.
   - **Native schema:** sends `output_config.format = {type: "json_schema", schema}`,
-    using the shared projection as a JSON object.
-  - **Prompt-only:** keeps the full schema in system guidance and sends no format.
+    using the shared projection as a JSON object (amended 25 November 2026: the only
+    response mode; the prompt-only form is removed).
   - **Fields never sent:** `temperature`, `top_p`, `top_k`, `thinking`, `stop_sequences`,
     tools, caching, `inference_geo` and `speed`. The registry declares
     `temperature: false`.
@@ -175,9 +175,9 @@ binding, correction or replay can narrow it.
 
 ## Not decided here
 
-- **Response mode.** Whether Claude entries use native schema or prompt-only waits for
-  measured compatibility. Both are implemented, and the catalogue's `json` flag
-  selects one.
+- **Response mode.** Settled 25 November 2026 (user: "remove the "json": false, it
+  brings limited value and bloats the code base"): Claude entries use native schema, the
+  only response mode. The catalogue has no `json` member.
 - **Out of scope:**
   - streaming, prompt caching, tools, batches and Claude through clouds other than
     Bedrock (ADR 0029's `claude` family);

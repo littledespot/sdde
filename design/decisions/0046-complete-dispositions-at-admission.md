@@ -72,8 +72,10 @@ as `cardinality`, and repair inserted each missing disposition with its own call
    list. Replay reapplies every recorded member set natively, over the bounds the
    recorded schema bytes already carry. The description shape therefore doesn't change,
    and `model-request-debug` takes no new version (ADR 0019).
-6. **Scope.** Two members of the omission class are left out:
-   - **Statement, signal and conflict coverage inserts:** these are at-least-one
+6. **Scope.** Two members of the omission class are left out. The conflicts answer's group IDs left
+   this list on 25 November 2026: [ADR 0022](0022-native-reference-phase-handoffs.md) "Conflict groups" binds
+   them as exact members, since two records over one claim pair left a conflict that no answer could resolve.
+   - **Statement and signal coverage inserts:** these are at-least-one
      coverage contracts, not exact membership, and no harm has been observed.
    - **Token classifications:** their composite key can't be bound by `exact_members`.
 

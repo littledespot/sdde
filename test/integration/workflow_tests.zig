@@ -107,7 +107,7 @@ const MatrixProviderBootstrap = struct {
         _: *const bootstrap_root_registry.LLMProviderConfigCapability,
     ) model_provider_bootstrap_binding.Outcome {
         const self: *MatrixProviderBootstrap = @ptrCast(@alignCast(context));
-        return .{ .ready = @import("../../src/model_request_workflow_test.zig").providerServices(self.allocator, null, &.{ "spec_generation", "repair" }, false) catch unreachable };
+        return .{ .ready = @import("../../src/model_request_workflow_test.zig").providerServices(self.allocator, null, &.{ "spec_generation", "repair" }) catch unreachable };
     }
 };
 
@@ -4161,7 +4161,7 @@ const test_provider_contracts: llm_provider_contracts.Registry = .{ .entries = &
     .capabilities = @import("../../src/model_contract_test_fixture.zig").capabilities,
 }} };
 const test_provider_document =
-    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}}]}]}
+    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"requestTimeoutMs":1000}}]}]}
 ;
 const test_model_step: workflow_compilation.CompiledStep = .{
     .id = workflow.WorkflowStepId.parse("run").?,

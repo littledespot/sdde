@@ -40,7 +40,6 @@ pub const Reconciliation = enum {
     repair_summary,
     repair_conflict_detail,
     repair_conflict_group,
-    repair_conflict_selection,
 
     pub fn id(self: Reconciliation) schema.DefinitionId {
         return .{ .bytes = @tagName(self) };

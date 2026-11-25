@@ -35,8 +35,7 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
 - The provider catalogue at `paths.providers` (`.sddproviders.json`) is the second,
   separately owned model-configuration source.
   [F0006 §3](../features/F0006-LLMProviderInterface.md#3-exact-sddprovidersjson-contract)
-  owns its closed shape, including each model's required `json` output selection and its
-  closed per-provider `config` with `maxOutputTokens` and the required `requestTimeoutMs`
+  owns its closed shape, including each model's closed per-provider `config` with `maxOutputTokens` and the required `requestTimeoutMs`
   deadline; [F0006 §5](../features/F0006-LLMProviderInterface.md#5-conditional-bootstrap-and-change-handling)
   owns its single immutable capture per model-capable invocation. Neither configuration
   document carries a credential

@@ -130,8 +130,12 @@ For example, a single-target replacement response is simply:
 - Unsupported numeric, string and array bounds remain in the complete schema supplied as
   guidance and enforced by the unchanged engine validator.
 - The projection is never acceptance authority.
-- No workflow or model supplies a second schema, relaxes validation, silently switches
+- No workflow or model supplies a second schema, relaxes validation, switches
   response mode, coerces output or introduces a hidden retry.
+- Amended 25 November 2026 (user: "remove the "json": false, it brings limited value and
+  bloats the code base"): native output is the only response mode. The prompt-only mode,
+  the catalogue's `json` member and the "native mode" qualifiers above are
+  removed; every registered contract supports native output.
 
 - This amendment is authorized by the user's instruction to implement shared
   provider-enforced output and actionable JSON diagnostics.
@@ -281,8 +285,7 @@ For example, a single-target replacement response is simply:
 - Malformed, duplicate, unknown, incomplete, excessive and legacy-envelope responses
   reject.
 - Required citations and selections cannot be omitted.
-- Native and prompt-only modes have the same candidate meaning and rejection rules;
-  unsupported native schemas fail before any provider call.
+- Unsupported native schemas fail before any provider call.
 - Tests inspect the actual model-visible payload and account for API-reported
   input/output usage, not size estimates or mandatory pre-call counts.
 - No fixed token-saving percentage is assumed.

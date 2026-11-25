@@ -230,7 +230,7 @@ test "test.integration.baseline freezes explicit scored rubric and refuses evalu
 
 const Fault = enum { none, source_changed, response_capture_failed };
 const Wire = struct {
-    native: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = response },
+    native: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expects_native_output = true, .inference_body = response },
     parent: std.Io.Dir,
     facts: *acquisition.Facts,
     gate: *dispatch.Gate,
@@ -304,7 +304,6 @@ test "test.integration.baseline source-only native acquisition retains exact fir
         try std.testing.expectEqualDeep(facts.receipts[0].origin, context.origin);
         try std.testing.expectEqualStrings("openai.gpt-oss-20b-1:0", context.model);
         try std.testing.expectEqualStrings("low", context.reasoning_effort.?);
-        try std.testing.expectEqual(.native_schema, context.response_mode);
         var lines = std.mem.tokenizeScalar(u8, example.sources[0].text, '\n');
         const first_requirement = while (lines.next()) |line| {
             if (std.mem.startsWith(u8, line, "- ")) break line;

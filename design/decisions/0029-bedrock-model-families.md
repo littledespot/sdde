@@ -69,11 +69,12 @@ the engine sends beyond common Converse input:
 | --- | --- | --- | --- |
 | `converse` | None | Omitted (provider default) | None |
 | `gpt-oss` | `low`, `medium`, `high` | Configured (ADR 0039) | `additionalModelRequestFields.reasoning_effort` |
-| `luna` | None | Omitted | `additionalModelRequestFields.text.format.strict` in native mode |
+| `luna` | None | Omitted | `additionalModelRequestFields.text.format.strict` |
 | `claude` | `low` to `max` | Omitted | `additionalModelRequestFields.output_config.effort`; no `thinking` field |
 
-Every family supports both response modes, and the catalogue's `json` flag selects
-one.
+Every family sends native JSON-schema output, the only response mode (amended
+25 November 2026; user: "remove the "json": false, it brings limited value and bloats
+the code base"). The catalogue has no `json` member.
 
 A Bedrock catalogue entry names its model, Region, family, documented maximum output
 and deadline:
@@ -81,7 +82,6 @@ and deadline:
 ```json
 {
   "model": "au.anthropic.claude-haiku-5-5",
-  "json": true,
   "config": {
     "region": "ap-southeast-2",
     "family": "claude",

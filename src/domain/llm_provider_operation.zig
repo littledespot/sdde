@@ -102,7 +102,6 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     model_visible_input_id: ModelVisibleInputId,
     content: []const ModelVisibleContent,
     response_schema: *const @import("model_result_schema.zig").Schema,
-    response_guidance_mode: model_controls.ResponseGuidanceMode,
     controls: model_controls.InferenceControls,
     /// Which configured temperature this attempt sends; only ADR 0039's runaway
     /// re-send sends the runaway-retry temperature.
@@ -153,10 +152,8 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
 
     pub fn matchesBinding(self: IdentifiedProviderNeutralModelRequest, selected: binding.ValidatedProviderModelBinding) bool {
         const supported = selected.registry_entry.capabilities;
-        const mode = selected.registry_entry.responseMode();
-        return supported.supports(mode, selected.controls) and
+        return supported.supports(selected.controls) and
             self.binding_id.eql(selected.bindingId()) and
-            self.response_guidance_mode == mode and
             std.meta.eql(self.controls, selected.controls);
     }
 };

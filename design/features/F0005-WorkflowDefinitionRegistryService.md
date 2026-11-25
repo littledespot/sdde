@@ -513,8 +513,8 @@ service is published.
 > below describe the rules each stage binding keeps; none is a YAML-selectable operation.
 
 - Request-origin contracts selecting a model binding declare their typed slot.
-  The selected catalogue model owns response mode through its required `json` boolean
-  (ADR 0012); workflow `response-mode` and `temperature` overrides reject.
+  Native JSON-schema output is the only response mode (ADR 0012, amended 25 November
+  2026); workflow `response-mode` and `temperature` overrides reject.
 - Under [ADR 0011](../decisions/0011-provider-owned-request-limits.md), retired
   `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters reject.
 - Registration and compilation require no capacity fields, local size ceilings or fit

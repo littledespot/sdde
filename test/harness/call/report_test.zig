@@ -12,7 +12,6 @@ const description: debug.Description = .{
     .content = &.{.{ .user = "MOCK ordinary request" }},
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
-    .response_mode = .prompt_only,
     .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
     .reasoning_effort = "low",
     .operation_kind = .inference,

@@ -164,7 +164,7 @@ The two project inputs have distinct responsibilities:
 | File | Responsibility |
 | --- | --- |
 | `.sddtoolkit.json` | Define the repository's allowed model set through named slots containing exact provider/model references and accepted options. F0001 remains its sole reader and decoder. |
-| `.sddproviders.json` | Catalogue the bounded configured provider/model instances, explicit JSON-output selection and their closed provider-specific deployment configuration. It contains no repository allowlist, workflow-operation assignment, capability claim, executable implementation, or secret. |
+| `.sddproviders.json` | Catalogue the bounded configured provider/model instances and their closed provider-specific deployment configuration. It contains no repository allowlist, workflow-operation assignment, capability claim, executable implementation, or secret. |
 
 - Let `C` be the exact validated catalogue tuple set and `S` the tuple set projected
   from `models.slots`.
@@ -213,7 +213,6 @@ ProviderDefinition {
 
 ProviderModelDefinition {
   model: ProviderModelId,
-  json: boolean,
   config: RegisteredProviderModelConfig
 }
 ```
@@ -249,8 +248,9 @@ ProviderModelDefinition {
   [ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
 - The provider catalogue may declare only a known provider, a model its provider
   admits (any Bedrock model or inference-profile ID with a compiled family, ADR 0029;
-  a registered Anthropic model, ADR 0028), explicit `json` selection, and the fields
-  permitted by that provider's closed `config` variant.
+  a registered Anthropic model, ADR 0028), and the fields permitted by that provider's
+  closed `config` variant. A catalogue model carries no `json` member (amended
+  25 November 2026).
 - Catalogue membership alone does not make that model repository-authorized.
 
 `RegisteredProviderModelConfig` is a closed tagged union selected by the
@@ -306,7 +306,6 @@ ProviderModelContract {
   providerVariant: RegisteredProviderVariant,
   targetContract: RegisteredProviderTargetContract,
   operationSet: RegisteredProviderOperationSet,
-  structuredResponse: RegisteredStructuredResponseContract,
   supportedControls: RegisteredInferenceControlSet
 }
 ```
@@ -374,13 +373,12 @@ LLMProviderDispatch = union(enum) {
 - An internally consistent but insufficient contract may remain catalogued, but cannot
   produce a usable model binding.
 
-- Response support admits `unavailable | prompt_only | native_json_schema`, one
-  native JSON-schema capability for every provider (ADR 0028).
-- Only the registered native profile permits native mode; its structural projection
+- Native JSON-schema output is the only response mode (user decision, 25 November
+  2026), so a contract declares no response support and every registered contract
+  provides it for every provider (ADR 0028). Its structural projection
   and the complete schema's guidance and validation follow
   [§12.3](../contracts/12-model-boundary.md#123-provider-neutral-response-envelope) and
   [ADR 0006](../decisions/0006-minimal-model-response.md).
-  Unsupported modes reject without fallback.
 - The compiled Bedrock family owns its verified wire fields, independently of those
   neutral capabilities (ADR 0029; [F0007](F0007-AWSBedrockProvider.md)).
 
@@ -481,19 +479,16 @@ outcome:
 5. the request retains the complete compiled result schema under ADR 0006;
    native generation constraints derive from it through the registered profile.
 
-Request-origin contracts declare one repository slot. Response mode
-([§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)) and
-temperature ([§12.5](../contracts/12-model-boundary.md#125-low-capability-model-operating-rules),
-[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)) come from
-the bound catalogue entry and configuration, never from the workflow. An entry selecting
-native-schema output (`json: true`) that its contract does not support rejects the
-complete catalogue.
+Request-origin contracts declare one repository slot. Temperature
+([§12.5](../contracts/12-model-boundary.md#125-low-capability-model-operating-rules),
+[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)) comes from
+the bound catalogue entry and configuration, never from the workflow. Native-schema
+output is the only response mode
+([§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)).
 
 - The originating step's typed slot requirements compile into the
   existing model-binding projection. Binding resolves that validated slot; graph
-  cloning rebuilds the projection from its owned parameters. Requests, leases and
-  capture records retain observations of the binding's response mode for validation,
-  not another selection authority.
+  cloning rebuilds the projection from its owned parameters.
 - Request consumers grant immutable binding data, not a provider port.
 - Provider-call capabilities remain independently derived from narrow ports and
   constrained by the selected policy.
@@ -506,7 +501,7 @@ complete catalogue.
   `model.provider_stopped` log; [§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)
   applies them to model operations. ADR 0039's one `output_limit` re-send is made by the
   runner's request flow, never by the provider adapter.
-- The runner checks identity, slot, schema, response mode and supported controls against
+- The runner checks identity, slot, schema and supported controls against
   the compiled contract and retains those facts for exact single-use authorization.
 
 **Actual token accounting**
@@ -697,9 +692,8 @@ port LLMProviderInterface {
   second inference request; a concrete provider must resolve such effects at separately
   accepted and accounted boundaries.
 
-- `ModelVisibleInputId` binds ordered model-visible content, controls, response-guidance
-  mode and the full response-schema identity; it is provider-neutral, not a provider
-  wire-request digest.
+- `ModelVisibleInputId` binds ordered model-visible content, controls and the full
+  response-schema identity; it is provider-neutral, not a provider wire-request digest.
 
 ## 8. Closed request, observation, and failure algebra
 
@@ -1042,9 +1036,9 @@ F0006 does not:
    - Full host/target collision proof keeps that file role distinct from engine config
      and every configured/derived root even when loading is skipped.
 3. The document has exactly the bounded
-   `providers[] -> { provider, models[] -> { model, json, config } }` shape, and every
+   `providers[] -> { provider, models[] -> { model, config } }` shape, and every
    common object and resolved provider variant is closed at its owning boundary.
-4. Capabilities, operations, tokenization, structured response, target,
+4. Capabilities, operations, tokenization, target,
    endpoint, and data-routing facts come only from compiled model contracts.
 5. The repository example selects a Bedrock model with a compiled family and
    validates against the production contracts. It is never a runtime default
@@ -1310,8 +1304,7 @@ Implementation evidence must cover:
   clarification/context alternatives.
 - Inspect actual model-visible payloads without reattached engine metadata and account
   for API-reported input/output usage
-- test identical semantics in prompt-only and supported native mode without silent
-  fallback.
+- test native output without silent fallback.
 
 **Architecture/security**
 

@@ -141,7 +141,7 @@ test "deadline is checked again at consume including exact equality" {
 }
 
 test "prepared lease cannot be reused with altered binding or controls" {
-    for (0..4) |variant| {
+    for (0..3) |variant| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -160,9 +160,6 @@ test "prepared lease cannot be reused with altered binding or controls" {
             2 => {
                 selected.controls.temperatures = null;
                 request.controls = selected.controls;
-            },
-            3 => {
-                request.response_guidance_mode = .native_schema;
             },
             else => unreachable,
         }

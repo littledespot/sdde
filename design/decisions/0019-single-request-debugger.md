@@ -12,7 +12,7 @@
   2, 12 and 14 November 2026), [ADR 0036](0036-source-quoted-claims.md) (18 November 2026)
   and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
   (26 October 2026), which change what the request description records ("Capture and
-  lineage" and "Replay" below; current version `model-request-debug/v21`, which also carries
+  lineage" and "Replay" below; current version `model-request-debug/v22`, which also carries
   [ADR 0043](0043-model-facing-exact-text-names.md)'s model-facing names and, since
   [ADR 0048](0048-engine-derived-specification-title.md), no brief-title field binding).
   [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, amended 23 October

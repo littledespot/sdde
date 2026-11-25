@@ -100,7 +100,7 @@ pub fn select(calls: []const debug.Call, captured: evidence_context.Captured, wo
         !std.mem.eql(u8, call.slot, context.slot) or !std.mem.eql(u8, description.workflow_id, workflow) or
         !std.mem.eql(u8, description.request_step, context.request_step) or !std.mem.eql(u8, description.model_slot, context.slot) or
         !std.mem.eql(u8, description.model, context.model) or !debug.sameOptional(description.reasoning_effort, context.reasoning_effort) or
-        description.response_mode != context.response_mode or !std.mem.eql(u8, description.schema, context.response_schema) or
+        !std.mem.eql(u8, description.schema, context.response_schema) or
         description.content.len != context.content.len or context.attempt != context.origin.attempt.value) return error.CaptureMismatch;
     if (!captured.recordsConfig(description.provider, description.provider_config)) return error.CaptureMismatch;
     for (description.content, context.content) |expected, actual| {

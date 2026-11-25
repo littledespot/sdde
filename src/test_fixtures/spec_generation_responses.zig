@@ -362,7 +362,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
                         dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                         proposal.signals = proposal.signals[2..];
-                        proposal.conflicts = if (fault == .conflict_coverage) &.{} else &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } }};
+                        // An omitted group is an admission defect (ADR 0022, amended 25 November 2026): the correction
+                        // returns the group's explanation.
+                        proposal.conflicts = if (fault == .conflict_coverage and options.attempt == 1) &.{} else &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = if (fault == .conflict_coverage) "The outcomes differ." else "Invalid\x01text" } }} } }};
                         if (fault == .occupied_conflict) {
                             const conflicts = try allocator.dupe(r.ConflictProposal, &.{ proposal.conflicts[0], proposal.conflicts[0] });
                             conflicts[0].summary = .{ .nodes = &.{.{ .literal = .{ .value = "The outcomes differ." } }} };

@@ -31,10 +31,9 @@ pub const Action = struct {
         const required = step.model orelse return invalid();
         const allowed = allowlist.resolveSlot(required.slot) orelse return invalid();
         const entry = registry.resolveId(allowed.registry_entry_id) orelse return invalid();
-        const response_mode = entry.responseMode();
         const supported = entry.capabilities;
         const controls = allowed.controls;
-        if (!supported.supports(response_mode, controls)) return invalid();
+        if (!supported.supports(controls)) return invalid();
         if (!contracts.supportsReasoningEffort(
             entry.supported_reasoning_efforts,
             allowed.reasoning_effort,

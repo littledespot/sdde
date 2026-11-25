@@ -524,7 +524,7 @@ for integration/fault-injection evidence. They are not E2E results:
 ### 28.8 Model-conformance comparisons
 
 Assess request-guidance changes (assignment-specific instructions, correction
-guidance, model or response-mode choice, further response decomposition) through
+guidance, model choice, further response decomposition) through
 existing request capture, provider binding, validators and the harness.
 Scripted fault/recovery tests establish enforcement, sibling/provenance preservation,
 dependency freshness and exact accounting; they do not establish live reliability.
@@ -533,8 +533,7 @@ dependency freshness and exact accounting; they do not establish live reliabilit
   cases, settings and repetition counts before comparing. Include unchanged invalid
   corrections, structural recovery that drops content, and fully supported recovery.
 - Change one factor at a time: hold model/settings fixed for guidance or composition
-  comparisons, and hold schema/evidence/guidance fixed for model or response-mode
-  comparisons. Retain actual serialized requests, responses and validation results.
+  comparisons, and hold schema/evidence/guidance fixed for model comparisons. Retain actual serialized requests, responses and validation results.
 - Report initial JSON/schema admission, correction recovery/exhaustion, unchanged
   responses, omitted requirements, unsupported evidence and false clarification gaps
   separately. A parseable response or a genuine clarification is not scored completion.

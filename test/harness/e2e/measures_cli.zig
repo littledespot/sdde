@@ -354,7 +354,7 @@ fn putTestRun(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, name: []const 
 /// One retained call's current evidence and, when given, its model output.
 fn putTestCall(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, run: []const u8, call: usize, request: u32, attempt: u32, model_output: ?[]const u8) !void {
     const context: CallContext = .{
-        .schema = .@"model-call-evidence/v3",
+        .schema = .@"model-call-evidence/v4",
         .call = call,
         .origin = .{ .request = .{ .value = request }, .attempt = .{ .value = attempt } },
         .request_step = "generate-records",
@@ -367,7 +367,6 @@ fn putTestCall(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, run: []const 
         .reasoning_effort = "low",
         .content = &.{.{ .user = "MOCK request" }},
         .response_schema = "{\"type\":\"object\"}",
-        .response_mode = .prompt_only,
     };
     // The layout is the store's: a moved evidence path moves the tests' files with it.
     try putTestFile(io, root, try std.fs.path.join(a, &.{ run, try evidence.Store.path(a, .generation, call, .context) }), try std.json.Stringify.valueAlloc(a, context, .{}));

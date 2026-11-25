@@ -130,9 +130,19 @@ Section *N* is detailed in `design/contracts/NN-*.md`; the §13 catalogue is in
   security policy only when the request explicitly includes it.
 - Get explicit approval before publishing, writing externally, acting destructively
   or materially expanding scope.
-- Run no git command, read-only included; the user alone manages version control.
-  Never advise on commits or make commit state a condition of approved work. A run's
-  recorded build state is reported as a fact.
+- Git is for checking uncommitted files and rolling them back, nothing else.
+  - Check and validate: `git status`, `git diff` (optionally against `HEAD`),
+    `git ls-files` and `git show HEAD:<path>`.
+  - Roll back: `git restore -- <path>...` on named files, only when the user asks for
+    the rollback and only when `git diff` shows that every uncommitted change in those
+    paths came from the work being rolled back. Otherwise restore from a recorded
+    before-image, never from git: git holds the committed tree, not an earlier
+    uncommitted state, and a restore discards the user's own uncommitted changes.
+  - No other git command: no staging, commit, branch, tag, stash, reset, clean,
+    checkout, merge, rebase, fetch, pull, push, configuration or global option.
+  - The user alone manages version control. Never advise on commits or make commit
+    state a condition of approved work. A run's recorded build state is reported as a
+    fact.
 - Preserve existing user changes; make no unrelated edits in a dirty worktree.
 
 ## Recommendations

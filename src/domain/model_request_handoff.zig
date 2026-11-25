@@ -354,11 +354,11 @@ pub fn resent(current: *const Request, owned: preparation.Owned, runaway: *const
 
 fn sameExceptSampling(sent: *const provider.IdentifiedProviderNeutralModelRequest, repeated: *const provider.IdentifiedProviderNeutralModelRequest) bool {
     // Every field below is compared; a new request field must join them.
-    comptime std.debug.assert(@typeInfo(provider.IdentifiedProviderNeutralModelRequest).@"struct".fields.len == 15);
+    comptime std.debug.assert(@typeInfo(provider.IdentifiedProviderNeutralModelRequest).@"struct".fields.len == 14);
     if (sent.model_request_id != repeated.model_request_id or !sent.model_operation_id.eql(repeated.model_operation_id) or
         !sent.binding_id.eql(repeated.binding_id) or !std.mem.eql(u8, sent.request_schema_id.bytes, repeated.request_schema_id.bytes) or
         !std.mem.eql(u8, sent.result_schema_id.bytes, repeated.result_schema_id.bytes) or !sent.model_visible_input_id.eql(repeated.model_visible_input_id) or
-        sent.response_schema != repeated.response_schema or sent.response_guidance_mode != repeated.response_guidance_mode or
+        sent.response_schema != repeated.response_schema or
         !std.meta.eql(sent.controls, repeated.controls) or sent.content.len != repeated.content.len or
         sent.original_sources.len != repeated.original_sources.len or
         !@import("model_text_wire.zig").sameProseFields(sent.prose_fields, repeated.prose_fields) or

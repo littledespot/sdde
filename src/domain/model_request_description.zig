@@ -2,12 +2,12 @@
 const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
-pub const Version = enum { @"model-request-debug/v21" };
+pub const Version = enum { @"model-request-debug/v22" };
 /// The one admitted description version, for readers that classify captures by it.
-pub const current_version = @tagName(Version.@"model-request-debug/v21");
+pub const current_version = @tagName(Version.@"model-request-debug/v22");
 
 pub const Description = struct {
-    version: Version = .@"model-request-debug/v21",
+    version: Version = .@"model-request-debug/v22",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -18,7 +18,6 @@ pub const Description = struct {
     content: []const provider.ModelVisibleContent,
     protocol_prompt: []const u8,
     schema: []const u8,
-    response_mode: @import("model_controls.zig").ResponseGuidanceMode,
     controls: @import("model_controls.zig").InferenceControls,
     /// Which configured temperature this attempt sent (ADR 0039), so replay
     /// sends the same value.
@@ -49,7 +48,6 @@ pub const Description = struct {
             .content = request.content,
             .protocol_prompt = @import("model_controls.zig").response_format_guidance,
             .schema = request.response_schema.modelBytes(),
-            .response_mode = request.response_guidance_mode,
             .controls = request.controls,
             .sampling = request.sampling,
             .reasoning_effort = selected.reasoning_effort,
@@ -75,8 +73,7 @@ pub const Description = struct {
             std.mem.eql(u8, selected.registry_entry.model.bytes, self.model) and
             std.meta.eql(selected.registry_entry.config, self.provider_config) and
             debug.sameOptional(selected.reasoning_effort, self.reasoning_effort) and
-            std.meta.eql(selected.controls, self.controls) and
-            selected.registry_entry.responseMode() == self.response_mode;
+            std.meta.eql(selected.controls, self.controls);
     }
 
     pub fn decode(a: std.mem.Allocator, bytes: []const u8) @import("strict_json.zig").Error!Description {

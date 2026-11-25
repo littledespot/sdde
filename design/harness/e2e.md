@@ -115,12 +115,12 @@ catalogue and the current registered model-binding contracts. The diagnostic
 creates an ephemeral in-memory binding: it inherits the captured provider and takes
 the selected model's configuration from the catalogue (Bedrock: Region, family,
 maximum output and deadline; Anthropic: maximum output and deadline). Captured
-response mode and other inference controls are preserved. Unsupported combinations reject before
-dispatch; no model, response mode or control silently falls back. The effective
+inference controls are preserved. Unsupported combinations reject before
+dispatch; no model or control silently falls back. The effective
 binding must also pass the live cost policy before the credential is read. A retained
 catalogue must satisfy the current catalogue contract, including `requestTimeoutMs`
 ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
-Captures with incompatible response modes or temperature controls reject; the
+Captures with incompatible temperature controls reject; the
 command does not rewrite those controls or add catalogue entries. The capture
 and its configuration remain unchanged. Browser exact and modified replay retain
 their existing model/settings restrictions.
@@ -201,8 +201,7 @@ recorded model maximum and no smaller allowance
 The frozen-protocol fixture configuration selects exactly these slot controls and
 passes preflight; the shipped wf-001/wf-002 configuration selects Claude and does
 not. A drifted slot control rejects with `FrozenBindingRejected`. Any supplied reasoning remains separately captured diagnostic data.
-No historical request is retargeted and no alternative model or response mode
-is substituted.
+No historical request is retargeted and no alternative model is substituted.
 
 The transport permits **at most one physical inference send**. The attempt is
 charged at the send boundary, so a transport failure does not permit a replacement
@@ -315,7 +314,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   execution budget.
 - Provider-owned response limits still apply and are reported as provider stops.
 - Bedrock generation, diagnostics and the standalone evaluator share the Converse
-  codec. The catalogue's `json: true` selects native JSON Schema; GPT-OSS-20B's
+  codec. Native JSON Schema is the only response mode; GPT-OSS-20B's
   `gpt-oss` family ([ADR 0029](../decisions/0029-bedrock-model-families.md)) sends the
   selected reasoning effort and the configured temperature, with
   `inferenceConfig.maxTokens` 16,384. Provider reasoning counts toward output usage;

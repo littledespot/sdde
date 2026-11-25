@@ -5,7 +5,6 @@
       "models": [
         {
           "model": "openai.gpt-oss-20b-1:0",
-          "json": true,
           "config": {
             "region": "ap-southeast-2",
             "family": "gpt-oss",

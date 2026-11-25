@@ -51,7 +51,6 @@ entries, never an absent entry. No model or region is a runtime default.
     "provider": "aws-bedrock",
     "models": [{
       "model": "openai.gpt-oss-20b-1:0",
-      "json": true,
       "config": {
         "region": "ap-southeast-2",
         "family": "gpt-oss",
@@ -75,11 +74,12 @@ the time the model takes to return that maximum output. It is required, from 1 t
 request that selects the entry, including protocol corrections. Workflow YAML declares
 no deadline.
 
-`json: true` uses Converse with `outputConfig.textFormat.type: "json_schema"`
+Every request uses Converse with `outputConfig.textFormat.type: "json_schema"`
 and `outputConfig.textFormat.structure.jsonSchema.schema` as a JSON string
 ([AWS structured-output contract](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)).
-`false` sends complete schema guidance without that native output constraint.
-Neither changes engine validation or permits fallback after provider rejection.
+Native output is the only response mode (user decision, 25 November 2026) and the
+catalogue has no `json` member. It does not change engine validation or permit fallback
+after provider rejection.
 
 The compiled registry supports these Bedrock families
 ([ADR 0029](../decisions/0029-bedrock-model-families.md)). A catalogue entry may name
@@ -91,10 +91,10 @@ capability or encoding.
 | --- | --- | --- | --- |
 | `converse` | None | Omitted (provider default) | None |
 | `gpt-oss` | `low`, `medium`, `high` | Configured `temperature`; `temperatureRunawayRetry` on a runaway re-send ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)) | `additionalModelRequestFields.reasoning_effort` |
-| `luna` | None | Omitted | `additionalModelRequestFields.text.format.strict` in native mode |
+| `luna` | None | Omitted | `additionalModelRequestFields.text.format.strict` |
 | `claude` | `low` to `max` | Omitted | `additionalModelRequestFields.output_config.effort`; no `thinking` field |
 
-Every family supports both response modes; the catalogue's `json` flag selects one.
+Every family sends native JSON-schema output.
 
 AWS documents default medium reasoning for Luna models but not the exact Converse
 override fields, so the `luna` family admits only omission of explicit reasoning and
@@ -177,12 +177,11 @@ quality conclusion follows from API availability.
   No local limit below that maximum, reservation or silent control substitution is
   introduced.
 - No streaming, tools, stop sequences or arbitrary request parameters are added.
-- Both response modes add the complete compiled result schema once to guidance.
-  Native mode also sends its registered structural projection as a JSON string in
+- Each request adds the complete compiled result schema once to guidance and sends its
+  registered structural projection as a JSON string in
   `outputConfig.textFormat.structure.jsonSchema.schema`, with type `json_schema`
-  and name `sdde_model_envelope_v1`. Luna native mode also emits
-  `additionalModelRequestFields.text.format.strict: true`; prompt-only mode
-  omits both native output fields. No service-tier override is sent.
+  and name `sdde_model_envelope_v1`. Luna also emits
+  `additionalModelRequestFields.text.format.strict: true`. No service-tier override is sent.
 - This is derived data, never a second schema source.
 - Under [ADR 0006](../decisions/0006-minimal-model-response.md), closed objects,
   required fields, types, enums and constants are retained; disjoint tagged `oneOf`
@@ -190,9 +189,9 @@ quality conclusion follows from API availability.
 - Bounds unsupported by [Bedrock's schema
   subset](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
   remain in complete guidance and authoritative engine validation.
-- No error triggers a response-mode fallback.
-- Both modes require the same explicit YAML response validation, strict JSON decoding
-  and payload validation.
+- No error triggers a fallback.
+- The explicit YAML response validation, strict JSON decoding and payload validation
+  still apply.
 
 ## Response, failure and accounting
 

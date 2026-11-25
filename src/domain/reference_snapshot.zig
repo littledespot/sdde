@@ -137,7 +137,7 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot, normalizer: @i
     for (records.conflicts, conflicts, 0..) |conflict, *proposal, index| {
         proposal.* = .{ .claim_ids = conflict.value.claim_ids, .kind = conflict.value.kind, .summary = conflict.value.summary.value };
         if (conflict.id.ordinal != index + 1 or try v.conflictClaims(items, records.dispositions, proposal.claim_ids, allowed) != null or
-            !v.conflictSelectionAvailable(conflicts[0..index], index, proposal.kind, proposal.claim_ids)) return error.InvalidReferenceSnapshot;
+            !v.conflictSelectionAvailable(conflicts[0..index], index, proposal.claim_ids)) return error.InvalidReferenceSnapshot;
         const selected = try @import("reference_support.zig").select(a, items, value.inputs, proposal.claim_ids);
         try x.text.stored(x.text.ReferenceNode, a, .{ .inputs = value.inputs, .passive = captured, .scopes = selected.scopes, .field = .reconciliation_conflict }, conflict.value.summary.value.nodes);
         try citationUnion(a, items, proposal.claim_ids, conflict.value.citation_ids);

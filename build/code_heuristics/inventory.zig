@@ -268,7 +268,7 @@ test "inventory refuses replaced parent symlinks and nonrepository roots" {
 fn projected(comptime guidance: []const u8, comptime protocol: []const u8) []const u8 {
     return "{\"provider\":\"test-provider\",\"model\":\"test-model\",\"provider_config\":{\"deadline_only\":{\"request_timeout\":1000}}," ++
         "\"model_slot\":\"spec_generation\",\"workflow_id\":\"spec-generation\",\"content\":[{\"guidance\":\"" ++ guidance ++ "\"},{\"user\":\"user text\"}]," ++
-        "\"protocol_prompt\":\"" ++ protocol ++ "\",\"schema\":\"{\\\"type\\\":\\\"object\\\"}\",\"response_mode\":\"prompt_only\"," ++
+        "\"protocol_prompt\":\"" ++ protocol ++ "\",\"schema\":\"{\\\"type\\\":\\\"object\\\"}\"," ++
         "\"controls\":{\"temperatures\":{\"configured\":0.1,\"runaway_retry\":1}},\"sampling\":\"configured\",\"reasoning_effort\":null," ++
         "\"operation_kind\":\"inference\",\"original_sources\":[],\"prose_fields\":[],\"field_policies\":[],\"exact_scope\":null," ++
         "\"members\":[],\"coverages\":[]}";

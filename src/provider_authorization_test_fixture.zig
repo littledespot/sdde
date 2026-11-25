@@ -63,7 +63,6 @@ pub const Fixture = struct {
             .model = .{ .bytes = "fake-model" },
             .implementation_id = .{ .ordinal = 1 },
             .config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } },
-            .json = false,
             .capabilities = @import("model_contract_test_fixture.zig").capabilities,
             .supported_reasoning_efforts = &.{"low"},
             .facts = .deadline_only,
@@ -88,7 +87,6 @@ pub const Fixture = struct {
             .model_visible_input_id = .{ .bytes = "input-1" },
             .content = &.{ .{ .system = "Return the declared result." }, .{ .user = "Generate the bounded candidate." } },
             .response_schema = response_schema,
-            .response_guidance_mode = .prompt_only,
             .controls = self.provider_binding.controls,
         });
         self.preloader = .{ .allocator = allocator };

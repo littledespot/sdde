@@ -338,8 +338,6 @@ test "selected source and reconciliation repairs conform to their native respons
     try checkCandidate("reconciliation", "business_text", "{\"segments\":" ++ response_wire.segments ++ "}");
     try checkCandidate("reconciliation", "reference_text", "{\"nodes\":" ++ response_wire.nodes ++ "}");
     try checkCandidate("reconciliation", "repair_selection", "{\"claim_ids\":[" ++ response_wire.id ++ "]}");
-    try checkCandidate("reconciliation", "repair_conflict_selection", "{\"group_id\":7}");
-    try candidateCase("reconciliation", "repair_conflict_selection", "{\"group_id\":7,\"claim_ids\":[7,9]}", .unknown_property, "/claim_ids");
     try checkCandidate("reconciliation", "repair_summary", "{\"nodes\":" ++ response_wire.nodes ++ "}");
     try checkCandidate("reconciliation", "repair_conflict_detail", "{\"kind\":\"scope_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}");
     try checkCandidate("reconciliation", "repair_disposition", "{\"kind\":\"retained\"}");
@@ -592,7 +590,6 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         if (comptime std.mem.eql(u8, definition, "reference_text")) return nativeWire(r.text.ReferenceSemanticText, a, bytes);
         if (comptime std.mem.eql(u8, definition, "repair_disposition")) return nativeWire(@import("domain/reference_conflict_groups.zig").SemanticDisposition, a, bytes);
         if (comptime std.mem.eql(u8, definition, "repair_conflict_group")) return nativeWire(@import("domain/reference_conflict_groups.zig").Repair, a, bytes);
-        if (comptime std.mem.eql(u8, definition, "repair_conflict_selection")) return nativeWire(struct { group_id: @import("domain/reference_conflict_groups.zig").Id }, a, bytes);
         const T = @import("domain/reference_reconciliation_repair.zig").Replacement;
         return selectedWire(T, a, @field(std.meta.Tag(T), definition["repair_".len..]), bytes);
     } else if (comptime std.mem.eql(u8, name, "generation")) {

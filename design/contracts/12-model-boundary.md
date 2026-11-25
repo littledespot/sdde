@@ -51,7 +51,7 @@ and ownership rules.
 
 - Every model request includes the short engine-owned JSON framing instruction defined by [ADR
   0014](../decisions/0014-universal-response-format-guidance.md), once per serialized call.
-- It applies to all workflows, response modes and retries.
+- It applies to all workflows and retries.
 - Task guidance and the exact result schema remain workflow-selected; the schema alone defines
   the permitted response fields and values.
 
@@ -239,7 +239,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v21` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v22` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 
@@ -258,8 +258,9 @@ request/response codec, including production invocation, diagnostic replay and t
 development harness. Common `system`, `messages`, `inferenceConfig` and
 `outputConfig` fields replace provider-specific chat envelopes. Native structured
 output projects the existing compiled schema into `outputConfig.textFormat`;
-`structure.jsonSchema.schema` is a JSON string. Prompt-only models still receive
-the exact closed schema as guidance and pass the same native candidate validators.
+`structure.jsonSchema.schema` is a JSON string. Native output is the only response
+mode (user decision, 25 November 2026); every registered contract supports it, so a model
+without it cannot be registered. The exact closed schema is also sent once as guidance.
 
 The compiled Bedrock family named by the catalogue entry owns the typed additional-control
 policy; [ADR 0029](../decisions/0029-bedrock-model-families.md) owns the families, Regions
@@ -373,9 +374,9 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - The originating model-request step calls a registered generic operation and declares its model
   slot, prompt/guidance resources, result schema, allowed context behavior,
   and outcome transitions in the workflow definition.
-- Response mode comes only from the selected catalogue model’s required `json` boolean
-  (§9; ADR 0012). Bindings derive it from their immutable catalogue entry rather than
-  retaining another selector. Workflow response-mode overrides reject; schemas remain workflow-owned.
+- Native JSON-schema output is the only response mode (user decision, 25 November 2026;
+  ADR 0012). The catalogue has no `json` member and no binding or request records a mode.
+  Workflow response-mode overrides reject; schemas remain workflow-owned.
 - Large resources are declared once and referenced by concise local IDs.
 - Request preparation may select an optional `context` prompt resource, including
   JSON field guidance. It precedes task guidance in static developer content;

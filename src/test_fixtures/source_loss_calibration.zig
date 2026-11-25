@@ -478,7 +478,7 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
     const content = try @import("../domain/strict_json.zig").decode([]const @import("../domain/llm_provider_operation.zig").ModelVisibleContent, a, try std.json.Stringify.valueAlloc(a, edit.object.get("content").?, .{}), .{ .maximum_depth = 64 });
     return @import("../adapters/provider/bedrock_request.zig").encodeText(a, .{
         .content = content,
-        .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .native) } },
+        .schema = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .native) },
         .schema_name = "sdde_model_envelope_v1",
         .temperature = @import("model_temperatures.zig").temperatures.configured,
         .reasoning_effort = .low,

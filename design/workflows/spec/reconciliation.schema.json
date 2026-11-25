@@ -573,18 +573,6 @@
         "additionalProperties": false
       },
       "maxItems": 4294967295
-    },
-    "repair_conflict_selection": {
-      "type": "object",
-      "properties": {
-        "group_id": {
-          "$ref": "#/$defs/ordinal"
-        }
-      },
-      "required": [
-        "group_id"
-      ],
-      "additionalProperties": false
     }
   },
   "$ref": "#/$defs/summary"
