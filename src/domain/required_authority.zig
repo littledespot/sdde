@@ -121,12 +121,17 @@ pub const Evidence = struct {
 pub const Exception = struct { id: ExceptionId, requirement: Id, authority: Authority, authenticated_actor_ordinal: u64 };
 pub const ForcedGap = struct { requirement: Id, reason: GapReason, subject: enum { authority, candidate } = .authority };
 pub const Projection = enum { source_readiness, source_preservation, registered_obligations };
+/// Which review a source-readiness projection serves. `first` is the pass that discovers
+/// what the sources need; `dependent` is the review pass that validates a pending source
+/// repair, so it covers everything the repair could have touched.
+pub const Pass = enum { first, dependent };
 /// Current review authority must be retired before generation consumes sources.
 /// The retirement operation and source-consumption precondition share this set.
 pub const projection_keys = [_]@import("pipeline.zig").DataKey{ .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate };
 pub const Inputs = struct {
     feature: @import("feature_identity.zig").FeatureId,
     projection: Projection = .registered_obligations,
+    pass: Pass = .first,
     source_inputs: ?@import("reference_evidence.zig").Inputs = null,
     detected_at: DetectionStage,
     authorities: []const Authority,
@@ -178,8 +183,12 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
         try sameSeeds(expected.seeds, inputs.seeds);
         try sameSet(Authority, expected.authorities, inputs.authorities);
     } else if (inputs.source_inputs != null) return error.InvalidRequiredAuthority;
+    // Only a source-readiness review has a second pass.
+    if (inputs.projection != .source_readiness and inputs.pass != .first) return error.InvalidRequiredAuthority;
     if (inputs.projection == .source_readiness) {
-        const expected = try @import("specification_authority.zig").projectRecords(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority);
+        // The pass only chooses between two projections, and `dependent` is the wider one:
+        // a mistaken `dependent` reviews more subjects, never fewer.
+        const expected = try @import("specification_authority.zig").projectRecords(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.pass);
         try sameSeeds(expected.seeds, inputs.seeds);
         try sameSet(ForcedGap, expected.forced_gaps, inputs.forced_gaps);
     }

@@ -56,7 +56,11 @@ pub const ProjectSpecification = struct {
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         if (generated.phase() != .pre_generation) return reject(self.allocator, inputs_schema, owner, error.InvalidRequiredAuthority);
-        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
+        const accounted = references.payload().reconciliation_accounted;
+        // The pending repair's scope is minted from the feature and the reference state, which
+        // the step already holds, so the pass needs no further data.
+        const pass = @import("../domain/source_omission_authority.zig").reviewPass(owner.arena.allocator(), input.step.repair_permit, feature.feature_id, @import("../domain/reference_support.zig").records(accounted).items.state_id) catch |err| return reject(self.allocator, inputs_schema, owner, err);
+        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, accounted, pass) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
         return owned.publish(self.allocator, inputs_schema, owner, .ok) catch |operation_error| return operation_error;
     }
 };

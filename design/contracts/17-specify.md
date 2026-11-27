@@ -423,7 +423,8 @@ For each feature-brief or specification unit other than the engine-composed stor
   execution-local section generation without a
   model review of specification fields that do not yet exist. The existing source
   review/repair route still handles blocked references or absence of selectable
-  positive evidence before generation. The native readiness check reuses the
+  positive evidence before generation. In a first pass over references that hold a conflict
+  record, that route's projection is the conflict records alone (F0100 §3.10). The native readiness check reuses the
   provenance owner's eligibility rule; it cannot certify source meaning or create
   a clarification.
   Generation and its selected repairs receive original sources through the shared
@@ -456,7 +457,8 @@ Source review must distinguish a source conflict from a false conflict introduce
 by extraction/reconciliation, following [§16.4](16-reference-ingestion.md#164-semantic-extraction-flow).
 Supported content stranded behind an incorrect disposition is candidate loss, not
 missing user knowledge. Review receives the original source and must assess that
-meaning even when current eligible signals contain only a preserved token. A
+meaning even when current eligible signals contain only a preserved token; in a first pass
+over an open conflict, the conflict subject alone carries that assessment. A
 validated conflict label alone cannot justify an `SNN`. Shared clarification
 preparation in §12.7 requires a concrete missing decision. Before generation,
 correcting an unsafe upstream candidate requires an authorized target and complete

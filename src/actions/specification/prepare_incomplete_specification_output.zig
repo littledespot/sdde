@@ -18,14 +18,14 @@ pub const Action = struct {
         if (clarifications != .ready or value.revision != try state.nextRevision(prior)) return error.InvalidWorkflowOutput;
         try draft.validate(a, value, feature.selector.feature_id, self.contracts, self.normalizer);
         const current_clarifications = try clarifications.ready.validateFor(a, value.reference.inputs);
-        const expected = try @import("../../domain/incomplete_specification_markdown.zig").render(a, value, current_clarifications);
+        const expected = try @import("../../domain/incomplete_specification_markdown.zig").render(a, value, current_clarifications, self.normalizer);
         if (!std.mem.eql(u8, expected, rendered) or !std.meta.eql(prior.ledger(), value.id_ledger)) return error.InvalidWorkflowOutput;
         var prepared = try @import("../../domain/clarification_output.zig").prepare(a, feature, paths, captured, inputs, clarifications, views, registry, prior_registry);
         if (prepared.terminal_outcome != .needs_user) return error.InvalidWorkflowOutput;
         const bytes = try @import("../../domain/canonical_json.zig").encode(draft.State, a, value);
         const restored = try state.parse(a, bytes, value.feature, self.contracts, self.normalizer);
         if (restored.value != .pending) return error.InvalidWorkflowOutput;
-        const restored_view = try @import("../../domain/incomplete_specification_markdown.zig").render(a, restored.value.pending, current_clarifications);
+        const restored_view = try @import("../../domain/incomplete_specification_markdown.zig").render(a, restored.value.pending, current_clarifications, self.normalizer);
         if (!std.mem.eql(u8, rendered, restored_view)) return error.InvalidWorkflowOutput;
         const files = try a.alloc(output.File, prepared.files.len + 3);
         files[0] = .{ .target = .{ .artifact = .specification }, .bytes = rendered };

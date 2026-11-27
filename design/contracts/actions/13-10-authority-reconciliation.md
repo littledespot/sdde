@@ -20,7 +20,9 @@ into clarification needs is `build-required-authority-clarification-needs`
   `required_authority_inputs` · **Side effect:** `none`
 - **Does:** Project the source-readiness requirements for the feature's required subjects from
   the accounted reference reconciliation, detected at `spec`
-  ([`specification_authority.zig`](../../../src/domain/specification_authority.zig)).
+  ([`specification_authority.zig`](../../../src/domain/specification_authority.zig)). The
+  step's pending source-readiness repair selects the pass; F0100 §3.10 states which requirements
+  each pass projects.
 - **Rejects:** `InvalidRequiredAuthority` (outcome `blocked`).
 
 ## `BuildSourcePreservationRequirementsAction` (`build-source-preservation-requirements`)
@@ -43,9 +45,9 @@ into clarification needs is `build-required-authority-clarification-needs`
 - **Does:** Re-derive the projection the inputs claim and require it to match, then build one
   requirement per seed in requirement-identity order with its registered policy; candidate or
   model order never decides order.
-- **Rejects:** `InvalidRequiredAuthority` for an invalid feature, a projection mismatch, a
-  repeated or invalid requirement, authority, evidence, exception, candidate or forced gap, or
-  one naming an unknown requirement.
+- **Rejects:** `InvalidRequiredAuthority` for an invalid feature, a projection mismatch, a pass
+  other than `first` on a projection that has no second pass, a repeated or invalid requirement,
+  authority, evidence, exception, candidate or forced gap, or one naming an unknown requirement.
 
 ## `BuildRequiredAuthorityObservationsAction` (`build-required-authority-observations`)
 

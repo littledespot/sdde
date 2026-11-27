@@ -1798,11 +1798,19 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // Keep the omitted claim and its exact token in the selected producer's
         // chunk so the empty -> claim -> classification recovery is exercised.
         // A discarded token reaches generation only on a line no claim quotes (ADR 0036).
-        if (source_repair_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = switch (source_repairs[scenario - source_repair_start]) {
-            .partial => "# Loan renewal\nMOCK librarian renews an eligible loan and sees the new return deadline.\n",
-            .classification => "# Loan renewal\nA librarian renews a loan and sees the new return deadline.\nDisplay `Loan renewed!`.\n",
-            else => "# Loan renewal\nA librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n",
-        } });
+        if (source_repair_scenario) try project.dir.writeFile(io, .{
+            .sub_path = "source-material/first/stories.md",
+            .data = switch (source_repairs[scenario - source_repair_start]) {
+                .partial => "# Loan renewal\nMOCK librarian renews an eligible loan and sees the new return deadline.\n",
+                .classification => "# Loan renewal\nA librarian renews a loan and sees the new return deadline.\nDisplay `Loan renewed!`.\n",
+                // Two conflicts that share no claim need four model claims. The scripted extraction of a false conflict
+                // states two claims for each chunk, and a source splits into a chunk at every 64 lines, so this one source
+                // gives each conflict a chunk's pair; a second source would hold a conflict's claims outside the source
+                // the scripted review names.
+                .two_false_conflicts => "# Loan renewal\n" ++ "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n",
+                else => "# Loan renewal\nA librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n",
+            },
+        });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
             .occupied_summary, .occupied_signals, .misbound_summary => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nDisplay `Loan renewed!`.\n" }),
             .misbound_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Startup display\nOn startup display `Hello, World!` and the current UTC date and time.\n" }),
@@ -2400,7 +2408,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (source_repair_scenario) {
             const pre_generation = switch (driver.source_loss.?) {
-                .empty, .false_conflict, .unchanged_conflict, .false_conflict_questions => true,
+                .empty, .false_conflict, .unchanged_conflict, .false_conflict_questions, .two_false_conflicts => true,
                 .partial, .classification, .signal, .unchanged => false,
             };
             if (pre_generation) {
@@ -2408,7 +2416,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 const loss_fault: ?@TypeOf(loss_faults[0]) = if (scenario >= loss_fault_start) loss_faults[scenario - loss_fault_start] else null;
                 // Exhausted comparison correction stops before the source repair it localizes.
                 const loss_exhausted = loss_fault != null and loss_fault.?.repetition == .persistent;
-                try std.testing.expectEqual(@as(usize, if (questions or loss_exhausted) 0 else 1), driver.source_repair_calls);
+                const repairs: usize = if (questions or loss_exhausted) 0 else if (driver.source_loss == .two_false_conflicts) 2 else 1;
+                try std.testing.expectEqual(repairs, driver.source_repair_calls);
                 try std.testing.expectEqual(@as(usize, 0), driver.admitted_losses.get(.candidate));
                 if (questions) {
                     try std.testing.expectEqual(@as(usize, 0), driver.loss_calls + driver.support_merges + driver.support_repair_calls);
@@ -2451,16 +2460,29 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     try std.testing.expect(driver.source_only_readiness_evidence > 0);
                     try std.testing.expect(runner.repair_retry.currentPermit() == null);
                     try std.testing.expect(view.contains(.published_workflow_output));
-                } else if (driver.source_loss == .false_conflict) {
-                    try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_repair_calls);
+                } else if (driver.source_loss == .false_conflict or driver.source_loss == .two_false_conflicts) {
+                    // Two false groups that share no claim are repaired in turn, in one permit scope.
+                    const groups: usize = if (driver.source_loss == .two_false_conflicts) 2 else 1;
+                    try std.testing.expectEqual(groups, driver.reconciliation_repair_calls);
                     try std.testing.expect(driver.dependent_source_review_calls > 0);
                     try std.testing.expect(driver.source_only_readiness_evidence > 0);
                     try std.testing.expect(runner.repair_retry.currentPermit() == null);
                     const references = (try @import("../../src/application/specification_workflow.zig").readContext(&view)).references.records;
                     try std.testing.expectEqual(@as(usize, 0), references.conflicts.len);
                     try std.testing.expect(view.contains(.published_workflow_output));
-                    // The repair removes the only conflict group, so the re-pass has none and its conflicts answer is
-                    // forced (ADR 0022): the one conflicts request is the first pass's, and no second one follows.
+                    if (groups == 2) {
+                        // No retry limit or repair-progress rejection ends the run.
+                        try std.testing.expect(result != .execution_rejected);
+                        // The first repair is validated by a dependent pass that still holds the second group, and the
+                        // second by one over a reconciliation that is already generation-ready: its pending permit alone
+                        // makes the pass dependent.
+                        try std.testing.expect(driver.dependent_source_review_calls >= 2);
+                        try std.testing.expect(driver.dependent_reviews_over_held_conflict > 0);
+                        try std.testing.expect(driver.dependent_reviews_over_held_conflict < driver.dependent_source_review_calls);
+                    }
+                    // A group repair keeps the explanation of a group that shares none of its claims, and the repair of the
+                    // last group leaves the re-pass none, so its conflicts answer is forced (ADR 0022): the one conflicts
+                    // request is the first pass's, and no second one follows.
                     var conflicts_requests: usize = 0;
                     for (runner.tokenLedger().accounted_operations.items) |operation| {
                         const owner = operation.id.model_request_id.immutable_unit_owner_id;
@@ -2639,6 +2661,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 const accounted = try @import("../../src/application/reference_extraction_workflow.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
                 try std.testing.expectEqual(.blocked, accounted.payload().reconciliation_accounted.outcome);
                 try std.testing.expect(accounted.payload().reconciliation_accounted.records.conflicts.len > 0);
+                // The blocked pass reviews each conflict record once and no other requirement.
+                try std.testing.expectEqual(accounted.payload().reconciliation_accounted.records.conflicts.len, driver.initial_source_review_calls);
             }
         }
 

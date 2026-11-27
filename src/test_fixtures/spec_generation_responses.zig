@@ -30,7 +30,9 @@ pub const Applicability = enum {
 pub const applicability_detail = "The source requires a displayed value. Its origin is undecided; the choice determines whether business records and their fields are required.";
 pub const applicability_question = "Should the displayed value be calculated on request or read from managed records? Answer calculate, or records with their required fields.";
 
-pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
+/// `two_false_conflicts` holds two conflicts that share no claim, each between a chunk's two claims and each judged
+/// false, so the source review's repair of one is followed by a repair of the other.
+pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions, two_false_conflicts };
 /// Scripted edge cases (ADR 0038 Decision 7). `native` writes one for each model claim, beside the
 /// one criterion the engine writes for the claim's requirement. `chosen` groups two claims in each
 /// signal and writes one edge case per group naming both, beside the two criteria the engine
@@ -38,7 +40,13 @@ pub const SourceLoss = enum { empty, partial, classification, signal, unchanged,
 /// only in an edge case: no requirement names it, so no criterion can serve the edge case.
 pub const EdgeCases = enum { native, chosen, unlinked };
 fn falseConflict(mode: ?SourceLoss) bool {
-    return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
+    return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions or mode == .two_false_conflicts;
+}
+
+/// Whether one accepted conflict group holds both claims of a scripted conflict.
+fn groupHolds(groups: []const @import("../domain/reference_conflict_groups.zig").Group, pair: []const r.ClaimId) bool {
+    for (groups) |group| if (r.contains(r.ClaimId, group.claim_ids, pair[0]) and r.contains(r.ClaimId, group.claim_ids, pair[1])) return true;
+    return false;
 }
 
 /// The kinds of restating record the scripted runs offer. ADR 0035 deletes any single-statement
@@ -46,8 +54,8 @@ fn falseConflict(mode: ?SourceLoss) bool {
 pub const RestatingKind = enum { business_rule, non_goal };
 
 pub const Options = struct {
-    /// The reconciliation holds one conflict between the first two business claims, and the source review raises it
-    /// and no other requirement. A rerun with the claims retained reconciles them again: the engine applies any answer.
+    /// The reconciliation holds one conflict between the first two business claims, and its source review raises it.
+    /// A rerun with the claims retained reconciles them again: the engine applies any answer.
     conflict: bool = false,
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
@@ -256,25 +264,37 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             // Later phase responses follow accepted repairs, rather than
             // reintroducing the initial scripted relationship defect.
             if ((falseConflict(options.source_loss) or options.conflict) and (accepted == null or accepted.?.proposal.conflict_groups.len != 0)) {
-                const claims = try allocator.alloc(r.ClaimId, 2);
+                // Each conflict is a pair of model claims, in claim order: the first two and, for two conflicts, the next
+                // two. A later phase holds the pairs the accepted groups still hold, so it follows an accepted repair of
+                // one pair and keeps the other.
+                const pair_count: usize = if (options.source_loss == .two_false_conflicts) 2 else 1;
+                const claims = try allocator.alloc(r.ClaimId, 2 * pair_count);
                 var count: usize = 0;
-                for (input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model and count < 2) {
+                for (input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model and count < claims.len) {
                     claims[count] = item.claim.id;
                     count += 1;
                 };
-                if (count != 2) return error.InvalidConflictFixture;
+                if (count != claims.len) return error.InvalidConflictFixture;
                 const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
-                for (dispositions) |*value| {
-                    if (std.meta.eql(value.claim_id, claims[0])) value.disposition = .{ .conflicting = .{ .related_claim_ids = claims[1..2] } };
-                    if (std.meta.eql(value.claim_id, claims[1])) value.disposition = .{ .conflicting = .{ .related_claim_ids = claims[0..1] } };
+                var held: std.ArrayList(r.ClaimId) = .empty;
+                var conflicts: std.ArrayList(r.ConflictProposal) = .empty;
+                for (0..pair_count) |index| {
+                    const pair = claims[2 * index ..][0..2];
+                    if (accepted) |checked| if (!groupHolds(checked.proposal.conflict_groups, pair)) continue;
+                    for (dispositions) |*value| {
+                        if (std.meta.eql(value.claim_id, pair[0])) value.disposition = .{ .conflicting = .{ .related_claim_ids = pair[1..2] } };
+                        if (std.meta.eql(value.claim_id, pair[1])) value.disposition = .{ .conflicting = .{ .related_claim_ids = pair[0..1] } };
+                    }
+                    try held.appendSlice(allocator, pair);
+                    try conflicts.append(allocator, .{ .claim_ids = pair, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The source behavior and its presentation." } }} } });
                 }
                 proposal.claim_dispositions = dispositions;
                 var signals: std.ArrayList(r.SignalProposal) = .empty;
-                for (proposal.signals) |signal| if (!r.contains(r.ClaimId, claims, signal.claim_ids[0])) {
+                for (proposal.signals) |signal| if (!r.contains(r.ClaimId, held.items, signal.claim_ids[0])) {
                     try signals.append(allocator, signal);
                 };
                 proposal.signals = try signals.toOwnedSlice(allocator);
-                proposal.conflicts = &.{.{ .claim_ids = claims, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The source behavior and its presentation." } }} } }};
+                proposal.conflicts = try conflicts.toOwnedSlice(allocator);
             }
             if (options.global_sequence != null) proposal = try @import("global_protocol_sequence.zig").mixed(allocator, input, proposal);
             if (options.disposition_sequence != null) {
@@ -564,7 +584,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const source_positive = source_only and required.eligible_source_ids.len != 0;
                 if (source_only) selected = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} };
                 const unbound = (source_only and !source_positive) or (!source_only and eligible.len != 0 and (requirement.seed.id.unit == .feature or requirement.seed.id.unit == .record));
-                const conflict = requirement.seed.id.unit == .conflict or (!options.conflict and (eligible.len == 0 or unbound) and context.references.records.conflicts.len != 0);
+                const conflict = requirement.seed.id.unit == .conflict;
                 finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
                 if (source_positive and finding.value.kind == .supported) {
                     finding.value.source_ids = required.eligible_source_ids[0..1];

@@ -71,6 +71,8 @@ pub const Driver = struct {
     applicability: ?@import("spec_generation_responses.zig").Applicability = null,
     initial_source_review_calls: usize = 0,
     dependent_source_review_calls: usize = 0,
+    /// The dependent reviews among them that ran while the reconciliation still held a conflict.
+    dependent_reviews_over_held_conflict: usize = 0,
     source_only_readiness_evidence: usize = 0,
     loss_calls: usize = 0,
     uncertain_loss_calls: usize = 0,
@@ -439,6 +441,22 @@ pub const Driver = struct {
                     const references = (@import("../application/specification_workflow.zig").readContext(&view) catch |err| return self.hookFailed(err)).references;
                     const native = authorityInputs(&view) catch |err| return self.hookFailed(err);
                     const pending = if (self.runner.repair_retry.currentPermit()) |permit| @import("../domain/source_omission_authority.zig").pendingReview(arena.allocator(), permit, native.feature, @import("../domain/reference_support.zig").records(references).items.state_id) catch |err| return self.hookFailed(err) else null;
+                    if (native.projection == .source_readiness) {
+                        // The review of a pending source repair is the dependent pass; any other
+                        // is a first pass, which reviews a held conflict's records alone.
+                        const expected_pass: @import("../domain/required_authority.zig").Pass = if (pending == .source_readiness) .dependent else .first;
+                        std.testing.expectEqual(expected_pass, native.pass) catch |err| return self.hookFailed(err);
+                        if (native.pass == .first and @import("../domain/reference_support.zig").records(references).conflicts.len != 0) for (native.seeds) |seed| {
+                            std.testing.expect(seed.id.unit == .conflict) catch |err| return self.hookFailed(err);
+                        };
+                        // A dependent pass reviews every subject the repair could have touched, not only conflicts.
+                        if (native.pass == .dependent) {
+                            if (@import("../domain/reference_support.zig").records(references).conflicts.len != 0) self.dependent_reviews_over_held_conflict += 1;
+                            var other_subjects: usize = 0;
+                            for (native.seeds) |seed| other_subjects += @intFromBool(seed.id.unit != .conflict);
+                            std.testing.expect(other_subjects != 0) catch |err| return self.hookFailed(err);
+                        }
+                    }
                     if (pending) |projection| {
                         std.testing.expectEqual(projection, native.projection) catch |err| return self.hookFailed(err);
                         self.dependent_source_review_calls += 1;

@@ -301,7 +301,8 @@ variants of the generic repair operations, specified once in
 - **Owner:** [`src/actions/specification/apply_specification_support.zig`](../../../src/actions/specification/apply_specification_support.zig)
 - **Reads:** `required_authority_inputs`, `specification_support_review` · **Writes:** replaces `required_authority_inputs` · **Side effect:** `none`
 - **Does:** Replace the authority inputs with the accepted review's inputs.
-- **Rejects:** `InvalidRequiredAuthority` for a pending or rejected review.
+- **Rejects:** `InvalidRequiredAuthority` for a pending or rejected review, or a source-readiness
+  review validating a pending repair that is not the dependent pass.
 
 ## Rendering and publication output
 

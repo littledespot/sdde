@@ -266,7 +266,7 @@ pub const Assembly = struct {
             .build_resolved_needs = .{ .allocator = allocator },
             .build_specification_state = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .build_incomplete_specification = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
-            .render_incomplete_specification = .{ .allocator = allocator },
+            .render_incomplete_specification = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .prepare_incomplete_specification_output = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .build_reference_snapshot = .{ .allocator = allocator },
             .render_reference_context = .{ .allocator = allocator },

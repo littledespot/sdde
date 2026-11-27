@@ -1576,7 +1576,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         retained[0] = try (Diagnostic{ .reconciliation = rejected }).copy(a);
         const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
         const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry };
-        const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted);
+        const review_inputs = try @import("../../../src/domain/specification_authority.zig").projectFor(scratch, input.inputs.corpus.feature_id, accounted, .first);
         var omission_inputs = review_inputs;
         omission_inputs.review_origin = origin;
         retained[4] = try (Diagnostic{ .support_findings = .from(omission_inputs, .unlocalized_omission) }).copy(a);
@@ -2550,6 +2550,11 @@ const ScriptedWire = struct {
     options: @import("../../../src/test_fixtures/spec_generation_responses.zig").Options = .{},
     /// Raises the operator's interrupt (a real SIGINT) while this request is in flight, then answers it.
     interrupt_on_call: ?usize = null,
+    /// The semantic review requests answered, and the requirements of the latest one's pass that are conflict
+    /// records and that are not.
+    reviews: usize = 0,
+    conflict_requirements: usize = 0,
+    other_requirements: usize = 0,
 
     fn port(self: *ScriptedWire) provider_transport.Port {
         return .{ .context = @ptrCast(self), .exchange_fn = exchange };
@@ -2572,10 +2577,20 @@ const ScriptedWire = struct {
         return messagesResponse(allocator, scripted);
     }
 
-    fn answer(self: *const ScriptedWire, allocator: std.mem.Allocator) ![]const u8 {
+    fn answer(self: *ScriptedWire, allocator: std.mem.Allocator) ![]const u8 {
         const slot = self.runner orelse return error.RunnerNotObserved;
         const runner = if (slot.*) |*prepared| prepared else return error.RunnerNotPrepared;
         const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+        const requests = @import("../../../src/application/model_request_workflow.zig");
+        if ((try requests.readCurrent(&view, requests.prepared_schema)).id().purpose == .semantic_review) {
+            const pass = try @import("../../../src/application/required_authority_values.zig").read(&view, @import("../../../src/application/required_authority_workflow.zig").inputs_schema, .inputs);
+            self.reviews += 1;
+            self.conflict_requirements = 0;
+            self.other_requirements = 0;
+            for (pass.seeds) |seed| {
+                if (seed.id.unit == .conflict) self.conflict_requirements += 1 else self.other_requirements += 1;
+            }
+        }
         const attempt = @import("../../../src/domain/model_attempt_accounting.zig").latestAttempt(runner.model_accounting.?.attempts).ordinal().value;
         var options = self.options;
         options.attempt = attempt;
@@ -2860,6 +2875,11 @@ test "a conflict's form is answered by option key, the next run applies the choi
     try std.testing.expectEqualStrings("A loan may be renewed twice.", options[0].label);
     try std.testing.expect(!std.mem.eql(u8, options[0].label, options[1].label));
     try std.testing.expectEqual(@as(usize, 0), account.observations);
+    // The blocked pass reviews its conflict record alone: one request for each, and no other requirement.
+    try std.testing.expect(first.conflict_requirements != 0);
+    try std.testing.expectEqual(@as(usize, 0), first.other_requirements);
+    try std.testing.expectEqual(first.conflict_requirements, first.reviews);
+    try std.testing.expectEqual(first.conflict_requirements, raised.records.len);
 
     // The user chooses the first claim by its key; run 2 authenticates the account, applies the choice and publishes.
     const chosen = options[0].key;
@@ -2872,6 +2892,50 @@ test "a conflict's form is answered by option key, the next run applies the choi
     const prepared = (try answer.prepare(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen)).ready;
     try std.testing.expectEqualStrings(form_path, prepared.path);
     const answered = prepared.bytes;
+    // What the harness does after each leg. The first leg paused, so its report says so and it retained no completed
+    // specification (`offline.specification` is null above); it is still answered, because the answer never waits on
+    // specification bytes.
+    try std.testing.expectEqual(.awaiting_clarification, offline.report.status);
+    const paused: answer.Finished = .{ .expected = .clarification, .status = offline.report.status, .specification = offline.specification };
+    const answered_next = try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, paused);
+    try std.testing.expect(answered_next == .answer);
+    try std.testing.expectEqualStrings(prepared.path, answered_next.answer.path);
+    try std.testing.expectEqualStrings(prepared.bytes, answered_next.answer.bytes);
+    // Any other state stops with the leg's own report, or reports that there was no form to answer.
+    try std.testing.expect((try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, null, paused)) == .stop);
+    var did_not_pause = paused;
+    did_not_pause.status = .workflow_invalid;
+    try std.testing.expect((try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, did_not_pause)) == .stop);
+    try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, "no.such.key", paused)).unavailable);
+    try std.testing.expectEqual(answer.Unavailable.no_clarification_state, (try answer.after(io, a, empty.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+    // A first leg that paused on two open forms, or on one that is not a selection, has no form to answer.
+    {
+        var crowded_dir = std.testing.tmpDir(.{});
+        defer crowded_dir.cleanup();
+        try crowded_dir.dir.createDirPath(io, std.fs.path.dirname(state_path).?);
+        var crowded = raised;
+        crowded.records = try a.dupe(cl.Record, &.{ raised.records[0], raised.records[0] });
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, crowded, .{}) });
+        try std.testing.expectEqual(answer.Unavailable.answer_form_count, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+        var typed = raised;
+        const text_only = try a.dupe(cl.Record, &.{raised.records[0]});
+        text_only[0].answer_schema = .{ .bounded_business_text = 100 };
+        typed.records = text_only;
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, typed, .{}) });
+        try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+    }
+    // A leg that expects publication is evaluated when it retained a specification and stops when it did not; the case's
+    // combined outcome is no leg's.
+    const completed: answer.Finished = .{ .expected = .publication, .status = .generated, .specification = "A completed specification." };
+    const evaluated = try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, completed);
+    try std.testing.expect(evaluated == .evaluate);
+    try std.testing.expectEqualStrings("A completed specification.", evaluated.evaluate);
+    var unretained = completed;
+    unretained.specification = null;
+    try std.testing.expect((try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, unretained)) == .stop);
+    var combined = paused;
+    combined.expected = .clarification_then_publication;
+    try std.testing.expectError(error.CombinedOutcomeIsNotALeg, answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, combined));
     // The first leg's project is evidence: the second leg starts from a copy of it with the answered form written over the form.
     var continued = std.testing.tmpDir(.{});
     {

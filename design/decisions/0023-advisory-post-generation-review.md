@@ -22,6 +22,10 @@
   2026): the membership rule's scope extends to reconciliation dispositions and the
   source-omission conflict-group repair, with the member count native (the request
   states no count) and an omitted member reported as `missing_member`.
+- **Readiness projection amendment:** 26 November 2026, by the user's instructions "implement
+  conflicts first" and "implement (b), update the documentation". A first pass over a conflict
+  projects the conflict records alone, and `Inputs` gains a typed `Pass`; see "Decision" below
+  and [F0100 §3.10](../features/F0100-SpecWorkflow.md).
 - **Removal amendment (SPEC01 D13.1, 1 November 2026):** by the user's decision to
   remove both post-generation reviews (source and principle) in one change, which also
   reverted the 31 October advisory verdict-set amendment (record: `fixes/Z_FIX06.md` at
@@ -44,9 +48,24 @@
 ## Decision
 
 Spec runs no semantic review after generation. Required source review runs only
-before generation: source readiness when no claim is generation-ready, and the
-optional source-preservation comparison (ADR 0021). Its findings keep their required
-authority and repair rules. An admitted semantic finding is a model judgment, not
+before generation: source readiness when the references are not generation-ready (no
+retained claim, or a conflict record, which makes the reconciliation `blocked`), and the
+optional source-preservation comparison (ADR 0021). In a first pass over a reconciliation
+that holds a conflict record, the source-readiness projection holds the conflict records
+alone, so each conflict has one decision, owned by its record's subject and answered by its
+`select_one` form. A dependent pass, the review that validates a pending source repair, and
+a reconciliation without a conflict keep the full projection: a repair is validated by the
+subjects that cover what it touched (§22), and a conflict-only pass omits them. This is a typed rule of
+Specify's projection, keyed on the conflict records and the pass, and no success or
+continuation rule (decided 26 November 2026, user: "implement conflicts first", and
+"implement (b), update the documentation"; ENGINE01 §10 item 9). `Inputs` gains a typed
+`Pass` (`first` or `dependent`) that the runner's pending repair selects and the gate
+re-derives with. It is execution-local: ids are unchanged and no closed persisted or
+captured contract changes shape, so `required_authority.version` stays 6 (ADR 0030
+"Versions"). A source-readiness repair's target population is the full projection's seed
+count whichever pass authorizes it first, because the scope freezes its population at first
+authorization ([§22](../contracts/22-repair.md)). Required source review's
+findings keep their required authority and repair rules. An admitted semantic finding is a model judgment, not
 deterministic evidence: a positive finding cannot discharge a native defect, and a
 negative finding cannot create or discharge a native authority gap. A finding may
 drive automatic content repair only when an independently established defect at its
@@ -121,7 +140,8 @@ review projection cannot erase the runner's repair obligation.
 ### Approved source-only readiness evidence
 
 Before authoring, the native `source_readiness` projection assesses whether
-original sources establish an assigned business purpose. A positive source-purpose
+original sources establish an assigned business purpose; which subjects a pass assesses is
+[F0100 §3.10](../features/F0100-SpecWorkflow.md)'s. A positive source-purpose
 finding requires explicitly selected, nonempty current original source IDs.
 Its canonical claim, citation and clarification-response selections are empty,
 regardless of whether the eligible claim catalogue has zero, one or many members.
@@ -161,7 +181,8 @@ without adding an assessment model, configuration option or principle loader.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v28` (v27 until an acceptance
+Completed and clarification-pending state use `specification-state/v29` (v28 until the clarification
+authentication chain, [ADR 0025](0025-clarification-answer-authentication.md); v27 until an acceptance
 criterion's `given` became optional, [ADR 0038](0038-record-claims-and-scenario-coverage.md)
 Decision 3, amended 22 November 2026; v26 until an edge
 case's one authored field became its `given`, [ADR 0038](0038-record-claims-and-scenario-coverage.md)

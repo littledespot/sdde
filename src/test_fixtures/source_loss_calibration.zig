@@ -422,7 +422,7 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .source_group_ids = assigned.source_group_ids, .provenance = attribution };
     var brief: spec.Brief = .{ .description = value, .primary_goal = value };
     brief = try admitBrief(a, provenance_context, brief);
-    const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished);
+    const inputs = try @import("../domain/specification_authority.zig").projectFor(a, sources.corpus.feature_id, finished, .first);
     return .{ .inputs = inputs, .context = provenance_context, .guidance = &(try @import("packet_guidance.zig").shipped(a)).guidance, .brief = brief, .passive = passive };
 }
 

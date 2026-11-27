@@ -75,7 +75,7 @@ test "an answered conflict leaves an ordinary reconciliation that keeps the chos
     const saved = try snapshot.build(.{ .bytes = "references" }, reference.inputs, reference.extracted, account, reference.text.registry, contract);
     try snapshot.validate(allocator, saved, @import("test_fixtures/reference_text.zig").normalizer);
     // The conflict seed is gone: the authority ledger sees the sources as one claim.
-    const inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, account);
+    const inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, account, .first);
     try std.testing.expectEqual(@as(usize, 0), inputs.forced_gaps.len);
 }
 

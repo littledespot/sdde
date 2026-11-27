@@ -128,6 +128,10 @@ same claim and native checks couldn't tell distinct duties apart.
      paragraph above it, so a line of text directly above a `---` or `===` line is heading
      text, and YAML front matter reads the same way. A quote left with no words, a fence
      alone for example, reads as one with none, as a heading alone does.
+   - **The incomplete specification shows the reading too** (26 November 2026, ENGINE01 §10
+     item 11, "accept recommendation 1, 2 and 3"). The stored quote is unchanged. A retained
+     claim's line in the [ADR 0017](0017-incomplete-specification-publication.md) view is this
+     reading, from the same function, and ADR 0017 says what the line shows.
 
    `business` and `scope_guard` claims become one literal `BusinessText`; other categories
    become one literal `ReferenceSemanticText`. The shared text validator then checks it as

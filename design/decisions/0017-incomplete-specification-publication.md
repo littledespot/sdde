@@ -10,6 +10,8 @@
   its validated content, marked and logged, instead of "no new specification
   publication". It is not a clarification pause: the run keeps its failed terminal
   (ADR 0041 Decision 5), and its state is `spec_incomplete`.
+- **Amended 26 November 2026** (ENGINE01 §10 item 11; user: "accept recommendation 1, 2 and 3"): a
+  retained claim's line shows its paragraph reading, not its stored quote. See the Decision.
 
 ## Decision
 
@@ -40,6 +42,15 @@ and links every open Spec clarification to its engine-owned `clarify/SNN.md` for
 It does not invent missing fields, infer a completed story, assign final requirement
 IDs, render technical claims as business requirements, or resolve conflicts.
 Conflicting and superseded claims are not asserted as supported requirements.
+A retained claim is one line: the paragraph reading of its cited source lines
+([ADR 0036](0036-source-quoted-claims.md) Decision 2), so a list item shows no marker and
+a wrapped item no line break. Inline code in that reading, as the shared code-span scan
+reads it, shows as an engine code span, as in the completed specification, and every other
+byte goes through the [§23.1](../contracts/23-rendering.md) escape table. The scan sees the
+reading, not the source: a span that crosses lines shows flattened, and a backtick the source
+left unmatched can pair with one in a later line or run. A claim whose reading has no words, such
+as a heading alone, shows its stored quote as written through that table, so a line is never
+empty.
 Questions and answers remain in controlled forms. No extra model call is needed to
 make already available business content visible when the source gate pauses before
 generation. All source, generation and candidate-review clarification branches use

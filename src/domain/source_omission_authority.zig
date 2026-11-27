@@ -76,10 +76,35 @@ pub fn pendingReview(a: std.mem.Allocator, permit: retry.Permit, feature: @impor
     return error.InvalidRequiredAuthority;
 }
 
+/// The pass of the review that validates a pending repair of `projection`: a source-readiness
+/// repair is validated by the dependent pass, which covers all it could have touched; a
+/// source-preservation projection has one pass.
+fn passFor(projection: authority.Projection) authority.Pass {
+    return if (projection == .source_readiness) .dependent else .first;
+}
+
+/// The review pass a source-readiness projection serves: the pass that validates the pending
+/// repair while one is pending, otherwise `first`.
+pub fn reviewPass(a: std.mem.Allocator, permit: ?retry.Permit, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId) authority.Error!authority.Pass {
+    const pending = (try pendingReview(a, permit orelse return .first, feature, state)) orelse return .first;
+    return passFor(pending);
+}
+
+/// Each native scope freezes its finite target population at first authorization (22-repair.md,
+/// "Each native scope freezes"). A source-readiness scope is shared by every pass over one source
+/// state, so its population is the full projection's seed count whichever pass authorizes first.
+fn targetPopulation(a: std.mem.Allocator, inputs: authority.Inputs) authority.Error!u32 {
+    const seeds = if (inputs.projection == .source_readiness)
+        (try @import("specification_authority.zig").projectRecords(a, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, .dependent)).seeds.len
+    else
+        inputs.seeds.len;
+    return std.math.cast(u32, seeds) orelse error.InvalidRequiredAuthority;
+}
+
 pub fn retryPermit(a: std.mem.Allocator, producer: Producer, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, authorization: @import("model_request_identity.zig").RepairAuthorizationId, revision: u64, support: Support, selected: authority.Id, previous: ?retry.Permit) Error!retry.Permit {
     try requireRepairPhase(support.repair_phase);
     const records = support.inputs.references orelse return error.InvalidRequiredAuthority;
-    var result = try atomic.permit(Subject, Family, a, owner, try subject(a, support.inputs, selected), .source_omission, authorization, revision, std.math.cast(u32, support.inputs.seeds.len) orelse return error.InvalidRequiredAuthority);
+    var result = try atomic.permit(Subject, Family, a, owner, try subject(a, support.inputs, selected), .source_omission, authorization, revision, try targetPopulation(a, support.inputs));
     result.key.scope = try retryScope(a, producer, support.inputs.feature, records.items.state_id, support.inputs.projection);
     if (previous) |prior| if (std.mem.eql(u8, &prior.key.scope, &result.key.scope)) {
         result.maximum_targets = prior.maximum_targets;
@@ -94,6 +119,9 @@ pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: 
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     const projection = (try pendingReview(a, permit, inputs.feature, records.items.state_id)) orelse return null;
     if (projection != inputs.projection) return error.InvalidRequiredAuthority;
+    // The review must be the pass that validates this repair. This sits before the conflict-group branch,
+    // which returns before `authority.build` re-derives the projection.
+    if (inputs.pass != passFor(projection)) return error.InvalidRequiredAuthority;
     const repaired_claims = admitted.candidate.omission_conflict_claims;
     if (repaired_claims.len != 0 and std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, .{ .conflict_claims = try orderedClaims(a, repaired_claims) })).bytes)) {
         var resolved = true;
