@@ -686,15 +686,58 @@ status line so the references above still hold; its build and review record was 
       target whose groups or dispositions reach a claim outside it, and group `[4,5]` reaches claim 4 (likely; which
       guarded line fired was not executed).
 
-    The conflict case stays as it is, its second leg stays unreached, and no more conflict-case launches run on this
-    build. **Not taken:** (b) rewording stories 5 in a new case version, which ends the case's comparability and works
-    around a model limitation; (c) a design change for a false group that overlaps a real one, which would help only a
-    `candidate_omission` verdict (1 of 3) and needs authority work first (`22-repair.md`, ADR 0046, a rule for the repair
-    target). **Known contract gap, not fixed:** the reconciliation guidance says "overlapping groups are allowed"
-    (`design/workflows/spec/reconciliation-dispositions.prompt.md:5`) and 12-model-boundary.md:877 says overlapping groups
-    preserve many-to-many links, while the group repair refuses a target that overlaps another group; no clause covers
-    repairing one of two overlapping groups. **Reopened by** a one-group first-leg launch of the conflict case, or a false
-    group overlapping another in a different domain.
+    The conflict case stays as it is. **Not taken:** (b) rewording stories 5 in a new case version, which ends the case's
+    comparability and works around a model limitation; (c) a design change for a false group that overlaps a real one,
+    which would help only a `candidate_omission` verdict (1 of 3 then) and needs authority work first (`22-repair.md`,
+    ADR 0046, a rule for the repair target). **Known contract gap, not fixed:** the reconciliation guidance says
+    "overlapping groups are allowed" (`design/workflows/spec/reconciliation-dispositions.prompt.md:5`) and
+    12-model-boundary.md:877 says overlapping groups preserve many-to-many links, while the group repair refuses a target
+    that overlaps another group; no clause covers repairing one of two overlapping groups. **Reopened by** a one-group
+    first-leg launch of the conflict case, or a false group overlapping another in a different domain.
+    - **Reopened 27 November 2026** by that condition: the first leg raised one select form in 3 of the 10 launches since
+      conflicts first (`2026-11-26T21-54-45Z`, `T23-05-11Z`, `T23-12-07Z`), and the last two ran a second leg. Decision (a)
+      stands until the user decides otherwise. Read from the retained reports and model outputs of those 10 launches (12
+      reconciliation samples: a second leg is a fresh run, ADR 0009:39-40):
+      - **Outcomes.** 7 launches stopped at `repair-source` in the first leg with no form. 1 paused on one form and had no
+        second leg (the harness defect, item 14). 1 answered the form, applied the answer and ended `awaiting_clarification`
+        on a second form S02 (`T23-05-40Z`). 1 drew both pairs in its second leg, left the answer unused
+        (`clarification_response_ids` empty; ADR 0025:206-208) and stopped at `repair-source` (`T23-12-36Z`). No launch has
+        published a specification.
+      - **The second pair** was declared in 8 of the 12 samples (7 of 10 first legs, 1 of 2 second legs). Its verdict was
+        `candidate_invalid` in 7 and `candidate_omission` in 1; the intended pair was `conflicting` in 11 of 11 reviews. The
+        prompt does not fix the verdict type: `support.prompt.md:7-14` defines `candidate_omission` to include "compatible
+        requirements labelled conflicting" and `candidate_invalid` as "an invented assertion", and a false conflict label
+        fits both ("invent" is in 6 of the 7 `candidate_invalid` details). The evaluations of `T22-58-20Z` and `T23-12-36Z`
+        call the wrong-type verdict `model_noncompliance`; that is too strong.
+      - **After an answer.** The answered second leg's first generation call (`g17-g8-generate-brief-gen`) received the
+        original source text, the superseded line included (`model_evidence.zig:79-83`), with signals that held only retained
+        claims, and returned a `clarification` that asks the answered question again. One sample.
+      - **Recommended, not decided** (recorded at the user's instruction "update the documentation with the recommendations";
+        the evidence decision (a) had not weighed is the two second legs and the prompt's overlap of the two finding types).
+        Need: completion of a clarification-expected run (item 2). 8 of 12 samples end at the same stop, so another launch
+        cannot change the decision.
+        1. **A repair route for a conflict group the review dismisses**: option (c) as design work, after `/preflight`. Two
+           decisions: the one finding type a conflict subject takes for "this label is false", the repairable one
+           (`support.prompt.md`, `22-repair.md:42-44`); and the repair target under overlap, the dismissed group alone with the
+           shared claim keeping its other relation (`22-repair.md`, `16-reference-ingestion.md:316-349`, ADR 0046;
+           feasibility unchecked). A merged reconciliation repair returns to `validate`, then `apply-answers`
+           (`spec.workflow.yaml:154-161`, `:95-100`), so one repair should serve both legs (from the wiring, not seen live).
+           Known follow-on: item 9's accepted limit, feature forms beside the conflict's form in the dependent pass.
+        2. **What generation reads after an answer.** Decide after 1: 1 of 10 launches has reached generation with an answer,
+           so launches cannot measure it until 1 lets more of them get there.
+        3. **Report an unused answer.** ADR 0025:207-208 says the report does not; a small change that amends ADR 0025.
+
+        **Not recommended:** stopping the model declaring the second pair (variance, and the review dismisses it);
+        rewording stories 5 (item 13 (b); it would hide this, since an answer applies only to a conflict none of whose claims
+        is in another, ADR 0025:202-203); reusing the first leg's reconciliation in the second (ADR 0009:39-40); asking the
+        real question despite a dismissed group (ADR 0017:29-30); more conflict launches before 1 is decided.
+14. **The E2E harness never started a second leg. Built** 27 November 2026 (user: "fix the harness leg chaining"). `cli.zig`
+    returned on `specification orelse return` before its answer branch, and the oracle retains specification bytes only for
+    `ok` (`test/harness/e2e/oracle.zig:46`), so a first leg that paused, which retains none, could never start the second
+    that e2e.md:345-355 requires. `answer.after` (`test/harness/e2e/answer.zig`) now decides what a finished leg does next
+    (stop, evaluate, answer, unavailable) and `cli.zig` acts on it; its cases are in the "a conflict's form is answered by
+    option key" scenario (`test/harness/integration/tests.zig`). Live: the chain ran in 2 of the 2 launches that paused after
+    it; `2026-11-26T21-54-45Z`, which paused before it, had no second leg for this cause. Closed.
 
 **Not proposed.**
 
@@ -707,8 +750,8 @@ status line so the references above still hold; its build and review record was 
 
 **Open uncertainty.**
 
-- The conflict case's second leg has never run, so its cost, its output and answer application after an answer have no
-  live evidence.
+- The conflict case's second leg has run twice (27 November 2026, §10 item 13), once to each of two outcomes and neither
+  published, so its cost, its output and generation after an answer rest on one sample each.
 - No large source has been run. §4's growth is read from code and contracts and sized on three small cases.
 - §9's savings are estimates. Only A and C were built; C measured −12% to −15% on the development cases (§13).
 - Two of the three `STRING_LENGTH` rejections since 17 November are no longer retained, so which limit they
@@ -721,11 +764,13 @@ decisions in §10 and deleted on 27 November 2026. Its findings stand:
 
 1. **The conflict case can't apply its answer to a conflict that shares a claim with another.** An answer is applied
    only to a conflict none of whose claims is in another conflict record (`src/domain/answered_reconciliation.zig:7-9`;
-   its test says so at `src/answered_reconciliation_test.zig:104`); otherwise the form is raised again. Not executed: no
-   launch has reached its second leg. §10 item 13 accepted the consequence.
+   its test says so at `src/answered_reconciliation_test.zig:104`); otherwise the form is raised again. Executed once (27
+   November 2026, `T23-12-36Z`): the second leg drew both pairs, so the answer was unused (the finding's
+   `clarification_response_ids` was empty) and the run stopped at `repair-source` before any form could be raised again
+   (§10 item 13).
 2. **The model declares a second conflict.** Beside the intended pair (stories 8 and 9) it pairs "not previously been
-   renewed" (stories 5) with "up to twice" (stories 9): 5 of 6 launches of 24 November, and 3 of 3 of 26 November.
-   Since conflicts first such a launch stops at `repair-source` with no form (§10 item 13).
+   renewed" (stories 5) with "up to twice" (stories 9): 5 of 6 launches of 24 November, and 8 of 12 samples since
+   conflicts first. Since conflicts first such a launch stops at `repair-source` with no form (§10 item 13).
 3. **Review requests never occur in the two development cases.** Those cases have no conflict and set
    `sourcePreservationCheck` false (§4), so a review-request change alters none of their requests and can't be decided
    "on both development cases" (AGENTS.md). The conflict case was conflicts first's live proof; for any other
@@ -745,7 +790,8 @@ decisions in §10 and deleted on 27 November 2026. Its findings stand:
 (§10 item 9), Phase 3 (C) was reverted, Phase 4 (B1) is parked, Phases 5 and 6 (D, B2 and B3) are dropped, and Phase 7
 (E) is unscheduled (§10). Only the `given` residual that `fixes/Z_SPEC01.md` Q26 owns remains (§10 item 4). Two decisions
 are open and unscheduled: binding `conflicts[].group_id` in the conflict-group repair (§10 item 3) and a mismatch between
-`conflict_groups` and the `conflicting` dispositions (§10 item 10).
+`conflict_groups` and the `conflicting` dispositions (§10 item 10). Item 13 is reopened, and its recommended next step,
+a repair route for a dismissed conflict group, needs `/preflight` and the user's decision first (§10 item 13).
 
 Any later phase follows SPEC01 §2: `/preflight`; offline tests at the owning boundary; `zig build verify`; one
 change set for each measured build, on a committed, unmodified build; each replay batch, launch and set approved
@@ -777,3 +823,10 @@ each run's evaluation stays under `evaluations/e2e/<run>/`.
 - **Option (b), offline.** The request-projection freeze `evaluations/request-projection/conflicts-first-repair-aware`
   equals `conflicts-first-after` (146 scenarios, 1,818 calls); `conflicts-first-before` has 1,856 calls, and the
   difference is the non-conflict review requests a blocked pass no longer sends.
+- **Live set of 27 November 2026** (user: "run 3 e2e test per test case"). Nine launches on one build, `fc57ddc`,
+  modified, `source_sha256` `71b27b0d…8517`, `claude-haiku-5-5`. hello-world passed at 100% three times (9 calls, 38,655
+  to 39,975 tokens, no accuracy defect). loan-renewal passed at 89.29%, 92.86% and 92.86% (11 to 13 calls, 64,316 to 83,863
+  tokens); in 3 of 3 `FR-001` reads "can renew" (`weakened_obligation`, a judgment call; the user's ruling is pending) and
+  a Given adds a due-date precondition (`unsupported_addition`, minor), and the first run also repeated the refusal rule
+  (`restatement` 2), which did not recur. The three conflict launches ended at the stops in §10 item 13 (none published).
+  Evaluations: `evaluations/e2e/2026-11-26T22-54-55Z-*` to `2026-11-26T23-12-36Z-*`.
