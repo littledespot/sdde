@@ -41,7 +41,7 @@ never used for it.
   exhausted runs (AGENTS.md). There is no fixed run count or pass rate: the user judges the
   evidence.
 - **The build.** The gate must hold on the build Plan work starts from. After a later
-  structural change, the gate is re-run on that build.
+  structural change, the user decides whether the gate is re-run on the new build.
 - **Evidence reported separately:**
   - mechanical checks passed;
   - publication rate per case;

@@ -197,8 +197,8 @@ A reference conflict is a gap that only the user can close, and the user closes 
   each entry joined once. An entry no response names is tolerated: the registry is
   written before the state, so a run that stops between them leaves evidence and
   never a response without it. One revision appends all of a run's accepted forms.
-  The registry records clarification responses only, and only Specify writes it
-  (Decision 4).
+  Specification edits (§18), user review (§14.5) and reference feedback use the same
+  registry; only clarification responses are built.
 - After acceptance, the closed form is protected byte-for-byte. A later edit to it,
   or its removal, blocks (§23.2).
 - Upstream changes invalidate dependent responses through the ordinary rework

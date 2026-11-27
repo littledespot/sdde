@@ -320,8 +320,9 @@ it. Coverage gaps could only block.
       scenarios.
     - An edit to a criterion's Given or When makes each linked edge case's lines differ from
       the projection, so readback rejects them.
-    - The Given/When/Then form of an edge case is built and kept; its benefit is not
-      demonstrated, because the measured sets wrote no edge case.
+    - The Given/When/Then form of an edge case rests on one scored run. Its benefit is not
+      demonstrated, and it is kept or reverted on scored repeated runs of both development
+      cases (AGENTS.md "Model output, prompts and evidence").
   - A lead-in condition is split from the items it governs. "Unless the borrower is
     staff:" followed by two items becomes three claims, and each item claim reads as
     unconditional; the condition survives only as its own claim.

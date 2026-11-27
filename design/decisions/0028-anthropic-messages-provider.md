@@ -55,9 +55,8 @@ These facts were checked against the Anthropic documentation on
 implements the dated wire manifest, including the error table.
 
 - **Provider and models:** provider ID `anthropic`; models `claude-haiku-5-5`,
-  `claude-sonnet-5-5` and `claude-opus-5-5`. `claude-sonnet-5-5` and `claude-opus-5-5`
-  each need an approved compatibility probe before live use; `claude-haiku-5-5` is in
-  live use by the user's direction of 17 November 2026 (ADR 0029).
+  `claude-sonnet-5-5` and `claude-opus-5-5`. Each needs its own approved
+  compatibility probe before live use.
 - **Configuration:** `{"maxOutputTokens": N, "requestTimeoutMs": M}`, both required
   positive integers, with no other field. The documented maximum output is 128,000
   for each model and is sent unchanged as `max_tokens`. `requestTimeoutMs` is the

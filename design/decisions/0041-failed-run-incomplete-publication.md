@@ -1,7 +1,9 @@
 # ADR 0041: A failed or blocked run publishes its validated results, marked incomplete
 
-- **Status:** Accepted, on hold since 30 October 2026. Nothing is built, and it binds nothing
-  until the user resumes it: until then failed and blocked runs publish nothing. It takes the
+- **Status:** Accepted, on hold since 30 October 2026. The engine builds none of its
+  publication. Built already: the E2E report's incomplete-publication member, which stays
+  null, and the runner's terminal-rejection classes that its publish rules read. It binds
+  nothing further until the user resumes it: until then failed and blocked runs publish nothing. It takes the
   next `specification-state` version when it resumes.
 - **Date:** 2026-10-26
 - **Decision authority:** User decisions, 26, 27, 29 and 30 October and 28 November 2026

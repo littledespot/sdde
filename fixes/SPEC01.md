@@ -435,8 +435,7 @@ lands with its stage's code, in ADR 0025 and the contracts it names:
   rubric with a `conflict-resolution` criterion. Its calibration members point at the loan-renewal files, since no panel exists
   for the derivative. No live run has been made.
 
-**Not decided here:** the gate re-run after E7 is the user's (ADR 0034:91-95, which recommends re-running after a
-structural change lands). Of the E7 stages, only stage 5's set changes development-case requests.
+**Not decided here:** the gate re-run after E7 is the user's (ADR 0034 "The gate"). Of the E7 stages, only stage 5's set changes development-case requests.
 
 ## 6. Test track (T)
 
