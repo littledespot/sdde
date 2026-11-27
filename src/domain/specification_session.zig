@@ -678,7 +678,7 @@ pub fn completeScenarios(a: std.mem.Allocator, current: Session) Error!Session {
 /// calls it; it acts only on a records batch while records are admitted or
 /// their scenarios written, so the story's composition and assembly, which run
 /// when no records are being admitted, don't. Its records rules, including
-/// ADR 0035 restatements, apply while records are admitted.
+/// ADR 0038 Decision 5 story restatements, apply while records are admitted.
 /// `model` is the candidate these checked records came from; it supplies the
 /// observed old value a native delete requires.
 pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Context, checked: g.Checked, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
@@ -688,7 +688,7 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Conte
     if (proposed != .records and proposed != .entities) return null;
     if (proposed == .records and current.completed == records_index) {
         // Every same-kind duplicate, competing ones included, is decided before
-        // a restatement can remove a record (ADR 0035). While scenarios are written, the
+        // a restatement can remove a record (ADR 0038 Decision 5). While scenarios are written, the
         // criteria meet every record of every batch, so an equal criterion of another group blocks.
         for (proposed.records, 0..) |record, index| {
             for (current.record_batches) |batch| for (batch.response.content.records) |prior| {
@@ -749,7 +749,7 @@ fn repeatedStatementIssue(a: std.mem.Allocator, records: []const g.spec.RecordPr
     return g.repeatedStatementIssue(index, try observedRecord(model, index));
 }
 
-/// ADR 0035 restatements of the story, decided before ADR 0038 Decision 5's repeated
+/// Restatements of the story (ADR 0038 Decision 5), decided before that decision's repeated
 /// statements, so a record restating both keeps the story's rule. ADR 0047: a record
 /// naming a claim that no other record names is kept, so every claim keeps a record.
 fn restatementIssue(a: std.mem.Allocator, current: Session, records: []const g.spec.RecordProposal, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {

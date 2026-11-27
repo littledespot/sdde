@@ -94,7 +94,7 @@ and an architecture test pins that.
 
 - **Owner:** [`src/actions/model/check_workflow_token_budget.zig`](../../../src/actions/model/check_workflow_token_budget.zig)
 - **Reads:** none (the runner's token ledger) · **Writes:** none · **Side effect:** `none`
-- **Does:** Blocks a further provider call when accounted usage has reached `workflowTokenBudget` ([ADR 0037](../../decisions/0037-configured-workflow-token-budget.md)); reserves nothing.
+- **Does:** Blocks a further provider call when accounted usage has reached `workflowTokenBudget` ([ADR 0011](../../decisions/0011-provider-owned-request-limits.md)); reserves nothing.
 - **Rejects:** `WorkflowTokenBudgetExceeded`, `ProviderTokenUsageUnavailable`.
 
 ## `PrepareProviderOperationAuthorizationAction` (`prepare-provider-operation-authorization`)
@@ -271,7 +271,7 @@ definition ([ADR 0033](../../decisions/0033-generic-repair-operations.md)). Each
 registered contract made of closed variants**, one per owner it serves, selected at compile
 time by the required enumeration parameter `owner`
 ([ADR 0030](../../decisions/0030-engine-owned-model-request.md), "Contract variants"). The
-owners are the 13 members of `RepairOwner`
+owners are the 12 members of `RepairOwner`
 ([`src/domain/repair_owner.zig`](../../../src/domain/repair_owner.zig)); each operation's
 allowed `owner` values are exactly the owners that have a variant of it, so a step that names
 an owner with no variant rejects at compilation.

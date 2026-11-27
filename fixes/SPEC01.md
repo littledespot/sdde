@@ -19,7 +19,7 @@ enough stability evidence for now. ADR 0034 leaves actioning Plan to the user, s
 started. **Re-run decided 14 November 2026** (user: "the above recommendations are approved"): the
 gate is re-run on the build after E1–E4 land, as one closing set after the output-track changes
 (§3) are each kept or reverted, so the evidence comes from the build Plan work would start from
-(ADR 0034, derived item 7). The closing set (`2026-11-15T21-47-*`) and the paragraph set (`01-49-*`) ran on
+(ADR 0034 "The gate"). The closing set (`2026-11-15T21-47-*`) and the paragraph set (`01-49-*`) ran on
 16 November 2026, each 6 of 6 published and passed with no lost or weakened requirement
 ([Z_SPEC01](Z_SPEC01.md) "Closing set", "Claim wording as one paragraph"). **Q14-check set run 16 November
 2026** (`2026-11-16T07-18-*`, build `904ba482…`, `build.source.modified: true`; [Z_SPEC01](Z_SPEC01.md)

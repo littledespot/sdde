@@ -362,7 +362,7 @@ pub fn statement(content: spec.Content(spec.BusinessValue)) ?spec.BusinessValue 
     };
 }
 
-/// ADR 0035: a record restates the primary user story when its statement equals
+/// ADR 0038 Decision 5: a record restates the primary user story when its statement equals
 /// the story and the story covers its evidence. The story is never removed, and
 /// a functional requirement is always kept.
 pub fn restatesStory(allocator: std.mem.Allocator, story: spec.AttributedValue, record: spec.RecordProposal) Error!bool {

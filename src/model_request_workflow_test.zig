@@ -7062,7 +7062,7 @@ pub const Fixture = struct {
     clock: @import("provider_authorization_test_fixture.zig").TestClock,
     entries: [base_entries + 1]operations.Entry,
     registry: operations.Registry,
-    /// The configured workflow budget the runner starts from (ADR 0037).
+    /// The configured workflow budget the runner starts from (ADR 0011).
     token_budget: @import("domain/workflow_token_budget.zig").TotalTokenBudget,
     /// When set, a compile also builds the workflow registry the startup builds from it and keeps the
     /// validated owner: the graph the registry keeps is the one the engine runs.

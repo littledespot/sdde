@@ -49,10 +49,7 @@ workflow without branching on workflow names:
    any later project, feature, toolchain, or other workflow-specific setup.
    After each applied child outcome, follow only the matching validated typed
    transition; and
-8. return the compiled terminal outcome
-   ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6, accepted,
-   on hold since 30 October 2026 and not implemented, owns the failure-output run it would
-   add before an eligible failure returns).
+8. return the compiled terminal outcome.
 
 - It does not parse a workflow definition, compile a graph, construct a node or binding, invoke
   a node directly, inspect domain data, or receive any operation port.
@@ -91,7 +88,7 @@ workflow without branching on workflow names:
 - Every retry-capable operation instance declares its own bounded limit, which the compiler
   binds to monotonic accounting and which no transition cycle can bypass.
 - The workflow execution's total-token budget comes from the project configuration
-  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)), not the selected policy.
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)), not the selected policy.
 
 Bounded collection operations may return `more` for successful progress with
 remaining work. It is a registered, non-terminal outcome: YAML declares its

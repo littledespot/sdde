@@ -38,9 +38,7 @@ create intermediate publication or restart checkpoints.
   only for the output of a run whose user's own `cancel` was accepted, which holds the forms, the
   actor evidence and the clarification state and no model-derived content,
   [ADR 0025](../decisions/0025-clarification-answer-authentication.md)); the
-  publisher returns it only after all writes succeed
-  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
-  since 30 October 2026 and not implemented, owns the failure output it would add). A
+  publisher returns it only after all writes succeed. A
   blocked clarification refresh is rejected before writing. Pure progress checks also precede publication.
 - Write successful completion state only after all required outputs have been written.
 - Existing files alone do not prove the current run succeeded.
@@ -51,8 +49,6 @@ create intermediate publication or restart checkpoints.
 
 - Failure, blocking, cancellation or interruption (an operator's, not the user's accepted `cancel`,
   whose output §25.1 publishes) abandons the execution and its unpublished candidate output; files already replaced during publication may remain under Section 25.1.
-  ADR 0041's failure output (§25.1; on hold, not implemented) would publish only validated
-  content; unvalidated candidates are still abandoned.
 - A subsequent invocation starts at `start`, revalidates current inputs and gates, and executes
   the whole selected workflow again.
 - It never restores a saved task, step, model response or provider operation.

@@ -326,7 +326,6 @@ Logging-internal nodes are not recursively observed.
 | `run.completed` | `info` | `outcome` | `duration_ms` |
 | `run.blocked` | `error` | `diagnostic_code`, `outcome` | — |
 | `run.failed` | `error` | `diagnostic_code`, `outcome` | — |
-| `run.incomplete_published` ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), on hold; not implemented) | `warning` | `diagnostic_code` | — |
 | `run.cancelled` | `info` | `outcome` | — |
 | `publication.prepared` | `info` | `outcome` | — |
 | `stage.started` | `info` | — | — |

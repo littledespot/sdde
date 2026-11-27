@@ -83,8 +83,8 @@ Keys are tags of the engine's one closed, unversioned `DataKey` enum, for exampl
   no logging-only `DataKey`s, and sanitized prompt records never persist in workflow state or
   become model context.
 - Business nodes use `PipelineNode` and return all intermediate values
-  through validated `NodeDelta`s. Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet
-  implemented), values passed between a stage action's internal functions are function-local;
+  through validated `NodeDelta`s. Under [ADR 0031](../decisions/0031-stage-actions.md),
+  values passed between a stage action's internal functions are function-local;
   only its stage-edge outputs are node values.
 - `NodeRuntime` exposes no sink, filesystem, or direct logger capability.
 
@@ -116,12 +116,7 @@ An unexpected binding error terminates execution without applying a delta or
 following a YAML outcome edge. Rejected input, delta, accounting or dependency-renewal
 contracts likewise return a terminal typed runner rejection, never an `invalid` or
 `failed` operation outcome. Only a declared operation outcome whose delta and runner
-transitions have been accepted and applied may select a YAML successor. After an
-eligible terminal failure, the engine may run the definition's declared model-free
-`failure-output` subgraph in the runner's failure-output mode; it follows no transition
-from the failing step and returns the original failure
-([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6, accepted,
-on hold since 30 October 2026; not implemented).
+transitions have been accepted and applied may select a YAML successor.
 
 An applied `invalid`, `needs_user`, `blocked`, `failed` or `cancelled` outcome
 remains associated with its canonical native subject (including the complete
@@ -173,8 +168,7 @@ The runner and a kernel binding stop a run on their own authority with the `auth
 rejection, which carries one closed reason (`AuthorityReason`,
 `src/domain/workflow_execution.zig`). A reason names the invariant that was checked,
 never a call site or a caller, so one reason covers every producer of its class. It
-sits beside the tag, which keeps its status (`failed`) and its publish rule
-([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 7.7): no
+sits beside the tag, which keeps its status (`failed`) and publishes nothing: no
 tag is added, merged or split. The reason is the rejection's diagnostic, so the command
 line, the report, the step event and trace, and the action and terminal events name it;
 an event upper-cases it under the existing `diagnostic_code` token rule (for example
@@ -271,9 +265,7 @@ Every action must:
 - An action that publishes output does not decide whether validation passed; it consumes the
   complete validated output set through its declared publication port.
 
-[ADR 0031](../decisions/0031-stage-actions.md) adds the **stage action** (`prepare-toolchain`
-is the first, in `src/actions/toolchain/prepare_toolchain.zig`; the other stages are not yet
-converted):
+[ADR 0031](../decisions/0031-stage-actions.md) adds the **stage action**:
 one registered action whose verb-object responsibility is a deterministic sequence of internal
 steps that routes no outcome. The ADR fixes its contract fields: side effect `none` or
 `filesystem_read`, repair role and runner accounting `none`, outcome association

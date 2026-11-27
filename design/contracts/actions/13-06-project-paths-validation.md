@@ -10,7 +10,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Reads:** `citable_reference_inputs` · **Writes:** none · **Side effect:** `none`
 - **Does:** Select the optional source-preservation branch from configuration
   (`validation.sourcePreservationCheck`,
-  [ADR 0021](../../decisions/0021-optional-source-preservation-review.md)): `ok` when enabled,
+  [ADR 0023](../../decisions/0023-advisory-post-generation-review.md)): `ok` when enabled,
   `more` when not.
 - **Rejects:** none.
 

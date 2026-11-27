@@ -1596,7 +1596,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // The same holds for a wholly taken statement whose text is only the exact value
         // another record holds: its text defect is no defect of the response.
         .{ .stage = .records, .shape = .bare_statement, .repetition = .{ .every_request = 1 } },
-        // ADR 0035: a record that repeats another's content, groups and evidence is a
+        // §17.5: a record that repeats another's content, groups and evidence is a
         // duplicate; it is deleted natively and the run publishes with no correction.
         .{ .stage = .records, .shape = .duplicate_record, .repetition = .{ .first_request = 1 } },
         // ADR 0039: a records runaway is re-sent once; a re-send that runs away
@@ -1663,7 +1663,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     // protocol correction naming both claims, and the run publishes from the answer that keeps one. It
     // follows the others so that no earlier scenario changes its number.
     const split_claim_once = scenario_stop_start + 5;
-    // ADR 0035: a record that restates the story is deleted natively and the outcome naming its claim
+    // ADR 0038 Decision 5: a record that restates the story is deleted natively and the outcome naming its claim
     // stays. The runs share the equal-criteria runs' sources and `.chosen` edge cases, which pair the claims
     // into groups of two, so the first group has a second claim that keeps its requirement. One run for each
     // kind of restating record. They follow the others so that no earlier scenario changes its number.
@@ -2884,7 +2884,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (story_restatement_scenario) {
             assertion_context = "story-restatement";
-            // ADR 0035: the first group's batch holds a record that states the story's own text ahead of an
+            // ADR 0038 Decision 5: the first group's batch holds a record that states the story's own text ahead of an
             // outcome naming the same claim, and no requirement names that claim. ADR 0038 Decision 5 would
             // delete that outcome and keep the restatement, so a batch that keeps the outcome and holds no
             // record of the restating kind shows the story comparison ran. The scripts offer no other record of that kind.

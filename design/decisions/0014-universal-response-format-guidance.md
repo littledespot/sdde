@@ -2,11 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-12
-- **Decision authority:** Explicit user instruction to apply universal response
-  guidance without local fixes, duplicate authority or verbose workflow templates
+- **Decision authority:** User decisions, 12 and 21 September 2026
 - **Amends:** Design Section 12.2; ADRs 0006 and 0012's prompt-ownership wording
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (amended 23 October
-  2026), whose removal of provider token counting was implemented on 24 October 2026.
 
 ## Decision
 
@@ -17,7 +14,7 @@ Every model request states the engine's existing JSON response framing:
 - The provider-neutral response-controls contract owns this one constant.
 - Provider serializers emit it once as system-level guidance for initial calls, semantic
   review, repair and protocol retries in any workflow, beside the native JSON-schema
-  output (amended 25 November 2026: native output is the only response mode).
+  output, which is the only response mode.
 - Test evaluators reuse the same constant.
 
 - The instruction is serialized beside the existing response schema; it is not appended
@@ -33,6 +30,8 @@ Every model request states the engine's existing JSON response framing:
 - No new configuration or YAML parameter is introduced.
 
 - Strict decoding and schema validation remain mandatory.
+- Malformed JSON rejects, with one exception: the user-approved, logged opening
+  normalization that [§22.6](../contracts/22-repair.md#226-unparseable-output) defines.
 - Fenced responses still reject; the engine does not strip fences or extract JSON from
   prose.
 - The model can still disobey the instruction, so live output and rubric evidence must
@@ -44,8 +43,6 @@ Every model request states the engine's existing JSON response framing:
   and both evaluator providers.
 - Unrelated result schemas retain their complete schema guidance and input bytes; native
   generation constraints follow ADR 0006's registered projection.
-- Malformed JSON still rejects except for the user-approved, logged
-  [§22.6 prefix normalization](../contracts/22-repair.md#226-unparseable-output)
-  added on 21 September 2026. Schema violations still reject.
+- Schema violations still reject.
 - Live evidence retains the actual outbound instruction and returned result; neither a
   fake response nor an unpublished candidate establishes E2E success.

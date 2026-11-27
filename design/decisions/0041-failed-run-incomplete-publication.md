@@ -1,40 +1,11 @@
 # ADR 0041: A failed or blocked run publishes its validated results, marked incomplete
 
-- **Status:** Accepted, on hold (30 October 2026): E0 stopped by user decision ("stop E0")
-  during implementation; nothing is implemented.
-  [ADR 0023](0023-advisory-post-generation-review.md)'s amendments took
-  `specification-state` v20 and v21, and the removal of the principle category policy
-  (ADR 0015, 8 November 2026) took v22, and the name-only entity
-  ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 6, 8 November 2026)
-  took v23, and the linked edge-case outcome
-  ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7, 8 November 2026) took v24,
-  and the engine-derived title ([ADR 0048](0048-engine-derived-specification-title.md),
-  11 November 2026) took v25, and the engine-owned model request
-  ([ADR 0030](0030-engine-owned-model-request.md), 13 November 2026) took v26, and the edge
-  case's own given ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7,
-  implemented 21 November 2026) took v27, and the acceptance criterion's optional given
-  ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 3, 22 November 2026)
-  took v28, and the authenticated clarification responses
-  ([ADR 0025](0025-clarification-answer-authentication.md), `clarification-state/v3`) took v29, so when
-  this ADR resumes it takes v30. Since
-  post-generation review was removed (SPEC01 D13.1, 1 November 2026), "review" leaves the
-  checks a failed view lists as not completed.
+- **Status:** Accepted, on hold since 30 October 2026. Nothing is built, and it binds nothing
+  until the user resumes it: until then failed and blocked runs publish nothing. It takes the
+  next `specification-state` version when it resumes.
 - **Date:** 2026-10-26
-- **Decision authority:** The user's decision on 26 October 2026. Asked whether a
-  required step that fails should also publish what it has, marked incomplete (for
-  example, "if the records step runs away twice, the run would publish the title, brief
-  and user story with an incomplete status"), the user answered "yes, publish and log,
-  and mark as incompelete", then "update docs". It extends the same day's "incomplete
-  results must be published, but it must be indicated that the results are incompelete,
-  and it must also be logged" (then ADR 0040, last at git `8aa7fb5`) from review to
-  required work. On the same day the user approved extending it to
-  blocked runs ("3 yes", then "update with recommendations and implement"). On
-  27 October 2026 the user accepted the four mechanism decisions of a read-only design
-  pass (Decision 6), with "update the docs with the above recommendations" after the
-  recommendation "accept all four as proposed". On 29 October 2026 the user approved the
-  twelve implementation decisions of E0's preflight ("yes E0 is approved"), recorded in
-  Decision 7.
-- **Amends:**
+- **Decision authority:** User decisions, 26, 27, 29 and 30 October and 28 November 2026
+- **Amends (when resumed):**
   - [ADR 0009](0009-atomic-workflow-execution.md): "Candidate outputs remain private
     until whole-workflow validation permits publication", for the validated content of
     a failed Specify run; the execution stays the atomic unit, nothing resumes, and a
@@ -44,12 +15,11 @@
     publication";
   - [ADR 0039](0039-configured-temperatures-and-runaway-resend.md): a required runaway
     on its re-send publishes this projection instead of nothing;
-  - [ADR 0011](0011-provider-owned-request-limits.md) and
-    [ADR 0037](0037-configured-workflow-token-budget.md): a token-budget failure stays
+  - [ADR 0011](0011-provider-owned-request-limits.md): a token-budget failure stays
     fatal to model work, but publishes this projection;
   - §3.3 (invariant on failed publication), §12.8.1 (the terminal-error rows), §17,
     §22.6 (uncorrectable JSON/schema rejection), §23.2 and §25 (the published set),
-    §24 (`specification-state/v30`), §27 and F0002 (the `run.incomplete_published`
+    §24 (the next `specification-state` version), §27 and F0002 (the `run.incomplete_published`
     event), §31.15, F0100 §5.5, the [E2E harness](../harness/e2e.md) and the §32 index;
   - §23.2 ("blocked … executions publish no new specification") and the §12.8.1
     administrative-block row, for blocked runs;
@@ -65,14 +35,12 @@
       and the formal [workflow-definition schema](../schemas/workflow-definition-v1.schema.json)
       with it), §14 (the engine loop) and §25 (the publication terminals).
 
-  The overall design remains **Proposed design**.
-
 ## Context
 
-When a required Specify step failed, for example a records response that ran away twice
-or a correction that ran out, the run published nothing. Content that had already
-passed its checks, such as the title, brief and user story, was lost, and the previous
-publication stayed in place unchanged. ADR 0017 already publishes a validated
+When a required Specify step fails, for example a records response that runs away twice
+or a correction that runs out, the run publishes nothing. Content that has already
+passed its checks, such as the title, brief and user story, is lost, and the previous
+publication stays in place unchanged. ADR 0017 already publishes a validated
 incomplete specification when a run pauses for clarification.
 
 ## Decision
@@ -92,7 +60,8 @@ incomplete specification when a run pauses for clarification.
      rework or a coverage gap (`no_independent_supported_target`).
 
    These still publish nothing:
-   - cancellation (`cancelled`);
+   - cancellation (`cancelled`); an accepted `cancel` form keeps its own publication
+     ([ADR 0025](0025-clarification-answer-authentication.md));
    - security, path, trusted-association or forged-evidence failures (`authority`, every
      reason, Decision 7.7), because the content can't be trusted;
    - a runner gate rejection (`gate`);
@@ -105,8 +74,9 @@ incomplete specification when a run pauses for clarification.
      exists to publish.
 2. **What is published.** Only content that passed every check that applies to it on
    its own: the validated reference snapshot and its cited source requirements (as in
-   ADR 0017), the title the engine took from the sources (ADR 0048), and each generated
-   unit (brief, story or record batch) that was admitted and validated before the failure.
+   ADR 0017), the title the engine took from the sources (ADR 0048), the story the engine
+   composed ([ADR 0047](0047-engine-composed-primary-story.md)) once it validated, and each
+   generated unit (brief or record batch) that was admitted and validated before the failure.
    - A unit that failed, or was still being corrected or repaired, is not published, in
      whole or in part, and neither is a unit whose owner has an unresolved candidate
      outcome. Unvalidated model output never appears.
@@ -136,8 +106,7 @@ incomplete specification when a run pauses for clarification.
    - It is never resumed. The next run starts again from `start` and revalidates
      current inputs.
    - Publication-write failures keep ADR 0009's failure rule.
-6. **Mechanism: a declared failure output** (accepted 27 October 2026, not yet
-   implemented). The runner's rejections end the run before any YAML edge, and
+6. **Mechanism: a declared failure output.** The runner's rejections end the run before any YAML edge, and
    publication accepts only `ok` and `needs_user`, so neither YAML routing nor today's
    publication path can reach these runs.
    - **The definition declares it.** A workflow definition may name one definition-local
@@ -168,7 +137,7 @@ incomplete specification when a run pauses for clarification.
      An ADR 0032 routine publishing after the failure would be a second publication path
      outside the runner.
 
-7. **Implementation decisions** (29 October 2026). They settle what Decisions 1–6 left
+7. **Implementation decisions.** They settle what Decisions 1–6 left
    open and amend nothing above.
    1. **`invalid` stays `invalid`.** The engine returns the original outcome unchanged.
       The closed `spec_incomplete` cause and the publication terminal outcomes are
@@ -198,7 +167,7 @@ incomplete specification when a run pauses for clarification.
       `authorization_denied` spans a foreign or mismatched lease, which is untrusted
       content, a stale or already consumed one, which is operational, and a failed
       preparation result; one reason covers all three, and it publishes nothing either
-      way. E0 may revisit them when it resumes. A `model_capture` exclusion test is added.
+      way. A `model_capture` exclusion test is added.
    8. **Rendering.** `spec.md`: the title first, then the failure line. The failure line is `**Status: Incomplete — the run
       failed.**` or `**Status: Incomplete — the run was blocked.**`, followed by one
       sentence naming the authored step ID and the diagnostic code. A section the run
@@ -212,34 +181,33 @@ incomplete specification when a run pauses for clarification.
        written last; no clarification files. The CLI prints the same set.
    11. **Pending failure subjects.** A runner rejection is one typed pending failure
        subject, which the incomplete prepared output must carry.
-   12. **Timing.** E0 lands after the Q1b set (done 29 October 2026).
-8. **Design details** (approved 29 October 2026, "approve all 13").
+8. **Design details.**
    1. The failure line names the full authored step path, such as
       `generate/records/gen/request`.
    2. The checks not completed are a closed list (coverage, cross-record), each shown as
-      not completed; no result is claimed either way.
-   3. Withdrawn 1 November 2026: ADR 0040's review line no longer exists.
-   4. The failed view has no `spec.md` reader slot; it is never read back as input, and the
+      not completed; no result is claimed either way. Spec runs no post-generation review
+      ([ADR 0023](0023-advisory-post-generation-review.md)), so the list holds no review.
+   3. The failed view has no `spec.md` reader slot; it is never read back as input, and the
       completed reader rejects it.
-   5. Without a produced title the H1 is `# Feature Specification: <feature-id>`.
-   6. Partly generated records show the produced records, then one line,
+   4. Without a produced title the H1 is `# Feature Specification: <feature-id>`.
+   5. Partly generated records show the produced records, then one line,
       "Record batches generated: k of n."
-   7. The failure output builds the reference snapshot itself, from the validated
+   6. The failure output builds the reference snapshot itself, from the validated
       reference inputs (Decision 7.3's required input is those inputs).
-   8. A logging failure at the incomplete-publication barrier publishes nothing; the
+   7. A logging failure at the incomplete-publication barrier publishes nothing; the
       original failure stands.
-   9. The diagnostic shown is the failing step's own code when it has one, otherwise the
+   8. The diagnostic shown is the failing step's own code when it has one, otherwise the
       outcome (`FAILED`, `BLOCKED` or `INVALID`); `run.failed` is unchanged.
-   10. A unit is unresolved when it has a pending generation request of its own.
-   11. When the failure output's inputs are missing it doesn't start, logs nothing extra,
+   9. A unit is unresolved when it has a pending generation request of its own.
+   10. When the failure output's inputs are missing it doesn't start, logs nothing extra,
        and the original failure stands.
-   12. `run.incomplete_published` carries `diagnostic_code` only, as F0002 defines.
-   13. The eligibility flag has three values (excluded, shared, failure-output only), so
+   11. `run.incomplete_published` carries `diagnostic_code` only, as F0002 defines.
+   12. The eligibility flag has three values (excluded, shared, failure-output only), so
        the compiler also rejects a failure-output-only operation in the main graph.
 
 ## Consequences
 
-- **Persistence.** `specification-state` advances to v30 for the new variant. Earlier
+- **Persistence.** `specification-state` advances for the new variant. Earlier
   states reject without migration. Workflow definitions advance to `workflow/v2`; a
   project holding a copied `workflow/v1` definition must replace it.
 - **Risks.**
@@ -247,7 +215,6 @@ incomplete specification when a run pauses for clarification.
     limited to the incomplete prepared output and its recorded failure terminal.
   - A failed or blocked run overwrites the previous good `spec.md` (below).
   - A write failure part-way can leave mixed files, under ADR 0009's existing rule.
-  - The change is about the size of ADR 0039.
 - **Evidence.** A failed or blocked run with an incomplete publication is still a failed workload
   under AGENTS.md's evidence rules. Its incomplete specification is not scored, as for
   ADR 0017's pending view, and the E2E report records the published incomplete set.

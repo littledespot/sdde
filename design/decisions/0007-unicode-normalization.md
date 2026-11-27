@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-05
-- **Decision authority:** Explicit user approval of a pinned normalization dependency and its native-packaging decision
+- **Decision authority:** User decision, 5 September 2026
 
 ## Decision
 
@@ -18,9 +18,6 @@
   case folding, transliteration, or removal of characters is implied.
 - Selector policy separately owns separator and segment rules.
 - Existing ASCII configuration-root policy remains unchanged.
-
-- Feature identity uses no naming transform ([ADR 0010](0010-explicit-feature-directory.md));
-  that does not affect shared NFC or this dependency/packaging decision.
 
 - Install the dependency's MIT/Unicode license notices with the distribution.
 - Verify Unicode composition, invalid UTF-8, bounds, allocation failures, and

@@ -38,8 +38,7 @@ indexes: [0001](../decisions/0001-zig-engine.md),
 [0028](../decisions/0028-anthropic-messages-provider.md),
 [0029](../decisions/0029-bedrock-model-families.md),
 [0030](../decisions/0030-engine-owned-model-request.md),
-[0032](../decisions/0032-engine-routines.md),
-[0037](../decisions/0037-configured-workflow-token-budget.md) and
+[0032](../decisions/0032-engine-routines.md) and
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md); [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0002 —
 LogService](F0002-LogService.md); [F0008 —
@@ -506,10 +505,8 @@ output is the only response mode
 
 **Actual token accounting**
 
-- [ADR 0037](../decisions/0037-configured-workflow-token-budget.md) owns the
-  per-execution `workflowTokenBudget`, and
-  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting)
-  owns actual-usage accounting: once-only recording, overshoot retention, exact
+- [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting)
+  owns the per-execution `workflowTokenBudget` and actual-usage accounting: once-only recording, overshoot retention, exact
   equality, no estimate or reservation, and unavailable usage
   (`ProviderTokenUsageUnavailable`) blocking further calls.
 - The pre-call check reads the current total without changing it.
@@ -1078,7 +1075,7 @@ F0006 does not:
     - Explicit consumer steps retain one immutable request association; they cannot
       rebind its model or resources.
     - The project configuration contributes the only workflow-global limit: one
-      positive total model-token budget (`workflowTokenBudget`, [ADR 0037](../decisions/0037-configured-workflow-token-budget.md)) initialized
+      positive total model-token budget (`workflowTokenBudget`, [ADR 0011](../decisions/0011-provider-owned-request-limits.md)) initialized
       independently for each workflow execution.
 11. The port's only provider operation is inference, which has no prerequisite operation
     or input-size preflight.

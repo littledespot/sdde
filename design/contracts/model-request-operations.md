@@ -1,9 +1,10 @@
 # Model-request operation contracts
 
-Detailed contracts for the explicit YAML model-request operations governed by
-[ADR 0012](../decisions/0012-workflow-owned-model-request.md).
+Detailed contracts for the stages of one model request, governed by
+[ADR 0030](../decisions/0030-engine-owned-model-request.md); request identity and retained
+inputs are [ADR 0012](../decisions/0012-workflow-owned-model-request.md)'s.
 
-> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented.** These
+> **[ADR 0030](../decisions/0030-engine-owned-model-request.md).** These
 > operations are not YAML-selectable: each request-lifecycle entry below is a fixed **stage**
 > of one `request-model` step, a native binding the registry holds under that step's entry, and a
 > definition that names a stage's ID fails to compile. A capability-free kernel orchestrator runs

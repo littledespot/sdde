@@ -34,7 +34,7 @@ into clarification needs is `build-required-authority-clarification-needs`
   `required_authority_inputs` · **Side effect:** `none`
 - **Does:** Project the optional source-preservation requirements from the reconciled records
   and captured sources
-  ([ADR 0021](../../decisions/0021-optional-source-preservation-review.md);
+  ([ADR 0023](../../decisions/0023-advisory-post-generation-review.md);
   [`source_preservation.zig`](../../../src/domain/source_preservation.zig)).
 - **Rejects:** `InvalidRequiredAuthority` (outcome `blocked`).
 

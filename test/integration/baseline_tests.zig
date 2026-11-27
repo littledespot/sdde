@@ -94,7 +94,7 @@ test "test.integration.baseline reads the configured budget without dispatch and
     try fixture.materialize(std.testing.io, target.dir, projected.captured);
     const budget = try @import("../harness/baseline/preflight.zig").workflowBudget(std.testing.io, a, target.dir, projected.selected.workflow_id);
     try std.testing.expectEqual(@as(u64, 100000), budget);
-    // ADR 0037: the preflight reads the project's configured budget, whatever its value.
+    // ADR 0011: the preflight reads the project's configured budget, whatever its value.
     var distinct = projected.captured;
     distinct.config = try std.mem.replaceOwned(u8, a, distinct.config, "\"workflowTokenBudget\": 100000", "\"workflowTokenBudget\": 80000");
     try std.testing.expect(!std.mem.eql(u8, distinct.config, projected.captured.config));

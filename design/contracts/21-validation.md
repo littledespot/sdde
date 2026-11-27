@@ -44,7 +44,7 @@ emits no placeholder, and readback accepts only its closed grammar.
 | Source omission handoff | Source `candidate_omission` requires a nonblank explicit obligation and authorized source evidence; comparison, correction and repair bind it unchanged under §22.1; other findings forbid it | Whether the stated obligation is faithful to its sources and each complete comparison collection preserves it |
 
 [§17.5](17-specify.md#175-deterministic-specification-validation) also lists the
-duplicate check, which [ADR 0035](../decisions/0035-cross-kind-restatement.md) extends
+duplicate check, which [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5 extends
 to covered restatements of the story
 ([F0100 §5.7](../features/F0100-SpecWorkflow.md#57-generation-coverage-and-repair)), and
 claim and scenario coverage ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).

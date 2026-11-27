@@ -2,13 +2,10 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-07
-- **Decision authority:** Explicit user instruction to implement TODO001's recommendations with single responsibility, no duplicate authority, and removal of superseded code
+- **Decision authority:** User decisions, 7, 12 and 16 September and 21 November 2026
 - **Amends:** ADRs 0005, 0006 and 0012; Design Sections 7, 9, 12.7, 14.1 and 28; F0005, F0006 and F0100
-- **Amended by:** [ADR 0043](0043-model-facing-exact-text-names.md) (26 October 2026):
-  the model-visible collection is `exact_texts` and the content kind `exact_text`;
-  internal names are unchanged.
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md), which removed provider
-  token counting on 24 October 2026; only providers use the compiled projection.
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md),
+  [ADR 0043](0043-model-facing-exact-text-names.md)
 
 ## Decision
 
@@ -19,10 +16,9 @@
   with `call`.
 - A subgraph has a `start` and `steps` selecting registered operations or other
   definition-local subgraphs. Calls may forward explicit parameters.
-- The 2026-09-16 user-approved composition amendment replaces the original
-  non-nesting restriction: high-level calls compose detailed operations and
-  reusable calls through this same compiler. Direct and indirect recursion reject;
-  all expanded operations remain subject to the existing graph limits and validators.
+- Calls may nest: a subgraph composes operations and other subgraphs through this same
+  compiler. Direct and indirect recursion reject; all expanded operations remain subject
+  to the existing graph limits and validators.
 - Its parameter references are closed `{param: name}` values.
 - The call supplies every referenced parameter exactly once through `with`.
 - The existing operation parameter contracts remain the sole type and bounds authority
@@ -71,7 +67,7 @@
 - Named local definitions that are complete result shapes can also be selected from the
   same compiled resource.
 - A request whose input is a native packet selects that packet's typed result-definition
-  identity; a static or absent input selects nothing (user decision, 21 November 2026).
+  identity; a static or absent input selects nothing.
 - The packet's producer supplies that identity from its current typed unit or authorized
   repair target; the model never selects it. A Spec-owned producer names the definition by a
   member of a closed enum declared for its schema resource
@@ -104,38 +100,15 @@
 - Generation, review and repair reuse these projections without changing native or
   persisted authority.
 
-- The 2026-09-12 source-selection amendment replaces model-owned extraction
-  quotes/coordinates with scoped source-line IDs, as defined in [design section
-  16.3](../design.md#163-structured-facts-and-exact-tokens).
+- Extraction selects scoped source-line IDs, not model-owned quotes or coordinates, as
+  defined in [§16.3](../contracts/16-reference-ingestion.md#163-structured-facts-and-exact-tokens).
 - The lossless line projection replaces the packet's duplicate whole-chunk text;
   canonical citations and exact-token spans retain their existing authority.
 
-### Authoring and scope
+### Scope
 
-- Workflow examples use block YAML.
-- Prompts remain short and task-specific.
-- The specification example is `spec.workflow.yaml`; its filename does not determine its
-  workflow ID.
-- Configuration, provider catalogue, toolchain and reference authorities remain
-  separate.
-- Whole-output publication and answer application are outside this change; ADR 0009
-  remains unchanged.
-
-## Validation
-
-- Equivalent explicit/expanded graphs, nested parameter forwarding, recursive-call
-  rejection, unrelated workflow representatives, per-use
-  request/retry isolation, and rejection of invalid boundaries.
-- Schema source/projection lifetime, local-reference failures, exact bounds,
-  compact/native consistency, and selected-variant rejection.
-- Complete citation/claim/token projection, preserved uncertainty, immutable canonical
-  evidence, and allocation-failure cleanup.
-- Full fake-provider workflow tests, architecture checks, and clean native packaging
-  through `zig build verify`.
-- Measured authored/expanded sizes and actual serialized model inputs; no unmeasured
-  token/cost-saving claims or live provider evaluation without its separate
-  authorization.
-
+- A definition's filename does not determine its workflow ID.
+- Each use of a subgraph has its own request and retry identity.
 - [F0005 §3.4](../features/F0005-WorkflowDefinitionRegistryService.md#34-definition-local-reuse)
   documents the authoring contract.
 - Input optimization alone does not establish workflow completion or measured quality

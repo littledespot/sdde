@@ -2,26 +2,13 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-26
-- **Decision authority:** Explicit user approval, with user-approved amendments:
-  provenance-free source-bound per-unit assignments (27 September 2026); loss
-  evidence and authoring-input projection (9 October); authored
-  associations, replacing the presentation-role classifier and prebinding gate
-  (11 October); shared composition admission, field-specific exact-copy coverage,
-  source-aware wire syntax and no exact copies in descriptive fields (16 October);
-  native-bound preservation-comparison attribution and the shared
-  invalid-content diagnosis (14 October); and native exact-value recognition,
-  replacing model-authored exact-copy selection (17 October).
+- **Decision authority:** User decisions, 26 September to 17 October 2026.
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1.
-- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)
-  (no post-generation review since 1 November 2026),
-  [ADR 0024](0024-native-exact-token-authority.md) (token-only groups get no
-  record task; native exact duties are independent of semantic kind) and
-  [ADR 0038](0038-record-claims-and-scenario-coverage.md) (a non-entity record's response names its supporting
-  claims, a subset of its one group; the group stays its association; since 16 November 2026 an
-  engine-bound acceptance criterion's value-repair bound is its claim plus the values that claim
-  holds, in place of the table's set equality: Decision 3) and
-  [ADR 0047](0047-engine-composed-primary-story.md) (amended 3 November 2026: the story's
-  group selection is native, the groups whose business claims it quotes).
+- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md),
+  [ADR 0024](0024-native-exact-token-authority.md),
+  [ADR 0038](0038-record-claims-and-scenario-coverage.md),
+  [ADR 0047](0047-engine-composed-primary-story.md) and
+  [ADR 0048](0048-engine-derived-specification-title.md).
 
 ## Native exact-value recognition
 
@@ -84,8 +71,7 @@ Recognition precedes normalization and repair comparison; exact old-value,
 revision, dependency, effective-evidence and sibling bounds remain unchanged.
 Canonical readback validates occurrence bindings and recomputes lineage; it never
 uses request logs, model-wire conversion or a matching display substring to repair
-missing stored authority. Earlier state/description contracts reject without a
-production compatibility reader.
+missing stored authority.
 
 ## Composition and coverage
 
@@ -119,10 +105,9 @@ association. Model responses do not contain
 `L = stableUnique(S + E)` and its citation union through the same reference
 owner. The union orders explicit selections first, then first exact occurrence
 in declared field/segment order. Duplicate explicit selections reject; repeated
-exact segments deduplicate dependencies, not text. No independently writable
-effective-claim or citation list remains; any materialized citations, review,
-coverage or view projection are checked against recomputed lineage, never used
-as selection authority.
+exact segments deduplicate dependencies, not text. There is no independently writable
+effective-claim or citation list; any materialized citations, coverage or view
+projection are checked against recomputed lineage, never used as selection authority.
 
 Each domain supplies eligibility and its other accepted support. Source-backed
 Spec content requires nonempty eligible effective reference support and derives
@@ -145,15 +130,18 @@ Native admission constructs canonical `source_group_ids`, resolves complete memb
 in catalogue order, deduplicates legitimate overlaps into `S` and then derives
 exact lineage and citations. Several groups may jointly support one field and one
 group may support several fields. The model supplies no claim list or provenance,
-except that a non-entity record names its supporting claims from its group
-([ADR 0038](0038-record-claims-and-scenario-coverage.md)).
+except that a non-entity record in the records response names its supporting claims
+from its group ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 1). The
+engine, not the model, binds the claims of a slot acceptance criterion (ADR 0038
+Decision 3).
 
 Each record task binds exactly one group containing a non-token member natively
-and may return several records
-or an empty array. Since [ADR 0038](0038-record-claims-and-scenario-coverage.md) each record names its supporting claims, a nonempty
-subset of that group's claims kept in the group's order, and retains exactly one
-`source_group_ids` occurrence. Empty output supplies no positive coverage and cannot bypass aggregate
-record families, entity membership, business mapping, exact coverage or review.
+and may return several records or an empty array. Each record in the records response
+names its supporting claims, a nonempty subset of that group's claims kept in the
+group's order, and retains exactly one `source_group_ids` occurrence. The story's group
+selection is native: the groups whose business claims it quotes (ADR 0047). Empty
+output supplies no positive coverage and cannot bypass aggregate record families,
+entity membership, business mapping or exact coverage.
 All-preserved-token groups receive no record task under ADR 0024; their original
 identities and exact obligations remain. Current appearance-based duties and
 equal-byte duplicate duties are independent of the representative's semantic kind.
@@ -173,19 +161,19 @@ membership cannot establish a source association.
 
 Model and canonical selection fields therefore differ, while `S`, `E`, `L` and
 their evidence bounds are preserved. Semantic grouping and generated meaning
-remain model-assisted and independently reviewed. Native group validation,
-source-review admission, exact coverage and publication remain separate gates.
+remain model-assisted. Spec runs no semantic review after generation (ADR 0023).
+Native group validation, pre-generation source-review admission, exact coverage and
+publication remain separate gates.
 Value-only repair retains its group association and original explicit and
 effective evidence bounds. Changing authored group membership requires separately
 authorized authored-unit rebuilding; no such permission exists. Unresolved
 association defects block without being rerouted to an upstream producer.
 Readback validates captured groups and recomputes lineage. There is no
-compatibility reader, second provenance store or new retry system.
+second provenance store.
 
 ## Authored associations
 
-There is no role classifier, independent role request, `generation_roles` field,
-role-coverage gate, legacy reader or dual binding registry.
+There is no role classifier, role request or role-coverage gate.
 
 Initial attributed values use `{signal_ids:[...],value:BusinessValue}`. Brief
 requires description and goal; entities retain disposition and a selected,
@@ -233,12 +221,14 @@ unit, validate the affected dependencies, then validate the full candidate.
 | Existing candidate | Value-only replacement bound |
 | --- | --- |
 | Valid old `L` | Keep `S` and the old effective claim **set** and derived citation **set**. Recompute canonical order; a reference addition/removal changing either set requires separately authorized coupled repair. |
-| Invalid canonical exact handle or occurrence scope | Reject invalid native authority. The superseded model-authored exact-handle repair case grants no new eligibility or model selection. |
+| Invalid canonical exact handle or occurrence scope | Reject invalid native authority. It grants no new eligibility or model selection. |
 | Invalid `S` or insufficient effective evidence | Use existing evidence-repair authority first where applicable; otherwise block. Recognition cannot supply unauthorized support. |
 | Missing, corrupt or stale trusted ledger/binding | Terminal engine rejection, not a model repair or user clarification. |
 
 The exact old value and revision still compare exactly; only effective evidence
-uses set equality. A value-only replacement cannot change unrelated siblings or
+uses set equality. One exception: an engine-bound acceptance criterion's value-repair
+bound is its claim plus the values that claim holds, in place of set equality (ADR 0038
+Decision 3). A value-only replacement cannot change unrelated siblings or
 borrow their reference choices. Retained exact obligations, membership,
 omission and publication gates still apply. A prose
 repair may pass field validation yet fail exact-token coverage; that is not
@@ -252,21 +242,18 @@ full validation. An unknown canonical claim `9`, invalid `S` or a stale bound
 ledger rejects; value-only repair cannot turn it into current authority. A new
 claim cannot enter on retry, and an unfulfilled exact obligation still blocks.
 
-No misbound token/citation tuple authorization exists, and no tuple trigger can
-become blanket coupled add/remove authority. Existing separately authorized membership
-repair remains. Positive Spec source
+No tuple trigger can become blanket coupled add/remove authority. Existing separately
+authorized membership repair remains. Positive Spec source
 findings compare with derived `L`; negative/loss evidence retains its distinct
 rules. The engine derives citations only from explicit selections and exact
 handles, never chooses semantic support or adds citations to satisfy a review.
 
 ## Persistence and readback
 
-Canonical content is `specification/v8` (ADR 0048, ADR 0038 Decisions 3 and 7); completed and clarification-pending
-specification state share one version and reject earlier versions without
-migration, dual reader or fallback. Canonical reference snapshots persist no
-presentation roles. Completed readback resolves handles from the captured ledger,
-recomputes lineage and rejects inconsistent lineage, coverage or review
-projections. Pending state keeps its reference and clarification contract and
+Completed and clarification-pending specification state share one version and reject
+earlier versions without migration, dual reader or fallback. State persists no review
+evidence (ADR 0023). Completed readback resolves handles from the captured ledger,
+recomputes lineage and rejects inconsistent lineage or coverage projections. Pending state keeps its reference and clarification contract and
 never fabricates completed attributed content. Changed reference or contract
 authority invalidates dependent state through the existing runner and stage gates.
 
@@ -277,5 +264,4 @@ its nullable source authority gap under §12. Fixed repair cannot derive support
 from dispatch order or expand an association to remedy an aggregate gap. Native
 request descriptions (ADR 0019) retain the immutable
 exact-occurrence scope; they are evidence, never readback or continuation
-authority. No new retry mechanism, schema registry, evidence store, provider mode
-or reassembly prompt is authorized.
+authority.

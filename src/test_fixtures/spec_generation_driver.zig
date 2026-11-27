@@ -88,7 +88,7 @@ pub const Driver = struct {
     candidate_omissions: bool = false,
     /// The records responses state each claim as an outcome and write no functional requirement.
     behaviour_without_requirement: bool = false,
-    /// The first group's records restate the story in a record of this kind (ADR 0035).
+    /// The first group's records restate the story in a record of this kind (ADR 0038 Decision 5).
     story_restatement: ?@import("spec_generation_responses.zig").RestatingKind = null,
     /// Records of that kind in the scripted answers: the restating records offered, so a run that checks their deletion is not vacuous.
     story_restatements: usize = 0,
@@ -578,7 +578,7 @@ pub const Driver = struct {
                     std.testing.expectEqualStrings(std.fmt.allocPrint(arena.allocator(), "/properties/{s}", .{collection.array}) catch |err| return self.hookFailed(err), expected.get("schema_pointer").?.string) catch |err| return self.hookFailed(err);
                 }
                 // ADR 0038 Decision 5: a wholly taken statement never reaches a correction, and
-                // neither does an evidence-equivalent duplicate (ADR 0035).
+                // neither does an evidence-equivalent duplicate (§17.5).
                 if (matches_stage and (fault.shape == .shared_statement or fault.shape == .bare_statement or fault.shape == .duplicate_record)) std.testing.expectEqual(@as(u32, 1), attempt) catch |err| return self.hookFailed(err);
                 if (matches_stage and (fault.shape == .runaway or fault.shape == .runaway_partial_assignment) and attempt > 1) {
                     // ADR 0039: the re-send of a first runaway repeats its request at

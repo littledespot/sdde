@@ -199,7 +199,7 @@ received no call in either run, and why was not traced.
 
 **The stops.**
 
-- One total budget per execution, with no default, set per project (ADR 0037:42-44, :52-55; design.md:229-232).
+- One total budget per execution, with no default, set per project (ADR 0011 "Workflow token accounting"; design.md:229-232).
   It doesn't change with the size of the source.
 - The engine doesn't count, predict or narrow a request (ADR 0011:52-53, :132-133; design.md:222-223), so a
   workload that can't fit is found only after its tokens are spent.
@@ -416,7 +416,7 @@ The practices are from Anthropic's guidance on
 | Several decisions over one context in one call | Not done | Ruled out for source review: SPEC01:537-538; 12-model-boundary.md:410-412 |
 | Reduce a large corpus in levels | Done for reconciliation (groups of 8, then summaries). Not for review or record generation | 16-reference-ingestion.md:250 |
 | Count before sending | Not done | Ruled out: ADR 0011:52-53, :132-133; design.md:222-223; SPEC01:524 |
-| A limit that tracks the work | One fixed total per project | ADR 0037; "no larger token budget: a budget failure is fixed at its cause, such as review cost" (SPEC01:523-525) |
+| A limit that tracks the work | One fixed total per project | ADR 0011; "no larger token budget: a budget failure is fixed at its cause, such as review cost" (SPEC01:523-525) |
 | Don't re-send fixed context with every call | The principle files ride every record-generation call, and every schema is sent twice | D17.1 (ADR 0015); 12-model-boundary.md:210-213. **Decision** (§10 item 4 reverted; item 6 dropped) |
 | Keep instructions, evidence and the question apart, with the question last | Instructions sit in up to eight places and the review payload opens with the question (§7) | F0100:764-766; ADRs 0016 and 0023. **Decision** (§10 item 5) |
 | Half-price asynchronous batches | Not used; each step needs the previous step's result | ADR 0028:181-183. Cost only |
@@ -787,7 +787,7 @@ status line so the references above still hold; its build and review record was 
         - **Decision: the finding type for a dismissed label. Decided 27 November 2026: A.** Narrow the schema view for
           reconciliation records so the repairable type is the only dismissal. It follows the design's classification
           (16-reference-ingestion.md §16.4, 17-specify.md:458-459) and its narrowing rule (12-model-boundary.md:89-91,
-          ADR 0021:24); the cost is the heavier `candidate_omission` answer above. Not taken: **B** let `candidate_invalid`
+          ADR 0023 "Source-preservation review"); the cost is the heavier `candidate_omission` answer above. Not taken: **B** let `candidate_invalid`
           on a conflict subject name its own record (it contradicts that classification and amends 22-repair.md);
           **C** tighten the prompt (AGENTS.md "Model output, prompts and evidence").
         - **Decision: the repair target under overlap. Decided 27 November 2026: T1.** The dismissed group alone, the shared

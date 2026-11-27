@@ -2,25 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-05
-- **Decision authority:** Explicit user direction
-- **Amends:** ADR 0003, Design Sections 7.3, 20, 24–25, 28, 30–31,
-  F0006 and F0007, and their transaction/checkpoint/recovery samples and diagrams.
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
-  yet implemented). A model request's own protocol correction runs inside its
-  `request-model` step, bounded by that step's `retry-limit`. Every other retry still
-  needs an explicit YAML transition.
-- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
-  October 2026): a provider `output_limit` stop is re-sent once, outside any
-  `retry-limit`. It is the one engine-owned retry besides protocol correction.
-- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
-  2026; on hold since 30 October 2026, not implemented): a Specify run that fails
-  because model work couldn't be completed, or ends `blocked`, publishes its validated
-  content as an incomplete specification, marked and logged, with a `spec_incomplete`
-  state. The execution stays atomic, ends with its own terminal (`failed`, `blocked` or
-  `invalid`, ADR 0041 Decisions 5 and 7.1), never reports success
-  and is never resumed. Its 27 October 2026 mechanism runs the definition's declared
-  failure output through the runner, the one mode in which publication may run while
-  failures are pending.
+- **Decision authority:** User decisions, 5 and 7 September 2026
+- **Amends:** ADR 0003, Design Sections 7.3, 20, 24–25, 28, 30–31, F0006 and F0007
+- **Amended by:** [ADR 0017](0017-incomplete-specification-publication.md),
+  [ADR 0025](0025-clarification-answer-authentication.md),
+  [ADR 0030](0030-engine-owned-model-request.md),
+  [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
 
 ## Decision
 
@@ -30,11 +17,11 @@
 - It starts at its compiled `start` step and follows its YAML transitions to a terminal
   outcome.
 - Steps, model calls, repairs and individual implementation tasks are not independently
-  committed or resumable executions.
+  committed or resumable executions. No task publishes on its own.
 
 - Candidate outputs remain private until whole-workflow validation permits publication.
 - Success requires writing the complete validated output.
-- Publication failure may leave replaced files under the approved failure rule below,
+- Publication failure may leave replaced files under the publication failure rule below,
   but failed, blocked, cancelled or interrupted executions never report success.
 - A later invocation starts the workflow again from the beginning, revalidating current
   inputs; it never resumes a saved step, task, model response or checkpoint.
@@ -59,8 +46,12 @@
 - Starting the complete workflow again may repeat API calls.
 - There is no cross-execution exactly-once request guarantee and no journal-derived
   replay approval gate.
-- Within one execution, only explicit YAML transitions and operation-local `retry-limit`
-  authorize retries, apart from ADR 0039's one runaway re-send.
+- Within one execution, a retry needs an explicit YAML transition and an operation-local
+  `retry-limit`. The two engine-owned retries are a model request's own protocol
+  correction, which runs inside its `request-model` step and is bounded by that step's
+  `retry-limit` ([ADR 0030](0030-engine-owned-model-request.md)), and the one re-send
+  after a provider `output_limit` stop, which is outside any `retry-limit`
+  ([ADR 0039](0039-configured-temperatures-and-runaway-resend.md)).
 
 ### Clarification exception
 
@@ -81,11 +72,10 @@
 - This decision does not weaken path authorization, candidate validation, predecessor
   gates, explicit approvals, command safety or secret redaction.
 
-## Rerun replacement rule (accepted 2026-09-07)
+## Rerun replacement rule
 
-- Explicit user direction makes this the shared rule for every workflow execution:
-  completely overwrite all registered replaceable output files at their existing
-  engine-owned paths.
+- This is the shared rule for every workflow execution: completely overwrite all
+  registered replaceable output files at their existing engine-owned paths.
 - Clarification forms the user has resolved are the sole clarification-file exception
   and MUST remain byte-for-byte unchanged.
 - Clarification forms the user has not resolved MUST be completely overwritten from the
@@ -114,9 +104,8 @@
   clarification publication may end in `needs_user`, and the publication of an accepted user `cancel` ends
   the run `cancelled` ([ADR 0025](0025-clarification-answer-authentication.md)).
 
-## Publication failure rule (accepted 2026-09-07)
+## Publication failure rule
 
-- Explicit user approval settles the multi-file write-failure/interruption case.
 - Validate the complete output set before writing.
 - A write failure or interruption may leave already-replaced files in place, but must
   never report success or record new successful completion.
@@ -129,22 +118,3 @@
   multi-file publication is not a filesystem transaction.
 - Existing files alone are not evidence that the current execution completed
   successfully.
-
-## Acceptance
-
-Tests must prove:
-
-- Whole-workflow completion or abandonment, including unrelated YAML workflows.
-- No intermediate task publication.
-- Reruns start at `start` with fresh per-execution provider state.
-- Clarification preservation and deduplication.
-- No transaction or provider-recovery prerequisites.
-- Rerun tests must also prove complete replacement of unresolved forms at unchanged
-  subject IDs/paths, replacement of unsubmitted drafts, byte-identical preservation of
-  user-resolved forms, and write-time protection against concurrent user closure.
-- Publication failpoints must prove that all candidates validate before any write, each
-  write failure prevents new successful completion, already-replaced files may remain,
-  and a fresh rerun replaces the complete output set without recovery.
-
-Prior transaction/checkpoint/recovery contracts are withdrawn and must not be used
-to reintroduce this machinery.

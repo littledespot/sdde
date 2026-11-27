@@ -282,8 +282,7 @@ noncandidate stops preserve their typed outcomes and independently valid usage.
 Normalize cached token usage under
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting).
 
-Live tests use the user-selected `openai.gpt-oss-20b-1:0` binding in `ap-southeast-2`
-under the development-only
+Live tests use the user-selected bindings named by the development-only
 [cost policy](../decisions/0029-bedrock-model-families.md#live-test-cost-policy). That
 is mechanical support, not a live compatibility or semantic-quality claim, and it
 cannot change production authority. Historical captures follow the immutable
@@ -454,7 +453,7 @@ findings. Only complete native collection validation permits authority advanceme
 - Inference requires no size estimate, token count or static-capacity preflight; the provider
   reports its own size errors or stops.
 - The runner accounts API-reported input plus output usage exactly once against
-  the execution's single configured `workflowTokenBudget` ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)), across
+  the execution's single configured `workflowTokenBudget` ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)), across
   all inference calls (ADR 0011). Global exhaustion, overshoot or unavailable usage
   prohibits later model calls, and a global budget rejection is fatal.
 
@@ -468,7 +467,7 @@ findings. Only complete native collection validation permits authority advanceme
 - Each workflow-declared result schema defines the entire compact response; there is no generic
   open payload or repeated engine metadata.
 - Repair operations do not recursively repair semantic failures: malformed responses may receive
-  only the YAML-declared bounded protocol-retry transition, while a schema-valid but invalid
+  only the bounded protocol correction inside their `request-model` step (ADR 0030), while a schema-valid but invalid
   repair consumes the existing authorization attempt.
 
 - The reference-extraction result schema selected by the workflow contains a bounded
@@ -893,18 +892,15 @@ exact subject/purpose/dependency bindings, never similar wording or shared citat
 Changed source or a different decision still requires its own current assessment.
 
 The shared authority owner combines the complete findings using this precedence;
-the source-loss owner selects targets and the runner executes declared operations.
-Rows marked "ADR 0041" state what
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-since 30 October 2026; not implemented) would add:
+the source-loss owner selects targets and the runner executes declared operations:
 
 | Current state | Required continuation |
 | --- | --- |
-| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; nothing is published. ADR 0041: a failure of model work would publish its failed incomplete specification of the validated content, marked and logged |
-| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass, and nothing is published. ADR 0041: the blocked run would publish its validated content as an incomplete specification, marked and logged |
+| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; nothing is published |
+| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass, and nothing is published |
 | Repairable malformed review/need | Existing bounded correction and full admission; no authority gate on the partial result |
 | One or more uniquely authorized localized candidate repairs, with current dependencies and allowance | Select deterministically from eligible targets; repair, rebuild affected dependents and reassess the complete ledger before choosing another outcome |
-| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause, and nothing is published. ADR 0041: its failed incomplete specification would publish the validated content without the unresolved unit |
+| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause, and nothing is published |
 | No unresolved candidate/review defect and one or more admitted user decisions | `needs_user`; validate the complete clarification output under the owning workflow policy |
 | All required authorities resolved and candidate validation passes | Continue the declared workflow; completion still requires all later gates |
 

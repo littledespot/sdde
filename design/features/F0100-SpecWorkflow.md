@@ -12,13 +12,11 @@ parts; packet purpose text is a workflow resource);
 [ADR 0024](../decisions/0024-native-exact-token-authority.md) (exact lineage,
 reconciliation phases and token authority);
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md) (source review runs only
-before generation); [ADR 0011](../decisions/0011-provider-owned-request-limits.md) and
-[ADR 0037](../decisions/0037-configured-workflow-token-budget.md) (one configured token
+before generation); [ADR 0011](../decisions/0011-provider-owned-request-limits.md) (one configured token
 budget covers all model work);
 [ADR 0047](../decisions/0047-engine-composed-primary-story.md) (the engine composes the
 primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0017](../decisions/0017-incomplete-specification-publication.md),
-[0035](../decisions/0035-cross-kind-restatement.md),
 [0036](../decisions/0036-source-quoted-claims.md),
 [0038](../decisions/0038-record-claims-and-scenario-coverage.md),
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
@@ -27,9 +25,7 @@ primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [ADR 0030](../decisions/0030-engine-owned-model-request.md) and the four generic repair
 operations of [ADR 0033](../decisions/0033-generic-repair-operations.md) are implemented, and so is
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md) except generation's use of every answer but a
-reference conflict's and the response-owned passive literals. Not yet implemented: those two parts;
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) is accepted, on hold
-since 30 October 2026. The
+reference conflict's and the response-owned passive literals. Not yet implemented: those two parts. The
 [§32 index](../design.md#32-accepted-and-deferred-implementation-choices) lists every
 decision. [Implementation status](#implementation-status) and
 [SPEC01](../../fixes/SPEC01.md) record what is built and what remains.
@@ -78,7 +74,7 @@ The definition uses [F0005's closed root, step and subgraph contracts](F0005-Wor
 
 | Field | Meaning |
 | --- | --- |
-| `schema` | Closed `workflow/v1` schema identity; `workflow/v2` if ADR 0041 (accepted, on hold since 30 October 2026; not implemented) is implemented. |
+| `schema` | Closed `workflow/v1` schema identity. |
 | `id` | Content-owned identity: the supplied implementation uses `spec-generation`; the complete initial-suite proposal names it `specify`. |
 | `version` | Positive workflow-definition version. |
 | `shortcode` | Validated unique four-character logging shortcode. |
@@ -699,7 +695,7 @@ closed requiredness/ownership policies, current support checks and outcomes.
   pending, whose dependent review still runs (§22). The decision (26 November 2026, "implement conflicts first" and
   "implement (b), update the documentation"; ENGINE01 §10 item 9) and its typed-rule
   justification are in [ADR 0023](../decisions/0023-advisory-post-generation-review.md). The opt-in source-preservation projection
-  ([ADR 0021](../decisions/0021-optional-source-preservation-review.md)) holds one
+  ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)) holds one
   obligation per captured source.
 - Optional collections add no minimum record count.
 - The gate rebuilds this projection to reject omitted/invented entries.
@@ -1155,29 +1151,7 @@ conflicting, the engine:
 6. after a current authenticated answer or authority resolution commits,
    regenerates every specification unit before validation and rendering.
 
-Today a failed, blocked or invalid run publishes nothing. Under
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-since 30 October 2026; not implemented), when a Specify run fails because model work
-couldn't be completed (a failed request, exhausted correction or repair, or the token
-budget), or ends `blocked`, after the reference snapshot validated, it would publish an
-incomplete specification:
-
-1. only content that passed every check that applies to it on its own: the validated
-   reference snapshot's cited source requirements and each generated unit admitted and
-   validated before the failure, without final requirement IDs, leaving out any unit
-   whose owner has an unresolved candidate outcome;
-2. `spec.md` starting `**Status: Incomplete — the run failed.**` or
-   `**Status: Incomplete — the run was blocked.**`, naming the step
-   and diagnostic, with each section not produced marked not generated, and a "Run
-   status" section in `reference-context.md`;
-3. one warning `run.incomplete_published`, then the `spec_incomplete` workflow
-   state, written last;
-4. the workflow still ends `failed` or `blocked` and exits nonzero; Plan stays blocked, and the
-   next run starts at `start`.
-
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6 names the
-eligible failures; the Specify definition would declare these steps as its
-`failure-output` subgraph (`workflow/v2`; on hold, not implemented).
+A failed, blocked or invalid run publishes nothing.
 
 - Reruns replace these outputs and unresolved forms, including on a `needs_user`
   publication, and retain user-closed forms under
@@ -1260,7 +1234,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   entity records, or a source-group batch of non-entity records (§17.3). Each entity independently selects its support; each
   non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 - Native validation normalizes typed text, checks closed record variants, identical
-  normalized records and covered restatements (ADR 0035), and keeps questions outside
+  normalized records and covered restatements (ADR 0038 Decision 5), and keeps questions outside
   specification content.
 
 - The model's `kind` selects `brief`, `entities`, `records`, `clarification` or
@@ -1318,7 +1292,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Coverage is mechanical accounting, not semantic proof.
 - Complete validated references with selectable retained claims admit private
   section generation directly, unless the opt-in `validation.sourcePreservationCheck`
-  ([ADR 0021](../decisions/0021-optional-source-preservation-review.md)) first runs
+  ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)) first runs
   source-preservation review. `check-specification-source-readiness` reuses the
   provenance owner's eligibility rule. Blocked references or absent selectable
   claims retain their source review/repair route. After assembly no model review runs
@@ -1333,7 +1307,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Record-field locations are closed native targets.
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
   blocked. Restatements of the primary user story follow
-  [ADR 0035](../decisions/0035-cross-kind-restatement.md) as amended by
+  [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5 and
   [ADR 0047](../decisions/0047-engine-composed-primary-story.md); records whose claims a
   requirement or an earlier record in the batch already names follow
   [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5
@@ -1560,8 +1534,7 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
   registered publication of either completed output or the ADR 0017 incomplete
   specification with its clarification forms and pending state.
 - Not implemented: generation's use of every clarification answer but a reference
-  conflict's and the response-owned passive literals (ADR 0025, SPEC01 E7), additional reference formats, the reference-feedback API (§16.5), and §5.5's failed-run
-  incomplete publication (ADR 0041, accepted, on hold since 30 October 2026).
+  conflict's and the response-owned passive literals (ADR 0025, SPEC01 E7), additional reference formats, and the reference-feedback API (§16.5).
 - Offline verification does not establish live E2E acceptance; the
   [harness](../harness/e2e.md) captures the exact published specification for
   separate adjudication by `/evaluate-e2e` ([R8](../harness/acceptance.md)), which starts only

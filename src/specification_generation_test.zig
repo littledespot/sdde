@@ -1123,7 +1123,7 @@ test "the only record naming a claim is kept when it equals the composed story" 
     const bound = (try sessions.currentBinding(a, current, fixture.context)).records;
     const restated: spec.Model.RecordProposal = .{ .content = .{ .assumption = .{ .text = story.value } }, .source_group_ids = &.{bound.signal}, .provenance = bound.selection };
     // The batch's only record equals the story; deleting it would leave its claim
-    // without a record, so ADR 0035 keeps it (ADR 0047).
+    // without a record, so the story comparison keeps it (ADR 0038 Decision 5, ADR 0047).
     const kept = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{restated} } } })).valid;
     try std.testing.expectEqual(@as(usize, 1), kept.response.content.records.len);
     // When another record names the same claim, the restatement is still deleted.
@@ -1937,7 +1937,7 @@ test "record generation and selected value repairs retain every family purpose w
         try std.testing.expectEqual(@as(usize, 6), found);
         const records = try a.alloc(spec.Model.RecordProposal, std.meta.fields(spec.Kind).len);
         // Functional requirements, acceptance criteria, edge cases and entities share
-        // the story's wording. ADR 0035 removes any other statement record that equals
+        // the story's wording. The story comparison (ADR 0038 Decision 5) removes any other statement record that equals
         // the story, so each of those states its own text.
         inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| {
             const own = switch (kind) {
@@ -1985,7 +1985,7 @@ test "record generation and selected value repairs retain every family purpose w
         for (written.items, valid.response.content.records) |proposed, accepted| try std.testing.expectEqualDeep(proposed.content, accepted.content);
         // Equal wording in a functional requirement, acceptance criterion, edge case
         // and entity remains distinct candidate data; purpose guidance creates no
-        // deduplication rule beyond ADR 0035's restatements.
+        // deduplication rule beyond the story comparison's restatements (ADR 0038 Decision 5).
         const complete = try appendMockChecked(a, current, fixture.context, valid);
         const identified = (try sessions.assemble(a, text.validator, fixture.context, complete, try resolvedLinks(a, complete))).content;
         // The written records, the entity, and the criteria the engine wrote for the claims the
@@ -3966,7 +3966,7 @@ test "active scalar repairs present one selected task and retain their bound sou
     }
 }
 
-// ADR 0035's same-kind delete runs before ADR 0038 Decision 5's repeated statements.
+// §17.5's same-kind duplicate delete runs before ADR 0038 Decision 5's repeated statements.
 test "record repair removes only an evidence-equivalent duplicate and preserves siblings" {
     const repair = @import("domain/specification_repair.zig");
     const sessions = @import("domain/specification_session.zig");
@@ -4297,7 +4297,7 @@ test "a record's part in the repeated-statement rule is the part the request's c
     }
 }
 
-test "ADR 0035 story restatement keeps functional requirements and needs covered evidence" {
+test "ADR 0038 story restatement keeps functional requirements and needs covered evidence" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -4391,7 +4391,7 @@ fn sessionAtRecordsWith(a: std.mem.Allocator, fixture: *const Fixture, brief: sp
     return current;
 }
 
-test "ADR 0035 restatements use production evidence shapes and keep uncovered wording" {
+test "ADR 0038 story restatements use production evidence shapes and keep uncovered wording" {
     const repair = @import("domain/specification_repair.zig");
     const sessions = @import("domain/specification_session.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -4804,7 +4804,7 @@ test "coverage rejects unsafe whole-field reconstruction without changing busine
         const good = try fixture.proposal("The requested outcome is observable.");
         const raw = token.value.raw_value.bytes;
         const normalized: spec.BusinessValue = .{ .segments = &.{ .{ .literal = .{ .value = raw[0..3] } }, .{ .literal = .{ .value = raw[3..] } } } };
-        // Distinct from the story, so ADR 0035's restatement rule leaves it in place.
+        // Distinct from the story, so the story comparison (ADR 0038 Decision 5) leaves it in place.
         const visible = try fixture.proposal("The requested outcome is visible.");
         const record: spec.Model.RecordProposal = .{ .content = .{ .user_visible_outcome = .{ .text = visible.value } }, .source_group_ids = visible.source_group_ids, .provenance = visible.provenance };
         var exact_only = record;
@@ -12153,7 +12153,7 @@ test "claim-bound scenarios: a criterion equal to another group's blocks as a co
     try std.testing.expectError(error.InvalidSpecificationUnit, completing.execute(a, current));
     // The second group's criterion repeats the first group's wording for another claim. Records of
     // different claims are not evidence-equivalent, so the duplicate rule blocks the pair, and no
-    // repair takes a block (ADR 0035, ADR 0038 Decision 3).
+    // repair takes a block (§17.5, ADR 0038 Decision 3).
     const second_plan = try sessions.scenarioPlan(a, current);
     try std.testing.expect(second_plan.group.ordinal != first_plan.group.ordinal);
     const bound = (try sessions.currentBinding(a, current, fixture.context)).records;

@@ -62,7 +62,7 @@ fn groupHolds(groups: []const @import("../domain/reference_conflict_groups.zig")
     return false;
 }
 
-/// The kinds of restating record the scripted runs offer. ADR 0035 deletes any single-statement
+/// The kinds of restating record the scripted runs offer. The story comparison (ADR 0038 Decision 5) deletes any single-statement
 /// kind but a functional requirement, which is never deleted as a restatement; these are two of them.
 pub const RestatingKind = enum { business_rule, non_goal };
 
@@ -89,7 +89,7 @@ pub const Options = struct {
     behaviour_without_requirement: bool = false,
     /// The first group's records name the first claim the story quotes in no functional requirement.
     /// A record of this kind states the story's own text for it, ahead of an outcome naming the same
-    /// claim, so ADR 0035's story comparison decides which of the two the batch keeps: ADR 0038 Decision 5
+    /// claim, so the story comparison decides which of the two the batch keeps: ADR 0038 Decision 5
     /// would keep the first and delete the outcome. The group needs a second claim, which keeps its requirement.
     story_restatement: ?RestatingKind = null,
     /// The first chunk's extraction answer states no feature claim, giving a reason the text validation

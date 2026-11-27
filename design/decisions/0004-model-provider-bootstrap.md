@@ -2,53 +2,44 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-02
-- **Amended:** 2026-09-05
-- **Decision authority:** Explicit user direction
-- **Amends:** ADR 0003's rule that setup beyond the startup graph appears only
-  as project-graph setup nodes, solely for model-provider run preparation
-
-**Size-policy amendment:** [ADR 0011](0011-provider-owned-request-limits.md)
-removes capacity fields and size-ceiling prerequisites; binding/call separation
-and conditional bootstrap remain unchanged.
-
-**Routine amendment (22 October 2026, implemented):**
-[ADR 0032](0032-engine-routines.md) replaces the capability-free
-`ModelProviderBootstrapOrchestrator` and its runner-owned child bindings with a typed
-engine routine. Each step is a function with only the port it uses, and values pass as
-typed arguments. The composition root or a runner-owned binding reaches it. The routine
-still branches only on the typed requirement, stays fixed and nonselectable, keeps the
-same outcomes and public codes, and gains no credential read.
+- **Decision authority:** User decisions, 2 and 5 September 2026 and 22 October 2026
+- **Amends:** ADR 0003's rule that setup beyond engine startup appears only as
+  project-graph setup nodes, solely for model-provider run preparation
+- **Amended by:** [ADR 0011](0011-provider-owned-request-limits.md),
+  [ADR 0032](0032-engine-routines.md)
 
 ## Context
 
-The fixed startup graph must load and compile workflow definitions before a
-workflow can be selected. Provider-catalogue loading cannot belong to that
-unconditional graph because a selected workflow without a model-binding
-requirement or provider-call capability must not probe or read `.sddproviders.json`.
+Engine startup must load and compile workflow definitions before a workflow can be
+selected. Provider-catalogue loading cannot belong to that unconditional sequence because
+a selected workflow without a model-binding requirement or provider-call capability must
+not probe or read `.sddproviders.json`.
 
-Project workflow data also cannot choose whether provider preparation runs.
-Binding requirements come only from registered operation contracts; operational
-capabilities are derived from their concrete narrow ports. Both are preserved
-in the validated compiled graph.
+Project workflow data also cannot choose whether provider preparation runs. Binding
+requirements come only from registered operation contracts; operational capabilities are
+derived from their concrete narrow ports. Both are preserved in the validated compiled
+graph.
 
 ## Decision
 
 ### Placement and requirement
 
-- The composition root owns a fixed, nonselectable, capability-free
-  `ModelProviderBootstrapOrchestrator`.
+- Model-provider bootstrap is a fixed, nonselectable typed engine routine
+  ([ADR 0032](0032-engine-routines.md)). The composition root or a runner-owned binding
+  reaches it.
 - It runs after exact workflow selection and before selected-workflow execution.
 - It is engine machinery: project definitions cannot select, replace, extend, or invoke
   it.
 
-`DeriveProviderRequirementAction` is the sole branch-fact owner. It examines
-only the selected validated compiled graph and returns a closed requirement:
+The routine's first step derives the requirement in the domain. It is the sole
+branch-fact owner. It examines only the selected validated compiled graph and returns a
+closed requirement:
 
 - `required` when any compiled step has a model-binding requirement or the exact
   compiler-owned provider-call capability ID `model-provider`;
 - `not_required` otherwise.
 
-- The action does not infer from workflow IDs, step IDs, parameter names, policy
+- The derivation does not infer from workflow IDs, step IDs, parameter names, policy
   allowance alone, `.sddtoolkit.json`, provider configuration, or operation names.
 - A project definition cannot author a capability; the workflow compiler can preserve
   only capabilities supplied by registered node contracts and allowed by the selected
@@ -62,7 +53,7 @@ only the selected validated compiled graph and returns a closed requirement:
   response controls, without capacity fields or size parameters.
 - Pure preparation and validation operations may require this binding without holding a
   provider port.
-- Under accepted [ADR 0012](0012-workflow-owned-model-request.md), the originating step
+- Under [ADR 0012](0012-workflow-owned-model-request.md), the originating step
   selects that binding once after catalogue bootstrap.
 - Consumers declare the typed prepared-request/ledger dependencies and receive its
   retained immutable binding, not a selection rebound to the consumer step.
@@ -72,22 +63,23 @@ only the selected validated compiled graph and returns a closed requirement:
 - `model-provider` still derives only from the concrete provider-call port, remains
   policy-gated, and requires a model binding.
 - Binding data never grants that port.
-- This amendment supersedes capability-only bootstrap derivation and the former
-  equivalence between model-slot access and provider-call capability.
+- Model-slot access is not equivalent to the provider-call capability, and bootstrap is
+  not derived from capability alone.
 - It adds no hidden operations or provider calls.
 - Capacity values are not needed for registration, compilation, bootstrap or pure
   preparation.
 
 ### Conditional preparation
 
-- The orchestrator may branch only on that typed requirement through runner-owned child
-  bindings.
+- The routine branches only on that typed requirement.
 - The `not_required` branch performs no provider file probe, read, decode, registry, or
   allowlist work.
-- The `required` branch coordinates the already separated F0008 and F0006 actions before
-  graph execution.
-- The orchestrator receives no filesystem, parser, registry-mutator, provider, network,
-  credential, logger, state, transaction, or command capability.
+- The `required` branch locates and reads the provider document, decodes it, and builds
+  and validates the registry and the repository allowlist before graph execution.
+- Each step is a function with only the port it uses, and values pass as typed
+  arguments. The locate and read steps hold the provider-config port; no step holds a
+  registry-mutator, provider, network, credential, logger, state, transaction, or command
+  capability.
 
 ### Immutable provider snapshot
 
@@ -104,11 +96,10 @@ only the selected validated compiled graph and returns a closed requirement:
 
 ## Consequences
 
-- The unconditional startup graph remains the sole loader/compiler of project workflow
-  authority.
+- Engine startup remains the sole loader/compiler of project workflow authority.
 - Model-provider preparation is conditional engine-owned run preparation, not a
   project-authored graph or workflow-name special case.
-- This decision accepts the orchestration owner, placement, requirement derivation, and
-  immutable per-invocation provider snapshot.
+- This decision accepts the placement, requirement derivation, and immutable
+  per-invocation provider snapshot.
 - Adding another engine-level conditional preparation concern requires its own accepted
   typed policy; this decision does not create a generic hook system.

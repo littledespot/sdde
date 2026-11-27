@@ -636,9 +636,7 @@ cannot be described, is not an exhaustion: the runner stops on its own authority
 `retry_admission` reason ([§6](06-pipeline-nodes.md#runner-rejection-reasons)). If JSON decoding or schema validation still fails when correction is unavailable
 or exhausted, the run reports an error, exits nonzero and publishes nothing
 ([§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)'s
-precedence table, which also records what
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold since 30
-October 2026 and not implemented, would change). A correction that passes admission
+precedence table). A correction that passes admission
 may continue through the remaining domain validators; a recovered earlier rejection
 is not itself a publication veto. Whole-stage regeneration is not used.
 

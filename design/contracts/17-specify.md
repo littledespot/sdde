@@ -146,13 +146,10 @@ Typed content covers these concerns; each concern does not require a separate ca
   A genuinely unresolved required decision uses the existing native clarification
   owner.
 - All inference, including correction, counts once against the single configured
-  workflow budget (ADR 0011, ADR 0037). Global exhaustion, overshoot or unavailable
+  workflow budget (ADR 0011). Global exhaustion, overshoot or unavailable
   usage prohibits all later model calls. A global budget rejection ends the workflow
   with `WorkflowTokenBudgetExceeded`; it cannot become a completed specification.
-  Today it publishes nothing. Under
-  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-  since 30 October 2026; not implemented), it would publish a failed incomplete
-  specification of the validated content.
+  It publishes nothing.
 - Pre-generation source-readiness and optional preservation review keep their
   required semantics: [ADR 0023](../decisions/0023-advisory-post-generation-review.md)'s
   pre-generation phase witness and retirement before generation initialization, the
@@ -299,7 +296,7 @@ For each feature-brief or specification unit other than the engine-composed stor
   unit validation or exact recognition blocks with `story_not_admissible`, carrying
   its unit issue. Neither is repaired or retried (nor is an edge case with no criterion,
   below). Its exact role is incidental, so it discharges no
-  exact-copy duty, and ADR 0035 never deletes a record naming a claim that no other
+  exact-copy duty, and the story comparison (ADR 0038 Decision 5) never deletes a record naming a claim that no other
   record names. The story is no source-readiness subject and has no packet-guidance
   purpose (ADR 0047 Decision 5). Records, entities and scenarios requests show each
   claim's wording in the same paragraph reading, a quote of headings alone as written
@@ -434,7 +431,7 @@ For each feature-brief or specification unit other than the engine-composed stor
   scenarios receive leaves out each line every one of whose claims an applied answer superseded, so it no longer states
   what the user decided against; a line another claim also cites stays, and a supersession the model proposed removes
   nothing ([ADR 0025](../decisions/0025-clarification-answer-authentication.md), amended 27 November 2026).
-- [ADR 0021](../decisions/0021-optional-source-preservation-review.md) adds the
+- [ADR 0023](../decisions/0023-advisory-post-generation-review.md) adds the
   opt-in `validation.sourcePreservationCheck` before generation-ready sources
   proceed. One obligation per captured source checks meaning preserved by
   extraction/reconciliation, including sources with no claims. Source-only loss

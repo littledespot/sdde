@@ -37,10 +37,7 @@ Completed and clarification-pending specification state share one versioned
 [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 3 and 7,
 [ADR 0048](../decisions/0048-engine-derived-specification-title.md) and
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md), whose `clarification-state/v3` joins each
-response to the actor-evidence registry; v30 is
-reserved for the `spec_incomplete` variant of
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
-since 30 October 2026, not implemented) over canonical `specification/v8` content, in which
+response to the actor-evidence registry) over canonical `specification/v8` content, in which
 an acceptance criterion holds a `given` only where its sources state a starting situation
 (ADR 0038 Decision 3), an edge case holds its own `given` and the ID of the acceptance criterion it links to, and
 readback checks the link against the candidate rule of ADR 0038 Decision 7, and the display name is native text
@@ -84,13 +81,6 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
 [View the Stage transition state machine sample](../code.md#stage-transition-state-machine).
 
 - Each in-progress execution can terminate as `blocked`, `failed`, or `cancelled`.
-- `spec_incomplete`, with a closed cause (`failed` or `blocked`), records a Specify run
-  that failed or was blocked but published its validated content as an incomplete
-  specification
-  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
-  since 30 October 2026; not implemented). It is written
-  last, replaces any earlier completion authority and blocks Plan and later stages; its
-  execution is abandoned under [§25.2](25-publication.md#252-abandonment-and-reruns).
 - Generated definition state is committed before entering its review-pending state.
 - `planned` and `tasked` are entered only after approval tied to the exact current plan or
   task-definition ID.

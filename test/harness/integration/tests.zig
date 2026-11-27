@@ -2091,7 +2091,7 @@ test "production workflow enforces one global token budget and fails required st
         const a = arena.allocator();
         const choice = try c.parse(a, if (mode == .global_budget) @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json") else @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
         var captured = try fixture.capture(io, a, .cwd(), choice);
-        // ADR 0037: the project configuration supplies the budget. A value unlike the
+        // ADR 0011: the project configuration supplies the budget. A value unlike the
         // shipped one shows the ledger starts from the configuration.
         captured.config = try std.mem.replaceOwned(u8, a, captured.config, "\"workflowTokenBudget\": 125000", "\"workflowTokenBudget\": 90000");
         try std.testing.expect(std.mem.indexOf(u8, captured.config, "\"workflowTokenBudget\": 90000") != null);

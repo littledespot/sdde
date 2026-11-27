@@ -2,54 +2,22 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-03
-- **Decision authority:** The user's decisions on 3 November 2026:
-  - D19.1, "Yes, may restate (Recommended)": the primary story may restate its source's
-    requirements in one paragraph, adding nothing ([Z_SPEC01](../../fixes/Z_SPEC01.md) Q19 D19.2);
-  - "yes" to the Q19 preflight's question, "Should the engine write the story itself, from the
-    source's requirement sentences, using these rules?", with the six rules in the Decision.
-  - Amended 7 November 2026 (user: "apply recommendations", then "yes, advance both"): Decision
-    5 now removes the story from pre-generation source review, advancing `packet-guidance` to v3
-    and the required-authority contract to 2.
-  - Amended 8 November 2026 ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7):
-    the typed rejection of Decision 2 also carries `edge_case_without_criterion`, which the
-    engine raises when a completed records unit holds an edge case that no acceptance criterion
-    of its records batch can serve. It is never repaired or retried, has no model origin, and
-    names the edge case's group and claims in place of a catalogue.
-  - Corrected 9 November 2026 (user decision: "Yes, keep it"): Decision 5's rationale and the
-    first consequence state only what native composition establishes. No decision changes.
-  - Amended 20 November 2026 (SPEC01 C49; user: "update the docs with the above
-    recommendations", then "preflight and implement"): Decision 1's paragraph also drops a
-    Setext heading's text and the Markdown structure lines that have no wording.
-- **Amends:**
-  - design.md §1 and §4: the story is no longer LLM-owned content (the Spec structure row);
-  - [17-specify.md](../contracts/17-specify.md) §17.3: four model task types (brief,
-    entities, one call per record group, one per group with a scenario slot) and a native story; the story prompt clause; the
-    narrative-assignment population;
-  - [F0100](../features/F0100-SpecWorkflow.md) §5.2 (the story's purpose, formerly "Main
-    user journey"), §5.7 and the four-call text;
-  - [text-field-composition.md](../contracts/text-field-composition.md): the story row's exact
-    role;
-  - ADR 0020: the story's group selection is native;
-  - ADR 0024: the story is not an exact-copy target;
-  - ADR 0035: the only-record exception;
-  - ADR 0016's packet-guidance amendment and F0100 §3.10: the story's purpose and readiness
-    subject (Decision 5, amended 7 November 2026);
-  - the §32 index.
-
-  The overall design remains **Proposed design**.
+- **Decision authority:** User decisions, 3, 7, 9 and 20 November 2026.
+- **Amends:** design.md §1 and §4; [17-specify.md](../contracts/17-specify.md) §17.3;
+  [F0100](../features/F0100-SpecWorkflow.md) §3.10, §5.2 and §5.7;
+  [text-field-composition.md](../contracts/text-field-composition.md) (the story row's exact
+  role); ADR 0016's packet guidance; ADR 0020 (the story's group selection is native);
+  ADR 0024 (the story is not an exact-copy target).
+- **Amended by:** [ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7 (a
+  further reason on Decision 2's typed rejection).
 
 ## Context
 
-The model-written story held 26 of 30 weakened obligations scored in published specifications
-since 29 October ("A borrower may renew…") and added unsupported content, such as invented
-steps ("logs into the library system and selects…"). Prompt wording moved the story between
-these modes without removing them ([Z_SPEC01](../../fixes/Z_SPEC01.md) Q12 D12.2 and Q19
-D19.2).
-
-ADR 0036 already makes each claim's wording the engine's quote of its cited source lines, so
-obligation strength, conditions and negation are the source's own words by construction.
-AGENTS.md lets deterministic code compute exact source bytes and structure; it can join quoted
-claims, but it can't paraphrase them.
+A model-written story weakened obligations and added unsupported content, and prompt wording
+moved it between these modes without removing them. ADR 0036 already makes each claim's
+wording the engine's quote of its cited source lines, so obligation strength, conditions and
+negation are the source's own words by construction. AGENTS.md lets deterministic code compute
+exact source bytes and structure; it can join quoted claims, but it can't paraphrase them.
 
 ## Decision
 
@@ -57,11 +25,10 @@ claims, but it can't paraphrase them.
    business claims (`business` category) of the groups in its catalogue, in source order:
    - each quote becomes one paragraph: its blank and Markdown heading lines are dropped, and
      each other line loses its indentation and leading list marker, the lines joined by one
-     space (user, 3 November 2026: "yes"); a quote of headings alone is skipped. A Setext
-     heading's text is a heading, and the lines that are Markdown structure with no wording
-     (a code fence's opening and closing line, a table delimiter row, a thematic break, a
-     Setext underline) are dropped too, while every line with words stays (20 November 2026,
-     SPEC01 C49; [ADR 0036](0036-source-quoted-claims.md) Decision 2);
+     space; a quote of headings alone is skipped. A Setext heading's text is a heading, and
+     the lines that are Markdown structure with no wording (a code fence's opening and closing
+     line, a table delimiter row, a thematic break, a Setext underline) are dropped too, while
+     every line with words stays ([ADR 0036](0036-source-quoted-claims.md) Decision 2);
    - the quotes are joined with one space, in one paragraph;
    - exact values are recognised by the same native recognizer as model text, so they render
      as engine code spans;
@@ -73,25 +40,26 @@ claims, but it can't paraphrase them.
    `no_story_requirements`. A composed story that fails unit validation or exact-value
    recognition (for example, a quote that is only an exact value, or an ambiguous exact
    value) blocks with the typed rejection `story_not_admissible`, carrying the unit issue;
-   it is never repaired or retried (user, 3 November 2026: "implement recommendation").
+   it is never repaired or retried. The same typed rejection also carries
+   `edge_case_without_criterion` (ADR 0038 Decision 7), which the engine raises when a
+   completed records unit holds an edge case that no acceptance criterion of its records
+   batch can serve. It is never repaired or retried, has no model origin, and names the edge
+   case's group and claims in place of a catalogue.
 3. **The story discharges no exact-copy duty.** Its exact role is incidental, as an entity
    name's is: an exact value may occur in it, and records must still carry every required
    exact value.
-4. **The only record naming a claim is kept.** ADR 0035's story comparison never deletes a
-   record when no other record names one of its claims.
-5. **The story is no source-review subject** (amended 7 November 2026). Pre-generation source
-   readiness (ADR 0023) assesses the other required feature subjects, not the story: its
-   support is the provenance of the claims it quotes (Decision 1), and a catalogue with none
-   blocks (Decision 2), so a support review of it checks nothing that provenance doesn't
-   already establish; the one such review that ran raised a false finding (SPEC01,
-   `2026-11-02T09-15-31Z`). The story has no required-authority policy, clarification question
-   or packet-guidance purpose; removing them advanced `packet-guidance` to v3 and the
-   required-authority contract to 2.
-6. **Workflow.** The `story` step is the registered action `compose-specification-story`. The
-   story prompt and the generation schema's story variant are deleted.
+4. **The only record naming a claim is kept.** The story comparison (ADR 0038 Decision 5)
+   never deletes a record when no other record names one of its claims.
+5. **The story is no source-review subject.** Pre-generation source readiness (ADR 0023)
+   assesses the other required feature subjects, not the story: its support is the provenance
+   of the claims it quotes (Decision 1), and a catalogue with none blocks (Decision 2), so a
+   support review of it checks nothing that provenance doesn't already establish. The story
+   has no required-authority policy, clarification question or packet-guidance purpose.
+6. **Workflow.** The `story` step is the registered action `compose-specification-story`.
+   There is no story prompt and no story variant in the generation schema.
 
-The story keeps its canonical `AttributedValue` shape, so no specification or state version
-changes. Its rejection reasons entered `spec-e2e-report/v15` (`test/harness/e2e/contracts.zig`).
+The story keeps its canonical `AttributedValue` shape. Its rejection reasons are members of the
+E2E report contract (`test/harness/e2e/contracts.zig`).
 
 ## Consequences
 
@@ -99,22 +67,9 @@ changes. Its rejection reasons entered `spec-e2e-report/v15` (`test/harness/e2e/
   Decision 1's formatting rules and adds no wording of its own. Its completeness and meaning
   still depend on which claims extraction cites and classifies as `business`, and on the
   context that dropped headings and list markers carried.
-- One model call (about 1.4k tokens) leaves every specification run.
 - The story reads as the source's requirement sentences, not a narrative; it mirrors the
-  functional requirements (D19.1 allows this, and the evaluator doesn't count it as
-  restatement).
-- A source written in fragments yields a fragmentary story, as hello-world's "Must also
-  output date and time in UTC" does.
-- Captured story responses in calibration corpora no longer decode and are retired with the
-  schema variant.
-
-## Tests
-
-- Accepted: both development cases' stories equal their joined source sentences, with exact
-  values recognised; an unrelated-domain fixture.
-- Rejected: a catalogue with no business claim blocks with `no_story_requirements`; a heading
-  claim and a technical claim are skipped.
-- A single-requirement source whose only non-FR record equals the story keeps that record.
-- A story exact value satisfies no exact-copy duty.
-- The request projection shows the story call removed and no other request changed.
-- Live: a measurement set on both cases (SPEC01 §2 rules 4–6).
+  functional requirements, which the user allowed, and the evaluator doesn't count it as
+  restatement.
+- A source written in fragments yields a fragmentary story.
+- A single-requirement source whose only non-requirement record equals the story keeps that
+  record (Decision 4).

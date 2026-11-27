@@ -1,137 +1,58 @@
 # ADR 0030: One engine-owned step per model request
 
-- **Status:** Accepted amendment, amended 23 October 2026. **Implemented:** on
-  24 October 2026 provider token counting was removed ("Token counting is removed") and
-  the provider-operation deadline moved to each catalogue entry's required
-  `requestTimeoutMs` ("Request deadline"). `request-model` is implemented and registered, and
-  the Spec workflow and the packaging fixture use it. The explicit request-lifecycle operations
-  are deleted: the stages are native bindings of the kernel entry, no workflow can select one,
-  and a definition that names a stage's former ID fails to compile. The shared contract-variant
-  mechanism ("Contract variants") is implemented (registry admission, compiler selection, graph
-  validation, publication recheck and runner check, with a test contract), and the four
-  generic repair operations of ADR 0033 use it (SPEC01 E4, 14 November 2026).
-- **Date:** 2026-10-22; amended 2026-10-23.
-- **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
-  subgraph as suggested, update documentations. do not make any code change yet". It
-  decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A1 after a review of the pros
-  and cons of keeping the 16-step `model-request-body` subgraph. The user's stated goal
-  is simpler workflow YAML.
-- **Amendment authority:** On 23 October 2026 the user asked for "the best possible
-  solution, remember this is a POC and best outcomes is the primary goal", then directed
-  "update docs with" the resulting table of choices. That settles the choices first
-  derived under existing rules; see "Choices settled on 23 October 2026". The user also
-  confirmed that the global token count stays, because it is built from actual inference
-  usage, not from token counting. After comparing four ways to give one operation two
-  outcome sets (one shared variant mechanism, separate operations, a compiler special
-  case, a union contract), the user directed "update the documentation around option
-  1": one shared contract-variant mechanism, built by this ADR and reused by
-  [ADR 0033](0033-generic-repair-operations.md). That also confirms ADR 0033's derived
-  choice 1.
-- **Amends:**
-  - [ADR 0005](0005-workflow-defined-operations.md): the engine-kernel list, "Sequencing
-    and branching are visible in the YAML graph", "must not conceal a second workflow
-    graph" and the provider-request fixture sentence, for the stages of one model request;
-    and "Each operation has one current contract", which now allows one contract made of
-    closed variants (see "Contract variants");
-  - [ADR 0012](0012-workflow-owned-model-request.md): "There is no new route registry,
-    implicit graph or YAML transport syntax", "YAML selects each operation … This does
-    not combine provider authorization, invocation, retries or accounting", the detailed
-    and consolidated operations that "remain available", and its operation-contract table;
-  - [ADR 0009](0009-atomic-workflow-execution.md) and
-    [ADR 0011](0011-provider-owned-request-limits.md): retries are "explicit YAML
-    transitions"; ADR 0011's "Model maximum output" also gains the catalogue's
-    `requestTimeoutMs` beside `maxOutputTokens`, and its CountTokens text no longer
-    applies;
-  - [ADR 0014](0014-universal-response-format-guidance.md): "Explicit input-token
-    counting uses the same model-visible projection as inference", because counting is
-    removed;
-  - [ADR 0016](0016-configured-json-response-composition.md): "Keep detailed operations
-    available" and "Detailed operations and distinct request identities remain visible";
-  - [ADR 0019](0019-single-request-debugger.md): what `node_id`, `route_id` and the
-    action ID name, and its token-count observations;
-  - [ADR 0028](0028-anthropic-messages-provider.md) and
-    [ADR 0029](0029-bedrock-model-families.md): each catalogue entry's `config` gains a
-    required `requestTimeoutMs`, which settles their open per-provider and per-family
-    deadline questions; ADR 0029's retired CountTokens registration now has no
-    counting path to return to;
-  - design.md §1 (property 1 and the "Workflow YAML owns" boundary), §3.1, §3.3
-    (invariant 28 and "Response decoding and lifecycle terminalization remain explicitly
-    selected operations") and the §32 index;
-  - contracts §§6.2, 7.3, 9 (each catalogue entry's closed `config`), 12.1, 12.7, 13.4,
-    14, 21, 22.6, 22.7, 24, 27 and 28 and the
-    [model-request operation catalogue](../contracts/model-request-operations.md);
-  - [F0005](../features/F0005-WorkflowDefinitionRegistryService.md),
-    [F0006](../features/F0006-LLMProviderInterface.md) (including its count semantics),
-    [F0007](../features/F0007-AWSBedrockProvider.md) (including CountTokens),
-    [F0100](../features/F0100-SpecWorkflow.md) and the
-    [E2E harness](../harness/e2e.md) step events.
-
-  The overall design remains **Proposed design**.
-- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
-  October 2026): after a provider `output_limit` stop, the request re-sends the
-  identical request once at the configured `temperatureRunawayRetry`, without using the
-  step's `retry-limit`. A runaway on the re-send fails the step. The `request-model`
-  kernel carries the re-send.
-- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (27 October
-  2026; on hold since 30 October 2026, nothing implemented): exhausting a required
-  request's correction stays a terminal runner rejection, not a YAML outcome, but after
-  it (and after a `RepairNoProgress` or token-budget rejection) the engine may run the
-  definition's declared, model-free failure output, then returns the original failure.
-- **Advisory variant withdrawn (SPEC01 D13.1, 1 November 2026):** by the user's decision
-  to remove both post-generation reviews and to delete the advisory request protocol
-  they alone used ([ADR 0023](0023-advisory-post-generation-review.md) removal
-  amendment). `request-model` has one contract with the outcomes `ok`, `invalid`,
-  `failed` and `cancelled`; the `advisory` parameter, the `advisory: allowed` marking,
-  the advisory `more` and `blocked` outcomes, their deferred carriers, the
-  one-directional check, `propagate-advisory-request-failure`, the advisory stop and
-  completion steps and `retire-advisory-protocol-transport` are withdrawn. The
-  contract-variant mechanism stays for ADR 0033, which is now its only user.
+- **Status:** Accepted
+- **Date:** 2026-10-22
+- **Decision authority:** User decisions, 22 and 23 October and 14, 21 and 25 November 2026
+- **Amends:** ADRs [0005](0005-workflow-defined-operations.md),
+  [0009](0009-atomic-workflow-execution.md), [0011](0011-provider-owned-request-limits.md),
+  [0012](0012-workflow-owned-model-request.md),
+  [0014](0014-universal-response-format-guidance.md),
+  [0016](0016-configured-json-response-composition.md),
+  [0019](0019-single-request-debugger.md), [0028](0028-anthropic-messages-provider.md) and
+  [0029](0029-bedrock-model-families.md); design.md §1, §3.1, §3.3 (invariant 28); contracts
+  §§6.2, 7.3, 9, 12.1, 12.7, 13.4, 14, 21, 22.6, 22.7, 24, 27 and 28 and the
+  [model-request operation catalogue](../contracts/model-request-operations.md); F0005,
+  F0006, F0007, F0100 and the [E2E harness](../harness/e2e.md) step events
+- **Amended by:** [ADR 0033](0033-generic-repair-operations.md),
+  [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
 
 ## Context
 
-Every model call in the Specify definition runs through the 16-step `model-request-body`
-subgraph. Its steps count the attempt, assign and authorize a provider operation, check
-the request phase, advance two lifecycles, invoke the model, validate the observation,
-complete the operation, admit the response, build a protocol correction, and close or
-terminate the request. Five wrapper subgraphs
-(`model-request`, `model-request-with-context`, `support-request`, `composition-request`
-and `composition-request-body`) add request preparation and route the result.
-
-- Every call site runs exactly the same sequence; only `retry-limit` differs.
-- Subgraphs are definition-local ([ADR 0013](0013-workflow-input-reuse.md)), so every
-  further workflow file would carry its own copy.
-- Because the sequence is project-authored, the generic runner has to reject every
-  wrong ordering of it. A wiring mistake appears only when a run fails, often as a
-  rejection without a reason.
-- Any change to the request lifecycle touches YAML, runner checks, bindings and tests
-  together.
-
-None of these steps is a workflow choice. They are engine mechanics that ADRs 0005 and
-0012 placed in YAML.
+The stages of one model request (accounting, authorization, lifecycle advances, inference,
+observation validation, admission, protocol correction and closure) are the same at every
+call site; only `retry-limit` differs. They are engine mechanics, not workflow choices, so
+YAML does not author them.
 
 ## Decision
 
 ### One step per model request
 
 A workflow makes one model request with one step that uses the registered operation
-`request-model`. The step declares what today's preparation step and wrappers declare:
+`request-model`. The step declares:
 
 - `slot`;
-- `protocol-prompt` and `prompt`;
+- `prompt`, and optionally `protocol-prompt`;
 - exactly one of `result-schema` (a native packet input selects its result definition within
   it, ADR 0013) or `composition-part` (ADR 0016);
 - optional `context`, which may accompany either schema form;
-- `retry-limit`, bounded by the operation contract as today (`0` permits only the
-  initial attempt).
+- optional `input` (ADR 0012);
+- `retry-limit`, bounded by the operation contract (`0` permits only the initial
+  attempt; the operation's one maximum is 3, `model-request-operations.md` "Retry limit").
 
 The step declares no deadline: the provider-operation deadline is the bound catalogue
 entry's `requestTimeoutMs` (see "Request deadline"). A `timeout-ms` parameter is rejected.
 
-Every step maps `ok`, `invalid`, `failed` and `cancelled`. Exhausting a request's
-protocol correction remains a terminal runner rejection, not a YAML outcome. It names
-the step and the stage. A stop on the runner's own authority, such as spending the step
-ceiling that each execution of the step counts toward once, names its closed reason
-([§6](../contracts/06-pipeline-nodes.md#runner-rejection-reasons)).
+Every step maps `ok`, `invalid`, `failed` and `cancelled`, and no other outcome.
+`request-model` has one contract with those four outcomes and no `advisory` parameter.
+Exhausting a request's protocol correction remains a terminal runner rejection, not a YAML
+outcome. It names the step and the stage. A stop on the runner's own authority, such as
+spending the step ceiling that each execution of the step counts toward once, names its
+closed reason ([§6](../contracts/06-pipeline-nodes.md#runner-rejection-reasons)).
+
+The compiler rejects a step that declares both or neither of `result-schema` and
+`composition-part`, omits `retry-limit` or sets it above the maximum, leaves an outcome
+unmapped, maps `more` or `blocked`, or runs under a policy that does not permit one of the
+stages' capabilities.
 
 A definition may still fix repeated parameters and routing, such as `protocol-prompt`,
 once in a thin definition-local subgraph (ADR 0013). This ADR adds no workflow-level
@@ -143,10 +64,11 @@ default.
 capability-free kernel orchestrator: the kernel-defined child graph of that registered
 operation. Its stage sequence joins ADR 0005's list of fixed engine responsibilities. The
 §6.2 private-child-graph rule governs it, as amended below. This coordinator keeps the
-orchestrator form even after [ADR 0032](0032-engine-routines.md) turns the other fixed
-engine sequences into typed routines. It is YAML-selected, its stages change runner-owned
-state the runner must apply per stage, and the runner must check capabilities per stage
-binding.
+orchestrator form beside [ADR 0032](0032-engine-routines.md)'s typed routines and
+[ADR 0031](0031-stage-actions.md)'s stage actions. It is YAML-selected, its stages change
+runner-owned state (accounting, leases and lifecycle ledgers) the runner must apply per
+stage, and the runner must check capabilities per stage binding (§12.1). Sequencing in the
+runner itself would give the runner workflow branching (F0006 §9).
 
 The orchestrator coordinates these stages, in this order, through runner-owned child
 bindings. This is the one stage list; other documents refer to it.
@@ -157,7 +79,7 @@ bindings. This is the one stage list; other documents refer to it.
 4. Authorization preparation, using the bound catalogue entry's `requestTimeoutMs`.
 5. Request-phase check.
 6. Request invocation-state advance, on the initial attempt only, as the phase check
-   decides.
+   decides. After a protocol correction only the provider operation advances again.
 7. Provider-operation invocation-state advance.
 8. Inference.
 9. Observation validation.
@@ -167,15 +89,17 @@ bindings. This is the one stage list; other documents refer to it.
 13. Request closure, or pre-call termination of the operation and then the request.
 
 - **Fixed order.** The order and branches are compiled into the engine and are the same
-  for every workflow. YAML cannot reorder, skip, add or name a stage. A removed stage ID
-  rejects at compilation, with no alias.
+  for every workflow. YAML cannot reorder, skip, add or name a stage. A former stage
+  operation ID rejects at compilation, with no alias.
 - **Orchestrator duties only.** The orchestrator branches only on typed stage outcomes.
-  It does no model, parsing, validation, state, logging or accounting work itself.
+  It does no model, parsing, validation, state, logging or accounting work itself. A
+  preparation rejection invokes no later stage.
 - **Runner duties are unchanged.** The runner invokes each stage, validates and applies
   each stage's delta, owns every retry count and accounts actual tokens
-  ([ADR 0011](0011-provider-owned-request-limits.md)). It chooses no workflow branch.
+  ([ADR 0011](0011-provider-owned-request-limits.md)). It chooses no workflow branch and
+  does not police a project-authored lifecycle order.
 - **Stages are actions.** Each stage is one action with one responsibility and only its
-  own narrow ports, as today. No action invokes another action or selects its
+  own narrow ports. No action invokes another action or selects its
   successor. No stage both invokes and interprets the model, and no stage holds both
   the `model-provider` and `provider-authorization` capabilities.
 - **Capabilities.** The step's compiled set is the exact union of its fixed stage
@@ -204,11 +128,10 @@ bindings. This is the one stage list; other documents refer to it.
 
 ### Contract variants
 
-Confirmed by the user on 23 October 2026 ("update the documentation around option 1").
 One operation may have one registered contract made of closed variants, selected per step
 at compile time. This ADR specifies the mechanism, and
 [ADR 0033](0033-generic-repair-operations.md)'s four generic repair operations are its only
-user (the advisory variant was withdrawn), so there is one mechanism with one user.
+user.
 
 - **A variant is a complete contract:** outcome set, data effects, side-effect class,
   outcome-association descriptors, repair role and retry authority, the same fields as
@@ -222,24 +145,27 @@ user (the advisory variant was withdrawn), so there is one mechanism with one us
   contract variant and grants no policy, scope or defect identity. Whether an operation
   also selects rules from its compiled variant, and how it checks its selector at run
   time, belongs to that operation's ADR: `owner`'s rules and check are in ADR 0033.
-  A selector is required; no variant is selected by its absence.
+  A selector is required; no variant is selected by its absence. A selector may be
+  forwarded through a subgraph `{param}`.
 - **Registry admission** validates every variant independently, with the same checks as
-  any registered contract. Registry-wide checks that read every contract cover every
-  variant of every contract: gate-evidence exclusivity, the gate-issuer check and schema
-  registration. The gate-issuer check holds for variants by rejecting an issuer that has
-  variants: a gate issuer must be a single-shape operation.
+  any registered contract: a variant that fails a per-contract check rejects although its
+  sibling is valid, and two variants with the same selector value reject. Registry-wide
+  checks that read every contract cover every variant of every contract: gate-evidence
+  exclusivity (including a non-first variant that produces another operation's gate
+  evidence key), the gate-issuer check and schema registration. The gate-issuer check
+  holds for variants by rejecting an issuer that has variants: a gate issuer must be a
+  single-shape operation.
 - **The compiler** checks each step against its selected variant alone: outcome mapping,
   data flow, role and association compatibility, and retry authority. Compiled-graph
   validation and registry publication recheck each step against that same variant.
 - **The runner and the stage actions** check every delta, outcome, association and
   retry authority against the compiled step's variant, never a union of variants.
 - **Scope.** The mechanism carries what ADR 0033 specifies for its variants. It adds no
-  run-time selector check of its own; any check against native facts belongs to the
-  operation that uses it.
-- **Why this option.** ADR 0033 needs per-owner variants anyway: separate operations
-  would bring back most of the 29 per-owner operations it removes, and a union contract
-  would lose the per-owner checks. A compiler special case is the per-caller branch
-  AGENTS.md forbids. Building the mechanism here keeps one way to do it.
+  run-time selector check of its own and has no operation-specific branch; any check
+  against native facts belongs to the operation that uses it.
+- **Why this option.** ADR 0033 needs per-owner variants: separate operations would be
+  per-owner operations again, and a union contract would lose the per-owner checks. A
+  compiler special case is the per-caller branch AGENTS.md forbids.
 
 ### Request deadline
 
@@ -250,11 +176,12 @@ return its documented maximum output (`maxOutputTokens`, ADR 0011).
 - **Where it lives.** Every `.sddproviders.json` model entry, for every provider, declares
   a required positive integer `requestTimeoutMs` in its `config`, beside
   `maxOutputTokens`. The closed catalogue schema rejects a missing, zero, negative,
-  fractional or unknown field, as it does for `maxOutputTokens`.
+  fractional, string or unknown field, as it does for `maxOutputTokens`.
 - **How it applies.** The authorization stage binds the deadline of the catalogue entry
   that the step's slot selects to every provider operation of that request, including
-  protocol corrections. YAML carries no deadline.
-- **Enforcement** (user decision, 21 November 2026). The exchange races the network task against
+  protocol corrections. YAML carries no deadline. Selecting a different model for a slot
+  brings that model's deadline with it.
+- **Enforcement.** The exchange races the network task against
   a timer that polls in slices: each slice reads the run's cancellation status, then the deadline clock, then
   sleeps the smaller of one slice and the time left. A slice is polling granularity, not a
   limit. A cancellation is therefore observed within one slice and the network task is
@@ -262,8 +189,8 @@ return its documented maximum output (`maxOutputTokens`, ADR 0011).
   so the time a machine is suspended counts. A sent request may still finish and incur
   cost ([ADR 0009](0009-atomic-workflow-execution.md)).
 - **Values.** GPT-OSS-20B keeps 180,000 ms; its slowest observed call, a 16,384-token
-  runaway, took 74.1 s. Every other entry, including both Claude Haiku 5.5 entries
-  (128,000 maximum output tokens), also starts at 180,000 ms, the former shared deadline.
+  runaway, took 74.1 s. Every other entry, including the Claude Haiku 5.5 entry
+  (128,000 maximum output tokens), also starts at 180,000 ms.
   A replacement is derived from the measured time the model takes to return its maximum
   output, not from the latency of one ordinary call, and each change is recorded with its
   measurement.
@@ -272,10 +199,9 @@ return its documented maximum output (`maxOutputTokens`, ADR 0011).
 - **Replay.** The request debugger ([ADR 0019](0019-single-request-debugger.md)) replays
   with the captured entry's `requestTimeoutMs`, not a fixed replay deadline, so the
   catalogue is the deadline's one owner.
-- **Why.** On 21 October 2026 a 60-second deadline, set below GPT-OSS-20B's own maximum
-  output time, turned three runaway responses into unexplained timeouts. A per-step
-  workflow value would repeat the same guess at every call site and apply it to any
-  model the slot selects.
+- **Why.** A deadline set below a model's own maximum-output time turns runaway responses
+  into unexplained timeouts. A per-step workflow value would repeat the same guess at
+  every call site and apply it to any model the slot selects.
 
 ### What stays in YAML
 
@@ -286,7 +212,9 @@ This is the one list; other documents refer to it.
 - **Release.** A site's release step chooses what the following steps keep:
   `release-model-request` keeps the input packet for a following request,
   and `release-model-transport` drops it. Release is a workflow
-  choice, so it stays an explicit step.
+  choice, so it stays an explicit step. Engine-owned release is not adopted; adopting it
+  would amend ADRs 0005, 0012, 0030 and 0033 and invariants 25 and 28, and needs its own
+  decision.
 - **JSON-part retention** after a composition request (`retain-json-part`).
 - **Request-ledger initialization** (`build-initial-model-request-identity-ledger`).
 - **Repairs**, each its own request.
@@ -296,30 +224,18 @@ This is the one list; other documents refer to it.
 - **Identity.** The `request-model` step is the originating step. Request identity
   stays `(workflowId, workflowVersion, originatingWorkflowStepId)`. ADR 0019's `node_id`
   and `route_id` both name that step, and its action ID records the stage.
-- **Retry scopes carry over.** Only the compiled operation changes, to the
-  `request-model` step:
+- **Retry scopes.** Counting is scoped to the `request-model` step:
   - ordinary requests count by step and immutable assignment;
   - atomic repair requests count by step and native defect key;
   - required dependent requests also bind their pending native parent key (§22.7).
-- **Failure location.** Every stage still emits its own step event, attributed to the
+- **Failure location.** Every stage emits its own step event, attributed to the
   originating step with a stable stage name. Reports, the request debugger
-  ([ADR 0019](0019-single-request-debugger.md)) and `/evaluate-e2e` can still name the
+  ([ADR 0019](0019-single-request-debugger.md)) and `/evaluate-e2e` name the
   exact stage where a request stopped.
-- **Versions.** Compiled step IDs change. The implementation advances each closed
-  contract whose shape changes, with no compatibility reader, and names which ones. The
-  candidates are `model-request-debug`, `model-call-evidence` (which carries the provider
-  configuration, ADR 0028), `prompt-columns`, `e2e-step-event` and
-  `specification-state`'s persisted extraction contract. Persisted extraction contracts
-  made before the change no longer match; that is the existing typed outcome for any
-  workflow change.
-  - The implemented deadline move advanced `model-call-evidence` to v3, whose provider
-    configuration carries the entry's deadline (`request_timeout`). Its v2 and v1
-    captures stay readable only as historical evidence that grants no current
-    authority; keeping the v2 reader was user-approved.
-  - Removing the response mode (25 November 2026; user decision, ADR 0006) advanced
-    `model-request-debug` to v22 and `model-call-evidence` to v4, each without its
-    `response_mode` member, with no compatibility reader: v3 captures are unreadable. The
-    retained v1 and v2 readers keep reading a recorded `response_mode` as history only.
+- **Versions.** A change advances each closed contract whose shape changes, with no
+  compatibility reader. One user-approved exception: `model-call-evidence` keeps its v1
+  and v2 readers, which read those captures (including a recorded `response_mode`) only as
+  historical evidence that grants no current authority. Its v3 captures are unreadable.
 - **Retained evidence.** Every tool that revalidates retained runs or captures through
   the production registry or an advanced contract (the retained-call replay `e2e-call`,
   the compatibility inspection, the baseline and the frozen binding) rejects those made
@@ -329,36 +245,17 @@ This is the one list; other documents refer to it.
 ### Token counting is removed
 
 Provider input-token counting, which asks a provider how many input tokens a request would
-use before sending it, is removed. There is no `count-model-tokens` step.
+use before sending it, is removed. There is no `count-model-tokens` step, count operation
+kind, capability or CountTokens wire path.
 
-- **Nothing used it.** No shipped workflow or packaging fixture ran a count operation,
-  and no registered model could count: the Anthropic contract and every Bedrock family
-  registered no CountTokens (ADRs 0028 and 0029).
 - **Nothing could use it.** ADR 0011 forbids pre-call reservations, capacity prediction
-  and local size ceilings, so a count could not gate a request.
+  and local size ceilings, so a count could not gate a request, and no registered model
+  contract counts (ADRs 0028 and 0029).
 - **The global token count stays.** The workflow token budget, `WorkflowTokenBudgetExceeded`,
   report token totals and per-call usage evidence all come from the actual API-reported
-  usage of every inference call (ADR 0011 "Workflow token accounting"). Counting never
-  fed them.
+  usage of every inference call (ADR 0011 "Workflow token accounting").
 - **Returning it** needs its own decision, made when a workflow needs counting and a
   model supports it.
-
-### Removal
-
-With no compatibility form (AGENTS.md), the implementation removes:
-
-- the YAML registration of every operation whose only job is one stage of a model
-  request, detailed or consolidated. That includes `prepare-model-request`,
-  `admit-model-response`, the 15 other steps of `model-request-body`, and the detailed
-  preparation and decoding operations the packaging fixture uses;
-- their application bindings as YAML operations, their registry entries and the runner
-  checks that police their YAML ordering;
-- the body and wrapper subgraphs in the Specify definition, and the explicit request
-  steps in the [packaging fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml);
-- the tests that pin YAML registration or YAML ordering of the removed operations.
-
-The inference stage actions and their unit tests stay, including ADR 0012's negative
-cases: forged deltas, stale or foreign evidence, cancellation and allocation cleanup.
 
 ### Unchanged
 
@@ -369,133 +266,28 @@ cases: forged deltas, stale or foreign evidence, cancellation and allocation cle
 - Request identity form, `model-request/v1` and retained-request consumers (ADR 0012).
 - Atomic execution (ADR 0009) and the 1,024-step ceiling (ADR 0016).
 
-## Choices settled on 23 October 2026
-
-On 23 October the user directed the best option for each choice derived on 22 October,
-for a proof of concept whose primary goal is the best outcome:
-
-1. **Form: a fixed kernel orchestrator with runner-owned child bindings,** as derived.
-   The request stages change runner-owned state (accounting, leases and lifecycle
-   ledgers) that the runner must apply stage by stage. The split between invoking and
-   interpreting the model, and between the model and authorization capabilities, must
-   be checked by the runner per binding (§12.1). A single action, including an
-   [ADR 0031](0031-stage-actions.md) stage action, can't give either, and neither can an
-   [ADR 0032](0032-engine-routines.md) routine. Sequencing in the runner itself would
-   give the runner workflow branching (F0006 §9).
-2. **Token counting is removed** rather than rebuilt as a `count-model-tokens` step; see
-   "Token counting is removed". A rebuilt count step would be a lifecycle with no caller
-   and no capable model.
-3. **The deadline moves to the catalogue** rather than a `timeout-ms` on every request
-   step; see "Request deadline". It is a model fact beside `maxOutputTokens`.
-4. **4a. Release stays an explicit YAML step**, as derived, because sites choose
-   different retirements and a release must follow the request's workflow-specific
-   consumers. Engine-owned release needs the compiler to derive each request's
-   lifetime. It was not adopted (user, 14 November 2026). Adopting it would amend ADRs 0005,
-   0012, 0030 and 0033 and invariants 25 and 28, and needs its own decision.
-5. **4b. Advisory routing** was settled as a per-site `advisory: allowed` marking. It was
-   withdrawn on 1 November 2026, when the advisory protocol it routed was removed with
-   post-generation review (SPEC01 D13.1).
-
 ## Consequences
 
-- **The request region goes.** The request body and its wrapper subgraphs leave the
-  Specify definition, and later workflow files don't copy them. The implementation
-  measures the saving.
-- **Deadlines follow the model.** Selecting a different model for a slot brings that
-  model's deadline with it; no workflow edit is needed.
-- **A larger first change.** The shared contract-variant mechanism is part of this ADR,
-  in the compiler, the registry and the runner, so ADR 0033 can reuse it. Its admission,
-  compiler and runner tests are part of this ADR's acceptance. The `request-model` landing
-  (E1) did not need variants, so the mechanism was built with ADR 0033's conversion (E4).
-- **Most of the remaining YAML size is outside this decision.** More than half of the
-  Specify definition's steps only pass `ok` to the next step and `failed` to the end;
-  ADRs 0031 and 0033 address those.
-- **The runner stops policing lifecycle order.** It no longer checks project-authored
-  orderings of the lifecycle; one fixed, spy-testable orchestrator runs it.
-- **Visibility moves to logs.** Request stages lose YAML visibility; logged stage events
+- **Visibility moves to logs.** Request stages have no YAML visibility; logged stage events
   replace it for diagnosis.
 - **No behaviour change is claimed.** No change to model behaviour, token cost or run
   reliability is expected or claimed.
 
-## Acceptance
+## Tests
 
-All offline. The change makes no model call.
-
-- **Freeze first.** Before the subgraph is removed, record today's outcomes, retained
-  evidence, retry counts and token accounting across the integration scenario matrix,
-  and the production-admission results of retained raw response bytes.
-- **Equivalence.** `request-model` must reproduce those frozen results. That includes:
-  - protocol correction and retry exhaustion;
-  - budget exhaustion and provider failure;
-  - pre-call termination and cancellation;
-  - an inference-then-authorization rejection.
-- **Spy tests for the orchestrator:**
-  - stage order;
-  - every branch: preparation rejection (no later stage is invoked), accounting
-    exhaustion, authorization failure or cancellation, phase `ok`/`more`, admission
-    `ok`/`invalid`, and closure;
-  - cancellation at each stage;
-  - the `retry-limit` bound;
-  - cleanup on every path.
-- **Phase check.** After a protocol correction, only the provider operation advances
-  again; the request lifecycle advances once.
-- **Retry scopes.** Separate cases for an ordinary request, an atomic repair request
-  (defect-keyed) and a required dependent request (parent-bound).
-- **Counting removed.** No count operation, operation kind, capability, CountTokens wire
-  path, fixture or test remains. Workflow token accounting reproduces the frozen totals
-  from inference usage alone.
-- **Contract variants (shared mechanism):**
-  - accepted: an operation with one contract of closed variants, each admitted on its
-    own, and a step whose selector picks one;
-  - accepted: a selector forwarded through a subgraph `{param}`, as ADR 0033's call
-    sites may (none forwards `owner` today);
-  - rejected at admission: a variant that fails any per-contract check while its
-    sibling variant is valid; two variants with the same selector value; and a
-    non-first variant that produces another operation's gate evidence key;
-  - rejected at compilation: a selector value with no variant, a missing required
-    selector, and a step checked against the wrong variant's outcomes or data effects;
-  - rejected by compiled-graph validation and by registry publication: a compiled step
-    whose effects match a non-selected variant;
-  - the runner rejects a delta, outcome, association or retry authority that fits
-    another variant but not the step's compiled one;
-  - the mechanism has no operation-specific branch: a test contract whose two
-    variants differ in data effects, retry authority (required and forbidden, with
-    different maximums) and repair role passes through the same admission, compiler and
-    runner paths that ADR 0033's four generic repair operations use.
-- **Request deadline:**
-  - accepted: catalogue entries of each provider with a positive integer
-    `requestTimeoutMs`;
-  - rejected: a missing, zero, negative, fractional or string `requestTimeoutMs`, and a
-    value too large to form a monotonic deadline;
-  - replay uses the captured entry's `requestTimeoutMs`;
-  - the authorization stage binds the selected entry's value to every provider
-    operation of the request, including protocol corrections, and two slots bound to
-    entries with different values get different deadlines;
-  - a provider operation past its deadline keeps today's timeout outcome and usage
-    rules.
-- **Compiler cases:**
-  - accepted: a valid request step with each schema form, with and without `context`;
-  - rejected: both or neither of `result-schema` and `composition-part`;
-  - rejected: a missing `retry-limit`, or any `timeout-ms` parameter;
-  - rejected: a `retry-limit` above 3, the operation's one maximum (`model-request-operations.md`
-    "Retry limit");
-  - rejected: an unmapped outcome, and any `more` or `blocked` mapping;
-  - rejected: a removed stage ID, or any attempt to name a stage;
-  - rejected: a policy that does not permit one of the stages' capabilities.
-- **Reports** name the stage where a request stopped.
-- **Architecture tests:**
-  - no request stage is YAML-addressable;
-  - each stage keeps its narrow ports;
-  - the orchestrator stays capability-free;
-  - the runner remains the sole delta and accounting owner.
-- **Build checks.** `zig build verify` and the clean packaged-executable smoke test pass.
-- **Measure.** The change records the Specify definition's lines and steps, and the files
-  it touches, before and after.
+- **Spy tests for the orchestrator:** stage order; every branch (preparation rejection,
+  accounting exhaustion, authorization failure or cancellation, phase `ok`/`more`,
+  admission `ok`/`invalid`, and closure); cancellation at each stage; the `retry-limit`
+  bound; cleanup on every path.
+- **Architecture tests:** no request stage is YAML-addressable; each stage keeps its
+  narrow ports; the orchestrator stays capability-free; the runner remains the sole delta
+  and accounting owner.
+- **Contract variants:** a test contract whose two variants differ in data effects, retry
+  authority and repair role passes through the same admission, compiler and runner paths
+  that ADR 0033's operations use.
 
 ## Not decided here
 
 - The measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`.
 - Token counting's return, if a workflow and a counting-capable model ever need it.
-- Any workflow-level parameter default. Stage actions and generic repair operations are
-  decided separately, in [ADR 0031](0031-stage-actions.md) and
-  [ADR 0033](0033-generic-repair-operations.md).
+- Any workflow-level parameter default.

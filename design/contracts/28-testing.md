@@ -201,9 +201,7 @@ Required cases include:
 - **Publication:**
   - Validate output before publication.
   - Unrepaired JSON/schema rejection with existing open forms ends in error with no
-    publication calls ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md),
-    on hold and not implemented, would publish a failed incomplete specification
-    instead). A successful correction may reach a valid clarification pause.
+    publication calls. A successful correction may reach a valid clarification pause.
   - Source, generation and residual open-registry pauses all publish
     the validated incomplete specification through the same path, remain ungraded,
     and keep Plan/Tasks gates closed. Rejected response bytes never enter that view.
@@ -326,7 +324,7 @@ Architecture tests also:
 - reject node `execute` calls outside orchestrator modules;
 - enforce the orchestrator import allowlist;
 - require orchestrators to receive only child bindings and the capability-free `NodeRuntime`;
-- once [ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented, reject any
+- under [ADR 0030](../decisions/0030-engine-owned-model-request.md), reject any
   YAML-addressable model-request stage, keep each stage's narrow ports and keep its kernel
   orchestrator capability-free, with the spy-binding, equivalence, compiler,
   contract-variant and failure-location tests of the ADR's acceptance list;

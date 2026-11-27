@@ -2,45 +2,13 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-05
-- **Decision authority:** Repeated explicit user direction; no further approval required
-- **B9 amendment:** 2026-10-17, explicit user approval for feature-owned entities
-  and diagnostic slot allowances of 2,048 tokens; no new cardinality caps or
-  `output_limit` correction.
-- **Output allowance removed:** 2026-10-18, by explicit user direction: "there
-  should be no output token limits". This supersedes every output allowance, including
-  B9's 2,048-token diagnostic allowances. Provider-applied stops must be logged.
-- **Model maximum output:** 2026-10-18, by explicit user direction ("Send model's
-  max output"; 16,384 for `openai.gpt-oss-20b-1:0`; "yes, allow the max" for the
-  grader). See "Model maximum output".
-- **Transport amendment:** 2026-10-15, explicit user direction to use Bedrock
-  Converse for model switching. This replaces the previous chat wire mapping only.
+- **Decision authority:** User decisions, 5 September 2026 and 15, 17, 18 and 25 October
+  2026
 - **Amends:** Design Sections 3, 9, 12–13, 17, 20, 22, 24, 28 and 31; ADRs 0004–0006;
-  F0001, F0005–F0007; and their samples and diagrams
-- **Amended by:** [ADR 0028](0028-anthropic-messages-provider.md) (21 October 2026): "Model maximum
-  output" applies to every provider's catalogue entry, not only Bedrock's.
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026,
-  amended 23 October 2026; partly implemented). Not yet implemented: a request's
-  protocol correction runs inside its `request-model` step under that step's
-  `retry-limit`, not as an explicit YAML transition. Implemented on 24 October 2026:
-  the 23 October amendment's removal of CountTokens and all provider token counting,
-  and its required `requestTimeoutMs` beside `maxOutputTokens` in every catalogue entry
-  (see "Model maximum output"). The runner still accounts every attempt's actual usage
-  against the one workflow budget.
-- **Amended by:** [ADR 0037](0037-configured-workflow-token-budget.md) (25 October
-  2026): the project configuration's required `workflowTokenBudget` supplies the one
-  total limit; workflow policy no longer owns it. Accounting is unchanged.
-- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
-  October 2026): a provider `output_limit` stop is re-sent once with the identical
-  request at the configured `temperatureRunawayRetry`. A runaway on the re-send stops
-  the workflow. This supersedes the B9 amendment's "no `output_limit` correction".
-- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)'s removal
-  amendment (SPEC01 D13.1, 1 November 2026): post-generation advice and its
-  incomplete-advice outcomes are removed, so every model call is required work.
-- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
-  2026; on hold since 30 October 2026, not implemented): a required failure of model
-  work, including a budget failure, still fails the run but publishes its validated
-  content as a failed incomplete specification, marked and logged. Partial text is still
-  discarded, and both attempts' usage is accounted.
+  F0001, F0005–F0007
+- **Amended by:** [ADR 0028](0028-anthropic-messages-provider.md),
+  [ADR 0030](0030-engine-owned-model-request.md),
+  [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
 
 ## Decision
 
@@ -59,14 +27,14 @@
   budgets, serialized-size proofs or static-capacity gates.
 - Renaming these restrictions as memory safety, transport budgets or provider-contract
   facts does not make them permitted.
-- Missing values for these retired contracts are not configuration errors,
-  implementation prerequisites or approval questions.
+- Missing values for these contracts are not configuration errors, implementation
+  prerequisites or approval questions.
+- No per-family record cardinality cap exists.
 
 ### No output-token allowance
 
-Amended 2026-10-18 by explicit user direction. A requested allowance truncates
-output and degrades results, so SDDE never sends one below the model's documented
-maximum (see "Model maximum output").
+A requested allowance truncates output and degrades results, so SDDE never sends one
+below the model's documented maximum (see "Model maximum output").
 
 - No slot, model contract, binding, prepared request, correction or replay can
   narrow the output maximum. The provider catalogue (and the grader's evaluator
@@ -76,32 +44,33 @@ maximum (see "Model maximum output").
 - Request descriptions have no allowance field; engine readback and replay reject a
   description carrying one, as they do older description versions (ADR 0019). Older
   captures stay historical evidence, read only by explicit historical readers, with no
-  current authority.
+  current authority. Frozen calibration settings likewise gain no current binding
+  authority by substitution.
 - The model's own maximum is the only output ceiling. When a provider stops a
   response for any non-candidate reason, including that maximum, the runner logs
   `model.provider_stopped` at warning level with the exact stop reason. Actual usage
   is still accounted, and the typed outcome is unchanged. SDDE does not clamp,
-  truncate or invent a fallback because of a stop. Its one retry is ADR 0039's
-  re-send after an `output_limit` stop; other stops are never retried.
+  truncate or invent a fallback because of a stop. Its one retry is
+  [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)'s re-send after an
+  `output_limit` stop; other stops are never retried.
 
 ### Model maximum output
 
-Amended 2026-10-18 by explicit user direction. Bedrock applies a default smaller
-than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
-(GPT-OSS-20B stopped at exactly 4,096), so omission is itself a hidden limit.
+A provider may apply a default smaller than a model's maximum when a request omits the
+output maximum, so omission is itself a hidden limit.
 
-- Each entry in the provider catalogue records the model's documented
-  maximum output as `providers[].models[].config.maxOutputTokens`: required,
-  positive and exact, with no default, runtime lookup, clamp or fallback. The
-  shipped value for `openai.gpt-oss-20b-1:0` is 16,384 (AWS documents "16K").
-- Under [ADR 0030](0030-engine-owned-model-request.md) as amended on 23 October 2026,
-  every catalogue entry also declares a required positive `requestTimeoutMs`: the
-  provider-operation deadline, sized to the time the model takes to return this maximum.
+- Each entry in the provider catalogue, for every provider, records the model's
+  documented maximum output as `providers[].models[].config.maxOutputTokens`: required,
+  positive and exact, with no default, runtime lookup, clamp or fallback.
+- Every catalogue entry also declares a required positive `requestTimeoutMs`: the
+  provider-operation deadline, sized to the time the model takes to return this maximum
+  ([ADR 0030](0030-engine-owned-model-request.md)).
 - The frozen semantic-simplicity protocol records the same maximum and the deadline as
-  `request_timeout_ms` (180,000); its binding checks reject a request or description
-  carrying any other value.
-- Every Bedrock inference request sends that value as `inferenceConfig.maxTokens`
-  unchanged. All slots selecting the entry share it, and no slot, binding or request
+  `request_timeout_ms`; its binding checks reject a request or description carrying any
+  other value.
+- Every inference request sends that value unchanged as the provider's output maximum
+  (`inferenceConfig.maxTokens` for Bedrock Converse, `max_tokens` for Anthropic
+  Messages). All slots selecting the entry share it, and no slot, binding or request
   can narrow it.
 - The development grader's `evaluation-config/v2` records its judge model's
   documented maximum as `max_output_tokens`, sent the same way.
@@ -112,11 +81,27 @@ than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
 
 ### Workflow token accounting
 
-There is one total limit: the project configuration's positive
-`workflowTokenBudget` ([ADR 0037](0037-configured-workflow-token-budget.md)), initialized
-freshly for every execution. It covers all model work, with no pool or allowance per
-purpose.
+There is one total limit per execution, initialized freshly for every execution. It
+covers all model work, with no pool or allowance per purpose.
 
+- **The project configuration owns the budget.** `.sddtoolkit.json` has a required root
+  member `workflowTokenBudget`: an integer from 1 to 4,294,967,295, the u32 range that
+  the catalogue's integer limits use. There is no engine default.
+  - The closed configuration type decodes it once at bootstrap through the shared
+    positive-integer rule (`positive_json_integer.zig`), which the catalogue's
+    `maxOutputTokens` and `requestTimeoutMs` also use. A missing, zero, negative,
+    fractional, exponent, quoted, null, duplicate or out-of-range value fails as
+    `ENGINE_CONFIG_PARSE_ERROR`.
+  - It sits at the root, not under `models`, so model-slot consumers don't depend on a
+    setting they never read.
+  - The composition root passes the decoded value to the workflow pipeline runner, which
+    starts that execution's token ledger from it.
+  - Workflow policy and compiled graphs don't carry it. Policy profiles keep only their
+    capabilities and terminal outcomes, a configuration change is never a change to a
+    bound workflow graph, and the runner's policy cross-check compares capabilities only.
+  - Specification and workflow state don't store the budget. The E2E report's
+    `token_accounting.total_budget` records the configured value, and the baseline
+    harness reads the budget from the bootstrapped configuration.
 - Record actual API-reported input plus output tokens after every inference call,
   including retries and stopped output, exactly once against that total.
 - For Converse, normalize input usage as `inputTokens + cacheReadInputTokens +
@@ -134,56 +119,22 @@ purpose.
   native validation, security, cancellation, deadline, logging and operational failures
   remain blocking.
 
-### B9 runaway-output policy
-
-Runaway output is bounded only by the model's own documented maximum, sent explicitly
-(see "Model maximum output"), and the execution's total token budget; no output
-allowance remains (see "No output-token allowance"). Each stop is logged as
-`model.provider_stopped`. Historical captures and frozen calibration settings remain
-unchanged and cannot acquire current binding authority by substitution.
-
-No per-family record cardinality cap is added. Under §17, entity records are
-instead authored once by the feature-wide entities unit, with independent support
-selections and native ownership checks. Other record batches cannot emit entities.
-A provider `output_limit` remains a typed non-candidate stop: partial text never
-becomes a candidate, is never salvaged, and receives no protocol correction. Under
-[ADR 0039](0039-configured-temperatures-and-runaway-resend.md) the identical request is
-re-sent once at the configured `temperatureRunawayRetry`. A runaway on the re-send
-fails the work. The model binding and existing
-explicit protocol retry rules otherwise remain unchanged.
-
 ### Retry and safety boundaries
 
-- Retries remain explicit YAML transitions with operation-local `retry-limit`. The one
-  engine-owned exception is ADR 0039's runaway re-send: it uses no `retry-limit`, and
-  its bound is fixed at one per attempt.
+- A request's protocol correction runs inside its `request-model` step under that step's
+  declared `retry-limit` ([ADR 0030](0030-engine-owned-model-request.md)). Every other
+  retry is an explicit YAML transition with an operation-local `retry-limit`. The one
+  further engine-owned retry is
+  [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)'s runaway re-send.
 - Provider adapters do not retry, truncate, repartition or select fallback calls on
   their own.
-- Only complete responses can become untrusted candidates.
+- Only complete responses can become untrusted candidates. A provider `output_limit` is
+  a typed non-candidate stop: partial text never becomes a candidate, is never salvaged,
+  and receives no protocol correction.
 
 - Exact request identity, model-slot authorization, supported controls, schema
-  validation, credential protection, cancellation and deadlines remain required.
+  validation, credential protection, cancellation and deadlines remain required. The
+  typed model-slot parameter is the sole new-binding selection.
 - Existing configuration/resource-read, logging, command and closed-schema constraints
   keep their separate responsibilities; they cannot be repurposed as model-call size
   ceilings.
-
-## Acceptance
-
-- The typed model-slot parameter is the sole new-binding selection; ADR 0012 allows
-  consumers to retain that request through typed data dependencies. No capacity
-  field, intersection, wire budget or static-capacity service exists.
-- Fake-provider and compiler tests cover rejected retired size parameters,
-  registration/preparation without capacity configuration, complete valid payloads
-  beyond former byte ceilings, preserved size failures/stops and schema rejection.
-- Tests cover rejection of a slot `maxOutputTokens`, the catalogue maximum's
-  required positive value, its exact `maxTokens` in every Bedrock inference request,
-  rejection of a description carrying the retired field, and `model.provider_stopped`
-  for every closed stop reason, including log-failure propagation. Provider maxima are
-  not encoded as local capacity checks.
-- Accounting tests must cover the single aggregate ledger across all inference,
-  full overshoot retention, global subsequent-call prohibition, unavailable usage,
-  execution isolation and explicit-only retries. Global-budget failures must stay
-  fatal.
-- Architecture tests require the retired capacity fields and local size-failure variants
-  to remain absent.
-- Configuration/resource capture bounds retain separate negative tests.

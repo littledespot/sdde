@@ -119,7 +119,7 @@ pub const RepairOwner = enum {
     }
 };
 
-/// What the 12 owners' merges accept as their `retry-limit` (ADR 0033 derived choice 6, user decision
+/// What the 12 owners' merges accept as their `retry-limit` (ADR 0033 "Owner-specialized contracts", user decision
 /// DE4 6, 13 November 2026): each owner's maximum is the value its YAML step declares today. Null
 /// means the owner's merge forbids a `retry-limit` (the text and extraction merges, as today), and an
 /// owner without a merge has none to bound. The native key population stays the one in
