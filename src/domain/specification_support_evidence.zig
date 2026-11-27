@@ -137,6 +137,15 @@ pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.e
         .source_preservation = id.unit == .source,
     };
 }
+/// A reconciliation record that source review dismisses is candidate loss, repaired in the producer that wrote it, so a
+/// signal or a conflict subject is offered no `candidate_invalid`, which authorizes no repair (22-repair.md, ADR 0022
+/// amended 27 November 2026). Every other subject keeps its finding.
+pub fn permitsInvalid(id: a.Id) bool {
+    return switch (id.unit) {
+        .signal, .conflict => false,
+        .feature, .source, .token, .record, .decision => true,
+    };
+}
 pub const Issue = enum { invalid_finding, invalid_obligation, invalid_loss, invalid_gap_detail, invalid_gap_question, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
 pub const Rejection = struct { issue: Issue, rule: Rule };
 pub const Admission = union(enum) { accepted: a.ReviewEvidence, rejected: Rejection };
@@ -146,6 +155,7 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     const required = try requirements(allocator, inputs, sources, id);
     const rule = required.rule(finding, loss);
+    if (finding == .candidate_invalid and !permitsInvalid(id)) return reject(.invalid_finding, rule);
     if (id.unit == .source) {
         if (inputs.projection != .source_preservation or !@import("source_preservation.zig").permits(finding)) return reject(.invalid_finding, rule);
         const original = inputs.source_inputs orelse return error.InvalidRequiredAuthority;

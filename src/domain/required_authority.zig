@@ -122,9 +122,22 @@ pub const Exception = struct { id: ExceptionId, requirement: Id, authority: Auth
 pub const ForcedGap = struct { requirement: Id, reason: GapReason, subject: enum { authority, candidate } = .authority };
 pub const Projection = enum { source_readiness, source_preservation, registered_obligations };
 /// Which review a source-readiness projection serves. `first` is the pass that discovers
-/// what the sources need; `dependent` is the review pass that validates a pending source
-/// repair, so it covers everything the repair could have touched.
-pub const Pass = enum { first, dependent };
+/// what the sources need. `dependent` and `decided` are the review pass that validates a pending
+/// source repair: `dependent` covers every subject, for a repair whose change cannot be bounded;
+/// `decided` follows a repair that names the claims it decided again (the conflict-group repair),
+/// and covers the conflict records and the signals holding those claims, all that repair changed.
+pub const Pass = union(enum) {
+    first,
+    dependent,
+    decided: []const @import("reference_reconciliation.zig").ClaimId,
+
+    pub fn eql(left: Pass, right: Pass) bool {
+        return switch (left) {
+            .first, .dependent => std.meta.activeTag(left) == std.meta.activeTag(right),
+            .decided => |claims| right == .decided and @import("reference_reconciliation_validation.zig").sameMembers(claims, right.decided),
+        };
+    }
+};
 /// Current review authority must be retired before generation consumes sources.
 /// The retirement operation and source-consumption precondition share this set.
 pub const projection_keys = [_]@import("pipeline.zig").DataKey{ .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate };
@@ -186,8 +199,9 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     // Only a source-readiness review has a second pass.
     if (inputs.projection != .source_readiness and inputs.pass != .first) return error.InvalidRequiredAuthority;
     if (inputs.projection == .source_readiness) {
-        // The pass only chooses between two projections, and `dependent` is the wider one:
-        // a mistaken `dependent` reviews more subjects, never fewer.
+        // The pass chooses the projection. A `decided` pass is narrower than `dependent`; what keeps
+        // it honest is the repair's progress check, which needs a supported finding over every
+        // decided claim, so a review that leaves one out reads `recurring`, never resolved.
         const expected = try @import("specification_authority.zig").projectRecords(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.pass);
         try sameSeeds(expected.seeds, inputs.seeds);
         try sameSet(ForcedGap, expected.forced_gaps, inputs.forced_gaps);

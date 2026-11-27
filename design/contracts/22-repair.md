@@ -31,8 +31,10 @@ An atomic repair changes the smallest independently valid IR unit associated wit
 - one explicitly declared coupled group of pointers within one authorized IR record or one authorized file when those pointers cannot be valid separately.
 
 Atomicity means unrelated valid units cannot change. [§16.4](16-reference-ingestion.md#false-conflict-repair-boundary)
-permits one native-bound inseparable conflict-relation group across its affected
-dispositions/conflict records. No other cross-record repair is authorized.
+permits one native-bound conflict-relation group: the selected conflict record, its group and the dispositions
+of the claims no other record holds. A claim another record holds keeps its other relation, and a record all of whose
+claims another record holds, or a replacement group naming only such claims, authorizes no repair. No other
+cross-record repair is authorized.
 
 Execution-private pre-generation repair of source-backed candidate omissions is
 permitted. The owning contract must establish a
@@ -41,7 +43,8 @@ review evidence. Source absence, ambiguous ownership and stale evidence do not
 authorize repair. A review verdict itself is never a repair target. A source
 `candidate_invalid` finding or its nested authority gap
 ([§12](12-model-boundary.md#source-invalid-content-finding)) authorizes no loss
-attribution, upstream rebuilding or semantic content repair.
+attribution, upstream rebuilding or semantic content repair. A reconciliation record is offered
+no `candidate_invalid`: its dismissal is candidate loss.
 
 The [clarification-admission boundary](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 does not relax that prohibition. In required pre-generation assessment, an inconclusive finding without an identifiable
@@ -474,7 +477,10 @@ producer, feature and captured reference state. After rebuilding, becoming
 generation-ready cannot skip that dependent review or substitute a different
 review purpose. Existing readiness/preservation gates require the matching
 pending review regardless of the optional preservation-scan setting. Only its
-admission can settle the repair obligation. Generation
+admission can settle the repair obligation. The scope pins the projection's kind and population
+bound; the subjects a readiness repair's dependent review covers are the pass's
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md), amended 27 November 2026: the conflict
+records and the signals holding the claims a conflict-group repair decided, or every subject). Generation
 initialization blocks while any native repair permit remains active, including
 a child suspending a source-repair parent. Projection retirement leaves those
 runner-owned obligations intact.

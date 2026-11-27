@@ -84,6 +84,7 @@ pub const Links = enum {
 /// `support.schema.json`: the support review findings, comparisons and their repairs.
 pub const Support = enum {
     finding,
+    record_finding,
     applicability_finding,
     preservation_finding,
     preservation_comparisons,

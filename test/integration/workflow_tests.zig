@@ -1807,7 +1807,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 // states two claims for each chunk, and a source splits into a chunk at every 64 lines, so this one source
                 // gives each conflict a chunk's pair; a second source would hold a conflict's claims outside the source
                 // the scripted review names.
-                .two_false_conflicts => "# Loan renewal\n" ++ "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n",
+                // The overlapping pair needs three, and shares the second claim, so it takes the same two chunks.
+                .two_false_conflicts, .overlapping_false_conflict => "# Loan renewal\n" ++ "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n",
                 else => "# Loan renewal\nA librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n",
             },
         });
@@ -2025,7 +2026,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (raised_limit and (summary_scenario or global_scenario)) try std.testing.expectEqual(@as(u32, 4), driver.largest_allowance);
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
-        const expected: workflow.OutcomeTag = if (scenario == equal_across_groups) .blocked else if (link_scenario) (if (driver.edge_cases == .unlinked) .blocked else .ok) else if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict or (driver.fault != null and driver.fault.?.repetition == .persistent)) .failed else .ok) else if (candidate_omission or extraction_omission or scenario == records_gap_scenario or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_classification_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
+        const expected: workflow.OutcomeTag = if (scenario == equal_across_groups) .blocked else if (link_scenario) (if (driver.edge_cases == .unlinked) .blocked else .ok) else if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict or (driver.fault != null and driver.fault.?.repetition == .persistent)) .failed else if (driver.source_loss == .overlapping_false_conflict) .needs_user else .ok) else if (candidate_omission or extraction_omission or scenario == records_gap_scenario or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_classification_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; operation: {s}; candidate: {any}\n", .{ scenario, result, driver.rejected_operation orelse "none", try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (scenario == 0) {
@@ -2408,7 +2409,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (source_repair_scenario) {
             const pre_generation = switch (driver.source_loss.?) {
-                .empty, .false_conflict, .unchanged_conflict, .false_conflict_questions, .two_false_conflicts => true,
+                .empty, .false_conflict, .unchanged_conflict, .false_conflict_questions, .two_false_conflicts, .overlapping_false_conflict => true,
                 .partial, .classification, .signal, .unchanged => false,
             };
             if (pre_generation) {
@@ -2465,7 +2466,10 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     const groups: usize = if (driver.source_loss == .two_false_conflicts) 2 else 1;
                     try std.testing.expectEqual(groups, driver.reconciliation_repair_calls);
                     try std.testing.expect(driver.dependent_source_review_calls > 0);
-                    try std.testing.expect(driver.source_only_readiness_evidence > 0);
+                    // A conflict-group repair is validated over the conflicts and the signals holding the claims it
+                    // decided, so no feature subject is reviewed after it (ADR 0023, amended 27 November 2026); the
+                    // extraction-owned repair above still takes the full pass.
+                    try std.testing.expectEqual(@as(usize, 0), driver.source_only_readiness_evidence);
                     try std.testing.expect(runner.repair_retry.currentPermit() == null);
                     const references = (try @import("../../src/application/specification_workflow.zig").readContext(&view)).references.records;
                     try std.testing.expectEqual(@as(usize, 0), references.conflicts.len);
@@ -2489,6 +2493,17 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                         if (owner == .reference_global and std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-conflicts-") != null) conflicts_requests += 1;
                     }
                     try std.testing.expectEqual(@as(usize, 1), conflicts_requests);
+                } else if (driver.source_loss == .overlapping_false_conflict) {
+                    // A false conflict that shares a claim with a genuine one is repaired alone: its repair decides the claim
+                    // only it holds, and the genuine conflict, whose claims one of them is, stays and asks its question.
+                    try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_repair_calls);
+                    const references = (try @import("../../src/application/specification_workflow.zig").readContext(&view)).references.records;
+                    try std.testing.expect(driver.dependent_source_review_calls > 0);
+                    try std.testing.expect(driver.dependent_reviews_over_held_conflict > 0);
+                    try std.testing.expectEqual(@as(usize, 1), references.conflicts.len);
+                    try std.testing.expect(result != .execution_rejected);
+                    // The run stops for the genuine conflict's question.
+                    try std.testing.expect(view.contains(.clarification_needs));
                 }
                 if (expected == .failed) {
                     try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));

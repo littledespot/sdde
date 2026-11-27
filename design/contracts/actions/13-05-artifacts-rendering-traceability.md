@@ -302,7 +302,8 @@ variants of the generic repair operations, specified once in
 - **Reads:** `required_authority_inputs`, `specification_support_review` · **Writes:** replaces `required_authority_inputs` · **Side effect:** `none`
 - **Does:** Replace the authority inputs with the accepted review's inputs.
 - **Rejects:** `InvalidRequiredAuthority` for a pending or rejected review, or a source-readiness
-  review validating a pending repair that is not the dependent pass.
+  review validating a pending repair that is not that repair's dependent pass (the `decided` pass over the claims a
+  conflict-group repair decided, the full pass for any other repair).
 
 ## Rendering and publication output
 

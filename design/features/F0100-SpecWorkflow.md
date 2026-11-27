@@ -691,7 +691,10 @@ closed requiredness/ownership policies, current support checks and outcomes.
   touched, and a conflict-only pass omits them
   ([§22](../contracts/22-repair.md), pre-generation omission progress). So a dependent pass
   over a reconciliation that still holds a conflict reviews every subject, and feature-requirement
-  forms can recur beside the conflict's form. A resolved conflict leaves a complete,
+  forms can recur beside the conflict's form, except after a conflict-group repair: that repair
+  touched only the claims it decided, so its dependent pass projects the conflict records and the
+  signals holding those claims ([ADR 0023](../decisions/0023-advisory-post-generation-review.md),
+  amended 27 November 2026). A resolved conflict leaves a complete,
   generation-ready reconciliation, which gets no readiness review unless a source repair is
   pending, whose dependent review still runs (§22). The decision (26 November 2026, "implement conflicts first" and
   "implement (b), update the documentation"; ENGINE01 §10 item 9) and its typed-rule
@@ -1322,8 +1325,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   (ADR 0023): publication requires the native checks (generation complete, coverage
   validated, rendering round trip), and the human who reviews and edits the published
   `spec.md` judges its meaning. Initial and repair generation packets
-  carry original source text through the same projection as source review;
-  retained claims still own positive provenance (§17.3).
+  carry original source text through the shared evidence projection, less the lines only an applied answer's
+  superseded claims cite (§17.3); retained claims still own positive provenance.
 
 - An invalid mechanically repairable candidate authorizes one independent value in
   stable diagnostic order.

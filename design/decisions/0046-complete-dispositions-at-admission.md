@@ -18,6 +18,8 @@
     insert and delete paths, and E4 takes its freeze after this change.
   - Also amended: §12.2, §16.4 (step 10 and the false-conflict repair), §22.4, §22.6,
     F0100 and the §32 index.
+  - **Amended 27 November 2026** (decision 3 only; user: "implement A and T1"): the
+    conflict-group repair binds the claims it decides again, not every claim of its group.
 
   The overall design remains **Proposed design**.
 
@@ -59,8 +61,9 @@ as `cardinality`, and repair inserted each missing disposition with its own call
    assignment under the dispositions request's `retry-limit` (2). It adds no counter,
    insertion or deletion. Exhaustion fails the run (§22.6).
 3. **Conflict-group repair.** The source-omission conflict-group repair uses the same
-   grouped binding over its group's claims. An incomplete answer is now corrected under
-   that repair's own `retry-limit` (1), instead of failing at merge.
+   grouped binding over the claims it decides again: its group's claims, except any that another
+   conflict record also holds ([ADR 0022](0022-native-reference-phase-handoffs.md), amended 27 November 2026).
+   An incomplete answer is now corrected under that repair's own `retry-limit` (1), instead of failing at merge.
 4. **Readback.** Canonical validation stays the authority behind admission: total
    dispositions, no repeat and authorized IDs.
    - A gap or repeat that still reaches it is an engine invariant failure

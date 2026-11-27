@@ -127,7 +127,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
     const run = try directories.open(io, repository, path);
     defer run.close(io);
     const report_bytes = try files.read(io, a, run, "report.json");
-    const report = @import("../../../src/domain/strict_json.zig").decode(native.Report, a, report_bytes, .{ .maximum_depth = 128 }) catch |err| switch (err) {
+    const report = @import("../../../src/domain/strict_json.zig").decode(native.Report, a, report_bytes, native.report_limits) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBudgetEvidence,
     };

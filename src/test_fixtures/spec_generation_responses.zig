@@ -31,8 +31,11 @@ pub const applicability_detail = "The source requires a displayed value. Its ori
 pub const applicability_question = "Should the displayed value be calculated on request or read from managed records? Answer calculate, or records with their required fields.";
 
 /// `two_false_conflicts` holds two conflicts that share no claim, each between a chunk's two claims and each judged
-/// false, so the source review's repair of one is followed by a repair of the other.
-pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions, two_false_conflicts };
+/// false, so the source review's repair of one is followed by a repair of the other. `overlapping_false_conflict` holds a
+/// genuine conflict between the first two model claims and a false one between the second and the third: they share the
+/// second claim, so the review judges the first record `conflicting` and the second `candidate_omission`, and the repair of
+/// the second decides the third claim alone.
+pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions, two_false_conflicts, overlapping_false_conflict };
 /// Scripted edge cases (ADR 0038 Decision 7). `native` writes one for each model claim, beside the
 /// one criterion the engine writes for the claim's requirement. `chosen` groups two claims in each
 /// signal and writes one edge case per group naming both, beside the two criteria the engine
@@ -40,7 +43,17 @@ pub const SourceLoss = enum { empty, partial, classification, signal, unchanged,
 /// only in an edge case: no requirement names it, so no criterion can serve the edge case.
 pub const EdgeCases = enum { native, chosen, unlinked };
 fn falseConflict(mode: ?SourceLoss) bool {
-    return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions or mode == .two_false_conflicts;
+    return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions or mode == .two_false_conflicts or mode == .overlapping_false_conflict;
+}
+
+/// The conflicts a scripted reconciliation holds, as positions in model-claim order: the first two claims, for two
+/// conflicts that share none the next two as well, and for an overlapping pair the second and the third.
+fn conflictPairs(mode: ?SourceLoss) []const [2]usize {
+    return switch (mode orelse .empty) {
+        .two_false_conflicts => &.{ .{ 0, 1 }, .{ 2, 3 } },
+        .overlapping_false_conflict => &.{ .{ 0, 1 }, .{ 1, 2 } },
+        else => &.{.{ 0, 1 }},
+    };
 }
 
 /// Whether one accepted conflict group holds both claims of a scripted conflict.
@@ -267,8 +280,10 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 // Each conflict is a pair of model claims, in claim order: the first two and, for two conflicts, the next
                 // two. A later phase holds the pairs the accepted groups still hold, so it follows an accepted repair of
                 // one pair and keeps the other.
-                const pair_count: usize = if (options.source_loss == .two_false_conflicts) 2 else 1;
-                const claims = try allocator.alloc(r.ClaimId, 2 * pair_count);
+                const pairs = conflictPairs(options.source_loss);
+                var needed: usize = 0;
+                for (pairs) |pair| needed = @max(needed, @max(pair[0], pair[1]) + 1);
+                const claims = try allocator.alloc(r.ClaimId, needed);
                 var count: usize = 0;
                 for (input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model and count < claims.len) {
                     claims[count] = item.claim.id;
@@ -278,14 +293,17 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
                 var held: std.ArrayList(r.ClaimId) = .empty;
                 var conflicts: std.ArrayList(r.ConflictProposal) = .empty;
-                for (0..pair_count) |index| {
-                    const pair = claims[2 * index ..][0..2];
+                for (pairs) |positions| {
+                    const pair = try allocator.dupe(r.ClaimId, &.{ claims[positions[0]], claims[positions[1]] });
                     if (accepted) |checked| if (!groupHolds(checked.proposal.conflict_groups, pair)) continue;
-                    for (dispositions) |*value| {
-                        if (std.meta.eql(value.claim_id, pair[0])) value.disposition = .{ .conflicting = .{ .related_claim_ids = pair[1..2] } };
-                        if (std.meta.eql(value.claim_id, pair[1])) value.disposition = .{ .conflicting = .{ .related_claim_ids = pair[0..1] } };
-                    }
-                    try held.appendSlice(allocator, pair);
+                    // A claim two conflicts share is related to the other claim of each.
+                    for (dispositions) |*value| for (pair, 0..) |claim, side| if (std.meta.eql(value.claim_id, claim)) {
+                        var related: std.ArrayList(r.ClaimId) = .empty;
+                        if (value.disposition == .conflicting) try related.appendSlice(allocator, value.disposition.conflicting.related_claim_ids);
+                        try related.append(allocator, pair[1 - side]);
+                        value.disposition = .{ .conflicting = .{ .related_claim_ids = try related.toOwnedSlice(allocator) } };
+                    };
+                    for (pair) |claim| if (!r.contains(r.ClaimId, held.items, claim)) try held.append(allocator, claim);
                     try conflicts.append(allocator, .{ .claim_ids = pair, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The source behavior and its presentation." } }} } });
                 }
                 proposal.claim_dispositions = dispositions;
@@ -562,6 +580,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             };
             const selected_index = if (request.id().purpose == .atomic_repair) 0 else try reviewIndex(allocator, inputs, try @import("../domain/specification_support.zig").Source.nextSubject(allocator, inputs, workflow.prior(progress)));
             const all = try @import("../domain/specification_provenance.zig").items(context);
+            // Of two overlapping conflicts only the second is false: the record that holds the third model claim.
+            const dismissed: ?r.ClaimId = if (options.source_loss == .overlapping_false_conflict) third: {
+                var seen: usize = 0;
+                for (all.entries) |item| if (item.claim.content == .model) {
+                    seen += 1;
+                    if (seen == 3) break :third item.claim.id;
+                };
+                break :third null;
+            } else null;
             const findings = try allocator.alloc(@import("../domain/specification_support.zig").Source.Finding, ledger.requirements.len);
             for (ledger.requirements, findings, 0..) |requirement, *finding, index| {
                 const required = try @import("../domain/specification_support_evidence.zig").requirements(allocator, inputs, context.inputs, requirement.seed.id);
@@ -590,7 +617,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     finding.value.source_ids = required.eligible_source_ids[0..1];
                     finding.value.detail = "The original source establishes the required readiness fact.";
                 }
-                if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict) {
+                if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict and
+                    (options.source_loss != .overlapping_false_conflict or (dismissed != null and r.contains(r.ClaimId, selected.claim_ids, dismissed.?))))
+                {
                     finding.value.kind = .candidate_omission;
                     finding.value.missing_obligation = context.inputs.corpus.sources[0].bytes;
                     finding.value.question = null;

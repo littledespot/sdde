@@ -76,18 +76,21 @@ pub fn pendingReview(a: std.mem.Allocator, permit: retry.Permit, feature: @impor
     return error.InvalidRequiredAuthority;
 }
 
-/// The pass of the review that validates a pending repair of `projection`: a source-readiness
-/// repair is validated by the dependent pass, which covers all it could have touched; a
-/// source-preservation projection has one pass.
-fn passFor(projection: authority.Projection) authority.Pass {
-    return if (projection == .source_readiness) .dependent else .first;
+/// The pass of the review that validates a pending repair of `projection`. A source-readiness repair
+/// that names the claims it decided again (`decided`, the conflict-group repair's released claims)
+/// is validated over all it changed; any other is validated by the dependent pass, which covers
+/// every subject. A source-preservation projection has one pass.
+fn passFor(projection: authority.Projection, decided: []const r.ClaimId) authority.Pass {
+    if (projection != .source_readiness) return .first;
+    return if (decided.len != 0) .{ .decided = decided } else .dependent;
 }
 
 /// The review pass a source-readiness projection serves: the pass that validates the pending
-/// repair while one is pending, otherwise `first`.
-pub fn reviewPass(a: std.mem.Allocator, permit: ?retry.Permit, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId) authority.Error!authority.Pass {
+/// repair while one is pending, otherwise `first`. `decided` is the claims the pending repair
+/// decided again, as its merge recorded them on the reconciliation (`omission_released_claims`).
+pub fn reviewPass(a: std.mem.Allocator, permit: ?retry.Permit, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId, decided: []const r.ClaimId) authority.Error!authority.Pass {
     const pending = (try pendingReview(a, permit orelse return .first, feature, state)) orelse return .first;
-    return passFor(pending);
+    return passFor(pending, decided);
 }
 
 /// Each native scope freezes its finite target population at first authorization (22-repair.md,
@@ -121,11 +124,17 @@ pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: 
     if (projection != inputs.projection) return error.InvalidRequiredAuthority;
     // The review must be the pass that validates this repair. This sits before the conflict-group branch,
     // which returns before `authority.build` re-derives the projection.
-    if (inputs.pass != passFor(projection)) return error.InvalidRequiredAuthority;
+    if (!inputs.pass.eql(passFor(projection, admitted.candidate.omission_released_claims))) return error.InvalidRequiredAuthority;
     const repaired_claims = admitted.candidate.omission_conflict_claims;
     if (repaired_claims.len != 0 and std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, .{ .conflict_claims = try orderedClaims(a, repaired_claims) })).bytes)) {
+        // The repair answers for the claims it decided again. A claim the repaired record shared with another
+        // record keeps that other relation and answers for nothing here, so a later answer that supersedes it
+        // cannot make the repair look unfinished.
+        const decided = admitted.candidate.omission_released_claims;
+        if (decided.len == 0) return error.InvalidRequiredAuthority;
+        for (decided) |claim| if (!r.contains(r.ClaimId, repaired_claims, claim)) return error.InvalidRequiredAuthority;
         var resolved = true;
-        for (repaired_claims) |claim| {
+        for (decided) |claim| {
             _ = r.item(records.items, claim) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
             var supported = false;
             for (inputs.evidence) |finding| if (finding.review) |review| {

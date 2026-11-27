@@ -153,7 +153,14 @@ pub const RecordAssignments = struct {
 };
 pub const Signal = struct { id: SignalId, value: ValidatedSignal };
 pub const Conflict = struct { id: ConflictId, value: ValidatedConflict };
-pub const Records = struct { assignments: RecordAssignments, signals: []const Signal, conflicts: []const Conflict };
+pub const Records = struct {
+    assignments: RecordAssignments,
+    signals: []const Signal,
+    conflicts: []const Conflict,
+    /// The claims an applied user answer superseded (ADR 0025). Execution-local: a supersession the model proposed is not
+    /// one, and the persisted snapshot does not carry it.
+    answer_superseded: []const ClaimId = &.{},
+};
 pub const Accounted = struct {
     records: Records,
     outcome: enum { complete, blocked },

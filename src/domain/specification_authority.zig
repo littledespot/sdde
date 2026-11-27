@@ -25,16 +25,33 @@ pub fn projectFor(allocator: std.mem.Allocator, feature: @import("feature_identi
 /// and their forced gaps alone. One conflict has one decision, owned by the conflict
 /// record's subject and answered by its `select_one` form; feature-requirement subjects
 /// raised competing free-text forms for the same contradiction (ADR 0025 subject rule).
-/// A dependent pass validates a pending source repair, which may have touched any claim,
-/// so it and a reconciliation without a conflict project every seed. The builder and the
-/// gate share this rule.
+/// A dependent pass validates a pending source repair. A repair whose change cannot be
+/// bounded may have touched any claim, so that pass, and a first pass over a reconciliation
+/// without a conflict, project every seed. A `decided` pass follows a repair that decided
+/// named claims again, and projects the conflict records and the signals holding those claims,
+/// all that repair created or changed (ADR 0023, amended 27 November 2026). The builder and
+/// the gate share this rule.
 pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: @import("reference_support.zig").Records, pass: authority.Pass) authority.Error!authority.Inputs {
     const items = references.items;
     const sources = try allocator.alloc(authority.Authority, 1);
     sources[0] = .{ .reference = items.state_id };
     var seeds: std.ArrayList(authority.Seed) = .empty;
     var gaps: std.ArrayList(authority.ForcedGap) = .empty;
-    const complete = references.conflicts.len == 0 or pass == .dependent;
+    const complete = switch (pass) {
+        .first => references.conflicts.len == 0,
+        .dependent => true,
+        .decided => false,
+    };
+    if (pass == .decided) for (references.signals) |signal| {
+        const changed = for (signal.value.claim_ids) |claim| {
+            if (@import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, pass.decided, claim)) break true;
+        } else false;
+        if (changed) try seeds.append(allocator, .{
+            .id = .{ .kind = .reference_meaning, .unit = .{ .signal = signal.id }, .slot = .disposition },
+            .requiredness = .{ .obligation = .reference_accounting },
+            .input_authorities = sources,
+        });
+    };
     if (complete) {
         for ([_]authority.Slot{ .description, .primary_goal, .entities, .acceptance_criteria, .functional_requirements, .scenario_coverage }) |slot| {
             try seeds.append(allocator, .{

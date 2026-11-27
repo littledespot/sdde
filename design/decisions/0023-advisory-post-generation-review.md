@@ -26,6 +26,10 @@
   conflicts first" and "implement (b), update the documentation". A first pass over a conflict
   projects the conflict records alone, and `Inputs` gains a typed `Pass`; see "Decision" below
   and [F0100 §3.10](../features/F0100-SpecWorkflow.md).
+- **Decided-pass amendment:** 27 November 2026 (ENGINE01 §10 item 15, change 2; user: "accept the three
+  amendments", then "implement the three changes"). The review that validates a conflict-group repair
+  projects the conflict records and the signals holding the claims that repair decided, not every
+  subject; see "Decision" below.
 - **Removal amendment (SPEC01 D13.1, 1 November 2026):** by the user's decision to
   remove both post-generation reviews (source and principle) in one change, which also
   reverted the 31 October advisory verdict-set amendment (record: `fixes/Z_FIX06.md` at
@@ -55,12 +59,19 @@ that holds a conflict record, the source-readiness projection holds the conflict
 alone, so each conflict has one decision, owned by its record's subject and answered by its
 `select_one` form. A dependent pass, the review that validates a pending source repair, and
 a reconciliation without a conflict keep the full projection: a repair is validated by the
-subjects that cover what it touched (§22), and a conflict-only pass omits them. This is a typed rule of
+subjects that cover what it touched (§22), and a conflict-only pass omits them. A repair that
+names the claims it decided again, the source-omission conflict-group repair, touched only those
+claims' dispositions and the signals rebuilt over them, so its dependent pass (`decided`) projects
+the conflict records and the signals holding those claims; every other repair, the extraction-owned
+one included, keeps the full projection (amended 27 November 2026: in the one live run that reached
+it, the full pass spent 64,017 tokens on nine subjects, none of which could validate the repair, and
+ended at the budget). The repair's progress check still needs a supported finding over every decided
+claim, so a review that leaves one out reads `recurring`. This is a typed rule of
 Specify's projection, keyed on the conflict records and the pass, and no success or
 continuation rule (decided 26 November 2026, user: "implement conflicts first", and
 "implement (b), update the documentation"; ENGINE01 §10 item 9). `Inputs` gains a typed
-`Pass` (`first` or `dependent`) that the runner's pending repair selects and the gate
-re-derives with. It is execution-local: ids are unchanged and no closed persisted or
+`Pass` (`first`, `dependent`, or `decided` with the decided claims, which the merge records on the
+reconciliation) that the runner's pending repair selects and the gate re-derives with. It is execution-local: ids are unchanged and no closed persisted or
 captured contract changes shape, so `required_authority.version` stays 6 (ADR 0030
 "Versions"). A source-readiness repair's target population is the full projection's seed
 count whichever pass authorizes it first, because the scope freezes its population at first

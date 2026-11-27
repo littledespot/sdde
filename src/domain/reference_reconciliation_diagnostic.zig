@@ -19,7 +19,11 @@ pub const Source = struct {
     conflicts: @import("repair_occurrences.zig").Set = .{},
     pending_repair: ?@import("atomic_repair.zig").Pending(ObservationTarget) = null,
     omission_retry: ?@import("workflow_retry.zig").Permit = null,
+    /// The claims of the conflict record a source-omission repair replaced: the repair's retry identity.
     omission_conflict_claims: []const r.ClaimId = &.{},
+    /// The claims of that record no other record holds, whose dispositions the repair decided again. A claim the
+    /// repaired record shared with another keeps its other relation and is none of them.
+    omission_released_claims: []const r.ClaimId = &.{},
     pub fn at(self: Source, unit: Unit, field: Field) ?Origin {
         for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == field) return value.origin;
         for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == .record) return value.origin;

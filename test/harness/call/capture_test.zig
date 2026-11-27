@@ -290,6 +290,7 @@ const case_bytes =
 
 const Sink = struct {
     allocator: std.mem.Allocator,
+    run: []const u8 = call.run,
     rows: std.ArrayList(u8) = .empty,
     sequence: u64 = 200,
     fn barrier(self: *Sink) @import("../../../src/ports/telemetry_barrier.zig").Barrier {
@@ -312,7 +313,7 @@ const Sink = struct {
             .sequence = self.sequence,
             .occurred_at_utc = "2026-09-20T00:00:00Z",
             .monotonic_offset = 1,
-            .run_id = .{ .bytes = call.run },
+            .run_id = .{ .bytes = self.run },
             .feature_id = .{ .bytes = "nested/feature" },
             .fragment = fragment,
         }) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
@@ -333,7 +334,12 @@ fn fixture(a: std.mem.Allocator, root: std.Io.Dir) !void {
     try write(root, run_path ++ "/project/settings/.sddproviders.json", provider_bytes);
     try write(root, run_path ++ "/evidence/generation/call-000009/context.json", try std.json.Stringify.valueAlloc(a, current, .{}));
     try write(root, run_path ++ "/evidence/generation/call-000009/request.json", body);
-    var sink: Sink = .{ .allocator = a };
+    try write(root, run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log", try promptLog(a, call.run, body));
+}
+
+/// The prompt log of one engine run that captured one request, at the captured origin, with these wire bytes.
+fn promptLog(a: std.mem.Allocator, run: []const u8, wire: []const u8) ![]const u8 {
+    var sink: Sink = .{ .allocator = a, .run = run };
     try sink.rows.appendSlice(a, format.prompt_heading);
     var logger: @import("../../../src/application/model_exchange_capture.zig").Capture = .{ .allocator = a, .logs = sink.barrier() };
     defer logger.deinit();
@@ -348,9 +354,56 @@ fn fixture(a: std.mem.Allocator, root: std.Io.Dir) !void {
         .description = description,
     });
     defer logger.end();
-    try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = body }, &.{}));
-    try write(root, run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log", sink.rows.items);
+    try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = wire }, &.{}));
+    return a.dupe(u8, sink.rows.items);
 }
+
+test "a case's second leg selects its own engine run's call and never its first leg's" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = std.testing.tmpDir(.{});
+    defer root.cleanup();
+    const io = std.testing.io;
+    try fixture(a, root.dir);
+    // The second leg's project is a copy of the first leg's, so it also holds the first leg's engine run, whose
+    // execution-local origin repeats the one captured here with other bytes.
+    try write(root.dir, run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-first/binding/0001.log", try promptLog(a, "MOCK-first", "{\"MOCK\":\"first leg wire body\"}"));
+    try write(root.dir, "runs/" ++ first_leg ++ "/project/documents/nested/feature/logs/events/MOCK-first/binding/0001.log", "MOCK event log");
+    // With no report, nothing names a first leg, so the two runs stay ambiguous, as do those of an older report.
+    try std.testing.expectError(error.CaptureAmbiguous, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    try write(root.dir, run_path ++ "/report.json", "{\"schema\":\"spec-e2e-report/v1\"}");
+    try std.testing.expectError(error.CaptureAmbiguous, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    const reports = @import("../e2e/contracts.zig");
+    const continued = struct {
+        fn report(allocator: std.mem.Allocator, first: []const u8) ![]const u8 {
+            const value: reports.Report = .{ .started_at_utc = "", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .continued_from = first };
+            return std.json.Stringify.valueAlloc(allocator, value, .{});
+        }
+    };
+    try write(root.dir, run_path ++ "/report.json", try continued.report(a, first_leg));
+    var loaded = try capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9);
+    defer loaded.deinit();
+    try std.testing.expectEqualStrings(call.run, loaded.call.run);
+    try std.testing.expectEqualStrings(body, loaded.call.request.?);
+    // Only the runs the first leg holds are excluded: a first leg holding another run leaves both calls in play.
+    try write(root.dir, "runs/" ++ other_leg ++ "/project/documents/nested/feature/logs/events/MOCK-other/binding/0001.log", "MOCK event log");
+    try write(root.dir, run_path ++ "/report.json", try continued.report(a, other_leg));
+    try std.testing.expectError(error.CaptureAmbiguous, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    // A first leg the report names must exist beside the run, and a name that is no run directory's is a bad report:
+    // neither is read as nothing inherited.
+    try write(root.dir, run_path ++ "/report.json", try continued.report(a, missing_leg));
+    try std.testing.expectError(error.DirectoryMissing, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    for ([_][]const u8{ "", "first-leg" }) |name| {
+        try write(root.dir, run_path ++ "/report.json", try continued.report(a, name));
+        try std.testing.expectError(error.InvalidReport, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    }
+}
+
+/// Run directory names, in the shape the launcher gives one.
+const first_leg = "2026-11-27T08-48-56Z-74b1a2cfe51c25d38a161e475a494183";
+const other_leg = "2026-11-27T08-48-57Z-74b1a2cfe51c25d38a161e475a494183";
+const missing_leg = "2026-11-27T08-48-58Z-74b1a2cfe51c25d38a161e475a494183";
 
 test "capture loads configured feature and provider locations and preserves request ownership" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);

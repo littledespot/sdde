@@ -1585,6 +1585,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
             .origin = origin,
             .origins = &.{},
             .omission_conflict_claims = context.references.records.assignments.checked.prior.prior.source.omission_conflict_claims,
+            .omission_released_claims = context.references.records.assignments.checked.prior.prior.source.omission_released_claims,
         })).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
@@ -2555,6 +2556,11 @@ const ScriptedWire = struct {
     reviews: usize = 0,
     conflict_requirements: usize = 0,
     other_requirements: usize = 0,
+    /// Authoring requests (those assigning source requirements), and how many requests from the first of them on,
+    /// scenarios and repairs included, carry `watched` in their body.
+    authoring: usize = 0,
+    watched: ?[]const u8 = null,
+    authoring_watched: usize = 0,
 
     fn port(self: *ScriptedWire) provider_transport.Port {
         return .{ .context = @ptrCast(self), .exchange_fn = exchange };
@@ -2563,6 +2569,11 @@ const ScriptedWire = struct {
     fn exchange(context: *provider_transport.Context, allocator: std.mem.Allocator, request: provider_transport.Request) provider_transport.Error!provider_transport.Response {
         const self: *ScriptedWire = @ptrCast(@alignCast(context));
         self.calls += 1;
+        if (std.mem.indexOf(u8, request.body, "source_assignment") != null) self.authoring += 1;
+        // No review runs after generation, so from the first authoring request on every request is authoring's.
+        if (self.authoring != 0) if (self.watched) |bytes| if (std.mem.indexOf(u8, request.body, bytes) != null) {
+            self.authoring_watched += 1;
+        };
         if (request.target != .anthropic) self.foreign_targets += 1;
         if (self.interrupt_on_call == self.calls) std.posix.raise(.INT) catch |err| {
             if (self.failure == null) self.failure = err;
@@ -2963,10 +2974,13 @@ test "a conflict's form is answered by option key, the next run applies the choi
     offline.evidence.cleanup();
     offline.evidence = std.testing.tmpDir(.{});
     offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
-    var second: ScriptedWire = .{ .options = .{ .conflict = true } };
+    var second: ScriptedWire = .{ .options = .{ .conflict = true }, .watched = "A loan may be renewed once." };
     errdefer std.debug.print("conflict run 2 of {s}: outcome {any}, step {?s}, diagnostic {?s}\n", .{ offline.choice.id, offline.report.workflow_outcome, offline.report.terminal_step, offline.report.diagnostic });
     try offline.execute(io, &second);
     try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    // Authoring never reads the line the answer superseded (ADR 0025, amended 27 November 2026).
+    try std.testing.expect(second.authoring > 0);
+    try std.testing.expectEqual(@as(usize, 0), second.authoring_watched);
     try std.testing.expectEqual(.passed, offline.report.publication_check);
     try std.testing.expectEqual(@as(usize, 1), account.observations);
     const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);

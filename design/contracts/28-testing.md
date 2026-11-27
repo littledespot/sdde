@@ -560,7 +560,7 @@ that inject a correct diagnosis do not establish complete recovery.
 | Case | Required evidence |
 | --- | --- |
 | Retained false-conflict sequence | Compatible source → incorrect candidate conflict → generic unsupported findings → completed question text does not authorize publication while the candidate conflict remains unclassified |
-| Correct localized diagnosis | A conflict subject in a first pass, and every subject in the dependent pass of a repair (F0100 §3.10), can cite the exact diagnostic claims; coupled repair rebuilds signals, coverage and reviews; positive provenance stays strict |
+| Correct localized diagnosis | A conflict subject in a first pass, and every subject in the dependent pass of a repair (F0100 §3.10), can cite the exact diagnostic claims; coupled repair rebuilds signals, coverage and reviews; positive provenance stays strict. A false conflict that shares a claim with a genuine one is repaired alone and the genuine conflict stays and asks its question, whichever order the records are declared in |
 | Mixed findings | Localized/unlocalized defects and genuine gaps in every ordering; eligible repairs are reachable, no finding disappears, unresolved defects prevent publication |
 | Genuine source contradiction | Exact current subject/claim/source association and explicit incompatible meanings admit a concrete choice; do not treat every conflict as repairable |
 | Supported versus missing requirement | Both source review and generation needs; complete source requires no restatement, genuine missing choice yields preconditions/question/expected answer with a blank answer region |

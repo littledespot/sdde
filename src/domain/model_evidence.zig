@@ -81,6 +81,60 @@ pub fn sources(a: std.mem.Allocator, inputs: r.evidence.Inputs) std.mem.Allocato
     for (inputs.corpus.sources, result) |source, *copy| copy.* = .{ .id = source.id, .text = source.bytes };
     return result;
 }
+
+/// Every source's text for authoring after the user's answers. A line is left out when every claim that cites it was
+/// superseded by an applied answer, so the text no longer states what the user decided against (ADR 0025, amended
+/// 27 November 2026). A line another claim also cites stays, and a supersession the model proposed changes nothing:
+/// with no answered supersession this is `sources`, byte for byte.
+pub fn answeredSources(a: std.mem.Allocator, inputs: r.evidence.Inputs, items: r.Items, superseded: []const r.ClaimId) r.Error![]const Source {
+    if (superseded.len == 0) return sources(a, inputs);
+    const result = try a.alloc(Source, inputs.corpus.sources.len);
+    for (inputs.corpus.sources, result) |source, *copy| {
+        var dropped: std.ArrayList(u32) = .empty;
+        var kept: std.ArrayList(u32) = .empty;
+        for (items.entries) |item| {
+            if (item.source_id.ordinal != source.id.ordinal) continue;
+            const lines = if (r.contains(r.ClaimId, superseded, item.claim.id)) &dropped else &kept;
+            for (item.citations) |citation| {
+                const covered = @import("source_coordinates.zig").lines(citation.value.location) catch return error.InvalidReferenceReconciliation;
+                var line = covered.first;
+                while (line <= covered.last) : (line += 1) try lines.append(a, line);
+            }
+        }
+        copy.* = .{ .id = source.id, .text = try withoutLines(a, source.bytes, dropped.items, kept.items) };
+    }
+    return result;
+}
+
+/// `bytes` without each line in `dropped` that is not also in `kept`. Lines are one-based and end as
+/// `source_coordinates.advance` ends them, each keeping its ending.
+fn withoutLines(a: std.mem.Allocator, bytes: []const u8, dropped: []const u32, kept: []const u32) std.mem.Allocator.Error![]const u8 {
+    if (dropped.len == 0) return bytes;
+    var text: std.ArrayList(u8) = .empty;
+    var line: u32 = 1;
+    var start: usize = 0;
+    while (start < bytes.len) : (line += 1) {
+        var at = start;
+        while (at < bytes.len and bytes[at] != '\n' and bytes[at] != '\r') at += 1;
+        const end = if (at == bytes.len) at else if (bytes[at] == '\r' and at + 1 < bytes.len and bytes[at + 1] == '\n') at + 2 else at + 1;
+        const omitted = std.mem.indexOfScalar(u32, dropped, line) != null and std.mem.indexOfScalar(u32, kept, line) == null;
+        if (!omitted) try text.appendSlice(a, bytes[start..end]);
+        start = end;
+    }
+    return text.toOwnedSlice(a);
+}
+
+test "a line leaves the authoring text only when every claim citing it was superseded by an answer" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bytes = "# Title\n- once\n- twice\r\n- both\rlast";
+    // Line 3 is cited only by a superseded claim; line 4 by a superseded and a kept claim.
+    try std.testing.expectEqualStrings("# Title\n- once\n- both\rlast", try withoutLines(a, bytes, &.{ 3, 4 }, &.{ 2, 4 }));
+    try std.testing.expectEqualStrings("# Title\n- once\n- twice\r\n- both\r", try withoutLines(a, bytes, &.{5}, &.{}));
+    try std.testing.expectEqualStrings(bytes, try withoutLines(a, bytes, &.{}, &.{}));
+    try std.testing.expectEqualStrings(bytes, try withoutLines(a, bytes, &.{2}, &.{2}));
+}
 pub const Statement = struct { id: r.StatementId, claim_ids: []const r.ClaimId, content: r.ContentProposal };
 pub const Summary = struct { id: r.SummaryId, partition_id: r.PartitionId, member_claim_ids: []const r.ClaimId, member_summary_ids: []const r.SummaryId, statements: []const Statement };
 pub const Signal = struct { id: r.SignalId, value: struct { claim_ids: []const r.ClaimId, citation_ids: []const r.CitationId, content: r.ContentProposal } };

@@ -982,6 +982,13 @@ The top-level finding carries no question, `missing_obligation`, localized loss
 or preservation comparison. A contradiction that removes original meaning still
 uses `candidate_omission`. Per-source preservation permits only a null gap.
 
+A signal or conflict subject is a candidate reconciliation record, and the producer repairs one the source review
+dismisses: a conflict group is replaced through
+[§16.4](16-reference-ingestion.md#false-conflict-repair-boundary), and a signal's content is replaced through the
+reconciliation repair's signal-content unit. Its selected schema view therefore holds every finding but `candidate_invalid`, with no
+gap and no gap question, and admission rejects one (`invalid_finding`). The dismissal is `candidate_omission`.
+Every other subject keeps its view.
+
 The shared authority owner retains an `invalid_content` candidate defect without
 omission-repair support, and evaluates a nested gap through its existing gap
 rules. Candidate failure continues to prevent clarification and completion.

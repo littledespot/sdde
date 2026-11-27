@@ -430,7 +430,10 @@ For each feature-brief or specification unit other than the engine-composed stor
   Generation and its selected repairs receive original sources through the shared
   evidence projection, retained claims/citations and exact tokens; the native group catalogue exposes selectable complete members without
   adding a second semantic authority. Original text is context, not a new
-  provenance selection or permission to cite a discarded claim.
+  provenance selection or permission to cite a discarded claim. After the user's answers, the text generation and
+  scenarios receive leaves out each line every one of whose claims an applied answer superseded, so it no longer states
+  what the user decided against; a line another claim also cites stays, and a supersession the model proposed removes
+  nothing ([ADR 0025](../decisions/0025-clarification-answer-authentication.md), amended 27 November 2026).
 - [ADR 0021](../decisions/0021-optional-source-preservation-review.md) adds the
   opt-in `validation.sourcePreservationCheck` before generation-ready sources
   proceed. One obligation per captured source checks meaning preserved by

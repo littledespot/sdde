@@ -120,7 +120,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         .purpose = purpose,
         .requirements = @as([]const Offered, offered),
         .exact_texts = display.exact_choices,
-        .sources = try evidence.sources(a, context.inputs),
+        .sources = try evidence.answeredSources(a, context.inputs, try p.items(context), context.references.records.answer_superseded),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, display.scopes),
     };
     const body = try json.encodeEvidence(@TypeOf(payload), a, payload);

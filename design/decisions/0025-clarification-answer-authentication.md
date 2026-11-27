@@ -29,6 +29,11 @@
   It leaves §23.2's protection of user-closed forms, ADR 0017's incomplete
   publication and ADR 0009's fresh-invocation rule unchanged. The overall design
   remains **Proposed design**.
+- **Amended 27 November 2026** (ENGINE01 §10 item 15, change 3; user: "accept the three amendments", then "implement the
+  three changes"): an answer applies to a conflict that shares a claim with another when the claim it keeps is in no
+  other conflict and each claim it supersedes leaves its other conflict with one claim, and generation's source text
+  leaves out the lines only an answer's superseded claims cite. It amends §17.3 and the §13.03 catalogue's
+  `ApplyClarificationAnswersAction`. See "What it applies to" and "The answered reconciliation".
 
 ## Problem
 
@@ -198,10 +203,17 @@ A reference conflict is a gap that only the user can close, and the user closes 
   become superseded by it, and the conflict is dropped. The result is an ordinary reconciliation: every reconciliation rule
   holds for it, the persisted reference snapshot validates on readback, and generation, review, scenarios and rendering read
   the chosen claim as they read any retained claim. The engine applies the choice by its option key. No model reads the
-  answer and no code judges its prose.
-- **What it applies to.** A conflict is answered only when every claim is a model claim of one kind and none is in another
-  conflict. The choice is matched by the conflict's subject (the lines) and by the option the form showed, its key and its
-  label, so the text under the lines is the text the user chose. An answer whose option no claim of the conflict offers any
+  answer and no code judges its prose. The source text generation and scenarios receive leaves out the lines only the
+  superseded claims cite ([§17](../contracts/17-specify.md), amended 27 November 2026), since with them the model asked the
+  decided question again.
+- **What it applies to.** A conflict is answered only when every claim is a model claim of one kind and the claim the
+  answer keeps is in no other conflict, whose disposition would then have to stay `conflicting`. A claim the answer
+  supersedes may also be in another conflict, but only when that conflict is left with one claim, a model claim in no
+  further conflict: the other conflict is then dropped too, and its last claim is retained with a signal of its own, as
+  the chosen claim is (amended 27 November 2026). A conflict that would be left with no claim or with two or more stays,
+  and the answer applies nothing, because its summary was written for claims it would no longer hold; so do two answers
+  that change one conflict, and an answer that would drop a conflict the user also answered. The choice is matched by the conflict's subject (the lines) and by the option the form showed, its
+  key and its label, so the text under the lines is the text the user chose. An answer whose option no claim of the conflict offers any
   more or offers under another quotation (the sources changed under a protected form), a key that two claims carry, an answer
   of another kind and an answer to any other gap apply nothing: the form stays protected and unused, and a rerun that raises
   the need again ends `blocked` with `ProtectedClarification` as before. If a rerun finds no such conflict at all (the model

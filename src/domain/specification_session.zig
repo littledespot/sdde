@@ -362,7 +362,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .source_groups = source_groups,
         .context_requirements = contextual_requirements.items,
         .exact_texts = display.exact_choices,
-        .sources = try @import("model_evidence.zig").sources(a, context.inputs),
+        .sources = try @import("model_evidence.zig").answeredSources(a, context.inputs, all, context.references.records.answer_superseded),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
     const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), a, payload);

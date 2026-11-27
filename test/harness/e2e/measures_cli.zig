@@ -12,6 +12,7 @@ const directories = @import("../../../src/adapters/filesystem/directory_access.z
 const relative = @import("../../../src/domain/relative_directory_path.zig");
 const config = @import("../../../src/domain/config.zig");
 const CallContext = @import("call_context.zig").CallContext;
+const run_directory = @import("run_directory.zig");
 
 pub const Options = struct { runs: []const []const u8, out: []const u8, set: ?[]const u8 };
 
@@ -145,19 +146,8 @@ fn unmeasurable(err: RecordError) RecordError!measures.Unmeasurable.Reason {
 fn measureRecords(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, root: std.Io.Dir, path: []const u8) !measures.Measured {
     var configured = try @import("../../../src/domain/engine_config_decode.zig").decode(a, try files.read(io, a, run, "project/" ++ config.engine_config_basename));
     defer configured.deinit();
-    const reported: ?c.Report = report: {
-        const bytes = files.read(io, a, run, "report.json") catch |err| switch (err) {
-            error.InputUnavailable => break :report null,
-            else => return err,
-        };
-        break :report switch (try reportVersion(a, bytes)) {
-            .current => harness.decode(c.Report, a, bytes) catch |err| return if (err == error.OutOfMemory) err else error.InvalidReport,
-            .older => null,
-        };
-    };
-    // A case's second leg starts from a copy of its first leg's project, so its project holds the first leg's engine run
-    // beside its own. The leg owns the engine run it added: the first leg's, named by `continued_from`, is not its own.
-    const earlier: []const []const u8 = if (reported) |value| if (value.continued_from) |first| try engineRuns(io, a, root, path, first) else &.{} else &.{};
+    const reported = try c.retainedReport(io, a, run);
+    const earlier = try run_directory.inherited(io, a, root, path, if (reported) |value| value.continued_from else null);
     return .{
         .log_threshold = (try @import("../../../src/domain/log_policy.zig").canonicalizeConfiguredLevel(configured.value().logs.level)).threshold,
         .report = if (reported) |value| .{ .measured = try measures.fromReport(a, value) } else .unavailable,
@@ -165,45 +155,6 @@ fn measureRecords(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, root: std.I
         .events = try featureEvents(io, a, run, earlier),
     };
 }
-
-/// The names of the engine runs whose feature logs the retained project of run `name` holds. `name` is a run directory beside
-/// the measured run, whose path under `root` is `measured`.
-fn engineRuns(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, measured: []const u8, name: []const u8) ![]const []const u8 {
-    if (std.mem.indexOfScalar(u8, name, '/') != null) return error.InvalidReport;
-    const beside = if (std.fs.path.dirname(measured)) |parent| try std.fs.path.join(a, &.{ parent, name }) else name;
-    var first = try directories.open(io, root, beside);
-    defer first.close(io);
-    var segments: std.ArrayList([]const u8) = .empty;
-    try collectEventLogs(io, a, first, "project", &segments);
-    var owners: std.ArrayList([]const u8) = .empty;
-    for (segments.items) |segment| {
-        const owner = std.fs.path.basename(std.fs.path.dirname(std.fs.path.dirname(segment).?).?);
-        const known = for (owners.items) |held| {
-            if (std.mem.eql(u8, held, owner)) break true;
-        } else false;
-        if (!known) try owners.append(a, owner);
-    }
-    return owners.toOwnedSlice(a);
-}
-
-/// The report's version, from its `schema` member alone: the one this harness writes,
-/// or a known older one that no longer decodes. Anything else is an error.
-fn reportVersion(a: std.mem.Allocator, bytes: []const u8) error{ InvalidReport, OutOfMemory }!enum { current, older } {
-    const versioned = std.json.parseFromSliceLeaky(struct { schema: []const u8 }, a, bytes, .{ .ignore_unknown_fields = true, .duplicate_field_behavior = .@"error" }) catch |err|
-        return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReport;
-    for (1..report_schema.latest + 1) |version| {
-        if (std.mem.eql(u8, versioned.schema, try std.fmt.allocPrint(a, "{s}{d}", .{ report_schema.prefix, version }))) return if (version == report_schema.latest) .current else .older;
-    }
-    return error.InvalidReport;
-}
-const report_schema = struct {
-    const values = @typeInfo(@FieldType(c.Report, "schema")).@"enum".fields;
-    const prefix = values[0].name[0 .. std.mem.lastIndexOfScalar(u8, values[0].name, 'v').? + 1];
-    const latest = std.fmt.parseInt(u32, values[0].name[prefix.len..], 10) catch @compileError("the report schema names no version");
-    comptime {
-        if (values.len != 1) @compileError("the report decodes exactly one schema version");
-    }
-};
 
 const calls = evidence.phaseDirectory(.generation);
 
@@ -238,14 +189,10 @@ fn responses(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) ![]const measure
 /// when the run left none.
 fn featureEvents(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, earlier: []const []const u8) !?measures.Events {
     var all: std.ArrayList([]const u8) = .empty;
-    try collectEventLogs(io, a, run, "project", &all);
+    try run_directory.eventLogs(io, a, run, "project", &all);
     var segments: std.ArrayList([]const u8) = .empty;
     for (all.items) |segment| {
-        const owner = std.fs.path.basename(std.fs.path.dirname(std.fs.path.dirname(segment).?).?);
-        const first_leg = for (earlier) |prior| {
-            if (std.mem.eql(u8, prior, owner)) break true;
-        } else false;
-        if (!first_leg) try segments.append(a, segment);
+        if (!run_directory.isInherited(earlier, run_directory.engineRun(segment))) try segments.append(a, segment);
     }
     if (segments.items.len == 0) return null;
     std.mem.sort([]const u8, segments.items, {}, lessThan);
@@ -257,23 +204,6 @@ fn featureEvents(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, earlier: []c
     const bytes = try a.alloc([]const u8, segments.items.len);
     for (segments.items, bytes) |segment, *content| content.* = try files.read(io, a, run, segment);
     return try measures.events(a, bytes);
-}
-
-fn collectEventLogs(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, path: []const u8, segments: *std.ArrayList([]const u8)) !void {
-    var dir = directories.open(io, run, path) catch |err| switch (err) {
-        error.DirectoryMissing => return,
-        else => return err,
-    };
-    defer dir.close(io);
-    var iterator = dir.iterate();
-    while (try iterator.next(io)) |entry| {
-        const child = try std.fmt.allocPrint(a, "{s}/{s}", .{ path, entry.name });
-        switch (entry.kind) {
-            .directory => try collectEventLogs(io, a, run, child, segments),
-            .file => if (std.mem.indexOf(u8, child, "/logs/events/") != null and std.mem.endsWith(u8, child, ".log")) try segments.append(a, child),
-            else => {},
-        }
-    }
 }
 
 fn lessThan(_: void, left: []const u8, right: []const u8) bool {
@@ -457,8 +387,8 @@ test "a retained run measures its configured threshold and one feature log, and 
     // A case's second leg holds its first leg's engine run beside its own, and owns only the one it added. Without the first
     // leg's directory the split is unknown, so the run is unreadable; without `continued_from` the two runs stay ambiguous.
     // The first leg is the measured run's sibling, wherever the pair sits under the root. Its run is the one holding a runaway.
-    try putTestRun(io, a, root.dir, "legs/one", null);
-    try putTestRun(io, a, root.dir, "legs/two", try continuedReport(a, "one"));
+    try putTestRun(io, a, root.dir, "legs/" ++ first_leg, null);
+    try putTestRun(io, a, root.dir, "legs/two", try continuedReport(a, first_leg));
     try putTestFile(io, root.dir, "legs/two/project/specs/loan/logs/events/RUN-2/LOGBIND-1/0001.log", try measures.testSegment(a, 1, &.{
         .{ .offset = 10, .event_type = .run_started },
         .{ .offset = 50, .event_type = .run_started },
@@ -468,13 +398,20 @@ test "a retained run measures its configured threshold and one feature log, and 
     try std.testing.expectEqual(@as(?u64, 80), owned.events.?.latency_ms);
     try std.testing.expectEqual(@as(u64, 0), owned.events.?.runaways);
     // A first leg that exists only at the top of the root is not beside the measured run, and a name that is a path is no run name.
-    try putTestRun(io, a, root.dir, "orphan", null);
-    try putTestRun(io, a, root.dir, "legs/stray", try continuedReport(a, "orphan"));
+    try putTestRun(io, a, root.dir, orphan_leg, null);
+    try putTestRun(io, a, root.dir, "legs/stray", try continuedReport(a, orphan_leg));
     try std.testing.expectEqual(.unreadable, try reason(io, a, root.dir, "legs/stray"));
-    try putTestRun(io, a, root.dir, "legs/pathed", try continuedReport(a, "../orphan"));
+    try putTestRun(io, a, root.dir, "legs/pathed", try continuedReport(a, "../" ++ orphan_leg));
     try std.testing.expectEqual(.report, try reason(io, a, root.dir, "legs/pathed"));
-    try putTestRun(io, a, root.dir, "legs/missing", try continuedReport(a, "no-such-leg"));
+    try putTestRun(io, a, root.dir, "legs/missing", try continuedReport(a, missing_leg));
     try std.testing.expectEqual(.unreadable, try reason(io, a, root.dir, "legs/missing"));
+    // A name that is no run directory's, or the run's own, is a bad report, never a run that inherited nothing.
+    try putTestRun(io, a, root.dir, "legs/" ++ self_leg, try continuedReport(a, self_leg));
+    try std.testing.expectEqual(.report, try reason(io, a, root.dir, "legs/" ++ self_leg));
+    for ([_][]const u8{ "", "one" }) |name| {
+        try putTestRun(io, a, root.dir, try std.fmt.allocPrint(a, "legs/named-{s}", .{name}), try continuedReport(a, name));
+        try std.testing.expectEqual(.report, try reason(io, a, root.dir, try std.fmt.allocPrint(a, "legs/named-{s}", .{name})));
+    }
     try putTestRun(io, a, root.dir, "unnamed", try currentReport(a));
     try putTestFile(io, root.dir, "unnamed/project/specs/loan/logs/events/RUN-2/LOGBIND-1/0001.log", try measures.testSegment(a, 1, &.{.{ .offset = 1, .event_type = .run_started }}, true));
     try std.testing.expectEqual(.ambiguous_feature_log, try reason(io, a, root.dir, "unnamed"));
@@ -498,6 +435,12 @@ test "a retained run measures its configured threshold and one feature log, and 
         try std.testing.expectError(operational, unmeasurable(operational));
     }
 }
+
+/// Run directory names, in the shape the launcher gives one.
+const first_leg = "2026-11-27T08-48-56Z-74b1a2cfe51c25d38a161e475a494183";
+const orphan_leg = "2026-11-27T08-48-57Z-74b1a2cfe51c25d38a161e475a494183";
+const missing_leg = "2026-11-27T08-48-58Z-74b1a2cfe51c25d38a161e475a494183";
+const self_leg = "2026-11-27T08-48-59Z-74b1a2cfe51c25d38a161e475a494183";
 
 /// A decodable current report of a second leg.
 fn continuedReport(a: std.mem.Allocator, first: []const u8) ![]const u8 {

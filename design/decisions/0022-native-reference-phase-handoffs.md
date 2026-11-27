@@ -23,6 +23,11 @@
 - **Amended 25 November 2026** (ENGINE01 §10 item 3, §12 Phase 2; user: "implement phase 1 and phase 2"): a
   conflicts answer explains each declared group exactly once. It carries one conflict kind for the group, and the
   engine keeps one conflict record for each claim set. See "Conflict groups" below.
+- **Amended 27 November 2026** (ENGINE01 §10 item 13, decisions A and T1; user: "accept recommendations A and T1",
+  then "implement A and T1"): the source-omission conflict-group repair replaces one record alone when it shares a claim
+  with another, and a signal or conflict subject is offered no `candidate_invalid`. It amends §12 (the source
+  `candidate_invalid` finding), §16.4 and §22.1. See "Overlap and the repair of one record" and "No `candidate_invalid`
+  for a record" below.
 
 Semantic decisions remain model candidates. YAML explicitly requests, collects,
 validates and repairs each reconciliation phase before requesting its descendants,
@@ -150,7 +155,8 @@ classification gate; positive token-only extraction remains distinct from
 no-feature extraction.
 
 **Conflict groups** (25 November 2026). Several kinds for one group made several records over the same claims,
-and an answered conflict must share no claim with another record, so no such pair could be answered.
+and the claim an answer keeps must be in no other record ([ADR 0025](0025-clarification-answer-authentication.md) "What
+it applies to"), so no such pair could be answered.
 - **Binding.** The conflicts assignment binds its group IDs as an `exact_members` choice on
   `conflicts[].group_id`, as ADR 0046 does for dispositions. Admission rejects a repeated group as
   `duplicate_member` and an omitted one as `missing_member`, and the existing bounded protocol correction
@@ -172,6 +178,17 @@ and an answered conflict must share no claim with another record, so no such pai
   for a group with no record and the duplicate-record deletion stay, because the source-omission conflict-group
   repair (§16.4) binds its group claims but not its `conflicts[].group_id` set, so its answer can omit or repeat
   an explanation.
+- **Overlap and the repair of one record** (27 November 2026). Overlapping groups are allowed, so a false record can
+  share a claim with a genuine one. The source-omission conflict-group repair replaces the selected record, its group
+  and the dispositions of the claims no other record holds, the claims it *releases*. A claim another record holds keeps
+  its disposition, and native code re-derives its relations from the records that stand. The record is found by its
+  claims, never by its first claim. The mechanics (authorization, retry identity, progress) are owned by
+  [§16.4](../contracts/16-reference-ingestion.md#false-conflict-repair-boundary) and
+  [ADR 0046](0046-complete-dispositions-at-admission.md) Decision 3.
+- **No `candidate_invalid` for a record** (27 November 2026). Source review that dismisses a signal or a conflict
+  subject has found candidate loss, which the producer repairs, so the subject's view offers no `candidate_invalid`.
+  The dismissal is `candidate_omission`. The rule is owned by
+  [§12](../contracts/12-model-boundary.md#source-invalid-content-finding).
 
 **Forced conflicts answer** (20 November 2026). When the validated dispositions declare no
 conflict group, the only admissible conflicts answer is the empty collection: the schema

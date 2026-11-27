@@ -347,6 +347,9 @@ credentials. No model answer means no evidence yet about schema conformance.
   answer's key. The second starts only then, from a copy of the first's retained project with the closed form (its key in the
   answer region and `requestedStatus: closed`) written over the form; it is an ordinary run that must publish (its report
   expects `publication` and names the first in `continued_from`). The first leg's project stays unchanged evidence. The
+  second leg's project therefore holds the first leg's engine run beside the one it added, and every reader of the second
+  leg takes only the run it added; a `continued_from` that names no run directory, names the run itself or names a first
+  leg not beside it is an error, never an empty set. The
   answer is the user's input, written by the launcher as the user would, and running the second leg is the act of accepting it
   under the invoking account ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)); it is no model
   output and no scripted provider response. A first leg that paused on no single form that offers the key ends the launch with

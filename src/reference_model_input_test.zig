@@ -763,7 +763,7 @@ test "disposition repair schemas reuse canonical eligibility without authorizing
         try std.testing.expect(native.duplicate_targets.len != 0);
         const base = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, .{ .bytes = "repair_disposition" });
         defer packets.release(base);
-        const packet = try input.withDispositionChoices(std.testing.allocator, base, global.partition.group.claim_ids, native, false);
+        const packet = try input.withDispositionChoices(std.testing.allocator, base, global.partition.group.claim_ids, native, null);
         defer packets.release(packet);
         const restricted = try schema.restrict(std.testing.allocator, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
         defer restricted.release();

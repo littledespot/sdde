@@ -75,7 +75,10 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     const inherited = try packets.withRestrictions(a, fields, selected.excludedVariants(), selected.integerChoices());
     if (prior == .signals) return inherited;
     defer packets.release(inherited);
-    if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, current.items), null, true);
+    if (prior == .dispositions) {
+        const claims = try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, current.items);
+        return @import("reference_model_input.zig").withDispositionChoices(a, inherited, claims, null, claims);
+    }
     const ids = try scratch.alloc(i64, conflict_catalogue.len);
     for (ids, conflict_catalogue) |*id, group| id.* = group.group_id.ordinal;
     // One explanation for every declared group (ADR 0022, amended 25 November 2026): admission rejects an omitted or

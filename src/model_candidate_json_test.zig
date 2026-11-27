@@ -315,9 +315,14 @@ test "source variants require questions only for gaps in focused findings" {
         var wrong = (try std.json.parseFromSlice(std.json.Value, a, valid, .{})).value;
         if (gap) _ = wrong.object.orderedRemove("question") else try wrong.object.put(a, "question", .{ .string = "Should this outcome be accepted?" });
         const invalid = try std.json.Stringify.valueAlloc(a, wrong, .{});
-        for ([_][]const u8{ "finding", "applicability_finding" }) |definition| {
+        for ([_][]const u8{ "finding", "applicability_finding", "record_finding" }) |definition| {
             if (tag == .not_applicable and std.mem.indexOf(u8, definition, "applicability") == null) continue;
             const selected = schema.select(.{ .bytes = definition }).?;
+            if (tag == .candidate_invalid and std.mem.eql(u8, definition, "record_finding")) {
+                // A reconciliation record is offered no candidate_invalid.
+                try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = valid, .rejection = .unknown_variant, .path = "/kind" });
+                continue;
+            }
             try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = valid });
             try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = if (gap) .missing_required_property else .unknown_property, .path = "/question" });
         }
@@ -604,7 +609,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         const selected = selection.?;
         if (comptime std.mem.eql(u8, selected, "preservation_comparisons")) return nativeWire(@import("domain/source_omission.zig").comparisons.Response, a, bytes);
         const model = @import("domain/specification_support_model.zig");
-        if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding")) return nativeWire(model.Value, a, bytes);
+        if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding") or std.mem.eql(u8, selected, "record_finding")) return nativeWire(model.Value, a, bytes);
         if (comptime std.mem.eql(u8, selected, "selection")) return nativeWire(model.Selection, a, bytes);
         const T = @import("domain/specification_support_repair.zig").Source.Replacement;
         return selectedWire(T, a, @field(std.meta.Tag(T), selected), bytes);

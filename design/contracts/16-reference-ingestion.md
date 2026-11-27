@@ -315,16 +315,23 @@ source decisions enter clarification.
 
 #### False-conflict repair boundary
 
-The existing omission-repair owner may replace one native-bound conflict group: the selected conflict's claims,
-their disposition entries and associated conflict records, the one exception to
-§22.1/§22.3's single-record boundary. Reconciliation labels are candidate assertions, so authority
-projection records them as candidate defects. Source review establishes a genuine
+The existing omission-repair owner may replace one native-bound conflict group: the selected conflict record, its
+group and the disposition entries of the claims no other record holds (its released claims), the one exception to
+§22.1/§22.3's single-record boundary. A claim another record also holds keeps its disposition and its other relation;
+native code re-derives its relations from the records that stand, and finds the replaced record by its claims, not by
+a position. A record whose every claim another holds, a record nested inside a larger one included, releases none
+and authorizes no repair
+([ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), amended 27 November 2026). Reconciliation labels
+are candidate assertions, so authority projection records them as candidate defects. Source review establishes a genuine
 gap or attributes lost meaning with `reconciliation_conflict`; a positive finding
-alone cannot clear an unresolved conflict record.
+alone cannot clear an unresolved conflict record. A signal or conflict subject is offered no `candidate_invalid`
+([§12](12-model-boundary.md#source-invalid-content-finding)), so a record the review dismisses is dismissed through the
+finding that authorizes this repair.
 
 Authorization requires exact claim/citation/source joins, current old values,
-producing origins, candidate revision and source/policy dependencies. Reject a group
-whose relationships cross the selected membership; never widen it to the whole
+producing origins, candidate revision and source/policy dependencies. Reject a replacement
+that names a claim outside the selected record, decides a claim another record holds or
+names a group without a released claim; never widen it to the whole
 result. Replacement retains that membership and cannot introduce external links;
 response admission binds each group claim once, so an incomplete answer takes the
 repair request's protocol correction ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)).
@@ -343,8 +350,9 @@ alternate continuation or retry owner.
 
 The original claim set supplies a stable retry identity across conflict-ID renewal.
 Retain that native witness with the candidate and review, not as persisted authority.
-Only complete rebuilt validation and current positive evidence for those claims can
-establish progress; unchanged false conflicts remain recurring failures. Genuine
+Only complete rebuilt validation and current positive evidence for the claims the repair decided again can
+establish progress, so a claim another record holds, or that a later answer supersedes, never makes a finished
+repair look unfinished; unchanged false conflicts remain recurring failures. Genuine
 source conflicts remain actionable clarifications. Unsafe attribution fails as a
 candidate defect; repair cannot invent source precedence or force a positive verdict.
 

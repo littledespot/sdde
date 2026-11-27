@@ -234,6 +234,67 @@ pub const ExchangeEvidence = struct {
 /// it here alone (SPEC01 §2 rule 12); decoding still requires the member in every document.
 pub const report_schema: ReportSchema = .@"spec-e2e-report/v27";
 const ReportSchema = enum { @"spec-e2e-report/v27" };
+
+/// A report carries model-derived diagnostic trees, so every reader decodes it at this depth.
+pub const report_limits: @import("../../../src/domain/strict_json.zig").Limits = .{ .maximum_depth = 128 };
+
+/// A retained run's report: null when the run has none, or has one of a known older version, which no longer decodes.
+/// The current version decodes through the closed contract or is `InvalidReport`.
+pub fn retainedReport(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) !?Report {
+    const bytes = @import("../files.zig").read(io, a, run, "report.json") catch |err| switch (err) {
+        error.InputUnavailable => return null,
+        else => return err,
+    };
+    return switch (try reportVersion(a, bytes)) {
+        .current => @import("../../../src/domain/strict_json.zig").decode(Report, a, bytes, report_limits) catch |err|
+            return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReport,
+        .older => null,
+    };
+}
+
+test "a retained report decodes through the closed contract, and only a missing or older one names nothing" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const io = std.testing.io;
+    var run = std.testing.tmpDir(.{});
+    defer run.cleanup();
+    try std.testing.expect(try retainedReport(io, a, run.dir) == null);
+    const current: Report = .{ .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .continued_from = "first" };
+    const bytes = try std.json.Stringify.valueAlloc(a, current, .{});
+    try run.dir.writeFile(io, .{ .sub_path = "report.json", .data = bytes });
+    try std.testing.expectEqualStrings("first", (try retainedReport(io, a, run.dir)).?.continued_from.?);
+    try run.dir.writeFile(io, .{ .sub_path = "report.json", .data = "{\"schema\":\"spec-e2e-report/v1\"}" });
+    try std.testing.expect(try retainedReport(io, a, run.dir) == null);
+    for ([_][]const u8{
+        "{\"schema\":\"spec-e2e-report/v99\"}",
+        "{\"schema\":\"" ++ @tagName(report_schema) ++ "\"}",
+        "not json",
+        try std.mem.replaceOwned(u8, a, bytes, "\"continued_from\"", "\"extra\":1,\"continued_from\""),
+    }) |rejected| {
+        try run.dir.writeFile(io, .{ .sub_path = "report.json", .data = rejected });
+        try std.testing.expectError(error.InvalidReport, retainedReport(io, a, run.dir));
+    }
+}
+
+/// A retained report's version, from its `schema` member alone: the one this harness writes, or a known older one that no
+/// longer decodes. Anything else is an error.
+pub fn reportVersion(a: std.mem.Allocator, bytes: []const u8) error{ InvalidReport, OutOfMemory }!enum { current, older } {
+    const versioned = std.json.parseFromSliceLeaky(struct { schema: []const u8 }, a, bytes, .{ .ignore_unknown_fields = true, .duplicate_field_behavior = .@"error" }) catch |err|
+        return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReport;
+    for (1..report_versions.latest + 1) |version| {
+        if (std.mem.eql(u8, versioned.schema, try std.fmt.allocPrint(a, "{s}{d}", .{ report_versions.prefix, version }))) return if (version == report_versions.latest) .current else .older;
+    }
+    return error.InvalidReport;
+}
+const report_versions = struct {
+    const values = @typeInfo(ReportSchema).@"enum".fields;
+    const prefix = values[0].name[0 .. std.mem.lastIndexOfScalar(u8, values[0].name, 'v').? + 1];
+    const latest = std.fmt.parseInt(u32, values[0].name[prefix.len..], 10) catch @compileError("the report schema names no version");
+    comptime {
+        if (values.len != 1) @compileError("the report decodes exactly one schema version");
+    }
+};
 pub const Report = struct {
     schema: ReportSchema = report_schema,
     origin: enum { live } = .live,

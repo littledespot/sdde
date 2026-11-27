@@ -234,7 +234,11 @@ pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, pass
 
 /// Project the native disposition scope into its selected response shape.
 /// Repair eligibility comes from the canonical checker, never another policy.
-pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packet, members: []const reconciliation.ClaimId, selected: ?@import("reference_disposition_validation.zig").RepairChoices, grouped: bool) packets.Error!*packets.Packet {
+/// `members` are the claims a group or a relation target may name. `grouped` is set for a group answer and
+/// names the claims that answer must give one disposition each: all of `members` for a first answer and for
+/// the repair of a closed group, only the claims a group alone holds when the repaired group shares a claim
+/// with another (ADR 0022, amended 27 November 2026).
+pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packet, members: []const reconciliation.ClaimId, selected: ?@import("reference_disposition_validation.zig").RepairChoices, grouped: ?[]const reconciliation.ClaimId) packets.Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -243,13 +247,14 @@ pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packe
     try excluded.appendSlice(scratch, packet.excludedVariants());
     var choices: std.ArrayList(schema.IntegerChoice) = .empty;
     try choices.appendSlice(scratch, packet.integerChoices());
-    if (grouped) {
+    if (grouped) |decided| {
         const ordinals = try claimOrdinals(scratch, members);
+        const decided_ordinals = try claimOrdinals(scratch, decided);
         // One disposition for every assigned claim (ADR 0046): admission rejects an
         // omitted or repeated claim and corrects the whole assignment. The schema
         // states no count, so the request is unchanged; an empty set admits only [].
-        var dispositions: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } } }, .definition = packet.resultDefinition(), .allowed = ordinals };
-        if (ordinals.len != 0) dispositions.collection = .{ .exact_members = .{ .count = .native } };
+        var dispositions: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } } }, .definition = packet.resultDefinition(), .allowed = decided_ordinals };
+        if (decided_ordinals.len != 0) dispositions.collection = .{ .exact_members = .{ .count = .native } };
         try choices.append(scratch, dispositions);
         try choices.append(scratch, .{ .target = .{ .path = &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = packet.resultDefinition(), .allowed = ordinals });
     }

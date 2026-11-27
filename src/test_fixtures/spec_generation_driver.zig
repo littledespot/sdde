@@ -444,17 +444,33 @@ pub const Driver = struct {
                     if (native.projection == .source_readiness) {
                         // The review of a pending source repair is the dependent pass; any other
                         // is a first pass, which reviews a held conflict's records alone.
-                        const expected_pass: @import("../domain/required_authority.zig").Pass = if (pending == .source_readiness) .dependent else .first;
-                        std.testing.expectEqual(expected_pass, native.pass) catch |err| return self.hookFailed(err);
-                        if (native.pass == .first and @import("../domain/reference_support.zig").records(references).conflicts.len != 0) for (native.seeds) |seed| {
+                        const decided = references.global().source.omission_released_claims;
+                        const expected_pass: @import("../domain/required_authority.zig").Pass = if (pending != .source_readiness) .first else if (decided.len != 0) .{ .decided = decided } else .dependent;
+                        std.testing.expect(expected_pass.eql(native.pass)) catch |err| return self.hookFailed(err);
+                        const held = @import("../domain/reference_support.zig").records(references);
+                        if (native.pass == .first and held.conflicts.len != 0) for (native.seeds) |seed| {
                             std.testing.expect(seed.id.unit == .conflict) catch |err| return self.hookFailed(err);
                         };
-                        // A dependent pass reviews every subject the repair could have touched, not only conflicts.
-                        if (native.pass == .dependent) {
-                            if (@import("../domain/reference_support.zig").records(references).conflicts.len != 0) self.dependent_reviews_over_held_conflict += 1;
+                        // A dependent pass reviews more than the conflicts: every subject, or, after a conflict-group repair,
+                        // the signals holding the claims it decided and nothing else beside the conflicts.
+                        if (native.pass != .first) {
+                            if (held.conflicts.len != 0) self.dependent_reviews_over_held_conflict += 1;
                             var other_subjects: usize = 0;
                             for (native.seeds) |seed| other_subjects += @intFromBool(seed.id.unit != .conflict);
                             std.testing.expect(other_subjects != 0) catch |err| return self.hookFailed(err);
+                            if (native.pass == .decided) for (native.seeds) |seed| switch (seed.id.unit) {
+                                .conflict => {},
+                                .signal => |id| {
+                                    const signal = for (held.signals) |candidate| {
+                                        if (std.meta.eql(candidate.id, id)) break candidate;
+                                    } else return self.hookFailed(error.TestUnexpectedResult);
+                                    const holds = for (signal.value.claim_ids) |claim| {
+                                        if (@import("../domain/reference_reconciliation.zig").contains(@import("../domain/reference_reconciliation.zig").ClaimId, decided, claim)) break true;
+                                    } else false;
+                                    std.testing.expect(holds) catch |err| return self.hookFailed(err);
+                                },
+                                else => return self.hookFailed(error.TestUnexpectedResult),
+                            };
                         }
                     }
                     if (pending) |projection| {
@@ -470,7 +486,13 @@ pub const Driver = struct {
                     }
                     const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch |err| return self.hookFailed(err);
                     std.testing.expectEqual(@as(usize, 1), input.value.object.get("requirements").?.array.items.len) catch |err| return self.hookFailed(err);
-                    assertReviewShape(schema.value, permits_applicability, native.projection == .source_preservation, true) catch |err| return self.hookFailed(err);
+                    // A signal or conflict subject is asked for the view without `candidate_invalid`, and no other subject is.
+                    const review_packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |err| return self.hookFailed(err);
+                    const record = definitions.Support.parse(review_packet.resultDefinition().?) == .record_finding;
+                    const ordinal: usize = @intCast(input.value.object.get("requirements").?.array.items[0].object.get("ordinal").?.integer);
+                    const ledger = @import("../domain/required_authority.zig").build(arena.allocator(), native) catch |err| return self.hookFailed(err);
+                    std.testing.expectEqual(!@import("../domain/specification_support_evidence.zig").permitsInvalid(ledger.requirements[ordinal - 1].seed.id), record) catch |err| return self.hookFailed(err);
+                    assertReviewShape(schema.value, permits_applicability, native.projection == .source_preservation, record, true) catch |err| return self.hookFailed(err);
                 }
             }
             if (current_request.id().purpose == .atomic_repair) {
@@ -1098,9 +1120,9 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
     }
     if (packet.resultDefinition()) |definition| {
         const review = definitions.Support.parse(definition);
-        if (review == .preservation_finding or review == .finding or review == .applicability_finding) {
+        if (review == .preservation_finding or review == .finding or review == .record_finding or review == .applicability_finding) {
             const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});
-            try assertReviewShape(schema.value, review == .applicability_finding, review == .preservation_finding, true);
+            try assertReviewShape(schema.value, review == .applicability_finding, review == .preservation_finding, review == .record_finding, true);
         }
         const payload: ?[]const u8 = switch (definitions.Reconciliation.parse(definition) orelse .summary) {
             .business_text => "segments",
@@ -1126,9 +1148,11 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
     try std.testing.expect(schema_found and instruction_found);
 }
 
-fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool, resolves_supported: bool) !void {
+/// `record` is the view of a signal or conflict subject, which a candidate reconciliation record is dismissed through
+/// `candidate_omission`: every variant of the general view but `candidate_invalid`.
+fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool, record: bool, resolves_supported: bool) !void {
     const variants = schema.object.get("oneOf").?.array.items;
-    try std.testing.expectEqual(@as(usize, if (preservation) 4 else (if (permits_applicability) @as(usize, 8) else 7) - @intFromBool(!resolves_supported)), variants.len);
+    try std.testing.expectEqual(@as(usize, if (preservation) 4 else (if (permits_applicability) @as(usize, 8) else if (record) @as(usize, 6) else 7) - @intFromBool(!resolves_supported)), variants.len);
     var has_supported = false;
     var has_inconclusive = false;
     var has_not_applicable = false;
@@ -1176,7 +1200,7 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         has_candidate_invalid = has_candidate_invalid or decision == .candidate_invalid;
     }
     try std.testing.expect(has_inconclusive);
-    try std.testing.expect(has_candidate_invalid);
+    try std.testing.expectEqual(!record, has_candidate_invalid);
     try std.testing.expectEqual(permits_applicability, has_not_applicable);
     if (!preservation) try std.testing.expectEqual(resolves_supported, has_supported);
 }
