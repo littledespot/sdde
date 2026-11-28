@@ -62,6 +62,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     _ = package_directory.add(".sddtoolkit/workflows/features/Chosen/Café/state/clarifications.json", clarification.state.?);
     _ = package_directory.add("requirements/current/Chosen/Café/clarify/P01.md", clarification.forms[0].bytes);
     _ = package_directory.add("requirements/current/Orphan/clarify/P01.md", clarification.forms[0].bytes);
+    // An archived feature exists on disk, so only the feature-directory validation keeps the debugger out of it.
+    _ = package_directory.add("requirements/current/_archive/archived/.keep", "");
     _ = package_directory.add("references/Café/日本語/stories.md", "Hello, World!\n");
     // A hard-coded specs root would select this non-directory and fail.
     _ = package_directory.add("specs/Selected/日本語", "not a directory\n");

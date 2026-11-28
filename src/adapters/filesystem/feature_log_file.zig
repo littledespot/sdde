@@ -90,6 +90,10 @@ fn parseSegmentName(value: []const u8) ?u16 {
 // level does not hold, including a symbolic link, is invalid (ADR 0026,
 // log-folder entries amendment).
 
+/// A stream collection holds run directories and a run directory holds binding directories, so two container levels sit
+/// above a binding's segments (ADR 0026).
+pub const container_levels: usize = 2;
+
 /// A stream collection or run directory holds directories only.
 pub const ContainerEntry = enum { directory, ignored, invalid };
 

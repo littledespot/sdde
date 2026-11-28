@@ -12,6 +12,12 @@ const relative = @import("relative_directory_path.zig");
 const directory = @import("feature_directory.zig");
 
 pub const FeatureRoots = struct { specs: []const u8, archive: []const u8, workflows: []const u8 };
+
+/// A feature's event log collection, relative to the feature directory. The engine writes it and the request debugger
+/// reads it, so both name it from here (ADR 0019, ADR 0026).
+pub const event_logs_collection = "logs/events";
+/// A feature's prompt log collection, named as `event_logs_collection` is.
+pub const prompt_logs_collection = "logs/prompts";
 pub const Artifact = enum { specification, reference_context, clarification_forms, clarification_state, workflow_state, event_logs, prompt_logs, actor_evidence };
 pub const Root = enum { specs, workflows };
 pub const ArtifactPath = struct { root: Root, root_relative: []const u8, project_relative: []const u8 };
@@ -46,8 +52,8 @@ pub fn resolveFeaturePaths(allocator: std.mem.Allocator, configured: FeatureRoot
         .{ Artifact.clarification_forms, Root.specs, clarification_directory_name },
         .{ Artifact.clarification_state, Root.workflows, "state/" ++ clarification_state_filename },
         .{ Artifact.workflow_state, Root.workflows, "state/" ++ workflow_state_filename },
-        .{ Artifact.event_logs, Root.specs, "logs/events" },
-        .{ Artifact.prompt_logs, Root.specs, "logs/prompts" },
+        .{ Artifact.event_logs, Root.specs, event_logs_collection },
+        .{ Artifact.prompt_logs, Root.specs, prompt_logs_collection },
         .{ Artifact.actor_evidence, Root.workflows, "state/" ++ actor_evidence_filename },
     }) |item| {
         const root = if (item[1] == .specs) configured.specs else configured.workflows;
