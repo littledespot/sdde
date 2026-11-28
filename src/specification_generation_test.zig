@@ -8734,6 +8734,10 @@ test "a false conflict that shares a claim with a genuine one is repaired alone 
         try std.testing.expectEqual(.native, decided.?.collection.exact_members.count);
         try std.testing.expectEqual(target.len, named.?.allowed.len);
         for (target, named.?.allowed) |id, allowed| try std.testing.expectEqual(@as(i64, id.ordinal), allowed);
+        // ADR 0046 Decision 7: a group the answer lists is checked against the dispositions it returns, and a listed
+        // claim it does not dispose (a claim only another group holds) is not this rule's.
+        try std.testing.expectEqualStrings("claim_dispositions", named.?.collection.listed.sibling);
+        try std.testing.expectEqualStrings("conflicting", named.?.collection.listed.kind);
 
         const changed = try a.dupe(r.ClaimDispositionProposal, old.claim_dispositions);
         for (changed) |*value| value.disposition = .{ .retained = .{} };
@@ -11663,7 +11667,7 @@ fn expectScenariosReplay(a: std.mem.Allocator, offered: *const @import("domain/m
     const Stored = struct { members: []const schema.MemberChoice };
     const stored = try strict_json.decode(Stored, a, try std.json.Stringify.valueAlloc(a, Stored{ .members = live.memberChoices() }, .{}), .{ .maximum_depth = 64 });
     const captured = try strict_json.parse(a, live.modelBytes(), .{ .maximum_depth = schema.max_json_depth }, true, null);
-    const replayed = try schema.restrictRecorded(a, try schema.compileSelected(a, captured.value, live.modelBytes()), stored.members, live.coverageChoices(), live.agreementChoices());
+    const replayed = try schema.restrictRecorded(a, try schema.compileSelected(a, captured.value, live.modelBytes()), stored.members, live.coverageChoices(), live.agreementChoices(), live.listedChoices());
     defer replayed.release();
     try std.testing.expectEqualDeep(live.memberChoices(), replayed.selected().memberChoices());
     // The rule that no two scenarios repeat all three parts is part of the record, and survives it.

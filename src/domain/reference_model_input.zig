@@ -256,7 +256,9 @@ pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packe
         var dispositions: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } } }, .definition = packet.resultDefinition(), .allowed = decided_ordinals };
         if (decided_ordinals.len != 0) dispositions.collection = .{ .exact_members = .{ .count = .native } };
         try choices.append(scratch, dispositions);
-        try choices.append(scratch, .{ .target = .{ .path = &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = packet.resultDefinition(), .allowed = ordinals });
+        // ADR 0046 Decision 7: a claim a group lists that the response disposes is disposed `conflicting`. The schema
+        // keeps its canonical bounds, so the request the model receives is unchanged.
+        try choices.append(scratch, .{ .target = .{ .path = &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = packet.resultDefinition(), .allowed = ordinals, .collection = .{ .listed = .{ .sibling = "claim_dispositions", .key = "claim_id", .state = "disposition", .kind = "conflicting" } } });
     }
     for ([_]struct { tag: []const u8, field: []const u8, ids: []const reconciliation.ClaimId }{
         .{ .tag = "duplicate", .field = "target_claim_id", .ids = if (selected) |value| value.duplicate_targets else members },

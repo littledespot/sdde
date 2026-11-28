@@ -353,7 +353,10 @@ found at response admission ([§12.2](12-model-boundary.md#122-initial-guidance-
 source-omission conflict-group repair) takes the bounded protocol correction of the complete
 response; it is never an insertion, deletion or repair target
 ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026),
-[ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)). Native ledger order owns canonical ordering.
+[ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)). A conflict group that names a claim not disposed
+`conflicting` (`group_member_not_conflicting`, ADR 0046 Decision 7) is likewise found at response admission, in the
+dispositions request and the conflict-group repair request, and takes the same bounded correction of the complete
+response. Native ledger order owns canonical ordering.
 A mechanically invalid finding may use the existing selected-value/field atomic
 repair while other subjects remain pending; valid produced siblings remain
 unchanged and future pending subjects do not produce missing-finding defects.
@@ -574,8 +577,8 @@ defined response-level correction containing:
   schema, and concise schema-derived immediate fields, required fields and allowed
   discriminator values. The single complete schema retains every alternative and
   every constraint that schema syntax can express; [§12.2](12-model-boundary.md#122-initial-guidance-packet)
-  owns the admission constraints that stay native, and `duplicate_member`, `equal_items`
-  and `disagreeing_items` are reported with parent scope on the enclosing array.
+  owns the admission constraints that stay native, and `duplicate_member`, `equal_items`,
+  `disagreeing_items` and `group_member_not_conflicting` are reported with parent scope on the enclosing array.
   A `missing_member` correction also names the first omitted member (`member`), and a
   `shared_member` correction, located at
   the partly taken record and offering its shape, names its exclusive and owning kinds
@@ -591,7 +594,9 @@ defined response-level correction containing:
   the first item that a later one disagrees with, names the list and the agreed property of the
   rule and lists, for each group of values that the same items list yet disagree on, those values
   and the JSON Pointer of every item that lists them, in response order (`agreement`: `property`,
-  `agree` and `sets` of `values` and `items`; ADR 0036 Decision 7). No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
+  `agree` and `sets` of `values` and `items`; ADR 0036 Decision 7). A `group_member_not_conflicting` correction,
+  located at the first group item that lists a claim the response disposes otherwise, names that claim as `member`; the
+  rejected response travels with the correction (ADR 0046 Decision 7). No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
   (`repeated_statement`, ADR 0038 Decision 5), without judging its text, unless it holds
   the only copy of an exact value, which keeps it and its text under the usual rules. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or

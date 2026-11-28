@@ -440,6 +440,51 @@ test "a dispositions assignment binds every semantic claim natively and states n
         try std.testing.expectEqual(.missing_member, omission.reason);
         try std.testing.expectEqual(bound.?.allowed[0], omission.member.?);
         try std.testing.expectEqualStrings("/claim_dispositions", (try omission.describe(a)).path);
+        // ADR 0046 Decision 7: the groups' claims carry one listed rule over the dispositions, with canonical bounds,
+        // so the guidance schema above is unchanged by it.
+        var listed: ?schema.IntegerChoice = null;
+        for (packet.integerChoices()) |choice| if (choice.collection.listedRule() != null) {
+            try std.testing.expect(listed == null);
+            listed = choice;
+        };
+        try std.testing.expectEqualDeep(&[_]schema.ChoiceStep{ .{ .property = "conflict_groups" }, .items, .{ .property = "claim_ids" } }, listed.?.target.path);
+        try std.testing.expectEqualStrings("claim_dispositions", listed.?.collection.listed.sibling);
+        try std.testing.expectEqualStrings("conflicting", listed.?.collection.listed.kind);
+        try std.testing.expectEqual(@as(usize, 1), native.selected().listedChoices().len);
+        // Consistent groups are admitted; a group listing a claim the response disposes `retained` is rejected at that
+        // group, naming the claim, and a response with no group is admitted.
+        const respond = struct {
+            fn of(allocator: std.mem.Allocator, disposed: []const reconciliation.r.ClaimId, group: []const reconciliation.r.ClaimId, kind: []const u8) ![]const u8 {
+                var parts: std.ArrayList([]const u8) = .empty;
+                for (disposed) |id| try parts.append(allocator, try std.fmt.allocPrint(allocator, "{{\"claim_id\":{d},\"disposition\":{{\"kind\":\"{s}\"}}}}", .{ id.ordinal, kind }));
+                const groups = if (group.len == 2) try std.fmt.allocPrint(allocator, "{{\"claim_ids\":[{d},{d}]}}", .{ group[0].ordinal, group[1].ordinal }) else "";
+                return std.fmt.allocPrint(allocator, "{{\"claim_dispositions\":[{s}],\"conflict_groups\":[{s}]}}", .{ try std.mem.join(allocator, ",", parts.items), groups });
+            }
+        }.of;
+        // A membership defect is reported before the group rule: a response that omits an assigned claim is rejected
+        // for that, though its group lists a claim it disposes `retained`.
+        {
+            var document = try @import("domain/model_envelope.zig").parseContent(std.testing.allocator, try respond(a, semantic[0..1], semantic[0..2], "retained"), null);
+            defer document.deinit();
+            const found = @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&document.parsed.value), native.selected().root()).?;
+            try std.testing.expectEqual(.missing_member, found.reason);
+        }
+        for ([_]struct { kind: []const u8, grouped: bool, rejected: bool }{
+            .{ .kind = "conflicting", .grouped = true, .rejected = false },
+            .{ .kind = "retained", .grouped = false, .rejected = false },
+            .{ .kind = "retained", .grouped = true, .rejected = true },
+        }) |case| {
+            var document = try @import("domain/model_envelope.zig").parseContent(std.testing.allocator, try respond(a, semantic, if (case.grouped) semantic[0..2] else &.{}, case.kind), null);
+            defer document.deinit();
+            const found = @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&document.parsed.value), native.selected().root());
+            if (!case.rejected) {
+                try std.testing.expect(found == null);
+                continue;
+            }
+            try std.testing.expectEqual(.group_member_not_conflicting, found.?.reason);
+            try std.testing.expectEqual(@as(i64, semantic[0].ordinal), found.?.member.?);
+            try std.testing.expectEqualStrings("/conflict_groups/0", (try found.?.describe(a)).path);
+        }
     }
 }
 

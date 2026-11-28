@@ -266,7 +266,7 @@ test "recorded exact members reconstruct native admission from provider schema b
     const repeated = try std.json.parseFromSlice(std.json.Value, a, "{\"value\":[{\"ordinal\":3},{\"ordinal\":3}]}", .{ .parse_numbers = false });
     const wire = try compile(a, exact.selected().modelBytes());
     try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&repeated.value), wire.root()) == null);
-    const restored = try schema.restrictRecorded(std.testing.allocator, wire, exact.selected().memberChoices(), &.{}, &.{});
+    const restored = try schema.restrictRecorded(std.testing.allocator, wire, exact.selected().memberChoices(), &.{}, &.{}, &.{});
     defer restored.release();
     try std.testing.expectEqual(check.Rejection.duplicate_member, check.validateValue(@import("domain/model_envelope.zig").value(&repeated.value), restored.selected().root()).?.reason);
     try expectSelection(a, restored.selected(), "{\"value\":[{\"ordinal\":5},{\"ordinal\":3}]}", true);
@@ -275,7 +275,7 @@ test "recorded exact members reconstruct native admission from provider schema b
         .{ .path = path, .allowed = &.{ 3, 5, 7 } },
         .{ .path = path, .allowed = &.{ 3, 9 } },
         .{ .path = &.{ .{ .property = "other" }, .{ .items = {} }, .{ .property = "ordinal" } }, .allowed = &.{ 3, 5 } },
-    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{invalid}, &.{}, &.{}));
+    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{invalid}, &.{}, &.{}, &.{}));
     // ADR 0046: a native-count set leaves the canonical bounds in the wire bytes;
     // replay restores admission's membership over those bounds, unchanged.
     const native = try schema.restrict(std.testing.allocator, resource, &.{}, &.{
@@ -284,7 +284,7 @@ test "recorded exact members reconstruct native admission from provider schema b
     defer native.release();
     const open_wire = try compile(a, native.selected().modelBytes());
     try std.testing.expectEqual(@as(u32, 10), schema.findProperty(open_wire.root().object, "value").?.schema.array.maximum);
-    const reopened = try schema.restrictRecorded(std.testing.allocator, open_wire, native.selected().memberChoices(), &.{}, &.{});
+    const reopened = try schema.restrictRecorded(std.testing.allocator, open_wire, native.selected().memberChoices(), &.{}, &.{}, &.{});
     defer reopened.release();
     try std.testing.expectEqualStrings(native.selected().modelBytes(), reopened.selected().modelBytes());
     for ([_]struct { bytes: []const u8, reason: ?check.Rejection }{
@@ -1000,7 +1000,7 @@ test "the statements array of a response is the array its schema covers, as repl
     try std.testing.expectEqualDeep(path, statements.path);
     try std.testing.expectEqualDeep(rule, statements.rule);
     // The recorded coverage restores the same statements, so replay exempts what live admission does.
-    const restored = try schema.restrictRecorded(std.testing.allocator, try compile(a, covered.selected().modelBytes()), &.{}, covered.selected().coverageChoices(), &.{});
+    const restored = try schema.restrictRecorded(std.testing.allocator, try compile(a, covered.selected().modelBytes()), &.{}, covered.selected().coverageChoices(), &.{}, &.{});
     defer restored.release();
     const replayed = composition.statementsOf(restored.selected()).?;
     try std.testing.expectEqualDeep(statements.path, replayed.path);
@@ -1061,7 +1061,7 @@ test "an agreement rule needs a subset selector on one array's item list and a c
     const disagreeing = try respond(a, item ++ "," ++ item, .{ "north", "[3,5]", "south", "[5,3]" });
     // The recorded choice restores the same admission over the wire bytes, so replay rejects what live admission does.
     const wire = try compile(a, governed.selected().modelBytes());
-    const restored = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, governed.selected().agreementChoices());
+    const restored = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, governed.selected().agreementChoices(), &.{});
     defer restored.release();
     for ([_]*const schema.Schema{ governed.selected(), cloned, restored.selected() }) |selected| {
         const accepted = try std.json.parseFromSlice(std.json.Value, a, agreeing, .{ .parse_numbers = false });
@@ -1072,7 +1072,7 @@ test "an agreement rule needs a subset selector on one array's item list and a c
         try std.testing.expectEqualStrings("/value/0", (try found.describe(a)).path);
     }
     // Replay without the recorded choice admits the same response: the rule lives in the choice, not the bytes.
-    const unrestricted = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, &.{});
+    const unrestricted = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, &.{}, &.{});
     defer unrestricted.release();
     const loose = try std.json.parseFromSlice(std.json.Value, a, disagreeing, .{ .parse_numbers = false });
     try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&loose.value), unrestricted.selected().root()) == null);
@@ -1097,7 +1097,103 @@ test "an agreement rule needs a subset selector on one array's item list and a c
         .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .unique_subset = .none } },
     }));
     // A recorded choice that no longer matches the wire bytes is refused rather than ignored.
-    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, &.{.{ .path = path, .allowed = &.{ 3, 5, 7 }, .agree = "ghost" }}));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, &.{.{ .path = path, .allowed = &.{ 3, 5, 7 }, .agree = "ghost" }}, &.{}));
+}
+
+test "a listed rule needs an item list and a sibling array that returns a key and a closed state, and replay restores it" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const check = @import("domain/model_payload_schema.zig");
+    // The object holds `groups`, whose items list claims, and `states`, whose items return a claim and its state.
+    const resource = try compile(a,
+        \\{"type":"object","properties":{"states":{"type":"array","minItems":1,"maxItems":6,"items":{"type":"object","properties":{"id":{"type":"integer","minimum":1,"maximum":6},"state":{"oneOf":[{"type":"object","properties":{"kind":{"const":"retained"}},"required":["kind"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"conflicting"}},"required":["kind"],"additionalProperties":false}]},"note":{"type":"string","maxLength":8}},"required":["id","state"],"additionalProperties":false}},"groups":{"type":"array","minItems":0,"maxItems":4,"items":{"type":"object","properties":{"ids":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"integer","minimum":1,"maximum":6}},"label":{"type":"string","maxLength":8}},"required":["ids"],"additionalProperties":false}}},"required":["states","groups"],"additionalProperties":false}
+    );
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "groups" }, .{ .items = {} }, .{ .property = "ids" } };
+    const rule: schema.ListedRule = .{ .sibling = "states", .key = "id", .state = "state", .kind = "conflicting" };
+    const governed = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .collection = .{ .listed = rule } }});
+    defer governed.release();
+    const plain = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6 } }});
+    defer plain.release();
+    // The provider schema can't express the rule, so the model bytes are those of the plain sequence.
+    try std.testing.expectEqualStrings(plain.selected().modelBytes(), governed.selected().modelBytes());
+    try std.testing.expectEqual(@as(usize, 1), governed.selected().listedChoices().len);
+    try std.testing.expectEqual(@as(usize, 0), plain.selected().listedChoices().len);
+    const array = schema.findProperty(governed.selected().root().object, "groups").?.schema.array;
+    try std.testing.expectEqualStrings("ids", array.listed.?.property);
+    try std.testing.expectEqualStrings("states", array.listed.?.sibling);
+    try std.testing.expectEqualStrings("conflicting", array.listed.?.kind);
+    try std.testing.expect(schema.findProperty(plain.selected().root().object, "groups").?.schema.array.listed == null);
+    // A clone keeps the rule and its recorded choice.
+    const cloned = try governed.selected().clone(a);
+    try std.testing.expectEqualDeep(governed.selected().listedChoices(), cloned.listedChoices());
+    try std.testing.expectEqualDeep(array.listed, schema.findProperty(cloned.root().object, "groups").?.schema.array.listed);
+    // The recorded choice restores the same admission over the wire bytes.
+    const wire = try compile(a, governed.selected().modelBytes());
+    const restored = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, &.{}, governed.selected().listedChoices());
+    defer restored.release();
+    const states = "\"states\":[{\"id\":1,\"state\":{\"kind\":\"conflicting\"}},{\"id\":2,\"state\":{\"kind\":\"conflicting\"}},{\"id\":3,\"state\":{\"kind\":\"retained\"}}]";
+    const cases = [_]struct { bytes: []const u8, rejected: ?struct { path: []const u8, member: i64 } }{
+        // Consistent groups, overlapping consistent groups and no group are admitted.
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[1,2]}]}", .rejected = null },
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[1,2]},{\"ids\":[2,1]}]}", .rejected = null },
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[]}", .rejected = null },
+        // A listed claim the response does not dispose is not this rule's.
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[1,5]}]}", .rejected = null },
+        // A claim disposed otherwise is rejected at the first group that lists it, naming the claim.
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[1,3]}]}", .rejected = .{ .path = "/groups/0", .member = 3 } },
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[1,2]},{\"ids\":[2,3]}]}", .rejected = .{ .path = "/groups/1", .member = 3 } },
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[3,1]},{\"ids\":[2,3]}]}", .rejected = .{ .path = "/groups/0", .member = 3 } },
+    };
+    for ([_]*const schema.Schema{ governed.selected(), cloned, restored.selected() }) |selected| for (cases) |case| {
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, case.bytes, .{ .parse_numbers = false });
+        const found = check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), selected.root());
+        if (case.rejected) |expected| {
+            try std.testing.expectEqual(check.Rejection.group_member_not_conflicting, found.?.reason);
+            try std.testing.expectEqualStrings(expected.path, (try found.?.describe(a)).path);
+            try std.testing.expectEqual(@as(?i64, expected.member), found.?.member);
+        } else try std.testing.expect(found == null);
+    };
+    // A sibling array that fails its own admission is rejected for that, before the listed rule is read.
+    const unfit = try std.json.parseFromSlice(std.json.Value, a, "{\"states\":[{\"id\":9,\"state\":{\"kind\":\"retained\"}}],\"groups\":[{\"ids\":[1,9]}]}", .{ .parse_numbers = false });
+    try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&unfit.value), governed.selected().root()).?.reason != .group_member_not_conflicting);
+    // Replay without the recorded choice admits the inconsistent response: the rule lives in the choice, not the bytes.
+    const unrestricted = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, &.{}, &.{});
+    defer unrestricted.release();
+    const loose = try std.json.parseFromSlice(std.json.Value, a, cases[4].bytes, .{ .parse_numbers = false });
+    try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&loose.value), unrestricted.selected().root()) == null);
+    // The selector names an item list of one array, every name, and a sibling that returns a required integer key and
+    // a required state offering the kind, so only IDs and closed tags are read.
+    const outer: []const schema.ChoiceStep = &.{ .{ .property = "groups" }, .{ .items = {} }, .{ .property = "ids" }, .{ .items = {} } };
+    for ([_]schema.IntegerChoice{
+        .{ .target = .{ .path = &.{.{ .property = "groups" }} }, .allowed = &.{3}, .collection = .{ .listed = rule } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "", .key = "id", .state = "state", .kind = "conflicting" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "states", .key = "", .state = "state", .kind = "conflicting" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "states", .key = "id", .state = "", .kind = "conflicting" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "states", .key = "id", .state = "state", .kind = "" } } },
+        // The sibling is another property than the array itself, and the schema holds it.
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "groups", .key = "id", .state = "state", .kind = "conflicting" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "ghost", .key = "id", .state = "state", .kind = "conflicting" } } },
+        // The key is a required integer, the state a required property, and the kind one it offers.
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "states", .key = "note", .state = "state", .kind = "conflicting" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "states", .key = "id", .state = "ghost", .kind = "conflicting" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "states", .key = "id", .state = "state", .kind = "ghost" } } },
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = .{ .sibling = "states", .key = "id", .state = "note", .kind = "conflicting" } } },
+        // One governed array, never an array inside an outer array.
+        .{ .target = .{ .path = outer }, .allowed = &.{3}, .collection = .{ .listed = rule } },
+    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
+    // Two choices on one selector would stack incompatible narrowings.
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{
+        .{ .target = .{ .path = path }, .allowed = &.{3}, .collection = .{ .listed = rule } },
+        .{ .target = .{ .path = path }, .allowed = &.{3} },
+    }));
+    // A rule that crosses an alternative would record what admission never finds, so a nullable array is refused.
+    const nullable = try compile(a,
+        \\{"type":"object","properties":{"states":{"type":"array","minItems":1,"maxItems":6,"items":{"type":"object","properties":{"id":{"type":"integer","minimum":1,"maximum":6},"state":{"oneOf":[{"type":"object","properties":{"kind":{"const":"retained"}},"required":["kind"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"conflicting"}},"required":["kind"],"additionalProperties":false}]}},"required":["id","state"],"additionalProperties":false}},"groups":{"oneOf":[{"type":"null"},{"type":"array","minItems":0,"maxItems":4,"items":{"type":"object","properties":{"ids":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"integer","minimum":1,"maximum":6}}},"required":["ids"],"additionalProperties":false}}]}},"required":["states","groups"],"additionalProperties":false}
+    );
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, nullable, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3 }, .collection = .{ .listed = rule } }}));
+    // A recorded choice that no longer matches the wire bytes is refused rather than ignored.
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{}, &.{}, &.{}, &.{.{ .path = path, .allowed = &.{ 1, 2, 3, 4, 5, 6 }, .rule = .{ .sibling = "states", .key = "id", .state = "state", .kind = "ghost" } }}));
 }
 
 test "an agreement selector may go unused by a composition part that lacks its array, and is refused where no schema holds it" {
@@ -1175,7 +1271,7 @@ test "no exclusive item names both taken and untaken values, owning items are un
         try std.testing.expectEqualDeep(governed.selected().coverageChoices()[0].coverage, rejected.coverage.?.rule);
         try std.testing.expectEqualStrings("ids", rejected.coverage.?.property);
         const wire = try compile(a, governed.selected().modelBytes());
-        const restored = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, governed.selected().coverageChoices(), &.{});
+        const restored = try schema.restrictRecorded(std.testing.allocator, wire, &.{}, governed.selected().coverageChoices(), &.{}, &.{});
         defer restored.release();
         try std.testing.expectEqual(check.Rejection.shared_member, check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), restored.selected().root()).?.reason);
     }
@@ -1234,7 +1330,7 @@ test "equal items of one exact member set are rejected as returned, and replay r
     defer plain.release();
     // Provider bytes carry neither rule, so replay reapplies the recorded one.
     const wire = try compile(a, restricted.selected().modelBytes());
-    const restored = try schema.restrictRecorded(std.testing.allocator, wire, restricted.selected().memberChoices(), &.{}, &.{});
+    const restored = try schema.restrictRecorded(std.testing.allocator, wire, restricted.selected().memberChoices(), &.{}, &.{}, &.{});
     defer restored.release();
     try std.testing.expectEqualDeep(restricted.selected().memberChoices(), restored.selected().memberChoices());
     const Case = struct { bytes: []const u8, equal: bool };
@@ -1274,7 +1370,7 @@ test "equal items of one exact member set are rejected as returned, and replay r
         .{ .path = equal_items_path, .allowed = &.{ 3, 5 }, .distinct = &.{"absent"} },
         .{ .path = equal_items_path, .allowed = &.{ 3, 5 }, .distinct = &.{"ordinal"} },
         .{ .path = equal_items_path, .allowed = &.{ 3, 5 }, .distinct = &.{ "then", "then" } },
-    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{invalid}, &.{}, &.{}));
+    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{invalid}, &.{}, &.{}, &.{}));
 }
 
 test "a compared property an item may omit is a value of its own: omitted equals omitted and differs from returned" {
@@ -1288,7 +1384,7 @@ test "a compared property an item may omit is a value of its own: omitted equals
     const restricted = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = equal_items_path }, .allowed = &.{ 3, 5 }, .collection = .{ .exact_members = .{ .distinct = compared } } }});
     defer restricted.release();
     const wire = try compile(a, restricted.selected().modelBytes());
-    const restored = try schema.restrictRecorded(std.testing.allocator, wire, restricted.selected().memberChoices(), &.{}, &.{});
+    const restored = try schema.restrictRecorded(std.testing.allocator, wire, restricted.selected().memberChoices(), &.{}, &.{}, &.{});
     defer restored.release();
     const Case = struct { bytes: []const u8, equal: bool };
     for ([_]Case{

@@ -66,8 +66,9 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
             // ADR 0038 Decision 5: exactly a partly taken item's correction names the
             // exclusive and owning kinds.
             if ((reason.coverage != null) != (reason.reason == .shared_member)) return error.ModelRequestAssociationInvalid;
-            // Exactly a missing member's correction names the member no item names.
-            if ((reason.member != null) != (reason.reason == .missing_member)) return error.ModelRequestAssociationInvalid;
+            // Exactly a missing member's correction names the member no item names, and exactly a group-agreement
+            // correction (ADR 0046 Decision 7) names the claim the group lists that the response disposes otherwise.
+            if ((reason.member != null) != (reason.reason == .missing_member or reason.reason == .group_member_not_conflicting)) return error.ModelRequestAssociationInvalid;
             // ADR 0038 Decision 3: exactly an equal-items correction names the rule that compares them.
             if ((reason.members != null) != (reason.reason == .equal_items)) return error.ModelRequestAssociationInvalid;
             // ADR 0036 Decision 7: exactly a disagreeing-items correction names the rule that compares them.

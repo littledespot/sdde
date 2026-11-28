@@ -770,8 +770,8 @@ request-projection freezes, not by a live run.
 - The offline Spec scenarios record every request the fake provider receives, at the
   provider port, as its `model_request_description` without `version`,
   `workflow_version` and `request_step`, which refactors change by design, and without
-  `agreements`, the admission rule recorded for replay (ADR 0036 Decision 7), which is no
-  model input. Member order and number spelling stay the description's own.
+  `agreements` and `listings`, the admission rules recorded for replay (ADR 0036 Decision 7,
+  ADR 0046 Decision 7), which are no model input. Member order and number spelling stay the description's own.
 - `SDDE_REQUEST_PROJECTION=<dir> zig build test-integration` writes
   `<dir>/<group>/<scenario name>/call-NNNN.json`, one file per invocation in provider-call
   order within each scenario, grouped by scenario case so groups never overwrite each

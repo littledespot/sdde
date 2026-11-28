@@ -101,12 +101,13 @@ Each generation request contains only what the current unit needs:
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
-  and local validation. Three admission constraints are exceptions, because
+  and local validation. Four admission constraints are exceptions, because
   provider schema syntax cannot express them: `exact_members` uniqueness, with a
   native count its completeness (`missing_member`; below, ADR 0046) and with a `distinct`
   rule its distinctness (`equal_items`; below),
   ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3),
-  and ADR 0036's claim agreement (`disagreeing_items`; below). Local admission, request descriptions and replay
+  ADR 0036's claim agreement (`disagreeing_items`; below), and ADR 0046's group agreement
+  (`group_member_not_conflicting`; below). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -130,6 +131,14 @@ Each generation request contains only what the current unit needs:
   - a part whose schema lacks the array leaves the selector unused and records nothing,
     while a selector that no schema holds rejects;
   - the request description records the applied rule (`agreements`), so replay applies it.
+  A reconciliation response that holds `conflict_groups` and `claim_dispositions` also declares a group agreement
+  ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md) Decision 7, 28 November 2026): every claim ID
+  in `conflict_groups[].claim_ids` that the response disposes is the `claim_id` of an item whose disposition kind is
+  `conflicting`, or admission rejects the first group item that lists such a claim as `group_member_not_conflicting`,
+  located at that item. It reads claim IDs and disposition tags only, so no prose is judged, and the request
+  description records it (`listings`), so replay applies it. A listed claim the response does not dispose, and a claim
+  disposed `conflicting` that is in no group, are not rejected here (ADR 0022 "Conflict groups"). It applies to the
+  dispositions request and the conflict-group repair request.
   An `exact_members` selector instead names an integer property of array items:
   - the array must contain exactly one item for each allowed value;
   - its item count is fixed to the member count, which the guidance schema states
@@ -239,7 +248,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v22` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v23` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 

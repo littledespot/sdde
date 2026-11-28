@@ -53,7 +53,7 @@ kind and attempt, in `correlation_id`. Native semantic rejections use their reco
 producing origin; unattributed evidence remains explicitly uncorrelated.
 
 The prompt column schema is `prompt-columns/v3`, with 37 columns; there is no legacy
-reader. A separate `request_description` body (`model-request-debug/v22`) records the
+reader. A separate `request_description` body (`model-request-debug/v23`) records the
 provider/model,
 region/config (including the model's documented maximum output and the catalogue
 entry's request deadline), selected slot, workflow/request entry, typed content, fixed

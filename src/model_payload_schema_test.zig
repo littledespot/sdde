@@ -983,6 +983,8 @@ test "only a shared value's correction carries a cross-item rule, only an equal-
         .{ .reason = .type_mismatch, .expected = root, .coverage = coverage },
         .{ .reason = .missing_member, .expected = root },
         .{ .reason = .array_length, .expected = root, .member = 3 },
+        // A group-agreement correction names the claim the group lists (ADR 0046 Decision 7), and only it does.
+        .{ .reason = .group_member_not_conflicting, .expected = root },
         // An equal-items correction needs the rule that compared the items, and finds the response's sets.
         .{ .reason = .equal_items, .expected = root },
         .{ .reason = .equal_items, .expected = root, .members = members },
@@ -991,6 +993,35 @@ test "only a shared value's correction carries a cross-item rule, only an equal-
     }) |schema_diagnostic| {
         const source = try fixture.requestSource();
         try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content, captured.evidence, .{ .schema = schema_diagnostic }, .unconfirmed, "Correct the response."));
+    }
+}
+
+test "a claim that a group lists and a sibling array disposes otherwise takes one correction naming it and locating its group" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const resource = try adapter.compiler().compile(arena.allocator(),
+        \\{"type":"object","properties":{"states":{"type":"array","minItems":1,"maxItems":6,"items":{"type":"object","properties":{"id":{"type":"integer","minimum":1,"maximum":6},"state":{"oneOf":[{"type":"object","properties":{"kind":{"const":"retained"}},"required":["kind"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"conflicting"}},"required":["kind"],"additionalProperties":false}]}},"required":["id","state"],"additionalProperties":false}},"groups":{"type":"array","minItems":0,"maxItems":4,"items":{"type":"object","properties":{"ids":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"integer","minimum":1,"maximum":6}}},"required":["ids"],"additionalProperties":false}}},"required":["states","groups"],"additionalProperties":false}
+    );
+    const governed = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, resource, &.{}, &.{.{
+        .target = .{ .path = &.{ .{ .property = "groups" }, .items, .{ .property = "ids" } } },
+        .allowed = &.{ 1, 2, 3, 4, 5, 6 },
+        .collection = .{ .listed = .{ .sibling = "states", .key = "id", .state = "state", .kind = "conflicting" } },
+    }});
+    defer governed.release();
+    const states = "\"states\":[{\"id\":1,\"state\":{\"kind\":\"conflicting\"}},{\"id\":2,\"state\":{\"kind\":\"conflicting\"}},{\"id\":3,\"state\":{\"kind\":\"retained\"}}]";
+    for ([_]Case{
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[1,2]}]}" },
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[]}" },
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[1,3]}]}", .rejection = .group_member_not_conflicting, .path = "/groups/0", .expected_path = "/groups", .member = 3 },
+        .{ .bytes = "{" ++ states ++ ",\"groups\":[{\"ids\":[1,2]},{\"ids\":[3,2]}]}", .rejection = .group_member_not_conflicting, .path = "/groups/1", .expected_path = "/groups", .member = 3 },
+        // The same rejection behind a §22.6 opening artefact.
+        .{ .bytes = "{\"sta{" ++ states ++ ",\"groups\":[{\"ids\":[1,3]}]}", .rejection = .group_member_not_conflicting, .path = "/groups/0", .expected_path = "/groups", .member = 3 },
+    }) |case| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithCompiledSchema(governed.selected());
+        defer fixture.deinit();
+        try checkFixture(&fixture, case);
     }
 }
 
@@ -1264,7 +1295,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             const integer_choice = reason == .enum_mismatch and result.invalid.expected.* == .integer_enumeration;
             // ADR 0038 Decision 5: only a shared value's correction names the exclusive kinds. Decision 3: only an
             // equal-items correction names the sets.
-            try std.testing.expectEqual(@as(usize, 3) + 2 * @as(usize, @intFromBool(reason == .shared_member)) + @intFromBool(reason == .missing_member) + 2 * @as(usize, @intFromBool(integer_choice)) + @intFromBool(reason == .equal_items) + @intFromBool(reason == .disagreeing_items), guidance.value.object.count());
+            try std.testing.expectEqual(@as(usize, 3) + 2 * @as(usize, @intFromBool(reason == .shared_member)) + @intFromBool(reason == .missing_member or reason == .group_member_not_conflicting) + 2 * @as(usize, @intFromBool(integer_choice)) + @intFromBool(reason == .equal_items) + @intFromBool(reason == .disagreeing_items), guidance.value.object.count());
             // ADR 0038 Decision 5: a partly taken item's correction lists every taken value's naming.
             if (reason == .shared_member) {
                 const listed = guidance.value.object.get("shared").?.array.items;

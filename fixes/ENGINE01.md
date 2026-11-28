@@ -663,10 +663,15 @@ status line so the references above still hold; its build and review record was 
 10. **Recorded limit: a mismatch between `conflict_groups` and the `conflicting` dispositions blocks the run**
     (`2026-11-25T08-23-17Z`, 1 of the 7 conflict-case launches since Phase 2). A group naming a `retained` claim is
     rejected at canonical validation, and the `dispositions` unit has no repair route
-    (`src/domain/reference_reconciliation_repair.zig:162`, ADR 0046). **Decision, not proposed:** derive the groups'
-    claims from the dispositions, correct the mismatch at admission as ADR 0046 does for a missing disposition, or leave
-    it as a valid model limitation. A fix would let such a launch reach the review, where item 13 stops it, so it can't
-    change a decision while item 13 stands.
+    (`src/domain/reference_reconciliation_repair.zig:162`, ADR 0046). **Decided 28 November 2026** (user: "all approved,
+    update", after the preflight of two changes): correct the mismatch at admission as ADR 0046 does for a missing
+    disposition (ADR 0046 Decision 7, change 8 of item 15), then show the rule to the model (Decision 8, change 9). Not
+    built. The earlier reasoning that a fix "can't change a decision while item 13 stands" is out of date: item 13's repair
+    route is built (A and T1), and the stop is now the commonest end of a conflict launch (3 of the last 4 launches of 28
+    November: the second leg of `2026-11-28T01-33-20Z-5d196478…`, and the first legs of `2026-11-28T02-27-09Z-8a26e165…`
+    and `2026-11-28T02-31-13Z-56ef1aed…`, each with a group member `retained`), so it also blocks the live proof of changes
+    4 to 7. **Not taken:** deriving the groups from the dispositions (the engine would choose which side is right) and
+    leaving it as a model limitation.
 11. **The incomplete specification printed claims with their source markup escaped. Built** 26 November 2026 (user:
     "accept recommendation 1, 2 and 3"). The rule, with its accepted code-span limit, is ADR 0017 and ADR 0036
     Decision 2. Closed. Untested: a reading with an unmatched backtick, a reading that starts with a span, and an
@@ -1030,6 +1035,81 @@ status line so the references above still hold; its build and review record was 
         dropped conflict has its rejected test, and the ADR states the exclusion.
       - **Not covered.** Three or more mutually overlapping answers still apply nothing. Whether a user would answer both forms
         is unobserved.
+    - **Change 8: a group that lists a claim the response disposes other than `conflicting` is corrected at admission.
+      Decided and built 28 November 2026, kept after its live set** (user: "all approved, update" and "Build change 8
+      offline", after the preflight; ADR 0046 Decision 7; "keep the changes" after the live set). Need: completion of a
+      conflict launch (the stop under item 10) and the live proof of changes 4 to 7. The published-output defect class is
+      completion; a correction that drops the genuine group would be a false assessment, so that is the measured risk.
+      - **Live set (28 November 2026, one build: `4a95260`, modified, `source_sha256` `7d3d60d9…`).** The conflict case,
+        four launches: three published and were accepted at 100% (`2026-11-28T06-39-20Z-2a829a9c…`,
+        `06-42-15Z-3bc1b559…`, `06-48-11Z-c3cc777d…`), and one second leg paused on a text form from a source-review
+        `conflicting` verdict (`06-45-05Z-996e6366…`, S02 open, not the group/disposition mismatch). A fifth launch
+        attempt failed authentication (HTTP 401) before any model response and is not counted. The rule fired in one launch
+        only (`06-48-11Z`): the correction kept the genuine group and made the response consistent. Both development
+        cases, twice each: hello-world 100% and 100%, loan-renewal 100% and 96.4% (a minor `restatement` from a scenario
+        repair graded `harmful`, at the scenarios step, which this change does not touch). **One firing is one sample; in
+        the other three conflict launches the rule never fired**, so the set shows no harm and one recovery, not a rate.
+      - **Built.** A native admission rule, `group_member_not_conflicting`, on the dispositions request and the
+        conflict-group repair request. Schema side (`model_result_schema.zig`): `Collection.listed` (a `ListedRule`:
+        sibling array, key, state, kind) on the `conflict_groups[].claim_ids` selector, which keeps canonical bounds so the
+        model bytes are those of a plain sequence; it attaches `Listed` to the governed array, is validated like the
+        agreement rule (one governed array, every name, a sibling array with a required integer key and a required closed
+        state offering the kind), is recorded as `ListedChoice` and restored by `restrictRecorded`. Admission
+        (`model_payload_schema.zig`): after both arrays are admitted, the first group item that lists a claim a sibling
+        item disposes other than `conflicting` is rejected, located at that item, with the claim as `member`; a listed claim
+        the sibling does not dispose is not this rule's (the conflict-group repair disposes only the claims it decides
+        again). The correction is the existing bounded protocol correction of the whole response (`model_protocol_retry.zig`
+        allows `member` for this reason too). `reference_model_input.withDispositionChoices` binds it on both requests.
+        Canonical validation is unchanged and stays the authority behind admission (`reference_conflict_groups.issue`).
+        **A `conflicting` claim in no group is not an admission rule** (the later `no_required_member` block).
+      - **Description version.** The request description records the rule as `listings` and takes
+        `model-request-debug/v23`, as every earlier recorded rule did (ADR 0019); v22 captures are refused by
+        `Description.decode`. **Consequence:** the three captured failing calls are v22, which the replay tools refuse
+        (`e2e-call` needs "a complete current-format debug/trace request capture", e2e.md:93-96), and a run directory is
+        immutable evidence, so no replay screen of them is possible. The correction's effect is measured by the live set
+        below, whose launches write v23 captures. The freeze (`request_projection.zig`) omits `listings`, so it still
+        proves model input unchanged.
+      - **Amended:** ADR 0046 (amends list, Decisions 4, 7 and 8, Consequences, Risk, Validation), ADR 0019 and the three
+        contracts that name the description version (12-model-boundary.md, 24-workflow-state.md, 27-observability.md),
+        12-model-boundary.md §12.2, 16-reference-ingestion.md §16.4 step 10, 22-repair.md §22.4 and §22.6, F0100's
+        dispositions sentence. Decision 7's text was refined while building: the rule covers claims the response disposes.
+      - **Tests.** `model_result_schema_test.zig`: the rule's bytes equal a plain sequence's, its attachment, clone, replay
+        restoration, accepted responses (consistent, overlapping, none, a listed claim the sibling does not dispose),
+        rejected ones (first and later group, order), twelve invalid selectors and a nullable array property (a selector that
+        crosses an alternative is refused, since admission would never find its rule). `model_payload_schema_test.zig`: the
+        correction is built from the real retry action for each rejection (location, expected scope, `member`, after an
+        opening artefact) and refused without its member. `reference_model_input_test.zig`: the dispositions packet carries
+        one listed choice with the guidance schema unchanged, admits or rejects real dispositions responses, and reports a
+        membership defect (`missing_member`) before the group rule; the conflict-group repair packet carries the same
+        choice (`specification_generation_test.zig`).
+        `request_debugger_test.zig`: a recorded `listings` replays the rejection, is refused when it does not fit, and a
+        v22 description is refused. Mutation checks, each failing a test: inverting the kind test, and removing the
+        key match.
+      - **Not covered.** No scripted workflow scenario runs a corrected or exhausted dispositions response through the
+        workflow (the integration scenario table is indexed by position and was not extended); exhaustion is the request's
+        generic retry limit, which is not reason-specific. No byte diff of request-projection freezes against the previous
+        build was run: the in-process equality of the model bytes stands in for it. One `zig build test` run failed once
+        with only log-failure noise and no test name, and passed on rerun; it is unexplained.
+      - **Approvals.** Made: the decision (the ADR) and the live sets (the conflict case, several launches, and both
+        development cases twice, on one recorded source hash). The replay screen of the three captured failing calls
+        (`2026-11-28T01-33-20Z-5d196478…` call 5, `2026-11-28T02-27-09Z-8a26e165…` call 5,
+        `2026-11-28T02-31-13Z-56ef1aed…` call 4) is dropped (see "Description version"). Each launch still runs only as the
+        skill and AGENTS.md prescribe. **The conflict case's launches decide whether the change stays:** when the
+        correction fires, the resubmitted response must become consistent and keep the genuine group; a set that drops
+        the genuine group reverts the plan to a narrower route (T1 on the inconsistent group) or the groups-first response
+        shape, each its own Decision. A set in which the rule never fires neither confirms nor refutes it.
+    - **Change 9: the rule is shown to the model. Decided 28 November 2026, not built** (same decision; ADR 0046
+      Decision 8). Built only after change 8 and its screen. The dispositions request lists a typed constraint
+      `grouped_claims_conflicting` ("Every claim in a conflict group must have disposition `conflicting`.") in the
+      `.disposition = .rules` scope, and the dispositions-stage group check reports it, so `conflicting_related_claims`
+      keeps its other two uses and each rule has one identity and one text. **Reading of AGENTS.md decided with it:** the
+      ban on restated engine-enforced rules binds prompt files and workflow-authored guidance; the native constraint
+      projection (F0100's "concise guidance projected from native constraint identities", `reconciliationGuidance`) is the
+      one owner of a rule's model-facing text, which the prompt file does not restate. It changes the dispositions request
+      in every case, so it needs the SPEC01 §2 rule 4 paired replays of the dispositions call from hello-world and
+      loan-renewal (approved), then repeated runs of both development cases and the conflict case on one recorded source
+      hash. ADR 0046's own evidence ("adding definitions didn't help", harm 1 in 40 replays for repair requests) is the
+      reason it follows rather than leads.
     - **Where the 27 runs ended** (tabulated on 27 November 2026 from the retained reports and model outputs): the token
       budget in a full first-pass review, 5 (before conflicts first); the token budget in a dependent pass, 1;
       `repair-source` on an overlapping false group, 8 (7 first legs and 1 second leg, all before A and T1); a second
@@ -1208,9 +1288,10 @@ decisions in §10 and deleted on 27 November 2026. Its findings stand:
 
 **Nothing is queued** (27 November 2026). Phases 1 and 2, conflicts first (kept) and the option (b) hardening are built
 (§10 item 9), Phase 3 (C) was reverted, Phase 4 (B1) is parked, Phases 5 and 6 (D, B2 and B3) are dropped, and Phase 7
-(E) is unscheduled (§10). Only the `given` residual that `fixes/Z_SPEC01.md` Q26 owns remains (§10 item 4). Two decisions
-are open and unscheduled: binding `conflicts[].group_id` in the conflict-group repair (§10 item 3) and a mismatch between
-`conflict_groups` and the `conflicting` dispositions (§10 item 10). Item 13's repair route for a dismissed conflict
+(E) is unscheduled (§10). Only the `given` residual that `fixes/Z_SPEC01.md` Q26 owns remains (§10 item 4). One decision
+is open and unscheduled: binding `conflicts[].group_id` in the conflict-group repair (§10 item 3). The mismatch between
+`conflict_groups` and the `conflicting` dispositions (§10 item 10) was decided on 28 November 2026 and is queued as
+changes 8 and 9 of item 15 (change 8 is built, change 9 is not). Item 13's repair route for a dismissed conflict
 group is built (A and T1, 27 November 2026). Its live set ran that day on the ruled proof route, the conflict case: one
 of three launches exercised it, the repair was graded `helpful`, and none published (§13). Decided and built that day,
 offline proof only: a replay screen (run) and three changes, each amending an accepted ADR or contract section (§10 item
@@ -1219,7 +1300,9 @@ replay and screen results); the live set that followed is under `evaluations/e2e
 `evaluations/adjudications/adjudication-aaaabffd80b15b9aaa4554f55950c7f6/`, and no launch drew a kept open question). A
 fifth change, closing a form an applied answer dropped, was built the same day (§10 item 15, change 5), and a sixth, the
 harness answering the one open form that offers the key (change 6), and a seventh, answers to both overlapping forms
-applying together (change 7). The order that follows is one live set, then proposals 4 and 5 one at a time.
+applying together (change 7), and an eighth, the group/disposition agreement at admission (change 8, kept after its live
+set; item 10). Decided and not built: change 9, its presentation. The order that follows is change 9 behind its paired
+dispositions replays from that set's v23 captures (see change 8), then proposals 4 and 5 one at a time.
 
 Any later phase follows SPEC01 §2: `/preflight`; offline tests at the owning boundary; `zig build verify`; one
 change set for each measured build, on a committed, unmodified build; each replay batch, launch and set approved
