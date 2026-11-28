@@ -33,7 +33,7 @@ pub const Render = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .incomplete_specification_state, .evidence = .refreshed_clarification_state, .result = .rendered_incomplete_specification } };
     pub const Action = @import("../actions/specification/render_incomplete_specification.zig").Action;
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const current = owned.read(&input.step.data, state_schema, .incomplete_state) catch |operation_error| return operation_error;

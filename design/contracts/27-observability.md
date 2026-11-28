@@ -89,8 +89,7 @@ Diagnostic runs must enable full capture. Console output is a mirror, not a subs
 for persisted records. A harness-only trace does not satisfy production logging.
 
 A later failure does not erase an earlier one. The terminal rejection stays the later
-failure, with its own status and diagnostic, which is all
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) reads. The runner
+failure, with its own status and diagnostic. The runner
 keeps the first rejection it replaced as the run's first cause, whole, with an `authority`
 reason ([§6](06-pipeline-nodes.md#runner-rejection-reasons)) when it has one, set once so
 the earliest replacement wins. A capture failure is recorded while its call runs, so it is never kept
@@ -113,7 +112,7 @@ file sink is unusable. Never claim a complete record after a logging failure.
 
 **Publication finalization:** retain ADR 0018 and
 §25.1's close-before-write barrier. `publication.prepared` records the validated
-intended `ok`/`needs_user` outcome; it is not a successful write. Actual publication
+intended `ok`, `needs_user` or `cancelled` outcome; it is not a successful write. Actual publication
 results remain in the terminal result and harness report. Non-publication terminal
 outcomes are recorded before close. Close failure prevents publication, repeated
 finalization preserves failure, and no event is appended after close. The feature
@@ -158,7 +157,7 @@ re-send is logged:
   carrying the diagnostic `RunawayRepeated`.
 
 Logging rejection prevents the re-send. The temperature each attempt sent is recorded in
-its request description (`model-request-debug/v21`), not in a log field. A re-send that
+its request description (`model-request-debug/v23`), not in a log field. A re-send that
 succeeds removes neither event.
 
 At `debug` or `trace`, ADR 0018's capture logs every runaway in full in the prompt
@@ -167,12 +166,6 @@ description (both configured temperatures and the sampling), the provider reques
 the temperature sent, and the complete returned output with its stop reason and token
 counts. A repeated runaway's output is captured before the failure events and the stop.
 Higher levels log only the events.
-
-Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on
-hold since 30 October 2026; not implemented), when a failed Specify run publishes its
-validated content as a failed incomplete specification, the runner emits one warning
-`run.incomplete_published` after the failure events and before the publication writes,
-with the failure's diagnostic code. Its logging rejection prevents publication.
 
 Useful metrics:
 

@@ -422,7 +422,7 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .source_group_ids = assigned.source_group_ids, .provenance = attribution };
     var brief: spec.Brief = .{ .description = value, .primary_goal = value };
     brief = try admitBrief(a, provenance_context, brief);
-    const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished);
+    const inputs = try @import("../domain/specification_authority.zig").projectFor(a, sources.corpus.feature_id, finished, .first);
     return .{ .inputs = inputs, .context = provenance_context, .guidance = &(try @import("packet_guidance.zig").shipped(a)).guidance, .brief = brief, .passive = passive };
 }
 
@@ -478,7 +478,7 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
     const content = try @import("../domain/strict_json.zig").decode([]const @import("../domain/llm_provider_operation.zig").ModelVisibleContent, a, try std.json.Stringify.valueAlloc(a, edit.object.get("content").?, .{}), .{ .maximum_depth = 64 });
     return @import("../adapters/provider/bedrock_request.zig").encodeText(a, .{
         .content = content,
-        .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .native) } },
+        .schema = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .native) },
         .schema_name = "sdde_model_envelope_v1",
         .temperature = @import("model_temperatures.zig").temperatures.configured,
         .reasoning_effort = .low,

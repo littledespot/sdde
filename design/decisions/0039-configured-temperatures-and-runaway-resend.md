@@ -2,78 +2,23 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-26
-- **Decision authority:** The user's decisions on 26 October 2026 on
-  FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) B9:
-  - "if a run away issue occurs, then the the retry tempreture should be set to 1 and
-    the same request should be tried again, if that fails then the workflow should stop
-    executing";
-  - "the respose must not be kept because it has no values … if a run away respose is
-    given, then the same input request should be tried with a tempreture of 1, if the
-    response back is still runaway then the workflow should stop with an error. if
-    there is a no runaway response then is should be evaluated as all other responses";
-  - "temperture must be configurable and should be loaded out of the .sddtoolkit, there
-    should be temperture and temperture_runaway_retry";
-  - "it must be logged if ht model fail on the first attempt and then retryed, the retry
-    responses must all pass through the same validation checks";
-  - on 27 October 2026: "if a run away error occurs on the first run then all the details
-    should be logged of loglevel is debug then the same request should be tried with
-    temperatureRunawayRetry and if the same issue occurs again then with workflow should
-    be stopped and all the info should be logged if log level is debug" (Decision 4's
-    debug capture).
-- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
-  2026; accepted, on hold since 30 October 2026, not implemented): when required work
-  stops on a repeated runaway, the run would publish its validated content as a failed
-  incomplete specification, marked and logged.
-- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)'s removal
-  amendment (SPEC01 D13.1, 1 November 2026): advisory work no longer exists, so a
-  runaway on the re-send always fails the work with `RunawayRepeated`. Decision 3 is
-  withdrawn, with ADR 0040's amendment of it for advisory runaways (ADR 0040 last at git
-  `8aa7fb5`).
-- **Amends:**
-  - [ADR 0011](0011-provider-owned-request-limits.md): a provider `output_limit` stop is
-    re-sent once instead of ending the request ("SDDE does not retry … because of a
-    stop", "receives no extra protocol correction", and the B9 amendment's "no
-    `output_limit` correction");
-  - [ADR 0012](0012-workflow-owned-model-request.md) and §12.5: the project
-    configuration supplies the temperature; it is no longer engine-fixed at `0.1`;
-  - [ADR 0030](0030-engine-owned-model-request.md): the request's child graph gains
-    the re-send beside its protocol correction;
-  - [ADR 0009](0009-atomic-workflow-execution.md): "only explicit YAML transitions and
-    operation-local `retry-limit` authorize retries" gains the re-send;
-  - [ADR 0019](0019-single-request-debugger.md): request descriptions advance to
-    `model-request-debug/v13`;
-  - [ADR 0029](0029-bedrock-model-families.md): the `gpt-oss` family sends the
-    configured temperature instead of `0.1`;
-  - the evidence rule (now in AGENTS.md) against sampling changes and extra retries, which
-    records this as an explicit engine-policy exception;
-  - §9 (configuration shape and retry defaults), §12 (model controls, stops and
-    `model-request-debug/v13`), the §13 model actions (a new
-    `build-model-runaway-resend` action and the attempt-accounting rule), the
-    [model-request operation catalogue](../contracts/model-request-operations.md),
-    §22 (correction bounds), §27 (attempt events), §31.12, the configuration schema
-    and example, F0001, F0006, F0007, F0100, the [E2E harness](../harness/e2e.md), the
-    [evaluator](../harness/evaluator.md) and the §32 index;
-  - F0002 (the `model.runaway_resent` event and the `RunawayRepeated` diagnostic) and
-    the E2E report (`spec-e2e-report/v10`).
-
-  The overall design remains **Proposed design**.
+- **Decision authority:** User decisions, 26 and 27 October 2026 and 1 November 2026
+- **Amends:** ADRs [0009](0009-atomic-workflow-execution.md),
+  [0011](0011-provider-owned-request-limits.md),
+  [0012](0012-workflow-owned-model-request.md),
+  [0019](0019-single-request-debugger.md), [0029](0029-bedrock-model-families.md) and
+  [0030](0030-engine-owned-model-request.md); the AGENTS.md evidence rule against
+  sampling changes and extra retries, as an explicit engine-policy exception; §9, §12,
+  the §13 model actions, the
+  [model-request operation catalogue](../contracts/model-request-operations.md), §22, §27,
+  §31.12, F0001, F0002, F0006, F0007, F0100, the [E2E harness](../harness/e2e.md) and the
+  [evaluator](../harness/evaluator.md). The overall design remains **Proposed design**.
 
 ## Context
 
-GPT-OSS-20B at temperature `0.1` sometimes keeps writing until it reaches the model's
-16,384-token maximum, mostly blank lines after a valid answer. The provider then stops it
-with `output_limit`. The partial text has no value and has never been kept.
-
-The request carries the JSON response schema, but on the Bedrock route decoding isn't
-held to it from the first token to the stop: the raw text block usually opens with a
-fragment and restarts the JSON, and answers have ended `end_turn` inside an open string.
-On 1 November 2026 the user recorded §22.6 normalization (of the malformed opening) as a
-provider defect (Bedrock request IDs
-`ad3f7d58-3b6b-4e99-bb37-f6463a9eb6b5` and `e1840c2b-fb08-4af7-a2e5-2ae75582c8f2`;
-[SPEC01](../../fixes/SPEC01.md) §3, "Provider doesn't enforce the response schema").
-
-Under ADR 0011 one runaway failed the run, and the temperature was a compiled engine
-constant, so projects couldn't choose it.
+A model sometimes keeps writing until it reaches its maximum output, mostly blank lines
+after a valid answer. The provider then stops it with `output_limit`. The partial text
+has no value and is never kept.
 
 ## Decision
 
@@ -89,9 +34,7 @@ constant, so projects couldn't choose it.
    - A model whose registered contract sends no temperature (the `converse`, `luna`
      and `claude` Bedrock families, and the Anthropic Messages API) still omits it on
      every attempt, including the re-send.
-   - Workflow definitions still can't set or override a temperature.
-   - The shipped E2E configuration sets `temperature` to `0.1` and
-     `temperatureRunawayRetry` to `1`.
+   - Workflow definitions can't set or override a temperature.
 2. **A runaway is re-sent once.** A runaway is a response the provider stopped with
    `output_limit`.
    - Its partial text never becomes a candidate and is never sent back to the model; at
@@ -107,10 +50,8 @@ constant, so projects couldn't choose it.
    - The rule applies to each attempt. A protocol correction that runs away is re-sent
      once in the same way.
    - A runaway on the re-send ends the request with the diagnostic `RunawayRepeated`,
-     naming the step, the runaway attempt and its re-send.
-     - The workflow stops with that error. Under
-       [ADR 0041](0041-failed-run-incomplete-publication.md) (on hold) it would publish
-       only its validated content, as a failed incomplete specification.
+     naming the step, the runaway attempt and its re-send. The workflow stops with that
+     error.
    - Other stop reasons and provider failures are unchanged.
    - Two single-responsibility stages of the `request-model` step carry it. Response
      admission admits a first runaway (an `output_limit` stop with valid usage, on an
@@ -124,16 +65,14 @@ constant, so projects couldn't choose it.
      accounting (ADR 0030).
    - The route is fixed in the orchestrator, not checked per workflow: an admission's
      `invalid` continues to the runaway check, whose re-send branch reaches the re-send
-     stage, and a re-send is reachable only from that branch. The orchestrator's branch
-     tests (a runaway takes the re-send, not the correction; an invalid response takes one
-     protocol correction) replace the compiler's route rule.
+     stage, and a re-send is reachable only from that branch. A runaway takes the
+     re-send, not the correction; an invalid response takes one protocol correction.
    - A re-send must equal the attempt it repeats in every request field except its
      sampling, and attempt accounting rejects a second re-send of one attempt.
-3. **An advisory runaway is re-sent before it can end advice.** Withdrawn on 1 November
-   2026 with post-generation review (SPEC01 D13.1); no advisory work remains.
+3. Withdrawn. The number is kept so that Decisions 4 and 5 keep theirs.
 4. **Accounting and evidence.**
    - Both attempts' actual usage counts once each against the one workflow budget
-     (ADR 0011, ADR 0037). Overshoot stays fatal.
+     (ADR 0011). Overshoot stays fatal.
    - Each stop still logs `model.provider_stopped`.
    - **Every re-send is logged.** Before the re-send is sent, the runner emits one
      warning `model.runaway_resent` for the runaway attempt: its operation, slot,
@@ -155,12 +94,11 @@ constant, so projects couldn't choose it.
    - Each request and provider operation records its sampling: `configured` or
      `runaway_resend`. The temperature sent follows from it and the binding's two
      configured temperatures. Request descriptions record both temperatures and the
-     sampling, so replay sends the same bytes (from `model-request-debug/v13`), and
-     authorization leases, invocation validation and attempt accounting check the
-     sampling.
+     sampling, so replay sends the same bytes, and authorization leases, invocation
+     validation and attempt accounting check the sampling. Replay refuses a description
+     that records no sampling.
    - The E2E report's `attempts` mark each re-send with `resends`, the attempt it
-     re-sends, so a run's runaways, re-sends and their outcomes can be counted (from
-     `spec-e2e-report/v10`).
+     re-sends, so a run's runaways, re-sends and their outcomes can be counted.
 5. **Every retry response passes the same checks.** A re-sent response, like every
    protocol correction's response, goes through exactly the checks a first response
    does, in the same order: observation and usage validation, envelope decoding,
@@ -174,41 +112,18 @@ constant, so projects couldn't choose it.
 
 - **Evidence policy.** AGENTS.md forbids working around a model limitation with
   "sampling changes, extra retries". This rule is the user's explicit exception to it,
-  recorded like the 18 October 2026 evaluator correction. It covers only a provider
+  recorded like the evaluator's one mechanical correction. It covers only a provider
   `output_limit` stop: it gives no other model limitation a retry or a sampling change.
   Development reports count runaways and re-sends, and what each re-send returned,
   separately.
 - **Cost.** A re-send costs a full second request. The first runaway still costs its
-  full output (about 19,000 tokens for GPT-OSS-20B), and a re-send that runs away again
-  costs the same.
+  full output, and a re-send that runs away again costs the same.
 - **Families without a temperature.** Their re-send is the identical request. Whether
   it avoids a second runaway is unmeasured.
 - **Persistence.**
-  - Every `.sddtoolkit.json` must state both temperatures. The closed schema, the
-    example and all fixtures change together, with no compatibility reader.
-  - Frozen calibration protocols keep their recorded `0.1`, and their binding checks
-    compare the recorded temperature value and reject a re-send capture, so a runaway in
-    a frozen experiment fails before its re-send is sent.
+  - Every `.sddtoolkit.json` must state both temperatures, with no compatibility reader.
+  - Frozen calibration protocols keep their recorded temperature, and their binding
+    checks compare the recorded temperature value and reject a re-send capture, so a
+    runaway in a frozen experiment fails before its re-send is sent.
 - **Harness.** The standalone evaluator's Bedrock temperature comes from its own
-  `evaluation-config/v2` value, no longer from an engine constant.
-- **Tests.**
-  - Configuration: accepted `0`, `0.1` and `1`; rejected missing, negative, quoted,
-    null and duplicate values for each member.
-  - Request building: the configured `temperature` on every attempt of a temperature
-    model; omission on both attempts for a family without one.
-  - The re-send: identical bytes except the temperature; sent at a `retry-limit: 0`
-    step; its admitted response publishes; its invalid response takes a correction at
-    `temperature`; a correction that runs away is re-sent; a second runaway fails the
-    request with `RunawayRepeated`; both attempts' usage is accounted.
-  - Logging: one `model.runaway_resent` warning before each re-send, after the
-    runaway's `model.provider_stopped`; none for any other stop; a logging rejection
-    prevents the re-send; the failure events carry `RunawayRepeated`.
-  - Debug capture: at `debug`, a repeated runaway leaves both attempts' requests, request
-    descriptions and complete returned outputs in the prompt log before the failure
-    events; at a higher level, only the events.
-  - Same checks: a re-sent response is rejected exactly as a first response would be
-    for malformed JSON, a schema violation and a missing assignment member; a scenarios
-    response's missing, repeated or foreign slot number, or items that return equal values
-    (`equal_items`), is rejected as a first response's is (ADR 0038 Decision 3); and the E2E report marks the re-send attempt.
-  - Replay: a current description round-trips each temperature, and a v12 description,
-    which recorded no sampling, is refused.
+  `evaluation-config/v2` value, not from an engine constant.

@@ -312,7 +312,7 @@ pub fn verifyWithHistory(a: std.mem.Allocator, finding: Finding, raw: []const u8
 /// Partial repair schemas cannot independently restate the inherited verdict.
 pub fn verifyRaw(a: std.mem.Allocator, finding: Finding, raw: []const u8, definition: ?@import("../../../src/domain/model_result_schema.zig").DefinitionId) !Verification {
     const selected = definition orelse return .unmeasured;
-    const source_single = std.mem.eql(u8, selected.bytes, "finding") or std.mem.eql(u8, selected.bytes, "preservation_finding") or std.mem.eql(u8, selected.bytes, "applicability_finding");
+    const source_single = std.mem.eql(u8, selected.bytes, "finding") or std.mem.eql(u8, selected.bytes, "preservation_finding") or std.mem.eql(u8, selected.bytes, "applicability_finding") or std.mem.eql(u8, selected.bytes, "record_finding");
     const preservation = std.mem.eql(u8, selected.bytes, "preservation_comparisons");
     if (!source_single and !preservation) return .unmeasured;
     var scratch: std.heap.ArenaAllocator = .init(a);
@@ -439,11 +439,14 @@ test "native source finding wire verification normalizes syntax and leaves retir
     try std.testing.expectEqual(Verification.complete, try verifyRaw(a, finding, raw, .{ .bytes = "finding" }));
     const prefixed = try std.mem.concat(a, u8, &.{ "{\"", raw });
     try std.testing.expectEqual(Verification.complete, try verifyRaw(a, finding, prefixed, .{ .bytes = "finding" }));
+    // A signal or conflict subject's view is a source finding like the others, so its review is measured.
+    try std.testing.expectEqual(Verification.complete, try verifyRaw(a, finding, raw, .{ .bytes = "record_finding" }));
     // Retired assignment definitions have no current producer and are not measured.
     for ([_][]const u8{ "assignment_findings", "record_findings", "principle_finding" }) |retired| try std.testing.expectEqual(Verification.unmeasured, try verifyRaw(a, finding, raw, .{ .bytes = retired }));
     var foreign = finding;
     foreign.detail = "MOCK substituted detail.";
     try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, foreign, raw, .{ .bytes = "finding" }));
+    try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, foreign, raw, .{ .bytes = "record_finding" }));
     try std.testing.expectEqual(Verification.unmeasured, try verifyRaw(a, finding, "{\"detail\":\"MOCK partial correction\"}", .{ .bytes = "detail" }));
 }
 

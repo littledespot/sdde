@@ -1,18 +1,18 @@
 # ADR 0006: Minimal model responses with runner-owned correlation
 
-- **Status:** Accepted design amendment
+- **Status:** Accepted
 - **Date:** 2026-09-05
-- **Decision authority:** User direction to derive a token-efficient response
-  standard and update documentation without code changes
-- **Implementation authority:** Subsequent user request to define and implement
-  the closed result-schema subset, immutable compilation and negative tests
+- **Decision authority:** User decisions, 5, 12, 25 and 26 September 2026 and 25 November
+  2026
 - **Amends:** Design Sections 12.3, 12.7 and 22.4; F0006; F0007 request/schema projection
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md), which removed provider
-  token counting on 24 October 2026; `modelBytes()` now serves inference only.
-- **Supersedes:** The metadata-bearing model response and repair-response
-  examples in `design/code.md`, and F0007's requirement to echo those identities
+- **Amended by:** [ADR 0013](0013-workflow-input-reuse.md),
+  [ADR 0014](0014-universal-response-format-guidance.md),
+  [ADR 0020](0020-derived-exact-reference-lineage.md),
+  [ADR 0025](0025-clarification-answer-authentication.md),
+  [ADR 0028](0028-anthropic-messages-provider.md),
+  [ADR 0030](0030-engine-owned-model-request.md)
 
-[ADR 0012](0012-workflow-owned-model-request.md) owns the request lifecycle that
+[ADR 0030](0030-engine-owned-model-request.md) owns the request lifecycle that
 consumes these responses.
 
 ## Decision
@@ -72,13 +72,11 @@ For example, a single-target replacement response is simply:
 - Losing the trusted association loses the result; an echoed identifier cannot restore
   it.
 
-- `ValidateModelRequestBindingAction` owns pre-call request-ledger proof;
-  `ValidateProviderInvocationObservationAction` owns post-call association and
-  complete-result eligibility.
-- `DecodeModelEnvelopeAction` parses the complete JSON object;
-  `ValidateModelPayloadSchemaAction` validates its bound result schema.
-- The proposed echo-checking `ValidateModelRequestIdentityAction` is removed, not
-  retained as a second identity authority.
+- Request-binding validation owns pre-call request-ledger proof; observation validation
+  owns post-call association and complete-result eligibility.
+- Response admission parses the complete JSON object and validates its bound result
+  schema.
+- No echo-checking identity validation exists as a second identity authority.
 
 ### Candidate fields and evidence
 
@@ -89,12 +87,13 @@ For example, a single-target replacement response is simply:
 - A fixed single target needs no echoed target ID.
 - Clarification IDs, ownership and deduplication remain engine-owned, while any
   necessary subject selection and supporting evidence remain candidate data.
+- One exception: the records clarification's `record_kind`
+  ([ADR 0025](0025-clarification-answer-authentication.md) Decision 6).
 
 - This is a semantic boundary, not a global ban on property names.
 - A business schema may legitimately declare a field named `status` or `requestId`; that
   field never becomes engine status or request identity.
-- Unrequested execution metadata and the superseded outer envelope reject as unknown
-  fields.
+- Unrequested execution metadata and an outer envelope reject as unknown fields.
 
 ### Provider and repair outcomes
 
@@ -103,7 +102,7 @@ For example, a single-target replacement response is simply:
 - They are not model-generated result kinds.
 - Repair operation selection, authorization/revision checks and old-value CAS remain
   mandatory even though their identities are not echoed.
-- `ValidateRepairEnvelopeAction` checks the retained repair authorization, diagnostic
+- Repair-response validation checks the retained repair authorization, diagnostic
   and current candidate revision; it does not repeat generic provider-observation
   validation.
 
@@ -121,22 +120,20 @@ For example, a single-target replacement response is simply:
   a general-purpose JSON Schema engine.
 
 - Schema/version selection stays in compiled authority.
-- The 2026-09-12 amendment separates generation constraints from acceptance: native
-  output mode receives a registered provider projection derived from the same compiled
-  schema.
+- Generation constraints are separate from acceptance: every request receives one
+  native grammar projection derived from the same compiled schema, the same for every
+  provider ([ADR 0028](0028-anthropic-messages-provider.md)).
 - It retains closed objects, required fields, types, enums and tagged alternatives.
-- The Bedrock projection uses `anyOf` for the compiler-proven disjoint `oneOf` variants
-  and retains supported array minima.
-- Unsupported numeric, string and array bounds remain in the complete schema supplied as
+- The projection uses `anyOf` for the compiler-proven disjoint `oneOf` variants and
+  reduces any nonzero array minimum to one item.
+- Other numeric, string and array bounds remain in the complete schema supplied as
   guidance and enforced by the unchanged engine validator.
-- The projection is never acceptance authority.
-- No workflow or model supplies a second schema, relaxes validation, silently switches
+- The projection is never acceptance authority; a schema need not be exactly
+  representable in a provider's grammar.
+- Native output is the only response mode. There is no prompt-only mode and no catalogue
+  `json` member; every registered contract supports native output.
+- No workflow or model supplies a second schema, relaxes validation, switches
   response mode, coerces output or introduces a hidden retry.
-
-- This amendment is authorized by the user's instruction to implement shared
-  provider-enforced output and actionable JSON diagnostics.
-- It supersedes this ADR's former exact-provider-representability requirement and the
-  corresponding wording in Design §12.3 and F0006.
 - Native JSON/schema compliance establishes structure only; semantic support and
   completion retain their existing gates.
 
@@ -169,14 +166,16 @@ For example, a single-target replacement response is simply:
 - Reject duplicate keys at any depth, unknown properties, missing required fields, wrong
   types/kinds, exceeded bounds, malformed JSON, fences, commentary, trailing content or
   a second value.
+- One exception: the user-approved, logged opening normalization that
+  [§22.6](../contracts/22-repair.md#226-unparseable-output) defines, decided in
+  [ADR 0014](0014-universal-response-format-guidance.md).
 - Do not extract JSON from prose or convert a stopped response into a candidate.
 - Schema validity still proves neither semantic correctness nor authority; ordinary
   validators, clarification handling and compiled YAML transitions remain mandatory.
 
 ## Closed result-schema profile
 
-- The accepted implementation increment fixes `model-result-schema/v1` as the
-  engine-selected, provider-neutral schema profile.
+- `model-result-schema/v1` is the engine-selected, provider-neutral schema profile.
 - This profile name is not a new YAML property or model-output field.
 - Each `result-schema` resource is one complete UTF-8 JSON object using only the
   following forms.
@@ -190,7 +189,7 @@ For example, a single-target replacement response is simply:
 | Integer | `type: "integer"`, required `minimum` and `maximum`, both signed 64-bit JSON integer literals. |
 | Boolean / null | Only `type: "boolean"` or `type: "null"`. |
 | Constant | Only `const`, containing a string, signed 64-bit integer, boolean or null. |
-| Enumeration | Only `enum`, containing a nonempty homogeneous list of distinct strings or signed 64-bit integer literals. Constants/enumerations are already finite and need no redundant type or length declaration. Integer enum support was approved for native choice restriction on 26 September 2026. |
+| Enumeration | Only `enum`, containing a nonempty homogeneous list of distinct strings or signed 64-bit integer literals. Constants/enumerations are already finite and need no redundant type or length declaration. |
 | Array | `type: "array"`, one `items` schema and required `maxItems`; optional `minItems` means zero when absent. |
 | Alternatives | Only `oneOf`, containing 2–32 alternatives. Nested alternatives may have distinct JSON types; alternatives sharing object type require distinct nonempty string `kind` constants. Repeated primitive types, nested alternative groups and overlapping branches reject. Complete response roots remain closed objects or tagged-object alternatives. |
 
@@ -235,9 +234,8 @@ For example, a single-target replacement response is simply:
 - The compiler reuses the existing 1,048,576-byte workflow-resource ceiling and adds
   structural guards: at most 64 JSON container levels, 16 schema-node levels (root is
   level 1), 4,096 schema nodes including alternative objects and their fields, 256
-  properties per object, and 1,024 enum values (enum limit increased by user approval
-  on 26 September 2026). The same enum bound applies to captured selected-schema
-  reconstruction.
+  properties per object, and 1,024 enum values. The same enum bound applies to captured
+  selected-schema reconstruction.
 - These are compiler safety bounds for compiling the schema resource, not model-call
   size limits, workflow token budgets or retry limits.
 - They cannot be repurposed as request or response byte ceilings.
@@ -258,8 +256,8 @@ For example, a single-target replacement response is simply:
   helper leaves cannot become response schemas.
 - All clones own the source, trees and transport bytes for their lifetime.
 - The registry deep-owns that same authority through execution.
-- The existing provider-neutral request also references this compiled schema; its
-  unchecked raw-schema constructor path is removed.
+- The provider-neutral request also references this compiled schema; it has no
+  unchecked raw-schema constructor path.
 - Other resource kinds remain byte captures and are not parsed as schemas.
 - Any invalid schema rejects graph construction with `WORKFLOW_GRAPH_COMPILE_INVALID`;
   no partial registry is published.
@@ -270,40 +268,22 @@ For example, a single-target replacement response is simply:
 - Byte-identical source/tree binding and immutable ownership are preserved through
   graph/registry copies.
 
-## Acceptance evidence for implementation
-
-- Single-shape and multi-variant results use only schema-required candidate fields;
-  generation and unrelated arbitrary workflows share this contract.
-- Exact call association survives decode; swapped requests/attempts, stale repair
-  revisions and unbound observations reject without replay or guessing.
-- Single-target repair omits identity echoes; group repair preserves exact target keys.
-- Clarification/context variants grant no hidden continuation.
-- Malformed, duplicate, unknown, incomplete, excessive and legacy-envelope responses
-  reject.
-- Required citations and selections cannot be omitted.
-- Native and prompt-only modes have the same candidate meaning and rejection rules;
-  unsupported native schemas fail before any provider call.
-- Tests inspect the actual model-visible payload and account for API-reported
-  input/output usage, not size estimates or mandatory pre-call counts.
-- No fixed token-saving percentage is assumed.
-
-- No compatibility reader or legacy metadata-emitting prompt is retained.
+- No compatibility reader or metadata-emitting prompt exists.
 - Schema compilation adds no workflow operation, hidden transition or provider support;
-  it is part of the existing workflow-compilation kernel.
+  it is part of the workflow-compilation kernel.
 
-## Compact wire amendment — 25 September 2026
+## Compact wire
 
-Approved by the user. Nested alternatives may be disjoint by JSON type,
-with the same compiler proof reused by validation, diagnostics and provider
-projection. This supersedes the object-only alternatives restriction. Composition
-keeps such mixed-type values whole; unsupported decomposition rejects at compile
-time. It does not infer a discriminator or a missing value.
+Nested alternatives may be disjoint by JSON type, with the same compiler proof reused by
+validation, diagnostics and provider projection. Composition keeps such mixed-type
+values whole; unsupported decomposition rejects at compile time. It does not infer a
+discriminator or a missing value.
 
 The shared candidate codec supports explicit native declarations for lossless
 single-field wrappers and scalar/array union payloads. Declared ordinal IDs encode
 as integers and literal text segments as strings. Under the
-[model-facing text contract](../contracts/07-domain-representations.md#model-facing-text)
-(14 October 2026), segment arrays are not a whole text wire value: ordinary prose is a string,
+[model-facing text contract](../contracts/07-domain-representations.md#model-facing-text),
+segment arrays are not a whole text wire value: ordinary prose is a string,
 while explicit composition uses a closed `{"fragments":[...]}` object.
 Passive/source references stay explicit. Under
 [ADR 0020](0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
@@ -318,4 +298,4 @@ or inferring reference identity; scoped exact recognition is a separate native o
 Configured result schemas remain acceptance authority. Native declarations only
 map wire representation to existing types; they neither choose evidence nor relax
 validation. Initial responses, repairs and their evidence use the same codec.
-Superseded wire forms reject; stored canonical formats remain unchanged.
+Any other wire form rejects; stored canonical formats are not wire forms.

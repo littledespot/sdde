@@ -2,8 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-05
-- **Decision authority:** Explicit user direction
-- **Supersedes:** ADR 0008's reference-derived naming (ADR 0008 is removed) and the feature-ownership
+- **Decision authority:** User decision, 5 September 2026
+- **Supersedes:** Reference-derived feature naming and the feature-ownership
   registry/inventory gates in Design Sections 7.3, 13.2, 17, 24 and 25.
 
 ## Decision
@@ -52,14 +52,5 @@ sdde <workflow-id> --feature <feature-directory> --reference <relative-selector>
 - No registry membership or separate overwrite approval is required to replace the
   selected workflow's known outputs.
 
-Reruns follow [ADR 0009's shared replacement rule](0009-atomic-workflow-execution.md#rerun-replacement-rule-accepted-2026-09-07):
-
-- Replace registered outputs and unresolved forms at their existing paths; retain
-  clarification IDs and applicable validated answers.
-- Preserve user-closed files byte-for-byte, including stale or invalid submissions;
-  recheck protection before writing.
-- Keep unrelated files outside the write set.
-- Follow ADR 0009 for publication and fresh reruns; add no recovery mechanism.
-
-Tests must cover standard and custom specs roots, independent reference changes and
-unchanged existing files.
+Reruns, publication and protected user-closed files follow
+[ADR 0009's rerun replacement rule](0009-atomic-workflow-execution.md#rerun-replacement-rule).

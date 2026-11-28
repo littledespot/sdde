@@ -26,6 +26,7 @@ test {
     _ = @import("domain/exact_value_recognition.zig");
     _ = @import("domain/exact_value_boundary.zig");
     _ = @import("domain/source_coordinates.zig");
+    _ = @import("domain/model_evidence.zig");
     _ = @import("domain/model_exact_values.zig");
     _ = @import("domain/ledger_revision.zig");
     _ = @import("domain/ledger_owner.zig");

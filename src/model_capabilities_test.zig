@@ -15,8 +15,8 @@ test "a model that takes a temperature carries the configured pair, and one that
         try std.testing.expectEqual(supported, selected.temperatures != null);
         if (selected.temperature(.configured)) |temperature| try std.testing.expectEqual(@as(f64, 0.1), temperature.wireValue());
         if (selected.temperature(.runaway_resend)) |temperature| try std.testing.expectEqual(@as(f64, 1), temperature.wireValue());
-        try std.testing.expect(capabilities.supports(.prompt_only, selected));
-        try std.testing.expect(!capabilities.supports(.prompt_only, .forTemperatureSupport(!supported, temperatures)));
+        try std.testing.expect(capabilities.supports(selected));
+        try std.testing.expect(!capabilities.supports(.forTemperatureSupport(!supported, temperatures)));
     }
 }
 
@@ -51,15 +51,15 @@ test "request result selection keeps exactly one canonical schema or configured 
 test "model contracts validate capabilities without granting unsupported operations" {
     var contract = provider_contract;
     try (contracts.Registry{ .entries = &.{contract} }).validate();
-    try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
+    try std.testing.expect(contract.capabilities.supports(contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
     contract = provider_contract;
     contract.capabilities.inference = false;
     try std.testing.expectError(error.InvalidProviderModelContracts, (contracts.Registry{ .entries = &.{contract} }).validate());
     contract = provider_contract;
     contract.capabilities.temperature = false;
-    try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
-    try std.testing.expect(!contract.capabilities.supports(.prompt_only, @import("test_fixtures/model_temperatures.zig").supported));
-    try std.testing.expect(!fixture.capabilities.supports(.native_schema, fixture.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
+    try std.testing.expect(contract.capabilities.supports(contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
+    try std.testing.expect(!contract.capabilities.supports(@import("test_fixtures/model_temperatures.zig").supported));
+    try std.testing.expect(fixture.capabilities.supports(fixture.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
 }
 
 test "catalogue candidate cannot substitute compiled capability facts" {
@@ -70,7 +70,6 @@ test "catalogue candidate cannot substitute compiled capability facts" {
         .model = provider_contract.model.?,
         .implementation_id = provider_contract.implementation_id,
         .config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } },
-        .json = false,
         .capabilities = fixture.capabilities,
         .supported_reasoning_efforts = &.{},
     };
@@ -111,7 +110,7 @@ test "registered model contracts cannot restore temperature or retired size para
     }
 }
 
-test "provider operations retain binding control mode and deadline checks" {
+test "provider operations retain binding control and deadline checks" {
     var authorization: @import("provider_authorization_test_fixture.zig").Fixture = undefined;
     try authorization.init(std.testing.allocator);
     defer authorization.deinit();
@@ -120,9 +119,6 @@ test "provider operations retain binding control mode and deadline checks" {
     try std.testing.expect(provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, inference.invoked));
     var request = authorization.request;
     request.controls.temperatures = null;
-    try std.testing.expect(!provider.validateInferenceInvocation(&authorization.provider_binding, &request, inference.invoked));
-    request = authorization.request;
-    request.response_guidance_mode = .native_schema;
     try std.testing.expect(!provider.validateInferenceInvocation(&authorization.provider_binding, &request, inference.invoked));
     var invoked = inference.invoked.*;
     invoked.deadline_monotonic_ms = 0;

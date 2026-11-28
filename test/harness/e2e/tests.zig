@@ -3,4 +3,6 @@ test {
     _ = @import("repair_log.zig");
     _ = @import("measures.zig");
     _ = @import("measures_cli.zig");
+    _ = @import("run_directory.zig");
+    _ = @import("contracts.zig");
 }

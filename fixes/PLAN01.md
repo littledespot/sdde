@@ -382,7 +382,7 @@ change, not a Plan-local one:
   - The case principles are 28,067 and 29,399 bytes (each case's `principles/*.md`;
     hello-world's sit under `node-vitest/`), and carrying them added about 5.5k to 6k tokens to
     Spec's records request (Z_SPEC01 Q17).
-  - The budget is one total for an execution (ADR 0037:52), 125,000 tokens in the case
+  - The budget is one total for an execution (ADR 0011), 125,000 tokens in the case
     configuration (`test/e2e/wf-001-hello-world/.sddtoolkit.json:6`), so about 20 carrying
     requests use it all before any other input or output. The closing set's whole Spec runs
     used 18.7k to 24.1k tokens (Z_SPEC01 "Closing set"); the twelve runs retained from 22

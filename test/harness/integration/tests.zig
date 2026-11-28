@@ -1576,7 +1576,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         retained[0] = try (Diagnostic{ .reconciliation = rejected }).copy(a);
         const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
         const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry };
-        const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted);
+        const review_inputs = try @import("../../../src/domain/specification_authority.zig").projectFor(scratch, input.inputs.corpus.feature_id, accounted, .first);
         var omission_inputs = review_inputs;
         omission_inputs.review_origin = origin;
         retained[4] = try (Diagnostic{ .support_findings = .from(omission_inputs, .unlocalized_omission) }).copy(a);
@@ -1585,6 +1585,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
             .origin = origin,
             .origins = &.{},
             .omission_conflict_claims = context.references.records.assignments.checked.prior.prior.source.omission_conflict_claims,
+            .omission_released_claims = context.references.records.assignments.checked.prior.prior.source.omission_released_claims,
         })).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
@@ -2090,7 +2091,7 @@ test "production workflow enforces one global token budget and fails required st
         const a = arena.allocator();
         const choice = try c.parse(a, if (mode == .global_budget) @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json") else @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
         var captured = try fixture.capture(io, a, .cwd(), choice);
-        // ADR 0037: the project configuration supplies the budget. A value unlike the
+        // ADR 0011: the project configuration supplies the budget. A value unlike the
         // shipped one shows the ledger starts from the configuration.
         captured.config = try std.mem.replaceOwned(u8, a, captured.config, "\"workflowTokenBudget\": 125000", "\"workflowTokenBudget\": 90000");
         try std.testing.expect(std.mem.indexOf(u8, captured.config, "\"workflowTokenBudget\": 90000") != null);
@@ -2271,10 +2272,10 @@ const ProviderWire = struct {
 const two_provider_catalogue =
     \\{"providers":[
     \\{"provider":"anthropic","models":[
-    \\{"model":"claude-haiku-5-5","json":false,"config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}},
-    \\{"model":"claude-opus-5-5","json":true,"config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}}]},
+    \\{"model":"claude-haiku-5-5","config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}},
+    \\{"model":"claude-opus-5-5","config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}}]},
     \\{"provider":"aws-bedrock","models":[
-    \\{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16384,"requestTimeoutMs":180000}}]}]}
+    \\{"model":"openai.gpt-oss-20b-1:0","config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16384,"requestTimeoutMs":180000}}]}]}
 ;
 
 const claude_slot = "{\"provider\":\"anthropic\",\"model\":\"claude-haiku-5-5\",\"reasoningEffort\":\"low\"}";
@@ -2436,8 +2437,8 @@ test "a Claude-only Spec run sends every call through the shared adapter to the 
         try std.testing.expectEqualStrings("claude-haiku-5-5", sent.value.object.get("model").?.string);
         try std.testing.expectEqual(@as(i64, 128000), sent.value.object.get("max_tokens").?.integer);
         try std.testing.expectEqualStrings("low", sent.value.object.get("output_config").?.object.get("effort").?.string);
-        // The catalogue selects prompt-only for this model: no native format.
-        try std.testing.expect(sent.value.object.get("output_config").?.object.get("format") == null);
+        // Native JSON-schema output is the only mode.
+        try std.testing.expectEqualStrings("json_schema", sent.value.object.get("output_config").?.object.get("format").?.object.get("type").?.string);
         try std.testing.expect(std.mem.indexOf(u8, body, "offline-anthropic-credential") == null);
     }
     try std.testing.expectEqual(@as(u64, 3), outcome.execution_rejected.retry_limit.completed_executions);
@@ -2550,6 +2551,16 @@ const ScriptedWire = struct {
     options: @import("../../../src/test_fixtures/spec_generation_responses.zig").Options = .{},
     /// Raises the operator's interrupt (a real SIGINT) while this request is in flight, then answers it.
     interrupt_on_call: ?usize = null,
+    /// The semantic review requests answered, and the requirements of the latest one's pass that are conflict
+    /// records and that are not.
+    reviews: usize = 0,
+    conflict_requirements: usize = 0,
+    other_requirements: usize = 0,
+    /// Authoring requests (those assigning source requirements), and how many requests from the first of them on,
+    /// scenarios and repairs included, carry `watched` in their body.
+    authoring: usize = 0,
+    watched: ?[]const u8 = null,
+    authoring_watched: usize = 0,
 
     fn port(self: *ScriptedWire) provider_transport.Port {
         return .{ .context = @ptrCast(self), .exchange_fn = exchange };
@@ -2558,6 +2569,11 @@ const ScriptedWire = struct {
     fn exchange(context: *provider_transport.Context, allocator: std.mem.Allocator, request: provider_transport.Request) provider_transport.Error!provider_transport.Response {
         const self: *ScriptedWire = @ptrCast(@alignCast(context));
         self.calls += 1;
+        if (std.mem.indexOf(u8, request.body, "source_assignment") != null) self.authoring += 1;
+        // No review runs after generation, so from the first authoring request on every request is authoring's.
+        if (self.authoring != 0) if (self.watched) |bytes| if (std.mem.indexOf(u8, request.body, bytes) != null) {
+            self.authoring_watched += 1;
+        };
         if (request.target != .anthropic) self.foreign_targets += 1;
         if (self.interrupt_on_call == self.calls) std.posix.raise(.INT) catch |err| {
             if (self.failure == null) self.failure = err;
@@ -2572,10 +2588,20 @@ const ScriptedWire = struct {
         return messagesResponse(allocator, scripted);
     }
 
-    fn answer(self: *const ScriptedWire, allocator: std.mem.Allocator) ![]const u8 {
+    fn answer(self: *ScriptedWire, allocator: std.mem.Allocator) ![]const u8 {
         const slot = self.runner orelse return error.RunnerNotObserved;
         const runner = if (slot.*) |*prepared| prepared else return error.RunnerNotPrepared;
         const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+        const requests = @import("../../../src/application/model_request_workflow.zig");
+        if ((try requests.readCurrent(&view, requests.prepared_schema)).id().purpose == .semantic_review) {
+            const pass = try @import("../../../src/application/required_authority_values.zig").read(&view, @import("../../../src/application/required_authority_workflow.zig").inputs_schema, .inputs);
+            self.reviews += 1;
+            self.conflict_requirements = 0;
+            self.other_requirements = 0;
+            for (pass.seeds) |seed| {
+                if (seed.id.unit == .conflict) self.conflict_requirements += 1 else self.other_requirements += 1;
+            }
+        }
         const attempt = @import("../../../src/domain/model_attempt_accounting.zig").latestAttempt(runner.model_accounting.?.attempts).ordinal().value;
         var options = self.options;
         options.attempt = attempt;
@@ -2821,6 +2847,16 @@ test "an authenticated closed clarification form is accepted, published with its
 }
 
 test "a conflict's form is answered by option key, the next run applies the choice and publishes, and a rerun reuses it" {
+    try conflictAnsweredByOptionKey(false);
+}
+
+// A model may file two lines that contradict each other as open questions. The answer decides them, so the claim it keeps
+// is no longer one and the run publishes (ADR 0025).
+test "a conflict between claims filed as open questions is answered by option key, publishes, and its snapshot keeps the chosen claim" {
+    try conflictAnsweredByOptionKey(true);
+}
+
+fn conflictAnsweredByOptionKey(open_question_claims: bool) !void {
     const io = std.testing.io;
     @import("../../../src/composition/root.zig").Interrupt.resetForTest();
     const cl = @import("../../../src/domain/clarification_inputs.zig");
@@ -2847,7 +2883,7 @@ test "a conflict's form is answered by option key, the next run applies the choi
     const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
 
     // Run 1 raises one form that offers each claim as an option, and publishes no specification.
-    var first: ScriptedWire = .{ .options = .{ .conflict = true } };
+    var first: ScriptedWire = .{ .options = .{ .conflict = true, .open_question_claims = open_question_claims } };
     errdefer std.debug.print("conflict run 1 of {s}\n", .{offline.choice.id});
     try offline.execute(io, &first);
     try std.testing.expectEqual(@as(?workflow.OutcomeTag, .needs_user), offline.report.workflow_outcome);
@@ -2860,6 +2896,11 @@ test "a conflict's form is answered by option key, the next run applies the choi
     try std.testing.expectEqualStrings("A loan may be renewed twice.", options[0].label);
     try std.testing.expect(!std.mem.eql(u8, options[0].label, options[1].label));
     try std.testing.expectEqual(@as(usize, 0), account.observations);
+    // The blocked pass reviews its conflict record alone: one request for each, and no other requirement.
+    try std.testing.expect(first.conflict_requirements != 0);
+    try std.testing.expectEqual(@as(usize, 0), first.other_requirements);
+    try std.testing.expectEqual(first.conflict_requirements, first.reviews);
+    try std.testing.expectEqual(first.conflict_requirements, raised.records.len);
 
     // The user chooses the first claim by its key; run 2 authenticates the account, applies the choice and publishes.
     const chosen = options[0].key;
@@ -2872,6 +2913,86 @@ test "a conflict's form is answered by option key, the next run applies the choi
     const prepared = (try answer.prepare(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen)).ready;
     try std.testing.expectEqualStrings(form_path, prepared.path);
     const answered = prepared.bytes;
+    // What the harness does after each leg. The first leg paused, so its report says so and it retained no completed
+    // specification (`offline.specification` is null above); it is still answered, because the answer never waits on
+    // specification bytes.
+    try std.testing.expectEqual(.awaiting_clarification, offline.report.status);
+    const paused: answer.Finished = .{ .expected = .clarification, .status = offline.report.status, .specification = offline.specification };
+    const answered_next = try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, paused);
+    try std.testing.expect(answered_next == .answer);
+    try std.testing.expectEqualStrings(prepared.path, answered_next.answer.path);
+    try std.testing.expectEqualStrings(prepared.bytes, answered_next.answer.bytes);
+    // Any other state stops with the leg's own report, or reports that there was no form to answer.
+    try std.testing.expect((try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, null, paused)) == .stop);
+    var did_not_pause = paused;
+    did_not_pause.status = .workflow_invalid;
+    try std.testing.expect((try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, did_not_pause)) == .stop);
+    try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, "no.such.key", paused)).unavailable);
+    try std.testing.expectEqual(answer.Unavailable.no_clarification_state, (try answer.after(io, a, empty.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+    // A first leg whose open forms are one form twice over, or are not selections, has no form to answer.
+    {
+        var crowded_dir = std.testing.tmpDir(.{});
+        defer crowded_dir.cleanup();
+        try crowded_dir.dir.createDirPath(io, std.fs.path.dirname(state_path).?);
+        var crowded = raised;
+        crowded.records = try a.dupe(cl.Record, &.{ raised.records[0], raised.records[0] });
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, crowded, .{}) });
+        try std.testing.expectEqual(answer.Unavailable.answer_form_count, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+        var typed = raised;
+        const text_only = try a.dupe(cl.Record, &.{raised.records[0]});
+        text_only[0].answer_schema = .{ .bounded_business_text = 100 };
+        typed.records = text_only;
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, typed, .{}) });
+        try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+        // Beside the form that offers the key, other open forms are left as they were: the harness answers the one form that
+        // offers the key and no other, and the state it read is unchanged.
+        var other = raised.records[0];
+        other.id = "S02";
+        other.subject.slot = "other";
+        other.answer_schema = .{ .select_one = &.{ .{ .key = "other.1", .label = "One." }, .{ .key = "other.2", .label = "Two." } } };
+        var prose = other;
+        prose.id = "S03";
+        prose.subject.slot = "prose";
+        prose.answer_schema = .{ .bounded_business_text = 100 };
+        var several = raised;
+        several.records = try a.dupe(cl.Record, &.{ other, raised.records[0], prose });
+        const several_bytes = try std.json.Stringify.valueAlloc(a, several, .{});
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = several_bytes });
+        const among = try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused);
+        try std.testing.expect(among == .answer);
+        try std.testing.expect(std.mem.endsWith(u8, among.answer.path, "S01.md"));
+        try std.testing.expectEqualStrings(prepared.bytes, among.answer.bytes);
+        try std.testing.expectEqualStrings(several_bytes, try crowded_dir.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)));
+        // The other form's own key answers that form, and a key that no open selection offers answers none.
+        const other_key = (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, "other.2", paused)).answer;
+        try std.testing.expect(std.mem.endsWith(u8, other_key.path, "S02.md"));
+        try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, "no.such.key", paused)).unavailable);
+        // A key two open forms offer is no choice for the harness to make.
+        var shared = other;
+        shared.answer_schema = .{ .select_one = &.{ .{ .key = chosen, .label = "The same option." }, .{ .key = "other.2", .label = "Two." } } };
+        several.records = try a.dupe(cl.Record, &.{ shared, raised.records[0] });
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, several, .{}) });
+        try std.testing.expectEqual(answer.Unavailable.answer_form_count, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+        // Forms that are no longer open leave nothing to answer.
+        var closed = raised.records[0];
+        closed.status = .resolved_by_authority;
+        closed.authority_resolution = "Decided by the answer to S09 (option x), which left this conflict with one claim.";
+        several.records = try a.dupe(cl.Record, &.{closed});
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, several, .{}) });
+        try std.testing.expectEqual(answer.Unavailable.answer_form_count, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+    }
+    // A leg that expects publication is evaluated when it retained a specification and stops when it did not; the case's
+    // combined outcome is no leg's.
+    const completed: answer.Finished = .{ .expected = .publication, .status = .generated, .specification = "A completed specification." };
+    const evaluated = try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, completed);
+    try std.testing.expect(evaluated == .evaluate);
+    try std.testing.expectEqualStrings("A completed specification.", evaluated.evaluate);
+    var unretained = completed;
+    unretained.specification = null;
+    try std.testing.expect((try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, unretained)) == .stop);
+    var combined = paused;
+    combined.expected = .clarification_then_publication;
+    try std.testing.expectError(error.CombinedOutcomeIsNotALeg, answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, combined));
     // The first leg's project is evidence: the second leg starts from a copy of it with the answered form written over the form.
     var continued = std.testing.tmpDir(.{});
     {
@@ -2899,10 +3020,13 @@ test "a conflict's form is answered by option key, the next run applies the choi
     offline.evidence.cleanup();
     offline.evidence = std.testing.tmpDir(.{});
     offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
-    var second: ScriptedWire = .{ .options = .{ .conflict = true } };
+    var second: ScriptedWire = .{ .options = .{ .conflict = true, .open_question_claims = open_question_claims }, .watched = "A loan may be renewed once." };
     errdefer std.debug.print("conflict run 2 of {s}: outcome {any}, step {?s}, diagnostic {?s}\n", .{ offline.choice.id, offline.report.workflow_outcome, offline.report.terminal_step, offline.report.diagnostic });
     try offline.execute(io, &second);
     try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    // Authoring never reads the line the answer superseded (ADR 0025, amended 27 November 2026).
+    try std.testing.expect(second.authoring > 0);
+    try std.testing.expectEqual(@as(usize, 0), second.authoring_watched);
     try std.testing.expectEqual(.passed, offline.report.publication_check);
     try std.testing.expectEqual(@as(usize, 1), account.observations);
     const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
@@ -2924,6 +3048,17 @@ test "a conflict's form is answered by option key, the next run applies the choi
     const text = offline.specification.?;
     try std.testing.expect(std.mem.indexOf(u8, text, "renewed twice") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "renewed once") == null);
+    // The published snapshot keeps the one claim the answer kept, and the reference context lists a question it decided apart
+    // from the questions still open.
+    const state_json = try std.json.parseFromSliceLeaky(std.json.Value, a, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", "workflow.json" }), a, .limited(64 * 1024 * 1024)), .{});
+    try std.testing.expectEqual(@as(usize, 1), state_json.object.get("reference").?.object.get("answer_retained").?.array.items.len);
+    const context = try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.specs, feature, artifacts.reference_context_filename }), a, .limited(cl.max_form_bytes * 64));
+    const answered_at = std.mem.indexOf(u8, context, "## Answered Questions\n\n- **SIG-") != null;
+    try std.testing.expectEqual(open_question_claims, answered_at);
+    // The one question the sources hold is the answered one, so no question is left open; with no question answered the
+    // view has no such section.
+    try std.testing.expectEqual(open_question_claims, std.mem.indexOf(u8, context, "## Open Questions\n\n\n## Answered Questions") != null);
+    try std.testing.expectEqual(open_question_claims, std.mem.indexOf(u8, context, "## Answered Questions") != null);
     // The form is protected byte for byte.
     try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
 
@@ -2931,7 +3066,7 @@ test "a conflict's form is answered by option key, the next run applies the choi
     offline.evidence.cleanup();
     offline.evidence = std.testing.tmpDir(.{});
     offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
-    var third: ScriptedWire = .{ .options = .{ .conflict = true } };
+    var third: ScriptedWire = .{ .options = .{ .conflict = true, .open_question_claims = open_question_claims } };
     errdefer std.debug.print("conflict run 3 of {s}\n", .{offline.choice.id});
     try offline.execute(io, &third);
     try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
@@ -2941,6 +3076,194 @@ test "a conflict's form is answered by option key, the next run applies the choi
     const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
     try std.testing.expectEqual(@as(u64, 1), registry.revision);
     try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+}
+
+// ADR 0025: an answer that leaves another conflict with one claim drops it, so that conflict's form has no question left to
+// ask. The engine closes such a form by authority instead of leaving it open, which would pause every later run.
+test "answering one of two overlapping conflict forms closes the other, which the answer dropped, and the run publishes" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    const workflow = @import("../../../src/domain/workflow.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.loan_renewal);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // Three sources make three claims, read in path order: "twice", "thrice" and "once". The scripted reconciliation holds
+    // two conflicts that share the second, and the review judges both genuine, so each raises a form.
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "a-twice.md" }), .data = "A loan may be renewed twice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "b-thrice.md" }), .data = "A loan may be renewed thrice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "stories.md" }), .data = "# Library Loan Renewal\n\nA loan may be renewed once.\n" });
+    const state_path = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", artifacts.clarification_state_filename });
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+    const options: @import("../../../src/test_fixtures/spec_generation_responses.zig").Options = .{ .conflict = true, .overlapping_conflicts = true };
+
+    var first: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("overlap run 1 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &first);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .needs_user), offline.report.workflow_outcome);
+    const raised = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqual(@as(usize, 2), raised.records.len);
+    // The conflict between "twice" and "thrice" is the one the user answers, keeping "twice".
+    const offers = struct {
+        fn label(record: cl.Record, text: []const u8) bool {
+            for (record.answer_schema.select_one) |option| if (std.mem.eql(u8, option.label, text)) return true;
+            return false;
+        }
+    }.label;
+    const real = for (raised.records) |record| {
+        if (offers(record, "A loan may be renewed twice.")) break record;
+    } else return error.TestUnexpectedResult;
+    const dropped = for (raised.records) |record| {
+        if (!std.mem.eql(u8, record.id, real.id)) break record;
+    } else return error.TestUnexpectedResult;
+    const key = for (real.answer_schema.select_one) |option| {
+        if (std.mem.eql(u8, option.label, "A loan may be renewed twice.")) break option.key;
+    } else return error.TestUnexpectedResult;
+    const answered = try forms.render(a, real, .{ .state_ordinal = raised.state_ordinal, .state_revision = raised.revision, .record_revision = real.revision, .status = real.status }, .closed, key);
+    const real_name = cl.Id.parse(real.id).?.filename();
+    const dropped_name = cl.Id.parse(dropped.id).?.filename();
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", &real_name }), .data = answered });
+
+    // Run 2 accepts the answer, which supersedes "thrice" and leaves the other conflict with "once" alone: the conflict is
+    // dropped, its form is closed by authority, and nothing is left open, so the run publishes.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var second: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("overlap run 2 of {s}: outcome {any}, step {?s}\n", .{ offline.choice.id, offline.report.workflow_outcome, offline.report.terminal_step });
+    try offline.execute(io, &second);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(.passed, offline.report.publication_check);
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    for (published.records) |record| {
+        if (std.mem.eql(u8, record.id, real.id)) {
+            try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, record.status);
+        } else {
+            try std.testing.expectEqual(cl.EngineStatus.resolved_by_authority, record.status);
+            try std.testing.expectEqual(@as(?u64, null), record.response_id);
+            try std.testing.expect(std.mem.indexOf(u8, record.authority_resolution.?, real.id) != null);
+            try std.testing.expect(std.mem.indexOf(u8, record.authority_resolution.?, key) != null);
+        }
+    }
+    // The closed form's file is the engine's audit view, and the user's answered form is untouched.
+    const audit = try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", &dropped_name }), a, .limited(cl.max_form_bytes));
+    try std.testing.expect(std.mem.indexOf(u8, audit, "engineStatus: resolved_by_authority") != null);
+    try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", &real_name }), a, .limited(cl.max_form_bytes)));
+
+    // A rerun reads the published state back, applies the same answer, finds the form already closed and publishes again.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var third: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("overlap run 3 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &third);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    const again = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    for (again.records, published.records) |now, before| {
+        try std.testing.expectEqual(before.status, now.status);
+        try std.testing.expectEqualStrings(before.authority_resolution orelse "", now.authority_resolution orelse "");
+    }
+}
+
+// ADR 0025: two answers to overlapping conflicts apply together when each would drop the other's conflict, so a user who
+// answers both forms is not stopped by the form they answered second.
+test "answering both overlapping conflict forms keeps both chosen claims, closes neither form by authority, and the run publishes" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    const workflow = @import("../../../src/domain/workflow.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.loan_renewal);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // Three sources make three claims, read in path order: "twice", "thrice" and "once". The scripted reconciliation holds
+    // two conflicts that share the second, and the review judges both genuine, so each raises a form.
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "a-twice.md" }), .data = "A loan may be renewed twice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "b-thrice.md" }), .data = "A loan may be renewed thrice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "stories.md" }), .data = "# Library Loan Renewal\n\nA loan may be renewed once.\n" });
+    const state_path = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", artifacts.clarification_state_filename });
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+    const options: @import("../../../src/test_fixtures/spec_generation_responses.zig").Options = .{ .conflict = true, .overlapping_conflicts = true };
+
+    var first: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("both-answers run 1 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &first);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .needs_user), offline.report.workflow_outcome);
+    const raised = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqual(@as(usize, 2), raised.records.len);
+    // The user keeps "twice" in the conflict between "twice" and "thrice", and "once" in the one between "thrice" and "once":
+    // each answer supersedes "thrice", and each keeps the claim the other would have retained.
+    const keeps = [_][]const u8{ "twice", "once" };
+    var names: [2][]const u8 = undefined;
+    var answers: [2][]const u8 = undefined;
+    const offers = struct {
+        fn label(record: cl.Record, word: []const u8) bool {
+            for (record.answer_schema.select_one) |option| if (std.mem.indexOf(u8, option.label, word) != null) return true;
+            return false;
+        }
+    }.label;
+    for (keeps, &names, &answers) |keep, *name, *text| {
+        // Each kept claim is offered by one form only.
+        const record = for (raised.records) |candidate| {
+            if (offers(candidate, keep)) break candidate;
+        } else return error.TestUnexpectedResult;
+        const key = for (record.answer_schema.select_one) |option| {
+            if (std.mem.indexOf(u8, option.label, keep) != null) break option.key;
+        } else return error.TestUnexpectedResult;
+        text.* = try forms.render(a, record, .{ .state_ordinal = raised.state_ordinal, .state_revision = raised.revision, .record_revision = record.revision, .status = record.status }, .closed, key);
+        const file = cl.Id.parse(record.id).?.filename();
+        name.* = try a.dupe(u8, &file);
+        try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", name.* }), .data = text.* });
+    }
+
+    // Run 2 accepts both answers, applies them together and has nothing left open, so it publishes.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var second: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("both-answers run 2 of {s}: outcome {any}, step {?s}\n", .{ offline.choice.id, offline.report.workflow_outcome, offline.report.terminal_step });
+    try offline.execute(io, &second);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(.passed, offline.report.publication_check);
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    // Both forms stay the user's: neither was dropped by an answer, so the engine closes none.
+    for (published.records) |record| try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, record.status);
+    // The snapshot keeps both claims the answers kept, each once.
+    const state_json = try std.json.parseFromSliceLeaky(std.json.Value, a, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", "workflow.json" }), a, .limited(64 * 1024 * 1024)), .{});
+    try std.testing.expectEqual(@as(usize, 2), state_json.object.get("reference").?.object.get("answer_retained").?.array.items.len);
+    const text = offline.specification.?;
+    try std.testing.expect(std.mem.indexOf(u8, text, "renewed twice") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "renewed once") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "renewed thrice") == null);
+    for (names, answers) |name, answered| {
+        try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", name }), a, .limited(cl.max_form_bytes)));
+    }
+
+    // A rerun reads the published state back (validating its reference snapshot), reuses both responses and publishes again.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var third: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("both-answers run 3 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &third);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
 }
 
 test "a valid cancel beside an answered form ends the run cancelled before its first request and publishes only the clarification state and its evidence" {

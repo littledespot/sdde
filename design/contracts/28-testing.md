@@ -201,9 +201,7 @@ Required cases include:
 - **Publication:**
   - Validate output before publication.
   - Unrepaired JSON/schema rejection with existing open forms ends in error with no
-    publication calls ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md),
-    on hold and not implemented, would publish a failed incomplete specification
-    instead). A successful correction may reach a valid clarification pause.
+    publication calls. A successful correction may reach a valid clarification pause.
   - Source, generation and residual open-registry pauses all publish
     the validated incomplete specification through the same path, remain ungraded,
     and keep Plan/Tasks gates closed. Rejected response bytes never enter that view.
@@ -326,7 +324,7 @@ Architecture tests also:
 - reject node `execute` calls outside orchestrator modules;
 - enforce the orchestrator import allowlist;
 - require orchestrators to receive only child bindings and the capability-free `NodeRuntime`;
-- once [ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented, reject any
+- under [ADR 0030](../decisions/0030-engine-owned-model-request.md), reject any
   YAML-addressable model-request stage, keep each stage's narrow ports and keep its kernel
   orchestrator capability-free, with the spy-binding, equivalence, compiler,
   contract-variant and failure-location tests of the ADR's acceptance list;
@@ -524,7 +522,7 @@ for integration/fault-injection evidence. They are not E2E results:
 ### 28.8 Model-conformance comparisons
 
 Assess request-guidance changes (assignment-specific instructions, correction
-guidance, model or response-mode choice, further response decomposition) through
+guidance, model choice, further response decomposition) through
 existing request capture, provider binding, validators and the harness.
 Scripted fault/recovery tests establish enforcement, sibling/provenance preservation,
 dependency freshness and exact accounting; they do not establish live reliability.
@@ -533,8 +531,7 @@ dependency freshness and exact accounting; they do not establish live reliabilit
   cases, settings and repetition counts before comparing. Include unchanged invalid
   corrections, structural recovery that drops content, and fully supported recovery.
 - Change one factor at a time: hold model/settings fixed for guidance or composition
-  comparisons, and hold schema/evidence/guidance fixed for model or response-mode
-  comparisons. Retain actual serialized requests, responses and validation results.
+  comparisons, and hold schema/evidence/guidance fixed for model comparisons. Retain actual serialized requests, responses and validation results.
 - Report initial JSON/schema admission, correction recovery/exhaustion, unchanged
   responses, omitted requirements, unsupported evidence and false clarification gaps
   separately. A parseable response or a genuine clarification is not scored completion.
@@ -561,7 +558,7 @@ that inject a correct diagnosis do not establish complete recovery.
 | Case | Required evidence |
 | --- | --- |
 | Retained false-conflict sequence | Compatible source → incorrect candidate conflict → generic unsupported findings → completed question text does not authorize publication while the candidate conflict remains unclassified |
-| Correct localized diagnosis | Feature and conflict subjects can cite the exact diagnostic claims; coupled repair rebuilds signals, coverage and reviews; positive provenance stays strict |
+| Correct localized diagnosis | A conflict subject in a first pass, and every subject in the dependent pass of a repair (F0100 §3.10), can cite the exact diagnostic claims; coupled repair rebuilds signals, coverage and reviews; positive provenance stays strict. A false conflict that shares a claim with a genuine one is repaired alone and the genuine conflict stays and asks its question, whichever order the records are declared in |
 | Mixed findings | Localized/unlocalized defects and genuine gaps in every ordering; eligible repairs are reachable, no finding disappears, unresolved defects prevent publication |
 | Genuine source contradiction | Exact current subject/claim/source association and explicit incompatible meanings admit a concrete choice; do not treat every conflict as repairable |
 | Supported versus missing requirement | Both source review and generation needs; complete source requires no restatement, genuine missing choice yields preconditions/question/expected answer with a blank answer region |

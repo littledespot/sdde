@@ -2,35 +2,19 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-29
-- **Decision authority:** Explicit user direction
-- **Storage amendment (2026-09-05):** Explicit user direction removes the
-  project-level transaction directory and its WAL, ledger, lock, and recovery
-  prerequisites. Feature activation follows Design Section 25.1; this
-  machinery must not be relocated under another path.
-- **Amended by:** [ADR 0005 — workflow-defined operations](0005-workflow-defined-operations.md)
-  and [ADR 0009 — atomic workflow execution](0009-atomic-workflow-execution.md).
-  One whole execution is atomic; there are no feature/task transactions,
-  provider-effect journals, checkpoints or saved-step recovery.
-  [ADR 0031 — stage actions](0031-stage-actions.md) (22 October 2026; `prepare-toolchain`
-  implemented): the internal steps of a stage action are functions, not workflow
-  operations, so they are not addressable from YAML; the stage action itself is.
-  [ADR 0032 — engine routines](0032-engine-routines.md) (22 October 2026; startup and
-  provider bootstrap implemented): the engine-startup graph is a typed engine routine run by the
-  composition root. It is still compiler-locked, nonselectable and lock-free. The
-  workflow-engine orchestrator still receives only runner-owned child bindings, one of
-  which reaches the provider-bootstrap routine.
+- **Decision authority:** User decisions, 29 August and 5 September 2026
+- **Amended by:** [ADR 0004](0004-model-provider-bootstrap.md),
+  [ADR 0005](0005-workflow-defined-operations.md),
+  [ADR 0009](0009-atomic-workflow-execution.md), [ADR 0031](0031-stage-actions.md),
+  [ADR 0032](0032-engine-routines.md)
 - **Supersedes:** The fixed four-role workflow registry and compiler-owned
   four-workflow graph described in Sections 5.2, 9.1, 9.2, 30, and 31 of the
   proposed design
 
-## Context
-
-A fixed four-role registry makes `paths.workflows` configurable while requiring
-engine changes for new workflow identities. SDDE must instead validate and
-execute project definitions composed from supported contracts without adding
-those identities to engine source.
-
 ## Decision
+
+SDDE validates and executes project definitions composed from supported contracts without
+adding workflow identities to engine source.
 
 ### Definition inventory
 
@@ -40,6 +24,9 @@ those identities to engine source.
   workflow-authority traversal.
 - Other directories have no reserved status and follow ordinary definition/resource
   inventory rules.
+- There is no project-level transaction directory, WAL, ledger, lock or recovery
+  prerequisite. Feature activation follows Design Section 25.1; this machinery must not be
+  relocated under another path.
 
 - Each definition has a validated project-authored `WorkflowId`, version, workflow
   logging shortcode, registered invocation operation, graph of engine-registered generic
@@ -63,12 +50,15 @@ The workflow runtime has four separate responsibilities:
    child bindings; the common runner remains the sole node invocation and delta
    application owner.
 
-- A small compiler-locked engine-startup graph is assembled by the composition root so
-  the runner can load, compile, and register project workflows before one of them exists
-  to execute.
-- This graph is engine machinery, not a project workflow: it is not discovered beneath
-  `paths.workflows`, cannot be selected, cannot be extended by a definition, and
-  acquires no feature transaction lock.
+- Engine startup is a typed engine routine ([ADR 0032](0032-engine-routines.md)) that the
+  composition root runs to load, compile, and register project workflows before one of
+  them exists to execute.
+- It is engine machinery, not a project workflow: it is compiler-locked, is not
+  discovered beneath `paths.workflows`, cannot be selected, cannot be extended by a
+  definition, and acquires no feature lock.
+- The internal steps of a stage action ([ADR 0031](0031-stage-actions.md)) are functions,
+  not workflow operations, so they are not addressable from YAML; the stage action itself
+  is.
 
 ### Compilation and invocation rules
 
@@ -91,9 +81,10 @@ The workflow runtime has four separate responsibilities:
   coordinates their runner-owned bindings.
 - The workflow engine coordinates that node before graph entry, then supplies only the
   validated run context to the graph.
-- Project/feature/toolchain setup beyond the minimal engine-startup graph is included
-  only when the selected workflow graph references the corresponding registered setup
-  operations.
+- Project/feature/toolchain setup beyond engine startup is included only when the
+  selected workflow graph references the corresponding registered setup operations. The
+  one exception is model-provider run preparation
+  ([ADR 0004](0004-model-provider-bootstrap.md)).
 
 ### Initial SDD suite
 
@@ -121,12 +112,12 @@ The workflow runtime has four separate responsibilities:
 - Bootstrap validates a variable-size workflow registry rather than requiring exact
   four-role coverage.
 - The composition root registers concrete generic operation implementations and
-  adapters; it no longer resolves complete workflows by hard-coded workflow name.
+  adapters; it does not resolve complete workflows by hard-coded workflow name.
 - The workflow engine remains a capability-free orchestrator.
 - Only runner-invoked actions receive their narrow declared ports, and every
-  orchestrator—including the workflow engine—receives only runner-owned child bindings.
+  orchestrator, including the workflow engine, receives only runner-owned child bindings,
+  one of which reaches the provider-bootstrap routine.
 - SDD predecessor validation, approvals, clarification ownership, artifact paths, and
   invalidation remain domain contracts of the four initial workflows.
-- This decision does not accept the remainder of the proposed design, define a plugin or
-  dynamic-library system, permit project-authored executable code, or authorize running
-  SDDE against a target project.
+- This decision defines no plugin or dynamic-library system and permits no
+  project-authored executable code.

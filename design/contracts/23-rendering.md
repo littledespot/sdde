@@ -238,15 +238,11 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
   output-exists failure, or separate overwrite approval.
 - Specify therefore overwrites `spec.md` and `reference-context.md`, including prior user edits
   to `spec.md`; it does not delete and recreate the feature directory.
-- Validation and predecessor/review gates still apply before commit. Today a failed,
+- Validation and predecessor/review gates still apply before commit. A failed,
   blocked or invalid execution publishes nothing
   ([§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)),
   and a clarification pause publishes ADR 0017's validated incomplete projection, never as a
   completed specification ([§25.2](25-publication.md#252-abandonment-and-reruns)).
-  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold; not
-  implemented) would publish a failed incomplete specification marked as
-  [F0100 §5.5](../features/F0100-SpecWorkflow.md#55-incomplete-specification-and-controlled-clarifications)
-  specifies.
 
 - Unresolved-form replacement includes the complete question/schema/revision projection and
   controlled editable regions; an unsubmitted draft answer is not protected from replacement.
@@ -306,6 +302,9 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
 - If a current required subject can no longer use its protected answer, preserve the file and
   response and block for explicit user direction.
 - If the subject is no longer required, retain its user closure as history without reopening it.
+- An open form of a conflict that an applied user answer dropped is closed by the engine as `resolved_by_authority` and
+  rendered as its audit view, which is replaceable; a user closure is never closed this way
+  ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)).
 - A rerun cannot automatically reopen it, replace its question, or allocate a duplicate ID to
   evade protection.
 - Clarification refreshes retain their existing same-ID rules; they never make unresolved-form

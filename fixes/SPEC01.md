@@ -19,7 +19,7 @@ enough stability evidence for now. ADR 0034 leaves actioning Plan to the user, s
 started. **Re-run decided 14 November 2026** (user: "the above recommendations are approved"): the
 gate is re-run on the build after E1–E4 land, as one closing set after the output-track changes
 (§3) are each kept or reverted, so the evidence comes from the build Plan work would start from
-(ADR 0034, derived item 7). The closing set (`2026-11-15T21-47-*`) and the paragraph set (`01-49-*`) ran on
+(ADR 0034 "The gate"). The closing set (`2026-11-15T21-47-*`) and the paragraph set (`01-49-*`) ran on
 16 November 2026, each 6 of 6 published and passed with no lost or weakened requirement
 ([Z_SPEC01](Z_SPEC01.md) "Closing set", "Claim wording as one paragraph"). **Q14-check set run 16 November
 2026** (`2026-11-16T07-18-*`, build `904ba482…`, `build.source.modified: true`; [Z_SPEC01](Z_SPEC01.md)
@@ -416,8 +416,8 @@ lands with its stage's code, in ADR 0025 and the contracts it names:
 - **Authoring answers between runs** (stage 7; amended 24 November 2026). An `answers` member in the case version after
   stage 4's holding one option key, since the form of a reference conflict is a selection and only its answer is applied
   (ADR 0025 Decision 7). The key names the lines of the claim to keep, so the case author states the source line, not a
-  per-run claim number. One launch runs run 1 and, only when it ends `needs_user` with exactly one open form that offers
-  that key, writes the key into the answer region, sets `requestedStatus: closed` and runs run 2; anything else is
+  per-run claim number. One launch runs run 1 and, only when it ends `needs_user` with exactly one open selection form that
+  offers that key, writes the key into the answer region, sets `requestedStatus: closed` and runs run 2; anything else is
   reported. No answer is matched to a form by its wording. The answer is the user's input, which ADR 0025 makes authority, not a project standard, so the principle-file
   rule (AGENTS.md "Testing expectations") is untouched.
 - **Adjudication basis** (stage 7, amended 24 November 2026 with D1 to D5 below). Leg 1 publishes the incomplete
@@ -435,8 +435,7 @@ lands with its stage's code, in ADR 0025 and the contracts it names:
   rubric with a `conflict-resolution` criterion. Its calibration members point at the loan-renewal files, since no panel exists
   for the derivative. No live run has been made.
 
-**Not decided here:** the gate re-run after E7 is the user's (ADR 0034:91-95, which recommends re-running after a
-structural change lands). Of the E7 stages, only stage 5's set changes development-case requests.
+**Not decided here:** the gate re-run after E7 is the user's (ADR 0034 "The gate"). Of the E7 stages, only stage 5's set changes development-case requests.
 
 ## 6. Test track (T)
 

@@ -2,91 +2,32 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-25
-- **Decision authority:** The user's decisions on 25 October 2026 on
-  FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) B7:
-  - "YES" to source-quoted claim wording;
-  - "apply the best option" for one claim per source requirement, recorded as a native
-    list-item split and later withdrawn (Decision 3);
-  - "implement B7 with option 1": claims cite a set of line IDs restricted to the supplied
-    lines, bad citations are rejected at admission, one pure function quotes them, and
-    claim-text repair and citation repair are deleted;
-  - "apply recommendations as per above": generated text loses the Markdown code
-    delimiters directly around a recognised exact value (Decision 6), after the first
-    live pair showed generation copying the quoted backticks;
-  - "make the changes as suggested": keep source quoting and withdraw the list-item
-    split, after the second live pair;
-  - "APPROVED. Implement B5": reinstate the split
-    ([ADR 0038](0038-record-claims-and-scenario-coverage.md)), after the withdrawal's
-    evidence turned out to be misread;
-  - 1 November 2026, SPEC01 Q7 D7.4, decided and then "implement Q7 D7.4.": the engine adds
-    no code span to an exact copy its text already wraps in a balanced pair (Decision 6);
-  - 1 November 2026, "Yes, keep the span": a copy that ends in terminal punctuation keeps
-    its span, although every development-case value then stays doubled (Decision 6;
-    withdrawn on 16 November 2026, below);
-  - 3 November 2026, SPEC01 Q7 D7.2, "apply recommendations": Decision 6 stays, and ADR 0045,
-    which would have extended it to entity meaning and relationships, is withdrawn;
-  - 7 November 2026, SPEC01 Q8 D8.3, "i accept recommendation" and "implement D8.3": a quoted
-    claim of the same category and cited lines as an earlier claim of its chunk is the same
-    claim (Decisions 3 and 4);
-  - 16 November 2026, SPEC01 Q7 A and its bundled-FR watch, "yes as per recommendations":
-    the engine gives no code span to an exact copy a balanced pair directly wraps, including
-    a copy that ends in terminal punctuation (Decision 6), and generation requests show a
-    claim's wording as one paragraph, without list markers or line breaks (Decision 2).
-  - 18 November 2026, "implement At extraction: yes. The engine can compute, from line IDs
-    alone, that two claims cite exactly the same lines. It could return the existing protocol
-    correction naming both, so the model keeps one category. The cost is that one line can no
-    longer be filed under two categories.": response admission corrects an extraction answer
-    that files one line under two categories (Decision 7). The rule first read "exactly the
-    same lines" as the same set of line IDs; on the user's "Wider rule: yes", to the question
-    whether it should cover claims whose line sets differ, it binds any line cited by claims
-    of two categories. It binds only where the categories differ, because the same category
-    on the same lines is already one claim (SPEC01 D8.3, Decision 3).
-  - 20 November 2026, SPEC01 C49 ("update the docs with the above recommendations", then
-    "preflight and implement"): the paragraph reading of Decision 2 drops the Markdown
-    structure lines that have no wording and reads a Setext heading's text as a heading.
-  - 21 November 2026, SPEC01 Q8 D8.2, "implement the recommendations for D8.2": a fenced
-    block's value excludes the blank lines at its edges, so a claim that cites every citable
-    line of the block cites it in full (Decision 5).
-- **Amends:**
-  - §12.2 and §22.6, whose admission constraints and corrections gain Decision 7's
-    agreement rule and its `disagreeing_items` correction;
-  - §16.3, extraction claims that cite a common line, and its fenced-block candidate, whose
-    value has no blank edge lines and which an all-blank block does not create (Decision 5);
-  - [ADR 0019](0019-single-request-debugger.md), whose request description records the
-    rule, and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) Decision 5,
-    whose list of native admission constraints gains it;
-  - §12.7, the reference-claim proposal;
-  - §16.3 and §16.4 step 6, extraction citations and repair;
-  - §22, reference-extraction repair;
-  - [F0100](../features/F0100-SpecWorkflow.md) §§3.7–3.8 and its validation summary;
-  - [text-field composition](../contracts/text-field-composition.md), extraction claim text
-    and exact-value code delimiters in generated text;
-  - §23.1, the code span of an exact copy its text already delimits (Decision 6);
-  - the §13 reference action catalogue, extraction text validation;
-  - [ADR 0016](0016-configured-json-response-composition.md) §5, whose extraction repairs
-    lose citation repair;
-  - the §32 index.
+- **Decision authority:** User decisions, 25 October to 26 November 2026.
+- **Amends:** §§12.2, 12.7, 16.3, 16.4, 22, 22.6 and 23.1; the §13 reference action
+  catalogue; [F0100](../features/F0100-SpecWorkflow.md) §§3.7–3.8;
+  [text-field composition](../contracts/text-field-composition.md);
+  [ADR 0016](0016-configured-json-response-composition.md) §5 (extraction repairs have no
+  citation repair); [ADR 0019](0019-single-request-debugger.md) (the request description
+  records Decision 7's rule);
+  [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) Decision 5 (its list of
+  native admission constraints).
 
-  [ADR 0024](0024-native-exact-token-authority.md)'s forcing rule is unchanged; it now
-  reads quoted text. Reconciliation statements and signals stay model text. The overall
-  design remains **Proposed design**.
+  [ADR 0024](0024-native-exact-token-authority.md)'s forcing rule is unchanged; it reads
+  quoted text. Reconciliation statements and signals stay model text.
 
 ## Context
 
-A model claim carried its own wording and a set of line ranges. In loan-renewal runs,
-extraction turned the source's "must be able to renew" into "may renew". Every later call
-received both the source and the weakened claim, followed the claim, and published a
-specification that contradicted itself. The claim's wording added nothing the source
-lacked; it only added a second wording that could disagree with the source.
-
-Extraction also returned one claim for each whole Markdown list, so every record cited the
-same claim and native checks couldn't tell distinct duties apart.
+A claim that carries its own wording adds a second wording that can disagree with the
+source: extraction turned a source's "must be able to renew" into "may renew", and every
+later call followed the weakened claim. One claim for a whole Markdown list also left
+native checks unable to tell distinct duties apart.
 
 ## Decision
 
 1. **A model claim is a category and the lines that state it.**
    - The proposal is `{category, citations}`, where `citations` is a set of supplied
-     source-line IDs. It has no wording field.
+     source-line IDs. It has no wording field; a proposal carrying wording is rejected as
+     an unknown property.
    - Admission restricts `citations` to the chunk's citable line IDs, and to no more IDs
      than there are such lines; a repeated ID adds nothing. A line is citable when it has
      any text, and one predicate (`source_selections.citable`) decides it for admission,
@@ -106,7 +47,7 @@ same claim and native checks couldn't tell distinct duties apart.
      object that isn't in the source.
    - Nothing inside a run is rewritten: no marker, code delimiter or whitespace changes.
      A quote is therefore never empty, and exact values appear in it byte for byte.
-   - **Generation requests show the quote as one paragraph** (16 November 2026). The claim,
+   - **Generation requests show the quote as one paragraph.** The claim,
      its stored quote, citations and exact-value duties are unchanged. The wording a records,
      entities or scenarios request shows the model is the paragraph reading the primary story
      uses ([ADR 0047](0047-engine-composed-primary-story.md) Decision 1), from the one
@@ -117,24 +58,25 @@ same claim and native checks couldn't tell distinct duties apart.
      its reading, such as a heading alone, is shown as written, so a claim the request
      assigns is never shown empty. Every other request keeps the quote as written:
      extraction, reconciliation, source review and omission.
-   - **The reading drops Markdown structure that has no wording** (20 November 2026, SPEC01
-     C49, "update the docs with the above recommendations", then "preflight and implement"):
+   - **The reading drops Markdown structure that has no wording:**
      a code fence's opening and closing line, a table delimiter row, a thematic break and a
      Setext underline, and the text lines of a Setext heading, which is a heading. Every line
      with words stays, table rows and code lines included. The classes are Markdown's own
      block syntax, recognised by the line reader of Decision 3, so no meaning is judged. A
-     thematic break joins the three the decision named (fence delimiters, table delimiter
-     rows, Setext underlines) because it carries no words either. A Setext underline heads the
+     Setext underline heads the
      paragraph above it, so a line of text directly above a `---` or `===` line is heading
      text, and YAML front matter reads the same way. A quote left with no words, a fence
      alone for example, reads as one with none, as a heading alone does.
+   - **The incomplete specification shows the reading too.** The stored quote is unchanged. A retained
+     claim's line in the [ADR 0017](0017-incomplete-specification-publication.md) view is this
+     reading, from the same function, and ADR 0017 says what the line shows.
 
    `business` and `scope_guard` claims become one literal `BusinessText`; other categories
    become one literal `ReferenceSemanticText`. The shared text validator then checks it as
    before, which normalizes prose to NFC. The Markdown reader admits only scalars that
    validator accepts, so a rejection is an engine defect.
-3. **A claim spanning several top-level list items is split** (withdrawn and reinstated
-   on 25 October 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)).
+3. **A claim spanning several top-level list items is split**
+   ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 4).
    - When the cited lines belong to two or more top-level list items, the engine emits one
      claim per item. Cited lines outside every item, such as a heading before the list or
      prose after it, become one claim per gap between items. Each claim quotes and cites
@@ -158,7 +100,7 @@ same claim and native checks couldn't tell distinct duties apart.
      prose-only claims and a cited line holding two facts.
    - ADR 0038's scenario rule needs one claim per requirement, which the split supplies
      for list sources (ADR 0038 Decision 4).
-   - **One piece of evidence is one claim** (SPEC01 D8.3). A quoted claim with the same
+   - **One piece of evidence is one claim.** A quoted claim with the same
      category and the same cited lines as an earlier claim of its chunk is the same
      evidence, because its wording is the quote of those lines. Extraction text validation
      keeps the first, with its origin, after the split and before claim identities exist.
@@ -171,7 +113,7 @@ same claim and native checks couldn't tell distinct duties apart.
    - Text repair keeps only the `no_feature_claim` reason, still model text.
    - Citation repair (`citation_replacement`, `source_selection_replacement`), its
      `source_selections` diagnostic and the `retain-reference-claim-rejection` operation
-     are deleted. `validate-reference-claims` now ends `ok` or `failed`.
+     are deleted. `validate-reference-claims` ends `ok` or `failed`.
    - Classification repair and source-omission repair are unchanged. An omission repair
      returns the same proposal shape, and every claim it quotes that its chunk doesn't
      already hold is inserted (Decision 3's one-evidence rule). An insertion that adds no
@@ -222,18 +164,15 @@ same claim and native checks couldn't tell distinct duties apart.
        (`"report.csv."`), and a copy beside another display value. Passive values always
        keep theirs (§23).
      - A copy that ends in terminal punctuation from the shared closed table gets no span
-       either (16 November 2026, withdrawing the exception of 1 November 2026). The pair
-       delimits it, and the model's bytes show whether the final period belongs to the
-       value: `"Renewal refused."` renders as the value in its quotes. All three exact
-       values in the development cases end this way, so each renders once, not doubled as
-       quotes around the engine's span. A copy with other punctuation between it and the
-       pair (`"Hello, World!."`) is not directly wrapped and keeps its span.
+       either. The pair delimits it, and the model's bytes show whether the final period
+       belongs to the value: `"Renewal refused."` renders as the value in its quotes. A
+       copy with other punctuation between it and the pair (`"Hello, World!."`) is not
+       directly wrapped and keeps its span.
      - The backtick is in the table, so a backtick run this decision keeps stays as
        written, with no second delimiter.
-     - No renderer revision exists to change, and no Plan or Tasks review exists to renew
-       ([ADR 0034](0034-spec-quality-gate.md)).
-7. **A line is cited under one category** (18 November 2026; the decision authority
-   above).
+7. **A line is cited under one category.** The rule binds any line cited by claims of two
+   categories, whether or not their line sets are equal, and only where the categories
+   differ.
    - **The rule.** In one chunk's claims answer, two claims whose `citations` hold a common
      line ID return the same `category`. IDs compare as integers, without order or repeats.
      Response admission rejects an answer that breaks it as `disagreeing_items`, located at
@@ -258,8 +197,8 @@ same claim and native checks couldn't tell distinct duties apart.
    - **Why admission.** A sentence filed under two categories can't be reconciled: a
      summary statement names claims of one category, and a duplicate or superseded target
      must share its claim's category. The pair therefore reached records authoring, where
-     two groups wrote equal records and the run blocked as `competing_records` (ADR 0035
-     Decision 3, ADR 0038). A defect of the response's own contract takes admission's
+     two groups wrote equal records and the run blocked as `competing_records` (ADR 0038
+     Decision 5). A defect of the response's own contract takes admission's
      correction, as member sets do (ADR 0023, ADR 0038 Decision 3, ADR 0046); it works around
      no model limitation, because the rule judges no meaning and is checked by the engine.
    - **What it does not change.**
@@ -274,13 +213,10 @@ same claim and native checks couldn't tell distinct duties apart.
      heading line cited beside two bullets of different categories is cited by one of them.
      Under ADR 0024 a code span in a `business` or `scope_guard` claim is forced and one in
      another category is not, so the kept category decides that duty.
-   - **Versions.** `model-request-debug/v20` records the rule. The new rejection reason is
-     a closed member of the reports, so `spec-e2e-report/v21`, `e2e-step-event/v6`,
-     `baseline-acquisition/v15`, `baseline-score/v7`,
-     `provider-compatibility-report/v4` and `exact-value-production-admission/v4` advance
-     with it, and earlier runs and captures stay readable only by the build that made
-     them. Persisted specification state and the extraction schema, composition and
-     operation bytes don't change.
+   - **Contracts.** The request description records the rule, and the rejection reason is
+     a closed member of the E2E, baseline, provider-compatibility and exact-value reports.
+     Persisted specification state and the extraction schema, composition and operation
+     bytes don't change.
 
 ## Consequences
 
@@ -292,9 +228,7 @@ same claim and native checks couldn't tell distinct duties apart.
   - Several requirements in one prose sentence or paragraph stay one claim.
   - Decision 7 covers the model's citations in one initial answer. An omission-repair
     insertion can still file a line under two categories, and a correction that keeps
-    failing ends the run at extraction instead of at records authoring. Whether it raises
-    the publication rate is for repeated runs of both development cases on one build
-    (SPEC01 D8.4 holds the evidence).
+    failing ends the run at extraction instead of at records authoring.
   - Items with different meanings in one split take the proposal's single category.
   - A cited heading, or other markup line such as a thematic break, split from its list
     becomes a short claim of its own.
@@ -302,16 +236,17 @@ same claim and native checks couldn't tell distinct duties apart.
     every request but the generation requests, which show its paragraph reading (Decision 2).
     A code span or fenced block that crosses lines is flattened in that wording like any
     lines; its exact value is still offered with its bytes.
-  - A model that copies a shown wording verbatim can now equal the story, so ADR 0035's
-    native deletion of a non-functional record that restates the story can apply to it;
+  - A model that copies a shown wording verbatim can equal the story, so the native
+    deletion of a non-functional record that restates the story (ADR 0038 Decision 5) can
+    apply to it;
     functional requirements stay exempt.
   - A top-level marker indented by one to three spaces is treated as a continuation, so
     such a list doesn't split. Unindented text after a fence that closes inside an item
     stays with the item. Both err toward not splitting; neither changes wording.
   - Reconciliation statements and signals still restate claims in model text. Whether
     they must reference claim text natively needs its own evidence.
-- **Ingestion.** The Markdown reader rejects C1 control characters (U+0080–U+009F) as
-  malformed text, through the typed-text scalar rule. A quote can't hide them, so the
+- **Ingestion.** The Markdown reader rejects C1 control characters (U+0080–U+009F) and DEL
+  as malformed text, through the typed-text scalar rule. A quote can't hide them, so the
   source fails at ingestion with a typed reason.
 - **Persistence.**
   - The extraction schema changes. Persisted specification state already records the
@@ -322,79 +257,8 @@ same claim and native checks couldn't tell distinct duties apart.
     re-quotes each stored model claim from its citations, in canonical text with the Unicode
     normalizer; a citation that no longer binds, or a claim that no longer quotes its
     citations, rejects the state.
-- **Tests.**
-  - Code delimiters:
-    - at the recogniser: equal, double and unequal runs, a backtick shared by two values,
-      delimiters kept when removing them would join a longer value, a narrow match
-      checked against every eligible value, and allocation failure on both paths;
-    - a repair bound to one value keeping delimiters whose removal would join another;
-    - admission into an obligation field and a field that can't hold exact copies, with
-      idempotence, including a code-wrapped value alone;
-    - the composition check with a code-wrapped value alone and with prose.
-  - Delimiting text:
-    - at the boundary owner: straight, curly and CJK quotes, groups and nested pairs are
-      direct pairs; no wrapper, punctuation inside the pair, a pair around a longer
-      phrase, mismatched or one-sided wrappers, a continuation and a reference edge are
-      not;
-    - at the projection: an unrelated value in straight, curly and group pairs, with and
-      without a direct pair, and the development cases' three exact values, which end in
-      punctuation and take no span inside their pair, through rendering and the parse
-      round trip, with a copy that has other punctuation inside the pair keeping its span; a
-      copy touching a passive value or another exact copy whose bytes begin with the
-      closer keeps it.
-  - Paragraph reading for generation requests: a list item, a nested item, a heading and
-    blank lines around a cited run, runs cited apart, a code line and an exact value in
-    the run, each against the story's reading of the same claim; the stored quote and
-    extraction and reconciliation requests unchanged. Structure with no wording: a fence
-    with and without an info string in either fence kind, an empty fence, a table delimiter
-    row with and without alignment, `=` and `-` underlines with the heading text above them,
-    a thematic break, and the same bytes inside a fence, which stay; a quote left with none.
-  - Quoting and splitting: top-level, ordered and nested items, continuation lines,
-    headings and prose in and out of a split, wrapped numbers, look-alike markers and a
-    thematic break, HTML blocks and comments, spacing and trimmed indentation, fenced
-    code and an item that opens a fence, a chunk that starts inside a paragraph, and two
-    sources whose chunks start inside and after fenced blocks.
-  - Exact-value duty for a code span across lines and for fenced blocks: with a blank
-    line, content lines only, the opening fence, indented content and an unterminated
-    fence, and a blank first or last interior line, which the value excludes. Citing
-    part of a block leaves it free.
-  - Joining runs: an ellipsis between runs, including inside a JSON value.
-  - Allocation stays proportional to the source across 128 chunks.
-  - Admission: blank, unsupplied and over-count citations are rejected, for the initial
-    request and for omission repair.
-  - Omission repair inserts every new claim a list-spanning proposal quotes; an inserted
-    duplicate adds nothing and is an unchanged merge; a list-spanning insertion whose first
-    item is held adds only the second, with the repair's origin; the same lines in another
-    category are inserted.
-  - One evidence, one claim: identical proposals, and duplicates per item after the split,
-    are one claim; the same lines in two categories (here, as an omission-repair
-    insertion makes them), different lines and partly overlapping lines stay separate;
-    the raw proposals are unchanged; duplicate claims quoting an exact value keep the
-    single claim's exact-value duty.
-  - A line is cited under one category (Decision 7):
-    - the extraction request's schema admits one claim, claims on different lines, and
-      shared lines in one category in any order or with repeats; it rejects a line cited
-      under two categories at the first of the claims, whether the lines are the same, a
-      whole list sits beside one of its items, or one line is shared, and among other
-      claims, for the development cases' two source shapes;
-    - the omission repair's request names no agreement;
-    - the rule at the owning boundary, in an unrelated domain: a pair sharing one value,
-      a whole list beside one of its items, lists that overlap in two values, three items,
-      two groups, a shared value that agrees beside one that doesn't, a shared value in
-      another array, and a selection without the rule that admits all of them;
-    - the correction lists each group of values its items disagree on, the values that the
-      same items cite forming one group, with the location of every item that cites them,
-      refuses a response whose first disagreeing item is elsewhere or that has none, and
-      is refused for a diagnostic of another reason;
-    - a composition part that lacks the claims array leaves the selector unused and
-      records nothing, and a selector that no schema holds is refused;
-    - the recorded rule restores the same admission over the captured bytes, so replay
-      rejects what live admission does, and a record that fits no captured schema is
-      refused;
-    - a scripted extraction answer that files one set of lines under two categories takes
-      one correction naming the lines and both claims, and the run publishes from the
-      answer that keeps one.
-  - Ingestion rejects C1 and DEL characters.
-  - A proposal carrying wording is rejected as an unknown property.
-  - Scripted models cite only citable lines. Scenarios that need a discarded token or
-    an exact-value omission now keep the token off every quoted line.
+- **Exact values.** A claim that cites only part of a code span or fenced block leaves it
+  unforced. Duplicate claims that quote an exact value are one claim (Decision 3) and keep
+  that claim's single exact-value duty.
+- **Selectors.** A composition part that lacks the claims array leaves Decision 7's selector
+  unused and records nothing; a selector that no schema holds is refused.

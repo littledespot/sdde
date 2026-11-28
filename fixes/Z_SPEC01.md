@@ -119,7 +119,7 @@ the record purposes and `records.prompt.md` carry no copy. Story weakening fell 
 
 **Committed with D16.2 in `6e543e6`; kept 2 November 2026** (user: "keep D12.1 + D16.2"),
 D16.2 amending D16.1 after its set failed the publication guard (SPEC01 §2 rule 1's recorded
-exception). ADR 0038 (Decisions 2, 3 and 5) and ADR 0035 record the rule: requirements own
+exception). ADR 0038 (Decisions 2, 3 and 5) records the rule: requirements own
 their claims; a partly taken statement is `shared_member`, a wholly taken one a native
 `repeated_statement` delete; FR, BR, UO and PB need a scenario. Versions:
 `model-request-debug/v16`, `spec-e2e-report/v14`, `baseline-acquisition/v11`. Evidence:
@@ -222,7 +222,7 @@ admission (`shared_member`), the session's delete, the records validator (`inspe
 `repeated_statement`) and the composition check use it. A record whose value can't be
 identified is never deleted and holds no value for another; requirements, the only holder of an
 exact value, and partly taken, untaken or unnamed records stay judged. ADR 0038 Decision 5 and
-its consequences, ADR 0035 item 5, text-field-composition.md, 22-repair.md,
+its consequences, text-field-composition.md, 22-repair.md,
 12-model-boundary.md, 17-specify.md and F0100 record it. Proof: accepted and rejected cases at
 the rule, admission, composition check, validator, replay and a scripted run, and a parity test
 that every exemption at the wire is a validator delete.
@@ -293,7 +293,7 @@ exactly; the run publishes with no correction, and no batch keeps two records of
 
 ## T3. The story restatement and the reference-text repair route in the scripted matrix (built 19 November 2026)
 
-**Decided** 19 November 2026 (user: "implement next item", then "implement T3"); test-only. ADR 0035's `restatement`
+**Decided** 19 November 2026 (user: "implement next item", then "implement T3"); test-only. ADR 0038 Decision 5's `restatement`
 rule had unit coverage only. Two scenarios, `story-restatement-business_rule` and `-non_goal`, follow
 `split-claim-once` in the `scenario_stops` group (`workflow_tests.zig`, so no earlier scenario changes its name). The scripted records
 generator's `story_restatement` option (`spec_generation_responses.zig`) leaves the first group's first story-quoted
@@ -1111,7 +1111,7 @@ has been reduce E1 should be kept"): kept for the reduced brittleness; no outcom
   runtime checks are unchanged and now bite: a new key or counter past 128 is `InvalidRepairProgress`, and
   one already counted continues. The first wording of the reason said the workflow token budget ends a
   realistic run long before; an independent review showed that false for native repairs (no model call, so
-  no budget spend) and for a budget set higher (ADR 0037), and the unit unstated, so the constant's comment
+  no budget spend) and for a budget set higher (ADR 0011), and the unit unstated, so the constant's comment
   and 22-repair.md now state the unit and drop the claim. A large source (many chunks or review subjects)
   can count more than the 32 the largest scripted scenario (084) does, and a run past 128 fails as the
   shared `retry_admission` or `repair_transition` reason, which did not name the population (named
@@ -2411,7 +2411,7 @@ grouping all five claims (likely, not established). Hello-world bundled 2 of 3 (
 exact value); the third split the greeting into UO-001. **Not exercised:** the balanced-pair path ran in 1 of 6
 runs (`c2fd…` rendered `"Hello, World!"` with no span); the model typed backticks or no quote pair in the other
 five, so the rule rests on its offline tests. No record was deleted as a story restatement (every record was an
-FR, which ADR 0035 exempts), so that interaction is untested. **Defects**, all minor and seen before: the Given
+FR, which ADR 0038 Decision 5 exempts), so that interaction is untested. **Defects**, all minor and seen before: the Given
 that already holds its When's event (hello-world 3 of 3), an entity for a feature with no business data (2 of 3),
 AC-001 repeating other requirements' results (loan-renewal 3 of 3), AC-004 as the bare source sentence or a Given
 that repeats AC-001's (3 of 3). One repair, helpful (`5196…`: both inline exact values classified irrelevant at
@@ -3711,7 +3711,7 @@ Decision 8). Offline; no live run was made.
 - **Change.** `spec-e2e-case/v5` adds a closed `answers` (empty, or exactly one option key for a case that expects
   `clarification_then_publication`); `spec-e2e-report/v27` adds `continued_from` and the status `answer_unavailable`. The CLI
   runs a launch as legs (`cli.zig` `leg`): leg 1 is an ordinary run that expects `clarification`; `answer.zig` `prepare` reads
-  its retained project (never writing it) and, only for exactly one open select-one form that offers the key, renders the closed
+  its retained project (never writing it) and, only for the one open select-one form that offers the key, renders the closed
   form with the key in its answer region; leg 2 starts from a copy of leg 1's project with that form written over the form
   (`continueProject`), expects `publication`, and names leg 1. Anything else ends the launch with leg 1's report
   (`answer_unavailable` plus a diagnostic code, or the ordinary unexpected outcome). Acceptance changed only to say that a

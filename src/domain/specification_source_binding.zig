@@ -149,12 +149,12 @@ fn activeSignal(records: refs.Records, index: usize, mode: Mode) Error!bool {
     try r.unique(r.ClaimId, signal.value.claim_ids);
     if (!(refs.eligibleSelection(records.dispositions, signal.value.claim_ids) catch return error.InvalidSpecificationBinding)) return false;
     if (mode == .content) for (signal.value.claim_ids) |id| {
-        if (!spec.permitsPositiveMapping((try r.item(records.items, id)).claim.content)) return false;
+        if (try refs.openQuestion(records, id)) return false;
     };
     return true;
 }
 /// Whether record content may be written over the batch's group: only a group that content mode accepts,
-/// which one holding an open question never is (`spec.permitsPositiveMapping`). A batch over any other
+/// which one holding an open question never is (`refs.openQuestion`; a question an applied answer kept is not). A batch over any other
 /// group is offered only its clarification outcome, so the request offers what the validation accepts
 /// (invariant 20; ADR 0020).
 pub fn bindsContent(records: refs.Records, signal: r.SignalId) Error!bool {

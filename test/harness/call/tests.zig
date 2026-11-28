@@ -47,7 +47,6 @@ const description: debug.Description = .{
     .content = &.{ .{ .guidance = "MOCK guidance" }, .{ .user = "MOCK request" } },
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":256}},\"required\":[\"answer\"],\"additionalProperties\":false}",
-    .response_mode = .native_schema,
     .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
     .reasoning_effort = "high",
     .operation_kind = .inference,

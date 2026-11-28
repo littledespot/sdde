@@ -2,21 +2,15 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-19
-- **Decision authority:** Explicit user direction to update documentation and remediate missing `spec.md` on clarification pauses.
+- **Decision authority:** User decisions, 19 September and 26 November 2026
 - **Amends:** ADR 0009's clarification persistence exception; Design §§3.3.5, 3.3.19–20, 3.3.30, 17, 23.2, 25 and 31; F0100 §5.5.
-- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
-  2026; on hold since 30 October 2026, not implemented): an execution that fails because
-  model work couldn't be completed publishes its own failed incomplete specification of
-  its validated content, marked and logged, instead of "no new specification
-  publication". It is not a clarification pause: the run keeps its failed terminal
-  (ADR 0041 Decision 5), and its state is `spec_incomplete`.
 
 ## Decision
 
 Specify publishes `spec.md` even when specification-owned clarifications remain open.
 This is a validated incomplete projection, never a completed `SpecificationIR` or
 `specified` authority. The workflow ends `needs_user`; Plan and all later stages
-remain blocked. The governing design retains its Proposed status.
+remain blocked.
 
 This applies to a valid `needs_user` outcome, not an execution that fails while
 open forms exist. Unrepaired JSON/schema rejection remains a terminal error under
@@ -40,10 +34,19 @@ and links every open Spec clarification to its engine-owned `clarify/SNN.md` for
 It does not invent missing fields, infer a completed story, assign final requirement
 IDs, render technical claims as business requirements, or resolve conflicts.
 Conflicting and superseded claims are not asserted as supported requirements.
+A retained claim is one line: the paragraph reading of its cited source lines
+([ADR 0036](0036-source-quoted-claims.md) Decision 2), so a list item shows no marker and
+a wrapped item no line break. Inline code in that reading, as the shared code-span scan
+reads it, shows as an engine code span, as in the completed specification, and every other
+byte goes through the [§23.1](../contracts/23-rendering.md) escape table. The scan sees the
+reading, not the source: a span that crosses lines shows flattened, and a backtick the source
+left unmatched can pair with one in a later line or run. A claim whose reading has no words, such
+as a heading alone, shows its stored quote as written through that table, so a line is never
+empty.
 Questions and answers remain in controlled forms. No extra model call is needed to
 make already available business content visible when the source gate pauses before
-generation. All source, generation and candidate-review clarification branches use
-the same projection/publication path.
+generation. Source, generation and residual open-registry pauses all use the same
+projection/publication path.
 
 The pending variant retains current reference evidence, clarification identity/revision
 and open IDs, plus the existing specification ID ledger for future allocation. It

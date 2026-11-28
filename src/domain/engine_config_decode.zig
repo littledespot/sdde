@@ -105,7 +105,7 @@ test "the removed principles section is an unknown member" {
 }
 
 test "the workflow token budget is a required positive integer within the u32 range" {
-    // ADR 0037: the project configuration is the budget's one source; no default exists.
+    // ADR 0011: the project configuration is the budget's one source; no default exists.
     const a = std.testing.allocator;
     const configured = "\"workflowTokenBudget\": 100000,\n";
     for ([_]struct { raw: []const u8, value: u64 }{ .{ .raw = "1", .value = 1 }, .{ .raw = "125000", .value = 125_000 }, .{ .raw = "4294967295", .value = 4_294_967_295 } }) |case| {

@@ -115,12 +115,12 @@ catalogue and the current registered model-binding contracts. The diagnostic
 creates an ephemeral in-memory binding: it inherits the captured provider and takes
 the selected model's configuration from the catalogue (Bedrock: Region, family,
 maximum output and deadline; Anthropic: maximum output and deadline). Captured
-response mode and other inference controls are preserved. Unsupported combinations reject before
-dispatch; no model, response mode or control silently falls back. The effective
+inference controls are preserved. Unsupported combinations reject before
+dispatch; no model or control silently falls back. The effective
 binding must also pass the live cost policy before the credential is read. A retained
 catalogue must satisfy the current catalogue contract, including `requestTimeoutMs`
 ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
-Captures with incompatible response modes or temperature controls reject; the
+Captures with incompatible temperature controls reject; the
 command does not rewrite those controls or add catalogue entries. The capture
 and its configuration remain unchanged. Browser exact and modified replay retain
 their existing model/settings restrictions.
@@ -201,8 +201,7 @@ recorded model maximum and no smaller allowance
 The frozen-protocol fixture configuration selects exactly these slot controls and
 passes preflight; the shipped wf-001/wf-002 configuration selects Claude and does
 not. A drifted slot control rejects with `FrozenBindingRejected`. Any supplied reasoning remains separately captured diagnostic data.
-No historical request is retargeted and no alternative model or response mode
-is substituted.
+No historical request is retargeted and no alternative model is substituted.
 
 The transport permits **at most one physical inference send**. The attempt is
 charged at the send boundary, so a transport failure does not permit a replacement
@@ -315,7 +314,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   execution budget.
 - Provider-owned response limits still apply and are reported as provider stops.
 - Bedrock generation, diagnostics and the standalone evaluator share the Converse
-  codec. The catalogue's `json: true` selects native JSON Schema; GPT-OSS-20B's
+  codec. Native JSON Schema is the only response mode; GPT-OSS-20B's
   `gpt-oss` family ([ADR 0029](../decisions/0029-bedrock-model-families.md)) sends the
   selected reasoning effort and the configured temperature, with
   `inferenceConfig.maxTokens` 16,384. Provider reasoning counts toward output usage;
@@ -342,18 +341,26 @@ credentials. No model answer means no evidence yet about schema conformance.
   kinds, `expected_outcome`, `answers` and `evaluation_case`.
 - `expected_outcome` is `publication`, `clarification` or `clarification_then_publication`. `answers` is
   empty except for a case that expects `clarification_then_publication`, which declares exactly one answer: the key of the
-  option the user chooses on the one form its first leg raises.
+  option the user chooses on the form its first leg raises that offers it.
 - A case that answers a form runs two legs in one launch, each its own run directory and report. The first leg is an
-  ordinary run that must end `needs_user` (its report expects `clarification`) on exactly one open form that offers the
-  answer's key. The second starts only then, from a copy of the first's retained project with the closed form (its key in the
-  answer region and `requestedStatus: closed`) written over the form; it is an ordinary run that must publish (its report
+  ordinary run that must end `needs_user` (its report expects `clarification`) with exactly one open selection form that
+  offers the answer's key; it may hold other open forms, which the answer leaves as the first leg left them. The second
+  starts only then, from a copy of the first's retained project with that form closed (its key in the
+  answer region and `requestedStatus: closed`) written over it; it is an ordinary run that must publish (its report
   expects `publication` and names the first in `continued_from`). The first leg's project stays unchanged evidence. The
+  second leg's project therefore holds the first leg's engine run beside the one it added, and every reader of the second
+  leg takes only the run it added; a `continued_from` that names no run directory, names the run itself or names a first
+  leg not beside it is an error, never an empty set. The
   answer is the user's input, written by the launcher as the user would, and running the second leg is the act of accepting it
   under the invoking account ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)); it is no model
   output and no scripted provider response. A first leg that paused on no single form that offers the key ends the launch with
-  its report `answer_unavailable` and a diagnostic (`NO_CLARIFICATION_STATE`, `ANSWER_FORM_COUNT` or `ANSWER_NOT_OFFERED`),
-  an unmet criterion that is reported with no retry, no rewording and no other form chosen. One approval covers both legs of
-  one launch, and a launch is one attempted workload for the Spec quality gate, judged on its last leg.
+  its report `answer_unavailable` and a diagnostic, an unmet criterion that is reported with no retry, no rewording and no form
+  chosen beyond the one that offers the key: `NO_CLARIFICATION_STATE` (the first leg published no clarification state),
+  `ANSWER_FORM_COUNT` (no form is open, or more than one open selection offers the key, so the harness makes no choice among
+  them) or `ANSWER_NOT_OFFERED` (forms are open and no open selection offers the key). The other open forms are not a
+  guarantee that the second leg publishes: the engine closes the form of a conflict an applied answer dropped (ADR 0025), and
+  a form it leaves open pauses the second leg, which is then reported as that leg's own result. One approval covers both legs
+  of one launch, and a launch is one attempted workload for the Spec quality gate, judged on its last leg.
 - The evaluation case names source documents and a rubric.
 - Every selected reference must map exactly once to an evaluation source.
 - Unknown or duplicate fields, unsafe paths, symlinks, destination collisions and
@@ -763,8 +770,8 @@ request-projection freezes, not by a live run.
 - The offline Spec scenarios record every request the fake provider receives, at the
   provider port, as its `model_request_description` without `version`,
   `workflow_version` and `request_step`, which refactors change by design, and without
-  `agreements`, the admission rule recorded for replay (ADR 0036 Decision 7), which is no
-  model input. Member order and number spelling stay the description's own.
+  `agreements` and `listings`, the admission rules recorded for replay (ADR 0036 Decision 7,
+  ADR 0046 Decision 7), which are no model input. Member order and number spelling stay the description's own.
 - `SDDE_REQUEST_PROJECTION=<dir> zig build test-integration` writes
   `<dir>/<group>/<scenario name>/call-NNNN.json`, one file per invocation in provider-call
   order within each scenario, grouped by scenario case so groups never overwrite each

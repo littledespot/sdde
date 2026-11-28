@@ -349,7 +349,7 @@ fn verifyBytes(expected: [32]u8, bytes: []const u8) !void {
 }
 fn sameJson(comptime T: type, a: std.mem.Allocator, expected: T, bytes: []const u8) !void {
     const current = if (T == native.Report)
-        try @import("../../../src/domain/strict_json.zig").decode(T, a, bytes, .{ .maximum_depth = 128 })
+        try @import("../../../src/domain/strict_json.zig").decode(T, a, bytes, native.report_limits)
     else
         try @import("../contracts.zig").decode(T, a, bytes);
     if (!std.mem.eql(u8, try std.json.Stringify.valueAlloc(a, expected, .{}), try std.json.Stringify.valueAlloc(a, current, .{}))) return error.CaptureMismatch;

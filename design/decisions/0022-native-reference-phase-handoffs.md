@@ -20,6 +20,14 @@
   implement C10: skip the conflicts call when the only valid answer is empty. This lands with
   the ADR 0022 amendment."): the conflicts phase has no request when no conflict group
   exists. See "Forced conflicts answer".
+- **Amended 25 November 2026** (ENGINE01 §10 item 3, §12 Phase 2; user: "implement phase 1 and phase 2"): a
+  conflicts answer explains each declared group exactly once. It carries one conflict kind for the group, and the
+  engine keeps one conflict record for each claim set. See "Conflict groups" below.
+- **Amended 27 November 2026** (ENGINE01 §10 item 13, decisions A and T1; user: "accept recommendations A and T1",
+  then "implement A and T1"): the source-omission conflict-group repair replaces one record alone when it shares a claim
+  with another, and a signal or conflict subject is offered no `candidate_invalid`. It amends §12 (the source
+  `candidate_invalid` finding), §16.4 and §22.1. See "Overlap and the repair of one record" and "No `candidate_invalid`
+  for a record" below.
 
 Semantic decisions remain model candidates. YAML explicitly requests, collects,
 validates and repairs each reconciliation phase before requesting its descendants,
@@ -126,7 +134,8 @@ admission, review, coverage and canonical readback. Historical duplicate/superse
 groups remain evidence but cannot acquire positive authored associations. Filtering
 preserves occurrence IDs and all members; it never trims a mixed group or chooses
 semantic support. Positive values additionally retain the existing prohibition on
-mapping open questions; clarification question evidence has its own scope.
+mapping open questions that no applied user answer kept ([ADR 0025](0025-clarification-answer-authentication.md));
+clarification question evidence has its own scope.
 An empty retained catalogue blocks native readiness before dispatch. Protocol
 correction retains the same catalogue, selected schema and existing allowance.
 No role list, unsupported-only schema or positive default is reconstructed.
@@ -134,9 +143,9 @@ No role list, unsupported-only schema or positive default is reconstructed.
 Conflict groups are semantic choices. Each supplied group declares all its pairs;
 native code constructs reciprocal relationships only within that group. Overlap is
 allowed; A–B and B–C never imply A–C. Explanations select accepted native group IDs,
-with multiple conflict kinds allowed. Native code attaches membership and checks coverage. Conflict selection repairs
-use the same group catalogue; removed claim-list and reciprocal-edge echoes reject.
-A coupled false-conflict replacement may change semantic groups only inside its
+one explanation for each group and one conflict kind for it (25 November 2026).
+Native code attaches membership and checks coverage. Removed claim-list and
+reciprocal-edge echoes reject. A coupled false-conflict replacement may change semantic groups only inside its
 existing authorized membership. Repairs retain exact dependency snapshots and retire affected descendants.
 
 When the closed, admitted no-feature outcome forces every token irrelevant, or a
@@ -145,6 +154,42 @@ model call. Native projections have no fabricated provider origin. An authorized
 outcome-changing repair retires forced classifications and returns through the
 classification gate; positive token-only extraction remains distinct from
 no-feature extraction.
+
+**Conflict groups** (25 November 2026). Several kinds for one group made several records over the same claims,
+and the claim an answer keeps must be in no other record ([ADR 0025](0025-clarification-answer-authentication.md) "What
+it applies to"), so no such pair could be answered.
+- **Binding.** The conflicts assignment binds its group IDs as an `exact_members` choice on
+  `conflicts[].group_id`, as ADR 0046 does for dispositions. Admission rejects a repeated group as
+  `duplicate_member` and an omitted one as `missing_member`, and the existing bounded protocol correction
+  resubmits the whole assignment under the conflicts request's `retry-limit`. It adds no counter, insertion or
+  deletion. The schema states no count, so the request the model receives changes only by the prompt line.
+- **Canonical rule.** The conflict records of one reconciliation have distinct claim sets, whatever their kind
+  (`conflictSelectionAvailable`, also checked when a snapshot is read back). A second record over one claim set is a
+  `duplicate_conflict`, and the existing repair deletes it only when its summary is equivalent.
+- **The kind.** A record keeps one kind. No code branches on its value; it is printed in `reference-context.md`
+  and sent to review.
+- **Readback.** A reference snapshot written before this amendment with two records of different kinds over one claim
+  set no longer validates (`InvalidReferenceSnapshot`). No state version advanced, and there is no reader for it:
+  the run starts again.
+- **Scope** (amended 25 November 2026). The statement and signal coverage inserts of ADR 0046 Decision 6 are
+  unchanged. The conflict-selection replacement (target, claim-pair facts and `repair_conflict_selection`) and the
+  coverage insert for a conflicting claim in no group are deleted: a record's claims are a validated group's
+  members, so only its summary text is repairable, and any other rule on a record is an engine invariant failure
+  (`InvalidAtomicRepair`). A conflicting claim in no group stays a `no_required_member` block. The coverage insert
+  for a group with no record and the duplicate-record deletion stay, because the source-omission conflict-group
+  repair (§16.4) binds its group claims but not its `conflicts[].group_id` set, so its answer can omit or repeat
+  an explanation.
+- **Overlap and the repair of one record** (27 November 2026). Overlapping groups are allowed, so a false record can
+  share a claim with a genuine one. The source-omission conflict-group repair replaces the selected record, its group
+  and the dispositions of the claims no other record holds, the claims it *releases*. A claim another record holds keeps
+  its disposition, and native code re-derives its relations from the records that stand. The record is found by its
+  claims, never by its first claim. The mechanics (authorization, retry identity, progress) are owned by
+  [§16.4](../contracts/16-reference-ingestion.md#false-conflict-repair-boundary) and
+  [ADR 0046](0046-complete-dispositions-at-admission.md) Decision 3.
+- **No `candidate_invalid` for a record** (27 November 2026). Source review that dismisses a signal or a conflict
+  subject has found candidate loss, which the producer repairs, so the subject's view offers no `candidate_invalid`.
+  The dismissal is `candidate_omission`. The rule is owned by
+  [§12](../contracts/12-model-boundary.md#source-invalid-content-finding).
 
 **Forced conflicts answer** (20 November 2026). When the validated dispositions declare no
 conflict group, the only admissible conflicts answer is the empty collection: the schema

@@ -12,7 +12,9 @@ pub const Need = struct {
     why_required: []const u8,
     answer_schema: c.AnswerSchema,
 };
-pub const Needs = struct { feature: @import("feature_identity.zig").FeatureId, original_sources: []const wire.SourceText, entries: []const Need };
+/// `decided` are the conflicts an applied user answer dropped (ADR 0025): a still-open form of one asks a question that no
+/// longer exists, so the refresh closes it. A need raised for the same subject still wins.
+pub const Needs = struct { feature: @import("feature_identity.zig").FeatureId, original_sources: []const wire.SourceText, entries: []const Need, decided: []const @import("reference_reconciliation.zig").DroppedConflict = &.{} };
 /// Execution-local source-aware state. Only State itself is persisted; a fresh
 /// invocation must revalidate its questions against its current captured corpus.
 pub const Ready = struct {
@@ -88,6 +90,7 @@ pub fn refresh(allocator: std.mem.Allocator, inputs: c.Inputs, needs: Needs) Err
     }
     var records: std.ArrayList(c.Record) = .empty;
     try records.appendSlice(allocator, state.records);
+    try closeDecided(allocator, records.items, state.revision, needs.decided);
     const sorted = try allocator.dupe(Need, needs.entries);
     std.mem.sort(Need, sorted, {}, lessNeed);
     for (sorted, 0..) |need, index| {
@@ -138,6 +141,25 @@ pub fn refresh(allocator: std.mem.Allocator, inputs: c.Inputs, needs: Needs) Err
     const ready: Ready = .{ .state = try c.validate(.{ .value = state }, needs.feature), .original_sources = needs.original_sources };
     _ = try ready.validate(allocator);
     return ready;
+}
+
+/// Closes each still-open Specify form of a conflict that an applied answer dropped, as resolved by authority (ADR 0025). It
+/// rests on the typed fact alone: the form's subject equals the dropped conflict's, and the answer that dropped it is a
+/// response the state holds. A form the user answered or cancelled is never touched, and nothing is inferred from a subject's
+/// absence. The resolution names the deciding form and its option, and writes no sentence about meaning.
+fn closeDecided(allocator: std.mem.Allocator, records: []c.Record, revision: u64, decided: []const @import("reference_reconciliation.zig").DroppedConflict) Error!void {
+    for (decided) |dropped| {
+        const deciding = for (records) |record| {
+            if (record.status == .resolved_by_user and record.response_id == dropped.response_id) break record.id;
+        } else return error.InvalidClarificationInput;
+        for (records) |*record| {
+            const id = c.Id.parse(record.id) orelse return error.InvalidClarificationInput;
+            if (id.stage != .spec or record.status != .open or !c.sameSubject(record.subject, dropped.subject)) continue;
+            record.status = .resolved_by_authority;
+            record.revision = revision;
+            record.authority_resolution = try std.fmt.allocPrint(allocator, "Decided by the answer to {s} (option {s}), which left this conflict with one claim.", .{ deciding, dropped.key });
+        }
+    }
 }
 
 fn lessNeed(_: void, a: Need, b: Need) bool {

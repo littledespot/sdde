@@ -26,22 +26,22 @@ Checked 17 November 2026 against Anthropic's
 
 ## 2. The engine's JSON path
 
-- Every request carries ADR 0014's framing sentence and the complete schema as system text, in both
-  response modes (`src/adapters/provider/model_text_request.zig:66-81`;
-  `src/domain/model_controls.zig:7`).
-- Native mode adds the provider projection: closed objects, `anyOf` for the compiler-proven
+- Every request carries ADR 0014's framing sentence and the complete schema as system text
+  (`src/adapters/provider/model_text_request.zig`, `layout`; `src/domain/model_controls.zig`,
+  `response_format_guidance`). Native JSON-schema output is the only response mode (D2).
+- Every request also carries the provider projection: closed objects, `anyOf` for the compiler-proven
   disjoint alternatives, and no length, numeric or item bound except `minItems: 1`
   (`src/domain/model_schema_projection.zig:5-9`, `:139-152`, `:170-181`).
-- Admission is the same in both modes (ADR 0006:284-285): one strict object, §22.6's opening
+- Admission (ADR 0006:284-285): one strict object, §22.6's opening
   normalization after a syntax error (`src/domain/model_envelope.zig:58-118`), the complete schema,
   then the domain validators. A rejection gets §22.6's protocol correction.
-- The registered `claude-haiku-5-5` contract admits native mode and takes no temperature
+- The registered `claude-haiku-5-5` contract sends native output and takes no temperature
   (`src/composition/provider_model_contracts.zig:11`, `:58-63`).
 
 | Route | Catalogue | Native wire |
 | --- | --- | --- |
-| Anthropic Messages, `claude-haiku-5-5` | `"json": true`, set by D1 (`test/e2e/config/.sddproviders.json:7-8`); all six E2E slots (`test/e2e/wf-001-hello-world/.sddtoolkit.json:10-21`) | `output_config.format`, schema as an object, beside `effort` (`src/adapters/provider/anthropic_request.zig:68-88`) |
-| Bedrock Converse, `openai.gpt-oss-20b-1:0`, family `gpt-oss` | `"json": true` (`:20-21`); no E2E slot since 17 November 2026, when all six moved to Claude | `outputConfig.textFormat` `json_schema`, schema as a JSON string, plus `reasoning_effort` (`src/adapters/provider/bedrock_request.zig:74-77`, `:101-123`) |
+| Anthropic Messages, `claude-haiku-5-5` | Native only (D1, D2; the catalogue has no `json` member); all six E2E slots (`test/e2e/wf-001-hello-world/.sddtoolkit.json:10-21`) | `output_config.format`, schema as an object, beside `effort` (`src/adapters/provider/anthropic_request.zig:68-88`) |
+| Bedrock Converse, `openai.gpt-oss-20b-1:0`, family `gpt-oss` | Native only; no E2E slot since 17 November 2026, when all six moved to Claude | `outputConfig.textFormat` `json_schema`, schema as a JSON string, plus `reasoning_effort` (`src/adapters/provider/bedrock_request.zig:74-77`, `:101-123`) |
 | Bedrock Converse, `au.anthropic.claude-haiku-5-5`, family `claude` | On the live-test allowlist (ADR 0029:131) but not in the E2E catalogue, which ADR 0029:32-33 says keeps it | `outputConfig.textFormat` plus `additionalModelRequestFields.output_config.effort` (`bedrock_request.zig:101-123`) |
 
 ## 3. Measurements
@@ -197,8 +197,10 @@ builds send the same schemas. The largest request kinds:
   member-value form would also mean trying it after `UnexpectedEndOfInput`, not only after a
   `SyntaxError` (`src/domain/model_envelope.zig:67`), to salvage more malformed text for one
   provider (AGENTS.md "Anti-overfitting rule"); each such answer was corrected.
-- **The schema sent twice in native mode:** the text copy carries the bounds the projection drops
-  (ADR 0006:124-134). Its size is SPEC01 C12's, and AGENTS.md rules out a cost-only change.
+- **The schema is sent twice in native mode:** the text copy carries the bounds the projection
+  drops (ADR 0006:124-134). Sending one copy was built and reverted on 25 November 2026 (user: "revert
+  phase 3"): the text copy changes the scenarios call's Given rate; [ENGINE01](ENGINE01.md) §7 measures
+  what the bounds do, and its §10 item 4 and §13 hold the change and its measured result.
 - **Prose inside JSON strings:** no invalid escape, control character or unterminated string in any
   retained answer. Composition compares decoded strings (`src/domain/model_envelope.zig:222`), so an
   escape style can't change admission.
@@ -245,24 +247,17 @@ day (ADR 0029), so the next approved run sends native mode.
   ADR 0028:91-92 still requires an approved compatibility probe before any live use. Amending an
   accepted ADR needs the user's word, and every live set needs its own approval.
 
-**D2. GPT-OSS response mode (SPEC01 §3).** Should a GPT-OSS-20B set run with `"json": false`? For
-example, a copy of the E2E catalogue says `"json": false` for `openai.gpt-oss-20b-1:0`, and requests
-stop sending `outputConfig` while keeping the full schema text.
+**D2. GPT-OSS response mode (SPEC01 §3). Decided 25 November 2026** (user: "remove the "json": false,
+is bring limited values and bloats the code base"): no set runs with `"json": false`, and prompt-only
+mode is removed from the engine, with the catalogue's `json` member. [ENGINE01](ENGINE01.md) §10
+item 1 holds its scope and the amendments that landed with the code; §2 above describes the code
+after it.
 
-- **Yes:** the set shows whether the opening fragment comes from Bedrock's grammar path. The shipped
-  catalogue can't be the one changed: the compatibility probe installs it and pins native mode
-  (`test/calibration/semantic-simplicity/protocol.json:10`, compared at
-  `test/harness/frozen_binding.zig:65`). The shipped cases now select Claude (ADR 0029:134-139), so a
-  GPT-OSS set needs its own toolkit config as well as its own catalogue, and its own measured
-  build (SPEC01 §2 rule 1). With no grammar at all, the model may fence or wrap its JSON, which is
-  rejected and corrected, never stripped (ADR 0014); OpenAI says a schema in the prompt "doesn't
-  guarantee the full adherence to the schema"
-  ([harmony guide](https://developers.openai.com/cookbook/articles/openai-harmony)).
-- **No:** the route keeps native mode, with §22.6 absorbing the fragment.
-- **Recommendation:** no. The set can't retire §22.6, which the native judge still needs, and the
-  fragment causes no published-output defect, so its only result would be a diagnosis of Bedrock,
-  whose fault J1's outside reproduction already separates from this engine's request. The same
-  applies to SPEC01 §3's deferred live comparison.
+- **What it rests on:** a prompt-only set couldn't retire §22.6, which the native judge still needs,
+  and the fragment causes no published-output defect, so its only result would have been a diagnosis
+  of Bedrock, whose fault J1's outside reproduction already separates from this engine's request. The
+  same applies to SPEC01 §3's deferred live comparison.
+- **What stays:** native mode on every route, with §22.6 absorbing the GPT-OSS fragment.
 
 ## 6. Open
 

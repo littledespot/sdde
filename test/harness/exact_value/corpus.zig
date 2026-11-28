@@ -21,10 +21,11 @@ pub const Input = struct {
     original_sources: ?[]const wire.SourceText = null,
     metadata_contract: MetadataContract = .current,
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
-    /// Recorded assignment membership, coverage and agreement; the schema bytes cannot express them.
+    /// Recorded assignment membership, coverage, agreement and listed rules; the schema bytes cannot express them.
     members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
     coverages: []const @import("../../../src/domain/model_result_schema.zig").CoverageChoice = &.{},
     agreements: []const @import("../../../src/domain/model_result_schema.zig").AgreementChoice = &.{},
+    listings: []const @import("../../../src/domain/model_result_schema.zig").ListedChoice = &.{},
 };
 pub const State = enum { measured, no_exact_context, invalid_packet, invalid_model_json, missing_schema, invalid_field_metadata, unsupported_schema, schema_invalid, no_declared_text_fields };
 pub const Binding = enum { assigned_requirements, selected_groups, explicit_provenance, fixed_candidate, missing, invalid };
@@ -202,8 +203,8 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
         return result;
     };
     var compiler: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    // Only current descriptions record membership, coverage and agreement; older contracts cannot carry them.
-    if ((input.members.len != 0 or input.coverages.len != 0 or input.agreements.len != 0) and input.metadata_contract != .current) {
+    // Only current descriptions record membership, coverage, agreement and listed rules; older contracts cannot carry them.
+    if ((input.members.len != 0 or input.coverages.len != 0 or input.agreements.len != 0 or input.listings.len != 0) and input.metadata_contract != .current) {
         result.state = .invalid_field_metadata;
         return result;
     }
@@ -213,7 +214,7 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
         return result;
     };
     // Production admission validates the restricted schema, membership, coverage and agreement included.
-    const restricted = @import("../../../src/domain/model_result_schema.zig").restrictRecorded(a, captured, input.members, input.coverages, input.agreements) catch |err| {
+    const restricted = @import("../../../src/domain/model_result_schema.zig").restrictRecorded(a, captured, input.members, input.coverages, input.agreements, input.listings) catch |err| {
         if (err == error.OutOfMemory) return err;
         result.state = .invalid_field_metadata;
         return result;

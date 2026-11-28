@@ -1,16 +1,12 @@
 # ADR 0024: Own exact-token authority and record scheduling natively
 
-- **Status:** Accepted amendment
+- **Status:** Accepted
 - **Date:** 2026-10-17
-- **Decision authority:** The user's explicit instruction to implement FIX05 B5
-  and B8 together (`fixes/Z_FIX05.md`, git `194e29a`), followed by approval of native
-  exact duties independent of semantic kind and canonical-literal byte matching.
-- **Amends:** Design §§16–17, their acceptance criteria, ADR 0020's record-task
-  population and exact-kind gates, and ADR 0022's classification/disposition
-  handoffs. The overall design remains **Proposed design**.
-- **Amended 3 November 2026** by [ADR 0047](0047-engine-composed-primary-story.md): the
-  engine-composed story is not an exact-copy target. Its exact role is incidental, so an
-  exact value in the story satisfies no exact duty.
+- **Decision authority:** User decisions, 17 October 2026.
+- **Amends:** Design §§16–17, ADR 0020's record-task population and exact-kind gates, and
+  ADR 0022's classification and disposition handoffs.
+- **Amended by:** [ADR 0047](0047-engine-composed-primary-story.md) (the engine-composed
+  story's exact role is incidental, so an exact value in it satisfies no exact duty).
 
 ## Record scheduling
 
@@ -38,7 +34,7 @@ run forces preservation. Case, whitespace and Unicode bytes remain significant.
 Adjacent literal segments form one run; passive/source insertions are opaque
 boundaries and their rendered text supplies no match. Empty values are not
 witnesses. This predicate uses stored canonical prose, after its existing NFC
-validation; it does not reconstruct or match an earlier raw response spelling.
+validation.
 ADR 0020's contextual [exact-value
 recognition](0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
 remains a separate contract.
@@ -87,11 +83,6 @@ choice cannot become authority through a later merge or stored readback.
 
 Completed and clarification-pending specification state persists these facts;
 earlier state versions reject without a migration or compatibility reader.
-Canonical specification content is `specification/v8`. Readback recomputes
-native appearance, dispositions, duplicate identities, exact eligibility and
-complete coverage; it does not fill corrupt state with a reconstructed success value.
-
-Regression evidence must include unrelated values, mixed kinds, cross-source
-duplicates and semantic conflicts, missing forced tokens, forged native entries,
-repair bounds and stored forgery. This decision authorizes no live call or budget
-change.
+Readback recomputes native appearance, dispositions, duplicate identities, exact
+eligibility and complete coverage; it does not fill corrupt state with a
+reconstructed success value.

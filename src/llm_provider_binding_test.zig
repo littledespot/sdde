@@ -86,23 +86,12 @@ test "binding rejects absent slot authority and non-model steps" {
     );
 }
 
-test "binding rejects catalogue models missing inference or response support" {
+test "binding rejects catalogue models missing inference support" {
     // Inference is the only operation, so a model without it registers nowhere.
     var unusable = provider_contracts.entries[0];
     unusable.capabilities.inference = false;
-    unusable.capabilities.structured_response = .unavailable;
     unusable.capabilities.temperature = false;
     try std.testing.expectError(error.InvalidLLMProviderRegistry, Fixture.initWith(.{ .entries = &.{unusable} }));
-    var contract = provider_contracts.entries[0];
-    contract.capabilities.structured_response = .unavailable;
-    var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
-    defer fixture.deinit();
-    try std.testing.expectError(error.ProviderModelBindingInvalid, (resolve_binding.Action{}).execute(
-        &model_graph,
-        model_step.id,
-        fixture.services.registry(),
-        fixture.services.allowlist(),
-    ));
 }
 
 test "binding projection rejects missing duplicate malformed or unprojected slots" {
@@ -289,10 +278,6 @@ const Fixture = struct {
     }
 
     fn initWith(registered: contracts.Registry) !Fixture {
-        return initJSON(registered, false);
-    }
-
-    fn initJSON(registered: contracts.Registry, json: bool) !Fixture {
         var toolkit = try decode_toolkit.decode(std.testing.allocator, toolkit_config);
         errdefer toolkit.deinit();
         var candidate = try provider_registry.Candidate.init(std.testing.allocator, 1);
@@ -302,7 +287,6 @@ const Fixture = struct {
             .model = model_id,
             .implementation_id = implementation_id,
             .config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } },
-            .json = json,
             .capabilities = registered.entries[0].capabilities,
             .supported_reasoning_efforts = &.{"low"},
         };
@@ -431,16 +415,10 @@ const toolkit_config =
     \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{"spec-generation":{"provider":"compiled-provider","model":"model-a","reasoningEffort":"low"}}},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
 ;
 
-test "model JSON selection owns binding mode independently of workflow identity" {
-    var contract = provider_contracts.entries[0];
-    contract.capabilities.structured_response = .native_json_schema;
-    for ([_]bool{ false, true }) |json| {
-        var fixture = try Fixture.initJSON(.{ .entries = &.{contract} }, json);
-        defer fixture.deinit();
-        const selected = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
-        try std.testing.expectEqual(json, selected.registry_entry.json);
-        try std.testing.expectEqual(@as(@import("domain/model_controls.zig").ResponseGuidanceMode, if (json) .native_schema else .prompt_only), selected.registry_entry.responseMode());
-        try std.testing.expectEqualDeep(contract.capabilities, selected.registry_entry.capabilities);
-    }
-    try std.testing.expectError(error.InvalidLLMProviderRegistry, Fixture.initJSON(provider_contracts, true));
+test "binding carries the registered contract's capabilities" {
+    const contract = provider_contracts.entries[0];
+    var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
+    defer fixture.deinit();
+    const selected = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
+    try std.testing.expectEqualDeep(contract.capabilities, selected.registry_entry.capabilities);
 }

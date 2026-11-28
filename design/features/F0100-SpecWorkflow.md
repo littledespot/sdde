@@ -12,23 +12,20 @@ parts; packet purpose text is a workflow resource);
 [ADR 0024](../decisions/0024-native-exact-token-authority.md) (exact lineage,
 reconciliation phases and token authority);
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md) (source review runs only
-before generation); [ADR 0011](../decisions/0011-provider-owned-request-limits.md) and
-[ADR 0037](../decisions/0037-configured-workflow-token-budget.md) (one configured token
+before generation); [ADR 0011](../decisions/0011-provider-owned-request-limits.md) (one configured token
 budget covers all model work);
 [ADR 0047](../decisions/0047-engine-composed-primary-story.md) (the engine composes the
 primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0017](../decisions/0017-incomplete-specification-publication.md),
-[0035](../decisions/0035-cross-kind-restatement.md),
 [0036](../decisions/0036-source-quoted-claims.md),
 [0038](../decisions/0038-record-claims-and-scenario-coverage.md),
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
 [0043](../decisions/0043-model-facing-exact-text-names.md),
 [0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md), and the engine-owned `request-model` step of
 [ADR 0030](../decisions/0030-engine-owned-model-request.md) and the four generic repair
-operations of [ADR 0033](../decisions/0033-generic-repair-operations.md) are implemented. Not yet implemented:
-[ADR 0025](../decisions/0025-clarification-answer-authentication.md);
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) is accepted, on hold
-since 30 October 2026. The
+operations of [ADR 0033](../decisions/0033-generic-repair-operations.md) are implemented, and so is
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md) except generation's use of every answer but a
+reference conflict's and the response-owned passive literals. Not yet implemented: those two parts. The
 [§32 index](../design.md#32-accepted-and-deferred-implementation-choices) lists every
 decision. [Implementation status](#implementation-status) and
 [SPEC01](../../fixes/SPEC01.md) record what is built and what remains.
@@ -77,7 +74,7 @@ The definition uses [F0005's closed root, step and subgraph contracts](F0005-Wor
 
 | Field | Meaning |
 | --- | --- |
-| `schema` | Closed `workflow/v1` schema identity; `workflow/v2` if ADR 0041 (accepted, on hold since 30 October 2026; not implemented) is implemented. |
+| `schema` | Closed `workflow/v1` schema identity. |
 | `id` | Content-owned identity: the supplied implementation uses `spec-generation`; the complete initial-suite proposal names it `specify`. |
 | `version` | Positive workflow-definition version. |
 | `shortcode` | Validated unique four-character logging shortcode. |
@@ -211,14 +208,14 @@ not the complete Specify workflow.
 
 The result distinguishes new submissions from recorded responses and retains
 closed bytes unchanged. Structural validation is not actor authentication or
-current-authority/applicability validation. Response acceptance and applicability
-remain open. §3.12 implements refresh, rendering and write-time protection;
-no stage completion is inferred.
+current-authority/applicability validation. §3.12 implements refresh, rendering and
+write-time protection; no stage completion is inferred.
 
 Accepting submitted answers requires the trusted authentication mechanism that
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md) selects: the
 operating-system account that runs the engine, with the run that reads valid closed
-forms as the act of acceptance. It is not yet implemented
+forms as the act of acceptance. It is implemented, as is generation's use of the answer to a
+reference conflict (ADR 0025 Decision 7); generation's use of every other answer is not
 ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 Merely editing a form or loading an actor/evidence ID is not authentication. This does not affect user-close file
 protection, which applies even when acceptance is blocked.
@@ -615,10 +612,11 @@ revision and exact accepted content; final full validation remains mandatory.
     or coupled conflict members. Semantic conflicts remain model-assisted.
   - Different exact scalars cannot be declared duplicates.
 - Conflict explanations select an accepted native `group_id`, a closed conflict
-  kind and typed `summary`. Native code attaches membership and unresolved status.
+  kind and typed `summary`, one explanation for each declared group (ADR 0022, amended 25 November 2026).
+  Native code attaches membership and unresolved status.
 
-  - Overlapping conflicts retain all relationship coverage; duplicate conflict groups of
-    the same kind fail.
+  - Overlapping conflicts retain all relationship coverage; a second conflict record over one
+    claim set fails, whatever its kind.
   - Conflicting claims cannot be projected as resolved signals.
   - No source-precedence authority is currently registered, so model-proposed precedence
     or user resolution is rejected.
@@ -632,8 +630,9 @@ revision and exact accepted content; final full validation remains mandatory.
   history append or reference acceptance.
 - Native authorizers select one field, a missing member, or an exactly redundant entry.
   Dispositions are the exception: admission binds one per assigned claim and corrects
-  an omitted or repeated one with the whole assignment, so disposition repair only
-  replaces one disposition ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)).
+  an omitted or repeated one with the whole assignment, and likewise corrects a conflict group that names a claim not
+  disposed `conflicting`, so disposition repair only replaces one disposition
+  ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)).
 - Related claims, partition/history membership and text/evidence facts remain read
   dependencies.
 - Every merge repeats summary validation or all global validators; changed
@@ -651,7 +650,7 @@ revision and exact accepted content; final full validation remains mandatory.
   choices.
 - Mixed claim kinds cannot receive a content-only assignment; an eligible selection can
   be repaired first, followed by an existing missing-member insertion when needed.
-- Empty signal selections or absent conflicting pairs block before a model call.
+- Empty signal selections block before a model call.
 - Every member must still be accounted for before acceptance.
 - Redundancy uses validated, normalized text together with identical claim evidence and
   obligations; adjacent literal segmentation alone does not create a competing claim.
@@ -680,8 +679,24 @@ closed requiredness/ownership policies, current support checks and outcomes.
   criteria, functional requirements, scenario coverage and evidence-backed entity decision,
   but not the engine-derived primary story or display name (ADRs 0047 Decision 5 and 0048);
   every accounted reference signal/conflict; and each exact-preservation
-  obligation. The opt-in source-preservation projection
-  ([ADR 0021](../decisions/0021-optional-source-preservation-review.md)) holds one
+  obligation. A first pass over a reconciliation that holds a conflict record projects those
+  records and their forced gaps alone. One conflict has one decision, owned by the conflict
+  record's subject and answered by its `select_one` form; feature-requirement subjects raised
+  competing free-text forms for the same contradiction (ADR 0025 subject rule). A dependent
+  pass, the review that validates a pending source repair, and a reconciliation without a
+  conflict project every seed: a repair is validated by the subjects that cover what it
+  touched, and a conflict-only pass omits them
+  ([§22](../contracts/22-repair.md), pre-generation omission progress). So a dependent pass
+  over a reconciliation that still holds a conflict reviews every subject, and feature-requirement
+  forms can recur beside the conflict's form, except after a conflict-group repair: that repair
+  touched only the claims it decided, so its dependent pass projects the conflict records and the
+  signals holding those claims ([ADR 0023](../decisions/0023-advisory-post-generation-review.md),
+  amended 27 November 2026). A resolved conflict leaves a complete,
+  generation-ready reconciliation, which gets no readiness review unless a source repair is
+  pending, whose dependent review still runs (§22). The decision (26 November 2026, "implement conflicts first" and
+  "implement (b), update the documentation"; ENGINE01 §10 item 9) and its typed-rule
+  justification are in [ADR 0023](../decisions/0023-advisory-post-generation-review.md). The opt-in source-preservation projection
+  ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)) holds one
   obligation per captured source.
 - Optional collections add no minimum record count.
 - The gate rebuilds this projection to reject omitted/invented entries.
@@ -937,9 +952,9 @@ validators:
   revision, `specified` stage, captured reference sources/chunks/claims/citations,
   exact compiled extraction-contract comparison evidence (each part is the `request-model`
   step that makes its request, with that step's own parameters), reconciliation and
-  passive-literal records, accepted brief/content/provenance,
+  passive-literal records, the claims an applied answer kept, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v29`). Neither variant holds review evidence.
+  registry identity (`specification-state/v30`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton
@@ -957,7 +972,7 @@ validators:
   inputs; stale captures reject.
 - Write failure, reruns and the pending publication's lack of completion authority
   follow [§25](../contracts/25-publication.md#252-abandonment-and-reruns).
-- Authenticated answer application remains open
+- Generation's use of every answer but a reference conflict's remains open
   ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 
 ### 3.13 Actionable questions
@@ -967,8 +982,8 @@ owns shared question preparation. Reuse model/evidence contracts and existing
 clarification builders; no workflow-local loader or summary call. Open forms gate later
 stages under [§24.2](../contracts/24-workflow-state.md#242-stage-transition-state-machine).
 Answer authentication is separate:
-[ADR 0025](../decisions/0025-clarification-answer-authentication.md) (SPEC01 E7; not yet
-implemented).
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md) (implemented except generation's use of every
+answer but a reference conflict's, SPEC01 E7).
 
 ## 4. Required logical coverage
 
@@ -1137,29 +1152,7 @@ conflicting, the engine:
 6. after a current authenticated answer or authority resolution commits,
    regenerates every specification unit before validation and rendering.
 
-Today a failed, blocked or invalid run publishes nothing. Under
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-since 30 October 2026; not implemented), when a Specify run fails because model work
-couldn't be completed (a failed request, exhausted correction or repair, or the token
-budget), or ends `blocked`, after the reference snapshot validated, it would publish an
-incomplete specification:
-
-1. only content that passed every check that applies to it on its own: the validated
-   reference snapshot's cited source requirements and each generated unit admitted and
-   validated before the failure, without final requirement IDs, leaving out any unit
-   whose owner has an unresolved candidate outcome;
-2. `spec.md` starting `**Status: Incomplete — the run failed.**` or
-   `**Status: Incomplete — the run was blocked.**`, naming the step
-   and diagnostic, with each section not produced marked not generated, and a "Run
-   status" section in `reference-context.md`;
-3. one warning `run.incomplete_published`, then the `spec_incomplete` workflow
-   state, written last;
-4. the workflow still ends `failed` or `blocked` and exits nonzero; Plan stays blocked, and the
-   next run starts at `start`.
-
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6 names the
-eligible failures; the Specify definition would declare these steps as its
-`failure-output` subgraph (`workflow/v2`; on hold, not implemented).
+A failed, blocked or invalid run publishes nothing.
 
 - Reruns replace these outputs and unresolved forms, including on a `needs_user`
   publication, and retain user-closed forms under
@@ -1202,7 +1195,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   requirements are required. Other record families have no minimum population.
   Schema presence never proves support, completeness or testability.
 - Acceptance criteria, functional requirements and scenario coverage are mandatory
-  obligations; the source-readiness projection always includes them (§3.10).
+  obligations; the source-readiness projection includes them except in a first pass over a
+  reconciliation that holds a conflict (§3.10).
 
   - Generation that completes without a mandatory record family ends `invalid`
     (`check-specification-generation-progress`, and `check-scenario-generation-progress` for
@@ -1241,7 +1235,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   entity records, or a source-group batch of non-entity records (§17.3). Each entity independently selects its support; each
   non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 - Native validation normalizes typed text, checks closed record variants, identical
-  normalized records and covered restatements (ADR 0035), and keeps questions outside
+  normalized records and covered restatements (ADR 0038 Decision 5), and keeps questions outside
   specification content.
 
 - The model's `kind` selects `brief`, `entities`, `records`, `clarification` or
@@ -1274,8 +1268,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   tampering rather than replacing it.
 - Canonical exact copies are derived occurrence handles, never replacement display bytes.
 - Arbitrary loaded clarification-response IDs are rejected; applicable-answer
-  integration is [ADR 0025](../decisions/0025-clarification-answer-authentication.md)
-  (SPEC01 E7; not yet implemented).
+  integration is [ADR 0025](../decisions/0025-clarification-answer-authentication.md): a reference conflict's answer
+  is applied, and generation's use of every other answer is not yet implemented (SPEC01 E7).
 - Engine code allocates monotonic per-family record IDs; no model identity, completion,
   approval or artifact-path field is accepted.
 
@@ -1299,22 +1293,22 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Coverage is mechanical accounting, not semantic proof.
 - Complete validated references with selectable retained claims admit private
   section generation directly, unless the opt-in `validation.sourcePreservationCheck`
-  ([ADR 0021](../decisions/0021-optional-source-preservation-review.md)) first runs
+  ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)) first runs
   source-preservation review. `check-specification-source-readiness` reuses the
   provenance owner's eligibility rule. Blocked references or absent selectable
   claims retain their source review/repair route. After assembly no model review runs
   (ADR 0023): publication requires the native checks (generation complete, coverage
   validated, rendering round trip), and the human who reviews and edits the published
   `spec.md` judges its meaning. Initial and repair generation packets
-  carry original source text through the same projection as source review;
-  retained claims still own positive provenance (§17.3).
+  carry original source text through the shared evidence projection, less the lines only an applied answer's
+  superseded claims cite (§17.3); retained claims still own positive provenance.
 
 - An invalid mechanically repairable candidate authorizes one independent value in
   stable diagnostic order.
 - Record-field locations are closed native targets.
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
   blocked. Restatements of the primary user story follow
-  [ADR 0035](../decisions/0035-cross-kind-restatement.md) as amended by
+  [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5 and
   [ADR 0047](../decisions/0047-engine-composed-primary-story.md); records whose claims a
   requirement or an earlier record in the batch already names follow
   [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5
@@ -1540,9 +1534,8 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
   shared required-authority validation, the native content schema and Markdown codec, and
   registered publication of either completed output or the ADR 0017 incomplete
   specification with its clarification forms and pending state.
-- Not implemented: authenticated answer application (ADR 0025, SPEC01 E7), additional
-  reference formats, the reference-feedback API (§16.5), and §5.5's failed-run
-  incomplete publication (ADR 0041, accepted, on hold since 30 October 2026).
+- Not implemented: generation's use of every clarification answer but a reference
+  conflict's and the response-owned passive literals (ADR 0025, SPEC01 E7), additional reference formats, and the reference-feedback API (§16.5).
 - Offline verification does not establish live E2E acceptance; the
   [harness](../harness/e2e.md) captures the exact published specification for
   separate adjudication by `/evaluate-e2e` ([R8](../harness/acceptance.md)), which starts only

@@ -2,25 +2,19 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-20
-- **Decision authority:** Explicit user direction for a local browser debugger served by the native executable, with exact and modified replay at a single prompt level.
-- **Amends:** ADR 0018 and design §§12, 26–28, 29 and 31.
-- **Amended by:** [ADR 0020](0020-derived-exact-reference-lineage.md),
-  [ADR 0011](0011-provider-owned-request-limits.md) (18 October 2026),
-  [ADR 0023](0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)
-  (18 October 2026), [ADR 0028](0028-anthropic-messages-provider.md) (21 October 2026,
-  Anthropic provider configuration), [ADR 0038](0038-record-claims-and-scenario-coverage.md) (25 October,
-  2, 12 and 14 November 2026), [ADR 0036](0036-source-quoted-claims.md) (18 November 2026)
-  and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
-  (26 October 2026), which change what the request description records ("Capture and
-  lineage" and "Replay" below; current version `model-request-debug/v21`, which also carries
-  [ADR 0043](0043-model-facing-exact-text-names.md)'s model-facing names and, since
-  [ADR 0048](0048-engine-derived-specification-title.md), no brief-title field binding).
-  [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, amended 23 October
-  2026; partly implemented): provider token counting is removed, and the description's
-  provider configuration records the catalogue entry's deadline (both implemented
-  24 October 2026). Not yet implemented: `node_id` and `route_id` both name the
-  originating `request-model` step, the action ID records the stage, and the
-  description version advances if its shape changes.
+- **Decision authority:** User decisions, 20 September and 15 October 2026.
+- **Amends:** [ADR 0018](0018-debug-model-exchange-logging.md) and design §§12, 26–28, 29
+  and 31.
+- **Amended by:** ADRs [0011](0011-provider-owned-request-limits.md),
+  [0020](0020-derived-exact-reference-lineage.md),
+  [0023](0023-advisory-post-generation-review.md),
+  [0028](0028-anthropic-messages-provider.md),
+  [0030](0030-engine-owned-model-request.md), [0036](0036-source-quoted-claims.md),
+  [0038](0038-record-claims-and-scenario-coverage.md),
+  [0039](0039-configured-temperatures-and-runaway-resend.md),
+  [0043](0043-model-facing-exact-text-names.md) and
+  [0048](0048-engine-derived-specification-title.md), each for what the request description
+  records.
 
 ## Diagnostic execution boundary
 
@@ -44,8 +38,9 @@ never workflow success.
 
 Debug/trace prompt rows additionally retain workflow ID, registered action ID,
 call ID, call kind, original call ID, parent call ID and complete sanitized body
-length. `node_id` names the expanded YAML invocation entry; `route_id` names its
-request-preparation entry. Run ID plus call ID is the join identity. Retries link
+length. `node_id` and `route_id` both name the originating `request-model` step, and the
+action ID records the stage ([ADR 0030](0030-engine-owned-model-request.md)). Run ID plus
+call ID is the join identity. Retries link
 to the preceding attempt and original call; repairs of response-produced values carry
 their candidate's producing origin through the shared native repair packet. A native
 authorized repair of an assembled candidate may have no single producing response:
@@ -57,8 +52,9 @@ Model and correlated validator events use that complete call ID, including opera
 kind and attempt, in `correlation_id`. Native semantic rejections use their recorded
 producing origin; unattributed evidence remains explicitly uncorrelated.
 
-The prompt column schema becomes `prompt-columns/v3`, with 37 columns; no legacy
-reader is added. A separate `request_description` body records the provider/model,
+The prompt column schema is `prompt-columns/v3`, with 37 columns; there is no legacy
+reader. A separate `request_description` body (`model-request-debug/v23`) records the
+provider/model,
 region/config (including the model's documented maximum output and the catalogue
 entry's request deadline), selected slot, workflow/request entry, typed content, fixed
 protocol prompt, exact validation schema and inference settings, including which
@@ -69,13 +65,13 @@ plain-prose selectors used by the source-aware model-text wire validator; native
 wire-field bindings to the composition registry, so the selected schema and diagnostic
 replay enforce the same permitted insertions; the immutable exact-occurrence scope
 (ADR 0020); and each applied exact-membership selection (ADR 0023), with the item properties
-that no two items may all repeat (`distinct`, ADR 0038 Decision 3; from v19), and native coverage
-rule, with its exclusive and owning kinds (ADR 0038; until v18 also covered and covering kinds), and each
+that no two items may all repeat (`distinct`, ADR 0038 Decision 3), and native coverage
+rule, with its exclusive and owning kinds (ADR 0038), and each
 applied agreement, the item property that items listing a common value must share (ADR 0036
-Decision 7; from v20), which the
+Decision 7), which the
 schema bytes cannot express, so replay reapplies them through the same schema
 restriction owner. This metadata is diagnostic input, not provider-visible authority.
-Older descriptions remain unchanged and reject readback; replay requires a new capture,
+A description of any other version rejects readback; replay requires a new capture,
 with no compatibility reader. The shared schema
 compiler reconstructs selected object/tagged-union roots for diagnostic use;
 constant-tagged selected roots are permitted without relaxing the external
@@ -90,7 +86,7 @@ Per-body byte lengths and contiguous chunk offsets prove complete reconstruction
 
 ## Captured source navigation
 
-The user-authorized source navigation extension retains diagnostic source metadata
+Source navigation retains diagnostic source metadata
 through schema validation, subgraph expansion, compilation and registry ownership.
 Each expanded step carries its authored ancestry, including top-level and nested
 subgraph call entries. This map is explicit; generated IDs are never decoded to
@@ -136,12 +132,12 @@ maximum output unchanged
 recorded deadline, and sends the temperature the captured attempt sent, so replaying a
 runaway re-send uses its own temperature (ADR 0039).
 
-**Converse amendment (user-directed, 15 October 2026):** Bedrock request construction,
+Bedrock request construction,
 capture, extraction and replay use the same canonical Converse codec as production
 invocation. Current validated model registration supplies the typed reasoning
-policy; a captured model name cannot choose a codec or invent controls. Historical
-chat-format captures remain immutable inspection records and fail exact replay
-reconstruction under this serializer. There is no legacy wire reader, migration,
+policy; a captured model name cannot choose a codec or invent controls. A capture in any
+other wire format remains an immutable inspection record and fails exact replay
+reconstruction. There is no legacy wire reader, migration,
 fallback or automatic retargeting. New compatibility evidence requires a fresh
 authorized current-model capture. Available provider reasoning is projected as
 separate ordered diagnostic blocks (text/signature or opaque redacted content),
@@ -165,10 +161,6 @@ exclusive, owner-only files. Model text renders as text, never executable HTML.
 
 ## Verification
 
-Offline tests cover exact reconstruction, wrong/missing chunks, attribution,
-retry/repair chains, closed replay input, unchanged exact wire bytes, modified
-prompt/context/schema, current provider authorization, one-call behavior,
-immutable parent records, pre/post-dispatch storage failure, and HTTP access checks.
 Capture rejections retain their typed boundary and cause through runner events,
 terminal reports and finalization. If subsequent logging also fails, retain that
 failure alongside the original capture diagnostic; neither permits dispatch or

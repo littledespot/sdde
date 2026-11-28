@@ -645,38 +645,33 @@ test "Bedrock projects the exact input once with only the model maximum and no i
     try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), first.value.object.get("system").?.array.items[2].object.get("text").?.string);
     try std.testing.expect(std.mem.indexOf(u8, infer, "$ref") == null);
     try std.testing.expect(std.mem.indexOf(u8, infer, "$defs") == null);
-    for ([_][]const u8{ "max_completion_tokens", "model_request_id", "binding_id", "deadline", "Authorization", "outputConfig" }) |name| {
+    for ([_][]const u8{ "max_completion_tokens", "model_request_id", "binding_id", "deadline", "Authorization" }) |name| {
         try std.testing.expect(std.mem.indexOf(u8, infer, name) == null);
     }
 }
 
 test "Bedrock serializes exactly the configured model maximum and no smaller allowance" {
     const encoding = @import("adapters/provider/bedrock_request.zig");
-    const controls = @import("domain/model_controls.zig");
-    for (std.enums.values(controls.ResponseGuidanceMode)) |mode| {
-        for (contracts.registry.entries[0..1]) |contract| {
-            var fixture: Fixture = undefined;
-            try fixture.init(std.testing.allocator, .bedrock);
-            defer fixture.deinit();
-            fixture.base.registry_entry.capabilities = contract.capabilities;
-            fixture.base.registry_entry.json = mode == .native_schema;
-            fixture.base.provider_binding.controls = contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures);
-            fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
-            fixture.base.request.controls = fixture.base.provider_binding.controls;
-            fixture.base.request.response_guidance_mode = mode;
-            try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
+    for (contracts.registry.entries[0..1]) |contract| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, .bedrock);
+        defer fixture.deinit();
+        fixture.base.registry_entry.capabilities = contract.capabilities;
+        fixture.base.provider_binding.controls = contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures);
+        fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
+        fixture.base.request.controls = fixture.base.provider_binding.controls;
+        try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
 
-            // Inference sends the model's documented maximum exactly as configured;
-            // Bedrock would otherwise apply a smaller default (ADR 0011).
-            const encoded = try encoding.encode(std.testing.allocator, &fixture.base.request, .converse, .{ .tokens = 16000 });
-            defer std.testing.allocator.free(encoded);
-            var parsed = try strict.parse(std.testing.allocator, encoded, .{ .maximum_depth = 32 }, false, null);
-            defer parsed.deinit();
-            const inference_config = parsed.value.object.get("inferenceConfig").?.object;
-            try std.testing.expectEqualStrings("16000", inference_config.get("maxTokens").?.number_string);
-            try std.testing.expectEqual(@as(usize, if (fixture.base.request.controls.temperatures != null) 2 else 1), inference_config.count());
-            for ([_][]const u8{ "max_output_tokens", "max_tokens" }) |field| try std.testing.expect(std.mem.indexOf(u8, encoded, field) == null);
-        }
+        // Inference sends the model's documented maximum exactly as configured;
+        // Bedrock would otherwise apply a smaller default (ADR 0011).
+        const encoded = try encoding.encode(std.testing.allocator, &fixture.base.request, .converse, .{ .tokens = 16000 });
+        defer std.testing.allocator.free(encoded);
+        var parsed = try strict.parse(std.testing.allocator, encoded, .{ .maximum_depth = 32 }, false, null);
+        defer parsed.deinit();
+        const inference_config = parsed.value.object.get("inferenceConfig").?.object;
+        try std.testing.expectEqualStrings("16000", inference_config.get("maxTokens").?.number_string);
+        try std.testing.expectEqual(@as(usize, if (fixture.base.request.controls.temperatures != null) 2 else 1), inference_config.count());
+        for ([_][]const u8{ "max_output_tokens", "max_tokens" }) |field| try std.testing.expect(std.mem.indexOf(u8, encoded, field) == null);
     }
 }
 
@@ -707,7 +702,7 @@ test "shared fake and Bedrock retain actual usage when the provider stops at its
     }
 }
 
-test "Bedrock native projection retains complete guidance and registered mode without fallback" {
+test "Bedrock native projection retains complete guidance without fallback" {
     // Every compiled family carries the same native projection.
     for (contracts.registry.entries) |contract| {
         if (contract.facts != .aws_bedrock) continue;
@@ -715,8 +710,6 @@ test "Bedrock native projection retains complete guidance and registered mode wi
         try fixture.init(std.testing.allocator, .bedrock);
         defer fixture.deinit();
         fixture.bindBedrockContract(contract, null);
-        fixture.base.registry_entry.json = true;
-        fixture.base.request.response_guidance_mode = .native_schema;
         var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const accepted = [_][]const u8{
             "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
@@ -751,22 +744,17 @@ test "Bedrock native projection retains complete guidance and registered mode wi
             try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), wire.value.object.get("system").?.array.items[2].object.get("text").?.string);
             const projection = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
             for ([_][]const u8{ "maxLength", "minimum", "maximum", "maxItems" }) |unsupported| try std.testing.expect(std.mem.indexOf(u8, projection, unsupported) == null);
-            fixture.base.request.response_guidance_mode = .prompt_only;
-            fixture.base.registry_entry.json = false;
-            try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
-            fixture.base.request.response_guidance_mode = .native_schema;
-            fixture.base.registry_entry.json = true;
         }
     }
 }
 
-test "Converse native schema rejects malformed projected data instead of weakening response mode" {
+test "Converse native schema rejects malformed projected data instead of weakening the request" {
     const encoding = @import("adapters/provider/bedrock_request.zig");
     for ([_][]const u8{ "{broken", "null", "[]", "{\"type\":\"object\",\"type\":\"object\"}", "{} {}" }) |structure| {
         for (std.enums.values(encoding.Family)) |family| {
             try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, .{
                 .content = &.{.{ .user = "input" }},
-                .schema = .{ .native = .{ .guidance = "{}", .structure = structure } },
+                .schema = .{ .guidance = "{}", .structure = structure },
                 .schema_name = "test",
                 .temperature = null,
                 .reasoning_effort = null,
@@ -813,7 +801,11 @@ test "Bedrock reasoning controls follow the exact registered policy" {
                     try std.testing.expectEqualStrings(value, additional.?.object.get("reasoning_effort").?.string);
                     try std.testing.expectEqual(@as(usize, 1), additional.?.object.count());
                 } else try std.testing.expect(additional == null),
-                .luna => try std.testing.expect(additional == null),
+                // Luna's native JSON requires its strict flag and takes no reasoning field.
+                .luna => {
+                    try std.testing.expectEqual(@as(usize, 1), additional.?.object.count());
+                    try std.testing.expect(additional.?.object.get("text").?.object.get("format").?.object.get("strict").?.bool);
+                },
                 .claude => if (effort) |value| {
                     // Effort travels only in Claude's own object; no GPT-OSS field or thinking override.
                     const output_config = additional.?.object.get("output_config").?.object;
@@ -829,7 +821,7 @@ test "Bedrock reasoning controls follow the exact registered policy" {
     for ([_]@import("adapters/provider/model_text_request.zig").ReasoningEffort{ .xhigh, .max }) |effort| {
         try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, .{
             .content = &.{.{ .user = "input" }},
-            .schema = .{ .prompt_only = "{}" },
+            .schema = .{ .guidance = "{}", .structure = "{}" },
             .schema_name = "test",
             .temperature = null,
             .reasoning_effort = effort,
@@ -839,7 +831,7 @@ test "Bedrock reasoning controls follow the exact registered policy" {
     }
     try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, .{
         .content = &.{.{ .user = "input" }},
-        .schema = .{ .prompt_only = "{}" },
+        .schema = .{ .guidance = "{}", .structure = "{}" },
         .schema_name = "test",
         .temperature = null,
         .reasoning_effort = .low,
@@ -850,7 +842,7 @@ test "Bedrock reasoning controls follow the exact registered policy" {
     for ([_]?@import("adapters/provider/model_text_request.zig").ReasoningEffort{ null, .low, .max }) |effort| {
         try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, .{
             .content = &.{.{ .user = "input" }},
-            .schema = .{ .prompt_only = "{}" },
+            .schema = .{ .guidance = "{}", .structure = "{}" },
             .schema_name = "test",
             .temperature = @import("domain/model_controls.zig").Temperature.init(0.1).?,
             .reasoning_effort = effort,
@@ -895,9 +887,7 @@ test "Converse accepts empty server tool usage across registered profiles and un
                 try fixture.init(std.testing.allocator, .bedrock);
                 defer fixture.deinit();
                 fixture.bindBedrockContract(contract, null);
-                fixture.base.registry_entry.json = contract.capabilities.structured_response == .native_json_schema;
-                fixture.base.request.response_guidance_mode = fixture.base.registry_entry.responseMode();
-                fixture.wire.expected_json = fixture.base.registry_entry.json;
+                fixture.wire.expects_native_output = true;
                 const text = try std.json.Stringify.valueAlloc(std.testing.allocator, content, .{});
                 defer std.testing.allocator.free(text);
                 const bytes = try std.fmt.allocPrint(
@@ -1529,7 +1519,7 @@ test "Luna native JSON emits its required strict flag and preserves canonical sc
     const structure = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}";
     const request: encoding.TextRequest = .{
         .content = &.{ .{ .guidance = "Generate the answer." }, .{ .user = "input" } },
-        .schema = .{ .native = .{ .guidance = structure, .structure = structure } },
+        .schema = .{ .guidance = structure, .structure = structure },
         .schema_name = "luna_schema",
         .temperature = null,
         .reasoning_effort = null,
@@ -1561,21 +1551,13 @@ test "Luna native JSON emits its required strict flag and preserves canonical sc
     defer other_parsed.deinit();
     try std.testing.expect(!other_parsed.value.object.contains("additionalModelRequestFields"));
     try std.testing.expect(other_parsed.value.object.contains("outputConfig"));
-    var prompted = request;
-    prompted.schema = .{ .prompt_only = structure };
-    const prompt = try encoding.encodeText(std.testing.allocator, prompted);
-    defer std.testing.allocator.free(prompt);
-    var prompt_parsed = try strict.parse(std.testing.allocator, prompt, .{ .maximum_depth = 32 }, false, null);
-    defer prompt_parsed.deinit();
-    try std.testing.expect(!prompt_parsed.value.object.contains("additionalModelRequestFields"));
-    try std.testing.expect(!prompt_parsed.value.object.contains("outputConfig"));
 }
 
 test "Luna request profile rejects unverified reasoning and temperature overrides" {
     const encoding = @import("adapters/provider/bedrock_request.zig");
     const base: encoding.TextRequest = .{
         .content = &.{.{ .user = "input" }},
-        .schema = .{ .prompt_only = "{}" },
+        .schema = .{ .guidance = "{}", .structure = "{}" },
         .schema_name = "test",
         .temperature = null,
         .reasoning_effort = null,

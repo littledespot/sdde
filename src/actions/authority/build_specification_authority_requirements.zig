@@ -3,7 +3,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 const a = @import("../../domain/required_authority.zig");
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{ .id = "build-specification-authority-requirements", .kind = .action, .requires = &.{ .relative_feature_directory, .accounted_reference_reconciliation }, .optional = &@import("../../domain/specification_generation_phase.zig").optional, .produces = &.{.required_authority_inputs}, .side_effect = .none };
-    pub fn execute(_: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_identity.zig").FeatureId, references: @import("../../domain/reference_reconciliation.zig").Accounted) a.Error!a.Inputs {
-        return @import("../../domain/specification_authority.zig").project(allocator, feature, references);
+    pub fn execute(_: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_identity.zig").FeatureId, references: @import("../../domain/reference_reconciliation.zig").Accounted, pass: a.Pass) a.Error!a.Inputs {
+        return @import("../../domain/specification_authority.zig").projectFor(allocator, feature, references, pass);
     }
 };

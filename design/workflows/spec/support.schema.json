@@ -130,6 +130,28 @@
         }
       ]
     },
+    "record_finding": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/supported"
+        },
+        {
+          "$ref": "#/$defs/ambiguous"
+        },
+        {
+          "$ref": "#/$defs/conflicting"
+        },
+        {
+          "$ref": "#/$defs/unsupported"
+        },
+        {
+          "$ref": "#/$defs/candidate_omission"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
+        }
+      ]
+    },
     "applicability_finding": {
       "oneOf": [
         {

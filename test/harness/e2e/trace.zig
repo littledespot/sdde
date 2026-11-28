@@ -536,7 +536,7 @@ pub const Trace = struct {
         }
         const selected = handoff.binding().registry_entry;
         const context = try std.json.Stringify.valueAlloc(self.store.allocator, @import("call_context.zig").CallContext{
-            .schema = .@"model-call-evidence/v3",
+            .schema = .@"model-call-evidence/v4",
             .call = self.calls,
             .origin = origin,
             .request_step = request.binding_id.operation_id.workflow_step_id.bytes,
@@ -549,7 +549,6 @@ pub const Trace = struct {
             .reasoning_effort = request.binding_id.reasoning_effort,
             .content = request.content,
             .response_schema = request.response_schema.modelBytes(),
-            .response_mode = request.response_guidance_mode,
         }, .{ .whitespace = .indent_2 });
         defer self.store.allocator.free(context);
         try self.store.write(.generation, self.calls, .context, context);
@@ -845,7 +844,6 @@ test "single-exchange capture requires the frozen native response settings and e
         .content = &.{.{ .user = "unit source input" }},
         .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
         .schema = "{}",
-        .response_mode = .native_schema,
         .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
         .reasoning_effort = "low",
         .operation_kind = .inference,
@@ -855,15 +853,14 @@ test "single-exchange capture requires the frozen native response settings and e
     try models.slots.map.put(std.testing.allocator, description.model_slot, .{ .provider = description.provider, .model = description.model, .reasoningEffort = "low" });
     const request = probeWireRequest();
     try frozen_binding.validateDescription(std.testing.allocator, description, request, &models);
-    for (0..6) |fault| {
+    for (0..5) |fault| {
         var invalid = description;
         switch (fault) {
-            0 => invalid.response_mode = .prompt_only,
-            1 => invalid.reasoning_effort = "medium",
-            2 => invalid.controls.temperatures = null,
-            3 => invalid.model = "us.openai.gpt-6-luna",
-            4 => invalid.provider_config.aws_bedrock.region = .@"us-west-2",
-            5 => invalid.reasoning_effort = null,
+            0 => invalid.reasoning_effort = "medium",
+            1 => invalid.controls.temperatures = null,
+            2 => invalid.model = "us.openai.gpt-6-luna",
+            3 => invalid.provider_config.aws_bedrock.region = .@"us-west-2",
+            4 => invalid.reasoning_effort = null,
             else => unreachable,
         }
         try std.testing.expectError(error.FrozenBindingRejected, frozen_binding.validateDescription(std.testing.allocator, invalid, request, &models));

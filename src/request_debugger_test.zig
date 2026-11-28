@@ -18,7 +18,6 @@ const description: debug.Description = .{
     .content = &.{ .{ .guidance = "Generate an answer." }, .{ .user = "{\"claims\":[\"one\",\"two\"]}" } },
     .protocol_prompt = @import("domain/model_controls.zig").response_format_guidance,
     .schema = schema,
-    .response_mode = .prompt_only,
     .controls = .{ .temperatures = @import("test_fixtures/model_temperatures.zig").temperatures },
     .reasoning_effort = "low",
     .operation_kind = .inference,
@@ -215,6 +214,8 @@ test "captured descriptions round-trip controls and reject a retired output allo
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v18")));
     // ADR 0036 Decision 7: v19 recorded no agreements, so a replay would admit a claim set the request corrected.
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v19")));
+    // ADR 0046 Decision 7: v22 recorded no listed rule, so a replay would admit a group the request corrected.
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v22")));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, ",\"sampling\":\"configured\"", "")));
     // A re-send records its sampling, and the value it sent round-trips.
     var resend = description;
@@ -347,7 +348,6 @@ test "response inspection admits retained native usage through existing normaliz
         no_feature_claim: @FieldType(@import("domain/reference_extraction_parser.zig").Response, "no_feature_claim"),
     };
     selected.field_policies = try @import("domain/model_candidate_json.zig").fieldBindings(Retained, a, .{ .reference_phase = .extraction });
-    selected.response_mode = .native_schema;
     const checked = try fixture.provider.provider().inspect(a, selected, bytes);
     try std.testing.expectEqual(.valid, checked.extraction);
     try std.testing.expectEqual(.valid, checked.json);
@@ -599,7 +599,6 @@ test "replay retains redacted partial errors and native schema modifications wit
     try std.testing.expect(partial.response.redacted);
     try std.testing.expect(std.mem.indexOf(u8, partial.response.body.?, "test-secret-never-log") == null);
     try std.testing.expectEqual(@as(usize, 1), fixture.wire.calls);
-    parent.description.?.response_mode = .native_schema;
     parent.request = try fixture.provider.provider().prepare(a, parent.description.?);
     const replacement = "{\"type\":\"object\",\"properties\":{\"updated\":{\"type\":\"boolean\"}},\"required\":[\"updated\"],\"additionalProperties\":false}";
     const modified = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = description.content, .schema = replacement } });
@@ -615,9 +614,8 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
     var fixture: Fixture = undefined;
     try fixture.init(a);
     defer fixture.environment.deinit();
-    fixture.wire.expected_json = true;
+    fixture.wire.expects_native_output = true;
     var parent = try fixture.parent(a);
-    parent.description.?.response_mode = .native_schema;
     parent.request = try fixture.provider.provider().prepare(a, parent.description.?);
     var previous_content: ?[]const @import("domain/llm_provider_operation.zig").ModelVisibleContent = null;
     const Probe = struct { edit: []const u8, answer: []const u8, first_key: []const u8, union_root: bool = false, constant_value: bool = false };
@@ -651,7 +649,6 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
             try std.testing.expectEqualDeep(description.controls, result.request.description.controls);
             try std.testing.expectEqualDeep(description.provider_config, result.request.description.provider_config);
             try std.testing.expectEqualStrings(description.reasoning_effort.?, result.request.description.reasoning_effort.?);
-            try std.testing.expectEqual(.native_schema, result.request.description.response_mode);
             const wire = try std.json.parseFromSlice(std.json.Value, a, result.request.body, .{});
             const native_bytes = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
             const native = try std.json.parseFromSlice(std.json.Value, a, native_bytes, .{});
@@ -686,7 +683,7 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
     try std.testing.expectEqual(fixture.requests, fixture.responses);
 }
 
-test "captured production request reconstructs exactly in both schema modes" {
+test "captured production request reconstructs exactly" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -699,22 +696,17 @@ test "captured production request reconstructs exactly in both schema modes" {
     production.registry_entry.provider.bytes = description.provider;
     production.registry_entry.model.bytes = description.model;
     production.registry_entry.config = description.provider_config;
-    production.registry_entry.capabilities.structured_response = .native_json_schema;
     production.registry_entry.facts = .{ .aws_bedrock = .@"gpt-oss" };
     production.request.response_schema = try fixture.compiler.compiler().compile(production.schema_arena.allocator(), schema);
-    for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
-        production.request.controls = production.provider_binding.controls;
-        production.request.binding_id = production.provider_binding.bindingId();
-        production.request.response_guidance_mode = mode;
-        production.registry_entry.json = mode == .native_schema;
-        try std.testing.expect(production.request.matchesBinding(production.provider_binding));
-        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, production.registry_entry.facts.bedrockFamily().?, production.registry_entry.config.aws_bedrock.max_output_tokens);
-        const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
-        const serialized = try std.json.Stringify.valueAlloc(a, projection, .{});
-        const restored = try debug.Description.decode(a, serialized);
-        try std.testing.expectEqualDeep(production.request.controls, restored.controls);
-        try std.testing.expectEqualStrings(captured, try fixture.provider.provider().prepare(a, restored));
-    }
+    production.request.controls = production.provider_binding.controls;
+    production.request.binding_id = production.provider_binding.bindingId();
+    try std.testing.expect(production.request.matchesBinding(production.provider_binding));
+    const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, production.registry_entry.facts.bedrockFamily().?, production.registry_entry.config.aws_bedrock.max_output_tokens);
+    const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
+    const serialized = try std.json.Stringify.valueAlloc(a, projection, .{});
+    const restored = try debug.Description.decode(a, serialized);
+    try std.testing.expectEqualDeep(production.request.controls, restored.controls);
+    try std.testing.expectEqualStrings(captured, try fixture.provider.provider().prepare(a, restored));
 }
 
 test "events join the exact request attempt" {
@@ -1012,7 +1004,7 @@ test "source snapshots retain static JSON guidance with its prompt resource kind
 // Exercise capture, fragmentation, graph release, inspection and replay through
 // the same shared owners for whole, named, composed and narrowed request shapes.
 test "selected request schemas survive capture and graph release without whole-schema fallback" {
-    for (0..10) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
+    for (0..11) |shape| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
@@ -1032,7 +1024,6 @@ test "selected request schemas survive capture and graph release without whole-s
             production.registry_entry.provider.bytes = description.provider;
             production.registry_entry.model.bytes = description.model;
             production.registry_entry.config = description.provider_config;
-            production.registry_entry.capabilities.structured_response = .native_json_schema;
             production.registry_entry.facts = .{ .aws_bedrock = .@"gpt-oss" };
             const selected = try debuggerSelectedShape(source, fixture.compiler.compiler(), shape);
             defer if (selected.restriction) |restriction| restriction.release();
@@ -1042,8 +1033,6 @@ test "selected request schemas survive capture and graph release without whole-s
             // occurrences. Absence of native metadata is a different state.
             production.request.exact_scope = .{ .reference_state = .{ .bytes = "TEST-empty-reference" }, .occurrences = &.{} };
             response_text = try a.dupe(u8, selected.response);
-            production.request.response_guidance_mode = mode;
-            production.registry_entry.json = mode == .native_schema;
             try std.testing.expect(production.request.matchesBinding(production.provider_binding));
             // Force request-description fragmentation, including its schema.
             production.request.content = &.{ .{ .guidance = try source.dupe(u8, "bounded captured context " ** 500) }, .{ .user = "Generate the selected data." } };
@@ -1067,6 +1056,7 @@ test "selected request schemas survive capture and graph release without whole-s
         if (shape == 7) try expectReplayedMembers(a, &fixture, selected);
         if (shape == 8) try expectReplayedCoverage(a, &fixture, selected);
         if (shape == 9) try expectReplayedAgreements(a, &fixture, selected);
+        if (shape == 10) try expectReplayedListings(a, &fixture, selected);
         const inspected = try fixture.provider.provider().inspect(a, selected, parent.response.?);
         if (inspected.schema != .valid) std.debug.print("selected shape {d}: {s}\n", .{ shape, try std.json.Stringify.valueAlloc(a, inspected, .{}) });
         try std.testing.expectEqual(.valid, inspected.schema);
@@ -1083,7 +1073,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
         const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), @import("domain/model_request_description.zig").current_version, "model-request-debug/v2");
         try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
-    };
+    }
 }
 
 fn debugResponse(a: std.mem.Allocator, content: []const u8) ![]const u8 {
@@ -1100,7 +1090,6 @@ test "replay serializes only the trusted model request profile and rejects legac
     var selected = description;
     selected.reasoning_effort = null;
     selected.controls.temperatures = null;
-    selected.response_mode = .native_schema;
     fixture.family = .luna;
     selected.provider_config.aws_bedrock.family = .luna;
     const body = try fixture.provider.provider().prepare(a, selected);
@@ -1130,6 +1119,11 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
             \\{"$defs":{"repair":{"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"],"additionalProperties":false}},"type":"object","properties":{"whole":{"$ref":"#/$defs/repair"}},"required":["whole"],"additionalProperties":false}
         );
         return .{ .schema = canonical.select(.{ .bytes = "repair" }).?, .response = "{\"enabled\":true}" };
+    }
+    if (shape == 10) {
+        const canonical = try compiler.compile(a, listed_schema);
+        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = listed_path }, .allowed = &.{ 2, 4 }, .collection = .{ .listed = listed_rule } }});
+        return .{ .schema = restriction.selected(), .response = "{\"states\":[{\"id\":2,\"state\":{\"kind\":\"conflicting\"}},{\"id\":4,\"state\":{\"kind\":\"conflicting\"}}],\"groups\":[{\"ids\":[2,4]}]}", .restriction = restriction };
     }
     if (shape == 9) {
         const canonical = try compiler.compile(a, agreement_schema);
@@ -1205,7 +1199,7 @@ fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debu
     var foreign = selected;
     foreign.members = &.{.{ .path = member_path, .allowed = &.{ 2, 4, 6 } }};
     try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
-    try std.testing.expectEqualStrings("Captured schema and native membership, coverage or agreement disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
+    try std.testing.expectEqualStrings("Captured schema and native membership, coverage, agreement or listed rule disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
     // So is a rule naming a property the captured schema's items do not have.
     var unknown = selected;
@@ -1302,6 +1296,43 @@ fn expectReplayedAgreements(a: std.mem.Allocator, fixture: *Fixture, selected: d
     unfitted.agreements = &.{.{ .path = agreement_path, .allowed = &.{ 2, 4, 6 }, .agree = "topic" }};
     try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, unfitted));
     try std.testing.expectEqualDeep(selected.agreements, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).agreements);
+}
+
+const listed_schema =
+    \\{"type":"object","properties":{"states":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"object","properties":{"id":{"type":"integer","minimum":1,"maximum":8},"state":{"oneOf":[{"type":"object","properties":{"kind":{"const":"retained"}},"required":["kind"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"conflicting"}},"required":["kind"],"additionalProperties":false}]}},"required":["id","state"],"additionalProperties":false}},"groups":{"type":"array","minItems":0,"maxItems":4,"items":{"type":"object","properties":{"ids":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"integer","minimum":1,"maximum":8}}},"required":["ids"],"additionalProperties":false}}},"required":["states","groups"],"additionalProperties":false}
+;
+const listed_path: []const @import("domain/model_result_schema.zig").ChoiceStep = &.{ .{ .property = "groups" }, .{ .items = {} }, .{ .property = "ids" } };
+const listed_rule: @import("domain/model_result_schema.zig").ListedRule = .{ .sibling = "states", .key = "id", .state = "state", .kind = "conflicting" };
+
+/// A captured request replays admission's native listed rule (ADR 0046 Decision 7), which the recorded
+/// provider schema bytes cannot express.
+fn expectReplayedListings(a: std.mem.Allocator, fixture: *Fixture, selected: debug.Description) !void {
+    try std.testing.expectEqual(@as(usize, 1), selected.listings.len);
+    try std.testing.expectEqual(@as(usize, 0), selected.agreements.len);
+    try std.testing.expectEqualStrings("conflicting", selected.listings[0].rule.kind);
+    try std.testing.expectEqualSlices(i64, &.{ 2, 4 }, selected.listings[0].allowed);
+    // The record replays the rule: a group that lists a claim the states dispose `retained` is rejected at that group,
+    // as it was live, and a group of `conflicting` claims is admitted.
+    const split = try debugResponse(a, "{\"states\":[{\"id\":2,\"state\":{\"kind\":\"conflicting\"}},{\"id\":4,\"state\":{\"kind\":\"retained\"}}],\"groups\":[{\"ids\":[2,4]}]}");
+    const checked = try fixture.provider.provider().inspect(a, selected, split);
+    try std.testing.expectEqual(.invalid, checked.schema);
+    try std.testing.expectEqualStrings("group_member_not_conflicting", checked.reason.?);
+    try std.testing.expectEqualStrings("/groups/0", checked.path.?);
+    const agreeing = try debugResponse(a, "{\"states\":[{\"id\":2,\"state\":{\"kind\":\"conflicting\"}},{\"id\":4,\"state\":{\"kind\":\"conflicting\"}}],\"groups\":[{\"ids\":[2,4]}]}");
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, selected, agreeing)).schema);
+    // Without the record the same bytes pass, so the record is what replays admission.
+    var unrestricted = selected;
+    unrestricted.listings = &.{};
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, split)).schema);
+    // A record that does not fit the captured schema cannot be read or replayed.
+    var foreign = selected;
+    foreign.listings = &.{.{ .path = listed_path, .allowed = &.{ 2, 4 }, .rule = .{ .sibling = "states", .key = "id", .state = "state", .kind = "ghost" } }};
+    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
+    var unfitted = selected;
+    unfitted.listings = &.{.{ .path = listed_path, .allowed = &.{ 2, 4, 6 }, .rule = listed_rule }};
+    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, unfitted));
+    try std.testing.expectEqualDeep(selected.listings, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).listings);
 }
 
 fn debuggerExtractionShape(a: std.mem.Allocator, selected: *const @import("domain/model_result_schema.zig").Schema, response: []const u8) !DebuggerSelectedShape {

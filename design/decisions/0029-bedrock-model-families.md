@@ -1,62 +1,22 @@
 # ADR 0029: Bedrock model families
 
-- **Status:** Accepted amendment
+- **Status:** Accepted
 - **Date:** 2026-10-22
-- **Decision authority:** The user's instructions on 22 October 2026:
-  - "for the e2e tests make use of haiku 5.5 on bedrock with low reasoning effort";
-  - "the bedrock connector should allow for all model avaiable on bedrock to be used";
-  - "Yes, name a family": each `.sddproviders.json` Bedrock model names a compiled
-    family, so the engine knows how to send effort and temperature;
-  - "Keep explicit list": billed live tests stay limited to named models;
-  - "test must be generic in nature and not hardcoded".
-- **Amends:**
-  - [F0006](../features/F0006-LLMProviderInterface.md): a Bedrock catalogue entry may
-    name any model, and its capabilities come from the compiled contract of the family
-    it names, not from a compiled contract for that exact model;
-  - [F0007](../features/F0007-AWSBedrockProvider.md): the registered model table, the
-    two-Region set and the request-profile bullet;
-  - [ADR 0028](0028-anthropic-messages-provider.md) "Not decided here", for Claude
-    through Bedrock and live use of Claude Haiku 5.5 through Bedrock;
-  - the request description (`model-request-debug`), whose Bedrock provider
-    configuration gains the family.
-
-  The overall design remains **Proposed design**.
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026;
-  implemented 24 October 2026): a Bedrock `config` also requires a positive
-  `requestTimeoutMs`, deadlines are per catalogue entry, and provider token counting is
-  removed. The text below includes these.
-- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
-  October 2026): the `gpt-oss` family sends the configuration's `temperature`, and
-  `temperatureRunawayRetry` on a runaway re-send, instead of `0.1`. The other families
-  still omit temperature on every attempt.
-- **Clarified (24 October 2026, user decision):** the E2E catalogue and the live-test
-  allowlist keep the AU cross-Region inference profile `au.anthropic.claude-haiku-5-5`,
-  called from `ap-southeast-2`. Bedrock routes each request to `ap-southeast-2` or
-  `ap-southeast-4`. The user accepts both, superseding the same day's Sydney-only
-  requirement ("it must be on ap-southeast-2"), because the
-  [Claude Haiku 5.5 model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-5-5.html)
-  (checked 2026-10-24) lists no in-Region inference in `ap-southeast-2`, only the AU geo
-  and global profiles.
-- **Amended (24 October 2026, user decision: "switch to openai.gpt-oss-20b"):** the
-  shipped E2E slots select GPT-OSS-20B, with low effort for `spec_generation` and
-  `repair`. This supersedes "for the e2e tests make use of haiku 5.5 on bedrock with low
-  reasoning effort" for the slots only: Claude Haiku 5.5 stays in the E2E catalogue and
-  the live-test allowlist for generation.
-- **Amended (9 November 2026, user decision):** the live-test cost policy also names
-  `anthropic` / `claude-haiku-5-5` for generation only, recording the 22 October 2026
-  direction ("update the providers to connect to claude") that
-  `test/harness/model_cost_policy.zig` already implements. This amends ADR 0028 "Not
-  decided here".
-- **Amended (17 November 2026, user decision: "change to claude-haiku-5-5 on anthropic,
-  not bedrock"):** the shipped E2E slots select `anthropic` / `claude-haiku-5-5`,
-  superseding the 24 October 2026 slot selection above; see "Live-test cost policy".
+- **Decision authority:** User decisions, 22 and 24 October 2026 and 9, 17 and 25
+  November 2026
+- **Amends:** [F0006](../features/F0006-LLMProviderInterface.md),
+  [F0007](../features/F0007-AWSBedrockProvider.md),
+  [ADR 0028](0028-anthropic-messages-provider.md) "Not decided here" and the request
+  description (`model-request-debug`). The overall design remains **Proposed design**.
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md),
+  [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
 
 ## Context
 
-Each Bedrock model had to be compiled into the engine before a project could select
-it. The catalogue could only pick from that list, and a test rejected any catalogue
-attempt to choose a request encoding. Bedrock offers many models through one Converse
-API. They differ in only a few request facts, and the engine owns each of those.
+Bedrock offers many models through one Converse API. They differ in only a few request
+facts, and the engine owns each of those. A Bedrock catalogue entry may name any model;
+its capabilities come from the compiled contract of the family it names, not from a
+compiled contract for that exact model.
 
 ## Decision
 
@@ -69,11 +29,13 @@ the engine sends beyond common Converse input:
 | --- | --- | --- | --- |
 | `converse` | None | Omitted (provider default) | None |
 | `gpt-oss` | `low`, `medium`, `high` | Configured (ADR 0039) | `additionalModelRequestFields.reasoning_effort` |
-| `luna` | None | Omitted | `additionalModelRequestFields.text.format.strict` in native mode |
+| `luna` | None | Omitted | `additionalModelRequestFields.text.format.strict` |
 | `claude` | `low` to `max` | Omitted | `additionalModelRequestFields.output_config.effort`; no `thinking` field |
 
-Every family supports both response modes, and the catalogue's `json` flag selects
-one.
+Every family sends native JSON-schema output, the only response mode. The catalogue has
+no `json` member. The `gpt-oss` family sends the configuration's `temperature`, and
+`temperatureRunawayRetry` on a runaway re-send; the other families omit temperature on
+every attempt.
 
 A Bedrock catalogue entry names its model, Region, family, documented maximum output
 and deadline:
@@ -81,7 +43,6 @@ and deadline:
 ```json
 {
   "model": "au.anthropic.claude-haiku-5-5",
-  "json": true,
   "config": {
     "region": "ap-southeast-2",
     "family": "claude",
@@ -109,11 +70,8 @@ A wrong model, Region or family is the project's explicit choice. Bedrock reject
 request and the engine reports a typed provider failure. It never retries with
 another family or model.
 
-### Retired registration
-
-The Claude 3.5 Haiku registration in `us-west-2`, the only Bedrock model with
-CountTokens and fixed temperature, is removed. Its model can still be configured as a
-`converse` entry, without temperature.
+No Bedrock model has a compiled per-model registration, a fixed temperature or a
+token-counting path.
 
 ### Captures and harness
 
@@ -132,14 +90,16 @@ named tuples, each for named uses:
 | --- | --- |
 | `aws-bedrock` / `openai.gpt-oss-20b-1:0` | Generation and rubric judging |
 | `aws-bedrock` / `au.anthropic.claude-haiku-5-5` | Generation only |
-| `anthropic` / `claude-haiku-5-5` | Generation only (amended 9 November 2026) |
+| `anthropic` / `claude-haiku-5-5` | Generation only |
+
+`test/harness/model_cost_policy.zig` holds the list. `au.anthropic.claude-haiku-5-5` is
+the AU cross-Region inference profile, called from `ap-southeast-2`; Bedrock routes each
+request to `ap-southeast-2` or `ap-southeast-4`, and the user accepts both.
 
 Rubric judging stays on GPT-OSS-20B ([acceptance.md](../harness/acceptance.md)). The
-shipped E2E cases select `anthropic` / `claude-haiku-5-5` in every slot (amended 17
-November 2026; user: "change to claude-haiku-5-5 on anthropic, not bedrock"), replacing
-the 24 October 2026 selection of GPT-OSS-20B. The provider-compatibility probe stays
-bound to the frozen calibration protocol's GPT-OSS slot controls, so it no longer
-accepts the shipped cases and checks only its own fixtures.
+shipped E2E cases select `anthropic` / `claude-haiku-5-5` in every slot. The
+provider-compatibility probe stays bound to the frozen calibration protocol's GPT-OSS
+slot controls, so it does not accept the shipped cases and checks only its own fixtures.
 
 ### Tests
 

@@ -12,10 +12,10 @@ const provider_interface = @import("../ports/llm_provider_interface.zig");
 /// Names the freeze root; unset, projections are kept in memory only.
 pub const environment_variable = "SDDE_REQUEST_PROJECTION";
 
-/// Description members that engine refactors change by design (E1, E4), and the native admission rule
-/// recorded for replay (ADR 0036 Decision 7), which is no model input: a freeze proves the input unchanged
-/// without a rule that only judges the answer.
-const omitted = [_][]const u8{ "version", "workflow_version", "request_step", "agreements" };
+/// Description members that engine refactors change by design (E1, E4), and the native admission rules
+/// recorded for replay (ADR 0036 Decision 7, ADR 0046 Decision 7), which are no model input: a freeze proves the
+/// input unchanged without a rule that only judges the answer.
+const omitted = [_][]const u8{ "version", "workflow_version", "request_step", "agreements", "listings" };
 
 /// One frozen invocation, read strictly: the description's members less `omitted`.
 /// The freeze carries no version, so none is checked.
@@ -28,7 +28,6 @@ pub const Projection = struct {
     content: Member("content"),
     protocol_prompt: Member("protocol_prompt"),
     schema: Member("schema"),
-    response_mode: Member("response_mode"),
     controls: Member("controls"),
     sampling: Member("sampling"),
     reasoning_effort: Member("reasoning_effort"),

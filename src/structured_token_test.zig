@@ -144,10 +144,18 @@ test "stored classification replay rejects omitted native duties and forged pres
                 .{ .id = .{ .ordinal = 2 }, .value = .{ .claim_ids = &.{.{ .ordinal = 2 }}, .citation_ids = completed.ledger.claims[1].citation_ids, .content = .{ .preserved_token = .{ .token_id = completed.ledger.claims[1].content.preserved_token.value.id } } } },
             },
             .conflicts = &.{},
+            .answer_retained = &.{},
             .passive_records = &.{},
             .passive_occurrences = &.{},
         };
         try snapshots.validate(a, snapshot, text.normalizer);
+        // A claim an answer kept is a model claim: an exact token is not. Readback checks the claim's structure only, not
+        // the clarification state, so a retained model claim that stands alone in a signal is accepted.
+        var kept = snapshot;
+        kept.answer_retained = &.{.{ .ordinal = 2 }};
+        try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, kept, text.normalizer));
+        kept.answer_retained = &.{.{ .ordinal = 1 }};
+        try snapshots.validate(a, kept, text.normalizer);
         const items = try @import("domain/reference_claim_items.zig").build(a, inputs, completed.ledger);
         try std.testing.expect(try duty.itemRequired(items, .{ .ordinal = 2 }));
         try std.testing.expect(!(try duty.itemRequired(items, .{ .ordinal = 1 })));

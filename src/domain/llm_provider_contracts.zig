@@ -285,7 +285,6 @@ pub fn supportsReasoningEffort(
 test "contract registry is exact unique and provider consistent" {
     const capabilities: @import("model_capabilities.zig").Capabilities = .{
         .inference = true,
-        .structured_response = .prompt_only,
         .temperature = false,
     };
     const provider = identity.ProviderId.parse("compiled-provider").?;
@@ -325,7 +324,7 @@ test "contract registry is exact unique and provider consistent" {
 }
 
 test "Bedrock family contracts cover every model and Region that names their family, once each" {
-    const capabilities: @import("model_capabilities.zig").Capabilities = .{ .inference = true, .structured_response = .prompt_only, .temperature = false };
+    const capabilities: @import("model_capabilities.zig").Capabilities = .{ .inference = true, .temperature = false };
     const provider = identity.ProviderId.parse("aws-bedrock").?;
     var contracts: [std.enums.values(BedrockFamily).len]ProviderModelContract = undefined;
     for (&contracts, std.enums.values(BedrockFamily)) |*contract, family| contract.* = .{
@@ -360,7 +359,7 @@ test "Bedrock family contracts cover every model and Region that names their fam
 }
 
 test "contract registry binds each provider family to its identity and implementation" {
-    const capabilities: @import("model_capabilities.zig").Capabilities = .{ .inference = true, .structured_response = .prompt_only, .temperature = false };
+    const capabilities: @import("model_capabilities.zig").Capabilities = .{ .inference = true, .temperature = false };
     const bedrock: ProviderModelContract = .{
         .provider = identity.ProviderId.parse("aws-bedrock").?,
         .model = null,

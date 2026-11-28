@@ -249,7 +249,7 @@ test "Specify projects registered native fields and complete reference obligatio
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
     const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
-    const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted);
+    const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted, .first);
     // Six mandatory slots, two signals, one exact value. The engine composes the
     // story and takes the title from the sources, so source readiness has neither
     // subject (ADRs 0047 and 0048).
@@ -367,7 +367,7 @@ test "reference support must name current accounted signals with no foreign or d
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
-    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "catalogue" }, accounted);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "catalogue" }, accounted, .first);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
     inputs.evidence = evidence;
@@ -394,7 +394,7 @@ test "reference conflicts cannot be dropped or resolved by supplied evidence" {
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = (try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context())).valid;
-    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "library" }, accounted);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "library" }, accounted, .first);
     try std.testing.expectEqual(@as(usize, 1), inputs.forced_gaps.len);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
@@ -767,7 +767,7 @@ test "gaps over the same lines become one need and one form, and gaps over other
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
     const held = support.records(accounted);
-    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, accounted);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, accounted, .first);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
     var asked: usize = 0;
@@ -790,6 +790,15 @@ test "gaps over the same lines become one need and one form, and gaps over other
     const needs = try conversion.build(allocator, reference.inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
     // The signals over one line are one need that asks each question and gives each reason; the third has its own.
     try std.testing.expectEqual(@as(usize, 2), needs.entries.len);
+    // No answer was applied, so no conflict was dropped; the conflicts an applied answer dropped are handed to the refresh.
+    try std.testing.expectEqual(@as(usize, 0), needs.decided.len);
+    var answered = inputs;
+    var answered_records = held;
+    answered_records.answer_dropped = &.{.{ .subject = needs.entries[0].subject, .response_id = 1, .key = "stories.md.8" }};
+    answered.references = answered_records;
+    const handed = try conversion.build(allocator, reference.inputs, answered, try observe(allocator, answered), try run(allocator, answered), &packet_guidance.marked);
+    try std.testing.expectEqual(@as(usize, 1), handed.decided.len);
+    try std.testing.expectEqualStrings("stories.md.8", handed.decided[0].key);
     const first_path = reference.inputs.corpus.sources[0].path.bytes;
     const together = for (needs.entries) |need| {
         if (std.mem.eql(u8, need.subject.sources[0].path, first_path)) break need;
@@ -836,7 +845,7 @@ test "a conflict's need offers its claims as options and every other need takes 
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = (try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context())).valid;
     const held = support.records(accounted);
-    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, accounted);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, accounted, .first);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
     for (evidence) |*entry| {
@@ -858,6 +867,72 @@ test "a conflict's need offers its claims as options and every other need takes 
     // A gap that is not a conflict is answered in text.
     const text = try conversion.consolidate(allocator, &.{}, &.{.{ .stage = .spec, .subject = needs.entries[0].subject, .authority = needs.entries[0].authority, .question = "Which applies?", .reason = "Open.", .citations = &.{}, .sources = &.{} }});
     try std.testing.expectEqual(c.max_text_bytes, text[0].answer_schema.bounded_business_text);
+}
+
+test "the gate admits each pass only its own projection of references that hold a conflict" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const f = @import("test_fixtures/reference_reconciliation.zig");
+    const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{ "Confirm immediately.\n", "Request approval first.\n" });
+    defer reference.deinit();
+    const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+    const accounted = (try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context())).valid;
+    const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
+    const first = try project.execute(allocator, reference.inputs.corpus.feature_id, accounted, .first);
+    const dependent = try project.execute(allocator, reference.inputs.corpus.feature_id, accounted, .dependent);
+    try std.testing.expectEqual(.first, first.pass);
+    try std.testing.expectEqual(.dependent, dependent.pass);
+    try std.testing.expect(first.seeds.len < dependent.seeds.len);
+    try std.testing.expectEqual(first.forced_gaps.len, dependent.forced_gaps.len);
+    _ = try a.build(allocator, first);
+    _ = try a.build(allocator, dependent);
+    // The same references, each claimed as the other pass: a first pass that lists every seed is not what a first
+    // pass projects, and a dependent pass that lists the conflict records alone omits what the review of a repair covers.
+    var full_as_first = dependent;
+    full_as_first.pass = .first;
+    try std.testing.expectError(error.InvalidRequiredAuthority, a.build(allocator, full_as_first));
+    var conflicts_as_dependent = first;
+    conflicts_as_dependent.pass = .dependent;
+    try std.testing.expectError(error.InvalidRequiredAuthority, a.build(allocator, conflicts_as_dependent));
+}
+
+test "the gate admits a second pass only on a source-readiness projection" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const f = @import("test_fixtures/reference_reconciliation.zig");
+    const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{ "Display `Hello, World!`.\n", "Renew a library loan.\n" });
+    defer reference.deinit();
+    const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+    const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
+    const feature = reference.inputs.corpus.feature_id;
+    const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
+    // Over references with no conflict the two readiness passes project the same seeds, so each is the projection its
+    // references call for; the conflict-bearing references, where they differ, are the test above.
+    try std.testing.expectEqual(@as(usize, 0), @import("domain/reference_support.zig").records(accounted).conflicts.len);
+    for ([_]a.Pass{ .first, .dependent }) |pass| {
+        const readiness = try project.execute(allocator, feature, accounted, pass);
+        try std.testing.expectEqual(.source_readiness, readiness.projection);
+        _ = try a.build(allocator, readiness);
+    }
+    // A source-preservation projection has one pass.
+    const preserved = try @import("domain/source_preservation.zig").project(allocator, feature, @import("domain/reference_support.zig").records(accounted), reference.inputs);
+    try std.testing.expectEqual(.first, preserved.pass);
+    _ = try a.build(allocator, preserved);
+    var preserved_second = preserved;
+    preserved_second.pass = .dependent;
+    try std.testing.expectError(error.InvalidRequiredAuthority, a.build(allocator, preserved_second));
+    // So does the registered-obligation projection.
+    for ([_]a.Kind{ .feature_intent, .design_decision, .policy_predicate }) |kind| {
+        const registered = try fixture(allocator, kind);
+        try std.testing.expectEqual(.registered_obligations, registered.projection);
+        try std.testing.expectEqual(.first, registered.pass);
+        _ = try a.build(allocator, registered);
+        var registered_second = registered;
+        registered_second.pass = .dependent;
+        try std.testing.expectError(error.InvalidRequiredAuthority, a.build(allocator, registered_second));
+    }
 }
 
 test "the parts of one subject share one way to answer, and a conflict's options are merged once each" {

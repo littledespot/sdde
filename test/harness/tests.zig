@@ -500,10 +500,6 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
         const family = entry.facts.bedrockFamily() orelse continue;
         const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
         const region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0];
-        if (entry.capabilities.structured_response != .native_json_schema) {
-            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, bedrockBytes(family), .{ .api = .bedrock_converse, .model = model, .region = region, .family = family }));
-            continue;
-        }
         var config = try configuration.parse(a, bedrockBytes(family), .{ .api = .bedrock_converse, .model = model, .region = region, .family = family });
         const baseline = try c.decode(std.json.Value, a, try bedrock.request(a, config, inputs, null));
         switch (family) {
@@ -585,16 +581,6 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         const family = entry.facts.bedrockFamily() orelse continue;
         const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
         const region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0];
-        if (entry.capabilities.structured_response != .native_json_schema) {
-            var forged = try configuration.parse(a, bedrock_config_bytes, bedrock_selection);
-            forged.model = model.bytes;
-            forged.region = region;
-            forged.family = family;
-            var fake: Fake = .{ .observations = &.{} };
-            try std.testing.expectError(error.InvalidEvaluationContract, evaluator.run(std.testing.io, a, fake.port(), forged, try capture(a)));
-            try std.testing.expectEqual(@as(usize, 0), fake.count);
-            continue;
-        }
         var socket: fixture_module.Fixture = undefined;
         socket.init(response);
         defer socket.deinit();
@@ -2028,10 +2014,6 @@ test "Bedrock judge temperature is the evaluator's own value, present exactly wh
             .region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0],
             .family = family,
         };
-        if (entry.capabilities.structured_response != .native_json_schema) {
-            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, bedrockBytes(family), selection));
-            continue;
-        }
         const takes = entry.capabilities.temperature;
         // Accepted: each in-range value when the family takes one, null otherwise.
         for ([_][]const u8{ "null", "0", "0.1", "0.25", "1", "2" }) |value| {

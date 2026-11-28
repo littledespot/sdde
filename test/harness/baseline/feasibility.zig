@@ -104,7 +104,7 @@ pub fn validate(plan: BudgetPlan) !void {
 }
 
 /// Caller supplies the budget the engine enforces, from the bootstrapped project
-/// configuration (ADR 0037).
+/// configuration (ADR 0011).
 /// Every retained value uses the caller's arena. No credentials are consulted.
 pub fn evaluate(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, plan: BudgetPlan, protocol: comparison.Protocol, baseline_build: provenance.Identity, configured_workflow_budget: u64) !Report {
     try validate(plan);
@@ -127,7 +127,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
     const run = try directories.open(io, repository, path);
     defer run.close(io);
     const report_bytes = try files.read(io, a, run, "report.json");
-    const report = @import("../../../src/domain/strict_json.zig").decode(native.Report, a, report_bytes, .{ .maximum_depth = 128 }) catch |err| switch (err) {
+    const report = @import("../../../src/domain/strict_json.zig").decode(native.Report, a, report_bytes, native.report_limits) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBudgetEvidence,
     };
@@ -598,7 +598,6 @@ test "budget usage proof binds actual wire controls to the canonical prepared re
         .content = &.{.{ .user = "Retain the source behavior." }},
         .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
         .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
-        .response_mode = .native_schema,
         .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
         .reasoning_effort = "low",
         .operation_kind = .inference,

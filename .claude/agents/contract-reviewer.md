@@ -1,6 +1,6 @@
 ---
 name: contract-reviewer
-description: Reviews an SDDE change against the AGENTS.md contract and reports findings; it never edits. Use after implementing a change and before reporting it complete, or when asked to review a change. Name the changed files and supply the before text, because it runs no git command.
+description: Reviews an SDDE change against the AGENTS.md contract and reports findings; it never edits. Use after implementing a change and before reporting it complete, or when asked to review a change. Name the changed files and supply the before text, because git holds only the committed tree.
 tools: Read, Grep, Glob, Bash
 model: inherit
 color: red
@@ -34,7 +34,9 @@ to you:
   path leaves without `defer` or `errdefer`.
 
 You may run offline checks to support a finding: `zig build lint`,
-`zig build test-architecture` or a targeted `zig build test-<area>`.
+`zig build test-architecture` or a targeted `zig build test-<area>`, and the read-only
+git checks AGENTS.md allows (`git status`, `git diff`, `git show HEAD:<path>`). You never
+run any other git command, and you never roll anything back.
 
 ## Output
 

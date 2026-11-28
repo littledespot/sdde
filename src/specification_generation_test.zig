@@ -25,6 +25,7 @@ pub fn collectReview(comptime Review: type, allocator: std.mem.Allocator, inputs
         .origin = origin,
         .origins = origins,
         .omission_conflict_claims = if (Review == @import("domain/specification_support.zig").Source) context.references.records.assignments.checked.prior.prior.source.omission_conflict_claims else &.{},
+        .omission_released_claims = if (Review == @import("domain/specification_support.zig").Source) context.references.records.assignments.checked.prior.prior.source.omission_released_claims else &.{},
     });
 }
 
@@ -654,6 +655,23 @@ test "the composed story skips heading and technical claims and blocks without a
         try std.testing.expectEqualDeep(try @import("domain/specification_source_binding.zig").catalogue(a, @import("domain/reference_support.zig").records(fixture.context.references), .content), rejection.eligible_signals);
         try std.testing.expectEqual(.no_story_requirements, (try compose_story.execute(a, current, fixture.context)).blocked.reason);
     }
+    // A question the source leaves open is not quoted. One an applied answer kept is the requirement the answer chose, so
+    // the story quotes it with the business claims, in source order (ADR 0025).
+    {
+        var fixture = try Fixture.initClaims(a, "MOCK Renew an eligible loan.\nMOCK A loan may be renewed only once.\n", null, .{ .selected = &.{
+            .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+            .{ .category = .open_question, .citations = &.{.{ .ordinal = 2 }} },
+        } });
+        defer fixture.deinit();
+        const current = try sessionAtStory(a, &fixture);
+        const open = (try story.compose(a, current, fixture.context)).story;
+        try std.testing.expectEqualStrings("MOCK Renew an eligible loan.", (try quotedText(a, fixture.context, open.value)).text);
+        try std.testing.expectEqual(@as(usize, 1), open.source_group_ids.len);
+        fixture.context.references.records.answer_retained = fixture.context.references.records.signals[1].value.claim_ids;
+        const answered = (try story.compose(a, current, fixture.context)).story;
+        try std.testing.expectEqualStrings("MOCK Renew an eligible loan. MOCK A loan may be renewed only once.", (try quotedText(a, fixture.context, answered.value)).text);
+        try std.testing.expectEqual(@as(usize, 2), answered.source_group_ids.len);
+    }
     // Each quote is one paragraph: a heading quoted with content, a wrapped list
     // item and lines cited apart keep their words, without headings or line breaks.
     for (reading_cases) |case| {
@@ -1122,7 +1140,7 @@ test "the only record naming a claim is kept when it equals the composed story" 
     const bound = (try sessions.currentBinding(a, current, fixture.context)).records;
     const restated: spec.Model.RecordProposal = .{ .content = .{ .assumption = .{ .text = story.value } }, .source_group_ids = &.{bound.signal}, .provenance = bound.selection };
     // The batch's only record equals the story; deleting it would leave its claim
-    // without a record, so ADR 0035 keeps it (ADR 0047).
+    // without a record, so the story comparison keeps it (ADR 0038 Decision 5, ADR 0047).
     const kept = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{restated} } } })).valid;
     try std.testing.expectEqual(@as(usize, 1), kept.response.content.records.len);
     // When another record names the same claim, the restatement is still deleted.
@@ -1320,8 +1338,9 @@ test "authoring schema reuse keeps positive support separate from open question 
 // SPEC01 C49 (decided 20 November 2026): a records batch is assigned its group with `.question` (`binding.record`,
 // `recordCount`) and every record over a group is validated with `.content` (`validateRecordAssociation`), which a
 // group holding an open question fails. The request offers what the validation accepts: a batch over such a group is
-// offered its clarification outcome and no record content (invariant 20; ADR 0020).
-test "a records batch over a group that holds an open question is offered only its clarification outcome" {
+// offered its clarification outcome and no record content (invariant 20; ADR 0020). A question an applied user answer kept is
+// decided, so its batch is offered record content like any other group's (ADR 0025).
+test "a records batch over a group that holds an open question is offered only its clarification outcome, unless an applied answer kept it" {
     const binding = @import("domain/specification_source_binding.zig");
     const refs = @import("domain/reference_support.zig");
     const extraction_contract = @import("domain/reference_extraction.zig");
@@ -1333,7 +1352,7 @@ test "a records batch over a group that holds an open question is offered only i
     const a = arena.allocator();
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
-    for ([_]struct { behavior: []const u8, question: []const u8 }{
+    for ([_]bool{ false, true }) |answered| for ([_]struct { behavior: []const u8, question: []const u8 }{
         .{ .behavior = "MOCK Show the startup time.", .question = "MOCK Which timezone applies?" },
         .{ .behavior = "MOCK Renew an eligible loan.", .question = "MOCK Which renewal period applies?" },
     }) |case| {
@@ -1343,11 +1362,13 @@ test "a records batch over a group that holds an open question is offered only i
         };
         var fixture = try Fixture.initClaims(a, try std.fmt.allocPrint(a, "{s}\n{s}\n", .{ case.behavior, case.question }), null, .{ .selected = &claims });
         defer fixture.deinit();
+        // The claim the question group holds is the one an applied answer kept, or no answer applied.
+        if (answered) fixture.context.references.records.answer_retained = fixture.context.references.records.signals[1].value.claim_ids;
         const records = refs.records(fixture.context.references);
         try std.testing.expectEqual(@as(usize, 2), records.signals.len);
         const business = records.signals[0];
         const question = records.signals[1];
-        try std.testing.expect(!spec.permitsPositiveMapping((try references.r.item(records.items, question.value.claim_ids[0])).claim.content));
+        try std.testing.expectEqual(!answered, try refs.openQuestion(records, question.value.claim_ids[0]));
         // Both groups get a records batch, the question's included, and the batch carries its claim.
         try std.testing.expectEqual(@as(usize, 2), try binding.recordCount(records));
         const bound = (try binding.record(a, records, fixture.context.inputs, 1)).records;
@@ -1356,12 +1377,15 @@ test "a records batch over a group that holds an open question is offered only i
         // Record content is bound with `.content`: the business group resolves and the question group does not,
         // which is the first check of `validateRecordAssociation`.
         _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{business.id}, .content);
-        try std.testing.expectError(error.InvalidSpecificationBinding, binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .content));
+        if (answered) {
+            _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .content);
+        } else try std.testing.expectError(error.InvalidSpecificationBinding, binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .content));
         // Question mode resolves it, so a clarification over it stays valid.
         _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .question);
-        // The binding names the rule the offer follows: content binds the business group and not the question group.
+        // The binding names the rule the offer follows: content binds the business group, and the question group only when
+        // an applied answer kept its claim.
         try std.testing.expect(try binding.bindsContent(records, business.id));
-        try std.testing.expect(!try binding.bindsContent(records, question.id));
+        try std.testing.expectEqual(answered, try binding.bindsContent(records, question.id));
         try std.testing.expectError(error.InvalidSpecificationBinding, binding.bindsContent(records, .{ .ordinal = 999 }));
         // Each batch's request, at its own group. Both offer the clarification outcome over their own group; only the
         // business batch offers record content, which the question batch's schema rejects.
@@ -1374,12 +1398,14 @@ test "a records batch over a group that holds an open question is offered only i
             for (packet.excludedVariants()) |entry| if (std.mem.eql(u8, entry.kind, "records")) {
                 excludes_records = true;
             };
-            try std.testing.expectEqual(question_batch, excludes_records);
+            // A batch over a question no answer kept is offered only its clarification outcome.
+            const clarification_only = question_batch and !answered;
+            try std.testing.expectEqual(clarification_only, excludes_records);
             var names_claims = false;
             for (packet.integerChoices()) |choice| if (choice.target.path.len == 3 and std.mem.eql(u8, choice.target.path[0].property, "records")) {
                 names_claims = true;
             };
-            try std.testing.expectEqual(!question_batch, names_claims);
+            try std.testing.expectEqual(!clarification_only, names_claims);
             const restricted = try schema.restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
             defer restricted.release();
             var good = try fixture.proposal(case.behavior);
@@ -1389,7 +1415,7 @@ test "a records batch over a group that holds an open question is offered only i
             var asked = good;
             asked.value = .{ .segments = &.{.{ .literal = .{ .value = case.question } }} };
             const wires = [_]struct { response: g.Response, accepted: bool }{
-                .{ .response = .{ .content = .{ .records = &.{requirement} } }, .accepted = !question_batch },
+                .{ .response = .{ .content = .{ .records = &.{requirement} } }, .accepted = !clarification_only },
                 .{ .response = .{ .clarification = .{ .reason = .missing, .question = asked, .record_kind = .functional_requirement } }, .accepted = true },
             };
             for (wires) |wire| {
@@ -1400,7 +1426,7 @@ test "a records batch over a group that holds an open question is offered only i
             // The business batch is written, which moves the session to the question group's batch.
             if (!question_batch) current = try sessions.appendBound(a, current, (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{requirement} } } })).valid);
         }
-    }
+    };
 }
 
 test "record authoring excludes only complete preserved-token groups and keeps sparse native assignments" {
@@ -1936,7 +1962,7 @@ test "record generation and selected value repairs retain every family purpose w
         try std.testing.expectEqual(@as(usize, 6), found);
         const records = try a.alloc(spec.Model.RecordProposal, std.meta.fields(spec.Kind).len);
         // Functional requirements, acceptance criteria, edge cases and entities share
-        // the story's wording. ADR 0035 removes any other statement record that equals
+        // the story's wording. The story comparison (ADR 0038 Decision 5) removes any other statement record that equals
         // the story, so each of those states its own text.
         inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| {
             const own = switch (kind) {
@@ -1984,7 +2010,7 @@ test "record generation and selected value repairs retain every family purpose w
         for (written.items, valid.response.content.records) |proposed, accepted| try std.testing.expectEqualDeep(proposed.content, accepted.content);
         // Equal wording in a functional requirement, acceptance criterion, edge case
         // and entity remains distinct candidate data; purpose guidance creates no
-        // deduplication rule beyond ADR 0035's restatements.
+        // deduplication rule beyond the story comparison's restatements (ADR 0038 Decision 5).
         const complete = try appendMockChecked(a, current, fixture.context, valid);
         const identified = (try sessions.assemble(a, text.validator, fixture.context, complete, try resolvedLinks(a, complete))).content;
         // The written records, the entity, and the criteria the engine wrote for the claims the
@@ -2792,6 +2818,11 @@ test "a records clarification names the source text of its bound signal, and the
     try std.testing.expectEqualStrings("records", subject.unit);
     try std.testing.expectEqualStrings("content", subject.slot);
     try std.testing.expect(subject.sources.len != 0 and c.validSources(subject.sources));
+    // No answer was applied, so no conflict was dropped; the conflicts an applied answer dropped go to the refresh with the need.
+    try std.testing.expectEqual(@as(usize, 0), (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked)).decided.len);
+    var answered_context = fixture.context;
+    answered_context.references.records.answer_dropped = &.{.{ .subject = subject, .response_id = 1, .key = "stories.md.8" }};
+    try std.testing.expectEqual(@as(usize, 1), (try builder.execute(a, fixture.context.inputs.corpus.feature_id, answered_context, checked)).decided.len);
     // The same need asked again names the same subject: nothing a run draws enters it.
     const again = (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked)).entries[0].subject;
     try std.testing.expect(c.sameSubject(subject, again));
@@ -3965,7 +3996,7 @@ test "active scalar repairs present one selected task and retain their bound sou
     }
 }
 
-// ADR 0035's same-kind delete runs before ADR 0038 Decision 5's repeated statements.
+// §17.5's same-kind duplicate delete runs before ADR 0038 Decision 5's repeated statements.
 test "record repair removes only an evidence-equivalent duplicate and preserves siblings" {
     const repair = @import("domain/specification_repair.zig");
     const sessions = @import("domain/specification_session.zig");
@@ -4296,7 +4327,7 @@ test "a record's part in the repeated-statement rule is the part the request's c
     }
 }
 
-test "ADR 0035 story restatement keeps functional requirements and needs covered evidence" {
+test "ADR 0038 story restatement keeps functional requirements and needs covered evidence" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -4390,7 +4421,7 @@ fn sessionAtRecordsWith(a: std.mem.Allocator, fixture: *const Fixture, brief: sp
     return current;
 }
 
-test "ADR 0035 restatements use production evidence shapes and keep uncovered wording" {
+test "ADR 0038 story restatements use production evidence shapes and keep uncovered wording" {
     const repair = @import("domain/specification_repair.zig");
     const sessions = @import("domain/specification_session.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -4803,7 +4834,7 @@ test "coverage rejects unsafe whole-field reconstruction without changing busine
         const good = try fixture.proposal("The requested outcome is observable.");
         const raw = token.value.raw_value.bytes;
         const normalized: spec.BusinessValue = .{ .segments = &.{ .{ .literal = .{ .value = raw[0..3] } }, .{ .literal = .{ .value = raw[3..] } } } };
-        // Distinct from the story, so ADR 0035's restatement rule leaves it in place.
+        // Distinct from the story, so the story comparison (ADR 0038 Decision 5) leaves it in place.
         const visible = try fixture.proposal("The requested outcome is visible.");
         const record: spec.Model.RecordProposal = .{ .content = .{ .user_visible_outcome = .{ .text = visible.value } }, .source_group_ids = visible.source_group_ids, .provenance = visible.provenance };
         var exact_only = record;
@@ -4948,7 +4979,7 @@ test "source-only extraction omissions remain candidate defects without clarific
     for ([_][]const u8{ "On startup display `MOCK Hello, World!` and the current UTC date and time.", "After renewal display `MOCK Loan renewed!` and the new return deadline." }) |source| {
         var fixture = try Fixture.initExtraction(a, source, null, false);
         defer fixture.deinit();
-        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+        const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
         const packet = try reviewPacketAt(support, a, inputs, fixture.context, 0);
         defer @import("domain/model_input_packet.zig").release(packet);
         const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
@@ -5182,7 +5213,7 @@ test "readiness source-purpose positives select original sources through product
         for ([_]usize{ 0, 1, 3 }) |count| {
             var fixture = try Fixture.initContent(a, source, null, count != 0, @max(count, 1));
             defer fixture.deinit();
-            const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+            const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
             const ledger = try authority.build(a, inputs);
             const id = ledger.requirements[0].seed.id;
             const required = try admission.requirements(a, inputs, fixture.context.inputs, id);
@@ -5346,7 +5377,7 @@ fn omissionSupport(fixture: *const Fixture, location: @import("domain/source_omi
     const support = @import("domain/specification_support.zig").Source;
     const a = fixture.allocator;
     const inputs = if (location == .reconciliation_signal or location == .reconciliation_conflict)
-        try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references)
+        try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first)
     else
         try @import("domain/source_preservation.zig").project(a, fixture.context.inputs.corpus.feature_id, @import("domain/reference_support.zig").records(fixture.context.references), fixture.context.inputs);
     const review = try reviewFor(a, inputs, fixture.context.inputs);
@@ -5972,7 +6003,7 @@ test "pre-generation localized disposition evidence replaces source review linea
         const feature = fixture.context.inputs.corpus.feature_id;
         const views = [_]authority.Inputs{
             try (@import("actions/authority/build_source_preservation_requirements.zig").Action{}).execute(a, feature, fixture.context.references, fixture.context.inputs),
-            try @import("domain/specification_authority.zig").project(a, feature, fixture.context.references),
+            try @import("domain/specification_authority.zig").projectFor(a, feature, fixture.context.references, .first),
         };
         for (views) |inputs| {
             const ledger = try authority.build(a, inputs);
@@ -6041,7 +6072,7 @@ test "loss comparison keeps multi-source producers visible without authorizing u
         proposal.signals = &.{.{ .claim_ids = &ids, .content = proposal.signals[0].content }};
         const ready = (try references.finish(a, input, proposal, fixture.context())).valid;
         const context: provenance.Context = .{ .inputs = fixture.inputs, .references = ready, .registry = fixture.text.registry };
-        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.inputs.corpus.feature_id, ready);
+        const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.inputs.corpus.feature_id, ready, .first);
         const subject_id = (try authority.build(a, inputs)).requirements[0].seed.id;
         const source_ids = [_]r.extraction.identity.SourceId{ fixture.inputs.corpus.sources[0].id, fixture.inputs.corpus.sources[1].id };
         const upstream: loss.Location = .{ .reconciliation_signal = inputs.references.?.signals[0].id };
@@ -6138,7 +6169,7 @@ test "loss producer comparison resolves passive and source references while pres
             .token_classification => |value| try std.testing.expectEqualStrings(value.candidate.verbatim.?, presented.output.token_classification.verbatim.?),
             else => return error.UnexpectedLossProducer,
         };
-        var inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+        var inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
         inputs.references = records;
         var signal_subjects: usize = 0;
         var token_subjects: usize = 0;
@@ -6258,7 +6289,7 @@ fn completedFixture(fixture: *const Fixture, omit_requirements: bool) !@import("
     return completedFixtureValue(fixture, omit_requirements, try fixture.proposal("A receipt is available."));
 }
 pub fn readinessSupportInputs(fixture: *const Fixture) !@import("domain/required_authority.zig").Inputs {
-    return @import("domain/specification_authority.zig").project(fixture.allocator, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+    return @import("domain/specification_authority.zig").projectFor(fixture.allocator, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
 }
 fn completedFixtureValue(fixture: *const Fixture, omit_requirements: bool, value: spec.Model.AttributedValue) !@import("domain/specification_session.zig").Session {
     const sessions = @import("domain/specification_session.zig");
@@ -6355,12 +6386,15 @@ test "native reference reviews retain pre-generation attribution" {
         const a = arena.allocator();
         var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 3);
         defer fixture.deinit();
-        _ = try introduceConflict(&fixture);
-        const records = @import("domain/reference_support.zig").records(fixture.context.references);
-        const source_inputs = try @import("domain/source_preservation.zig").project(a, fixture.context.inputs.corpus.feature_id, records, fixture.context.inputs);
-        _ = try checkNativeReferenceReview(a, &fixture, source_inputs, source_inputs.seeds[0].id);
-        {
-            const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+        // A complete reconciliation reviews each signal and token; a blocked one, its conflict
+        // records alone.
+        for ([_]bool{ false, true }) |blocked| {
+            if (blocked) _ = try introduceConflict(&fixture);
+            const records = @import("domain/reference_support.zig").records(fixture.context.references);
+            try std.testing.expectEqual(blocked, records.conflicts.len != 0);
+            const source_inputs = try @import("domain/source_preservation.zig").project(a, fixture.context.inputs.corpus.feature_id, records, fixture.context.inputs);
+            _ = try checkNativeReferenceReview(a, &fixture, source_inputs, source_inputs.seeds[0].id);
+            const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
             var counts: std.EnumArray(std.meta.Tag(authority.Unit), usize) = .initFill(0);
             for ((try authority.build(a, inputs)).requirements) |required| {
                 const id = required.seed.id;
@@ -6376,8 +6410,8 @@ test "native reference reviews retain pre-generation attribution" {
                     try std.testing.expectEqual(.unlocalized, std.meta.activeTag(token_finding.loss));
                 }
             }
-            try std.testing.expectEqual(records.signals.len, counts.get(.signal));
-            try std.testing.expectEqual(@as(usize, 1), counts.get(.token));
+            try std.testing.expectEqual(if (blocked) 0 else records.signals.len, counts.get(.signal));
+            try std.testing.expectEqual(@as(usize, if (blocked) 0 else 1), counts.get(.token));
             try std.testing.expectEqual(records.conflicts.len, counts.get(.conflict));
             for ([_]authority.Id{
                 .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 999 } }, .slot = .disposition },
@@ -6394,6 +6428,619 @@ test "native reference reviews retain pre-generation attribution" {
         // The obsolete broad reference assignment is not a second accepted
         // model-facing shape after the native-subject change.
         try std.testing.expectError(error.InvalidJsonDocument, json.decode(subjects.Subject, a, "{\"kind\":\"candidate_support\",\"candidate\":null,\"brief\":null}"));
+    }
+}
+
+/// A hello-world-like, a loan-renewal-like and an unrelated-domain source, each with one exact value.
+const projection_examples = [_][]const u8{
+    "On startup display `MOCK Ready!` and the UTC date.\n",
+    "Renew the loan, show the return date and display `MOCK Loan renewed!`.\n",
+    "After delivery display `MOCK Delivered!` and retain the sender receipt.\n",
+};
+
+/// The seeds of a reconciliation with no conflict, in order: the six feature requirements, each signal and each exact
+/// value. A test's own statement of the complete projection, from the typed records alone.
+fn completeSeeds(a: std.mem.Allocator, records: @import("domain/reference_support.zig").Records, sources: []const @import("domain/required_authority.zig").Authority) ![]const @import("domain/required_authority.zig").Seed {
+    const authority = @import("domain/required_authority.zig");
+    var seeds: std.ArrayList(authority.Seed) = .empty;
+    for ([_]authority.Slot{ .description, .primary_goal, .entities, .acceptance_criteria, .functional_requirements, .scenario_coverage }) |slot| {
+        try seeds.append(a, .{ .id = .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot }, .requiredness = .{ .schema = .specification }, .input_authorities = sources });
+    }
+    for (records.signals) |signal| try seeds.append(a, .{ .id = .{ .kind = .reference_meaning, .unit = .{ .signal = signal.id }, .slot = .disposition }, .requiredness = .{ .obligation = .reference_accounting }, .input_authorities = sources });
+    for (records.items.entries) |item| if (item.claim.content == .preserved_token) {
+        try seeds.append(a, .{ .id = .{ .kind = .preservation, .unit = .{ .token = item.claim.content.preserved_token.value.id }, .slot = .value }, .requiredness = .{ .obligation = .exact_preservation }, .input_authorities = sources });
+    };
+    return seeds.toOwnedSlice(a);
+}
+
+test "a blocked reconciliation projects its conflict records and their forced gaps alone" {
+    const authority = @import("domain/required_authority.zig");
+    const specify = @import("domain/specification_authority.zig");
+    for (projection_examples) |example| for ([_][]const [2]usize{ &.{.{ 0, 1 }}, &.{ .{ 0, 1 }, .{ 2, 3 } } }) |pairs| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        _ = try introduceConflicts(&fixture, pairs);
+        const records = @import("domain/reference_support.zig").records(fixture.context.references);
+        try std.testing.expectEqual(pairs.len, records.conflicts.len);
+        // The records still hold signals and an exact value: the rule, not their absence, leaves them out.
+        var exact_values: usize = 0;
+        for (records.items.entries) |item| exact_values += @intFromBool(item.claim.content == .preserved_token);
+        try std.testing.expect(records.signals.len != 0 and exact_values != 0);
+        const inputs = try specify.projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
+        try std.testing.expectEqual(records.conflicts.len, inputs.seeds.len);
+        try std.testing.expectEqual(records.conflicts.len, inputs.forced_gaps.len);
+        for (records.conflicts, inputs.seeds, inputs.forced_gaps) |conflict, seed, gap| {
+            const id: authority.Id = .{ .kind = .reference_meaning, .unit = .{ .conflict = conflict.id }, .slot = .disposition };
+            try std.testing.expectEqualDeep(id, seed.id);
+            try std.testing.expectEqualDeep(@as(@TypeOf(seed.requiredness), .{ .obligation = .reference_accounting }), seed.requiredness);
+            try std.testing.expectEqualDeep(inputs.authorities, seed.input_authorities);
+            try std.testing.expectEqualDeep(id, gap.requirement);
+            try std.testing.expectEqual(.conflicting, gap.reason);
+            try std.testing.expectEqual(.candidate, gap.subject);
+        }
+        for (inputs.seeds) |seed| {
+            try std.testing.expectEqual(.reference_meaning, seed.id.kind);
+            try std.testing.expectEqual(.conflict, std.meta.activeTag(seed.id.unit));
+        }
+        // The gate rebuilds the same projection, so the ledger holds the conflict subjects alone.
+        try std.testing.expectEqual(records.conflicts.len, (try authority.build(a, inputs)).requirements.len);
+    };
+}
+
+test "a reconciliation with no conflict projects every feature requirement, signal and exact value in order" {
+    const authority = @import("domain/required_authority.zig");
+    const specify = @import("domain/specification_authority.zig");
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 3);
+        defer fixture.deinit();
+        const records = @import("domain/reference_support.zig").records(fixture.context.references);
+        try std.testing.expectEqual(@as(usize, 0), records.conflicts.len);
+        const inputs = try specify.projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
+        const expected = try completeSeeds(a, records, inputs.authorities);
+        try std.testing.expect(records.signals.len != 0 and expected.len > 6 + records.signals.len);
+        try std.testing.expectEqualDeep(expected, inputs.seeds);
+        try std.testing.expectEqual(@as(usize, 0), inputs.forced_gaps.len);
+        _ = try authority.build(a, inputs);
+    }
+}
+
+test "the gate admits only the projection of the references it holds" {
+    const authority = @import("domain/required_authority.zig");
+    const specify = @import("domain/specification_authority.zig");
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 3);
+        defer fixture.deinit();
+        const feature = fixture.context.inputs.corpus.feature_id;
+        const complete = try specify.projectFor(a, feature, fixture.context.references, .first);
+        _ = try introduceConflict(&fixture);
+        const blocked = try specify.projectFor(a, feature, fixture.context.references, .first);
+        _ = try authority.build(a, complete);
+        _ = try authority.build(a, blocked);
+        // The feature, signal, token and conflict seeds together, with the conflict's forced gap, over references that
+        // hold the conflict: the gate rejects each entry it did not project.
+        const records = @import("domain/reference_support.zig").records(fixture.context.references);
+        const others = try completeSeeds(a, records, blocked.authorities);
+        const signals_end = 6 + records.signals.len;
+        var conflicts: std.ArrayList(authority.Seed) = .empty;
+        for (blocked.seeds) |seed| if (seed.id.unit == .conflict) try conflicts.append(a, seed);
+        var invented = blocked;
+        invented.seeds = try std.mem.concat(a, authority.Seed, &.{ others[0..signals_end], conflicts.items, others[signals_end..] });
+        var units: std.EnumArray(std.meta.Tag(authority.Unit), usize) = .initFill(0);
+        for (invented.seeds) |seed| units.set(std.meta.activeTag(seed.id.unit), units.get(std.meta.activeTag(seed.id.unit)) + 1);
+        try std.testing.expect(units.get(.feature) != 0 and units.get(.signal) != 0 and units.get(.token) != 0 and units.get(.conflict) != 0);
+        try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, invented));
+        // A blocked pass that drops its conflict's seed or its forced gap is rejected too.
+        var seedless = blocked;
+        seedless.seeds = &.{};
+        try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, seedless));
+        var gapless = blocked;
+        gapless.forced_gaps = &.{};
+        try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, gapless));
+        // The conflict records alone over a reconciliation with no conflict omit what it requires.
+        var omitted = complete;
+        omitted.seeds = blocked.seeds;
+        omitted.forced_gaps = blocked.forced_gaps;
+        try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, omitted));
+    }
+}
+
+test "a dependent pass over a held conflict projects every seed and its forced gaps in the order before conflicts first" {
+    const authority = @import("domain/required_authority.zig");
+    const specify = @import("domain/specification_authority.zig");
+    for (projection_examples) |example| for ([_][]const [2]usize{ &.{.{ 0, 1 }}, &.{ .{ 0, 1 }, .{ 2, 3 } } }) |pairs| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        _ = try introduceConflicts(&fixture, pairs);
+        const feature = fixture.context.inputs.corpus.feature_id;
+        const held = fixture.context.references;
+        const records = @import("domain/reference_support.zig").records(held);
+        const first = try specify.projectFor(a, feature, held, .first);
+        const dependent = try specify.projectFor(a, feature, held, .dependent);
+        try std.testing.expectEqual(.first, first.pass);
+        try std.testing.expectEqual(.dependent, dependent.pass);
+        // The first pass is the conflict records and their forced gaps alone.
+        try std.testing.expectEqual(pairs.len, first.seeds.len);
+        // The dependent pass is the complete projection of a reconciliation without a conflict (the feature
+        // requirements, each signal and each exact value) with the conflict seeds where they stood before
+        // conflicts first: after the signals, before the exact values.
+        const others = try completeSeeds(a, records, dependent.authorities);
+        const signals_end = 6 + records.signals.len;
+        const expected = try std.mem.concat(a, authority.Seed, &.{ others[0..signals_end], first.seeds, others[signals_end..] });
+        try std.testing.expect(records.signals.len != 0 and expected.len > first.seeds.len + 6 + records.signals.len);
+        try std.testing.expectEqualDeep(expected, dependent.seeds);
+        try std.testing.expectEqualDeep(first.forced_gaps, dependent.forced_gaps);
+        // Both are projections the gate admits for their own pass.
+        try std.testing.expectEqual(first.seeds.len, (try authority.build(a, first)).requirements.len);
+        try std.testing.expectEqual(expected.len, (try authority.build(a, dependent)).requirements.len);
+    };
+    // Without a conflict the pass chooses nothing.
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 3);
+        defer fixture.deinit();
+        const feature = fixture.context.inputs.corpus.feature_id;
+        const first = try specify.projectFor(a, feature, fixture.context.references, .first);
+        const dependent = try specify.projectFor(a, feature, fixture.context.references, .dependent);
+        try std.testing.expectEqualDeep(first.seeds, dependent.seeds);
+        try std.testing.expectEqual(@as(usize, 0), dependent.forced_gaps.len);
+    }
+}
+
+test "a decided pass projects the conflicts and the signals holding a decided claim, and the gate admits it for its own claims alone" {
+    const authority = @import("domain/required_authority.zig");
+    const specify = @import("domain/specification_authority.zig");
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        _ = try introduceConflicts(&fixture, &.{.{ 0, 1 }});
+        const feature = fixture.context.inputs.corpus.feature_id;
+        const held = fixture.context.references;
+        const records = @import("domain/reference_support.zig").records(held);
+        // A claim one signal holds, as a conflict-group repair leaves the claim it decided retained in a signal.
+        try std.testing.expect(records.signals.len >= 2);
+        const holder = records.signals[0];
+        const decided = holder.value.claim_ids[0..1];
+        const narrowed = try specify.projectFor(a, feature, held, .{ .decided = decided });
+        const first = try specify.projectFor(a, feature, held, .first);
+        const dependent = try specify.projectFor(a, feature, held, .dependent);
+        // The holding signal, then the conflict records with their forced gaps; no feature requirement, no other signal and
+        // no exact value.
+        try std.testing.expectEqual(@as(usize, 1) + first.seeds.len, narrowed.seeds.len);
+        try std.testing.expectEqualDeep(authority.Unit{ .signal = holder.id }, narrowed.seeds[0].id.unit);
+        try std.testing.expectEqualDeep(first.seeds, narrowed.seeds[1..]);
+        try std.testing.expectEqualDeep(first.forced_gaps, narrowed.forced_gaps);
+        try std.testing.expect(narrowed.seeds.len < dependent.seeds.len);
+        try std.testing.expectEqual(narrowed.seeds.len, (try authority.build(a, narrowed)).requirements.len);
+        // The gate re-derives the projection from the pass: other claims, or the full pass's seeds, are not this pass.
+        var relabelled = dependent;
+        relabelled.pass = .{ .decided = decided };
+        try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, relabelled));
+        var other_claims = narrowed;
+        other_claims.pass = .{ .decided = records.signals[1].value.claim_ids[0..1] };
+        try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, other_claims));
+        // A decided claim no signal holds projects the conflicts alone.
+        const conflicting = records.conflicts[0].value.claim_ids[0..1];
+        try std.testing.expectEqualDeep(first.seeds, (try specify.projectFor(a, feature, held, .{ .decided = conflicting })).seeds);
+    }
+    // With no conflict left and no signal holding a decided claim, the pass has nothing to review: the gate admits the
+    // empty projection, and the repair's progress check, which needs a supported finding over every decided claim, cannot
+    // be met by it.
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 3);
+        defer fixture.deinit();
+        const feature = fixture.context.inputs.corpus.feature_id;
+        var records = @import("domain/reference_support.zig").records(fixture.context.references);
+        try std.testing.expectEqual(@as(usize, 0), records.conflicts.len);
+        // The decided claim ended in no signal, as a repair that marks it a duplicate leaves it.
+        const decided = records.signals[0].value.claim_ids[0..1];
+        records.signals = &.{};
+        const empty = try specify.projectRecords(a, feature, records, .{ .decided = decided });
+        try std.testing.expectEqual(@as(usize, 0), empty.seeds.len);
+        try std.testing.expectEqual(@as(usize, 0), (try authority.build(a, empty)).requirements.len);
+    }
+}
+
+const FalseConflicts = struct { admitted: @FieldType(@import("domain/specification_support.zig").Source.Collection, "accepted"), support: @import("domain/source_omission_authority.zig").Support, conflicts: usize };
+
+/// The admitted source review in which the model judged every conflict record of `inputs` false: a candidate omission
+/// over the record's own claims, localized to the record. `repaired` is what an earlier merge left on the reconciliation
+/// (`omission_conflict_claims`, and `omission_released_claims`, which a closed record's repair makes the same set); the
+/// other subjects keep the review the fixture gives them.
+fn reviewConflictsAsFalse(a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, repaired: []const references.r.ClaimId) !FalseConflicts {
+    const review = @import("domain/specification_support.zig").Source;
+    const entries = try a.dupe(review.Finding, (try reviewFor(a, inputs, context.inputs)).entries);
+    const ledger = try @import("domain/required_authority.zig").build(a, inputs);
+    var conflicts: usize = 0;
+    for (ledger.requirements, entries) |requirement, *finding| if (requirement.seed.id.unit == .conflict) {
+        conflicts += 1;
+        finding.value.kind = .candidate_omission;
+        finding.value.missing_obligation = context.inputs.corpus.sources[0].bytes;
+        finding.value.detail = "The original requirements are compatible; restore their separate supported meanings.";
+        finding.value.source_ids = try a.dupe(@import("domain/reference_identity.zig").SourceId, &.{context.inputs.corpus.sources[0].id});
+        finding.value.loss = .{ .reconciliation_conflict = requirement.seed.id.unit.conflict };
+        finding.value.preservation = try @import("test_fixtures/source_omission_evidence.zig").proof(a, inputs, context.inputs, finding.*);
+    };
+    const origins = try a.alloc(?@import("domain/model_candidate_origin.zig").Origin, entries.len);
+    @memset(origins, null);
+    const admitted = (try review.validate(a, inputs, context.inputs, .{ .review = .{ .entries = entries }, .origin = null, .origins = origins, .omission_conflict_claims = repaired, .omission_released_claims = repaired })).accepted;
+    const decision = try supportDecision(a, admitted.inputs);
+    return .{
+        .admitted = admitted,
+        .support = .{ .repair_phase = .pre_generation, .review = admitted.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result },
+        .conflicts = conflicts,
+    };
+}
+
+/// `validation` is the source-omission owner's judgement of the follow-on review against A's repair.
+/// `second_authorization` is the runner's answer on B's repair, which only a validated A reaches.
+const FollowOn = struct { validation: @import("domain/required_authority.zig").Error!?@import("domain/workflow_retry.zig").Transition, second_authorization: ?(@import("domain/workflow_retry.zig").AdmissionError!void) };
+
+/// The review of `base` in which every signal subject that cites one of `claims` is judged inconclusive, over the claims
+/// it still cites: no finding supports those claims.
+fn leaveClaimsUnsupported(a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, base: FalseConflicts, claims: []const references.r.ClaimId) !FalseConflicts {
+    const review = @import("domain/specification_support.zig").Source;
+    const ledger = try @import("domain/required_authority.zig").build(a, inputs);
+    const entries = try a.dupe(review.Finding, base.admitted.candidate.review.entries);
+    var judged: usize = 0;
+    for (ledger.requirements, entries) |requirement, *finding| {
+        if (requirement.seed.id.unit != .signal) continue;
+        const signal = for (inputs.references.?.signals) |value| {
+            if (value.id.ordinal == requirement.seed.id.unit.signal.ordinal) break value;
+        } else return error.InvalidFixture;
+        const cites = for (claims) |claim| {
+            if (references.r.contains(references.r.ClaimId, signal.value.claim_ids, claim)) break true;
+        } else false;
+        if (!cites) continue;
+        judged += 1;
+        finding.value.kind = .inconclusive;
+        finding.value.detail = "The review could not establish this meaning from the sources.";
+        finding.value.question = null;
+    }
+    try std.testing.expect(judged != 0);
+    const origins = try a.alloc(?@import("domain/model_candidate_origin.zig").Origin, entries.len);
+    @memset(origins, null);
+    const admitted = (try review.validate(a, inputs, context.inputs, .{ .review = .{ .entries = entries }, .origin = null, .origins = origins, .omission_conflict_claims = base.admitted.candidate.omission_conflict_claims, .omission_released_claims = base.admitted.candidate.omission_released_claims })).accepted;
+    const decision = try supportDecision(a, admitted.inputs);
+    return .{
+        .admitted = admitted,
+        .support = .{ .repair_phase = .pre_generation, .review = admitted.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result },
+        .conflicts = base.conflicts,
+    };
+}
+
+/// A reconciliation holds two false conflicts, A (business claims 0 and 1) and B (2 and 3). The first pass, a first
+/// review, repairs A. This runs the follow-on pass, whose reconciliation holds B alone and which is built as `pass`: it
+/// validates A's repair with the review the pass projects, then asks the runner's retry state to authorize B's repair.
+/// With `claims_a` unsupported the review leaves A's claims without a supported finding, as a repair that restored
+/// nothing would. A validation the owner refuses ends the sequence, as it ends the runner's.
+///
+/// The follow-on's references come from a second fixture, not from executing A's merge, and A's merge fields are set by
+/// hand as `reference_reconciliation_repair.zig` writes them (`source.revision`, `omission_retry`,
+/// `omission_conflict_claims` and `omission_released_claims`). Neither the signals' rebuilding after A's group repair nor the runner is run.
+fn followOnAfterFirstRepair(a: std.mem.Allocator, example: []const u8, follow_on: enum { decided, dependent, first }, claims_a: enum { supported, unsupported }) !FollowOn {
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const retry = @import("domain/workflow_retry.zig");
+    const loss = @import("domain/source_omission_authority.zig");
+    const specify = @import("domain/specification_authority.zig");
+    const r = references.r;
+    var first = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+    defer first.deinit();
+    const business = try introduceConflicts(&first, &.{ .{ 0, 1 }, .{ 2, 3 } });
+    const global = first.context.references.records.assignments.checked.prior.prior;
+    const parsed: r.Parsed = .{ .source = global.source, .input = global.input, .proposal = .{ .global = global.proposal } };
+    const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = first.context.inputs, .registry = first.context.registry };
+    const feature = first.context.inputs.corpus.feature_id;
+    const reviewed = try reviewConflictsAsFalse(a, try specify.projectFor(a, feature, first.context.references, .first), first.context, &.{});
+    try std.testing.expectEqual(@as(usize, 2), reviewed.conflicts);
+    const auth = try repair.authorize(a, parsed, ctx, reviewed.support);
+    try std.testing.expectEqualDeep(business[0..2], auth.target.conflict_group);
+    const permit_a = auth.retry.?;
+
+    var second = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+    defer second.deinit();
+    _ = try introduceConflicts(&second, &.{.{ 2, 3 }});
+    try std.testing.expectEqual(@as(usize, 1), @import("domain/reference_support.zig").records(second.context.references).conflicts.len);
+    try std.testing.expectEqualStrings(first.context.inputs.corpus.state_id.bytes, second.context.inputs.corpus.state_id.bytes);
+    const global2 = second.context.references.records.assignments.checked.prior.prior;
+    var parsed2: r.Parsed = .{ .source = global2.source, .input = global2.input, .proposal = .{ .global = global2.proposal } };
+    parsed2.source.revision = permit_a.revision + 1;
+    parsed2.source.omission_retry = permit_a;
+    parsed2.source.omission_conflict_claims = business[0..2];
+    parsed2.source.omission_released_claims = business[0..2];
+    const ctx2: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = second.context.inputs, .registry = second.context.registry };
+    const pass: @import("domain/required_authority.zig").Pass = switch (follow_on) {
+        .decided => .{ .decided = business[0..2] },
+        .dependent => .dependent,
+        .first => .first,
+    };
+    const inputs2 = try specify.projectFor(a, feature, second.context.references, pass);
+    const supported2 = try reviewConflictsAsFalse(a, inputs2, second.context, business[0..2]);
+    try std.testing.expectEqual(@as(usize, 1), supported2.conflicts);
+    const reviewed2 = switch (claims_a) {
+        .supported => supported2,
+        .unsupported => try leaveClaimsUnsupported(a, inputs2, second.context, supported2, business[0..2]),
+    };
+    const validation = loss.admittedValidation(a, permit_a, reviewed2.admitted);
+    const validated = (validation catch return .{ .validation = validation, .second_authorization = null }) orelse return error.MissingValidation;
+
+    // The runner's retry state: A authorized, merged (a dependent review is pending), then validated by that review.
+    var state = retry.State.init(std.testing.allocator);
+    defer state.deinit();
+    try state.commit(try state.prepare(.{ .authorized = permit_a }));
+    try state.commit(try state.prepare(.{ .merged = .{ .permit = permit_a, .revision_after = permit_a.revision + 1, .changed = true, .validation = .dependent_review } }));
+    try state.commit(try state.prepare(validated));
+    // B's repair, authorized by the production owner in the same pass.
+    const auth2 = try repair.authorize(a, parsed2, ctx2, reviewed2.support);
+    const permit_b = auth2.retry.?;
+    try std.testing.expect(!std.meta.eql(permit_a.key.target, permit_b.key.target));
+    try std.testing.expectEqualSlices(u8, &permit_a.key.scope, &permit_b.key.scope);
+    try std.testing.expectEqual(permit_a.maximum_targets, permit_b.maximum_targets);
+    const second_authorization: retry.AdmissionError!void = if (state.prepare(.{ .authorized = permit_b })) |_| {} else |err| err;
+    return .{ .validation = validation, .second_authorization = second_authorization };
+}
+
+test "a dependent review of a false-conflict repair validates it, so a second false conflict is repaired" {
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        // The follow-on is the decided pass over A's claims: the remaining conflict and the signals holding them.
+        const dependent = try followOnAfterFirstRepair(a, example, .decided, .supported);
+        try std.testing.expectEqual(.resolved, (try dependent.validation).?.validated.result);
+        try dependent.second_authorization.?;
+        // A dependent review that leaves A's claims without a supported finding does not discharge A's repair: the
+        // conflict-group branch answers `recurring`, so the runner's retry state, recurring on A, refuses B's repair.
+        const recurring = try followOnAfterFirstRepair(a, example, .decided, .unsupported);
+        try std.testing.expectEqual(.recurring, (try recurring.validation).?.validated.result);
+        try std.testing.expectError(error.InvalidRepairProgress, recurring.second_authorization.?);
+        // The same sequence with the follow-on pass built as a first pass projects the remaining conflict alone, so no
+        // subject cites A's claims, and built as the full dependent pass it is not the pass of a repair that decided
+        // named claims. Neither is the review of this readiness repair: the owner refuses both at the pass check, which
+        // sits before the conflict-group branch, and the runner never reaches B's repair.
+        inline for (.{ .first, .dependent }) |other| {
+            const refused = try followOnAfterFirstRepair(a, example, other, .supported);
+            try std.testing.expectError(error.InvalidRequiredAuthority, refused.validation);
+            try std.testing.expect(refused.second_authorization == null);
+        }
+    }
+}
+
+/// The admitted source review of a reconciliation after a group repair: every subject as the fixture gives it, with the
+/// claims the repair replaced and the claims it decided again left on the reconciliation as its merge writes them.
+fn reviewAfterRepair(a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, conflict_claims: []const references.r.ClaimId, released: []const references.r.ClaimId) !@FieldType(@import("domain/specification_support.zig").Source.Collection, "accepted") {
+    const review = @import("domain/specification_support.zig").Source;
+    const entries = try a.dupe(review.Finding, (try reviewFor(a, inputs, context.inputs)).entries);
+    const origins = try a.alloc(?@import("domain/model_candidate_origin.zig").Origin, entries.len);
+    @memset(origins, null);
+    return (try review.validate(a, inputs, context.inputs, .{ .review = .{ .entries = entries }, .origin = null, .origins = origins, .omission_conflict_claims = conflict_claims, .omission_released_claims = released })).accepted;
+}
+
+test "a repair that leaves a shared claim in its other conflict is judged by the claims it decided again alone" {
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const loss = @import("domain/source_omission_authority.zig");
+    const specify = @import("domain/specification_authority.zig");
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var first = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer first.deinit();
+        // Records over claims 0 and 1 (genuine) and 1 and 2 (false): the repair replaces the second and decides claim 2.
+        const setup = try overlapRepair(a, &first, &.{ &.{ 0, 1 }, &.{ 1, 2 } }, 1);
+        const auth = try repair.authorize(a, setup.parsed, setup.ctx, setup.support);
+        const permit = auth.retry.?;
+        const target = setup.business[1..3];
+        const released = setup.business[2..3];
+        const feature = first.context.inputs.corpus.feature_id;
+
+        // The follow-on holds the genuine record alone. The shared claim is still in conflict and no signal cites it.
+        var second = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer second.deinit();
+        _ = try introduceOverlappingConflicts(&second, &.{&.{ 0, 1 }});
+        try std.testing.expectEqualStrings(first.context.inputs.corpus.state_id.bytes, second.context.inputs.corpus.state_id.bytes);
+        const dependent = try specify.projectFor(a, feature, second.context.references, .{ .decided = released });
+        const resolved = try reviewAfterRepair(a, dependent, second.context, target, released);
+        try std.testing.expectEqual(.resolved, (try loss.admittedValidation(a, permit, resolved)).?.validated.result);
+        // The repair must have decided something, and only claims of the record it replaced, each reviewed in its own pass.
+        const none = try reviewAfterRepair(a, try specify.projectFor(a, feature, second.context.references, .dependent), second.context, target, &.{});
+        try std.testing.expectError(error.InvalidRequiredAuthority, loss.admittedValidation(a, permit, none));
+        const foreign = try reviewAfterRepair(a, try specify.projectFor(a, feature, second.context.references, .{ .decided = setup.business[0..1] }), second.context, target, setup.business[0..1]);
+        try std.testing.expectError(error.InvalidRequiredAuthority, loss.admittedValidation(a, permit, foreign));
+        // A review built for other decided claims than the ones the candidate carries is not this repair's pass.
+        const mismatched = try reviewAfterRepair(a, try specify.projectFor(a, feature, second.context.references, .dependent), second.context, target, released);
+        try std.testing.expectError(error.InvalidRequiredAuthority, loss.admittedValidation(a, permit, mismatched));
+
+        // A repair that leaves the false record standing is the unchanged false conflict, and it recurs.
+        var third = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer third.deinit();
+        _ = try introduceOverlappingConflicts(&third, &.{ &.{ 0, 1 }, &.{ 1, 2 } });
+        const unchanged = try specify.projectFor(a, feature, third.context.references, .{ .decided = released });
+        const recurring = try reviewAfterRepair(a, unchanged, third.context, target, released);
+        try std.testing.expectEqual(.recurring, (try loss.admittedValidation(a, permit, recurring)).?.validated.result);
+    }
+}
+
+test "a source-readiness repair's target bound is the full projection's seed count in either pass, and a preservation repair's is its own" {
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const extraction_repair = @import("domain/reference_extraction_repair.zig").Omission;
+    const specify = @import("domain/specification_authority.zig");
+    const authority = @import("domain/required_authority.zig");
+    const r = references.r;
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        _ = try introduceConflicts(&fixture, &.{ .{ 0, 1 }, .{ 2, 3 } });
+        const feature = fixture.context.inputs.corpus.feature_id;
+        const held = fixture.context.references;
+        const global = held.records.assignments.checked.prior.prior;
+        const parsed: r.Parsed = .{ .source = global.source, .input = global.input, .proposal = .{ .global = global.proposal } };
+        const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry };
+        const full = (try specify.projectFor(a, feature, held, .dependent)).seeds.len;
+        try std.testing.expect(full > (try specify.projectFor(a, feature, held, .first)).seeds.len);
+        for ([_]authority.Pass{ .first, .dependent }) |pass| {
+            const inputs = try specify.projectFor(a, feature, held, pass);
+            try std.testing.expectEqual(if (pass == .first) @as(usize, 2) else full, inputs.seeds.len);
+            const reviewed = try reviewConflictsAsFalse(a, inputs, fixture.context, &.{});
+            const permit = (try repair.authorize(a, parsed, ctx, reviewed.support)).retry.?;
+            try std.testing.expectEqual(@as(u32, @intCast(full)), permit.maximum_targets);
+        }
+    }
+    // A preservation projection keeps its own seed count.
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initClaims(a, "Renewal rules:\n\n- Renew a loan.\n- Refuse overdue loans.\n", null, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = 1 }} }} });
+    defer fixture.deinit();
+    const inputs = fixture.context.inputs;
+    const facts: extraction_repair.Facts = .{ .extraction = .{ .inputs = inputs, .candidates = try tokens.candidates(a, inputs), .candidate = fixture.extracted_text }, .support = try omissionSupport(&fixture, .{ .extraction_claim = inputs.chunks.entries[0].id }, "Renewal rules:\n\n- Renew a loan.\n- Refuse overdue loans.\n") };
+    try std.testing.expectEqual(.source_preservation, facts.support.inputs.projection);
+    const permit = (try extraction_repair.authorize(a, facts)).retry.?;
+    try std.testing.expectEqual(@as(u32, @intCast(facts.support.inputs.seeds.len)), permit.maximum_targets);
+}
+
+test "the review pass is dependent only while a source-readiness repair is pending" {
+    const loss = @import("domain/source_omission_authority.zig");
+    const authority = @import("domain/required_authority.zig");
+    const specify = @import("domain/specification_authority.zig");
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const r = references.r;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, projection_examples[0], .business_exact_string, true, 5);
+    defer fixture.deinit();
+    _ = try introduceConflicts(&fixture, &.{.{ 0, 1 }});
+    const feature = fixture.context.inputs.corpus.feature_id;
+    const state = fixture.context.inputs.corpus.state_id;
+    const held = fixture.context.references;
+    const global = held.records.assignments.checked.prior.prior;
+    const parsed: r.Parsed = .{ .source = global.source, .input = global.input, .proposal = .{ .global = global.proposal } };
+    const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry };
+    const reviewed = try reviewConflictsAsFalse(a, try specify.projectFor(a, feature, held, .first), fixture.context, &.{});
+    const authorized = try repair.authorize(a, parsed, ctx, reviewed.support);
+    const readiness = authorized.retry.?;
+    try std.testing.expectEqual(.source_readiness, (try loss.pendingReview(a, readiness, feature, state)).?);
+    // A source-readiness repair is pending: its review is the dependent pass, over every subject, or, when the repair
+    // names the claims it decided again, over the conflicts and the signals holding those claims.
+    try std.testing.expectEqual(authority.Pass.dependent, try loss.reviewPass(a, readiness, feature, state, &.{}));
+    const decided: []const r.ClaimId = &.{.{ .ordinal = 1 }};
+    try std.testing.expect((try loss.reviewPass(a, readiness, feature, state, decided)).eql(.{ .decided = decided }));
+    try std.testing.expect(!(try loss.reviewPass(a, readiness, feature, state, decided)).eql(.dependent));
+    // Whichever stage owns it: the extraction owner's readiness repair has a scope of its own and the same review.
+    const conflict_seed = reviewed.support.inputs.seeds[0].id;
+    try std.testing.expectEqual(.conflict, std.meta.activeTag(conflict_seed.unit));
+    const extraction_owned = try loss.retryPermit(a, .extraction, authorized.owner, authorized.id, authorized.revision, reviewed.support, conflict_seed, null);
+    try std.testing.expect(!std.mem.eql(u8, &readiness.key.scope, &extraction_owned.key.scope));
+    try std.testing.expectEqual(.source_readiness, (try loss.pendingReview(a, extraction_owned, feature, state)).?);
+    try std.testing.expectEqual(authority.Pass.dependent, try loss.reviewPass(a, extraction_owned, feature, state, &.{}));
+    // No repair is pending, or a repair of another family is: a first pass, whatever claims are named.
+    try std.testing.expectEqual(authority.Pass.first, try loss.reviewPass(a, null, feature, state, decided));
+    var other_family = readiness;
+    other_family.key.family[0] ^= 1;
+    try std.testing.expectEqual(authority.Pass.first, try loss.reviewPass(a, other_family, feature, state, &.{}));
+    // A pending source-preservation repair is a first pass of the readiness projection.
+    var preserved = try Fixture.initClaims(a, "Renewal rules:\n\n- Renew a loan.\n- Refuse overdue loans.\n", null, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = 1 }} }} });
+    defer preserved.deinit();
+    const inputs = preserved.context.inputs;
+    const facts: @import("domain/reference_extraction_repair.zig").Omission.Facts = .{ .extraction = .{ .inputs = inputs, .candidates = try tokens.candidates(a, inputs), .candidate = preserved.extracted_text }, .support = try omissionSupport(&preserved, .{ .extraction_claim = inputs.chunks.entries[0].id }, "Renewal rules:\n\n- Renew a loan.\n- Refuse overdue loans.\n") };
+    const pending = (try @import("domain/reference_extraction_repair.zig").Omission.authorize(a, facts)).retry.?;
+    try std.testing.expectEqual(.source_preservation, (try loss.pendingReview(a, pending, inputs.corpus.feature_id, inputs.corpus.state_id)).?);
+    try std.testing.expectEqual(authority.Pass.first, try loss.reviewPass(a, pending, inputs.corpus.feature_id, inputs.corpus.state_id, decided));
+    // A source-omission permit of no scope of this feature and source state is refused, as `pendingReview` refuses it.
+    var foreign = readiness;
+    foreign.key.scope[0] ^= 1;
+    try std.testing.expectError(error.InvalidRequiredAuthority, loss.reviewPass(a, foreign, feature, state, &.{}));
+    try std.testing.expectError(error.InvalidRequiredAuthority, loss.reviewPass(a, readiness, .{ .bytes = "another-feature" }, state, &.{}));
+}
+
+test "the registered specification projection takes the pass from the pending repair of its step" {
+    const data = @import("domain/pipeline_data.zig");
+    const values = @import("application/pipeline_values.zig");
+    const native = @import("application/required_authority_workflow.zig");
+    const owned = @import("application/required_authority_values.zig");
+    const feature_directory = @import("application/feature_directory_workflow.zig");
+    const accounted = @import("application/reference_reconciliation_workflow.zig").accounted_schema;
+    const reference_owned = @import("domain/reference_candidate_value.zig");
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const specify = @import("domain/specification_authority.zig");
+    const r = references.r;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, projection_examples[0], .business_exact_string, true, 5);
+    defer fixture.deinit();
+    _ = try introduceConflicts(&fixture, &.{.{ 0, 1 }});
+    const feature = fixture.context.inputs.corpus.feature_id;
+    const held = fixture.context.references;
+    const selector = try values.create(std.testing.allocator, feature_directory.selector, @import("domain/feature_directory.zig").Selector, .{ .feature_id = feature, .project_relative_path = "specs/features/test" });
+    defer values.destroy(selector);
+    const reference_value = value: {
+        const owner = try reference_owned.create(std.testing.allocator, null);
+        errdefer reference_owned.destroy(owner);
+        owner.payload = .{ .reconciliation_accounted = held };
+        break :value try values.adopt(std.testing.allocator, accounted, reference_owned.Value, reference_owned.Owner, owner, reference_owned.view, reference_owned.destroy, null);
+    };
+    defer values.destroy(reference_value);
+    var view: data.View = .{};
+    view.slots[@intFromEnum(feature_directory.selector.key)] = selector;
+    view.slots[@intFromEnum(accounted.key)] = reference_value;
+    const global = held.records.assignments.checked.prior.prior;
+    const parsed: r.Parsed = .{ .source = global.source, .input = global.input, .proposal = .{ .global = global.proposal } };
+    const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry };
+    const reviewed = try reviewConflictsAsFalse(a, try specify.projectFor(a, feature, held, .first), fixture.context, &.{});
+    const pending = (try repair.authorize(a, parsed, ctx, reviewed.support)).retry.?;
+    var foreign = pending;
+    foreign.key.scope[0] ^= 1;
+    var binding: native.ProjectSpecification = .{ .allocator = std.testing.allocator };
+    for ([_]struct { permit: ?@import("domain/workflow_retry.zig").Permit, pass: ?@import("domain/required_authority.zig").Pass }{
+        .{ .permit = null, .pass = .first },
+        .{ .permit = pending, .pass = .dependent },
+        .{ .permit = foreign, .pass = null },
+    }) |case| {
+        var input = try projectionOperationInput(native.ProjectSpecification, view);
+        input.step.repair_permit = case.permit;
+        const result = try native.ProjectSpecification.invoke(&binding, input);
+        const written = result.delta.data_writes[@intFromEnum(native.inputs_schema.key)] orelse return error.ExpectedAuthorityProjection;
+        defer values.destroy(written);
+        const projected: ?@import("domain/required_authority.zig").Inputs = owned.read(&.{ .slots = result.delta.data_writes }, native.inputs_schema, .inputs) catch |err| switch (err) {
+            error.InvalidRequiredAuthority => null,
+            else => return err,
+        };
+        if (case.pass) |pass| {
+            try std.testing.expectEqual(.ok, result.outcome);
+            // The published projection is the scoped projection the pass names.
+            const expected = try specify.projectFor(a, feature, held, pass);
+            try std.testing.expectEqual(pass, projected.?.pass);
+            try std.testing.expectEqualDeep(expected.seeds, projected.?.seeds);
+            try std.testing.expectEqualDeep(expected.forced_gaps, projected.?.forced_gaps);
+        } else {
+            try std.testing.expectEqual(.blocked, result.outcome);
+            try std.testing.expectEqual(error.InvalidRequiredAuthority, result.diagnostic.?);
+            try std.testing.expect(projected == null);
+        }
     }
 }
 
@@ -6676,7 +7323,7 @@ test "conflict review exact evidence survives repair and rejects corrupt readbac
     proposal.conflicts = &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The outcomes disagree." } }} } }};
     const accounted = (try references.finish(a, global, proposal, fixture.context())).valid;
     const context: provenance.Context = .{ .inputs = fixture.inputs, .references = accounted, .registry = fixture.context().registry };
-    const inputs = try @import("domain/specification_authority.zig").project(a, fixture.inputs.corpus.feature_id, accounted);
+    const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.inputs.corpus.feature_id, accounted, .first);
     const allowed_sources = try @import("domain/specification_support_evidence.zig").sourceChoices(a, fixture.inputs);
     try std.testing.expectEqualDeep(&[_]@import("domain/reference_identity.zig").SourceId{ .{ .ordinal = 1 }, .{ .ordinal = 2 }, .{ .ordinal = 3 } }, allowed_sources);
     const ledger = try authority.build(a, inputs);
@@ -6753,7 +7400,7 @@ test "support reviews retain original sources and discarded or misclassified tok
         for ([_]?@import("domain/structured_tokens.zig").Kind{ null, .visual_typography, .business_exact_string }) |kind| {
             var fixture = try Fixture.initClaims(a, source, kind, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = 2 }} }} });
             defer fixture.deinit();
-            const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+            const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
             const packet = try reviewPacketAt(support, a, inputs, fixture.context, 0);
             defer @import("domain/model_input_packet.zig").release(packet);
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
@@ -6810,7 +7457,7 @@ test "review-purpose eligibility retains native duplicate token evidence without
         try std.testing.expectEqual(.retained, dispositions[first.id.ordinal - 1].disposition);
         try std.testing.expectEqual(.duplicate, dispositions[duplicate.id.ordinal - 1].disposition);
         try std.testing.expectEqualDeep(&[_]r.ClaimId{first.id}, dispositions[duplicate.id.ordinal - 1].related_claim_ids);
-        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+        const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
         const good = try reviewFor(a, inputs, fixture.context.inputs);
         const accepted = (try collectReview(support, a, inputs, fixture.context, try json.encode(support.Review, a, good), null)).accepted.inputs;
         try std.testing.expectEqual(.all_resolved, (try supportDecision(a, accepted)).result.continuation);
@@ -6859,7 +7506,7 @@ test "source review offers not_applicable only where native applicability permit
         var fixture = try Fixture.init(a, source);
         defer fixture.deinit();
         // Before authoring, unresolved entity applicability alone permits the verdict.
-        const readiness = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+        const readiness = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
         var permitted: usize = 0;
         for ((try authority.build(a, readiness)).requirements) |requirement| {
             const id = requirement.seed.id;
@@ -6870,7 +7517,8 @@ test "source review offers not_applicable only where native applicability permit
             }
             const packet = try support.packetFor(a, readiness, fixture.context, &packet_guidance.marked, .{ .finding = id });
             defer packets.release(packet);
-            try std.testing.expectEqualStrings(if (permits) "applicability_finding" else "finding", packet.resultDefinition().?.bytes);
+            // A signal is a reconciliation record: its view holds no `candidate_invalid`.
+            try std.testing.expectEqualStrings(if (permits) "applicability_finding" else if (id.unit == .signal) "record_finding" else "finding", packet.resultDefinition().?.bytes);
             const body = (try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{})).object;
             try std.testing.expectEqual(permits, body.get("evidence_rules").?.object.contains("not_applicable"));
             try std.testing.expectEqual(permits, body.get("requirements").?.array.items[0].object.contains("permitted_not_applicable"));
@@ -6928,6 +7576,74 @@ fn selectedNativeRepairTask(input: std.json.Value) ![]const u8 {
         }
     }
     return input.object.get("task").?.string;
+}
+
+test "a signal or conflict subject is offered no candidate_invalid, and admission refuses one" {
+    const authority = @import("domain/required_authority.zig");
+    const support = @import("domain/specification_support.zig").Source;
+    const model = @import("domain/specification_support_model.zig");
+    const codec = @import("domain/model_candidate_json.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const envelope = @import("domain/model_envelope.zig");
+    const admission = @import("domain/specification_support_evidence.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+    const invalid: @FieldType(model.Value, "candidate_invalid") = .{ .source_ids = &.{.{ .ordinal = 1 }}, .detail = "MOCK structural schema probe; no semantic judgment.", .authority_gap = null };
+    const inconclusive: @FieldType(model.Value, "inconclusive") = .{ .source_ids = &.{.{ .ordinal = 1 }}, .detail = "MOCK structural schema probe; no semantic judgment." };
+    // The first reconciliation holds signals, the second a conflict record: a record subject of each kind.
+    for ([_]bool{ false, true }) |held| {
+        var fixture = try Fixture.initContent(a, "On startup display `MOCK Hello, World!` and the UTC date.\n", .business_exact_string, true, 2);
+        defer fixture.deinit();
+        if (held) _ = try introduceConflict(&fixture);
+        const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, if (held) .first else .dependent);
+        var records: usize = 0;
+        var others: usize = 0;
+        const ledger = try authority.build(a, inputs);
+        for (ledger.requirements) |requirement| {
+            const id = requirement.seed.id;
+            const record = id.unit == .signal or id.unit == .conflict;
+            try std.testing.expectEqual(!record, admission.permitsInvalid(id));
+            records += @intFromBool(record);
+            others += @intFromBool(!record);
+            const packet = try support.packetFor(a, inputs, fixture.context, &packet_guidance.marked, .{ .finding = id });
+            defer packets.release(packet);
+            const body = (try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{})).object;
+            // The guidance names the evidence a `candidate_invalid` needs only where the schema offers one.
+            try std.testing.expectEqual(!record, body.get("evidence_rules").?.object.contains("candidate_invalid"));
+            // The request is built as the handoff builds it: the packet's choices and field policies over the definition,
+            // and its prose fields each naming a place the complete schema holds.
+            const definition = schemas.select(packet.resultDefinition().?).?;
+            const restricted = try @import("domain/model_result_schema.zig").restrictFieldPolicies(a, definition, packet.excludedVariants(), packet.integerChoices(), packet.fieldPolicies());
+            defer restricted.release();
+            try std.testing.expect(@import("domain/model_text_wire.zig").validProseSchema(packet.proseFields(), definition.root()));
+            var refused = try envelope.parseContent(a, try codec.encode(model.Value, a, .{ .candidate_invalid = invalid }), null);
+            defer refused.deinit();
+            try std.testing.expectEqual(record, @import("domain/model_payload_schema.zig").validateValue(envelope.value(&refused.parsed.value), restricted.selected().root()) != null);
+            // Every other verdict stays open to the subject.
+            var open = try envelope.parseContent(a, try codec.encode(model.Value, a, .{ .inconclusive = inconclusive }), null);
+            defer open.deinit();
+            try std.testing.expect(@import("domain/model_payload_schema.zig").validateValue(envelope.value(&open.parsed.value), restricted.selected().root()) == null);
+        }
+        try std.testing.expect(records != 0);
+        try std.testing.expectEqual(held, others == 0);
+
+        // Admission holds the same line, whatever a response says.
+        const findings = try a.dupe(support.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
+        for (ledger.requirements, findings) |requirement, *finding| {
+            if (admission.permitsInvalid(requirement.seed.id)) continue;
+            finding.value.kind = .candidate_invalid;
+            finding.value.detail = "The candidate record is invented.";
+            finding.value.source_ids = &.{fixture.context.inputs.corpus.sources[0].id};
+            finding.value.authority_gap = null;
+            break;
+        }
+        const collected = try collectReview(support, a, inputs, fixture.context, try codec.encode(support.Review, a, .{ .entries = findings }), null);
+        try std.testing.expect(collected == .rejected);
+        try std.testing.expectEqual(.invalid_finding, collected.rejected.rejection.diagnostics[0].evidence.?.issue);
+    }
 }
 
 test "specification repair occurrence keys survive preceding record deletion" {
@@ -6991,7 +7707,11 @@ fn checkSourceOmissionProgress(a: std.mem.Allocator, permit: @import("domain/wor
     const json = @import("domain/model_candidate_json.zig");
     try std.testing.expectEqual(negative.inputs.projection, (try loss.pendingReview(a, permit, context.inputs.corpus.feature_id, context.inputs.corpus.state_id)).?);
     try checkNativeSourceReviewGates(permit, negative.inputs.projection, context);
+    // The review that validates a pending readiness repair is the dependent pass; a preservation
+    // projection has one pass.
+    const pass: @import("domain/required_authority.zig").Pass = if (negative.inputs.projection == .source_readiness) .dependent else .first;
     var unreviewed = negative.inputs;
+    unreviewed.pass = pass;
     unreviewed.evidence = &.{};
     unreviewed.candidates = &.{};
     const negative_admitted = (try support.validate(a, unreviewed, context.inputs, negative.review)).accepted;
@@ -6999,12 +7719,17 @@ fn checkSourceOmissionProgress(a: std.mem.Allocator, permit: @import("domain/wor
     const renewed_inputs = if (negative.inputs.projection == .source_preservation)
         try @import("domain/source_preservation.zig").project(a, context.inputs.corpus.feature_id, @import("domain/reference_support.zig").records(context.references), context.inputs)
     else
-        try @import("domain/specification_authority.zig").project(a, context.inputs.corpus.feature_id, context.references);
+        try @import("domain/specification_authority.zig").projectFor(a, context.inputs.corpus.feature_id, context.references, pass);
     const reviewed = (try collectReview(support, a, renewed_inputs, context, try json.encode(support.Review, a, try reviewFor(a, renewed_inputs, context.inputs)), null)).accepted;
     try std.testing.expectEqual(.all_resolved, (try supportDecision(a, reviewed.inputs)).result.continuation);
     try std.testing.expectEqual(.resolved, (try loss.admittedValidation(a, permit, reviewed)).?.validated.result);
+    // The other pass is never the review of this repair, whichever purpose the permit holds.
+    var misplaced = reviewed;
+    misplaced.inputs.pass = if (pass == .dependent) .first else .dependent;
+    try std.testing.expectError(error.InvalidRequiredAuthority, loss.admittedValidation(a, permit, misplaced));
+    try checkNativeApplySourceRejection(permit, misplaced);
     const foreign_purpose = if (negative.inputs.projection == .source_preservation)
-        try @import("domain/specification_authority.zig").project(a, context.inputs.corpus.feature_id, context.references)
+        try @import("domain/specification_authority.zig").projectFor(a, context.inputs.corpus.feature_id, context.references, .first)
     else
         try @import("domain/source_preservation.zig").project(a, context.inputs.corpus.feature_id, @import("domain/reference_support.zig").records(context.references), context.inputs);
     const wrong_review = (try collectReview(support, a, foreign_purpose, context, try json.encode(support.Review, a, try reviewFor(a, foreign_purpose, context.inputs)), null)).accepted;
@@ -7238,12 +7963,33 @@ test "persisted extraction binding resolves fresh compiled authority after origi
     try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_blocks_v1));
 }
 
+/// What the incomplete view of a fixture needs: its reference snapshot under one open Spec clarification, `S01`.
+const IncompleteDraft = struct {
+    snapshot: @import("domain/reference_snapshot.zig").Snapshot,
+    clarification: @import("domain/clarification_inputs.zig").State,
+    validated: @import("domain/clarification_inputs.zig").ValidatedState,
+    value: @import("domain/incomplete_specification.zig").State,
+};
+
+fn incompleteDraft(a: std.mem.Allocator, fixture: *const Fixture, contracts: *const @import("test_fixtures/extraction_contract.zig").Fixture) !IncompleteDraft {
+    const c = @import("domain/clarification_inputs.zig");
+    const cf = @import("test_fixtures/clarification_inputs.zig");
+    const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
+    const snapshot = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "first" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
+    var record = cf.record("S01");
+    record.authority = try a.dupe(c.Authority, &.{.{ .reference = snapshot.inputs.corpus.state_id }});
+    var clarification = cf.state(try a.dupe(c.Record, &.{record}));
+    clarification.feature_id = snapshot.inputs.corpus.feature_id.bytes;
+    const validated = try c.validate(.{ .value = clarification }, snapshot.inputs.corpus.feature_id);
+    const value = try @import("domain/incomplete_specification.zig").build(a, .{ .captured = null }, snapshot, validated, contracts.port(), text.normalizer);
+    return .{ .snapshot = snapshot, .clarification = clarification, .validated = validated, .value = value };
+}
+
 test "incomplete specifications publish supported business evidence and bound questions without completion authority" {
     const draft = @import("domain/incomplete_specification.zig");
     const codec = @import("domain/incomplete_specification_markdown.zig");
     const state = @import("domain/specification_state.zig");
     const c = @import("domain/clarification_inputs.zig");
-    const cf = @import("test_fixtures/clarification_inputs.zig");
     const json = @import("domain/canonical_json.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -7252,18 +7998,15 @@ test "incomplete specifications publish supported business evidence and bound qu
         var fixture = try Fixture.initContent(a, source, .business_exact_string, true, 1);
         defer fixture.deinit();
         const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
-        const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
-        const snapshot = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "first" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
-        var record = cf.record("S01");
-        record.authority = &.{.{ .reference = snapshot.inputs.corpus.state_id }};
-        var clarification = cf.state(&.{record});
-        clarification.feature_id = snapshot.inputs.corpus.feature_id.bytes;
-        const validated = try c.validate(.{ .value = clarification }, snapshot.inputs.corpus.feature_id);
+        const built = try incompleteDraft(a, &fixture, &contracts);
+        const snapshot = built.snapshot;
+        const clarification = built.clarification;
+        const validated = built.validated;
+        const value = built.value;
         const prior: state.Prior = .{ .captured = null };
-        const value = try draft.build(a, prior, snapshot, validated, contracts.port(), text.normalizer);
-        const rendered = try codec.render(a, value, validated);
+        const rendered = try codec.render(a, value, validated, text.normalizer);
         try std.testing.expect(std.mem.indexOf(u8, rendered, "Status: Incomplete") != null);
-        // Exact business text is escaped by the canonical Markdown owner.
+        // A source with no Markdown structure reads as itself, escaped by the canonical Markdown owner.
         var escaped: std.Io.Writer.Allocating = .init(a);
         try @import("domain/specification_markdown.zig").literal(&escaped.writer, source, .block_start);
         try std.testing.expect(std.mem.indexOf(u8, rendered, escaped.written()) != null);
@@ -7279,15 +8022,15 @@ test "incomplete specifications publish supported business evidence and bound qu
         technical.reference.extraction.claims = technical_claims;
         technical.reference.signals = technical_signals;
         try draft.validate(a, technical, value.feature, contracts.port(), text.normalizer);
-        const without_technical = try codec.render(a, technical, validated);
+        const without_technical = try codec.render(a, technical, validated, text.normalizer);
         try std.testing.expect(std.mem.indexOf(u8, without_technical, escaped.written()) == null);
         try std.testing.expect(std.mem.indexOf(u8, try @import("domain/reference_context.zig").render(a, technical.reference, null), escaped.written()) != null);
-        // A claim's text opens its list item's line, so a byte that opens a block there is escaped.
-        var leading = value;
-        const leading_claims = try a.dupe(@import("domain/reference_extraction.zig").Claim, value.reference.extraction.claims);
-        leading_claims[0].content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "- item" } }} } } } };
-        leading.reference.extraction.claims = leading_claims;
-        try std.testing.expect(std.mem.indexOf(u8, try codec.render(a, leading, validated), "\n- \\- item\n") != null);
+        // A claim's line shows the reading of its cited source lines (ADR 0017), so the stored quote does not reach it.
+        var stored = value;
+        const stored_claims = try a.dupe(@import("domain/reference_extraction.zig").Claim, value.reference.extraction.claims);
+        stored_claims[0].content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "- item" } }} } } } };
+        stored.reference.extraction.claims = stored_claims;
+        try std.testing.expectEqualStrings(rendered, try codec.render(a, stored, validated, text.normalizer));
 
         try std.testing.expectError(error.InvalidSpecification, @import("domain/specification_markdown.zig").parse(a, rendered));
         const bytes = try json.encode(draft.State, a, value);
@@ -7295,7 +8038,7 @@ test "incomplete specifications publish supported business evidence and bound qu
         try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, unknown, value.feature, contracts.port(), text.normalizer));
         const restored = try state.parse(a, bytes, value.feature, contracts.port(), text.normalizer);
         try std.testing.expect(restored.value == .pending and restored.specified() == null);
-        try std.testing.expectEqualStrings(rendered, try codec.render(a, restored.value.pending, validated));
+        try std.testing.expectEqualStrings(rendered, try codec.render(a, restored.value.pending, validated, text.normalizer));
         try std.testing.expectEqual(@as(u64, 2), try state.nextRevision(restored));
         var successor = restored;
         successor.value.pending.id_ledger.next[0] = 42;
@@ -7324,10 +8067,10 @@ test "incomplete specifications publish supported business evidence and bound qu
         try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, forged, value.feature, contracts.port(), text.normalizer));
         var stale = value;
         stale.clarification.revision += 1;
-        try std.testing.expectError(error.InvalidIncompleteSpecification, codec.render(a, stale, validated));
+        try std.testing.expectError(error.InvalidIncompleteSpecification, codec.render(a, stale, validated, text.normalizer));
         stale = value;
         stale.open_clarifications = &.{.{ .stage = .spec, .ordinal = 2 }};
-        try std.testing.expectError(error.InvalidIncompleteSpecification, codec.render(a, stale, validated));
+        try std.testing.expectError(error.InvalidIncompleteSpecification, codec.render(a, stale, validated, text.normalizer));
         const closed_records = try a.dupe(c.Record, clarification.records);
         closed_records[0].status = .resolved_by_authority;
         closed_records[0].authority_resolution = "Resolved from current sources.";
@@ -7353,6 +8096,113 @@ test "incomplete specifications publish supported business evidence and bound qu
         try std.testing.expectEqual(.clarification_state, prepared.files[prepared.files.len - 2].target.artifact);
         try std.testing.expectEqual(.workflow_state, prepared.files[prepared.files.len - 1].target.artifact);
         try std.testing.expectError(error.InvalidWorkflowOutput, prepare.execute(a, directory, paths, .{ .state = null, .forms = &.{} }, inputs, .{ .ready = ready }, forms, prior, value, "forged spec", no_evidence, null));
+    }
+}
+
+/// The lines of the incomplete view's section that opens with `heading`.
+fn incompleteSection(view: []const u8, heading: []const u8) ![]const u8 {
+    const start = (std.mem.indexOf(u8, view, heading) orelse return error.MissingViewSection) + heading.len;
+    return view[start .. std.mem.indexOfPos(u8, view, start, "\n## ") orelse view.len];
+}
+
+// A claim's line in the incomplete view is the paragraph reading of its cited lines (ADR 0017,
+// ADR 0036 Decision 2), with the source's own code spans as engine code spans, not the stored quote through the escape
+// table, which doubled a list marker, escaped backticks and wrote line breaks as entities.
+test "an incomplete specification shows each retained claim as the paragraph its cited lines read as" {
+    const draft = @import("domain/incomplete_specification.zig");
+    const codec = @import("domain/incomplete_specification_markdown.zig");
+    const state = @import("domain/specification_state.zig");
+    const json = @import("domain/canonical_json.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+    for ([_]struct { source: []const u8, lines: []const u8 }{
+        // A list item shows its words once, whichever marker the source wrote.
+        .{ .source = "- A borrower must be able to renew an active loan.\n", .lines = "- A borrower must be able to renew an active loan.\n" },
+        .{ .source = "* A borrower must be able to renew an active loan.\n", .lines = "- A borrower must be able to renew an active loan.\n" },
+        .{ .source = "+ A borrower must be able to renew an active loan.\n", .lines = "- A borrower must be able to renew an active loan.\n" },
+        .{ .source = "1. A borrower must be able to renew an active loan.\n", .lines = "- A borrower must be able to renew an active loan.\n" },
+        // A wrapped item is one paragraph, with no line break entity.
+        .{ .source = "- Refuse renewal if the loan is inactive;\n  leave its due date unchanged.\n", .lines = "- Refuse renewal if the loan is inactive; leave its due date unchanged.\n" },
+        // Each item is a line of its own, read from its own lines.
+        .{ .source = "- First requirement.\n- Second requirement.\n", .lines = "- First requirement.\n- Second requirement.\n" },
+        // A source's inline code spans show as engine code spans, with the delimiters the value needs.
+        .{ .source = "- Display `Renewal refused.` to the borrower.\n", .lines = "- Display `Renewal refused.` to the borrower.\n" },
+        .{ .source = "- Compare ``a`b`` with `c`.\n", .lines = "- Compare ``a`b`` with `c`.\n" },
+        // Another domain reads the same way.
+        .{ .source = "- When started, display `MOCK Hello, World!` and the UTC date and time.\n", .lines = "- When started, display `MOCK Hello, World!` and the UTC date and time.\n" },
+    }) |case| {
+        var fixture = try Fixture.init(a, case.source);
+        defer fixture.deinit();
+        const built = try incompleteDraft(a, &fixture, &contracts);
+        const view = try codec.render(a, built.value, built.validated, text.normalizer);
+        try std.testing.expectEqualStrings(case.lines, try incompleteSection(view, "## Supported Requirements\n\n"));
+        // The view is a projection of the state: identical state, identical bytes, also after a round trip through storage.
+        try std.testing.expectEqualStrings(view, try codec.render(a, built.value, built.validated, text.normalizer));
+        const restored = try state.parse(a, try json.encode(draft.State, a, built.value), built.value.feature, contracts.port(), text.normalizer);
+        try std.testing.expectEqualStrings(view, try codec.render(a, restored.value.pending, built.validated, text.normalizer));
+    }
+}
+
+// The reading is source bytes, which ingestion does not normalize. The stored claim text the view used to print was NFC,
+// so the prose of a claim line is NFC and an inline code span keeps the bytes its source wrote, as an exact value does.
+test "an incomplete specification shows a claim's prose in canonical form and its code spans as the source wrote them" {
+    const codec = @import("domain/incomplete_specification_markdown.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+    for ([_]struct { source: []const u8, lines: []const u8 }{
+        // Decomposed prose reads as its canonical form, and canonical prose is unchanged.
+        .{ .source = "- Cafe\u{301} receipts are issued.\n", .lines = "- Caf\u{e9} receipts are issued.\n" },
+        .{ .source = "- Caf\u{e9} receipts are issued.\n", .lines = "- Caf\u{e9} receipts are issued.\n" },
+        // The same bytes inside an inline code span stay as written, and the prose around the span is canonical.
+        .{ .source = "- Display `Cafe\u{301}` to the borrower.\n", .lines = "- Display `Cafe\u{301}` to the borrower.\n" },
+        .{ .source = "- Cafe\u{301}: show `Cafe\u{301}` now, in Cafe\u{301}.\n", .lines = "- Caf\u{e9}: show `Cafe\u{301}` now, in Caf\u{e9}.\n" },
+    }) |case| {
+        var fixture = try Fixture.init(a, case.source);
+        defer fixture.deinit();
+        const built = try incompleteDraft(a, &fixture, &contracts);
+        const view = try codec.render(a, built.value, built.validated, text.normalizer);
+        try std.testing.expectEqualStrings(case.lines, try incompleteSection(view, "## Supported Requirements\n\n"));
+        try std.testing.expectEqualStrings(view, try codec.render(a, built.value, built.validated, text.normalizer));
+    }
+}
+
+test "an incomplete specification shows the stored quote only for a claim whose reading has no words and escapes text that still opens a block" {
+    const codec = @import("domain/incomplete_specification_markdown.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+    // A quote of headings alone reads as none: the stored quote shows as written, through the escape table (ADR 0036 Decision 2).
+    for ([_][]const u8{ "# Loan Renewal\n", "Loan renewal\n============\n" }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const built = try incompleteDraft(a, &fixture, &contracts);
+        const stored = for (built.value.reference.extraction.claims) |claim| {
+            if (claim.content == .model and claim.content.model == .business) break claim.content.model.business.value.segments[0].literal.value;
+        } else return error.MissingTestClaim;
+        var expected: std.Io.Writer.Allocating = .init(a);
+        try expected.writer.writeAll("- ");
+        try @import("domain/specification_markdown.zig").literal(&expected.writer, stored, .block_start);
+        try expected.writer.writeAll("\n");
+        try std.testing.expect(expected.written().len > "- \n".len);
+        try std.testing.expectEqualStrings(expected.written(), try incompleteSection(try codec.render(a, built.value, built.validated, text.normalizer), "## Supported Requirements\n\n"));
+    }
+    for ([_]struct { source: []const u8, category: @import("domain/reference_extraction.zig").Kind, heading: []const u8, lines: []const u8 }{
+        // Text that still opens a block after the reading stays escaped, so it is no nested list item.
+        .{ .source = "- - nested\n", .category = .business, .heading = "## Supported Requirements\n\n", .lines = "- \\- nested\n" },
+        // A scope constraint reads the same way.
+        .{ .source = "- Loans past due must not be renewed.\n", .category = .scope_guard, .heading = "## Scope Constraints\n\n", .lines = "- Loans past due must not be renewed.\n" },
+        // A technical claim is no supported requirement.
+        .{ .source = "- Store loans in a relational database.\n", .category = .technical, .heading = "## Supported Requirements\n\n", .lines = "No supported content is available for this section yet.\n" },
+    }) |case| {
+        var fixture = try Fixture.initClaims(a, case.source, null, .{ .selected = &.{.{ .category = case.category, .citations = &.{.{ .ordinal = 1 }} }} });
+        defer fixture.deinit();
+        const built = try incompleteDraft(a, &fixture, &contracts);
+        try std.testing.expectEqualStrings(case.lines, try incompleteSection(try codec.render(a, built.value, built.validated, text.normalizer), case.heading));
     }
 }
 
@@ -7470,6 +8320,11 @@ test "clarification excerpts cite a span's lines as spec.md does" {
 }
 
 fn introduceConflict(fixture: *Fixture) ![]const references.r.ClaimId {
+    return introduceConflicts(fixture, &.{.{ 0, 1 }});
+}
+
+/// One conflict record between each pair of business claims (positions in claim order), and no signal over them.
+fn introduceConflicts(fixture: *Fixture, pairs: []const [2]usize) ![]const references.r.ClaimId {
     const a = fixture.allocator;
     const r = references.r;
     const original = fixture.context.references.records.assignments.checked.prior.prior;
@@ -7479,23 +8334,27 @@ fn introduceConflict(fixture: *Fixture) ![]const references.r.ClaimId {
     for (original.input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model) {
         try business.append(a, item.claim.id);
     };
-    try std.testing.expect(business.items.len >= 2);
-    const claims = business.items[0..2];
-    for (dispositions) |*value| {
-        if (std.meta.eql(value.claim_id, claims[0])) value.disposition = .{ .conflicting = .{ .related_claim_ids = try a.dupe(r.ClaimId, &.{claims[1]}) } };
-        if (std.meta.eql(value.claim_id, claims[1])) value.disposition = .{ .conflicting = .{ .related_claim_ids = try a.dupe(r.ClaimId, &.{claims[0]}) } };
+    try std.testing.expect(business.items.len >= 2 * pairs.len);
+    const conflicts = try a.alloc(r.ConflictProposal, pairs.len);
+    for (pairs, conflicts) |pair, *conflict| {
+        const claims = [2]r.ClaimId{ business.items[pair[0]], business.items[pair[1]] };
+        for (dispositions) |*value| {
+            if (std.meta.eql(value.claim_id, claims[0])) value.disposition = .{ .conflicting = .{ .related_claim_ids = try a.dupe(r.ClaimId, &.{claims[1]}) } };
+            if (std.meta.eql(value.claim_id, claims[1])) value.disposition = .{ .conflicting = .{ .related_claim_ids = try a.dupe(r.ClaimId, &.{claims[0]}) } };
+        }
+        conflict.* = .{ .claim_ids = try a.dupe(r.ClaimId, &claims), .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The compatible requirements were incorrectly grouped as conflicting." } }} } };
     }
     proposal.claim_dispositions = dispositions;
     var signals: std.ArrayList(r.SignalProposal) = .empty;
     for (proposal.signals) |signal| {
         var affected = false;
-        for (claims) |id| if (r.contains(r.ClaimId, signal.claim_ids, id)) {
+        for (conflicts) |conflict| for (conflict.claim_ids) |id| if (r.contains(r.ClaimId, signal.claim_ids, id)) {
             affected = true;
         };
         if (!affected) try signals.append(a, signal);
     }
     proposal.signals = try signals.toOwnedSlice(a);
-    proposal.conflicts = try a.dupe(r.ConflictProposal, &.{.{ .claim_ids = claims, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The compatible requirements were incorrectly grouped as conflicting." } }} } }});
+    proposal.conflicts = conflicts;
     const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry };
     fixture.context.references = (try references.finish(a, original.input, proposal, ctx)).valid;
     return business.toOwnedSlice(a);
@@ -7568,7 +8427,7 @@ test "false conflicts repair a closed relation group with exact preconditions an
         const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry };
         const global = fixture.context.references.records.assignments.checked.prior.prior;
         const parsed: r.Parsed = .{ .source = global.source, .input = global.input, .proposal = .{ .global = global.proposal } };
-        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+        const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
         const entries = try a.dupe(review.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
         const ledger = try authority.build(a, inputs);
         var conflict_index: usize = 0;
@@ -7717,6 +8576,316 @@ test "false conflicts repair a closed relation group with exact preconditions an
     }
 }
 
+/// Like `introduceConflicts`, but a record holds any number of claims and records may share a claim. Each record is one
+/// conflict record and one group, a claim is related to every other claim of each record that holds it in the order the
+/// records give them, and no signal cites a claim in conflict. A record is positions in business-claim order.
+fn introduceOverlappingConflicts(fixture: *Fixture, records: []const []const usize) ![]const references.r.ClaimId {
+    const a = fixture.allocator;
+    const r = references.r;
+    const original = fixture.context.references.records.assignments.checked.prior.prior;
+    var proposal = original.proposal;
+    const dispositions = try a.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
+    var business: std.ArrayList(r.ClaimId) = .empty;
+    for (original.input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model) {
+        try business.append(a, item.claim.id);
+    };
+    const groups = try a.alloc(@import("domain/reference_conflict_groups.zig").Group, records.len);
+    const conflicts = try a.alloc(r.ConflictProposal, records.len);
+    for (records, groups, conflicts) |positions, *group, *conflict| {
+        const claims = try a.alloc(r.ClaimId, positions.len);
+        for (positions, claims) |position, *claim| {
+            try std.testing.expect(position < business.items.len);
+            claim.* = business.items[position];
+        }
+        for (dispositions) |*value| for (claims) |claim| {
+            if (!std.meta.eql(value.claim_id, claim)) continue;
+            var related: std.ArrayList(r.ClaimId) = .empty;
+            if (value.disposition == .conflicting) try related.appendSlice(a, value.disposition.conflicting.related_claim_ids);
+            for (claims) |other| if (other.ordinal != claim.ordinal and !r.contains(r.ClaimId, related.items, other)) try related.append(a, other);
+            value.disposition = .{ .conflicting = .{ .related_claim_ids = try related.toOwnedSlice(a) } };
+        };
+        group.* = .{ .claim_ids = claims };
+        conflict.* = .{ .claim_ids = claims, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The compatible requirements were incorrectly grouped as conflicting." } }} } };
+    }
+    proposal.claim_dispositions = dispositions;
+    var signals: std.ArrayList(r.SignalProposal) = .empty;
+    for (proposal.signals) |signal| {
+        var affected = false;
+        for (conflicts) |conflict| for (conflict.claim_ids) |id| if (r.contains(r.ClaimId, signal.claim_ids, id)) {
+            affected = true;
+        };
+        if (!affected) try signals.append(a, signal);
+    }
+    proposal.signals = try signals.toOwnedSlice(a);
+    proposal.conflict_groups = groups;
+    proposal.conflicts = conflicts;
+    const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry };
+    fixture.context.references = (try references.finish(a, original.input, proposal, ctx)).valid;
+    return business.toOwnedSlice(a);
+}
+
+/// A reconciliation whose `records` overlap, and the admitted source review in which the model judged the record
+/// `false_record` false (a candidate omission localized to it) and every other record a genuine conflict.
+const OverlapRepair = struct {
+    business: []const references.r.ClaimId,
+    parsed: references.r.Parsed,
+    ctx: @import("domain/reference_reconciliation_validation.zig").TextContext,
+    support: @import("domain/source_omission_authority.zig").Support,
+};
+fn overlapRepair(a: std.mem.Allocator, fixture: *Fixture, records: []const []const usize, false_record: usize) !OverlapRepair {
+    const review = @import("domain/specification_support.zig").Source;
+    const authority = @import("domain/required_authority.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    const r = references.r;
+    const business = try introduceOverlappingConflicts(fixture, records);
+    const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry };
+    const global = fixture.context.references.records.assignments.checked.prior.prior;
+    const parsed: r.Parsed = .{ .source = global.source, .input = global.input, .proposal = .{ .global = global.proposal } };
+    const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first);
+    try std.testing.expectEqual(records.len, @import("domain/reference_support.zig").records(fixture.context.references).conflicts.len);
+    const entries = try a.dupe(review.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
+    const ledger = try authority.build(a, inputs);
+    for (ledger.requirements, entries) |requirement, *finding| {
+        if (requirement.seed.id.unit != .conflict) continue;
+        if (requirement.seed.id.unit.conflict.ordinal - 1 == false_record) {
+            finding.value.kind = .candidate_omission;
+            finding.value.missing_obligation = fixture.context.inputs.corpus.sources[0].bytes;
+            finding.value.detail = "The original requirements are compatible; restore their separate supported meanings.";
+            finding.value.source_ids = &.{fixture.context.inputs.corpus.sources[0].id};
+            finding.value.loss = .{ .reconciliation_conflict = requirement.seed.id.unit.conflict };
+            finding.value.preservation = try @import("test_fixtures/source_omission_evidence.zig").proof(a, inputs, fixture.context.inputs, finding.*);
+        } else {
+            finding.value.kind = .conflicting;
+            finding.value.detail = "The two requirements state incompatible limits.";
+            finding.value.question = "Which requirement takes precedence? Identify the required behavior.";
+        }
+    }
+    const admitted = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).accepted;
+    const decision = try supportDecision(a, admitted.inputs);
+    // The false record's defect outranks the genuine record's question: no form is raised before it is repaired.
+    try std.testing.expectEqual(.invalid, decision.result.continuation);
+    return .{
+        .business = business,
+        .parsed = parsed,
+        .ctx = ctx,
+        .support = .{ .repair_phase = .pre_generation, .review = admitted.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result },
+    };
+}
+
+/// Records (positions in business-claim order), the one of them that is false, the claims only it holds (`released`), the
+/// claims it shares with another record (`shared`) and, for each shared claim, the claims it conflicts with once the false
+/// record is gone (`after`).
+const OverlapShape = struct { records: []const []const usize, false_record: usize, released: []const usize, shared: []const usize, after: []const []const usize };
+const overlap_shapes = [_]OverlapShape{
+    .{ .records = &.{ &.{ 0, 1 }, &.{ 1, 2 } }, .false_record = 1, .released = &.{2}, .shared = &.{1}, .after = &.{&.{0}} },
+    .{ .records = &.{ &.{ 1, 2 }, &.{ 0, 1 } }, .false_record = 1, .released = &.{0}, .shared = &.{1}, .after = &.{&.{2}} },
+    // The false record is declared first, and the genuine one's first claim is one the false one holds.
+    .{ .records = &.{ &.{ 0, 1 }, &.{ 1, 2 } }, .false_record = 0, .released = &.{0}, .shared = &.{1}, .after = &.{&.{2}} },
+    .{ .records = &.{ &.{ 1, 2 }, &.{ 0, 1 } }, .false_record = 0, .released = &.{2}, .shared = &.{1}, .after = &.{&.{0}} },
+    // A claim shared with two genuine records keeps both relations.
+    .{ .records = &.{ &.{ 0, 1 }, &.{ 1, 2 }, &.{ 1, 3 } }, .false_record = 2, .released = &.{3}, .shared = &.{1}, .after = &.{&.{ 0, 2 }} },
+    // A record of three claims decides the two it alone holds.
+    .{ .records = &.{ &.{ 0, 1 }, &.{ 1, 2, 3 } }, .false_record = 1, .released = &.{ 2, 3 }, .shared = &.{1}, .after = &.{&.{0}} },
+    .{ .records = &.{ &.{ 1, 2, 3 }, &.{ 0, 1 } }, .false_record = 0, .released = &.{ 2, 3 }, .shared = &.{1}, .after = &.{&.{0}} },
+    // A record nested inside another is another record: the outer one decides the claim the inner one does not hold.
+    .{ .records = &.{ &.{ 0, 1 }, &.{ 0, 1, 2 } }, .false_record = 1, .released = &.{2}, .shared = &.{ 0, 1 }, .after = &.{ &.{1}, &.{0} } },
+};
+
+test "a false conflict that shares a claim with a genuine one is repaired alone and the genuine one keeps its relation" {
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const json = @import("domain/model_candidate_json.zig");
+    const r = references.r;
+    for (projection_examples) |example| for (overlap_shapes) |shape| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        const setup = try overlapRepair(a, &fixture, shape.records, shape.false_record);
+        const business = setup.business;
+        const parsed = setup.parsed;
+        const ctx = setup.ctx;
+        const support = setup.support;
+        const dismissed = shape.records[shape.false_record];
+        const target = try a.alloc(r.ClaimId, dismissed.len);
+        for (dismissed, target) |position, *claim| claim.* = business[position];
+        const released = try a.alloc(r.ClaimId, shape.released.len);
+        for (shape.released, released) |position, *claim| claim.* = business[position];
+        const auth = try repair.authorize(a, parsed, ctx, support);
+        try std.testing.expectEqualDeep(@as([]const r.ClaimId, target), auth.target.conflict_group);
+        // The old value is the false record alone: its group, its explanation and the claims only it holds.
+        const old = auth.operation.replace.conflict_group;
+        try std.testing.expectEqual(released.len, old.claim_dispositions.len);
+        for (released, old.claim_dispositions) |id, value| try std.testing.expectEqualDeep(id, value.claim_id);
+        try std.testing.expectEqual(@as(usize, 1), old.conflict_groups.len);
+        try std.testing.expectEqual(@as(usize, 1), old.conflicts.len);
+        const packet = try repair.packet(a, parsed, ctx, support, auth, &packet_guidance.marked);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        // The answer decides the released claims only and may name any claim of the false record.
+        var decided: ?@import("domain/model_result_schema.zig").IntegerChoice = null;
+        var named: ?@import("domain/model_result_schema.zig").IntegerChoice = null;
+        for (packet.integerChoices()) |choice| {
+            if (choice.target != .path or choice.target.path.len == 0) continue;
+            if (std.mem.eql(u8, choice.target.path[0].property, "claim_dispositions")) decided = choice;
+            if (std.mem.eql(u8, choice.target.path[0].property, "conflict_groups")) named = choice;
+        }
+        try std.testing.expectEqual(released.len, decided.?.allowed.len);
+        for (released, decided.?.allowed) |id, allowed| try std.testing.expectEqual(@as(i64, id.ordinal), allowed);
+        try std.testing.expectEqual(.native, decided.?.collection.exact_members.count);
+        try std.testing.expectEqual(target.len, named.?.allowed.len);
+        for (target, named.?.allowed) |id, allowed| try std.testing.expectEqual(@as(i64, id.ordinal), allowed);
+        // ADR 0046 Decision 7: a group the answer lists is checked against the dispositions it returns, and a listed
+        // claim it does not dispose (a claim only another group holds) is not this rule's.
+        try std.testing.expectEqualStrings("claim_dispositions", named.?.collection.listed.sibling);
+        try std.testing.expectEqualStrings("conflicting", named.?.collection.listed.kind);
+
+        const changed = try a.dupe(r.ClaimDispositionProposal, old.claim_dispositions);
+        for (changed) |*value| value.disposition = .{ .retained = .{} };
+        const replacement = try repair.parse(a, auth, packet, try json.encode(@import("domain/reference_reconciliation_repair.zig").ConflictGroup, a, .{ .claim_dispositions = changed, .conflicts = &.{} }));
+        const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, ctx.inputs);
+        // A shared claim is not the repair's to decide, and a group names claims of the false record only.
+        const with_shared = try a.alloc(r.ClaimDispositionProposal, changed.len + 1);
+        @memcpy(with_shared[0..changed.len], changed);
+        with_shared[changed.len] = .{ .claim_id = business[shape.shared[0]], .disposition = .{ .retained = .{} } };
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, canonical, parsed, ctx, support, auth, .{ .conflict_group = .{ .claim_dispositions = with_shared, .conflicts = &.{} } }, null));
+        const outsider = for (business) |claim| {
+            if (!r.contains(r.ClaimId, target, claim)) break claim;
+        } else return error.MissingOutsideClaim;
+        var outside = replacement;
+        outside.conflict_group.conflict_groups = &.{.{ .claim_ids = &.{ released[0], outsider } }};
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, canonical, parsed, ctx, support, auth, outside, null));
+
+        const fixed = try repair.merge(a, canonical, parsed, ctx, support, auth, replacement, .{ .request = .{ .value = 101 }, .attempt = .{ .value = 1 } });
+        // Every other record and group stands as it was, found by its claims and not by a position.
+        try std.testing.expectEqual(shape.records.len - 1, fixed.proposal.global.conflicts.len);
+        try std.testing.expectEqual(shape.records.len - 1, fixed.proposal.global.conflict_groups.len);
+        var kept: usize = 0;
+        for (parsed.proposal.global.conflicts, parsed.proposal.global.conflict_groups, 0..) |record, group, index| {
+            if (index == shape.false_record) continue;
+            try std.testing.expectEqualDeep(record, fixed.proposal.global.conflicts[kept]);
+            try std.testing.expectEqualDeep(group, fixed.proposal.global.conflict_groups[kept]);
+            kept += 1;
+        }
+        for (parsed.proposal.global.claim_dispositions, fixed.proposal.global.claim_dispositions) |before, after| {
+            if (r.contains(r.ClaimId, released, before.claim_id)) {
+                try std.testing.expect(after.disposition == .retained);
+                continue;
+            }
+            const shared_at = for (shape.shared, 0..) |position, at| {
+                if (std.meta.eql(before.claim_id, business[position])) break at;
+            } else null;
+            if (shared_at) |at| {
+                // A shared claim keeps its disposition and conflicts with the claims of the records that stand.
+                try std.testing.expect(after.disposition == .conflicting);
+                const related = after.disposition.conflicting.related_claim_ids;
+                try std.testing.expectEqual(shape.after[at].len, related.len);
+                for (shape.after[at], related) |position, id| try std.testing.expectEqualDeep(business[position], id);
+            } else try std.testing.expectEqualDeep(before, after);
+        }
+        try std.testing.expectEqualDeep(@as([]const r.ClaimId, target), fixed.source.omission_conflict_claims);
+        try std.testing.expectEqualDeep(@as([]const r.ClaimId, released), fixed.source.omission_released_claims);
+        // The old value changed, so the same replacement cannot merge again.
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, canonical, fixed, ctx, support, auth, replacement, null));
+    };
+}
+
+test "a conflict record whose every claim another record holds has no repair to authorize" {
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        // Each of the three records holds two claims that the other two also hold between them.
+        const setup = try overlapRepair(a, &fixture, &.{ &.{ 0, 1 }, &.{ 0, 2 }, &.{ 1, 2 } }, 0);
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, setup.parsed, setup.ctx, setup.support));
+    }
+}
+
+test "a replacement group that names only claims another record holds is refused at merge" {
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const r = references.r;
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        // The false record holds claims 0, 1 and 2. Claims 0 and 1 are also in a genuine record each, so only claim 2 is its own.
+        const setup = try overlapRepair(a, &fixture, &.{ &.{ 0, 3 }, &.{ 1, 3 }, &.{ 0, 1, 2 } }, 2);
+        const auth = try repair.authorize(a, setup.parsed, setup.ctx, setup.support);
+        const old = auth.operation.replace.conflict_group;
+        try std.testing.expectEqual(@as(usize, 1), old.claim_dispositions.len);
+        const changed = try a.dupe(r.ClaimDispositionProposal, old.claim_dispositions);
+        changed[0].disposition = .{ .retained = .{} };
+        const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, setup.ctx.inputs);
+        // The schema offers every claim of the record to a group, so this answer is admitted and fails here, typed.
+        const shared_only: @import("domain/reference_reconciliation_repair.zig").Replacement = .{ .conflict_group = .{ .conflict_groups = &.{.{ .claim_ids = &.{ setup.business[0], setup.business[1] } }}, .claim_dispositions = changed, .conflicts = &.{} } };
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, canonical, setup.parsed, setup.ctx, setup.support, auth, shared_only, null));
+        // The same answer with the claim only this record holds in the group is within the repair's scope.
+        var own = shared_only;
+        own.conflict_group.conflict_groups = &.{.{ .claim_ids = &.{ setup.business[0], setup.business[2] } }};
+        const merged = try repair.merge(a, canonical, setup.parsed, setup.ctx, setup.support, auth, own, null);
+        try std.testing.expectEqual(@as(usize, 3), merged.proposal.global.conflict_groups.len);
+    }
+}
+
+test "a closed false conflict's malformed answer keeps the relations its own groups gave it" {
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const r = references.r;
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        const setup = try overlapRepair(a, &fixture, &.{ &.{ 0, 1 }, &.{ 2, 3 } }, 1);
+        const auth = try repair.authorize(a, setup.parsed, setup.ctx, setup.support);
+        const target = setup.business[2..4];
+        // The answer keeps the group and gives it no explanation. Its claims keep the relations the group gave them, so
+        // validation fails where it always did, at the missing record, and not at an emptied relation.
+        const kept = try a.alloc(r.ClaimDispositionProposal, 2);
+        kept[0] = .{ .claim_id = target[0], .disposition = .{ .conflicting = .{ .related_claim_ids = target[1..2] } } };
+        kept[1] = .{ .claim_id = target[1], .disposition = .{ .conflicting = .{ .related_claim_ids = target[0..1] } } };
+        const unexplained: @import("domain/reference_reconciliation_repair.zig").Replacement = .{ .conflict_group = .{ .conflict_groups = &.{.{ .claim_ids = target }}, .claim_dispositions = kept, .conflicts = &.{} } };
+        const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, setup.ctx.inputs);
+        const merged = try repair.merge(a, canonical, setup.parsed, setup.ctx, setup.support, auth, unexplained, null);
+        try std.testing.expectEqual(@as(usize, 1), merged.proposal.global.conflicts.len);
+        for (merged.proposal.global.claim_dispositions) |value| {
+            if (std.meta.eql(value.claim_id, target[0])) try std.testing.expectEqualDeep(target[1..2], value.disposition.conflicting.related_claim_ids);
+            if (std.meta.eql(value.claim_id, target[1])) try std.testing.expectEqualDeep(target[0..1], value.disposition.conflicting.related_claim_ids);
+        }
+        // A closed repair records the claims it replaced as the claims it decided.
+        try std.testing.expectEqualDeep(target, merged.source.omission_conflict_claims);
+        try std.testing.expectEqualDeep(target, merged.source.omission_released_claims);
+    }
+}
+
+test "a closed false conflict still releases every claim it holds, so its repair is the repair it was" {
+    const repair = @import("domain/reference_reconciliation_repair.zig").Omission;
+    const r = references.r;
+    for (projection_examples) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example, .business_exact_string, true, 5);
+        defer fixture.deinit();
+        // Two records over four claims share none, and one of them is false.
+        const setup = try overlapRepair(a, &fixture, &.{ &.{ 0, 1 }, &.{ 2, 3 } }, 1);
+        const auth = try repair.authorize(a, setup.parsed, setup.ctx, setup.support);
+        const old = auth.operation.replace.conflict_group;
+        try std.testing.expectEqual(@as(usize, 2), old.claim_dispositions.len);
+        try std.testing.expectEqualDeep(@as([]const r.ClaimId, setup.business[2..4]), auth.target.conflict_group);
+        const packet = try repair.packet(a, setup.parsed, setup.ctx, setup.support, auth, &packet_guidance.marked);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        for (packet.integerChoices()) |choice| {
+            if (choice.target != .path or choice.target.path.len == 0) continue;
+            if (std.mem.eql(u8, choice.target.path[0].property, "claim_dispositions")) try std.testing.expectEqual(@as(usize, 2), choice.allowed.len);
+        }
+    }
+}
+
 test "selected question schemas match retained decisions and text defects share one retry identity" {
     const review = @import("domain/specification_support.zig").Source;
     const repair = @import("domain/specification_support_repair.zig").Source;
@@ -7819,7 +8988,7 @@ test "selected evidence repair schemas preserve native minima across findings an
             const inputs = if (stage == 0)
                 try @import("domain/source_preservation.zig").project(a, session.feature, @import("domain/reference_support.zig").records(fixture.context.references), fixture.context.inputs)
             else
-                try @import("domain/specification_authority.zig").project(a, session.feature, fixture.context.references);
+                try @import("domain/specification_authority.zig").projectFor(a, session.feature, fixture.context.references, .first);
             const good = try reviewFor(a, inputs, fixture.context.inputs);
             const ledger = try @import("domain/required_authority.zig").build(a, inputs);
             for (std.meta.tags(review.Decision)) |decision| {
@@ -7879,34 +9048,39 @@ test "selected evidence repair schemas preserve native minima across findings an
     }
 }
 
-test "false cross-kind conflict and seven question repairs cannot publish a clarification" {
+test "false cross-kind conflict and question repairs cannot publish a clarification in either pass" {
     const review = @import("domain/specification_support.zig").Source;
     const repair = @import("domain/specification_support_repair.zig").Source;
     const authority = @import("domain/required_authority.zig");
     const json = @import("domain/model_candidate_json.zig");
     const needs = @import("domain/required_authority_clarifications.zig");
-    for ([_][]const u8{ "On startup display `MOCK Hello, World!` and the UTC date.", "Renew the loan, show the return date and display `MOCK Loan renewed!`." }) |source| {
+    for ([_][]const u8{ "On startup display `MOCK Hello, World!` and the UTC date.", "Renew the loan, show the return date and display `MOCK Loan renewed!`." }) |source| for ([_]authority.Pass{ .first, .dependent }) |pass| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
         var fixture = try Fixture.initContentKinds(a, source, .business_exact_string, true, 2, true);
         defer fixture.deinit();
         _ = try introduceConflict(&fixture);
-        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references);
+        const inputs = try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, pass);
         const entries = try a.dupe(review.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
         const ledger = try authority.build(a, inputs);
         var negative_count: usize = 0;
         for (ledger.requirements, entries) |required, *entry| {
             if (required.seed.id.unit == .signal or required.seed.id.unit == .token) continue;
+            // A first pass over a held conflict has no other subject.
+            if (pass == .first) try std.testing.expect(required.seed.id.unit == .conflict);
             entry.value.kind = .unsupported;
             entry.value.detail = "The source supplies the action and date, but the derived conflict leaves this interpretation unsupported.";
             entry.value.question = null;
             negative_count += 1;
         }
         try bindReviewClaims(a, inputs, fixture.context, entries);
-        // Six feature subjects (the engine-derived story and title are none, ADRs 0047 and
-        // 0048) and one conflict.
-        try std.testing.expectEqual(@as(usize, 7), negative_count);
+        // A first pass reviews its conflict records alone. The dependent pass that validates a source repair also reviews six
+        // feature subjects (the engine-derived story and title are none, ADRs 0047 and 0048), so the repair of each question
+        // runs beside siblings it must leave unchanged.
+        const conflicts = @import("domain/reference_support.zig").records(fixture.context.references).conflicts.len;
+        try std.testing.expectEqual(@as(usize, 1), conflicts);
+        try std.testing.expectEqual(if (pass == .first) conflicts else 6 + conflicts, negative_count);
         const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 8 }, .attempt = .{ .value = 1 } };
         var collected = try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), origin);
         try std.testing.expectEqual(negative_count, collected.rejected.rejection.diagnostics.len);
@@ -7934,7 +9108,7 @@ test "false cross-kind conflict and seven question repairs cannot publish a clar
         try std.testing.expectEqual(.invalid, gate.result.continuation);
         try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(a, fixture.context.inputs, gate.inputs, gate.observations, gate.result, &packet_guidance.marked));
         try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/source_omission_authority.zig").select(a, fixture.context.inputs, .{ .repair_phase = .generation_started, .review = collected.accepted.candidate, .inputs = gate.inputs, .observations = gate.observations, .result = gate.result }));
-    }
+    };
 }
 
 test "generation inconclusive stays terminal and an inconclusive source finding invents no question" {
@@ -8619,7 +9793,7 @@ fn preservationTest(a: std.mem.Allocator, fixture: *const Fixture, owner: Preser
     const authority = @import("domain/required_authority.zig");
     const support = @import("domain/specification_support.zig").Source;
     const inputs = switch (owner) {
-        .source_readiness => try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references),
+        .source_readiness => try @import("domain/specification_authority.zig").projectFor(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, .first),
         .source_preservation => try @import("domain/source_preservation.zig").project(a, fixture.context.inputs.corpus.feature_id, @import("domain/reference_support.zig").records(fixture.context.references), fixture.context.inputs),
     };
     const ledger = try authority.build(a, inputs);
@@ -10493,7 +11667,7 @@ fn expectScenariosReplay(a: std.mem.Allocator, offered: *const @import("domain/m
     const Stored = struct { members: []const schema.MemberChoice };
     const stored = try strict_json.decode(Stored, a, try std.json.Stringify.valueAlloc(a, Stored{ .members = live.memberChoices() }, .{}), .{ .maximum_depth = 64 });
     const captured = try strict_json.parse(a, live.modelBytes(), .{ .maximum_depth = schema.max_json_depth }, true, null);
-    const replayed = try schema.restrictRecorded(a, try schema.compileSelected(a, captured.value, live.modelBytes()), stored.members, live.coverageChoices(), live.agreementChoices());
+    const replayed = try schema.restrictRecorded(a, try schema.compileSelected(a, captured.value, live.modelBytes()), stored.members, live.coverageChoices(), live.agreementChoices(), live.listedChoices());
     defer replayed.release();
     try std.testing.expectEqualDeep(live.memberChoices(), replayed.selected().memberChoices());
     // The rule that no two scenarios repeat all three parts is part of the record, and survives it.
@@ -10629,6 +11803,62 @@ test "coverage counts only the claims each record names" {
     // not (an ADR 0038 limit).
     const story = try attributed(a, behaviours.id, behaviours.value.claim_ids);
     try std.testing.expect(try coverage.checkRecords(a, records, brief, content(story, narrative, &.{ requirement, scenario })) == .valid);
+}
+
+test "coverage maps no question the source leaves open and requires one an applied answer kept" {
+    const coverage = @import("domain/specification_coverage.zig");
+    const ClaimId = @import("domain/reference_identity.zig").ClaimId;
+    const SignalId = @import("domain/reference_reconciliation.zig").SignalId;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const claims = [_]@import("domain/reference_extraction.zig").Proposal{
+        .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+        .{ .category = .open_question, .citations = &.{.{ .ordinal = 2 }} },
+    };
+    var fixture = try Fixture.initClaims(a, "MOCK Renew loans.\nMOCK A loan may be renewed only once.\n", null, .{ .selected = &claims });
+    defer fixture.deinit();
+    const unanswered = @import("domain/reference_support.zig").records(fixture.context.references);
+    var kept_references = fixture.context.references;
+    kept_references.records.answer_retained = unanswered.signals[1].value.claim_ids;
+    const kept = @import("domain/reference_support.zig").records(kept_references);
+    const purpose = unanswered.signals[0];
+    const question = unanswered.signals[1];
+    const attributed = struct {
+        fn of(allocator: std.mem.Allocator, group: SignalId, named: []const ClaimId) !spec.AttributedValue {
+            return .{ .value = .{ .segments = try allocator.dupe(@import("domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = "MOCK value" } }}) }, .source_group_ids = try allocator.dupe(SignalId, &.{group}), .provenance = .{ .claim_ids = named, .citation_ids = &.{}, .clarification_response_ids = &.{} } };
+        }
+    }.of;
+    const narrative = try attributed(a, purpose.id, purpose.value.claim_ids);
+    const brief: spec.Brief = .{ .description = narrative, .primary_goal = narrative };
+    const requirement: spec.IdentifiedRecord = .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .proposal = .{ .content = .{ .functional_requirement = .{ .text = narrative.value } }, .source_group_ids = narrative.source_group_ids, .provenance = narrative.provenance } };
+    const mapped = try attributed(a, question.id, question.value.claim_ids);
+    const naming: spec.IdentifiedRecord = .{ .id = .{ .kind = .functional_requirement, .ordinal = 2 }, .proposal = .{ .content = .{ .functional_requirement = .{ .text = narrative.value } }, .source_group_ids = mapped.source_group_ids, .provenance = mapped.provenance } };
+    const without: spec.IdentifiedContent = .{ .display_name = fixture_display_name, .primary_user_story = narrative, .records = &.{requirement}, .entities = .{ .disposition = .not_applicable, .basis = narrative } };
+    const with: spec.IdentifiedContent = .{ .display_name = fixture_display_name, .primary_user_story = narrative, .records = &.{ requirement, naming }, .entities = .{ .disposition = .not_applicable, .basis = narrative } };
+    // A question no answer decided stays context only: no record names it, and a record that does is rejected.
+    try std.testing.expect(try coverage.checkRecords(a, unanswered, brief, without) == .valid);
+    const refused = try coverage.checkRecords(a, unanswered, brief, with);
+    try std.testing.expect(refused == .invalid);
+    try std.testing.expectEqual(question.value.claim_ids[0], refused.invalid.claim_id);
+    try std.testing.expect(refused.invalid.issue == .open_question_mapped);
+    // A question an applied answer kept is a requirement: it must be mapped, and a record may name it.
+    const missing = try coverage.checkRecords(a, kept, brief, without);
+    try std.testing.expect(missing == .invalid);
+    try std.testing.expectEqual(question.value.claim_ids[0], missing.invalid.claim_id);
+    try std.testing.expect(missing.invalid.issue == .missing_business_mapping);
+    try std.testing.expect(try coverage.checkRecords(a, kept, brief, with) == .valid);
+    // The rule is the question's alone: a kept claim of another category keeps its place, so a technical claim stays
+    // context only and needs no record.
+    const technical = [_]@import("domain/reference_extraction.zig").Proposal{
+        .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+        .{ .category = .technical, .citations = &.{.{ .ordinal = 2 }} },
+    };
+    var other = try Fixture.initClaims(a, "MOCK Renew loans.\nMOCK Store loans in a relational database.\n", null, .{ .selected = &technical });
+    defer other.deinit();
+    var other_references = other.context.references;
+    other_references.records.answer_retained = other.context.references.records.signals[1].value.claim_ids;
+    try std.testing.expect(try coverage.checkRecords(a, @import("domain/reference_support.zig").records(other_references), brief, without) == .valid);
 }
 
 fn authoredRecord(content: spec.Content(spec.BusinessValue), value: spec.Model.AttributedValue) spec.Model.RecordProposal {
@@ -11013,7 +12243,7 @@ test "claim-bound scenarios: a criterion equal to another group's blocks as a co
     try std.testing.expectError(error.InvalidSpecificationUnit, completing.execute(a, current));
     // The second group's criterion repeats the first group's wording for another claim. Records of
     // different claims are not evidence-equivalent, so the duplicate rule blocks the pair, and no
-    // repair takes a block (ADR 0035, ADR 0038 Decision 3).
+    // repair takes a block (§17.5, ADR 0038 Decision 3).
     const second_plan = try sessions.scenarioPlan(a, current);
     try std.testing.expect(second_plan.group.ordinal != first_plan.group.ordinal);
     const bound = (try sessions.currentBinding(a, current, fixture.context)).records;

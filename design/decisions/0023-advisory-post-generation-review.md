@@ -1,56 +1,58 @@
 # ADR 0023: Required source review only; post-generation review removed
 
-- **Status:** Accepted amendment
+- **Status:** Accepted
 - **Date:** 2026-10-17
-- **Decision authority:** The user's instruction to implement FIX05 B2 and W1
-  together, include W2 (`fixes/Z_FIX05.md`, git `194e29a`), and the explicit scope
-  answer: "All post-generation semantic reviews", including principle findings. The
-  user separately approved source-only positive readiness evidence on 17 October 2026.
-- **Amends:** Design §§3.3 (invariants 20 and 22), 12.6–12.8, 17.3–17.4, 18.1, 22,
-  24 and their acceptance criteria. Supersedes ADR 0015's promotion of semantic
-  principle findings into mandatory Plan obligations and the post-generation
-  semantic omission/rebuild paths described under ADR 0020. The overall design
-  remains **Proposed design**.
-- **Membership amendment:** 2026-10-18, by the user's instruction to "apply best
-  recommendation" after the loan-renewal run blocked on an assignment response that
-  omitted one member, with the follow-up option that opts preservation comparisons
-  into the same admission rule. It amends §12.2 (a native-only `exact_members` rule
-  beside the derived provider schema), §12.7, §17.3, §22.1, §22.4 and §22.6, and
-  ADR 0019's request description. See
-  "Assignment membership at response admission".
-- **Amended by:** [ADR 0046](0046-complete-dispositions-at-admission.md) (31 October
-  2026): the membership rule's scope extends to reconciliation dispositions and the
-  source-omission conflict-group repair, with the member count native (the request
-  states no count) and an omitted member reported as `missing_member`.
-- **Removal amendment (SPEC01 D13.1, 1 November 2026):** by the user's decision to
-  remove both post-generation reviews (source and principle) in one change, which also
-  reverted the 31 October advisory verdict-set amendment (record: `fixes/Z_FIX06.md` at
-  git `388438e`) in full, and the
-  user's approval of the policy edits. The earlier rule that post-generation source
-  and principle findings remain advice, its budget and incomplete-advice contract,
-  whole-unit assignments, record families, unresolvable-verdict withholding, the
-  advisory verdict set and the post-generation upstream-finding rule are withdrawn,
-  with the advisory request protocol that only they used (ADR 0030's advisory variant).
-  ADRs 0040 and 0042, which governed only that review, were deleted as moot (last at
-  git `8aa7fb5`). Spec runs no
-  principle assessment ([ADR 0015](0015-specification-principle-review.md)). Judgments
-  post-generation review was described as owning (business/technical placement,
-  scenario-coverage meaning, support of each generated field) rest on the human who
-  reviews and edits the published `spec.md`, the source of Plan and Tasks, and on H1
-  adjudication for E2E acceptance; no native check replaces them. Publication
-  requires the native checks that already run (generation complete, coverage
-  validated, rendering round trip). `specification-state` advances to v21.
+- **Decision authority:** User decisions, 3, 17 and 18 October and 1, 26 and 27 November 2026
+- **Amends:** Design §§3.3 (invariants 20 and 22), 9, 12.2, 12.6–12.8, 17.3–17.4, 18.1, 22 and
+  24; [ADR 0019](0019-single-request-debugger.md)'s request description
+- **Amended by:** [ADR 0046](0046-complete-dispositions-at-admission.md)
 
 ## Decision
 
 Spec runs no semantic review after generation. Required source review runs only
-before generation: source readiness when no claim is generation-ready, and the
-optional source-preservation comparison (ADR 0021). Its findings keep their required
-authority and repair rules. An admitted semantic finding is a model judgment, not
-deterministic evidence: a positive finding cannot discharge a native defect, and a
-negative finding cannot create or discharge a native authority gap. A finding may
-drive automatic content repair only when an independently established defect at its
-deterministic owning validator authorizes that repair. Citation existence, matching
+before generation: source readiness when the references are not generation-ready (no
+retained claim, or a conflict record, which makes the reconciliation `blocked`), and the
+optional source-preservation comparison ("Source-preservation review" below).
+
+- **No replacement check.** The judgments a post-generation review would own (business or
+  technical placement, scenario-coverage meaning, support of each generated field) rest on
+  the human who reviews and edits the published `spec.md`, the source of Plan and Tasks, and
+  on [R8](../harness/acceptance.md) adjudication for E2E acceptance. No native check replaces
+  them. Publication requires the native checks that already run: generation complete,
+  coverage validated and the rendering round trip.
+- **Kept paths.** Authorized pre-generation source repair, native generation repair, bounded
+  protocol correction and deterministic coverage validation remain.
+
+### Readiness projection by pass
+
+- In a first pass over a reconciliation that holds a conflict record, the source-readiness
+  projection holds the conflict records alone, so each conflict has one decision, owned by its
+  record's subject and answered by its `select_one` form.
+- A dependent pass, the review that validates a pending source repair, and a reconciliation
+  without a conflict keep the full projection: a repair is validated by the subjects that cover
+  what it touched (§22), and a conflict-only pass omits them.
+- A repair that names the claims it decided again, the source-omission conflict-group repair,
+  touched only those claims' dispositions and the signals rebuilt over them. Its dependent pass
+  (`decided`) projects the conflict records and the signals holding those claims. Every other
+  repair, the extraction-owned one included, keeps the full projection.
+- The repair's progress check still needs a supported finding over every decided claim, so a
+  review that leaves one out reads `recurring`.
+- This is a typed rule of Specify's projection, keyed on the conflict records and the pass, and
+  no success or continuation rule. `Inputs` carries a typed `Pass` (`first`, `dependent`, or
+  `decided` with the decided claims, which the merge records on the reconciliation) that the
+  runner's pending repair selects and the gate re-derives with. It is execution-local: ids are
+  unchanged and no closed persisted or captured contract changes shape.
+- A source-readiness repair's target population is the full projection's seed count whichever
+  pass authorizes it first, because the scope freezes its population at first authorization
+  ([§22](../contracts/22-repair.md)).
+
+### Findings and policy
+
+Required source review's findings keep their required authority and repair rules. An admitted
+semantic finding is a model judgment, not deterministic evidence: a positive finding cannot
+discharge a native defect, and a negative finding cannot create or discharge a native authority
+gap. A finding may drive automatic content repair only when an independently established defect
+at its deterministic owning validator authorizes that repair. Citation existence, matching
 subject IDs and model-assisted loss comparisons are not semantic corroboration.
 
 Native requiredness, current authority, provenance, schema/family floors, exact
@@ -83,21 +85,59 @@ invalidation or generic dependency-on-absence rule.
   authority failures. They are checked at response admission, before any member is
   appended.
 - **Mechanism:** the packet binds the member ordinals as an `exact_members`
-  integer choice on the result schema. That fixes the item count, narrows each
-  ordinal to an assigned member, and rejects a repeated member natively
-  (`duplicate_member`). The guidance schema states the count, and a provider
-  structural projection may keep only its own array floor. Uniqueness stays native.
+  integer choice on the result schema, a native-only rule beside the derived provider
+  schema. That fixes the item count, narrows each ordinal to an assigned member, and
+  rejects a repeated member natively (`duplicate_member`). For preservation comparisons
+  the guidance schema states the count. A provider structural projection may keep only
+  its own array floor. Uniqueness stays native.
 - **Correction:** the existing bounded protocol correction resubmits the complete
   request with the typed diagnostic, under its original allowance. It adds no
   counter, partial merge, insertion or deletion.
 - **Scope:** preservation comparisons bind their comparison IDs at response
-  admission; ADR 0046 extends the rule to reconciliation dispositions and the
-  source-omission conflict-group repair. Protocol exhaustion stays terminal.
+  admission. [ADR 0046](0046-complete-dispositions-at-admission.md) extends the rule to
+  reconciliation dispositions and the source-omission conflict-group repair; there the
+  member count is native, the request states no count, and an omitted member is reported
+  as `missing_member`. Protocol exhaustion stays terminal.
 - **Diagnostics:** request descriptions (ADR 0019) record each applied member set, so
   debugger inspection and replay enforce the same admission as the original request.
 - **Unchanged:** native collection still rejects partial, repeated or foreign
   membership atomically, as the authority behind admission; finding-evidence
   defects and repair exhaustion keep their terminal outcomes.
+
+## Source-preservation review
+
+The optional `.sddtoolkit.json` setting `validation.sourcePreservationCheck` is a boolean,
+disabled when omitted. When enabled, complete, generation-ready references undergo a focused
+semantic review before specification generation. When disabled, the extra review and its
+repairs are skipped. Required review of blocked references is unchanged, and this setting
+cannot relax publication authority.
+
+- **Obligations.** The original captured corpus supplies one preservation obligation per
+  source, including sources with no extracted claims. Review compares original meaning with
+  extraction and reconciliation. It does not assess specification fields that do not yet exist
+  or resolve uncertainty already present in the source.
+- **Findings.** The closed findings are `supported`, `candidate_omission` and `inconclusive`;
+  model-assisted review remains candidate evidence, not deterministic proof.
+- **Owners.** The immutable configuration service remains the only configuration authority. A
+  narrow action returns the configured branch outcome; YAML owns sequencing. Source obligations
+  join the existing required-authority ledger, evidence admission and gate.
+- **Repair.** Identified loss uses the existing producer localization, revision-bound repair
+  authorization, merging, dependent rebuilding and bounded retry path. Source identities
+  survive rebuilding and establish whether the repaired obligation was re-reviewed.
+  Inconclusive or unlocalized findings cannot invent user decisions, bypass failure or
+  authorize an unbounded repair.
+- **Model slots.** Every authorized candidate repair in the supplied Spec definition is a
+  `request-model` step that names the distinct `models.slots.repair` slot. Generation, review
+  and loss localization use `spec_generation`. A protocol retry keeps its original request and
+  model binding ([ADR 0012](0012-workflow-owned-model-request.md)). Both slots may select the
+  same provider and model or different registered models; each selection must join the
+  captured provider catalogue. There is no fallback between slots. Whole-graph binding
+  requires both referenced slots even when the optional check is disabled.
+- **Workflow-neutral.** The setting and the model-slot name are workflow-neutral. Any validated
+  workflow can select the registered policy action and the repair slot in its definition. Each
+  workflow supplies its own typed review subjects and repair validators; the engine does not
+  infer applicability or provide a default repair path. The supplied Spec definition is the
+  initial consumer.
 
 ## Pre-generation source repair
 
@@ -121,7 +161,8 @@ review projection cannot erase the runner's repair obligation.
 ### Approved source-only readiness evidence
 
 Before authoring, the native `source_readiness` projection assesses whether
-original sources establish an assigned business purpose. A positive source-purpose
+original sources establish an assigned business purpose; which subjects a pass assesses is
+[F0100 §3.10](../features/F0100-SpecWorkflow.md)'s. A positive source-purpose
 finding requires explicitly selected, nonempty current original source IDs.
 Its canonical claim, citation and clarification-response selections are empty,
 regardless of whether the eligible claim catalogue has zero, one or many members.
@@ -141,40 +182,17 @@ exact claim sets remain unchanged. This amends §12's restriction of source-only
 evidence to negative findings for this native pre-generation source-purpose context
 only. It does not make semantic review deterministic proof.
 
-Delete the post-generation upstream-repair subgraph, duplicate upstream merge
-operations, their registrations/bindings and unused semantic omission-repair
-paths. Keep authorized pre-generation source repair, native generation repair,
-bounded protocol correction and deterministic coverage validation.
-
 ## Principles
 
-Spec captures the exact current principle registry and runs no principle assessment
-([ADR 0015](0015-specification-principle-review.md)). No model-reported conflict or
-uncertainty creates a Plan obligation or a Spec clarification. Plan validates current
-project policy and all native required decisions at its own gate. Missing or invalid
-principle capture remains a native failure. The captured files are context for the
-records generation request, which is not an assessment (SPEC01 D17.1,
-[ADR 0015](0015-specification-principle-review.md)).
-
-This supersedes the semantic-finding-to-Plan-obligation handoff in ADR 0015,
-without adding an assessment model, configuration option or principle loader.
+Spec runs no principle assessment; [ADR 0015](0015-specification-principle-review.md) owns
+principle capture and its use.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v28` (v27 until an acceptance
-criterion's `given` became optional, [ADR 0038](0038-record-claims-and-scenario-coverage.md)
-Decision 3, amended 22 November 2026; v26 until an edge
-case's one authored field became its `given`, [ADR 0038](0038-record-claims-and-scenario-coverage.md)
-Decision 7, amended 13 November 2026; v25 until the
-extraction contract's parts became the `request-model` steps, [ADR 0030](0030-engine-owned-model-request.md);
-v24 until the display name became the sources' heading, [ADR 0048](0048-engine-derived-specification-title.md);
-v23 until an edge case's outcome became a link to an acceptance criterion, [ADR 0038](0038-record-claims-and-scenario-coverage.md)
-Decision 7; v22 until the entity lost its meaning and relationships, Decision 6; v21 until the principle category policy was removed,
-[ADR 0015](0015-specification-principle-review.md)): it holds
-no post-generation review, principle assessment or incomplete-advice evidence, and
-keeps the captured principle registry identity as its own `principle_registry`
-field, which the next run's capture reads as its prior registry. Earlier contracts
-reject without migration or a compatibility reader. Stored validation recomputes
-native policy, authority currentness, provenance and coverage. Execution-local
-receipts and their origins remain separate from persisted workflow authority; a
+Completed and clarification-pending `specification-state` holds no post-generation review,
+principle assessment or incomplete-advice evidence, and keeps the captured principle registry
+identity as its own `principle_registry` field, which the next run's capture reads as its prior
+registry. Earlier contracts reject without migration or a compatibility reader. Stored
+validation recomputes native policy, authority currentness, provenance and coverage.
+Execution-local receipts and their origins remain separate from persisted workflow authority; a
 fresh invocation starts at `start`.

@@ -33,7 +33,6 @@ pub const Rule = struct {
         expected: ?d.Fact,
         content: ?d.ContentKind,
         selection: ?[]const r.ClaimId,
-        conflicting_pairs: ?@FieldType(d.Relations, "conflicting_pairs"),
         disposition_choices: ?dispositions.RepairChoices,
     };
     pub fn guidance(self: Rule) Guidance {
@@ -45,7 +44,6 @@ pub const Rule = struct {
             .expected = if (expected == .count or expected == .constraint) null else expected,
             .content = relations.content,
             .selection = if (relations.selection.len == 0) null else relations.selection,
-            .conflicting_pairs = if (relations.conflicting_pairs.len == 0) null else relations.conflicting_pairs,
             .disposition_choices = self.disposition_choices,
         };
     }
@@ -64,7 +62,7 @@ fn stableTarget(a: std.mem.Allocator, source: d.Source, proposal: @FieldType(r.P
         .statement_selection, .statement_content, .statement => |index| .{ .statement = source.statements.at(index, proposal.summary.statements.len) catch return error.InvalidAtomicRepair },
         .disposition => |value| .{ .disposition = value.claim },
         .signal_selection, .signal_content, .signal => |index| .{ .signal = source.signals.at(index, proposal.global.signals.len) catch return error.InvalidAtomicRepair },
-        .conflict_selection, .conflict_summary, .conflict => |index| .{ .conflict = source.conflicts.at(index, proposal.global.conflicts.len) catch return error.InvalidAtomicRepair },
+        .conflict_summary, .conflict => |index| .{ .conflict = source.conflicts.at(index, proposal.global.conflicts.len) catch return error.InvalidAtomicRepair },
         .insert_statement => |value| .{ .missing_statement = value.claim },
         .insert_signal => |value| .{ .missing_signal = value.claim },
         .insert_conflict => |value| blk: {
@@ -96,7 +94,7 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@im
     const subjects = std.math.add(usize, existing, additions) catch return error.InvalidAtomicRepair;
     const maximum = std.math.mul(usize, subjects, std.meta.tags(Family).len) catch return error.InvalidAtomicRepair;
     const family: Family = switch (authorization.target) {
-        .statement_selection, .signal_selection, .conflict_selection => .selection,
+        .statement_selection, .signal_selection => .selection,
         .statement_content, .signal_content, .conflict_summary => .content,
         .disposition => .disposition,
         .statement, .signal, .conflict => .duplicate,
@@ -195,21 +193,17 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
                 if (rejection.relations.redundant) |redundant| return deletion(a, parsed, facts, .{ .conflict = redundant }, rule);
                 return .{ .blocked = .competing_entries };
             }
-            if (rejection.issue.rule != .typed_text and (rejection.relations.conflicting_pairs.len == 0 or parsed.proposal.global.conflict_groups.len == 0)) return .{ .blocked = .no_independent_target };
-            return replace(a, parsed, facts, if (rejection.issue.rule == .typed_text) .{ .conflict_summary = index } else .{ .conflict_selection = index }, rule);
+            // A record's claims are a validated group's members, so only its text can fail; any other rule is an engine invariant failure.
+            if (rejection.issue.rule != .typed_text) return error.InvalidAtomicRepair;
+            return replace(a, parsed, facts, .{ .conflict_summary = index }, rule);
         },
         .conflicts => {
             if (parsed.proposal != .global or rejection.issue.rule != .conflict_coverage) return .{ .blocked = .no_independent_target };
+            // A group left without a record is explained by one inserted record.
             if (rejection.issue.observed == .claims) return insertion(a, parsed, facts, .{ .insert_conflict = .{ .index = parsed.proposal.global.conflicts.len, .claims = try a.dupe(r.ClaimId, rejection.issue.observed.claims) } }, .conflict_detail, rule);
             if (rejection.issue.observed != .disposition) return .{ .blocked = .no_independent_target };
-            const disposition = rejection.issue.observed.disposition;
-            if (disposition.disposition != .conflicting) return .{ .blocked = .no_independent_target };
-            for (disposition.related_claim_ids) |related| {
-                for (parsed.proposal.global.conflicts) |conflict| {
-                    if (r.contains(r.ClaimId, conflict.claim_ids, disposition.claim_id) and r.contains(r.ClaimId, conflict.claim_ids, related)) break;
-                } else return insertion(a, parsed, facts, .{ .insert_conflict = .{ .index = parsed.proposal.global.conflicts.len, .claims = try a.dupe(r.ClaimId, &.{ disposition.claim_id, related }) } }, .conflict_detail, rule);
-            }
-            return .{ .blocked = .no_required_member };
+            // A conflicting claim in no group has no record to insert.
+            return .{ .blocked = if (rejection.issue.observed.disposition.disposition == .conflicting) .no_required_member else .no_independent_target };
         },
     }
 }
@@ -268,7 +262,6 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .selection => .{ .selection = switch (authorization.target) {
             .statement_selection => .statement,
             .signal_selection => .signal,
-            .conflict_selection => .conflict,
             else => return error.InvalidAtomicRepair,
         } },
         .content => .{ .content = authorization.rule.rejection.relations.content orelse return error.InvalidAtomicRepair },
@@ -283,13 +276,10 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .global => null,
     });
     defer packets.release(base);
-    const contextual = if (authorization.target == .conflict_selection)
-        try packets.withContext([]const @import("reference_conflict_groups.zig").CatalogueEntry, a, base, "accepted_conflict_groups", try @import("reference_conflict_groups.zig").catalogue(scratch, parsed.proposal.global.conflict_groups))
-    else
-        try packets.withContext(@FieldType(r.Parsed, "proposal"), a, base, "candidate", parsed.proposal);
+    const contextual = try packets.withContext(@FieldType(r.Parsed, "proposal"), a, base, "candidate", parsed.proposal);
     defer packets.release(contextual);
     const definitions = @import("specification_result_definitions.zig").Reconciliation;
-    const definition: definitions = if (authorization.target == .conflict_selection) .repair_conflict_selection else if (scope == .content) try contentDefinition(scope.content) else switch (kind) {
+    const definition: definitions = if (scope == .content) try contentDefinition(scope.content) else switch (kind) {
         .selection => .repair_selection,
         .disposition => .repair_disposition,
         .summary => .repair_summary,
@@ -299,26 +289,17 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
     const prepared_input = try atomic.packet(a, authorization, contextual, definition.id(), parsed.source.at(targetOrigin(authorization.target).unit, targetOrigin(authorization.target).field), options);
     if (kind == .disposition) {
         defer packets.release(prepared_input);
-        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, parsed.input.items), authorization.rule.disposition_choices, false);
+        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, parsed.input.items), authorization.rule.disposition_choices, null);
     }
     if (kind != .selection) return prepared_input;
     defer packets.release(prepared_input);
-    const groups = @import("reference_conflict_groups.zig");
-    const ids = if (authorization.target == .conflict_selection) group_ids: {
-        const catalogue = try groups.catalogue(scratch, parsed.proposal.global.conflict_groups);
-        const values = try scratch.alloc(i64, catalogue.len);
-        for (values, catalogue) |*id, group| id.* = group.group_id.ordinal;
-        break :group_ids values;
-    } else selections: {
-        const values = try scratch.alloc(i64, authorization.rule.rejection.relations.selection.len);
-        for (values, authorization.rule.rejection.relations.selection) |*id, claim| id.* = claim.ordinal;
-        break :selections values;
-    };
+    const ids = try scratch.alloc(i64, authorization.rule.rejection.relations.selection.len);
+    for (ids, authorization.rule.rejection.relations.selection) |*id, claim| id.* = claim.ordinal;
     return packets.withIntegerChoices(a, prepared_input, &.{.{
-        .target = .{ .path = &.{.{ .property = if (authorization.target == .conflict_selection) "group_id" else "claim_ids" }} },
+        .target = .{ .path = &.{.{ .property = "claim_ids" }} },
         .definition = definition.id(),
         .allowed = ids,
-        .collection = if (authorization.target == .conflict_selection) .sequence else .{ .unique_subset = .none },
+        .collection = .{ .unique_subset = .none },
     }});
 }
 
@@ -344,10 +325,6 @@ fn contentFieldBindings(a: std.mem.Allocator, kind: d.ContentKind) Error![]const
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     const kind = try atomic.checkRequest(authorization, input);
-    if (authorization.target == .conflict_selection) {
-        const selection = try @import("model_candidate_json.zig").decode(struct { group_id: @import("reference_conflict_groups.zig").Id }, a, bytes);
-        return .{ .selection = .{ .claim_ids = try a.dupe(r.ClaimId, @import("reference_conflict_groups.zig").members(authorization.dependencies.proposal.global.conflict_groups, selection.group_id)) } };
-    }
     if (kind == .disposition) return .{ .disposition = try @import("reference_conflict_groups.zig").disposition(a, try @import("model_candidate_json.zig").decode(@import("reference_conflict_groups.zig").SemanticDisposition, a, bytes), authorization.rule.disposition_choices) };
     if (kind == .content) {
         const json = @import("model_candidate_json.zig");
@@ -424,11 +401,10 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
                 }
                 global.signals = try values.toOwnedSlice(a);
             },
-            .conflict_selection, .conflict_summary, .conflict, .insert_conflict => {
+            .conflict_summary, .conflict, .insert_conflict => {
                 var values: std.ArrayList(r.ConflictProposal) = .empty;
                 try values.appendSlice(a, global.conflicts);
                 switch (target) {
-                    .conflict_selection => |index| values.items[index].claim_ids = replacement.?.selection.claim_ids,
                     .conflict_summary => |index| values.items[index].summary = replacement.?.summary,
                     .conflict => |index| {
                         _ = values.orderedRemove(index);
@@ -451,7 +427,7 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
                 result.phase = if (parsed.phase == .complete) .complete else .signals;
             },
             // A summary or conflict change leaves the phase where it was.
-            .statement_selection, .statement_content, .statement, .insert_statement, .conflict_selection, .conflict_summary, .conflict, .insert_conflict => {},
+            .statement_selection, .statement_content, .statement, .insert_statement, .conflict_summary, .conflict, .insert_conflict => {},
         };
         result.proposal = .{ .global = global };
     }
@@ -465,7 +441,7 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
         .conflict => |index| result.source.conflicts = parsed.source.conflicts.deleting(a, index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
         .insert_conflict => |value| result.source.conflicts = parsed.source.conflicts.inserting(a, value.index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
         // A replacement keeps the occurrence it replaces; only an insert or a delete moves occurrences.
-        .statement_selection, .statement_content, .disposition, .signal_selection, .signal_content, .conflict_selection, .conflict_summary => {},
+        .statement_selection, .statement_content, .disposition, .signal_selection, .signal_content, .conflict_summary => {},
     }
     result.source.revision = merged.revision_after;
     result.source.last_repair = merged;
@@ -494,7 +470,7 @@ fn stageOf(target: Target) d.Stage {
         .statement_selection, .statement_content, .statement, .insert_statement => .summary,
         .disposition => .dispositions,
         .signal_selection, .signal_content, .signal, .insert_signal => .signals,
-        .conflict_selection, .conflict_summary, .conflict, .insert_conflict => .conflicts,
+        .conflict_summary, .conflict, .insert_conflict => .conflicts,
     };
 }
 
@@ -544,10 +520,6 @@ pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextCo
             const selected = parsed.proposal.global.signals[value.index];
             break :blk try v.signalClaims(items, checked_dispositions, selected.claim_ids, parsed.input.partition.group.claim_ids) == null and try v.selectedSignalCoverage(items, checked_dispositions, selected, value.claim) == null;
         },
-        .conflict_selection => |index| blk: {
-            const value = parsed.proposal.global.conflicts[index];
-            break :blk (try v.conflictClaims(items, checked_dispositions, value.claim_ids, parsed.input.partition.group.claim_ids)) == null;
-        },
         .conflict_summary => |index| blk: {
             const value = parsed.proposal.global.conflicts[index];
             break :blk (try v.conflictSummary(a, validator, ctx, items, value.claim_ids, value.summary)) == .valid;
@@ -590,7 +562,7 @@ fn recordPart(comptime kind: Kind, proposal: @FieldType(r.Parsed, "proposal"), i
             .record => .{ .signal = proposal.global.signals[index] },
         },
         .conflict => switch (part) {
-            .selection => .{ .selection = .{ .claim_ids = proposal.global.conflicts[index].claim_ids } },
+            .selection => return error.InvalidAtomicRepair,
             .text => .{ .summary = proposal.global.conflicts[index].summary },
             .record => .{ .conflict = proposal.global.conflicts[index] },
         },
@@ -617,7 +589,6 @@ fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
         .signal_content => |index| try recordPart(.signal, parsed.proposal, index, .text),
         .signal => |index| try recordPart(.signal, parsed.proposal, index, .record),
         .insert_signal => |value| try insertionPoint(.signal, parsed.proposal, value.index),
-        .conflict_selection => |index| try recordPart(.conflict, parsed.proposal, index, .selection),
         .conflict_summary => |index| try recordPart(.conflict, parsed.proposal, index, .text),
         .conflict => |index| try recordPart(.conflict, parsed.proposal, index, .record),
         .insert_conflict => |value| try insertionPoint(.conflict, parsed.proposal, value.index),
@@ -647,7 +618,6 @@ fn targetOrigin(target: Target) struct { unit: d.Unit, field: d.Field } {
         .signal_content => |i| .{ .unit = .{ .signal = i }, .field = .content },
         .signal => |i| .{ .unit = .{ .signal = i }, .field = .record },
         .insert_signal => |value| .{ .unit = .{ .signal = value.index }, .field = .record },
-        .conflict_selection => |i| .{ .unit = .{ .conflict = i }, .field = .selections },
         .conflict_summary => |i| .{ .unit = .{ .conflict = i }, .field = .content },
         .conflict => |i| .{ .unit = .{ .conflict = i }, .field = .record },
         .insert_conflict => |value| .{ .unit = .{ .conflict = value.index }, .field = .record },
@@ -759,7 +729,8 @@ pub const Omission = struct {
         const prepared_input = try Atomic.packetPresenting(a, auth, guidance, base, definition.id(), if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record), .{ .fields = if (kind) |value| .{ .selected = try contentFieldBindings(arena.allocator(), value) } else .{ .replacement = .{ .reference_phase = .reconciliation } } });
         if (kind != null) return prepared_input;
         defer packets.release(prepared_input);
-        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, if (auth.target == .conflict_group) auth.target.conflict_group else try @import("reference_reconciliation_projection.zig").semanticClaimIds(arena.allocator(), parsed.input.items), auth.rule.disposition_choices, auth.target == .conflict_group);
+        const decided: ?[]const r.ClaimId = if (auth.target == .conflict_group) try released(arena.allocator(), parsed, auth.target.conflict_group) else null;
+        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, if (auth.target == .conflict_group) auth.target.conflict_group else try @import("reference_reconciliation_projection.zig").semanticClaimIds(arena.allocator(), parsed.input.items), auth.rule.disposition_choices, decided);
     }
     pub fn parse(a: std.mem.Allocator, auth: OmissionAuthorization, input: *const packets.Packet, bytes: []const u8) OmissionError!Replacement {
         const json = @import("model_candidate_json.zig");
@@ -786,79 +757,120 @@ pub const Omission = struct {
         const merged = try Atomic.checkMerge(a, canonical, try owner(a, parsed), parsed.source.revision, try selectedValue(a, parsed, auth.target), current, auth, replacement, origin);
         var result = if (auth.target == .unit) try apply(a, parsed, auth.target.unit, replacement, merged, origin) else try applyGroup(a, parsed, auth.target.conflict_group, replacement.conflict_group, merged, origin);
         result.source.omission_conflict_claims = if (auth.target == .conflict_group) try a.dupe(r.ClaimId, auth.target.conflict_group) else &.{};
+        result.source.omission_released_claims = if (auth.target == .conflict_group) try released(a, parsed, auth.target.conflict_group) else &.{};
         result.source.omission_retry = auth.retry orelse return error.InvalidAtomicRepair;
         return result;
+    }
+    /// The claims of the record over `claims` that no other record holds, in the record's order: the claims whose
+    /// dispositions a repair of that record may decide again (ADR 0022, amended 27 November 2026). A claim another
+    /// record also holds keeps its disposition and its other relation. A closed record releases every claim.
+    fn released(a: std.mem.Allocator, parsed: r.Parsed, claims: []const r.ClaimId) OmissionError![]const r.ClaimId {
+        if (parsed.proposal != .global) return error.InvalidAtomicRepair;
+        var result: std.ArrayList(r.ClaimId) = .empty;
+        for (claims) |claim| {
+            var held_elsewhere = false;
+            for (parsed.proposal.global.conflicts) |other| {
+                if (v.sameMembers(other.claim_ids, claims)) continue;
+                if (r.contains(r.ClaimId, other.claim_ids, claim)) held_elsewhere = true;
+            }
+            if (!held_elsewhere) try result.append(a, claim);
+        }
+        return result.toOwnedSlice(a);
+    }
+    /// The claims `claim` conflicts with once `records` stand: a relation that survives keeps its place, and a
+    /// new one follows in record order.
+    fn related(a: std.mem.Allocator, claim: r.ClaimId, existing: []const r.ClaimId, records: []const r.ConflictProposal) OmissionError![]const r.ClaimId {
+        var result: std.ArrayList(r.ClaimId) = .empty;
+        for (existing) |id| for (records) |record| {
+            if (!r.contains(r.ClaimId, record.claim_ids, claim) or !r.contains(r.ClaimId, record.claim_ids, id)) continue;
+            if (!r.contains(r.ClaimId, result.items, id)) try result.append(a, id);
+            break;
+        };
+        for (records) |record| {
+            if (!r.contains(r.ClaimId, record.claim_ids, claim)) continue;
+            for (record.claim_ids) |id| if (id.ordinal != claim.ordinal and !r.contains(r.ClaimId, result.items, id)) try result.append(a, id);
+        }
+        return result.toOwnedSlice(a);
+    }
+    /// A group or record in a replacement names claims of the replaced record and at least one it decides.
+    fn ownClaims(claims: []const r.ClaimId, decided: []const r.ClaimId, named: []const r.ClaimId) OmissionError!void {
+        if (named.len < 2) return error.InvalidAtomicRepair;
+        var own = false;
+        for (named) |id| {
+            if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
+            if (r.contains(r.ClaimId, decided, id)) own = true;
+        }
+        if (!own) return error.InvalidAtomicRepair;
     }
     fn selectedValue(a: std.mem.Allocator, parsed: r.Parsed, target: OmissionTarget) OmissionError!?Replacement {
         if (target == .unit) return select(parsed, target.unit);
         if (parsed.proposal != .global or target.conflict_group.len < 2) return error.InvalidAtomicRepair;
         const claims = target.conflict_group;
         for (claims) |id| if (!try modelDisposition(parsed.input.progress.plan.layout.items, id)) return error.InvalidAtomicRepair;
+        // The old value is this record alone: its group, its explanation and the dispositions of the claims no
+        // other record holds. No other group may hold one of those claims, and a claim the record shares keeps
+        // the disposition its other record gives it.
+        const decided = try released(a, parsed, claims);
+        if (decided.len == 0) return error.InvalidAtomicRepair;
         var selected_dispositions: std.ArrayList(r.ClaimDispositionProposal) = .empty;
         var selected_conflicts: std.ArrayList(r.ConflictProposal) = .empty;
         var selected_groups: std.ArrayList(@import("reference_conflict_groups.zig").Group) = .empty;
         for (parsed.proposal.global.conflict_groups) |group| {
-            var touches = false;
-            for (group.claim_ids) |id| if (r.contains(r.ClaimId, claims, id)) {
-                touches = true;
-            };
-            if (!touches) continue;
-            for (group.claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
-            try selected_groups.append(a, group);
+            if (v.sameMembers(group.claim_ids, claims)) {
+                try selected_groups.append(a, group);
+                continue;
+            }
+            for (group.claim_ids) |id| if (r.contains(r.ClaimId, decided, id)) return error.InvalidAtomicRepair;
         }
         for (parsed.proposal.global.claim_dispositions) |value| {
-            if (!r.contains(r.ClaimId, claims, value.claim_id)) continue;
+            if (!r.contains(r.ClaimId, decided, value.claim_id)) continue;
             if (value.disposition != .conflicting) return error.InvalidAtomicRepair;
             for (value.disposition.conflicting.related_claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
             try selected_dispositions.append(a, value);
         }
-        if (selected_dispositions.items.len != claims.len) return error.InvalidAtomicRepair;
-        for (parsed.proposal.global.conflicts) |value| {
-            var touches = false;
-            for (value.claim_ids) |id| if (r.contains(r.ClaimId, claims, id)) {
-                touches = true;
-            };
-            if (!touches) continue;
-            for (value.claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
-            try selected_conflicts.append(a, value);
-        }
+        if (selected_dispositions.items.len != decided.len) return error.InvalidAtomicRepair;
+        for (parsed.proposal.global.conflicts) |value| if (v.sameMembers(value.claim_ids, claims)) try selected_conflicts.append(a, value);
         if (selected_conflicts.items.len == 0) return error.InvalidAtomicRepair;
         return .{ .conflict_group = .{ .conflict_groups = try selected_groups.toOwnedSlice(a), .claim_dispositions = try selected_dispositions.toOwnedSlice(a), .conflicts = try selected_conflicts.toOwnedSlice(a) } };
     }
     fn applyGroup(a: std.mem.Allocator, parsed: r.Parsed, claims: []const r.ClaimId, replacement: ConflictGroup, merged: shared.Merge, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!r.Parsed {
         // No external links, missing members, duplicates or foreign records can
-        // widen this native-bound unit. Ordinary validators judge its meaning.
-        if (replacement.claim_dispositions.len != claims.len) return error.InvalidAtomicRepair;
+        // widen this native-bound unit. The replacement decides the claims no other record holds and names
+        // claims of the replaced record only, at least one of them its own. Ordinary validators judge its meaning.
+        const decided = try released(a, parsed, claims);
+        if (decided.len == 0 or replacement.claim_dispositions.len != decided.len) return error.InvalidAtomicRepair;
         for (replacement.claim_dispositions, 0..) |value, index| {
             if (!try modelDisposition(parsed.input.progress.plan.layout.items, value.claim_id)) return error.InvalidAtomicRepair;
-            if (!r.contains(r.ClaimId, claims, value.claim_id)) return error.InvalidAtomicRepair;
+            if (!r.contains(r.ClaimId, decided, value.claim_id)) return error.InvalidAtomicRepair;
             for (replacement.claim_dispositions[0..index]) |prior| if (std.meta.eql(prior.claim_id, value.claim_id)) return error.InvalidAtomicRepair;
             const canonical = try value.canonical(a);
             for (canonical.related_claim_ids) |id| if (!r.contains(r.ClaimId, claims, id) or !try modelDisposition(parsed.input.progress.plan.layout.items, id)) return error.InvalidAtomicRepair;
         }
-        for (replacement.conflict_groups) |group| {
-            if (group.claim_ids.len < 2) return error.InvalidAtomicRepair;
-            for (group.claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
-        }
-        for (replacement.conflicts) |value| {
-            if (value.claim_ids.len < 2) return error.InvalidAtomicRepair;
-            for (value.claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
-        }
+        for (replacement.conflict_groups) |group| try ownClaims(claims, decided, group.claim_ids);
+        for (replacement.conflicts) |value| try ownClaims(claims, decided, value.claim_ids);
         var result = parsed;
         const values = try a.dupe(r.ClaimDispositionProposal, parsed.proposal.global.claim_dispositions);
         for (values) |*value| for (replacement.claim_dispositions) |revised| {
             if (value.claim_id.ordinal == revised.claim_id.ordinal) value.* = revised;
         };
+        // The record is found by its claims, not by its first claim: another record may hold that claim too.
         var groups: std.ArrayList(@import("reference_conflict_groups.zig").Group) = .empty;
         for (parsed.proposal.global.conflict_groups) |group| {
-            if (!r.contains(r.ClaimId, claims, group.claim_ids[0])) try groups.append(a, group);
+            if (!v.sameMembers(group.claim_ids, claims)) try groups.append(a, group);
         }
         try groups.appendSlice(a, replacement.conflict_groups);
         var conflicts: std.ArrayList(r.ConflictProposal) = .empty;
         for (parsed.proposal.global.conflicts) |value| {
-            if (!r.contains(r.ClaimId, claims, value.claim_ids[0])) try conflicts.append(a, value);
+            if (!v.sameMembers(value.claim_ids, claims)) try conflicts.append(a, value);
         }
         try conflicts.appendSlice(a, replacement.conflicts);
+        // A claim the replaced record shared keeps its disposition, and its relations follow the records that stand.
+        // A claim the replacement decided has the relations `expand` gave its answer, so a malformed answer fails where
+        // it always did.
+        for (values) |*value| {
+            if (!r.contains(r.ClaimId, claims, value.claim_id) or r.contains(r.ClaimId, decided, value.claim_id) or value.disposition != .conflicting) continue;
+            value.disposition = .{ .conflicting = .{ .related_claim_ids = try related(a, value.claim_id, value.disposition.conflicting.related_claim_ids, conflicts.items) } };
+        }
         for (replacement.claim_dispositions) |value| for (values, 0..) |existing, index| {
             if (existing.claim_id.ordinal == value.claim_id.ordinal) result.source = try origins(a, result.source, .{ .disposition = .{ .index = index, .claim = value.claim_id } }, false, origin);
         };
@@ -866,7 +878,7 @@ pub const Omission = struct {
         var cursor = count;
         while (cursor > 0) {
             cursor -= 1;
-            if (!r.contains(r.ClaimId, claims, parsed.proposal.global.conflicts[cursor].claim_ids[0])) continue;
+            if (!v.sameMembers(parsed.proposal.global.conflicts[cursor].claim_ids, claims)) continue;
             result.source.conflicts = result.source.conflicts.deleting(a, cursor, count) catch |err| return occurrenceError(err);
             result.source = try origins(a, result.source, .{ .conflict = cursor }, true, null);
             count -= 1;
@@ -882,7 +894,7 @@ pub const Omission = struct {
         if (merged.changed) {
             // Signals were accepted against the old complete disposition graph.
             // Their downstream assignment is rebuilt; independent conflicts survive.
-            result = try retireSignals(a, result, claims);
+            result = try retireSignals(a, result, decided);
             result.phase = .dispositions;
         }
         result.source.revision = merged.revision_after;
@@ -921,7 +933,6 @@ test "select reads each kind's record from its own proposal and rejects an index
             .{ .parsed = global, .target = .{ .signal_selection = index }, .expected = .{ .selection = .{ .claim_ids = signals[index].claim_ids } } },
             .{ .parsed = global, .target = .{ .signal_content = index }, .expected = .{ .content = signals[index].content } },
             .{ .parsed = global, .target = .{ .signal = index }, .expected = .{ .signal = signals[index] } },
-            .{ .parsed = global, .target = .{ .conflict_selection = index }, .expected = .{ .selection = .{ .claim_ids = conflicts[index].claim_ids } } },
             .{ .parsed = global, .target = .{ .conflict_summary = index }, .expected = .{ .summary = conflicts[index].summary } },
             .{ .parsed = global, .target = .{ .conflict = index }, .expected = .{ .conflict = conflicts[index] } },
         }) |row| try std.testing.expectEqualDeep(@as(?Replacement, row.expected), try select(row.parsed, row.target));
@@ -942,7 +953,6 @@ test "select reads each kind's record from its own proposal and rejects an index
         .{ .parsed = global, .target = .{ .signal_selection = signals.len } },
         .{ .parsed = global, .target = .{ .signal_content = signals.len } },
         .{ .parsed = global, .target = .{ .signal = signals.len } },
-        .{ .parsed = global, .target = .{ .conflict_selection = conflicts.len } },
         .{ .parsed = global, .target = .{ .conflict_summary = conflicts.len } },
         .{ .parsed = global, .target = .{ .conflict = conflicts.len } },
         .{ .parsed = summary, .target = .{ .insert_statement = .{ .index = 0, .claim = ids[0] } } },
@@ -956,7 +966,6 @@ test "select reads each kind's record from its own proposal and rejects an index
         .{ .parsed = summary, .target = .{ .signal_content = 0 } },
         .{ .parsed = summary, .target = .{ .signal = 0 } },
         .{ .parsed = summary, .target = .{ .insert_signal = .{ .index = 0, .claim = ids[0] } } },
-        .{ .parsed = summary, .target = .{ .conflict_selection = 0 } },
         .{ .parsed = summary, .target = .{ .conflict_summary = 0 } },
         .{ .parsed = summary, .target = .{ .conflict = 0 } },
         .{ .parsed = summary, .target = .{ .insert_conflict = .{ .index = 0, .claims = ids[0..2] } } },

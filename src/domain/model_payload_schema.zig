@@ -141,6 +141,28 @@ pub fn firstDisagreeingItem(items: *const envelope.Array, agreement: schema.Agre
     return null;
 }
 
+/// A listed value the sibling array disposes otherwise, and the item that lists it.
+pub const Unlisted = struct { item: usize, value: i64 };
+/// The first value, in response order, that an item of `listing` lists in `listed.property` and an item of the
+/// object's sibling array disposes (by returning it as `listed.key`) as something other than `listed.kind`
+/// (ADR 0046 Decision 7). A value no sibling item names, or that is no integer, is not this rule's.
+pub fn firstUnlisted(object: *const envelope.Object, listing: *const envelope.Array, listed: schema.Listed) ?Unlisted {
+    const sibling = object.get(listed.sibling) orelse return null;
+    if (sibling != .array) return null;
+    for (0..listing.count()) |item| {
+        const list = listOf(listing.at(item).?, listed.property) orelse continue;
+        for (0..list.count()) |position| {
+            const value = listedValue(list.at(position).?) orelse continue;
+            for (0..sibling.array.count()) |index| {
+                const disposed = sibling.array.at(index).?;
+                if (memberKey(disposed, listed.key) != value) continue;
+                if (!hasKind(disposed, listed.state, &.{listed.kind})) return .{ .item = item, .value = value };
+            }
+        }
+    }
+    return null;
+}
+
 fn hasKind(item: envelope.Value, kind_property: []const u8, kinds: []const []const u8) bool {
     if (item != .object) return false;
     const tagged = item.object.get(kind_property) orelse return false;
@@ -251,6 +273,19 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                     continue;
                 };
                 if (validateValue(child, property.schema)) |diagnostic| return diagnostic.within(.{ .property = property.name });
+            }
+            // ADR 0046 Decision 7: a value that a listing array names is disposed the closed kind its sibling array
+            // states. Both arrays are already admitted, so the sibling's keys and tags are read as returned. The
+            // location names the first item that lists such a value, and the contract violated is the array's.
+            for (properties) |property| {
+                if (property.schema.* != .array) continue;
+                const listed = property.schema.array.listed orelse continue;
+                const listing = object.get(property.name) orelse continue;
+                if (firstUnlisted(object, listing.array, listed)) |found| {
+                    var diagnostic = reject(.group_member_not_conflicting, property.schema);
+                    diagnostic.member = found.value;
+                    return diagnostic.item(found.item).within(.{ .property = property.name });
+                }
             }
         },
         .string => |bounds| {

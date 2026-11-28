@@ -2,12 +2,12 @@
 const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
-pub const Version = enum { @"model-request-debug/v21" };
+pub const Version = enum { @"model-request-debug/v23" };
 /// The one admitted description version, for readers that classify captures by it.
-pub const current_version = @tagName(Version.@"model-request-debug/v21");
+pub const current_version = @tagName(Version.@"model-request-debug/v23");
 
 pub const Description = struct {
-    version: Version = .@"model-request-debug/v21",
+    version: Version = .@"model-request-debug/v23",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -18,7 +18,6 @@ pub const Description = struct {
     content: []const provider.ModelVisibleContent,
     protocol_prompt: []const u8,
     schema: []const u8,
-    response_mode: @import("model_controls.zig").ResponseGuidanceMode,
     controls: @import("model_controls.zig").InferenceControls,
     /// Which configured temperature this attempt sent (ADR 0039), so replay
     /// sends the same value.
@@ -36,6 +35,9 @@ pub const Description = struct {
     coverages: []const @import("model_result_schema.zig").CoverageChoice = &.{},
     /// Native cross-item agreement the schema bytes cannot express (ADR 0036 Decision 7).
     agreements: []const @import("model_result_schema.zig").AgreementChoice = &.{},
+    /// Native cross-array agreement of listed values with a sibling array's closed state, which the schema
+    /// bytes cannot express (ADR 0046 Decision 7).
+    listings: []const @import("model_result_schema.zig").ListedChoice = &.{},
 
     pub fn from(request: *const provider.IdentifiedProviderNeutralModelRequest, selected: *const binding.ValidatedProviderModelBinding, kind: provider.ProviderOperationKind) Description {
         return .{
@@ -49,7 +51,6 @@ pub const Description = struct {
             .content = request.content,
             .protocol_prompt = @import("model_controls.zig").response_format_guidance,
             .schema = request.response_schema.modelBytes(),
-            .response_mode = request.response_guidance_mode,
             .controls = request.controls,
             .sampling = request.sampling,
             .reasoning_effort = selected.reasoning_effort,
@@ -61,6 +62,7 @@ pub const Description = struct {
             .members = request.response_schema.memberChoices(),
             .coverages = request.response_schema.coverageChoices(),
             .agreements = request.response_schema.agreementChoices(),
+            .listings = request.response_schema.listedChoices(),
         };
     }
 
@@ -75,8 +77,7 @@ pub const Description = struct {
             std.mem.eql(u8, selected.registry_entry.model.bytes, self.model) and
             std.meta.eql(selected.registry_entry.config, self.provider_config) and
             debug.sameOptional(selected.reasoning_effort, self.reasoning_effort) and
-            std.meta.eql(selected.controls, self.controls) and
-            selected.registry_entry.responseMode() == self.response_mode;
+            std.meta.eql(selected.controls, self.controls);
     }
 
     pub fn decode(a: std.mem.Allocator, bytes: []const u8) @import("strict_json.zig").Error!Description {
@@ -90,7 +91,7 @@ pub const Description = struct {
         // just as the canonical schema syntax adapter does.
         const parsed_schema = try @import("strict_json.zig").parse(scratch.allocator(), value.schema, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }, true, null);
         const selected_schema = @import("model_result_schema.zig").compileSelected(scratch.allocator(), parsed_schema.value, value.schema) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
-        const recorded = @import("model_result_schema.zig").restrictRecorded(scratch.allocator(), selected_schema, value.members, value.coverages, value.agreements) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
+        const recorded = @import("model_result_schema.zig").restrictRecorded(scratch.allocator(), selected_schema, value.members, value.coverages, value.agreements, value.listings) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
         recorded.release();
         const fields = @import("model_text_field.zig").inspectSchema(selected_schema.root(), value.field_policies, value.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and value.exact_scope == null)) return error.InvalidJsonDocument;

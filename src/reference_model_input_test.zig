@@ -98,7 +98,6 @@ test "no rule text the model reads carries engine vocabulary" {
         .conflict_detail,
         .{ .selection = .statement },
         .{ .selection = .signal },
-        .{ .selection = .conflict },
         .{ .disposition = .rules },
         .{ .assignment = .summary },
         .{ .assignment = .dispositions },
@@ -441,7 +440,101 @@ test "a dispositions assignment binds every semantic claim natively and states n
         try std.testing.expectEqual(.missing_member, omission.reason);
         try std.testing.expectEqual(bound.?.allowed[0], omission.member.?);
         try std.testing.expectEqualStrings("/claim_dispositions", (try omission.describe(a)).path);
+        // ADR 0046 Decision 7: the groups' claims carry one listed rule over the dispositions, with canonical bounds,
+        // so the guidance schema above is unchanged by it.
+        var listed: ?schema.IntegerChoice = null;
+        for (packet.integerChoices()) |choice| if (choice.collection.listedRule() != null) {
+            try std.testing.expect(listed == null);
+            listed = choice;
+        };
+        try std.testing.expectEqualDeep(&[_]schema.ChoiceStep{ .{ .property = "conflict_groups" }, .items, .{ .property = "claim_ids" } }, listed.?.target.path);
+        try std.testing.expectEqualStrings("claim_dispositions", listed.?.collection.listed.sibling);
+        try std.testing.expectEqualStrings("conflicting", listed.?.collection.listed.kind);
+        try std.testing.expectEqual(@as(usize, 1), native.selected().listedChoices().len);
+        // Consistent groups are admitted; a group listing a claim the response disposes `retained` is rejected at that
+        // group, naming the claim, and a response with no group is admitted.
+        const respond = struct {
+            fn of(allocator: std.mem.Allocator, disposed: []const reconciliation.r.ClaimId, group: []const reconciliation.r.ClaimId, kind: []const u8) ![]const u8 {
+                var parts: std.ArrayList([]const u8) = .empty;
+                for (disposed) |id| try parts.append(allocator, try std.fmt.allocPrint(allocator, "{{\"claim_id\":{d},\"disposition\":{{\"kind\":\"{s}\"}}}}", .{ id.ordinal, kind }));
+                const groups = if (group.len == 2) try std.fmt.allocPrint(allocator, "{{\"claim_ids\":[{d},{d}]}}", .{ group[0].ordinal, group[1].ordinal }) else "";
+                return std.fmt.allocPrint(allocator, "{{\"claim_dispositions\":[{s}],\"conflict_groups\":[{s}]}}", .{ try std.mem.join(allocator, ",", parts.items), groups });
+            }
+        }.of;
+        // A membership defect is reported before the group rule: a response that omits an assigned claim is rejected
+        // for that, though its group lists a claim it disposes `retained`.
+        {
+            var document = try @import("domain/model_envelope.zig").parseContent(std.testing.allocator, try respond(a, semantic[0..1], semantic[0..2], "retained"), null);
+            defer document.deinit();
+            const found = @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&document.parsed.value), native.selected().root()).?;
+            try std.testing.expectEqual(.missing_member, found.reason);
+        }
+        for ([_]struct { kind: []const u8, grouped: bool, rejected: bool }{
+            .{ .kind = "conflicting", .grouped = true, .rejected = false },
+            .{ .kind = "retained", .grouped = false, .rejected = false },
+            .{ .kind = "retained", .grouped = true, .rejected = true },
+        }) |case| {
+            var document = try @import("domain/model_envelope.zig").parseContent(std.testing.allocator, try respond(a, semantic, if (case.grouped) semantic[0..2] else &.{}, case.kind), null);
+            defer document.deinit();
+            const found = @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&document.parsed.value), native.selected().root());
+            if (!case.rejected) {
+                try std.testing.expect(found == null);
+                continue;
+            }
+            try std.testing.expectEqual(.group_member_not_conflicting, found.?.reason);
+            try std.testing.expectEqual(@as(i64, semantic[0].ordinal), found.?.member.?);
+            try std.testing.expectEqualStrings("/conflict_groups/0", (try found.?.describe(a)).path);
+        }
     }
+}
+
+test "a conflicts answer names every declared group once and a repeat or omission is corrected as the whole answer" {
+    const stage = @import("domain/reference_reconciliation_stage.zig");
+    const r = reconciliation.r;
+    const schema = @import("domain/model_result_schema.zig");
+    const envelope = @import("domain/model_envelope.zig");
+    const payload = @import("domain/model_payload_schema.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try @import("reference_reconciliation_test.zig").prepare(a, &.{ "Display the greeting.\n", "Suppress the greeting.\n" });
+    defer fixture.deinit();
+    const global = try reconciliation.summaries(a, try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    var candidate: r.Parsed = .{ .phase = .signals, .input = global, .proposal = .{ .global = try @import("reference_reconciliation_test.zig").conflicting(a, global) } };
+    candidate.proposal.global.conflicts = &.{};
+    const checked = (try reconciliation.validate_signals.execute(a, (try reconciliation.validate_dispositions.execute(a, candidate)).valid, fixture.context())).valid;
+    const packet = try stage.packet(std.testing.allocator, .{ .conflicts = checked }, fixture.inputs, fixture.text.registry);
+    defer packets.release(packet);
+    // One native exact-members choice over the declared groups (ADR 0022, amended 25 November 2026).
+    var bound: ?schema.IntegerChoice = null;
+    for (packet.integerChoices()) |choice| if (choice.collection == .exact_members) {
+        try std.testing.expect(bound == null);
+        bound = choice;
+    };
+    try std.testing.expectEqual(.native, bound.?.collection.exact_members.count);
+    try std.testing.expectEqualDeep(&[_]schema.ChoiceStep{ .{ .property = "conflicts" }, .items, .{ .property = "group_id" } }, bound.?.target.path);
+    try std.testing.expectEqualSlices(i64, &.{1}, bound.?.allowed);
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const resource = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
+    const native = try schema.restrict(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+    defer native.release();
+    const text_body = "{\"nodes\":\"The sources disagree.\"}";
+    const once = "{\"conflicts\":[{\"group_id\":1,\"kind\":\"value_mismatch\",\"summary\":" ++ text_body ++ "}]}";
+    const twice = "{\"conflicts\":[{\"group_id\":1,\"kind\":\"value_mismatch\",\"summary\":" ++ text_body ++ "},{\"group_id\":1,\"kind\":\"precedence_missing\",\"summary\":" ++ text_body ++ "}]}";
+    var accepted = try envelope.parseContent(std.testing.allocator, once, null);
+    defer accepted.deinit();
+    try std.testing.expect(payload.validateValue(envelope.value(&accepted.parsed.value), native.selected().root()) == null);
+    // A second kind for one group repeats a member.
+    var repeated = try envelope.parseContent(std.testing.allocator, twice, null);
+    defer repeated.deinit();
+    const repeat = payload.validateValue(envelope.value(&repeated.parsed.value), native.selected().root()).?;
+    try std.testing.expectEqual(.duplicate_member, repeat.reason);
+    // An empty answer omits the group, and its correction names it.
+    var empty = try envelope.parseContent(std.testing.allocator, "{\"conflicts\":[]}", null);
+    defer empty.deinit();
+    const omission = payload.validateValue(envelope.value(&empty.parsed.value), native.selected().root()).?;
+    try std.testing.expectEqual(.missing_member, omission.reason);
+    try std.testing.expectEqual(@as(i64, 1), omission.member.?);
 }
 
 test "shared text choice refresh retains unrelated restrictions and replaces stale text IDs" {
@@ -715,7 +808,7 @@ test "disposition repair schemas reuse canonical eligibility without authorizing
         try std.testing.expect(native.duplicate_targets.len != 0);
         const base = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, .{ .bytes = "repair_disposition" });
         defer packets.release(base);
-        const packet = try input.withDispositionChoices(std.testing.allocator, base, global.partition.group.claim_ids, native, false);
+        const packet = try input.withDispositionChoices(std.testing.allocator, base, global.partition.group.claim_ids, native, null);
         defer packets.release(packet);
         const restricted = try schema.restrict(std.testing.allocator, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
         defer restricted.release();

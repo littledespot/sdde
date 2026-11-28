@@ -1,29 +1,19 @@
-# ADR 0012: Retain one workflow-owned model request across YAML steps
+# ADR 0012: One workflow-owned model request retained across its consumers
 
 - **Status:** Accepted
 - **Date:** 2026-09-05
-- **Decision authority:** Explicit user direction
+- **Decision authority:** User decisions, 5, 18 and 21 September and 21 and 25 November 2026
 - **Amends:** Design Sections 7.3 and 12, ADRs 0004/0005, and F0005/F0006
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026,
-  amended 23 October 2026; implemented). One `request-model` step replaced the explicit
-  lifecycle operations, which became engine-run stages that YAML cannot name. Request
-  identity, retained inputs, consumers and release are unchanged; the step that owns
-  identity and retries is the `request-model` step.
-  Implemented on 24 October 2026: the 23 October amendment removed the
-  input-token-count operation kind, leaving inference the only operation kind, and took
-  the deadline from the bound catalogue entry's `requestTimeoutMs`, which catalogue
-  validation checks.
-- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
-  October 2026): the temperature comes from the project configuration's required
-  `temperature`, not a fixed `0.1`, and a runaway re-send uses its
-  `temperatureRunawayRetry`.
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md),
+  [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
 
 ## Decision
 
 ### Request identity and retained inputs
 
 - A generic request belongs to its current execution, originating compiled YAML step and
-  request ordinal.
+  request ordinal. The originating step, which owns identity and retries, is the
+  `request-model` step ([ADR 0030](0030-engine-owned-model-request.md)).
 - It does not require a fabricated SDD feature, section or task.
 - Existing SDD owner variants and purpose validation remain required by operations that
   use those domain authorities; generic ownership cannot stand in for semantic-review,
@@ -33,25 +23,17 @@
   schema and optional input resource once. Temperature is configuration-owned
   (§12.5, ADR 0039): the configured `temperature` when the registered model supports
   it, omitted otherwise; workflow temperature parameters reject.
-- The required per-model `json` boolean in `.sddproviders.json` is the sole
-  response-mode selector (user-directed, 2026-09-21). `true` selects
-  native schema output, `false` prompt-only; registered capabilities still constrain
-  support. Workflow `response-mode` is removed and rejected. Binding, preparation,
-  correction, authorization and replay retain/verify the selected mode. Full engine
-  validation, retries and token accounting remain unchanged.
-- Registered identity, binding-validation and request-building operations exchange
-  immutable typed pipeline values. `prepare-model-request` (user-approved,
-  2026-09-18) may also reuse those domain owners and publish
-  assignment, validation and preparation together in one runner-validated delta.
-- Both forms retain the same originating identity, selected resources and validation
-  rules. Failed consolidated preparation publishes no partial state. Detailed
-  operations remain available; actions never invoke other actions.
+- Native schema output is the only response mode. The catalogue has no `json` member and
+  no request, binding, lease or description records a mode. Workflow `response-mode` is
+  removed and rejected.
+- The request's lifecycle stages run as the fixed stages of the `request-model` step.
+  YAML cannot name, reorder or select a stage, and actions never invoke other actions.
 - Consumers retain the originating request identity, binding, resources and content;
   they do not rebind to their own step or repeat selection parameters.
 - The existing data-dependency compiler proves the required handoff.
-- There is no new route registry, implicit graph or YAML transport syntax. (ADR 0030
-  adds one fixed kernel stage sequence behind each `request-model`
-  step; it routes nothing and adds no YAML syntax.)
+- There is no route registry, implicit graph or YAML transport syntax. The one fixed
+  kernel stage sequence behind each `request-model` step routes nothing and adds no YAML
+  syntax.
 - The internal request content contract is `model-request/v1`; it is not a second YAML
   schema resource.
 - Task prompt content and the result schema remain explicitly workflow-selected, never
@@ -61,10 +43,10 @@
 
 ### Schema and binding selection
 
-- A `result-schema` step given a native packet resolves the packet's typed result-definition ID
-  within the explicitly bound schema resource once ([ADR 0013](0013-workflow-input-reuse.md);
-  user decision, 21 November 2026).
-  A static or absent `input` sends the whole resource.
+- A `request-model` step whose `input` is a native packet resolves the packet's typed
+  result-definition ID within the explicitly bound `result-schema` resource once
+  ([ADR 0013](0013-workflow-input-reuse.md)). A static or absent `input` sends the whole
+  resource.
 - A packet that names no definition, or one that is not a complete result definition, fails
   before invocation.
 - The selector is internal; consumers retain the selected compiled schema through
@@ -85,105 +67,24 @@
 - The runner owns every value and applies or discards each delta; shared canonical
   identity owners remain alive until their last consumer is destroyed.
 - Neither identities nor prepared requests are persisted, restored or reused by a rerun.
-- No provider invocation, counting, retry or successor selection occurs during request
+- No provider invocation, retry or successor selection occurs during request
   preparation.
-- ADRs 0009 and 0011 remain unchanged.
 
 - Native sealed pipeline values may omit a byte cap when their owning contract has none.
 - Their ownership transfer remains typed and opaque; ordinary copying values and
   contracts with explicit resource bounds retain their existing checks.
 - This is not a second request store or a model-call size policy.
 
-## Operation contracts
+### Rejections the stages keep
 
-> **Superseded by [ADR 0030](0030-engine-owned-model-request.md) once implemented.**
-> The operations in this section stop being YAML-selectable; the engine runs them as
-> the fixed stages of one `request-model` step, and the detailed and consolidated forms
-> no longer both remain available. Each operation's catalogue rules carry over as stage
-> rules.
+Each stage rejects, with no partial state published:
 
-YAML selects each operation; request preparation may use either the detailed
-operations or the consolidated pure preparation operation. This does not combine
-provider authorization, invocation, retries or accounting. The
-[detailed catalogue](../contracts/model-request-operations.md) owns each operation's
-input, transition, ownership, rejection and cleanup rules.
+- a missing input, a rebinding or a parameter override by a consumer;
+- forged deltas, transitions, facts, successors or outcomes;
+- missing, stale, foreign or duplicate evidence, including evidence from another
+  execution;
+- cancellation and allocation failure, each with complete cleanup of leases and owners.
 
-`admit-model-response` (user-approved, 2026-09-18) may combine JSON decoding and selected-schema validation.
-It reuses their existing owners and publishes the existing envelope and payload
-results together in one runner-validated delta. Detailed operations remain
-available. No provider call, lifecycle change, retry, accounting, semantic review
-or child-node execution is added, and the compiled step ceiling (ADR 0016) is unchanged.
-
-| Operation contract | Detailed rules |
-| --- | --- |
-| Accounting | [Contract](../contracts/model-request-operations.md#accounting-integration) |
-| Operation assignment | [Contract](../contracts/model-request-operations.md#operation-assignment-integration) |
-| Authorization preparation | [Contract](../contracts/model-request-operations.md#authorization-preparation-integration) |
-| Request invocation-state | [Contract](../contracts/model-request-operations.md#request-invocation-state-integration) |
-| Provider-operation invocation-state | [Contract](../contracts/model-request-operations.md#provider-operation-invocation-state-integration) |
-| Inference | [Contract](../contracts/model-request-operations.md#inference-integration) |
-| Observation validation | [Contract](../contracts/model-request-operations.md#observation-validation-integration) |
-| JSON decoding | [Contract](../contracts/model-request-operations.md#json-decoding-integration) |
-| Payload-schema validation | [Contract](../contracts/model-request-operations.md#payload-schema-validation-integration) |
-| Consolidated response admission | [Contract](../contracts/model-request-operations.md#consolidated-response-admission) |
-| Provider-operation completion | [Contract](../contracts/model-request-operations.md#provider-operation-completion-integration) |
-| Pre-call operation termination | [Contract](../contracts/model-request-operations.md#pre-call-operation-termination-integration) |
-| Logical-request closure | [Contract](../contracts/model-request-operations.md#logical-request-closure-integration) |
-| Pre-call logical-request closure | [Contract](../contracts/model-request-operations.md#pre-call-logical-request-closure-integration) |
-
-## Acceptance
-
-- Compile and execute arbitrary YAML using the native preparation bindings and test-only
-  provider contracts.
-- Prove exact identity/resource retention across different steps, missing-input and
-  rebinding rejection, malformed SDD owners, cancellation, allocation cleanup and
-  isolation between executions.
-- Test-only assignment cases also cover duplicate/open operations, stale/foreign
-  evidence, forged transitions and compiler-permission tampering.
-- Authorization cases cover denied capability, failed preparation, forged/mismatched
-  deposits and results, duplicate use, expiration, cancellation and allocation-failure
-  cleanup.
-- Test-only provider contracts do not enter production composition.
-- Invocation-state cases also prove exact canonical evidence, the unchanged lease
-  deadline, one-use consumption through the existing adapter port, rejected-delta
-  atomicity and execution isolation.
-- Fake-provider YAML tests also cover one inference call, lease reuse, missing
-  dependencies/capabilities, original deadlines, actual-token accounting, failed
-  publication, allocation cleanup and execution isolation.
-- Observation-validation cases cover exact associations, every stop, provider failures,
-  cancellation, invalid UTF-8, cross-execution rejection, missing inputs, parameter
-  overrides, allocation cleanup and retained evidence lifetime.
-- Token usage is unchanged, and pure validation remains available at budget exhaustion.
-- Decoder cases cover valid objects, exact numbers, malformed JSON, duplicate decoded
-  keys, trailing content, missing/foreign evidence, source-owner lifetime, allocation
-  failure and rejected/cancelled publication.
-- Payload-validation cases cover exact compiled schemas, accepted/rejected candidates,
-  unchanged upstream outcomes, missing/foreign evidence, overrides, owner lifetime,
-  allocation failure, cancelled/rejected publication and validation at token-budget
-  exhaustion.
-- Detailed/consolidated response admission must preserve selected requests,
-  diagnostics, current-authority dependencies, response ownership and actual usage.
-  Test exact output-pair contracts, rejected/cancelled atomic publication and
-  allocation cleanup, plus independent source-review correction and repair
-  origins through the production runner. The consolidated pair shares one
-  publication generation; it does not require identical intermediate generations.
-- Completion cases cover exact terminal facts, malformed/schema-invalid content
-  independence, missing/foreign/stale/duplicate evidence, forged facts/outcomes,
-  allocation/cancellation cleanup, owner lifetime and unchanged usage at exhaustion.
-- Request-closure cases cover all evidence-backed reasons/outcomes, unfinished
-  operations, missing/foreign/stale/duplicate inputs, forged successors/reasons,
-  suppressed failures, compiler/registry rejection, allocation and cancellation cleanup,
-  owner lifetime, and closure without a live lease at token exhaustion.
-- Production Bedrock uses the same retained-request bindings; shared fake/adapter
-  and YAML tests must prove the production handoff.
-
-- Pre-call termination cases cover failure/cancellation,
-  prepared/missing/foreign/stale/duplicate rejection, forged deltas, no-clock terminal
-  fact consumption, prepared-lease checks, allocation and deposited-lease cleanup,
-  retained owners, and runtime abandonment without hidden termination.
-- Pre-call request-closure cases additionally cover both request statuses, exact
-  terminal reasons, unfinished operations, mismatched authorization/terminal facts,
-  forged request successors and outcomes, immutable ledger ownership, allocation and
-  cancellation cleanup, YAML assertions and compiled-contract tampering.
-- An inference-then-authorization-rejection YAML run preserves the earlier response and
-  token charge while closing the invoked request as failed or cancelled.
+Test-only provider contracts do not enter production composition. An authorization
+rejection after an inference preserves the earlier response and its token charge while
+closing the invoked request as failed or cancelled.

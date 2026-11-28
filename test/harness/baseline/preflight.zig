@@ -1,4 +1,4 @@
-//! Read the project's configured workflow budget (ADR 0037) after a complete
+//! Read the project's configured workflow budget (ADR 0011) after a complete
 //! bootstrap, without invoking a project workflow or provider.
 const std = @import("std");
 

@@ -2,7 +2,7 @@
 //! field names and expected shapes; reports copy only reason and JSON Pointer.
 const std = @import("std");
 const schema = @import("model_result_schema.zig");
-pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, shared_member, missing_member, equal_items, disagreeing_items };
+pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, shared_member, missing_member, equal_items, disagreeing_items, group_member_not_conflicting };
 pub const Segment = @import("json_pointer.zig").Segment;
 pub const Description = struct { reason: Reason, path: []const u8 };
 pub const Diagnostic = struct {
@@ -13,7 +13,8 @@ pub const Diagnostic = struct {
     /// property it governs, borrowed like `expected`, so a correction can name the kinds
     /// it governs and find every naming.
     coverage: ?schema.Coverage = null,
-    /// For `missing_member`, the first assigned member no item names.
+    /// For `missing_member`, the first assigned member no item names. For `group_member_not_conflicting`
+    /// (ADR 0046 Decision 7), the first value the located item lists that the sibling array disposes otherwise.
     member: ?i64 = null,
     /// For `equal_items` (ADR 0038 Decision 3), the compiled member rule whose `distinct` properties the
     /// equal items repeat, borrowed like `expected`, so a correction can find every equal set.
@@ -48,6 +49,7 @@ pub const Diagnostic = struct {
             .shared_member => "Schema validation failed: this item names values that an item of a kind in exclusive.owning names, or an earlier item of a kind in exclusive.kinds names, as well as values none of those items names. Rewrite this item to name and state only the values none of those items names. shared lists every such naming in this response.",
             .equal_items => "Schema validation failed: items of this array return the same values for every property in equal.compared. equal.sets lists, for each set of such items, the equal.key value of every item in it. Return every item again, each with the values its own equal.key value calls for, so that no two items of a set stay equal.",
             .disagreeing_items => "Schema validation failed: items of this array list a common value in agreement.property but return different values for agreement.agree. agreement.sets lists, for each group of such values, the values and the location of every item that lists them. Return every item again so that items listing a common value return the same value for agreement.agree.",
+            .group_member_not_conflicting => "Schema validation failed: this item lists a claim in member that another array of this response disposes as something other than conflicting. Every claim that a conflict group lists must be disposed conflicting. Return the complete response again so that the groups and the dispositions agree.",
         };
     }
 

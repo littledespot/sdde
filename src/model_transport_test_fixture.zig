@@ -5,7 +5,8 @@ pub const complete = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content
 
 pub const Wire = struct {
     calls: usize = 0,
-    expected_json: ?bool = null,
+    /// When set, every request must carry the native JSON-schema output configuration.
+    expects_native_output: bool = false,
     result: ?transport.Response = null,
     cancelled: bool = false,
     inference_body: []const u8 = complete,
@@ -21,13 +22,13 @@ pub const Wire = struct {
         const self: *Wire = @ptrCast(@alignCast(context));
         self.calls += 1;
         self.deadline_monotonic_ms = request.deadline_monotonic_ms;
-        if (self.expected_json) |enabled| {
+        if (self.expects_native_output) {
             var parsed = std.json.parseFromSlice(std.json.Value, allocator, request.body, .{}) catch |err| return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
                 else => @panic("provider emitted malformed JSON"),
             };
             defer parsed.deinit();
-            std.debug.assert(parsed.value.object.contains("outputConfig") == enabled);
+            std.debug.assert(parsed.value.object.contains("outputConfig"));
         }
         if (self.expected_max_tokens) |maximum| {
             var parsed = std.json.parseFromSlice(std.json.Value, allocator, request.body, .{}) catch |err| return switch (err) {

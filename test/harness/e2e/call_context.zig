@@ -1,10 +1,12 @@
 //! Shared closed projection of one physically captured E2E provider exchange.
-//! New captures are `model-call-evidence/v3`, which names the provider and its
+//! New captures are `model-call-evidence/v4`, which names the provider and its
 //! catalogue configuration (ADR 0028), including the entry's request deadline
-//! (ADR 0030). Version 2 captures, whose configuration predates the deadline,
+//! (ADR 0030), and records no response mode: native JSON-schema output is the
+//! only mode. Version 2 captures, whose configuration predates the deadline,
 //! and version 1 captures, which could only describe a Bedrock region, stay
 //! readable as historical evidence through the explicit reader selected by
-//! their exact schema value; they grant no current authority.
+//! their exact schema value; they grant no current authority. Version 3
+//! captures are not readable.
 const std = @import("std");
 const operation = @import("../../../src/domain/llm_provider_operation.zig");
 const ids = @import("../../../src/domain/llm_provider_identity.zig");
@@ -12,8 +14,12 @@ const workflow = @import("../../../src/domain/workflow.zig");
 const contracts = @import("../../../src/domain/llm_provider_contracts.zig");
 const strict = @import("../../../src/domain/strict_json.zig");
 
+/// The response mode a retired capture recorded. Read as history only; no
+/// current contract names a mode, and a capture of the removed prompt-only mode doesn't decode.
+const RecordedResponseMode = enum { native_schema };
+
 pub const CallContext = struct {
-    schema: enum { @"model-call-evidence/v3" },
+    schema: enum { @"model-call-evidence/v4" },
     call: usize,
     origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
     request_step: []const u8,
@@ -26,7 +32,6 @@ pub const CallContext = struct {
     reasoning_effort: ?[]const u8,
     content: []const operation.ModelVisibleContent,
     response_schema: []const u8,
-    response_mode: @import("../../../src/domain/model_controls.zig").ResponseGuidanceMode,
 
     pub fn decode(a: std.mem.Allocator, bytes: []const u8) !CallContext {
         const value = try strict.decode(CallContext, a, bytes, .{ .maximum_depth = 64 });
@@ -38,7 +43,7 @@ pub const CallContext = struct {
     }
 
     pub fn common(self: CallContext) Common {
-        return .{ .call = self.call, .origin = self.origin, .request_step = self.request_step, .slot = self.slot, .attempt = self.attempt, .model = self.model, .kind = self.kind, .reasoning_effort = self.reasoning_effort, .content = self.content, .response_schema = self.response_schema, .response_mode = self.response_mode };
+        return .{ .call = self.call, .origin = self.origin, .request_step = self.request_step, .slot = self.slot, .attempt = self.attempt, .model = self.model, .kind = self.kind, .reasoning_effort = self.reasoning_effort, .content = self.content, .response_schema = self.response_schema };
     }
 };
 
@@ -59,10 +64,10 @@ pub const HistoricalCallContextV2 = struct {
     reasoning_effort: ?[]const u8,
     content: []const operation.ModelVisibleContent,
     response_schema: []const u8,
-    response_mode: @import("../../../src/domain/model_controls.zig").ResponseGuidanceMode,
+    response_mode: RecordedResponseMode,
 
     pub fn common(self: HistoricalCallContextV2) Common {
-        return .{ .call = self.call, .origin = self.origin, .request_step = self.request_step, .slot = self.slot, .attempt = self.attempt, .model = self.model, .kind = self.kind, .reasoning_effort = self.reasoning_effort, .content = self.content, .response_schema = self.response_schema, .response_mode = self.response_mode };
+        return .{ .call = self.call, .origin = self.origin, .request_step = self.request_step, .slot = self.slot, .attempt = self.attempt, .model = self.model, .kind = self.kind, .reasoning_effort = self.reasoning_effort, .content = self.content, .response_schema = self.response_schema };
     }
 };
 
@@ -103,10 +108,10 @@ pub const HistoricalCallContextV1 = struct {
     reasoning_effort: ?[]const u8,
     content: []const operation.ModelVisibleContent,
     response_schema: []const u8,
-    response_mode: @import("../../../src/domain/model_controls.zig").ResponseGuidanceMode,
+    response_mode: RecordedResponseMode,
 
     pub fn common(self: HistoricalCallContextV1) Common {
-        return .{ .call = self.call, .origin = self.origin, .request_step = self.request_step, .slot = self.slot, .attempt = self.attempt, .model = self.model, .kind = self.kind, .reasoning_effort = self.reasoning_effort, .content = self.content, .response_schema = self.response_schema, .response_mode = self.response_mode };
+        return .{ .call = self.call, .origin = self.origin, .request_step = self.request_step, .slot = self.slot, .attempt = self.attempt, .model = self.model, .kind = self.kind, .reasoning_effort = self.reasoning_effort, .content = self.content, .response_schema = self.response_schema };
     }
 };
 
@@ -122,7 +127,6 @@ pub const Common = struct {
     reasoning_effort: ?[]const u8,
     content: []const operation.ModelVisibleContent,
     response_schema: []const u8,
-    response_mode: @import("../../../src/domain/model_controls.zig").ResponseGuidanceMode,
 };
 
 /// One captured context, dispatched by its exact schema value.
@@ -135,7 +139,7 @@ pub const Captured = union(enum) {
         const Header = struct { schema: []const u8 };
         var header = std.json.parseFromSlice(Header, a, bytes, .{ .ignore_unknown_fields = true }) catch return error.InvalidCallContext;
         defer header.deinit();
-        if (std.mem.eql(u8, header.value.schema, "model-call-evidence/v3")) return .{ .current = try CallContext.decode(a, bytes) };
+        if (std.mem.eql(u8, header.value.schema, "model-call-evidence/v4")) return .{ .current = try CallContext.decode(a, bytes) };
         if (std.mem.eql(u8, header.value.schema, "model-call-evidence/v2")) {
             const value = try strict.decode(HistoricalCallContextV2, a, bytes, .{ .maximum_depth = 64 });
             try validCommon(value.common());

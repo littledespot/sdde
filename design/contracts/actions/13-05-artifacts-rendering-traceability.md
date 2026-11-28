@@ -55,9 +55,11 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 ## `BuildResolvedClarificationNeedsAction` (`build-resolved-clarification-needs`)
 
 - **Owner:** [`src/actions/clarification/build_resolved_clarification_needs.zig`](../../../src/actions/clarification/build_resolved_clarification_needs.zig)
-- **Reads:** `citable_reference_inputs` · **Writes:** `clarification_needs` · **Side effect:** `none`
+- **Reads:** `citable_reference_inputs`, `accounted_reference_reconciliation` · **Writes:** `clarification_needs` · **Side effect:** `none`
 - **Does:** Build an empty need set with the feature's original sources, so a run with no new gap
-  still refreshes existing forms.
+  still refreshes existing forms, and carry the conflicts an applied answer dropped so the refresh
+  closes any form of one that is still open (ADR 0025). The authority and generation need builders
+  carry the same list.
 - **Rejects:** none beyond allocation.
 
 ## `RefreshClarificationsAction` (`refresh-clarifications`)
@@ -66,7 +68,11 @@ Capturing and validating the clarification inputs are steps 10 to 13 of `prepare
 - **Reads:** `clarification_inputs`, `clarification_needs` · **Writes:** `refreshed_clarification_state` · **Side effect:** `none`
 - **Does:** Open or update one record per need, keyed by stage and structural subject: an
   existing subject keeps its ID, a new one takes the next `SNN`, `PNN` or `TNN`, and a prior
-  subject absent from the needs is retained, never inferred resolved.
+  subject absent from the needs is retained, never inferred resolved. The one exception is a
+  record the needs name as decided: an open Specify record whose subject equals a conflict an
+  applied user answer dropped becomes `resolved_by_authority` (ADR 0025), its resolution naming the
+  deciding form and option key. It never touches a record the user answered or cancelled, and a need
+  for the same subject wins.
 - **Rejects:** `AuthenticationRequired` for a submitted answer that was not accepted before it (a
   deferral is not one and leaves its record open), `ProtectedClarification`
   for reopening a user-closed or protected record, `ClarificationLimitExceeded` past 99, and
@@ -301,7 +307,9 @@ variants of the generic repair operations, specified once in
 - **Owner:** [`src/actions/specification/apply_specification_support.zig`](../../../src/actions/specification/apply_specification_support.zig)
 - **Reads:** `required_authority_inputs`, `specification_support_review` · **Writes:** replaces `required_authority_inputs` · **Side effect:** `none`
 - **Does:** Replace the authority inputs with the accepted review's inputs.
-- **Rejects:** `InvalidRequiredAuthority` for a pending or rejected review.
+- **Rejects:** `InvalidRequiredAuthority` for a pending or rejected review, or a source-readiness
+  review validating a pending repair that is not that repair's dependent pass (the `decided` pass over the claims a
+  conflict-group repair decided, the full pass for any other repair).
 
 ## Rendering and publication output
 

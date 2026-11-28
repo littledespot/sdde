@@ -2,35 +2,22 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-19
-- **Decision authority:** User instructions to design and implement generic, configured response
-  decomposition and prompt-free reconstitution across JSON shapes. Higher input
-  token counts are acceptable; existing execution-budget enforcement remains.
+- **Decision authority:** User decisions, 19 September 2026 to 21 November 2026. Higher
+  input token counts are acceptable; existing execution-budget enforcement remains.
 - **Amends:** §§6, 12, 14, 16.4, 22 and 28 for configured response composition;
   ADRs 0012–0013 retain request, resource and compiler ownership.
-- **Additional approved direction:** the user explicitly permitted raising the
-  finite compiler step limit (now 1,024; §3).
 - **Does not approve:** an unbounded graph, hidden request dispatcher, new semantic
   repair authority, production dependency or live run.
-- **Amended by:** [ADR 0022](0022-native-reference-phase-handoffs.md) (6 October 2026):
-  reconciliation phases hand off native typed facts rather than JSON prerequisites, so
-  global reconciliation requests each phase separately, and native code constructs
-  forced token classifications without a model call.
-  [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
-  yet implemented). Each part's request becomes one `request-model` step with its
-  `composition-part`. The lifecycle stages behind it are no longer visible detailed
-  operations; distinct request identities and `retain-json-part` stay visible.
-  [ADR 0031](0031-stage-actions.md) (22 October 2026; `prepare-toolchain` implemented) likewise
-  removes absorbed deterministic operations instead of keeping them available beside a
-  stage action. [ADR 0036](0036-source-quoted-claims.md) (25 October 2026) removes §5's
-  citation repair: claim citations are bounded at admission and claim wording is quoted
-  from the cited lines.
+- **Amended by:** [ADR 0022](0022-native-reference-phase-handoffs.md),
+  [ADR 0030](0030-engine-owned-model-request.md), [ADR 0031](0031-stage-actions.md),
+  [ADR 0036](0036-source-quoted-claims.md),
+  [ADR 0038](0038-record-claims-and-scenario-coverage.md),
+  [ADR 0047](0047-engine-composed-primary-story.md),
+  [ADR 0048](0048-engine-derived-specification-title.md)
 
 ## 1. Problem and intended outcome
 
-Live runs failed extraction admission through malformed JSON and token
-classifications misplaced inside a claim, despite intact evidence and schema
-delivery. Smaller output responsibilities are a reliability hypothesis, not a
-demonstrated cure.
+Smaller output responsibilities are a reliability hypothesis, not a demonstrated cure.
 
 One configured semantic assignment may produce several independently schema-checked
 JSON parts. Each model request returns its complete assigned part. Native code
@@ -119,26 +106,18 @@ the base packet, epoch, restrictions and native repair authority, and protocol
 corrections retain that exact selected input. Contexts may present applicable rules and
 field purposes; they cannot filter evidence, alter identities, choose roles, weaken
 coverage or create continuation policy. Canonical native validators remain the sole rule
-owners; semantic purposes come from the workflow's packet guidance (amendment below).
+owners; semantic purposes come from the workflow's packet guidance (below).
 Reconciliation selects its summary, disposition, signal and conflict assignments in its
 native packet builders, and a composition part selects none. Atomic repairs keep their
 existing authorized scope and projection owner.
 
-**Packet-guidance amendment (user-approved, 30 October 2026, SPEC01 D3.1, record in
-`fixes/Z_FIX06.md` at git `194e29a`; amended 1 November 2026 by
-SPEC01 D13.1, 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
-Decision 5, 8 November 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)
-Decisions 6 and 7, which removed the entity meaning and relationship entries and the entity
-repair tail, and then the edge case's outcome entry, 11 November 2026 by
-[ADR 0048](0048-engine-derived-specification-title.md), which removed the `display_name`
-purpose, and 13 November 2026 by ADR 0038 Decision 7, implemented 21 November 2026, which
-removed the `condition` entry: an edge case's one authored field is its `given`, which shares
-the acceptance criterion's `given` entry):** workflow resources own the semantic
-guidance that native packet builders present. One closed `packet-guidance/v7` resource holds exactly one text for each
+**Packet guidance:** workflow resources own the semantic guidance that native packet
+builders present. One closed `packet-guidance/v7` resource holds exactly one text for each
 registered key: feature and record purposes, source-review scopes, the reconciliation
 summary purpose, support-evidence guidance and the semantic tails of native repair
-requirements. The removed post-generation review's scopes and the engine-derived
-story's and title's purposes have no key. The keys are closed native enums, derived from the native
+requirements. The engine-derived story and title have no purpose key, and neither have an
+entity's meaning or relationships. An edge case's one authored field is its `given`, which
+shares the acceptance criterion's `given` entry. The keys are closed native enums, derived from the native
 registries where one exists, so the compiler rejects a missing, extra, duplicate,
 mistyped or empty entry and an unsupported version. One `capture-packet-guidance` step publishes
 the compiled guidance as run data; consuming operations declare `.packet_guidance`
@@ -149,9 +128,8 @@ tail when it authorizes, and the run-local authorization carries the composed
 requirement. Native code keeps rule ownership, mechanical diagnostics, identity, coverage and sibling-order
 requirements, composition frames and the user-facing clarification question
 frames; a question about a record or reference subject embeds that subject's task
-from the guidance. Mechanical sentences inside a moved entry move with it; SPEC01 Q4
-removed the engine vocabulary and the one schema-stated rule that the entries and rule
-texts the model reads carried.
+from the guidance. Mechanical sentences inside a moved entry move with it. The entries
+and rule texts the model reads carry no engine vocabulary and no schema-stated rule.
 
 Request preparation selects either its existing schema/definition binding or one
 sealed composition-part binding. The latter resolves the complete schema through
@@ -176,8 +154,8 @@ All provider, admission and correction consumers retain this same binding.
 - Resolve ownership separately for every permitted tagged variant. In the example,
   `/claims` and `/reason` occur in different branches; neither becomes an invented
   optional field in the other branch. A path absent from every branch rejects.
-  The first implementation also rejects a part with no selected properties in
-  any reachable active branch; it cannot infer a skip or manufacture a response.
+  A part with no selected properties in any reachable active branch also rejects;
+  the compiler cannot infer a skip or manufacture a response.
 - A discriminator has one producer. Its admitted value can select only an existing
   permitted branch. A dependent part consumes that exact value/revision; it does
   not repeat or override the discriminator. Identical variant projections may share
@@ -186,7 +164,7 @@ All provider, admission and correction consumers retain this same binding.
   never merges `/billing` with `/shipping` or establishes value identity.
   Ambiguous variant selection or an unrepresentable partial schema rejects at
   compilation; keep the affected group together instead of weakening `oneOf`.
-- Keep optional containers as whole subtrees in the first implementation. The
+- Keep optional containers as whole subtrees. The
   encoding has no separate presence owner or absent-part transition;
   splitting `/details/summary` from `/details/rationale` when `details` is optional
   therefore rejects. Required object containers remain recursively decomposable.
@@ -196,7 +174,7 @@ All provider, admission and correction consumers retain this same binding.
   child plans cannot both write it. No new domain-specific implementation is needed
   for another supported shape.
 - Arbitrary array-index partitioning, concatenation, semantic deduplication and
-  model-invented work lists are outside the first implementation. Item-level
+  model-invented work lists are not supported. Item-level
   decomposition requires a separately established finite assignment set, stable
   item identity and exact coverage/order contract. Genericity does not infer them
   from a schema or from whatever items the model happened to return.
@@ -211,14 +189,17 @@ All provider, admission and correction consumers retain this same binding.
 | Existing resource capture and workflow compiler | Capture/parse configuration, resolve the complete schema, prove partition/dependency rules and bind ordinary registered operations. |
 | Existing schema compiler/projection owner | Derive exact closed part schemas from the bound complete schema; retain both for their execution lifetime. |
 | Existing request-preparation actions | Extend their sealed selection to bind one configured part and current declared inputs. No parallel part-only builder, provider call or successor selection. |
-| Existing model-request operations | Invoke, decode, schema-check and correct that part using existing provider, retry and actual-usage owners. |
+| The `request-model` step ([ADR 0030](0030-engine-owned-model-request.md)) | Invoke, decode, schema-check and correct that part in its fixed engine-run stages, using existing provider, retry and actual-usage owners. |
 | Pure part-retention action | Propose one associated part with schema admission and successful request closure; the runner validates/applies its envelope delta. |
 | Pure JSON-assembly action | Place current admitted values at their compiled destinations and produce one complete candidate plus its provenance projection. No parsing of arbitrary paths, semantic transformation, prompts or model capability. |
 | Existing schema and domain validators | Validate the assembled shape, then cross-part/domain obligations, citations, coverage and semantic findings. |
 | Existing runner and capability-free orchestration | Execute declared child bindings, apply deltas, branch on typed results and enforce limits. Orchestrators perform no assembly or validation work. |
 
-The registered operations implement these responsibility boundaries. Keep detailed operations available; any consolidated pure entrypoint reuses
-their domain functions, never invokes another action. Reuse definition-local
+The registered operations implement these responsibility boundaries. Each part's request
+is one `request-model` step with its `composition-part`; the lifecycle stages behind it
+are not visible operations ([ADR 0030](0030-engine-owned-model-request.md)), and a stage
+action's absorbed steps are not operations either ([ADR 0031](0031-stage-actions.md)). No
+action invokes another action. Reuse definition-local
 subgraphs for coordination. The composition resource does not hide a model-call
 loop or an executable child graph.
 
@@ -233,16 +214,18 @@ then distinguishes parts, while corrections retain the same unit/operation/purpo
 Changing the selected schema or allocating a new request ordinal alone does **not**
 create a new retry allowance. A shared loop selecting different parts at one call
 site would require an explicit extension to the existing identity contract; it is
-not part of this design's initial integration.
+not part of this design.
 Dependent rebuilding retains the existing native parent-defect association where
 required. New part revisions or schema selections cannot replenish retry attempts.
 
 ### Graph capacity
 
-Global reconciliation requests each phase separately (ADR 0022), and a summary is a
-plain request over the `summary` definition like the others (user decision, 21 November 2026). All requests reuse the
-lifecycle body; extraction's retention and complete assembly/validation use shared
-subgraphs with independent compiled call sites.
+Global reconciliation requests each phase separately: its phases hand off native typed
+facts, not JSON prerequisites, and native code constructs forced token classifications
+without a model call (ADR 0022). A summary is a plain request over the `summary`
+definition like the others. Each request is one `request-model` step; extraction's
+retention and complete assembly/validation use shared subgraphs with independent compiled
+call sites.
 
 The step bound is **1,024**, defined once by `workflow_definition.max_steps`; schema validation,
 expansion, compiled validation and runner storage use that same constant. The runner's
@@ -255,8 +238,8 @@ bound; authored local IDs remain 64 bytes. Retry-exhaustion evidence derives its
 owned name storage from the same compiled bound. No additional capacity
 configuration is introduced.
 
-Do not introduce request orchestration machinery solely to fit the ceiling. Detailed
-operations and distinct request identities remain visible. Consolidate only where
+Do not introduce request orchestration machinery solely to fit the ceiling. Distinct
+request identities and `retain-json-part` remain visible. Consolidate only where
 there is a separate cohesive responsibility; neither a larger ceiling nor call
 frames reduce the number of operations or model calls. Token and retry budgets
 remain unchanged.
@@ -279,7 +262,7 @@ to check that association; schema-valid but unclosed, failed, cancelled or forei
 results reject. Do not add a composition acceptance flag, lifecycle or token charge.
 
 Separate stable candidate association from diagnostic producer attribution through
-the existing identity/provenance owners. Today both extraction repair owners use
+the existing identity/provenance owners. Both extraction repair owners use
 `entry.origin` in native defect scope; a composite must not substitute the last
 call or change that anchor with each part repair. Freeze the composition's native
 candidate association when its generation unit is established, retain it across
@@ -345,7 +328,9 @@ and its complete readback validation remain authoritative.
 ## 5. First use: extraction
 
 1. Request claims with their citations, or the existing `no_feature_claim` reason.
-   Keep full relevant source lines, passive-literal and exact-token evidence.
+   Keep full relevant source lines, passive-literal and exact-token evidence. Claim
+   citations are bounded at admission and never repaired, and claim wording is quoted
+   from the cited lines ([ADR 0036](0036-source-quoted-claims.md)).
 2. Request the complete chunk-local classification collection using that admitted
    outcome and the original candidate/evidence set. Existing native policy permits
    preserve/irrelevant for `claims`, but only irrelevant for `no_feature_claim`.
@@ -385,7 +370,7 @@ does not authorize that API or a second extraction path.
 
 ### Persisted contract readiness
 
-The approved §12.7 amendment derives extraction-contract metadata from the existing
+§12.7 derives extraction-contract metadata from the existing
 compiled graph/schema/composition and native partition identity. The canonical
 snapshot writer records this comparison evidence; state readback and publication
 resolve it against the current validated registry. Exact content and identities must
@@ -408,8 +393,8 @@ safe boundaries require their own dependency/coverage analysis using this contra
   overlap, missing ownership, cycles, ambiguous variants/presence and graph overflow.
   Reused `$defs` at different destinations retain distinct values/producers; a split
   that removes a discriminator needed to distinguish unequal branches rejects.
-- Each projected schema derives from the exact complete schema; native/prompt
-  provider modes and correction retain the same part association and constraints.
+- Each projected schema derives from the exact complete schema; native output and
+  correction retain the same part association and constraints.
   Release compiler/capture owners, then prepare, correct, retain and assemble through
   the surviving registry; every projection still binds its canonical schema owner.
   Reject a correct shape bound to the wrong composition/part. Initial and correction
@@ -442,10 +427,4 @@ safe boundaries require their own dependency/coverage analysis using this contra
   token exhaustion and usage retention obey the existing runner contract.
   The same unresolved defect retains its allowance across assembly and part/native
   repairs; producer changes cannot reset its frozen candidate association.
-- Measure complete compiled operation count, response complexity, calls, actual
-  usage and completed outcomes. Input tokens may increase; do not weaken evidence
-  to meet an arbitrary size target. Run targeted checks, full `zig build verify`
-  and clean native packaging when implemented.
-- A separately approved live run must publish and score output before claiming
-  E2E closure or demonstrated reliability improvement.
-- Report feedback-API readiness separately; a scored output cannot stand in for it.
+- Input tokens may increase; do not weaken evidence to meet an arbitrary size target.

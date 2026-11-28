@@ -68,6 +68,9 @@ the project allow list, so in every Bash call, yours and every subagent's:
   `exec` or `__import__`.
 - Before launching an agent that edits non-Markdown files, check the Edit allow list
   covers them.
+- The AGENTS.md git checks (`git status`, `git diff`, `git ls-files`, `git show HEAD:<path>`)
+  match the allow list. `git restore` asks the user, because a rollback is destructive;
+  every other git command is denied.
 
 ## Claude Code setup
 
@@ -79,7 +82,8 @@ the project allow list, so in every Bash call, yours and every subagent's:
   runs the validation ladder and writes the definition-of-done report.
 - Before reporting a change complete, have the `contract-reviewer` agent review it
   against the AGENTS.md review rules. Name the changed files and give it the before
-  text, since it runs no git command.
+  text: it may run the AGENTS.md git checks, but git holds only the committed tree,
+  not an earlier uncommitted state.
 - These files are policy: AGENTS.md, CLAUDE.md, accepted ADRs, and the Claude Code
   settings and hooks. Change them only when the request includes that policy change.
   Markdown edits and `zig` commands don't prompt. Edits to the settings and hooks do.

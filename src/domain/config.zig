@@ -24,7 +24,7 @@ pub const ModelsConfig = struct {
 };
 
 /// The total model tokens one workflow execution may use, shared by every call
-/// (ADR 0037). Required, with no engine default; on the wire it is one positive
+/// (ADR 0011). Required, with no engine default; on the wire it is one positive
 /// integer-written JSON number in the u32 range.
 pub const WorkflowTokenBudget = struct {
     budget: @import("workflow_token_budget.zig").TotalTokenBudget,

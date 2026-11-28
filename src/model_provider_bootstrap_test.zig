@@ -515,7 +515,7 @@ const compiled_provider_contracts: contracts.Registry = .{ .entries = &.{.{
 }} };
 
 const provider_document =
-    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}}]}]}
+    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"requestTimeoutMs":1000}}]}]}
 ;
 
 const unsupported_provider_document =

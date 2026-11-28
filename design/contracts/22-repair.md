@@ -31,8 +31,10 @@ An atomic repair changes the smallest independently valid IR unit associated wit
 - one explicitly declared coupled group of pointers within one authorized IR record or one authorized file when those pointers cannot be valid separately.
 
 Atomicity means unrelated valid units cannot change. [§16.4](16-reference-ingestion.md#false-conflict-repair-boundary)
-permits one native-bound inseparable conflict-relation group across its affected
-dispositions/conflict records. No other cross-record repair is authorized.
+permits one native-bound conflict-relation group: the selected conflict record, its group and the dispositions
+of the claims no other record holds. A claim another record holds keeps its other relation, and a record all of whose
+claims another record holds, or a replacement group naming only such claims, authorizes no repair. No other
+cross-record repair is authorized.
 
 Execution-private pre-generation repair of source-backed candidate omissions is
 permitted. The owning contract must establish a
@@ -41,7 +43,8 @@ review evidence. Source absence, ambiguous ownership and stale evidence do not
 authorize repair. A review verdict itself is never a repair target. A source
 `candidate_invalid` finding or its nested authority gap
 ([§12](12-model-boundary.md#source-invalid-content-finding)) authorizes no loss
-attribution, upstream rebuilding or semantic content repair.
+attribution, upstream rebuilding or semantic content repair. A reconciliation record is offered
+no `candidate_invalid`: its dismissal is candidate loss.
 
 The [clarification-admission boundary](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 does not relax that prohibition. In required pre-generation assessment, an inconclusive finding without an identifiable
@@ -350,7 +353,10 @@ found at response admission ([§12.2](12-model-boundary.md#122-initial-guidance-
 source-omission conflict-group repair) takes the bounded protocol correction of the complete
 response; it is never an insertion, deletion or repair target
 ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026),
-[ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)). Native ledger order owns canonical ordering.
+[ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)). A conflict group that names a claim not disposed
+`conflicting` (`group_member_not_conflicting`, ADR 0046 Decision 7) is likewise found at response admission, in the
+dispositions request and the conflict-group repair request, and takes the same bounded correction of the complete
+response. Native ledger order owns canonical ordering.
 A mechanically invalid finding may use the existing selected-value/field atomic
 repair while other subjects remain pending; valid produced siblings remain
 unchanged and future pending subjects do not produce missing-finding defects.
@@ -474,7 +480,10 @@ producer, feature and captured reference state. After rebuilding, becoming
 generation-ready cannot skip that dependent review or substitute a different
 review purpose. Existing readiness/preservation gates require the matching
 pending review regardless of the optional preservation-scan setting. Only its
-admission can settle the repair obligation. Generation
+admission can settle the repair obligation. The scope pins the projection's kind and population
+bound; the subjects a readiness repair's dependent review covers are the pass's
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md), amended 27 November 2026: the conflict
+records and the signals holding the claims a conflict-group repair decided, or every subject). Generation
 initialization blocks while any native repair permit remains active, including
 a child suspending a source-repair parent. Projection retirement leaves those
 runner-owned obligations intact.
@@ -568,8 +577,8 @@ defined response-level correction containing:
   schema, and concise schema-derived immediate fields, required fields and allowed
   discriminator values. The single complete schema retains every alternative and
   every constraint that schema syntax can express; [§12.2](12-model-boundary.md#122-initial-guidance-packet)
-  owns the admission constraints that stay native, and `duplicate_member`, `equal_items`
-  and `disagreeing_items` are reported with parent scope on the enclosing array.
+  owns the admission constraints that stay native, and `duplicate_member`, `equal_items`,
+  `disagreeing_items` and `group_member_not_conflicting` are reported with parent scope on the enclosing array.
   A `missing_member` correction also names the first omitted member (`member`), and a
   `shared_member` correction, located at
   the partly taken record and offering its shape, names its exclusive and owning kinds
@@ -585,7 +594,9 @@ defined response-level correction containing:
   the first item that a later one disagrees with, names the list and the agreed property of the
   rule and lists, for each group of values that the same items list yet disagree on, those values
   and the JSON Pointer of every item that lists them, in response order (`agreement`: `property`,
-  `agree` and `sets` of `values` and `items`; ADR 0036 Decision 7). No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
+  `agree` and `sets` of `values` and `items`; ADR 0036 Decision 7). A `group_member_not_conflicting` correction,
+  located at the first group item that lists a claim the response disposes otherwise, names that claim as `member`; the
+  rejected response travels with the correction (ADR 0046 Decision 7). No other correction changes. A wholly taken record is never corrected: the records validator deletes it natively
   (`repeated_statement`, ADR 0038 Decision 5), without judging its text, unless it holds
   the only copy of an exact value, which keeps it and its text under the usual rules. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
@@ -630,9 +641,7 @@ cannot be described, is not an exhaustion: the runner stops on its own authority
 `retry_admission` reason ([§6](06-pipeline-nodes.md#runner-rejection-reasons)). If JSON decoding or schema validation still fails when correction is unavailable
 or exhausted, the run reports an error, exits nonzero and publishes nothing
 ([§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)'s
-precedence table, which also records what
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold since 30
-October 2026 and not implemented, would change). A correction that passes admission
+precedence table). A correction that passes admission
 may continue through the remaining domain validators; a recovered earlier rejection
 is not itself a publication veto. Whole-stage regeneration is not used.
 

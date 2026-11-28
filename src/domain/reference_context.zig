@@ -6,6 +6,18 @@ const r = @import("reference_reconciliation.zig");
 const markdown = @import("specification_markdown.zig");
 pub const Error = snapshot.Error || markdown.Error;
 
+/// Whether the signal holds an `open_question` claim that an applied answer kept: the snapshot's `answer_retained`, which
+/// readback checks, names claims that stand alone in a signal of their own.
+fn answeredQuestion(value: snapshot.Snapshot, signal: r.Signal) bool {
+    return signal.value.content == .model and signal.value.content.model == .open_question and signal.value.claim_ids.len == 1 and
+        r.contains(r.ClaimId, value.answer_retained, signal.value.claim_ids[0]);
+}
+
+fn hasAnsweredQuestion(value: snapshot.Snapshot) bool {
+    for (value.signals) |signal| if (answeredQuestion(value, signal)) return true;
+    return false;
+}
+
 pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, traces: ?[]const @import("specification_projection.zig").RequirementTrace) Error![]const u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
@@ -28,10 +40,16 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, traces: ?[
         .{ r.extraction.Kind.validation, "Validation Signals" },
         .{ r.extraction.Kind.implementation_assumption, "Implementation Assumptions" },
         .{ r.extraction.Kind.open_question, "Open Questions" },
+        .{ r.extraction.Kind.open_question, "Answered Questions" },
     }) |section| {
-        try write(w, "\n## " ++ section[1] ++ "\n\n");
+        const answered_section = comptime std.mem.eql(u8, section[1], "Answered Questions");
+        // The section of answered questions appears only when an applied answer kept a question, so a run with no such answer
+        // renders the view it always has.
+        if (!answered_section or hasAnsweredQuestion(value)) try write(w, "\n## " ++ section[1] ++ "\n\n");
         for (value.signals) |signal| {
             if (signal.value.content != .model or signal.value.content.model != section[0]) continue;
+            // A question an applied answer kept is listed apart from the questions still open (ADR 0025).
+            if (comptime section[0] == .open_question) if (answeredQuestion(value, signal) != answered_section) continue;
             w.print("- **SIG-{d}** ", .{signal.id.ordinal}) catch return error.OutOfMemory;
             const content = @field(signal.value.content.model, @tagName(section[0])).value;
             if (comptime section[0] == .business or section[0] == .scope_guard) {

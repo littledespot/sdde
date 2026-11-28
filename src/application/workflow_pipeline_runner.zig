@@ -128,7 +128,7 @@ pub const Runner = struct {
         barrier: telemetry_barrier.Barrier,
         runtime: pipeline.NodeRuntime,
         model_provider_services: ?*const provider_services.ModelProviderBootstrapServices,
-        /// The project's decoded budget (ADR 0037); its closed decoder admits only
+        /// The project's decoded budget (ADR 0011); its closed decoder admits only
         /// positive values, so the execution ledger always initializes.
         token_budget: @import("../domain/config.zig").WorkflowTokenBudget,
     ) Runner {

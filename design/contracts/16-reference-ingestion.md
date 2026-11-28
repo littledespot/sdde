@@ -116,7 +116,9 @@ Initial readers should cover:
   `specified`.
 - The snapshot records only reference-derived facts: every claim has one
   retained/superseded/duplicate/conflicting extraction disposition, with valid
-  block/chunk/related-claim joins.
+  block/chunk/related-claim joins. The one exception is the claims an applied user answer kept
+  (`answer_retained`, [ADR 0025](../decisions/0025-clarification-answer-authentication.md)): each is a
+  retained model claim standing alone in a signal of its own, checked on load.
 - It never stores a mapping to the current editable specification.
 
 - Every citation ID must resolve uniquely to the same `referenceStateId` and a manifest
@@ -248,7 +250,7 @@ This sequence is normative; an orchestrator must require the typed evidence from
 7. Record exactly one claims/positive-`no_feature_claim`/blocked outcome for every identified chunk. Positive empty is forbidden when any model or preserved-token claim exists. Validate the expected chunk set is complete, then derive each block's final status from all chunks; neither one successful chunk nor a file-level status can hide an unprocessed range. Only then build a decoded-entry candidate.
 8. Merge identified claims into a per-document claim set. A compact reconciliation item retains the existing typed claim payload, claim ID, block/chunk IDs, canonical source citations and preserved-token references—not an ID without meaning. Reconciliation does not invent modality or subject/object identities absent from the extraction contract.
 9. Reconcile bounded groups hierarchically: within document, across the documents in the selected reference directory, then across compact group summaries. The selected directory is the related-document set; no inferred affinity or filename priority applies. The workflow explicitly supplies `group-size` (at least two). Group in stable source/claim order, then in preceding-summary order; recursively group global summaries until one global partition remains. The bound counts immediate claims/summaries, not model bytes or tokens. Every summary retains total original claim membership, payloads needed to decide conflict, and citations. Empty accounted corpora have an explicit empty global partition, not fabricated claims.
-10. Under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), as amended by [ADR 0024](../decisions/0024-native-exact-token-authority.md), validate dispositions before requesting signals, and signals before requesting conflict explanations, which are not requested when no conflict group exists: the empty answer is the only admissible one, so the engine constructs it with no provider origin (ADR 0022 "Forced conflicts answer"). Native code supplies preserved-token retained/direct-duplicate entries by exact bytes and earliest original claim ordinal; models dispose only extracted semantic claims. Token IDs are not model disposition subjects, relationship targets or conflict members. Each phase receives native validated prerequisite facts, bound to the exact current assignment. Models select semantic conflict groups once; native code expands reciprocal edges without transitive closure. Models explain conflicts through native group handles, without copying membership. Native code adds mandatory singleton projections for every preserved-token occurrence, including duplicates. Summary semantic response order precedes native token statements in partition claim order; model local keys and token metadata are absent. Response admission binds one disposition to every assigned semantic claim and corrects an omitted or repeated one with the whole assignment ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)); full closed-proposal validation still requires authorized IDs, total dispositions, matching signal content and valid conflict joins, and a gap reaching it is an engine failure, not a repair target.
+10. Under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), as amended by [ADR 0024](../decisions/0024-native-exact-token-authority.md), validate dispositions before requesting signals, and signals before requesting conflict explanations, which are not requested when no conflict group exists: the empty answer is the only admissible one, so the engine constructs it with no provider origin (ADR 0022 "Forced conflicts answer"). Native code supplies preserved-token retained/direct-duplicate entries by exact bytes and earliest original claim ordinal; models dispose only extracted semantic claims. Token IDs are not model disposition subjects, relationship targets or conflict members. Each phase receives native validated prerequisite facts, bound to the exact current assignment. Models select semantic conflict groups once; native code expands reciprocal edges without transitive closure. Models explain conflicts through native group handles, without copying membership, one explanation and one conflict kind for each declared group (response admission binds the group IDs as exact members and corrects a repeat or an omission with the whole assignment; ADR 0022 "Conflict groups"). Native code adds mandatory singleton projections for every preserved-token occurrence, including duplicates. Summary semantic response order precedes native token statements in partition claim order; model local keys and token metadata are absent. Response admission binds one disposition to every assigned semantic claim and corrects an omitted or repeated one with the whole assignment ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)); response admission also rejects a conflict group that lists a claim the response disposes other than `conflicting` and corrects it with the whole assignment (ADR 0046 Decision 7; a `conflicting` claim in no group stays a later block); full closed-proposal validation still requires authorized IDs, total dispositions, matching signal content and valid conflict joins, and a gap reaching it is an engine failure, not a repair target.
 11. Build/validate the canonical claim ledger; assign engine conflict/signal IDs; and build canonical `SourceConflict`/`ReferenceSignal` records. Current-spec claim dispositions refer to open-question signals by `signalId`.
 12. Build the manifest from the ordered inventory and exactly one final entry variant per source; validate that every inventory entry and decoded block has a final accounting state, both budget ledgers are closed, every source map is complete, and every passive/claim/context join resolves. Assemble and fully validate the immutable `ReferenceSnapshot` candidate before deciding its next branch.
 13. If source review establishes genuine behavior-changing source conflicts that remain unresolved, deterministically create or reuse exactly one conflict-bound `SNN` for every unique structural subject coordinate, render their engine-owned current claim-ID choices, and use one `SpecificationClarificationPauseEntries` variant to validate and publish under §§23.2 and 25 the conflict-bearing snapshot, current authorities, complete clarification-set transition, complete controlled-form set, reference view, and `spec_clarification_pending` state. Snapshot-local conflict/claim/citation IDs are binding data, not clarification subject identity. No completed feature brief or specification authority is persisted; ADR 0017 additionally publishes the validated incomplete `spec.md` projection alongside the pending state. A closed authenticated response is accepted in memory, then checked against a fully and independently recaptured successor snapshot, and published only with the run's own publication (ADR 0025). Only a validated total old-option-to-current-claim correspondence for the exact same structural subject may feed the decision-ID allocator and decision builder; full accounting, set reconciliation, and snapshot validation run again. Otherwise generate/validate the specification, rebuild the current `SpecificationProvenanceState.claimDispositions`, and persist bootstrap-authority/request/passive-literal-registry/acknowledgement/reference/provenance/spec/views/workflow state with the complete successful Specify output.
@@ -315,16 +317,23 @@ source decisions enter clarification.
 
 #### False-conflict repair boundary
 
-The existing omission-repair owner may replace one native-bound conflict group: the selected conflict's claims,
-their disposition entries and associated conflict records, the one exception to
-§22.1/§22.3's single-record boundary. Reconciliation labels are candidate assertions, so authority
-projection records them as candidate defects. Source review establishes a genuine
+The existing omission-repair owner may replace one native-bound conflict group: the selected conflict record, its
+group and the disposition entries of the claims no other record holds (its released claims), the one exception to
+§22.1/§22.3's single-record boundary. A claim another record also holds keeps its disposition and its other relation;
+native code re-derives its relations from the records that stand, and finds the replaced record by its claims, not by
+a position. A record whose every claim another holds, a record nested inside a larger one included, releases none
+and authorizes no repair
+([ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), amended 27 November 2026). Reconciliation labels
+are candidate assertions, so authority projection records them as candidate defects. Source review establishes a genuine
 gap or attributes lost meaning with `reconciliation_conflict`; a positive finding
-alone cannot clear an unresolved conflict record.
+alone cannot clear an unresolved conflict record. A signal or conflict subject is offered no `candidate_invalid`
+([§12](12-model-boundary.md#source-invalid-content-finding)), so a record the review dismisses is dismissed through the
+finding that authorizes this repair.
 
 Authorization requires exact claim/citation/source joins, current old values,
-producing origins, candidate revision and source/policy dependencies. Reject a group
-whose relationships cross the selected membership; never widen it to the whole
+producing origins, candidate revision and source/policy dependencies. Reject a replacement
+that names a claim outside the selected record, decides a claim another record holds or
+names a group without a released claim; never widen it to the whole
 result. Replacement retains that membership and cannot introduce external links;
 response admission binds each group claim once, so an incomplete answer takes the
 repair request's protocol correction ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)).
@@ -343,8 +352,9 @@ alternate continuation or retry owner.
 
 The original claim set supplies a stable retry identity across conflict-ID renewal.
 Retain that native witness with the candidate and review, not as persisted authority.
-Only complete rebuilt validation and current positive evidence for those claims can
-establish progress; unchanged false conflicts remain recurring failures. Genuine
+Only complete rebuilt validation and current positive evidence for the claims the repair decided again can
+establish progress, so a claim another record holds, or that a later answer supersedes, never makes a finished
+repair look unfinished; unchanged false conflicts remain recurring failures. Genuine
 source conflicts remain actionable clarifications. Unsafe attribution fails as a
 candidate defect; repair cannot invent source precedence or force a positive verdict.
 

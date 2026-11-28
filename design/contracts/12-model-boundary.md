@@ -51,7 +51,7 @@ and ownership rules.
 
 - Every model request includes the short engine-owned JSON framing instruction defined by [ADR
   0014](../decisions/0014-universal-response-format-guidance.md), once per serialized call.
-- It applies to all workflows, response modes and retries.
+- It applies to all workflows and retries.
 - Task guidance and the exact result schema remain workflow-selected; the schema alone defines
   the permitted response fields and values.
 
@@ -101,12 +101,13 @@ Each generation request contains only what the current unit needs:
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
-  and local validation. Three admission constraints are exceptions, because
+  and local validation. Four admission constraints are exceptions, because
   provider schema syntax cannot express them: `exact_members` uniqueness, with a
   native count its completeness (`missing_member`; below, ADR 0046) and with a `distinct`
   rule its distinctness (`equal_items`; below),
   ADR 0038's records exclusivity (`shared_member`; scenario coverage is met by construction, Decision 3),
-  and ADR 0036's claim agreement (`disagreeing_items`; below). Local admission, request descriptions and replay
+  ADR 0036's claim agreement (`disagreeing_items`; below), and ADR 0046's group agreement
+  (`group_member_not_conflicting`; below). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -130,6 +131,14 @@ Each generation request contains only what the current unit needs:
   - a part whose schema lacks the array leaves the selector unused and records nothing,
     while a selector that no schema holds rejects;
   - the request description records the applied rule (`agreements`), so replay applies it.
+  A reconciliation response that holds `conflict_groups` and `claim_dispositions` also declares a group agreement
+  ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md) Decision 7, 28 November 2026): every claim ID
+  in `conflict_groups[].claim_ids` that the response disposes is the `claim_id` of an item whose disposition kind is
+  `conflicting`, or admission rejects the first group item that lists such a claim as `group_member_not_conflicting`,
+  located at that item. It reads claim IDs and disposition tags only, so no prose is judged, and the request
+  description records it (`listings`), so replay applies it. A listed claim the response does not dispose, and a claim
+  disposed `conflicting` that is in no group, are not rejected here (ADR 0022 "Conflict groups"). It applies to the
+  dispositions request and the conflict-group repair request.
   An `exact_members` selector instead names an integer property of array items:
   - the array must contain exactly one item for each allowed value;
   - its item count is fixed to the member count, which the guidance schema states
@@ -239,7 +248,7 @@ Raw whole-repository listings and earlier model prose are not sent. Stable ident
   its rejected body. Admission recognizes raw prose before NFC and validates the
   derived composition through the shared owner. Ambiguous eligible spans reject the
   complete field through existing bounded correction, not a new retry route.
-  `model-request-debug/v21` retains native scope for diagnostic replay; request logs
+  `model-request-debug/v23` retains native scope for diagnostic replay; request logs
   never become workflow or persistence authority. Missing historical native scope
   stays unavailable rather than reconstructed from a visible token catalogue.
 
@@ -258,8 +267,9 @@ request/response codec, including production invocation, diagnostic replay and t
 development harness. Common `system`, `messages`, `inferenceConfig` and
 `outputConfig` fields replace provider-specific chat envelopes. Native structured
 output projects the existing compiled schema into `outputConfig.textFormat`;
-`structure.jsonSchema.schema` is a JSON string. Prompt-only models still receive
-the exact closed schema as guidance and pass the same native candidate validators.
+`structure.jsonSchema.schema` is a JSON string. Native output is the only response
+mode (user decision, 25 November 2026); every registered contract supports it, so a model
+without it cannot be registered. The exact closed schema is also sent once as guidance.
 
 The compiled Bedrock family named by the catalogue entry owns the typed additional-control
 policy; [ADR 0029](../decisions/0029-bedrock-model-families.md) owns the families, Regions
@@ -281,8 +291,7 @@ noncandidate stops preserve their typed outcomes and independently valid usage.
 Normalize cached token usage under
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting).
 
-Live tests use the user-selected `openai.gpt-oss-20b-1:0` binding in `ap-southeast-2`
-under the development-only
+Live tests use the user-selected bindings named by the development-only
 [cost policy](../decisions/0029-bedrock-model-families.md#live-test-cost-policy). That
 is mechanical support, not a live compatibility or semantic-quality claim, and it
 cannot change production authority. Historical captures follow the immutable
@@ -373,9 +382,9 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - The originating model-request step calls a registered generic operation and declares its model
   slot, prompt/guidance resources, result schema, allowed context behavior,
   and outcome transitions in the workflow definition.
-- Response mode comes only from the selected catalogue model’s required `json` boolean
-  (§9; ADR 0012). Bindings derive it from their immutable catalogue entry rather than
-  retaining another selector. Workflow response-mode overrides reject; schemas remain workflow-owned.
+- Native JSON-schema output is the only response mode (user decision, 25 November 2026;
+  ADR 0012). The catalogue has no `json` member and no binding or request records a mode.
+  Workflow response-mode overrides reject; schemas remain workflow-owned.
 - Large resources are declared once and referenced by concise local IDs.
 - Request preparation may select an optional `context` prompt resource, including
   JSON field guidance. It precedes task guidance in static developer content;
@@ -453,7 +462,7 @@ findings. Only complete native collection validation permits authority advanceme
 - Inference requires no size estimate, token count or static-capacity preflight; the provider
   reports its own size errors or stops.
 - The runner accounts API-reported input plus output usage exactly once against
-  the execution's single configured `workflowTokenBudget` ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)), across
+  the execution's single configured `workflowTokenBudget` ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)), across
   all inference calls (ADR 0011). Global exhaustion, overshoot or unavailable usage
   prohibits later model calls, and a global budget rejection is fatal.
 
@@ -467,7 +476,7 @@ findings. Only complete native collection validation permits authority advanceme
 - Each workflow-declared result schema defines the entire compact response; there is no generic
   open payload or repeated engine metadata.
 - Repair operations do not recursively repair semantic failures: malformed responses may receive
-  only the YAML-declared bounded protocol-retry transition, while a schema-valid but invalid
+  only the bounded protocol correction inside their `request-model` step (ADR 0030), while a schema-valid but invalid
   repair consumes the existing authorization attempt.
 
 - The reference-extraction result schema selected by the workflow contains a bounded
@@ -892,18 +901,15 @@ exact subject/purpose/dependency bindings, never similar wording or shared citat
 Changed source or a different decision still requires its own current assessment.
 
 The shared authority owner combines the complete findings using this precedence;
-the source-loss owner selects targets and the runner executes declared operations.
-Rows marked "ADR 0041" state what
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-since 30 October 2026; not implemented) would add:
+the source-loss owner selects targets and the runner executes declared operations:
 
 | Current state | Required continuation |
 | --- | --- |
-| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; nothing is published. ADR 0041: a failure of model work would publish its failed incomplete specification of the validated content, marked and logged |
-| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass, and nothing is published. ADR 0041: the blocked run would publish its validated content as an incomplete specification, marked and logged |
+| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; nothing is published |
+| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass, and nothing is published |
 | Repairable malformed review/need | Existing bounded correction and full admission; no authority gate on the partial result |
 | One or more uniquely authorized localized candidate repairs, with current dependencies and allowance | Select deterministically from eligible targets; repair, rebuild affected dependents and reassess the complete ledger before choosing another outcome |
-| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause, and nothing is published. ADR 0041: its failed incomplete specification would publish the validated content without the unresolved unit |
+| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause, and nothing is published |
 | No unresolved candidate/review defect and one or more admitted user decisions | `needs_user`; validate the complete clarification output under the owning workflow policy |
 | All required authorities resolved and candidate validation passes | Continue the declared workflow; completion still requires all later gates |
 
@@ -980,6 +986,13 @@ against the same current subject; neither part supplies authority for the other.
 The top-level finding carries no question, `missing_obligation`, localized loss
 or preservation comparison. A contradiction that removes original meaning still
 uses `candidate_omission`. Per-source preservation permits only a null gap.
+
+A signal or conflict subject is a candidate reconciliation record, and the producer repairs one the source review
+dismisses: a conflict group is replaced through
+[§16.4](16-reference-ingestion.md#false-conflict-repair-boundary), and a signal's content is replaced through the
+reconciliation repair's signal-content unit. Its selected schema view therefore holds every finding but `candidate_invalid`, with no
+gap and no gap question, and admission rejects one (`invalid_finding`). The dismissal is `candidate_omission`.
+Every other subject keeps its view.
 
 The shared authority owner retains an `invalid_content` candidate defect without
 omission-repair support, and evaluates a nested gap through its existing gap

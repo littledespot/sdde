@@ -153,7 +153,24 @@ pub const RecordAssignments = struct {
 };
 pub const Signal = struct { id: SignalId, value: ValidatedSignal };
 pub const Conflict = struct { id: ConflictId, value: ValidatedConflict };
-pub const Records = struct { assignments: RecordAssignments, signals: []const Signal, conflicts: []const Conflict };
+pub const Records = struct {
+    assignments: RecordAssignments,
+    signals: []const Signal,
+    conflicts: []const Conflict,
+    /// The claims an applied user answer superseded (ADR 0025). Execution-local: a supersession the model proposed is not
+    /// one, and the persisted snapshot does not carry it.
+    answer_superseded: []const ClaimId = &.{},
+    /// The claims an applied user answer kept (ADR 0025). Unlike `answer_superseded` it is persisted with the snapshot, since
+    /// what a retained question claim may map to depends on it each time the snapshot is read back.
+    answer_retained: []const ClaimId = &.{},
+    /// The conflicts an applied user answer dropped, each with the subject of the form that conflict owned. Execution-local:
+    /// it lets the clarification refresh close such a form that is still open (ADR 0025), and the persisted snapshot does
+    /// not carry it.
+    answer_dropped: []const DroppedConflict = &.{},
+};
+/// A conflict an applied answer dropped: the subject of its clarification form, and the answer that decided it by the
+/// response it came from and the option key it chose.
+pub const DroppedConflict = struct { subject: @import("clarification_inputs.zig").Subject, response_id: u64, key: []const u8 };
 pub const Accounted = struct {
     records: Records,
     outcome: enum { complete, blocked },

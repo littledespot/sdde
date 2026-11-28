@@ -33,14 +33,14 @@ pub const Adapter = struct {
         const family = key.Family.of(description.provider_config) orelse return error.InvalidReplay;
         if (std.meta.activeTag(facts) != family.configSchema() or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
-        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, schema, description.members, description.coverages, description.agreements) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
+        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, schema, description.members, description.coverages, description.agreements, description.listings) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
         recorded.release();
         const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null)) return error.InvalidReplay;
         if (description.exact_scope) |scope| if (!@import("../../domain/model_exact_values.zig").valid(scope)) return error.InvalidReplay;
-        const text_schema: text.TextSchema = switch (description.response_mode) {
-            .prompt_only => .{ .prompt_only = schema.modelBytes() },
-            .native_schema => .{ .native = .{ .guidance = schema.modelBytes(), .structure = @import("../../domain/model_schema_projection.zig").render(a, schema, .native) catch return error.InvalidReplay } },
+        const text_schema: text.TextSchema = .{
+            .guidance = schema.modelBytes(),
+            .structure = @import("../../domain/model_schema_projection.zig").render(a, schema, .native) catch return error.InvalidReplay,
         };
         const effort = text.reasoningEffort(description.reasoning_effort) catch return error.InvalidReplay;
         // The captured family must be the one the authorized binding compiles.
@@ -188,10 +188,10 @@ pub const Adapter = struct {
             result.reason = "Captured schema is invalid";
             return result;
         };
-        // Admission validates the restricted schema, including native membership, coverage and agreement.
-        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, compiled, description.members, description.coverages, description.agreements) catch |err| {
+        // Admission validates the restricted schema, including native membership, coverage, agreement and listed rules.
+        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, compiled, description.members, description.coverages, description.agreements, description.listings) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
-            result.reason = "Captured schema and native membership, coverage or agreement disagree";
+            result.reason = "Captured schema and native membership, coverage, agreement or listed rule disagree";
             return result;
         };
         defer recorded.release();

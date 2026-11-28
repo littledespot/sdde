@@ -357,7 +357,7 @@ test "the shared provider adapter sends one Messages request with the Anthropic 
     try std.testing.expectEqualStrings(model, sent.value.object.get("model").?.string);
     try std.testing.expectEqual(@as(i64, 128000), sent.value.object.get("max_tokens").?.integer);
     try std.testing.expectEqualStrings("low", sent.value.object.get("output_config").?.object.get("effort").?.string);
-    try std.testing.expect(sent.value.object.get("output_config").?.object.get("format") == null);
+    try std.testing.expectEqualStrings("json_schema", sent.value.object.get("output_config").?.object.get("format").?.object.get("type").?.string);
     try std.testing.expect(!sent.value.object.contains("temperature"));
     const complete = observed.completed.raw_result.complete;
     try std.testing.expectEqualStrings("{\"a\":1}", complete.content.bytes);

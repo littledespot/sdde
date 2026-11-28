@@ -3,9 +3,7 @@
 **Status:** Proposed feature design
 
 **Compatibility:** None. This pre-release increment accepts only the exact
-concise v1 YAML contract; [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
-(on hold, not implemented) replaces it with `workflow/v2` when implemented
-([§3.2](#32-root-shape)). It has no verbose tagged-parameter form, JSON or
+concise v1 YAML contract ([§3.2](#32-root-shape)). It has no verbose tagged-parameter form, JSON or
 `.yml` reader, migration, YAML alias, legacy filename, dual reader, implicit
 default, source example, or packaged fallback.
 
@@ -181,21 +179,11 @@ Every definition contains these exact concise fields:
 | `version` | Positive unsigned 32-bit integer. It is part of semantic authority; v1 performs no migration or range selection. |
 | `shortcode` | Exactly four case-sensitive ASCII alphanumeric bytes. F0002's canonical parser owns the same syntax. |
 | `invoke` | Exact unversioned ID of one registered capability-free invocation operation. |
-| `policy` | Exact versioned reference to one registered workflow policy profile, which bounds capabilities and terminal outcomes; it supplies no token budget ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)) and no retry count. |
+| `policy` | Exact versioned reference to one registered workflow policy profile, which bounds capabilities and terminal outcomes; it supplies no token budget ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)) and no retry count. |
 | `start` | Definition-local ID of the graph entry step. |
 | `resources` | Optional map of concise local aliases to bounded workflow-root-relative resource names. |
 | `steps` | Local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. Authored and expanded graphs obey the compiler-owned bounds in §4. |
 | `subgraphs` | Optional map of 1–32 local reusable operation sequences, each with `start` and `steps`. |
-
-**`workflow/v2` (ADR 0041 Decision 6; on hold, not implemented).**
-`schema` becomes the constant `workflow/v2`, and the root gains one optional member:
-
-| Field | Meaning |
-| --- | --- |
-| `failure-output` | Local ID of one `subgraphs` entry that the engine runs through the runner after an eligible failure, then returns the original failure. It holds no model capability, uses only registered snapshot and incomplete-publication operations, and ends in its publication step. Only Specify declares one. |
-
-Every definition, the formal schema and every fixture move to v2 together; `workflow/v1`
-then rejects, with no compatibility reader.
 
 - `sourceInventoryOrdinal` is engine-derived provenance and is not accepted in a file.
 - A resource name is declarative input resolved only beneath the authorized
@@ -513,8 +501,8 @@ service is published.
 > below describe the rules each stage binding keeps; none is a YAML-selectable operation.
 
 - Request-origin contracts selecting a model binding declare their typed slot.
-  The selected catalogue model owns response mode through its required `json` boolean
-  (ADR 0012); workflow `response-mode` and `temperature` overrides reject.
+  Native JSON-schema output is the only response mode (ADR 0012, amended 25 November
+  2026); workflow `response-mode` and `temperature` overrides reject.
 - Under [ADR 0011](../decisions/0011-provider-owned-request-limits.md), retired
   `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters reject.
 - Registration and compilation require no capacity fields, local size ceilings or fit
@@ -775,10 +763,6 @@ The `validate_workflow_graphs` step proves at least:
   terminal for every declared outcome, including after subgraph expansion. No
   later pure, filesystem, model, logging or publication operation is permitted;
   preparation selects the validated `ok` or `needs_user` terminal before writing;
-- under ADR 0041 (on hold), a declared `failure-output` names an existing
-  subgraph that holds no model capability, uses only registered snapshot and
-  incomplete-publication operations, and ends in its publication step, whose terminal
-  is the recorded failure;
 - every terminal target preserves its source tag exactly, and graph policy
   cannot discard a failure, invalid result, user-input need, block, or
   cancellation along a later branch;
@@ -787,7 +771,7 @@ The `validate_workflow_graphs` step proves at least:
 - effective capabilities are derived only from registered contracts and are a
   subset of the selected workflow policy profile; and
 - compiled workflow authority carries no token budget: the project configuration's
-  `workflowTokenBudget` ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)) initializes a fresh accounting ledger for each
+  `workflowTokenBudget` ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)) initializes a fresh accounting ledger for each
   execution rather than one shared across executions.
 
 Unknown or mismatched contracts, outcomes, gates, policies, schema/policy versions;
@@ -969,7 +953,7 @@ Those concerns remain with their accepted owners or later increments.
     adapter failure, and deadline exhaustion return `failed`. Neither publishes
     a service or partial registry.
 21. The project configuration supplies exactly one positive total model-token budget
-    ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)), applied to a fresh ledger for each workflow execution; the selected
+    ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)), applied to a fresh ledger for each workflow execution; the selected
     policy supplies no budget and no retry count. Every retry-capable operation instance declares its own
     bounded `retry-limit`; missing limits, policy-supplied retry defaults, and
     retry parameters on non-retry contracts fail compilation.

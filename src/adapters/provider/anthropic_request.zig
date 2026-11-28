@@ -65,27 +65,23 @@ fn writeMessages(writer: *std.Io.Writer, request: TextRequest, parts: text.Layou
     try json.endArray();
     try json.endObject();
     try json.endArray();
-    if (request.reasoning_effort != null or request.schema == .native) {
-        try json.objectField("output_config");
-        try json.beginObject();
-        if (request.reasoning_effort) |effort| {
-            try json.objectField("effort");
-            try json.write(effort);
-        }
-        if (request.schema == .native) {
-            // The Messages API takes the schema as a JSON object, not a string.
-            try json.objectField("format");
-            try json.beginObject();
-            try json.objectField("type");
-            try json.write("json_schema");
-            try json.objectField("schema");
-            try json.beginWriteRaw();
-            try json.writer.writeAll(request.schema.native.structure);
-            json.endWriteRaw();
-            try json.endObject();
-        }
-        try json.endObject();
+    try json.objectField("output_config");
+    try json.beginObject();
+    if (request.reasoning_effort) |effort| {
+        try json.objectField("effort");
+        try json.write(effort);
     }
+    // The Messages API takes the schema as a JSON object, not a string.
+    try json.objectField("format");
+    try json.beginObject();
+    try json.objectField("type");
+    try json.write("json_schema");
+    try json.objectField("schema");
+    try json.beginWriteRaw();
+    try json.writer.writeAll(request.schema.structure);
+    json.endWriteRaw();
+    try json.endObject();
+    try json.endObject();
     try json.endObject();
 }
 
@@ -95,7 +91,7 @@ test "Messages request carries the layout, maximum, effort and schema object" {
     const body = try encodeText(a, .{
         .model = "claude-haiku-5-5",
         .content = &content,
-        .schema = .{ .native = .{ .guidance = "{\"schema\":1}", .structure = "{\"type\":\"object\",\"additionalProperties\":false}" } },
+        .schema = .{ .guidance = "{\"schema\":1}", .structure = "{\"type\":\"object\",\"additionalProperties\":false}" },
         .temperature = null,
         .reasoning_effort = .low,
         .max_output_tokens = .{ .tokens = 128000 },
@@ -107,14 +103,16 @@ test "Messages request carries the layout, maximum, effort and schema object" {
     try std.testing.expectEqualStrings(expected, body);
 }
 
-test "prompt-only Messages request without effort sends no output configuration" {
+test "Messages request without effort sends the schema format and no unsupported field" {
     const a = std.testing.allocator;
     const content = [_]operation.ModelVisibleContent{.{ .evidence = "source" }};
-    const body = try encodeText(a, .{ .model = "claude-opus-5-5", .content = &content, .schema = .{ .prompt_only = "{}" }, .temperature = null, .reasoning_effort = null, .max_output_tokens = .{ .tokens = 64 } });
+    const body = try encodeText(a, .{ .model = "claude-opus-5-5", .content = &content, .schema = .{ .guidance = "{}", .structure = "{\"type\":\"object\"}" }, .temperature = null, .reasoning_effort = null, .max_output_tokens = .{ .tokens = 64 } });
     defer a.free(body);
     var parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
     defer parsed.deinit();
-    try std.testing.expect(!parsed.value.object.contains("output_config"));
+    const output_config = parsed.value.object.get("output_config").?.object;
+    try std.testing.expect(!output_config.contains("effort"));
+    try std.testing.expectEqualStrings("json_schema", output_config.get("format").?.object.get("type").?.string);
     inline for (.{ "temperature", "top_p", "top_k", "thinking", "stop_sequences", "tools", "inference_geo", "speed", "anthropic-beta" }) |forbidden| {
         try std.testing.expect(std.mem.indexOf(u8, body, forbidden) == null);
     }
@@ -124,7 +122,7 @@ test "prompt-only Messages request without effort sends no output configuration"
 test "Messages request rejects temperature, missing user text and non-object schemas before send" {
     const a = std.testing.allocator;
     const content = [_]operation.ModelVisibleContent{.{ .user = "input" }};
-    const base: TextRequest = .{ .model = "claude-sonnet-5-5", .content = &content, .schema = .{ .prompt_only = "{}" }, .temperature = null, .reasoning_effort = null, .max_output_tokens = .{ .tokens = 1 } };
+    const base: TextRequest = .{ .model = "claude-sonnet-5-5", .content = &content, .schema = .{ .guidance = "{}", .structure = "{}" }, .temperature = null, .reasoning_effort = null, .max_output_tokens = .{ .tokens = 1 } };
     var with_temperature = base;
     with_temperature.temperature = @import("../../domain/model_controls.zig").Temperature.init(0.1).?;
     try std.testing.expectError(error.InvalidRequest, encodeText(a, with_temperature));
@@ -132,7 +130,7 @@ test "Messages request rejects temperature, missing user text and non-object sch
     without_user.content = &.{.{ .system = "rules" }};
     try std.testing.expectError(error.InvalidRequest, encodeText(a, without_user));
     var array_schema = base;
-    array_schema.schema = .{ .native = .{ .guidance = "{}", .structure = "[]" } };
+    array_schema.schema = .{ .guidance = "{}", .structure = "[]" };
     try std.testing.expectError(error.InvalidRequest, encodeText(a, array_schema));
     var unnamed = base;
     unnamed.model = "";

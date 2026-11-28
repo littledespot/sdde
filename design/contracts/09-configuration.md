@@ -35,8 +35,7 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
 - The provider catalogue at `paths.providers` (`.sddproviders.json`) is the second,
   separately owned model-configuration source.
   [F0006 §3](../features/F0006-LLMProviderInterface.md#3-exact-sddprovidersjson-contract)
-  owns its closed shape, including each model's required `json` output selection and its
-  closed per-provider `config` with `maxOutputTokens` and the required `requestTimeoutMs`
+  owns its closed shape, including each model's closed per-provider `config` with `maxOutputTokens` and the required `requestTimeoutMs`
   deadline; [F0006 §5](../features/F0006-LLMProviderInterface.md#5-conditional-bootstrap-and-change-handling)
   owns its single immutable capture per model-capable invocation. Neither configuration
   document carries a credential
@@ -56,13 +55,13 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
   also owns each member's decode rejections.
 - The root requires `logs`, `models`, `workflowTokenBudget`, `temperature`,
   `temperatureRunawayRetry` and `paths` and permits
-  optional `validation` ([ADR 0021](../decisions/0021-optional-source-preservation-review.md));
+  optional `validation` ([ADR 0023](../decisions/0023-advisory-post-generation-review.md));
   fixed records reject missing required, duplicate and unknown members. The removed
   `principles` section is an unknown member
   ([ADR 0015](../decisions/0015-specification-principle-review.md)).
 - `workflowTokenBudget` is the total model tokens one workflow execution may use, an
   integer from 1 to 4,294,967,295 with no default
-  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)).
 - `temperature` is the temperature every inference request sends, and
   `temperatureRunawayRetry` the one a runaway re-send sends
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). Each
@@ -118,13 +117,12 @@ bootstrap:
 - [F0005 — WorkflowDefinitionRegistryService](../features/F0005-WorkflowDefinitionRegistryService.md)
   owns the workflow root: its bounded, totally accounted inventory and reserved `features/`
   child, the closed v1 definition media and
-  [schema](../schemas/workflow-definition-v1.schema.json) (including ADR 0041's on-hold
-  `workflow/v2`), unique `WorkflowId`s and logging shortcodes, and compilation from registered
+  [schema](../schemas/workflow-definition-v1.schema.json), unique `WorkflowId`s and logging shortcodes, and compilation from registered
   operation contracts. Project workflow files are never executable scripts, infrastructure
   selectors, raw path/command sources, or operational capabilities.
 - The sole workflow-global execution limit is the configuration's `workflowTokenBudget`,
   initialized afresh for each execution
-  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). Workflow policy and
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)). Workflow policy and
   compiled graphs don't carry it, and it is not an attempt, retry, repair, or per-action count.
 - Every retry path instead requires an explicit bounded `retry-limit` on its YAML operation
   instance ([F0005 §3.3](../features/F0005-WorkflowDefinitionRegistryService.md#33-steps-parameters-resources-and-transitions));
@@ -336,7 +334,7 @@ Resolution is explicit:
 5. include every chunk of every captured file in stable source order; no model classifies, summarizes, ranks, or omits principle prose;
 6. include the exact raw spans in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; Specify captures them and sends them only in the records generation request ([ADR 0015](../decisions/0015-specification-principle-review.md)); provider size errors follow the workflow's explicit outcome transitions;
 7. validate only transport facts deterministically: configured root, containment, identity, UTF-8, source-capture byte/count ceilings, stable spans, and registry joins;
-8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations. Specify runs no principle assessment ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)); Plan validates current policy and resolves its native required decisions at its own gate.
+8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations. Specify runs no principle assessment ([ADR 0015](../decisions/0015-specification-principle-review.md)); Plan validates current policy and resolves its native required decisions at its own gate.
 
 - Semantic principle prose is never parsed or compiled into a deterministic validator, even when
   it resembles YAML, a table, a template, or a formal rule.

@@ -62,7 +62,6 @@ pub fn build(
             };
             candidate.entries[entry_index] = .{
                 .provider = provider_id,
-                .json = model.json,
                 .model = model_id,
                 .implementation_id = resolved.implementation_id,
                 .config = config,

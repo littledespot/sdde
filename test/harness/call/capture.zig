@@ -7,6 +7,7 @@ const files = @import("../files.zig");
 const paths = @import("../contracts.zig");
 const workflow_ids = @import("../../../src/domain/workflow.zig");
 const evidence_context = @import("../e2e/call_context.zig");
+const run_directory = @import("../e2e/run_directory.zig");
 
 pub const Captured = struct {
     arena: std.heap.ArenaAllocator,
@@ -57,7 +58,9 @@ pub fn load(io: std.Io, allocator: std.mem.Allocator, root: std.Io.Dir, run_path
     if (redacted(context_bytes) or redacted(request_bytes)) return error.CaptureRedacted;
     const context = try evidence_context.Captured.decode(a, context_bytes);
     var store: @import("../../../src/adapters/filesystem/request_debugger_store.zig").Store = .{ .io = io, .feature = feature };
-    const call = try select(try store.load(a), context, workflow, ordinal, request_bytes);
+    const reported = try @import("../e2e/contracts.zig").retainedReport(io, a, run);
+    const inherited = try run_directory.inherited(io, a, root, run_path, if (reported) |value| value.continued_from else null);
+    const call = try select(try ownCalls(a, try store.load(a), inherited), context, workflow, ordinal, request_bytes);
     const owned_run_path = try a.dupe(u8, run_path);
     const context_path = try std.fmt.allocPrint(a, "{s}/{s}", .{ run_path, context_relative });
     const request_path = try std.fmt.allocPrint(a, "{s}/{s}", .{ run_path, request_relative });
@@ -73,6 +76,15 @@ pub fn load(io: std.Io, allocator: std.mem.Allocator, root: std.Io.Dir, run_path
         .context_path = context_path,
         .request_path = request_path,
     };
+}
+
+/// The calls of the run's own engine runs. A case's second leg also holds its first leg's request log, whose
+/// execution-local origins repeat its own. A run without a report, or with one of an older version, inherited nothing,
+/// so its calls are selected among all those its project holds.
+fn ownCalls(a: std.mem.Allocator, calls: []const debug.Call, inherited: []const []const u8) ![]const debug.Call {
+    var own: std.ArrayList(debug.Call) = .empty;
+    for (calls) |call| if (!run_directory.isInherited(inherited, call.run)) try own.append(a, call);
+    return own.toOwnedSlice(a);
 }
 
 /// Origins are execution-local. Multiple archive runs with the same workflow
@@ -100,7 +112,7 @@ pub fn select(calls: []const debug.Call, captured: evidence_context.Captured, wo
         !std.mem.eql(u8, call.slot, context.slot) or !std.mem.eql(u8, description.workflow_id, workflow) or
         !std.mem.eql(u8, description.request_step, context.request_step) or !std.mem.eql(u8, description.model_slot, context.slot) or
         !std.mem.eql(u8, description.model, context.model) or !debug.sameOptional(description.reasoning_effort, context.reasoning_effort) or
-        description.response_mode != context.response_mode or !std.mem.eql(u8, description.schema, context.response_schema) or
+        !std.mem.eql(u8, description.schema, context.response_schema) or
         description.content.len != context.content.len or context.attempt != context.origin.attempt.value) return error.CaptureMismatch;
     if (!captured.recordsConfig(description.provider, description.provider_config)) return error.CaptureMismatch;
     for (description.content, context.content) |expected, actual| {

@@ -129,22 +129,19 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     report.build.?.reconstruction = reconstruction;
     const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_keys, store, report, .{ .purpose = .whole_workflow });
     if (!try verifySources(io, allocator, case_path, case_bytes, captured, report)) return;
-    const published = specification orelse return;
-    if (report.expected_outcome != .publication) {
-        // A first leg that paused is answered only when it raised exactly one form that offers the case's key.
-        if (answers_a_form and report.status == .awaiting_clarification) {
-            const paths = generation_config.value().paths;
-            switch (try @import("answer.zig").prepare(io, allocator, project, paths.specs, paths.workflows, selected.feature, selected.answers[0].key)) {
-                .ready => |form| next.* = .{ .from = try allocator.dupe(u8, execution_id), .answered = form },
-                .unavailable => |why| {
-                    report.status = .answer_unavailable;
-                    report.diagnostic = why.diagnostic();
-                },
-            }
-        }
-        return;
+    // A first leg that paused is answered when exactly one of its open forms offers the case's key; it retains no completed
+    // specification, so the answer cannot wait on one.
+    const paths = generation_config.value().paths;
+    const key: ?[]const u8 = if (answers_a_form) selected.answers[0].key else null;
+    switch (try @import("answer.zig").after(io, allocator, project, paths.specs, paths.workflows, selected.feature, key, .{ .expected = report.expected_outcome.?, .status = report.status, .specification = specification })) {
+        .stop => {},
+        .evaluate => |published| report.evaluation_inputs = try @import("evaluation.zig").inputs(allocator, report.*, captured.evaluation, published, execution_id),
+        .answer => |form| next.* = .{ .from = try allocator.dupe(u8, execution_id), .answered = form },
+        .unavailable => |why| {
+            report.status = .answer_unavailable;
+            report.diagnostic = why.diagnostic();
+        },
     }
-    report.evaluation_inputs = try @import("evaluation.zig").inputs(allocator, report.*, captured.evaluation, published, execution_id);
 }
 
 fn verifySources(io: std.Io, allocator: std.mem.Allocator, case_path: []const u8, case_bytes: []const u8, captured: fixture.Capture, report: *c.Report) !bool {

@@ -3,7 +3,6 @@ const capabilities_module = @import("domain/model_capabilities.zig");
 // Compiler-supplied test facts only. Never installed by production composition.
 pub const capabilities: capabilities_module.Capabilities = .{
     .inference = true,
-    .structured_response = .prompt_only,
     .temperature = true,
 };
 

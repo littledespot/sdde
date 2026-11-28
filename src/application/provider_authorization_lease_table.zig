@@ -18,7 +18,6 @@ const Entry = struct {
     registry_entry: *const registry.Entry,
     /// The operation's binding, input and sampling, compared whole at consumption.
     assignment: lifecycle.Assignment,
-    response_mode: @import("../domain/model_controls.zig").ResponseGuidanceMode,
     controls: @import("../domain/model_controls.zig").InferenceControls,
     deadline: u64,
     state: State = .allocated,
@@ -77,7 +76,6 @@ pub const Table = struct {
             .operation_id = facts.operation_id,
             .registry_entry = facts.provider_binding.registry_entry,
             .assignment = record.assignment,
-            .response_mode = facts.provider_binding.registry_entry.responseMode(),
             .controls = facts.provider_binding.controls,
             .deadline = facts.deadline_monotonic_ms,
         };
@@ -207,7 +205,6 @@ pub const Table = struct {
 
 fn matches(entry: *const Entry, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, deadline: u64) bool {
     return entry.registry_entry == provider_binding.registry_entry and
-        entry.response_mode == provider_binding.registry_entry.responseMode() and
         std.meta.eql(entry.controls, provider_binding.controls) and
         request.matchesBinding(provider_binding.*) and
         entry.assignment.binding_id.eql(provider_binding.bindingId()) and entry.assignment.eql(.of(request)) and

@@ -116,7 +116,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     try @import("../harness/output.zig").write(io, run, "case.json", case_bytes);
     try quiet_project.materialize(io, project, captured);
     var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{
-        .expected_json = true,
+        .expects_native_output = true,
         .cancelled = scenario == .cancelled or scenario == .partial_cancelled,
         .inference_body = try body(a, scenario),
     };
@@ -229,7 +229,6 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     try std.testing.expectEqualStrings("aws-bedrock", readback.context.current.provider);
     try std.testing.expectEqual(.@"ap-southeast-2", readback.context.current.provider_config.aws_bedrock.region);
     try std.testing.expectEqual(.inference, readback.context.common().kind);
-    try std.testing.expectEqual(.native_schema, readback.context.common().response_mode);
     try std.testing.expect(readback.call.replay == null);
     try std.testing.expect(readback.call.request_complete);
     try std.testing.expect(readback.call.source_snapshot != null);
@@ -556,7 +555,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         try std.mem.replaceOwned(u8, a, normal_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":1,\"totalTokens\":100001")
     else
         normal_body;
-    var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = response };
+    var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expects_native_output = true, .inference_body = response };
     wire.result = if (scenario == .uncertain_delivery) .{ .failed = .{
         .cause = .transport_failed,
         .retry_class = .policy_eligible,
@@ -652,7 +651,7 @@ fn runKernelExchanges(case_path: []const u8, scenario: KernelExchanges) !void {
     defer log.deinit();
     // A response that is not the requested object is a protocol failure, which the request corrects
     // within its retry limit; a response stopped at its output limit is a runaway.
-    var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = try body(a, if (scenario == .runaway_resend) .noncandidate_stop else .malformed_candidate) };
+    var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expects_native_output = true, .inference_body = try body(a, if (scenario == .runaway_resend) .noncandidate_stop else .malformed_candidate) };
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
     var report: contracts.Report = .{ .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     const run = invoke.run(io, a, project, selected, captured, @import("../harness/environment.zig").bedrockOnly(key), store, &report, .{

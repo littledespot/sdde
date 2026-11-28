@@ -274,7 +274,7 @@ test "fixed source review reconstructs bound claims and rejects an echoed union"
     const a = arena.allocator();
     const model = @import("domain/specification_support_model.zig");
     const required: @import("domain/specification_support_evidence.zig").Requirements = .{
-        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{}, .answer_retained = &.{} },
         .eligible_claim_ids = &.{.{ .ordinal = 1 }},
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
         .positive_claims = .exact_set,
@@ -296,7 +296,7 @@ test "source variants require questions only for gaps in focused findings" {
     const json = @import("domain/model_candidate_json.zig");
     const model = @import("domain/specification_support_model.zig");
     const required: @import("domain/specification_support_evidence.zig").Requirements = .{
-        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{}, .answer_retained = &.{} },
         .eligible_claim_ids = &.{.{ .ordinal = 1 }},
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
         .positive_claims = .exact_set,
@@ -315,9 +315,14 @@ test "source variants require questions only for gaps in focused findings" {
         var wrong = (try std.json.parseFromSlice(std.json.Value, a, valid, .{})).value;
         if (gap) _ = wrong.object.orderedRemove("question") else try wrong.object.put(a, "question", .{ .string = "Should this outcome be accepted?" });
         const invalid = try std.json.Stringify.valueAlloc(a, wrong, .{});
-        for ([_][]const u8{ "finding", "applicability_finding" }) |definition| {
+        for ([_][]const u8{ "finding", "applicability_finding", "record_finding" }) |definition| {
             if (tag == .not_applicable and std.mem.indexOf(u8, definition, "applicability") == null) continue;
             const selected = schema.select(.{ .bytes = definition }).?;
+            if (tag == .candidate_invalid and std.mem.eql(u8, definition, "record_finding")) {
+                // A reconciliation record is offered no candidate_invalid.
+                try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = valid, .rejection = .unknown_variant, .path = "/kind" });
+                continue;
+            }
             try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = valid });
             try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = if (gap) .missing_required_property else .unknown_property, .path = "/question" });
         }
@@ -338,8 +343,6 @@ test "selected source and reconciliation repairs conform to their native respons
     try checkCandidate("reconciliation", "business_text", "{\"segments\":" ++ response_wire.segments ++ "}");
     try checkCandidate("reconciliation", "reference_text", "{\"nodes\":" ++ response_wire.nodes ++ "}");
     try checkCandidate("reconciliation", "repair_selection", "{\"claim_ids\":[" ++ response_wire.id ++ "]}");
-    try checkCandidate("reconciliation", "repair_conflict_selection", "{\"group_id\":7}");
-    try candidateCase("reconciliation", "repair_conflict_selection", "{\"group_id\":7,\"claim_ids\":[7,9]}", .unknown_property, "/claim_ids");
     try checkCandidate("reconciliation", "repair_summary", "{\"nodes\":" ++ response_wire.nodes ++ "}");
     try checkCandidate("reconciliation", "repair_conflict_detail", "{\"kind\":\"scope_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}");
     try checkCandidate("reconciliation", "repair_disposition", "{\"kind\":\"retained\"}");
@@ -443,7 +446,7 @@ test "focused review evidence shapes follow native minima without excluding sour
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
     const bound: admission.Requirements = .{
-        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{}, .answer_retained = &.{} },
         .eligible_claim_ids = &.{.{ .ordinal = 7 }},
         .eligible_source_ids = &.{.{ .ordinal = 7 }},
         .positive_claims = .eligible_subset,
@@ -592,7 +595,6 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         if (comptime std.mem.eql(u8, definition, "reference_text")) return nativeWire(r.text.ReferenceSemanticText, a, bytes);
         if (comptime std.mem.eql(u8, definition, "repair_disposition")) return nativeWire(@import("domain/reference_conflict_groups.zig").SemanticDisposition, a, bytes);
         if (comptime std.mem.eql(u8, definition, "repair_conflict_group")) return nativeWire(@import("domain/reference_conflict_groups.zig").Repair, a, bytes);
-        if (comptime std.mem.eql(u8, definition, "repair_conflict_selection")) return nativeWire(struct { group_id: @import("domain/reference_conflict_groups.zig").Id }, a, bytes);
         const T = @import("domain/reference_reconciliation_repair.zig").Replacement;
         return selectedWire(T, a, @field(std.meta.Tag(T), definition["repair_".len..]), bytes);
     } else if (comptime std.mem.eql(u8, name, "generation")) {
@@ -607,7 +609,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         const selected = selection.?;
         if (comptime std.mem.eql(u8, selected, "preservation_comparisons")) return nativeWire(@import("domain/source_omission.zig").comparisons.Response, a, bytes);
         const model = @import("domain/specification_support_model.zig");
-        if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding")) return nativeWire(model.Value, a, bytes);
+        if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding") or std.mem.eql(u8, selected, "record_finding")) return nativeWire(model.Value, a, bytes);
         if (comptime std.mem.eql(u8, selected, "selection")) return nativeWire(model.Selection, a, bytes);
         const T = @import("domain/specification_support_repair.zig").Source.Replacement;
         return selectedWire(T, a, @field(std.meta.Tag(T), selected), bytes);

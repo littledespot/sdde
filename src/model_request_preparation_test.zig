@@ -378,17 +378,7 @@ test "composition source preserves exact part schema execution unit and purpose 
     var prepared = try preparation.build(std.testing.allocator, selected, fixture.request.content);
     defer prepared.deinit();
     try std.testing.expect(prepared.request.response_schema == part.schema);
-    var native_entry = fixture.registry_entry;
-    native_entry.capabilities.structured_response = .native_json_schema;
-    native_entry.json = true;
-    var native_binding = fixture.provider_binding;
-    native_binding.registry_entry = &native_entry;
-    var native_source = selected;
-    native_source.provider_binding = &native_binding;
-    var native_request = try preparation.build(std.testing.allocator, native_source, fixture.request.content);
-    defer native_request.deinit();
-    try std.testing.expect(native_request.request.response_schema == part.schema);
-    const native_projection = try @import("domain/model_schema_projection.zig").render(a, native_request.request.response_schema, .native);
+    const native_projection = try @import("domain/model_schema_projection.zig").render(a, prepared.request.response_schema, .native);
     try std.testing.expect(std.mem.indexOf(u8, native_projection, "\"left\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, native_projection, "\"right\"") == null);
     try std.testing.expect(std.mem.indexOf(u8, part.schema.modelBytes(), "\"maxLength\":10") != null);
@@ -412,7 +402,7 @@ test "composition source preserves exact part schema execution unit and purpose 
     }
 }
 
-test "request validation rejects divergent binding controls and modes" {
+test "request validation rejects divergent binding and controls" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
@@ -420,7 +410,7 @@ test "request validation rejects divergent binding controls and modes" {
     const selected = try source(&fixture, &resource);
     var owned = try preparation.build(std.testing.allocator, selected, fixture.request.content);
     defer owned.deinit();
-    inline for (0..4) |variant| {
+    inline for (0..3) |variant| {
         var wrong = owned.request.*;
         switch (variant) {
             0 => wrong.binding_id.registry_entry_id.ordinal += 1,
@@ -429,7 +419,6 @@ test "request validation rejects divergent binding controls and modes" {
                 wrong.controls.temperatures = null;
                 wrong.binding_id.controls = wrong.controls;
             },
-            3 => wrong.response_guidance_mode = .native_schema,
             else => unreachable,
         }
         try std.testing.expectError(error.ModelRequestBindingInvalid, preparation.validateRequest(selected, &wrong));
@@ -437,8 +426,6 @@ test "request validation rejects divergent binding controls and modes" {
     fixture.registry_entry.capabilities.temperature = false;
     try std.testing.expectError(error.ModelRequestBindingInvalid, preparation.validateRequest(selected, owned.request));
     fixture.registry_entry.capabilities.temperature = true;
-    fixture.registry_entry.json = true;
-    try std.testing.expectError(error.ModelRequestBindingInvalid, preparation.build(std.testing.allocator, selected, fixture.request.content));
 }
 
 test "prepared request reaches fake inference without preparation side effects" {
@@ -501,21 +488,6 @@ fn source(fixture: *Fixture, resource: *const compilation.CompiledResource) !pre
         .model_visible_input_id = fixture.request.model_visible_input_id,
         .result_resource = resource,
     };
-}
-
-test "request mode cannot override catalogue JSON selection" {
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
-    defer fixture.deinit();
-    fixture.registry_entry.capabilities.structured_response = .native_json_schema;
-    // Both wire modes are supported; only the captured catalogue choice is allowed.
-    for ([_]bool{ false, true }) |json| {
-        fixture.registry_entry.json = json;
-        fixture.request.response_guidance_mode = fixture.registry_entry.responseMode();
-        try std.testing.expect(fixture.request.matchesBinding(fixture.provider_binding));
-        fixture.request.response_guidance_mode = if (json) .prompt_only else .native_schema;
-        try std.testing.expect(!fixture.request.matchesBinding(fixture.provider_binding));
-    }
 }
 
 test "native exact occurrence scope is deep owned and bound across request descriptions" {
@@ -646,9 +618,6 @@ test "replay authority matches a description only to its exact current binding a
     try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
     other = described;
     other.controls.temperatures = if (described.controls.temperatures == null) @import("test_fixtures/model_temperatures.zig").temperatures else null;
-    try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
-    other = described;
-    other.response_mode = if (described.response_mode == .native_schema) .prompt_only else .native_schema;
     try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
 }
 

@@ -71,10 +71,8 @@ fn writeConverse(writer: *std.Io.Writer, request: TextRequest, parts: text.Layou
     try json.objectField("maxTokens");
     try json.write(request.max_output_tokens.tokens);
     try json.endObject();
-    if (request.schema == .native) {
-        try json.objectField("outputConfig");
-        try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{ .name = request.schema_name, .schema = request.schema.native.structure } } } });
-    }
+    try json.objectField("outputConfig");
+    try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{ .name = request.schema_name, .schema = request.schema.structure } } } });
     try json.endObject();
 }
 
@@ -103,7 +101,7 @@ fn writeModelFields(json: *std.json.Stringify, request: TextRequest) std.Io.Writ
     // Claude takes effort in its own `output_config` object; adaptive thinking is
     // the model's default, so no `thinking` field is sent.
     const effort = request.family == .claude and request.reasoning_effort != null;
-    const strict_json = request.family == .luna and request.schema == .native;
+    const strict_json = request.family == .luna;
     if (reasoning or effort or strict_json) {
         try json.objectField("additionalModelRequestFields");
         try json.beginObject();

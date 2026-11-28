@@ -117,7 +117,7 @@ pub fn checkConflict(a: std.mem.Allocator, validator: r.text.Validator, context:
     const proposed = prior.proposal.conflicts[index];
     const items = prior.input.progress.plan.layout.items;
     if (try conflictClaims(items, prior.dispositions, proposed.claim_ids, prior.input.partition.group.claim_ids)) |issue| return .{ .invalid = issue };
-    if (!conflictSelectionAvailable(prior.proposal.conflicts[0..index], index, proposed.kind, proposed.claim_ids)) return .{ .invalid = .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposed.claim_ids }, .expected = .{ .constraint = .unique_members } } };
+    if (!conflictSelectionAvailable(prior.proposal.conflicts[0..index], index, proposed.claim_ids)) return .{ .invalid = .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposed.claim_ids }, .expected = .{ .constraint = .unique_members } } };
     const summary = switch (try conflictSummary(a, validator, context, items, proposed.claim_ids, proposed.summary)) {
         .valid => |checked| checked,
         .invalid => |issue| return .{ .invalid = issue },
@@ -220,9 +220,11 @@ pub fn signalSelectionAvailable(values: []const r.SignalProposal, selected: usiz
     return true;
 }
 
-pub fn conflictSelectionAvailable(values: []const r.ConflictProposal, selected: usize, kind: r.ConflictKind, ids: []const r.ClaimId) bool {
+/// One conflict record for each claim set (ADR 0022, amended 25 November 2026): the record's kind
+/// doesn't make a second record over the same claims a different one.
+pub fn conflictSelectionAvailable(values: []const r.ConflictProposal, selected: usize, ids: []const r.ClaimId) bool {
     for (values, 0..) |sibling, index| {
-        if (index != selected and sibling.kind == kind and sameMembers(sibling.claim_ids, ids)) return false;
+        if (index != selected and sameMembers(sibling.claim_ids, ids)) return false;
     }
     return true;
 }
@@ -287,31 +289,22 @@ pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextCon
                 }
             }
         },
-        .conflict => |index| {
-            var pairs: std.ArrayList(std.meta.Child(@FieldType(d.Relations, "conflicting_pairs"))) = .empty;
-            // Traverse declared edges, never subsets, cliques or repair sequences.
-            for (dispositions) |left| for (left.related_claim_ids) |right| {
-                if (left.claim_id.ordinal < right.ordinal and try conflictRelated(dispositions, left.claim_id, right) and try conflictRelated(dispositions, right, left.claim_id) and
-                    conflictSelectionAvailable(parsed.proposal.global.conflicts, index, parsed.proposal.global.conflicts[index].kind, &.{ left.claim_id, right })) try pairs.append(a, .{ .left = left.claim_id, .right = right });
-            };
-            result.conflicting_pairs = try pairs.toOwnedSlice(a);
-            if (rejection.issue.rule == .duplicate_conflict) {
-                const value = parsed.proposal.global.conflicts[index];
-                for (parsed.proposal.global.conflicts[0..index]) |prior| {
-                    if (prior.kind != value.kind or !sameMembers(prior.claim_ids, value.claim_ids)) continue;
-                    const scope = try scopes(a, items, value.claim_ids, ctx);
-                    const left = switch (try validator.checkReferenceIn(a, scope, prior.summary)) {
-                        .valid => |checked| checked,
-                        .invalid => continue,
-                    };
-                    const right = switch (try validator.checkReferenceIn(a, scope, value.summary)) {
-                        .valid => |checked| checked,
-                        .invalid => continue,
-                    };
-                    if (r.text.equivalentReference(left, right)) {
-                        result.redundant = index;
-                        break;
-                    }
+        .conflict => |index| if (rejection.issue.rule == .duplicate_conflict) {
+            const value = parsed.proposal.global.conflicts[index];
+            for (parsed.proposal.global.conflicts[0..index]) |prior| {
+                if (!sameMembers(prior.claim_ids, value.claim_ids)) continue;
+                const scope = try scopes(a, items, value.claim_ids, ctx);
+                const left = switch (try validator.checkReferenceIn(a, scope, prior.summary)) {
+                    .valid => |checked| checked,
+                    .invalid => continue,
+                };
+                const right = switch (try validator.checkReferenceIn(a, scope, value.summary)) {
+                    .valid => |checked| checked,
+                    .invalid => continue,
+                };
+                if (r.text.equivalentReference(left, right)) {
+                    result.redundant = index;
+                    break;
                 }
             }
         },

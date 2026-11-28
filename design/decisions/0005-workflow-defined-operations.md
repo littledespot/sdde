@@ -2,60 +2,20 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-03
-- **Decision authority:** Explicit user direction
+- **Decision authority:** User decisions, 3 and 6 September 2026
 - **Supersedes:** The compiler-owned built-in model-route registry in proposed
   design Section 12.7, its route-resolution actions, and every requirement for
   a fixed route-to-`models.slots` assignment
-- **Amends:** ADR 0003 and the proposed F0005/F0006 workflow and model-operation
-  contracts
-
-**Size-policy amendment:** [ADR 0011](0011-provider-owned-request-limits.md)
-removes model-call size ceilings and estimates; provider APIs report their own
-limits and the workflow accounts actual token usage.
-
-**Budget amendment:** [ADR 0037](0037-configured-workflow-token-budget.md) moves the
-per-execution token budget from the selected workflow policy to the project
-configuration's `workflowTokenBudget`.
-
-**Authoring amendment:** [ADR 0013](0013-workflow-input-reuse.md) permits local,
-composable definition-local subgraphs expanded by the shared compiler before graph
-validation. ADR 0013’s 2026-09-16 amendment permits nested calls and rejects recursion.
-The existing operation registry and runner remain the execution owners.
-
-**Single-request amendment (22 October 2026, implemented):**
-[ADR 0030](0030-engine-owned-model-request.md) adds the stages of one model request to
-the engine-kernel list below. A workflow makes each request with one `request-model` step
-and still declares its slot, resources, retry limit and outcome transitions. The stage
-order and the request's own protocol correction are no longer YAML steps. ADR 0030's
-23 October 2026 amendment removed provider token counting and took the request deadline
-from the model's catalogue entry instead of YAML, both implemented 24 October 2026. It
-also lets one operation's single current contract consist of closed variants selected at
-compile time (see "Unversioned operation IDs" below), a mechanism ADR 0033 uses.
-
-**Stage-action amendment (22 October 2026; `prepare-toolchain` implemented first, 12
-November 2026):**
-[ADR 0031](0031-stage-actions.md) lets one registered stage action own a deterministic
-sequence of internal steps that routes no outcome. Every routed outcome stays a YAML
-transition. The internal steps are functions, not workflow operations or a second
-workflow graph, so they are no longer addressable or composable from YAML. Composing
-them differently needs a new stage action and an engine rebuild.
-
-**Failure-output amendment (27 October 2026; on hold since 30 October 2026, not
-implemented):**
-[ADR 0041](0041-failed-run-incomplete-publication.md) lets a definition declare one
-model-free `failure-output` subgraph. After an eligible failure, the engine kernel runs
-it through the runner and then returns the original failure. The member is declared in
-YAML, so no publication runs hidden, and it moves the definition contract to
-`workflow/v2`.
-
-## Context
-
-A fixed catalogue such as `spec.section.generate` or
-`implementation.operation.generate` hides prompts, schemas, limits and slot
-selection outside the workflow. YAML must explicitly describe configurable
-workflow behavior without duplicating large resources at every node.
+- **Amends:** ADR 0003 and the F0005/F0006 workflow and model-operation contracts
+- **Amended by:** [ADR 0011](0011-provider-owned-request-limits.md),
+  [ADR 0013](0013-workflow-input-reuse.md),
+  [ADR 0030](0030-engine-owned-model-request.md), [ADR 0031](0031-stage-actions.md),
+  [ADR 0033](0033-generic-repair-operations.md)
 
 ## Decision
+
+YAML explicitly describes configurable workflow behavior without duplicating large
+resources at every node.
 
 - There is no built-in workflow or model-route catalogue.
 - The workflow definition is the sole authority for workflow topology and for selecting
@@ -80,28 +40,30 @@ workflow behavior without duplicating large resources at every node.
   sequence for one model request; it is not a workflow graph. Its internal retries are the
   protocol correction, bounded by the step's declared `retry-limit`, and ADR 0039's one
   runaway re-send per attempt, which is outside `retry-limit`.
+- A stage action ([ADR 0031](0031-stage-actions.md)) owns a deterministic sequence of
+  internal steps that routes no outcome. Every routed outcome stays a YAML transition. The
+  internal steps are functions, not workflow operations or a second workflow graph, so
+  they are not addressable or composable from YAML. Composing them differently needs a new
+  stage action and an engine rebuild.
 
 - Engine-kernel enforcement is not workflow functionality and is not callable or
   bypassable from YAML.
 - Loading, parsing, compilation, contract validation, capability derivation,
   runner-owned invocation and delta application, provider preparation, cancellation,
-  cleanup, and security enforcement remain fixed engine responsibilities.
-  [ADR 0030](0030-engine-owned-model-request.md) adds the stage sequence of one model
-  request.
+  cleanup, security enforcement and the stage sequence of one model request
+  ([ADR 0030](0030-engine-owned-model-request.md)) are fixed engine responsibilities.
 - They may inspect only the compiled definition and registered contracts; they cannot
   add domain workflow behavior.
 
-### Unversioned operation IDs (accepted 2026-09-06)
+### Unversioned operation IDs
 
-- Explicit user direction removes operation-contract versioning.
+- Operation contracts are not versioned.
 - Each operation has one current contract and one unversioned ID, such as
-  `request-model`. Under [ADR 0033](0033-generic-repair-operations.md) (implemented), the
-  four generic repair operations each keep one contract and one ID. That contract has a
-  closed variant per repair owner, and the compiler selects it from the step's `owner` at
-  compile time. They use the one contract-variant mechanism that
-  [ADR 0030](0030-engine-owned-model-request.md) specifies ("Contract variants"); a variant
-  is a complete contract, and one closed step parameter selects it. `request-model` has
-  one contract with no variants.
+  `request-model`. That one contract may consist of closed variants selected at compile
+  time by one closed step parameter; [ADR 0030](0030-engine-owned-model-request.md)
+  "Contract variants" owns the mechanism, and
+  [ADR 0033](0033-generic-repair-operations.md)'s four generic repair operations use it.
+  `request-model` has one contract with no variants.
 - Both `invoke` and `steps.*.use` name that ID directly.
 - No operation-version field, version suffix, range, compatibility alias or parallel
   legacy contract is retained.
@@ -112,7 +74,7 @@ workflow behavior without duplicating large resources at every node.
 
 ### Concise workflow form
 
-- The workflow-definition contract will use YAML mappings and native scalar values
+- The workflow-definition contract uses YAML mappings and native scalar values
   instead of repeated tagged `{ kind, value }` parameter objects.
 - Field names may be concise aliases, and node IDs provide the local identity used by
   transitions.
@@ -147,12 +109,9 @@ An originating generic model-request step declares in YAML:
   operation; and
 - every outcome transition, including repair, failure, and cancellation.
 
-- [ADR 0011](0011-provider-owned-request-limits.md) owns the shared size-limit and
-  actual-usage rules: one positive workflow-global token budget per execution, full
-  API-reported usage retained on overshoot, and no further calls at or above budget.
-- It prohibits local size gates, reservations and budget-derived output allowances;
-  providers report their own limit errors/stops.
-- The runner enforces accounting without a YAML bypass or hidden model route.
+- [ADR 0011](0011-provider-owned-request-limits.md) owns the size-limit and actual-usage
+  accounting rules. The runner enforces accounting without a YAML bypass or hidden model
+  route.
 
 - The token budget supplies no retry count.
 - Any operation instance that can take a retry transition must declare its own
@@ -191,9 +150,8 @@ An originating generic model-request step declares in YAML:
   remains the provider catalogue.
 - Workflow YAML selects an allowed slot; neither configuration file defines workflow
   control flow.
-- The per-execution total model-token budget is the project configuration's
-  `workflowTokenBudget` ([ADR 0037](0037-configured-workflow-token-budget.md)); the
-  selected workflow policy no longer owns it.
+- The selected workflow policy does not own the per-execution token budget
+  ([ADR 0011](0011-provider-owned-request-limits.md)).
 - Retry limits are explicit per retry-capable operation instance and are never inherited
   from configuration, provider policy, or a global retry default.
 - Workflow definitions stay compact through mappings, native scalars, local resource

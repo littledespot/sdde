@@ -32,6 +32,7 @@ pub const Source = struct {
 
     pub const Candidate = struct {
         omission_conflict_claims: []const r.ClaimId = &.{},
+        omission_released_claims: []const r.ClaimId = &.{},
         review: Review,
         revision: u64 = 1,
         working: bool = false,
@@ -130,7 +131,7 @@ pub const Source = struct {
             .source_preservation => true,
         };
         // Guidance offers only verdicts native applicability permits, and a preservation finding has no negative.
-        const evidence_rules = .{ .instruction = try admission.selection_instruction.present(scratch, guidance), .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = if (inputs.projection == .source_preservation and scope == .finding) null else evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum };
+        const evidence_rules = .{ .instruction = try admission.selection_instruction.present(scratch, guidance), .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = if (admission.permitsInvalid(target)) evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum else null, .negative = if (inputs.projection == .source_preservation and scope == .finding) null else evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum };
         const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(guidance, subject), .evidence_rules = if (correcting) null else evidence_rules, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .exact_texts = projected.exact_texts, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
         const encoded = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
         var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
@@ -144,29 +145,30 @@ pub const Source = struct {
         const body = try std.json.Stringify.valueAlloc(scratch, projected_input, .{});
         const slot = try reviewSlot(scratch, target);
         const support_definitions = @import("specification_result_definitions.zig").Support;
-        const definition: ?@import("model_result_schema.zig").DefinitionId = (if (inputs.projection == .source_preservation) support_definitions.preservation_finding else if (permitsNotApplicable(required)) support_definitions.applicability_finding else support_definitions.finding).id();
+        const definition: ?@import("model_result_schema.zig").DefinitionId = (if (inputs.projection == .source_preservation) support_definitions.preservation_finding else if (permitsNotApplicable(required)) support_definitions.applicability_finding else if (!admission.permitsInvalid(target)) support_definitions.record_finding else support_definitions.finding).id();
         const packet = try reviewPacket(allocator, inputs, all.state_id, body, slot, definition);
         defer packets.release(packet);
         const ids = try scratch.alloc(i64, evidence_rule.eligible_source_ids.len);
         for (ids, evidence_rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
         const selected_sources: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = definition, .allowed = ids };
-        const selected_packet = if (inputs.projection == .source_preservation)
+        // A preservation finding and a record subject's finding hold no authority gap, so no gap's sources are chosen.
+        const selected_packet = if (inputs.projection == .source_preservation or !admission.permitsInvalid(target))
             try packets.withIntegerChoices(allocator, packet, &.{selected_sources})
         else
             try packets.withIntegerChoices(allocator, packet, &.{ selected_sources, .{ .target = .{ .path = &.{ .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = ids } });
         defer packets.release(selected_packet);
         if (inputs.projection == .source_preservation) return packets.withOriginalSources(allocator, selected_packet, context.inputs);
-        return withQuestionText(allocator, selected_packet, context.inputs);
+        return withQuestionText(allocator, selected_packet, context.inputs, admission.permitsInvalid(target));
     }
 
-    fn withQuestionText(allocator: std.mem.Allocator, base: *const packets.Packet, sources: r.evidence.Inputs) Error!*packets.Packet {
+    /// The question is prose in every view; a gap's question only where the view holds `candidate_invalid`.
+    fn withQuestionText(allocator: std.mem.Allocator, base: *const packets.Packet, sources: r.evidence.Inputs, permits_gap: bool) Error!*packets.Packet {
         const witnessed = try packets.withOriginalSources(allocator, base, sources);
         defer packets.release(witnessed);
         const Field = @import("model_text_wire.zig").ProseField;
-        const fields: []const Field = &.{
-            .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} },
-            .{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } },
-        };
+        const question: Field = .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} };
+        const gap_question: Field = .{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } };
+        const fields: []const Field = if (permits_gap) &.{ question, gap_question } else &.{question};
         const prose = try packets.withProseFields(allocator, witnessed, fields);
         defer packets.release(prose);
         const bindings = @import("model_candidate_json.zig").fieldBindings(source_model.Value, allocator, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
@@ -386,6 +388,7 @@ pub const Source = struct {
             .occurrence_history = if (previous) |old| old.occurrence_history else &.{},
             .last_repair = if (previous) |old| old.last_repair else null,
             .omission_conflict_claims = if (previous) |old| old.omission_conflict_claims else context.references.global().source.omission_conflict_claims,
+            .omission_released_claims = if (previous) |old| old.omission_released_claims else context.references.global().source.omission_released_claims,
         };
         return validateWorking(allocator, inputs, context.inputs, candidate);
     }

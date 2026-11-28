@@ -2,9 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-19
-- **Decision authority:** Explicit user direction that debug logging retain every full LLM prompt and output for tuning, including the production execution path.
-- **Amends:** Design §§9, 13.4, 26.5, 27, 31.8 and 31.34; F0001's logging configuration, F0002's capture/sanitization/verification contracts and F0006's provider observation boundary.
-- **Amended by:** [ADR 0032](0032-engine-routines.md) (22 October 2026, implemented). The fixed logging orchestration it retains under §13.9 is a set of typed engine routines that the runtime logging lifecycle runs. Finalization keeps one idempotent owner that preserves the first failure.
+- **Decision authority:** User decisions, 19 and 20 September 2026.
+- **Amends:** Design §§9, 13.4, 26.5, 27, 31.8 and 31.34; F0001's logging configuration,
+  F0002's capture/sanitization/verification contracts and F0006's provider observation
+  boundary.
+- **Amended by:** [ADR 0019](0019-single-request-debugger.md),
+  [ADR 0032](0032-engine-routines.md).
 
 ## Decision
 
@@ -12,10 +15,8 @@ Setting `logs.level` to `debug` or the more verbose `trace` enables complete
 request and response body capture for every production model invocation attempt.
 The shared effective logging policy selects both directions and every body class
 at these levels. Higher thresholds emit metadata only. The closed `logs` object
-contains `level` and `console`; the superseded `promptCapture` field is removed and
-rejected, with no compatibility reader or migration. Since debug/trace selects all
-bodies and higher thresholds exclude the registered debug prompt rows, retaining
-direction/class switches would leave configuration with no effect.
+contains only `level` and `console`; any other member, such as a direction or body-class
+switch, rejects as unknown.
 
 Capture the full model-facing request after assembly, including system/task
 instructions, response-format guidance, schema, reference inputs and code inputs.
@@ -42,8 +43,9 @@ Composition injects a narrow observation port into the provider adapter. The com
 runner binds its request identity and lifetime before invoking the action. The
 adapter may submit only borrowed body bytes, typed provenance and credential values
 needed for redaction; it receives no logger, log-sink, child binding, action selector
-or workflow transition capability. The execution-owned capture runner and active
-logging lifecycle retain the fixed logging sequences under §13.9. Actions and
+or workflow transition capability. The fixed logging sequences under §13.9 are typed
+engine routines that the runtime logging lifecycle runs
+([ADR 0032](0032-engine-routines.md)). Actions and
 the model receive no capture or child-execution capability. This does not amend the
 action/orchestrator invariants or give the provider control of a business graph.
 
@@ -72,11 +74,12 @@ finalizes on failures, cancellation and outcomes without publication; repeated
 finalization is idempotent and preserves an existing failure. Cleanup releases
 owners only after the finalization result has contributed to the reported outcome.
 Publication is terminal in the compiled graph: prepared output carries the validated
-`ok` or `needs_user` outcome, and each publication edge targets that terminal directly.
+`ok`, `needs_user` or `cancelled` outcome (the last is
+[ADR 0025](0025-clarification-answer-authentication.md)'s accepted cancel), and each
+publication edge targets that terminal directly.
 This also excludes pure post-publication steps that could emit telemetry or fail
 after the required log stream has closed.
 
-The user's approved clarification of 20 September 2026 retains this ordering.
 Before close, persist `publication.prepared` with the validated intended outcome.
 Actual write success/failure is reported by the existing terminal result and harness
 report, not the closed feature log. Execution, admission, repair and retry events
@@ -85,10 +88,9 @@ For paths without publication, persist the terminal event before close. No logge
 intent grants completion and no post-write logging failure can rewrite completion
 history. Pre-activation failures retain the terminal/emergency path.
 
-This run-local lifecycle does not restore the persisted bootstrap-policy lineage,
-WAL or historical execution recovery withdrawn by ADR 0009. Earlier historical
-maintenance catalogue entries are not current-run activation prerequisites. Old
-logs remain observations and are never read as workflow continuation authority.
+This lifecycle is run-local: there is no persisted bootstrap-policy lineage, WAL or
+historical execution recovery (ADR 0009). Old logs remain observations and are never read
+as workflow continuation authority.
 
 ## Content and storage
 
@@ -122,7 +124,7 @@ diagnostics. `truncated=false` means the logger retained all available bytes; th
 `partial_provider_body` provenance still identifies incomplete transport framing.
 Never silently truncate, drop the tail, summarize or select only successful
 payloads. Redaction is the only authorized content removal. No local model-call
-limit is introduced; ADR 0011 remains unchanged.
+limit is introduced (ADR 0011).
 
 Reuse the registered feature prompt stream, format, sequence, locking, permissions,
 rotation, retention and flush rules. File writes remain mandatory; console output
@@ -137,7 +139,7 @@ continuation is introduced.
 - `debug` and `trace` capture full requests and responses through the production
   invocation path and across unrelated
   workflow operations and model slots.
-- Higher thresholds emit metadata only; the removed `promptCapture` field rejects.
+- Higher thresholds emit metadata only.
 - Each dispatched attempt retains its exact assembled request and each available
   raw returned body, including protocol/schema rejection, retries and provider
   failure after a body was returned. No-response failures remain distinguishable.

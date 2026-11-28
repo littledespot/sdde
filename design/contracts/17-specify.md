@@ -146,13 +146,10 @@ Typed content covers these concerns; each concern does not require a separate ca
   A genuinely unresolved required decision uses the existing native clarification
   owner.
 - All inference, including correction, counts once against the single configured
-  workflow budget (ADR 0011, ADR 0037). Global exhaustion, overshoot or unavailable
+  workflow budget (ADR 0011). Global exhaustion, overshoot or unavailable
   usage prohibits all later model calls. A global budget rejection ends the workflow
   with `WorkflowTokenBudgetExceeded`; it cannot become a completed specification.
-  Today it publishes nothing. Under
-  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-  since 30 October 2026; not implemented), it would publish a failed incomplete
-  specification of the validated content.
+  It publishes nothing.
 - Pre-generation source-readiness and optional preservation review keep their
   required semantics: [ADR 0023](../decisions/0023-advisory-post-generation-review.md)'s
   pre-generation phase witness and retirement before generation initialization, the
@@ -191,7 +188,8 @@ occurrences into required `source_group_ids`, their complete ordered claim union
 `S`, exact dependencies and citations. Joint support and legitimate overlaps are
 permitted; repeated, foreign, mixed-inactive or stale groups reject. A larger
 catalogue is availability, not semantic support. Positive associations cannot map
-open questions; initial clarification questions have a separate native eligibility
+open questions that no applied user answer kept ([ADR 0025](../decisions/0025-clarification-answer-authentication.md));
+initial clarification questions have a separate native eligibility
 scope and select only their actual evidence. Existing missing/ambiguous/conflicting
 reasons and inconclusive outcomes remain. A question does not establish a genuine
 user gap merely by having valid IDs. Field purposes, owned by the workflow's
@@ -200,11 +198,13 @@ Do not invent an actor, benefit or entity to fill a field.
 
 Record authoring binds one complete retained group containing at least one
 non-token claim and may return multiple records
-or none. A batch over a group that holds an open question is offered only its
-clarification outcome, never record content (the engine excludes the records variant
-from that batch's request, through the schema restriction it already applies): a
-positive record cannot map an open question, so the request offers what validation
-accepts. Each record names the claims it supports, a nonempty subset of that group's
+or none. A batch over a group that holds an open question no applied user answer kept is
+offered only its clarification outcome, never record content (the engine excludes the records
+variant from that batch's request, through the schema restriction it already applies): a
+positive record cannot map such a question, so the request offers what validation
+accepts. A question an applied answer kept (ADR 0025, the snapshot's `answer_retained`) is a
+requirement the answer chose: its batch is offered record content, and the claim must be mapped
+as a business claim is. One native rule decides both the request and the validation. Each record names the claims it supports, a nonempty subset of that group's
 claims kept in the group's order, and keeps exactly one group occurrence. Requirements
 own their claims: in one response, a business rule, outcome, assumption, non-goal or
 prohibition whose every claim a requirement or an earlier such record names is deleted
@@ -299,7 +299,7 @@ For each feature-brief or specification unit other than the engine-composed stor
   unit validation or exact recognition blocks with `story_not_admissible`, carrying
   its unit issue. Neither is repaired or retried (nor is an edge case with no criterion,
   below). Its exact role is incidental, so it discharges no
-  exact-copy duty, and ADR 0035 never deletes a record naming a claim that no other
+  exact-copy duty, and the story comparison (ADR 0038 Decision 5) never deletes a record naming a claim that no other
   record names. The story is no source-readiness subject and has no packet-guidance
   purpose (ADR 0047 Decision 5). Records, entities and scenarios requests show each
   claim's wording in the same paragraph reading, a quote of headings alone as written
@@ -423,14 +423,18 @@ For each feature-brief or specification unit other than the engine-composed stor
   execution-local section generation without a
   model review of specification fields that do not yet exist. The existing source
   review/repair route still handles blocked references or absence of selectable
-  positive evidence before generation. The native readiness check reuses the
+  positive evidence before generation. In a first pass over references that hold a conflict
+  record, that route's projection is the conflict records alone (F0100 §3.10). The native readiness check reuses the
   provenance owner's eligibility rule; it cannot certify source meaning or create
   a clarification.
   Generation and its selected repairs receive original sources through the shared
   evidence projection, retained claims/citations and exact tokens; the native group catalogue exposes selectable complete members without
   adding a second semantic authority. Original text is context, not a new
-  provenance selection or permission to cite a discarded claim.
-- [ADR 0021](../decisions/0021-optional-source-preservation-review.md) adds the
+  provenance selection or permission to cite a discarded claim. After the user's answers, the text generation and
+  scenarios receive leaves out each line every one of whose claims an applied answer superseded, so it no longer states
+  what the user decided against; a line another claim also cites stays, and a supersession the model proposed removes
+  nothing ([ADR 0025](../decisions/0025-clarification-answer-authentication.md), amended 27 November 2026).
+- [ADR 0023](../decisions/0023-advisory-post-generation-review.md) adds the
   opt-in `validation.sourcePreservationCheck` before generation-ready sources
   proceed. One obligation per captured source checks meaning preserved by
   extraction/reconciliation, including sources with no claims. Source-only loss
@@ -456,7 +460,8 @@ Source review must distinguish a source conflict from a false conflict introduce
 by extraction/reconciliation, following [§16.4](16-reference-ingestion.md#164-semantic-extraction-flow).
 Supported content stranded behind an incorrect disposition is candidate loss, not
 missing user knowledge. Review receives the original source and must assess that
-meaning even when current eligible signals contain only a preserved token. A
+meaning even when current eligible signals contain only a preserved token; in a first pass
+over an open conflict, the conflict subject alone carries that assessment. A
 validated conflict label alone cannot justify an `SNN`. Shared clarification
 preparation in §12.7 requires a concrete missing decision. Before generation,
 correcting an unsafe upstream candidate requires an authorized target and complete
@@ -534,7 +539,7 @@ The engine validates:
 - typed clarification state rather than fragile substring matching;
 - citation validity and reference-file accounting;
 - for every spec record, each authority is either a resolvable reference-claim/citation set, a current resolved clarification response, or an allowed combination; reference citations equal the stable unique union derived under ADR 0020 from explicit support and exact dependencies, while user answers never receive fabricated citations;
-- every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs (including reference-context question signals), a blocking conflict, a specification clarification need bound to its `SNN` record, or an explicit non-spec reason; no claim disappears between the snapshot and specification, and no question becomes a specification content record;
+- every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs (including reference-context question signals), a blocking conflict, a specification clarification need bound to its `SNN` record, or an explicit non-spec reason; no claim disappears between the snapshot and specification, and no question left open becomes a specification content record (a question an applied answer kept is mapped like a business claim);
 - derived-feature-brief records cite the reference claims from which they were generated; a later user-authored record requires its explicit acknowledgement provenance;
 - exact user-facing copy obligations;
 - exact preserved-token propagation in `reference-context.md`, with visual/style kinds additionally requiring visual checks;

@@ -30,7 +30,12 @@ pub const Applicability = enum {
 pub const applicability_detail = "The source requires a displayed value. Its origin is undecided; the choice determines whether business records and their fields are required.";
 pub const applicability_question = "Should the displayed value be calculated on request or read from managed records? Answer calculate, or records with their required fields.";
 
-pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
+/// `two_false_conflicts` holds two conflicts that share no claim, each between a chunk's two claims and each judged
+/// false, so the source review's repair of one is followed by a repair of the other. `overlapping_false_conflict` holds a
+/// genuine conflict between the first two model claims and a false one between the second and the third: they share the
+/// second claim, so the review judges the first record `conflicting` and the second `candidate_omission`, and the repair of
+/// the second decides the third claim alone.
+pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions, two_false_conflicts, overlapping_false_conflict };
 /// Scripted edge cases (ADR 0038 Decision 7). `native` writes one for each model claim, beside the
 /// one criterion the engine writes for the claim's requirement. `chosen` groups two claims in each
 /// signal and writes one edge case per group naming both, beside the two criteria the engine
@@ -38,17 +43,41 @@ pub const SourceLoss = enum { empty, partial, classification, signal, unchanged,
 /// only in an edge case: no requirement names it, so no criterion can serve the edge case.
 pub const EdgeCases = enum { native, chosen, unlinked };
 fn falseConflict(mode: ?SourceLoss) bool {
-    return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
+    return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions or mode == .two_false_conflicts or mode == .overlapping_false_conflict;
 }
 
-/// The kinds of restating record the scripted runs offer. ADR 0035 deletes any single-statement
+/// The conflicts a scripted reconciliation holds, as positions in model-claim order: the first two claims, for two
+/// conflicts that share none the next two as well, and for an overlapping pair the second and the third.
+fn conflictPairs(options: Options) []const [2]usize {
+    if (options.overlapping_conflicts) return &.{ .{ 0, 1 }, .{ 1, 2 } };
+    return switch (options.source_loss orelse .empty) {
+        .two_false_conflicts => &.{ .{ 0, 1 }, .{ 2, 3 } },
+        .overlapping_false_conflict => &.{ .{ 0, 1 }, .{ 1, 2 } },
+        else => &.{.{ 0, 1 }},
+    };
+}
+
+/// Whether one accepted conflict group holds both claims of a scripted conflict.
+fn groupHolds(groups: []const @import("../domain/reference_conflict_groups.zig").Group, pair: []const r.ClaimId) bool {
+    for (groups) |group| if (r.contains(r.ClaimId, group.claim_ids, pair[0]) and r.contains(r.ClaimId, group.claim_ids, pair[1])) return true;
+    return false;
+}
+
+/// The kinds of restating record the scripted runs offer. The story comparison (ADR 0038 Decision 5) deletes any single-statement
 /// kind but a functional requirement, which is never deleted as a restatement; these are two of them.
 pub const RestatingKind = enum { business_rule, non_goal };
 
 pub const Options = struct {
-    /// The reconciliation holds one conflict between the first two business claims, and the source review raises it
-    /// and no other requirement. A rerun with the claims retained reconciles them again: the engine applies any answer.
+    /// The reconciliation holds one conflict between the first two business claims, and its source review raises it.
+    /// A rerun with the claims retained reconciles them again: the engine applies any answer.
     conflict: bool = false,
+    /// With `conflict`, the reconciliation holds a second conflict between the second and third model claims, so the two
+    /// share the second, and the source review judges each `conflicting`: both raise a form, as a model that declares an
+    /// overlapping pair and judges both genuine does.
+    overlapping_conflicts: bool = false,
+    /// The extraction files every claim as an open question rather than a business claim, as a model may file two lines that
+    /// contradict each other.
+    open_question_claims: bool = false,
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     disposition_sequence: ?enum { recover, exhaust } = null,
@@ -68,7 +97,7 @@ pub const Options = struct {
     behaviour_without_requirement: bool = false,
     /// The first group's records name the first claim the story quotes in no functional requirement.
     /// A record of this kind states the story's own text for it, ahead of an outcome naming the same
-    /// claim, so ADR 0035's story comparison decides which of the two the batch keeps: ADR 0038 Decision 5
+    /// claim, so the story comparison decides which of the two the batch keeps: ADR 0038 Decision 5
     /// would keep the first and delete the outcome. The group needs a second claim, which keeps its requirement.
     story_restatement: ?RestatingKind = null,
     /// The first chunk's extraction answer states no feature claim, giving a reason the text validation
@@ -149,7 +178,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             // classification loss leaves the token's final line unquoted.
             const lines = try @import("../reference_extraction_test.zig").citableLines(allocator, inputs, chunk);
             const cited = if (options.source_loss == .classification) lines[0 .. lines.len - 1] else lines;
-            const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .category = .business, .citations = cited }}, .token_classifications = &.{} } });
+            const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .category = if (options.open_question_claims) .open_question else .business, .citations = cited }}, .token_classifications = &.{} } });
             // Native correlation faults need two eligible semantic kinds;
             // selecting an exact-token ID is now rejected by the wire schema.
             if (falseConflict(options.source_loss) or (mixed_kinds and chunk.id.eql(inputs.chunks.entries[0].id))) {
@@ -256,25 +285,42 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             // Later phase responses follow accepted repairs, rather than
             // reintroducing the initial scripted relationship defect.
             if ((falseConflict(options.source_loss) or options.conflict) and (accepted == null or accepted.?.proposal.conflict_groups.len != 0)) {
-                const claims = try allocator.alloc(r.ClaimId, 2);
+                // Each conflict is a pair of model claims, in claim order: the first two and, for two conflicts, the next
+                // two. A later phase holds the pairs the accepted groups still hold, so it follows an accepted repair of
+                // one pair and keeps the other.
+                const pairs = conflictPairs(options);
+                var needed: usize = 0;
+                for (pairs) |pair| needed = @max(needed, @max(pair[0], pair[1]) + 1);
+                const claims = try allocator.alloc(r.ClaimId, needed);
                 var count: usize = 0;
-                for (input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model and count < 2) {
+                for (input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model and count < claims.len) {
                     claims[count] = item.claim.id;
                     count += 1;
                 };
-                if (count != 2) return error.InvalidConflictFixture;
+                if (count != claims.len) return error.InvalidConflictFixture;
                 const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
-                for (dispositions) |*value| {
-                    if (std.meta.eql(value.claim_id, claims[0])) value.disposition = .{ .conflicting = .{ .related_claim_ids = claims[1..2] } };
-                    if (std.meta.eql(value.claim_id, claims[1])) value.disposition = .{ .conflicting = .{ .related_claim_ids = claims[0..1] } };
+                var held: std.ArrayList(r.ClaimId) = .empty;
+                var conflicts: std.ArrayList(r.ConflictProposal) = .empty;
+                for (pairs) |positions| {
+                    const pair = try allocator.dupe(r.ClaimId, &.{ claims[positions[0]], claims[positions[1]] });
+                    if (accepted) |checked| if (!groupHolds(checked.proposal.conflict_groups, pair)) continue;
+                    // A claim two conflicts share is related to the other claim of each.
+                    for (dispositions) |*value| for (pair, 0..) |claim, side| if (std.meta.eql(value.claim_id, claim)) {
+                        var related: std.ArrayList(r.ClaimId) = .empty;
+                        if (value.disposition == .conflicting) try related.appendSlice(allocator, value.disposition.conflicting.related_claim_ids);
+                        try related.append(allocator, pair[1 - side]);
+                        value.disposition = .{ .conflicting = .{ .related_claim_ids = try related.toOwnedSlice(allocator) } };
+                    };
+                    for (pair) |claim| if (!r.contains(r.ClaimId, held.items, claim)) try held.append(allocator, claim);
+                    try conflicts.append(allocator, .{ .claim_ids = pair, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The source behavior and its presentation." } }} } });
                 }
                 proposal.claim_dispositions = dispositions;
                 var signals: std.ArrayList(r.SignalProposal) = .empty;
-                for (proposal.signals) |signal| if (!r.contains(r.ClaimId, claims, signal.claim_ids[0])) {
+                for (proposal.signals) |signal| if (!r.contains(r.ClaimId, held.items, signal.claim_ids[0])) {
                     try signals.append(allocator, signal);
                 };
                 proposal.signals = try signals.toOwnedSlice(allocator);
-                proposal.conflicts = &.{.{ .claim_ids = claims, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The source behavior and its presentation." } }} } }};
+                proposal.conflicts = try conflicts.toOwnedSlice(allocator);
             }
             if (options.global_sequence != null) proposal = try @import("global_protocol_sequence.zig").mixed(allocator, input, proposal);
             if (options.disposition_sequence != null) {
@@ -362,7 +408,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
                         dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                         proposal.signals = proposal.signals[2..];
-                        proposal.conflicts = if (fault == .conflict_coverage) &.{} else &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } }};
+                        // An omitted group is an admission defect (ADR 0022, amended 25 November 2026): the correction
+                        // returns the group's explanation.
+                        proposal.conflicts = if (fault == .conflict_coverage and options.attempt == 1) &.{} else &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = if (fault == .conflict_coverage) "The outcomes differ." else "Invalid\x01text" } }} } }};
                         if (fault == .occupied_conflict) {
                             const conflicts = try allocator.dupe(r.ConflictProposal, &.{ proposal.conflicts[0], proposal.conflicts[0] });
                             conflicts[0].summary = .{ .nodes = &.{.{ .literal = .{ .value = "The outcomes differ." } }} };
@@ -393,9 +441,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const all = try @import("../domain/specification_provenance.zig").items(context);
             const dispositions = @import("../domain/reference_support.zig").records(context.references).dispositions;
             const first = for (dispositions) |disposition| {
-                if (@import("../domain/reference_support.zig").eligibleClaim(disposition.disposition) and (try r.item(all, disposition.claim_id)).claim.content == .model and (try businessValue(allocator, (try r.item(all, disposition.claim_id)).claim)) != null) break disposition.claim_id;
+                if (@import("../domain/reference_support.zig").eligibleClaim(disposition.disposition) and (try r.item(all, disposition.claim_id)).claim.content == .model and (try businessValue(allocator, (try r.item(all, disposition.claim_id)).claim, options)) != null) break disposition.claim_id;
             } else return error.InvalidFixture;
-            const value = try withoutExact(allocator, options, try attributed(allocator, all, &.{first}));
+            const value = try withoutExact(allocator, options, try attributed(allocator, options, all, &.{first}));
             if (request.id().purpose == .atomic_repair) {
                 if (view.contains(.specification_repair_authorization)) {
                     const state = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_repair_workflow.zig").authorization_schema, .repair_authorization);
@@ -441,15 +489,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         // edge case, which no requirement's criterion serves.
                         const unlinked = options.edge_cases == .unlinked and current.record_cursor != 0;
                         const statement: g.spec.Kind = if (options.behaviour_without_requirement) .user_visible_outcome else .functional_requirement;
-                        const restating = if (restating_batch) try storyRestatement(allocator, current, all, dispositions, assigned.records.selection.claim_ids) else null;
+                        const restating = if (restating_batch) try storyRestatement(allocator, options, current, all, dispositions, assigned.records.selection.claim_ids) else null;
                         for (std.enums.values(g.spec.Kind)) |kind| {
                             if (omittedKind(options, kind) or (unlinked and kind == .functional_requirement)) continue;
                             if (kind != statement and !(kind == .edge_case and options.edge_cases != null)) continue;
                             for (all.entries) |item| {
                                 const retained = eligibleRecordClaim(dispositions, item.claim.id);
-                                if (!retained or (try businessValue(allocator, item.claim)) == null or !r.contains(r.ClaimId, assigned.records.selection.claim_ids, item.claim.id)) continue;
+                                if (!retained or (try businessValue(allocator, item.claim, options)) == null or !r.contains(r.ClaimId, assigned.records.selection.claim_ids, item.claim.id)) continue;
                                 if (kind == .functional_requirement and restating != null and std.meta.eql(item.claim.id, restating.?.claim)) continue;
-                                const selected = try withoutExact(allocator, options, try attributed(allocator, all, &.{item.claim.id}));
+                                const selected = try withoutExact(allocator, options, try attributed(allocator, options, all, &.{item.claim.id}));
                                 if (kind == .edge_case) {
                                     // `chosen` writes one edge case for the group, which names every claim it holds.
                                     const written = options.edge_cases != .chosen or item.claim.id.ordinal == assigned.records.selection.claim_ids[0].ordinal;
@@ -459,7 +507,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                                 if (item.claim.content != .model) continue;
                                 var text: std.ArrayList(r.text.BusinessSegment) = .empty;
                                 try text.appendSlice(allocator, selected.value.segments);
-                                if (!options.omit_exact and std.meta.eql(item.claim.id, try outcomeClaim(allocator, all, dispositions, item.claim.chunk_id))) for (all.entries) |exact_item| {
+                                if (!options.omit_exact and std.meta.eql(item.claim.id, try outcomeClaim(allocator, options, all, dispositions, item.claim.chunk_id))) for (all.entries) |exact_item| {
                                     if (exact_item.claim.content != .preserved_token or !std.mem.eql(u8, exact_item.claim.chunk_id.bytes, item.claim.chunk_id.bytes)) continue;
                                     try text.append(allocator, .{ .literal = .{ .value = " " } });
                                     try text.append(allocator, .{ .exact_copy = .{ .claim_id = exact_item.claim.id } });
@@ -471,7 +519,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         if (restating) |subject| {
                             // The restating record comes first: ADR 0038 Decision 5 deletes the later of two
                             // records that name one claim, so only the story comparison removes this one.
-                            const selected = try withoutExact(allocator, options, try attributed(allocator, all, &.{subject.claim}));
+                            const selected = try withoutExact(allocator, options, try attributed(allocator, options, all, &.{subject.claim}));
                             try records.append(allocator, .{ .content = switch (options.story_restatement.?) {
                                 .business_rule => .{ .business_rule = .{ .text = subject.story } },
                                 .non_goal => .{ .non_goal = .{ .text = subject.story } },
@@ -540,6 +588,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             };
             const selected_index = if (request.id().purpose == .atomic_repair) 0 else try reviewIndex(allocator, inputs, try @import("../domain/specification_support.zig").Source.nextSubject(allocator, inputs, workflow.prior(progress)));
             const all = try @import("../domain/specification_provenance.zig").items(context);
+            // Of two overlapping conflicts only the second is false: the record that holds the third model claim.
+            const dismissed: ?r.ClaimId = if (options.source_loss == .overlapping_false_conflict) third: {
+                var seen: usize = 0;
+                for (all.entries) |item| if (item.claim.content == .model) {
+                    seen += 1;
+                    if (seen == 3) break :third item.claim.id;
+                };
+                break :third null;
+            } else null;
             const findings = try allocator.alloc(@import("../domain/specification_support.zig").Source.Finding, ledger.requirements.len);
             for (ledger.requirements, findings, 0..) |requirement, *finding, index| {
                 const required = try @import("../domain/specification_support_evidence.zig").requirements(allocator, inputs, context.inputs, requirement.seed.id);
@@ -547,7 +604,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 var selected: g.spec.Selection = .{ .claim_ids = if (eligible.len == 0) &.{} else eligible[0..1], .clarification_response_ids = &.{} };
                 switch (requirement.seed.id.unit) {
                     .token => |token| for (all.entries) |item| {
-                        if (item.claim.content == .preserved_token and item.claim.content.preserved_token.value.id.ordinal == token.ordinal) selected = (try attributed(allocator, all, &.{item.claim.id})).provenance;
+                        if (item.claim.content == .preserved_token and item.claim.content.preserved_token.value.id.ordinal == token.ordinal) selected = (try attributed(allocator, options, all, &.{item.claim.id})).provenance;
                     },
                     .signal => |id| for (context.references.records.signals) |signal| {
                         if (signal.id.ordinal == id.ordinal) selected = selection(.{ .claim_ids = signal.value.claim_ids, .citation_ids = signal.value.citation_ids, .clarification_response_ids = &.{} });
@@ -562,13 +619,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const source_positive = source_only and required.eligible_source_ids.len != 0;
                 if (source_only) selected = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} };
                 const unbound = (source_only and !source_positive) or (!source_only and eligible.len != 0 and (requirement.seed.id.unit == .feature or requirement.seed.id.unit == .record));
-                const conflict = requirement.seed.id.unit == .conflict or (!options.conflict and (eligible.len == 0 or unbound) and context.references.records.conflicts.len != 0);
+                const conflict = requirement.seed.id.unit == .conflict;
                 finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
                 if (source_positive and finding.value.kind == .supported) {
                     finding.value.source_ids = required.eligible_source_ids[0..1];
                     finding.value.detail = "The original source establishes the required readiness fact.";
                 }
-                if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict) {
+                if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict and
+                    (options.source_loss != .overlapping_false_conflict or (dismissed != null and r.contains(r.ClaimId, selected.claim_ids, dismissed.?))))
+                {
                     finding.value.kind = .candidate_omission;
                     finding.value.missing_obligation = context.inputs.corpus.sources[0].bytes;
                     finding.value.question = null;
@@ -712,27 +771,39 @@ fn reviewIndex(allocator: std.mem.Allocator, inputs: a.Inputs, selected: a.Id) !
     for (ledger.requirements, 0..) |requirement, index| if (std.meta.eql(requirement.seed.id, selected)) return index;
     return error.InvalidFixture;
 }
-fn businessValue(allocator: std.mem.Allocator, claim: r.extraction.Claim) !?g.spec.BusinessValue {
+fn businessValue(allocator: std.mem.Allocator, claim: r.extraction.Claim, options: Options) !?g.spec.BusinessValue {
     return switch (claim.content) {
         .model => |model| switch (model) {
             .business, .scope_guard => |value| .{ .segments = value.value.segments },
+            // A run that files its claims as open questions authors from the one an answer kept: the engine admits no other.
+            .open_question => |value| if (options.open_question_claims) try questionSegments(allocator, value.value.nodes) else null,
             else => null,
         },
         .preserved_token => .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .claim_id = claim.id } }}) },
     };
 }
 
+/// The claim's wording as business segments, when it is source quotation alone.
+fn questionSegments(allocator: std.mem.Allocator, nodes: []const r.text.ReferenceNode) !?g.spec.BusinessValue {
+    const segments = try allocator.alloc(r.text.BusinessSegment, nodes.len);
+    for (nodes, segments) |node, *segment| segment.* = switch (node) {
+        .literal => |literal| .{ .literal = literal },
+        .passive, .source => return null,
+    };
+    return .{ .segments = segments };
+}
+
 /// The claim a story-restating record names and the story's own text, read from the admitted story:
 /// the first claim of the batch the story quotes, while another claim of the batch keeps its
 /// requirement. A group without both is a mis-specified fixture, so it fails instead of restating nothing.
-fn storyRestatement(allocator: std.mem.Allocator, current: @import("../domain/specification_session.zig").Session, all: r.Items, dispositions: []const r.ClaimDisposition, batch_claims: []const r.ClaimId) !struct { claim: r.ClaimId, story: g.spec.BusinessValue } {
+fn storyRestatement(allocator: std.mem.Allocator, options: Options, current: @import("../domain/specification_session.zig").Session, all: r.Items, dispositions: []const r.ClaimDisposition, batch_claims: []const r.ClaimId) !struct { claim: r.ClaimId, story: g.spec.BusinessValue } {
     const admitted = current.units[@import("../domain/specification_session.zig").story_index] orelse return error.StoryRestatementNeedsStory;
     if (admitted.response != .content or admitted.response.content != .primary_user_story) return error.StoryRestatementNeedsStory;
     const story = admitted.response.content.primary_user_story;
     var subject: ?r.ClaimId = null;
     var others: usize = 0;
     for (all.entries) |item| {
-        if (!eligibleRecordClaim(dispositions, item.claim.id) or item.claim.content != .model or (try businessValue(allocator, item.claim)) == null or !r.contains(r.ClaimId, batch_claims, item.claim.id)) continue;
+        if (!eligibleRecordClaim(dispositions, item.claim.id) or item.claim.content != .model or (try businessValue(allocator, item.claim, options)) == null or !r.contains(r.ClaimId, batch_claims, item.claim.id)) continue;
         if (subject == null and r.contains(r.ClaimId, story.provenance.claim_ids, item.claim.id)) subject = item.claim.id else others += 1;
     }
     if (others == 0) return error.StoryRestatementNeedsAnotherClaim;
@@ -746,10 +817,10 @@ fn eligibleRecordClaim(dispositions: []const r.ClaimDisposition, id: r.ClaimId) 
 
 /// This fake chooses one business claim per chunk to author its exact outcomes.
 /// Other groups still receive their own requirements and acceptance criteria.
-fn outcomeClaim(allocator: std.mem.Allocator, all: r.Items, dispositions: []const r.ClaimDisposition, chunk: r.extraction.identity.ChunkId) !r.ClaimId {
+fn outcomeClaim(allocator: std.mem.Allocator, options: Options, all: r.Items, dispositions: []const r.ClaimDisposition, chunk: r.extraction.identity.ChunkId) !r.ClaimId {
     for (all.entries) |item| {
         if (item.claim.content != .model or !item.claim.chunk_id.eql(chunk) or !eligibleRecordClaim(dispositions, item.claim.id)) continue;
-        if ((try businessValue(allocator, item.claim)) != null) return item.claim.id;
+        if ((try businessValue(allocator, item.claim, options)) != null) return item.claim.id;
     }
     return error.InvalidFixture;
 }
@@ -762,8 +833,8 @@ fn withoutExact(allocator: std.mem.Allocator, options: Options, value: g.spec.Mo
     result.value = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = text } }}) };
     return result;
 }
-fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId) !g.spec.Model.AttributedValue {
-    const value = (try businessValue(allocator, (try r.item(all, ids[0])).claim)) orelse return error.InvalidFixture;
+fn attributed(allocator: std.mem.Allocator, options: Options, all: r.Items, ids: []const r.ClaimId) !g.spec.Model.AttributedValue {
+    const value = (try businessValue(allocator, (try r.item(all, ids[0])).claim, options)) orelse return error.InvalidFixture;
     return .{ .value = value, .provenance = .{ .claim_ids = try allocator.dupe(r.ClaimId, ids), .clarification_response_ids = &.{} } };
 }
 
@@ -784,7 +855,7 @@ fn scenarios(allocator: std.mem.Allocator, current: @import("../domain/specifica
     const written = try allocator.alloc(request.Scenario, group_plan.count());
     for (written, 0..) |*scenario, index| {
         const slot = group_plan.slot(index);
-        const claim = try withoutExact(allocator, options, try attributed(allocator, all, &.{slot.claim}));
+        const claim = try withoutExact(allocator, options, try attributed(allocator, options, all, &.{slot.claim}));
         const value = try provenance.modelValue(allocator, references, claim.value);
         const refuses = options.edge_cases == .chosen and index + 1 == written.len;
         scenario.* = .{ .number = slot.number, .given = if (options.scenarios_without_given) null else value, .when = value, .then = if (refuses) .{ .segments = &.{.{ .literal = .{ .value = refusal } }} } else value };

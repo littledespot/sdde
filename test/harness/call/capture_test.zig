@@ -16,13 +16,12 @@ const description: debug.Description = .{
     .content = &.{ .{ .guidance = "MOCK guidance" }, .{ .user = "MOCK request" } },
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
-    .response_mode = .prompt_only,
     .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
     .reasoning_effort = "low",
     .operation_kind = .inference,
 };
 const current: Context = .{
-    .schema = .@"model-call-evidence/v3",
+    .schema = .@"model-call-evidence/v4",
     .call = 9,
     .origin = .{ .request = .{ .value = 72 }, .attempt = .{ .value = 3 } },
     .request_step = description.request_step,
@@ -35,7 +34,6 @@ const current: Context = .{
     .reasoning_effort = description.reasoning_effort,
     .content = description.content,
     .response_schema = description.schema,
-    .response_mode = description.response_mode,
 };
 const context: context_contract.Captured = .{ .current = current };
 const call: debug.Call = .{
@@ -124,9 +122,6 @@ test "capture selection compares all recorded context fields and exact request b
     mismatch.provider = "anthropic";
     mismatch.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
-    mismatch = current;
-    mismatch.response_mode = .native_schema;
-    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, context, description.workflow_id, 9, body ++ " "));
 }
 
@@ -154,18 +149,20 @@ test "capture preserves source evidence and rejects foreign node or redacted sou
     try std.testing.expectError(error.CaptureRedacted, capture.select(&.{source}, context, description.workflow_id, 9, body));
 }
 
-test "shared context retains v3 wire shape and rejects unknown version fields and inconsistent origin" {
+test "shared context retains v4 wire shape and rejects unknown version fields and inconsistent origin" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const bytes = try std.json.Stringify.valueAlloc(a, current, .{});
     try std.testing.expectEqualDeep(current, try Context.decode(a, bytes));
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "\"schema\":\"model-call-evidence/v3\"") != null);
-    // The current shape records the catalogue entry's deadline.
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "\"schema\":\"model-call-evidence/v4\"") != null);
+    // The current shape records the catalogue entry's deadline and no response mode.
     try std.testing.expect(std.mem.indexOf(u8, bytes, "\"request_timeout\":180000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "response_mode") == null);
     for ([_][2][]const u8{
-        .{ "model-call-evidence/v3", "model-call-evidence/v2" },
-        .{ "model-call-evidence/v3", "model-call-evidence/v4" },
+        .{ "model-call-evidence/v4", "model-call-evidence/v2" },
+        .{ "model-call-evidence/v4", "model-call-evidence/v5" },
+        .{ "\"call\":9", "\"call\":9,\"response_mode\":\"native_schema\"" },
         .{ ",\"request_timeout\":180000", "" },
         .{ "\"request_timeout\":180000", "\"request_timeout\":0" },
         .{ "\"request_timeout\":180000", "\"request_timeout\":\"180000\"" },
@@ -212,7 +209,7 @@ test "captured contexts dispatch on their exact schema and keep v2 and v1 as his
         .reasoning_effort = current.reasoning_effort,
         .content = current.content,
         .response_schema = current.response_schema,
-        .response_mode = current.response_mode,
+        .response_mode = .native_schema,
     };
     const v2_bytes = try std.json.Stringify.valueAlloc(a, v2, .{});
     try std.testing.expect(std.mem.indexOf(u8, v2_bytes, "request_timeout") == null);
@@ -247,9 +244,9 @@ test "captured contexts dispatch on their exact schema and keep v2 and v1 as his
     try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "{\"aws_bedrock\":{\"region\":\"ap-southeast-2\",\"family\":\"gpt-oss\",\"max_output_tokens\":16000}}", "{\"deadline_only\":{}}")));
     try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "\"provider\":\"aws-bedrock\"", "\"provider\":\"anthropic\"")));
     try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "\"call\":9", "\"call\":0")));
-    // A v2 body labelled v3, and a v3 body labelled v2, reject.
-    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "model-call-evidence/v2", "model-call-evidence/v3")));
-    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v3", "model-call-evidence/v2")));
+    // A v2 body labelled v4, and a v4 body labelled v2, reject.
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "model-call-evidence/v2", "model-call-evidence/v4")));
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v4", "model-call-evidence/v2")));
     const historical: context_contract.HistoricalCallContextV1 = .{
         .schema = .@"model-call-evidence/v1",
         .call = current.call,
@@ -263,7 +260,7 @@ test "captured contexts dispatch on their exact schema and keep v2 and v1 as his
         .reasoning_effort = current.reasoning_effort,
         .content = current.content,
         .response_schema = current.response_schema,
-        .response_mode = current.response_mode,
+        .response_mode = .native_schema,
     };
     const historical_bytes = try std.json.Stringify.valueAlloc(a, historical, .{});
     const old = try context_contract.Captured.decode(a, historical_bytes);
@@ -273,10 +270,13 @@ test "captured contexts dispatch on their exact schema and keep v2 and v1 as his
     try std.testing.expect(old.recordsConfig("aws-bedrock", description.provider_config));
     try std.testing.expect(!old.recordsConfig("aws-bedrock", .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
     try std.testing.expect(!old.recordsConfig("anthropic", .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
-    // Unknown versions and a v1 body labelled v2 or v3 reject.
-    try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v3", "model-call-evidence/v9")));
+    // Unknown versions, the retired v3, and a v1 body labelled v2 or v4 reject.
+    try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v4", "model-call-evidence/v9")));
+    try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v4", "model-call-evidence/v3")));
     try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, historical_bytes, "model-call-evidence/v1", "model-call-evidence/v2")));
-    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, historical_bytes, "model-call-evidence/v1", "model-call-evidence/v3")));
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, historical_bytes, "model-call-evidence/v1", "model-call-evidence/v4")));
+    // A capture of the removed prompt-only mode doesn't decode.
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, historical_bytes, "\"response_mode\":\"native_schema\"", "\"response_mode\":\"prompt_only\"")));
 }
 
 const config_bytes =
@@ -290,6 +290,7 @@ const case_bytes =
 
 const Sink = struct {
     allocator: std.mem.Allocator,
+    run: []const u8 = call.run,
     rows: std.ArrayList(u8) = .empty,
     sequence: u64 = 200,
     fn barrier(self: *Sink) @import("../../../src/ports/telemetry_barrier.zig").Barrier {
@@ -312,7 +313,7 @@ const Sink = struct {
             .sequence = self.sequence,
             .occurred_at_utc = "2026-09-20T00:00:00Z",
             .monotonic_offset = 1,
-            .run_id = .{ .bytes = call.run },
+            .run_id = .{ .bytes = self.run },
             .feature_id = .{ .bytes = "nested/feature" },
             .fragment = fragment,
         }) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
@@ -333,7 +334,12 @@ fn fixture(a: std.mem.Allocator, root: std.Io.Dir) !void {
     try write(root, run_path ++ "/project/settings/.sddproviders.json", provider_bytes);
     try write(root, run_path ++ "/evidence/generation/call-000009/context.json", try std.json.Stringify.valueAlloc(a, current, .{}));
     try write(root, run_path ++ "/evidence/generation/call-000009/request.json", body);
-    var sink: Sink = .{ .allocator = a };
+    try write(root, run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log", try promptLog(a, call.run, body));
+}
+
+/// The prompt log of one engine run that captured one request, at the captured origin, with these wire bytes.
+fn promptLog(a: std.mem.Allocator, run: []const u8, wire: []const u8) ![]const u8 {
+    var sink: Sink = .{ .allocator = a, .run = run };
     try sink.rows.appendSlice(a, format.prompt_heading);
     var logger: @import("../../../src/application/model_exchange_capture.zig").Capture = .{ .allocator = a, .logs = sink.barrier() };
     defer logger.deinit();
@@ -348,9 +354,56 @@ fn fixture(a: std.mem.Allocator, root: std.Io.Dir) !void {
         .description = description,
     });
     defer logger.end();
-    try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = body }, &.{}));
-    try write(root, run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log", sink.rows.items);
+    try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = wire }, &.{}));
+    return a.dupe(u8, sink.rows.items);
 }
+
+test "a case's second leg selects its own engine run's call and never its first leg's" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = std.testing.tmpDir(.{});
+    defer root.cleanup();
+    const io = std.testing.io;
+    try fixture(a, root.dir);
+    // The second leg's project is a copy of the first leg's, so it also holds the first leg's engine run, whose
+    // execution-local origin repeats the one captured here with other bytes.
+    try write(root.dir, run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-first/binding/0001.log", try promptLog(a, "MOCK-first", "{\"MOCK\":\"first leg wire body\"}"));
+    try write(root.dir, "runs/" ++ first_leg ++ "/project/documents/nested/feature/logs/events/MOCK-first/binding/0001.log", "MOCK event log");
+    // With no report, nothing names a first leg, so the two runs stay ambiguous, as do those of an older report.
+    try std.testing.expectError(error.CaptureAmbiguous, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    try write(root.dir, run_path ++ "/report.json", "{\"schema\":\"spec-e2e-report/v1\"}");
+    try std.testing.expectError(error.CaptureAmbiguous, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    const reports = @import("../e2e/contracts.zig");
+    const continued = struct {
+        fn report(allocator: std.mem.Allocator, first: []const u8) ![]const u8 {
+            const value: reports.Report = .{ .started_at_utc = "", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .continued_from = first };
+            return std.json.Stringify.valueAlloc(allocator, value, .{});
+        }
+    };
+    try write(root.dir, run_path ++ "/report.json", try continued.report(a, first_leg));
+    var loaded = try capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9);
+    defer loaded.deinit();
+    try std.testing.expectEqualStrings(call.run, loaded.call.run);
+    try std.testing.expectEqualStrings(body, loaded.call.request.?);
+    // Only the runs the first leg holds are excluded: a first leg holding another run leaves both calls in play.
+    try write(root.dir, "runs/" ++ other_leg ++ "/project/documents/nested/feature/logs/events/MOCK-other/binding/0001.log", "MOCK event log");
+    try write(root.dir, run_path ++ "/report.json", try continued.report(a, other_leg));
+    try std.testing.expectError(error.CaptureAmbiguous, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    // A first leg the report names must exist beside the run, and a name that is no run directory's is a bad report:
+    // neither is read as nothing inherited.
+    try write(root.dir, run_path ++ "/report.json", try continued.report(a, missing_leg));
+    try std.testing.expectError(error.DirectoryMissing, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    for ([_][]const u8{ "", "first-leg" }) |name| {
+        try write(root.dir, run_path ++ "/report.json", try continued.report(a, name));
+        try std.testing.expectError(error.InvalidReport, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    }
+}
+
+/// Run directory names, in the shape the launcher gives one.
+const first_leg = "2026-11-27T08-48-56Z-74b1a2cfe51c25d38a161e475a494183";
+const other_leg = "2026-11-27T08-48-57Z-74b1a2cfe51c25d38a161e475a494183";
+const missing_leg = "2026-11-27T08-48-58Z-74b1a2cfe51c25d38a161e475a494183";
 
 test "capture loads configured feature and provider locations and preserves request ownership" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);

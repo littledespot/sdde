@@ -148,7 +148,7 @@ test "static JSON guidance stays separate from dynamic input and source capture"
             try std.testing.expectEqualStrings(context_bytes, prepared.content[0].guidance);
             try std.testing.expectEqualStrings(prompt_bytes, prepared.content[1].guidance);
             try std.testing.expectEqualStrings(body, prepared.content[2].user);
-            const wire = try @import("adapters/provider/bedrock_request.zig").encodeText(a, .{ .content = prepared.content, .schema = .{ .prompt_only = prepared.response_schema.modelBytes() }, .schema_name = "test", .temperature = null, .reasoning_effort = null, .family = .converse, .max_output_tokens = .{ .tokens = 16000 } });
+            const wire = try @import("adapters/provider/bedrock_request.zig").encodeText(a, .{ .content = prepared.content, .schema = .{ .guidance = prepared.response_schema.modelBytes(), .structure = "{\"type\":\"object\"}" }, .schema_name = "test", .temperature = null, .reasoning_effort = null, .family = .converse, .max_output_tokens = .{ .tokens = 16000 } });
             var parsed = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             defer parsed.deinit();
             const messages = parsed.value.object.get("messages").?.array.items;
@@ -185,7 +185,7 @@ test "static context rejects missing resources and conflicting resource kinds be
 test "protocol corrections retain static context dynamic input and registered controls" {
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, true);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
         defer fixture.deinit();
         var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
         defer models.slots.deinit(std.testing.allocator);
@@ -1183,7 +1183,7 @@ fn deadlineServices(allocator: std.mem.Allocator, selections: []const DeadlineSe
     defer candidate.deinit();
     for (selections, compiled[0..selections.len], candidate.entries) |selection, *contract, *entry| {
         contract.* = .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = selection.model }, .implementation_id = .{ .ordinal = 1 }, .facts = .deadline_only, .capabilities = capabilities };
-        entry.* = .{ .provider = contract.provider, .model = contract.model.?, .implementation_id = contract.implementation_id, .json = false, .config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = selection.milliseconds } } }, .capabilities = capabilities, .supported_reasoning_efforts = &.{} };
+        entry.* = .{ .provider = contract.provider, .model = contract.model.?, .implementation_id = contract.implementation_id, .config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = selection.milliseconds } } }, .capabilities = capabilities, .supported_reasoning_efforts = &.{} };
     }
     const owner = try registry.createValidated(allocator, candidate, .{ .entries = compiled[0..selections.len] });
     errdefer registry.deinitOwner(owner);
@@ -4889,14 +4889,13 @@ test "a re-send keeps the full prepared identity of the attempt it repeats" {
     // Accepted: the identical request with only its sampling changed.
     handoff.destroy(try handoff.resent(current, try resend_preparation.resend(std.testing.allocator, original), runaway));
     // Rejected: any other difference, including ones only admission reads.
-    for (0..4) |variant| {
+    for (0..3) |variant| {
         var owned = try resend_preparation.resend(std.testing.allocator, original);
         var tampered = owned.request.*;
         switch (variant) {
             0 => tampered.content = tampered.content[0 .. tampered.content.len - 1],
-            1 => tampered.response_guidance_mode = if (tampered.response_guidance_mode == .native_schema) .prompt_only else .native_schema,
-            2 => tampered.controls = if (tampered.controls.temperatures == null) .forTemperatureSupport(true, @import("test_fixtures/model_temperatures.zig").temperatures) else .{},
-            3 => tampered.sampling = .configured,
+            1 => tampered.controls = if (tampered.controls.temperatures == null) .forTemperatureSupport(true, @import("test_fixtures/model_temperatures.zig").temperatures) else .{},
+            2 => tampered.sampling = .configured,
             else => unreachable,
         }
         const replaced = try owned.arena.allocator().create(provider.IdentifiedProviderNeutralModelRequest);
@@ -7063,7 +7062,7 @@ pub const Fixture = struct {
     clock: @import("provider_authorization_test_fixture.zig").TestClock,
     entries: [base_entries + 1]operations.Entry,
     registry: operations.Registry,
-    /// The configured workflow budget the runner starts from (ADR 0037).
+    /// The configured workflow budget the runner starts from (ADR 0011).
     token_budget: @import("domain/workflow_token_budget.zig").TotalTokenBudget,
     /// When set, a compile also builds the workflow registry the startup builds from it and keeps the
     /// validated owner: the graph the registry keeps is the one the engine runs.
@@ -7071,13 +7070,13 @@ pub const Fixture = struct {
     registry_owner: ?*@import("domain/workflow_registry.zig").Owner,
 
     pub fn init(self: *Fixture, allocator: std.mem.Allocator) !void {
-        return self.initWithProvider(allocator, null, false);
+        return self.initWithProvider(allocator, null);
     }
 
-    fn initWithProvider(self: *Fixture, allocator: std.mem.Allocator, production: ?ProviderChoice, json: bool) !void {
+    fn initWithProvider(self: *Fixture, allocator: std.mem.Allocator, production: ?ProviderChoice) !void {
         self.arena = .init(allocator);
         errdefer self.arena.deinit();
-        self.services = try providerServices(allocator, production, &.{"selected"}, json);
+        self.services = try providerServices(allocator, production, &.{"selected"});
         errdefer self.services.deinit();
         self.roots_owner = try rootOwner(allocator);
         self.native.init(allocator);
@@ -7220,7 +7219,7 @@ fn compiledBedrockContract(family: contracts.BedrockFamily) contracts.ProviderMo
     unreachable;
 }
 
-pub fn providerServices(allocator: std.mem.Allocator, production: ?ProviderChoice, slots: []const []const u8, json: bool) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
+pub fn providerServices(allocator: std.mem.Allocator, production: ?ProviderChoice, slots: []const []const u8) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
     const selected: contracts.ProviderModelContract = if (production) |choice| switch (choice) {
         .bedrock => |family| compiledBedrockContract(family),
     } else .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .facts = .deadline_only, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} };
@@ -7230,7 +7229,7 @@ pub fn providerServices(allocator: std.mem.Allocator, production: ?ProviderChoic
     const contract = registered.entries[0];
     const model = contract.model orelse @import("domain/llm_provider_identity.zig").ModelId{ .bytes = @import("model_contract_test_fixture.zig").bedrock_model_ids[0] };
     const config: contracts.ValidatedProviderConfig = if (contract.facts.bedrockFamily()) |family| .{ .aws_bedrock = .{ .region = std.enums.values(contracts.BedrockRegion)[0], .family = family, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 1000 } } } else .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } };
-    candidate.entries[0] = .{ .provider = contract.provider, .model = model, .implementation_id = contract.implementation_id, .json = json, .config = config, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
+    candidate.entries[0] = .{ .provider = contract.provider, .model = model, .implementation_id = contract.implementation_id, .config = config, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
     const owner = try registry.createValidated(allocator, candidate, registered);
     errdefer registry.deinitOwner(owner);
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
@@ -7341,7 +7340,7 @@ test "production request capture failure records non-delivery and response captu
         const Case = struct { direction: ModelCaptureSink.prompt.PromptDirection, overshoot: bool = false };
         for ([_]Case{ .{ .direction = .request }, .{ .direction = .response }, .{ .direction = .response, .overshoot = true } }) |case| {
             var fixture: Fixture = undefined;
-            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
             defer fixture.deinit();
             const graph = try fixture.compile(try invocationYaml(&fixture));
             var environment = try bedrockEnvironment(std.testing.allocator);
@@ -7405,7 +7404,7 @@ test "production request capture failure records non-delivery and response captu
 test "a cancellation under the log while a body is captured is no capture failure; a request is never sent, a response already was" {
     for (std.enums.values(contracts.BedrockFamily)) |family| for ([_]ModelCaptureSink.prompt.PromptDirection{ .request, .response }) |direction| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
         defer fixture.deinit();
         const graph = try fixture.compile(try invocationYaml(&fixture));
         var environment = try bedrockEnvironment(std.testing.allocator);
@@ -7447,7 +7446,7 @@ test "a cancellation under the log while a body is captured is no capture failur
 test "production source snapshot capture failure preserves its cause and unsent accounting" {
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
         defer fixture.deinit();
         const a = fixture.arena.allocator();
         const source = try invocationYaml(&fixture);
@@ -7502,7 +7501,7 @@ test "production source snapshot capture failure preserves its cause and unsent 
 test "production capture accepts an authorized repair packet without a single producing call" {
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
         defer fixture.deinit();
         const a = fixture.arena.allocator();
         var source = try invocationYaml(&fixture);
@@ -7559,7 +7558,7 @@ test "production capture accepts an authorized repair packet without a single pr
 
 test "production capture attributes inference bodies to the existing request ledger" {
     var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = .converse }, false);
+    try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = .converse });
     defer fixture.deinit();
     const a = fixture.arena.allocator();
     const yaml_source = try std.mem.concat(a, u8, &.{ try requestCompletionYaml(&fixture), "\n# " ++ "source snapshot " ** 1000 });
@@ -7646,7 +7645,7 @@ test "production capture attributes inference bodies to the existing request led
 test "production Bedrock composition executes inference validation and request closure from YAML" {
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
         defer fixture.deinit();
         const graph = try fixture.compile(try requestCompletionYaml(&fixture));
         // A fresh invocation captures its own environment snapshot and ledger.
@@ -7682,7 +7681,7 @@ test "production Bedrock composition executes inference validation and request c
 test "production Bedrock YAML records budget overshoot and blocks another call" {
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
         defer fixture.deinit();
         const graph = try fixture.compile(try invocationYaml(&fixture));
         var environment = try bedrockEnvironment(std.testing.allocator);
@@ -7715,7 +7714,7 @@ test "production Bedrock YAML records budget overshoot and blocks another call" 
 test "production Bedrock missing credentials follow explicit pre-call termination without effects" {
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
         defer fixture.deinit();
         const graph = try fixture.compile(try requestTerminationYaml(&fixture));
         var environment: std.process.Environ.Map = .init(std.testing.allocator);
@@ -7791,7 +7790,7 @@ const bedrock_runaway_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\
 test "ADR 0039: a repeated runaway is captured in full at debug before its failure, and only its events survive higher levels" {
     for (std.enums.values(@import("domain/telemetry.zig").CanonicalLogLevel)) |level| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = .converse }, false);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = .converse });
         defer fixture.deinit();
         const a = fixture.arena.allocator();
         const source = try runawayYaml(&fixture, "2");
@@ -7879,7 +7878,7 @@ test "production missing-answer observation retains usage and can close without 
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         for ([_]bool{ false, true }) |overshoot| {
             var fixture: Fixture = undefined;
-            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
             defer fixture.deinit();
             const graph = try fixture.compile(try requestCompletionYaml(&fixture));
             var environment = try bedrockEnvironment(std.testing.allocator);
@@ -7946,9 +7945,9 @@ test "missing answers share protocol allowance through mixed failure and success
             .{ .schema = schema_bytes, .valid = "{\"answer\":\"complete\"}" },
             .{ .schema = "{\"type\":\"object\",\"properties\":{\"ready\":{\"type\":\"boolean\"},\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":20},\"maxItems\":3}},\"required\":[\"ready\",\"names\"],\"additionalProperties\":false}", .valid = "{\"ready\":true,\"names\":[\"first\",\"second\"]}" },
         };
-        for ([_]bool{ false, true }) |json| for (shapes) |shape| for (0..3) |sequence| {
+        for (shapes) |shape| for (0..3) |sequence| {
             var fixture: Fixture = undefined;
-            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, json);
+            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family });
             defer fixture.deinit();
             const source = try withStaticContext(fixture.arena.allocator(), try protocolRetryYaml(&fixture));
             const graph = try fixture.compileResources(source, shape.schema, true, null, context_bytes);
@@ -7964,7 +7963,7 @@ test "missing answers share protocol allowance through mixed failure and success
             var runner = fixture.runner(graph, std.testing.allocator);
             defer runner.deinit();
             try runtime.bind(&runner);
-            var wire: @import("model_transport_test_fixture.zig").Wire = .{ .expected_json = json };
+            var wire: @import("model_transport_test_fixture.zig").Wire = .{ .expects_native_output = true };
             runtime.provider.?.transport = wire.port();
             var original_id: ?*const identity.ModelRequestId = null;
             for (0..3) |attempt| {
@@ -7980,7 +7979,6 @@ test "missing answers share protocol allowance through mixed failure and success
                 const request = try currentRequest(&runner);
                 if (original_id == null) original_id = request.id();
                 try std.testing.expect(request.id() == original_id.?);
-                try std.testing.expectEqual(json, request.prepared().?.response_guidance_mode == .native_schema);
                 try std.testing.expectEqualDeep(request.binding().registry_entry.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures), request.prepared().?.controls);
                 try std.testing.expectEqualStrings(shape.schema, request.prepared().?.response_schema.bytes());
                 try std.testing.expectEqual(@as(u32, @intCast(attempt + 1)), (try invokedOperation(&runner)).operation().id.model_attempt_ordinal.value);

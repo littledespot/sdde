@@ -1,52 +1,19 @@
 # ADR 0028: Anthropic Messages API provider on shared provider owners
 
-- **Status:** Accepted amendment
+- **Status:** Accepted
 - **Date:** 2026-10-21
-- **Decision authority:** The user's instruction "implement a claude connector" on
-  21 October 2026, referring to the proposal in
-  `fixes/claude_connector.md` (git `9719dc7`). The user also
-  required that "the implementation must strive to reusability", with one common
-  layer that both connectors use. The user then chose:
-  - "All three" models: Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5;
-  - "Yes, same stop": a refusal is the existing `content_filtered` stop;
-  - "Yes, access denied": an out-of-credit or spend-cap error is
-    `authorization_denied` and is never retried;
-  - "No, fail at first Claude call": a missing key fails when that provider's call
-    is authorized, as a missing Bedrock key does today.
-
-  The 16 October direction that configuration selects Claude or Bedrock per slot,
-  with both allowed in one workflow, still applies. The 18 October direction stored
-  the required Anthropic `max_tokens` in each catalogue model entry. Later that day
-  [ADR 0011](0011-provider-owned-request-limits.md#model-maximum-output) made the
-  catalogue's `maxOutputTokens` the model's documented maximum for Bedrock. This ADR
-  uses that one field for both providers.
-- **Amends:**
-  - ADR 0011 "Model maximum output", which now applies to every provider's catalogue
-    entry, not only Bedrock's;
-  - design invariant 32 and acceptance criterion 31.12, in the same way;
-  - ADR 0019, whose request description admits Anthropic provider configuration;
-  - §9 configuration, §12.3 (a new §12.3.2 beside §12.3.1 Bedrock Converse), and
-    F0006–F0008 where they describe a single provider, including its one credential
-    variable (now one exact variable per selected provider family).
-
-  The overall design remains **Proposed design**. The connector proposal stays an
-  unaccepted source document; its normative content moves here.
-- **Amended by:** [ADR 0029](0029-bedrock-model-families.md) (22 October 2026):
-  Bedrock contracts join by compiled family, Claude through Bedrock is its `claude`
-  family, and the live-test cost policy names Claude Haiku 5.5 through Bedrock; amended
-  9 November 2026, it also names `anthropic` / `claude-haiku-5-5` for generation.
-  [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026, implemented
-  24 October 2026): each catalogue entry also requires its own `requestTimeoutMs`
-  deadline, and provider token counting is removed for every provider. The text below
-  includes both.
+- **Decision authority:** User decisions, 16, 18 and 21 October 2026 and 10, 17, 21 and
+  25 November 2026
+- **Amends:** ADR 0011 "Model maximum output"; ADR 0019; design invariant 32 and
+  acceptance criterion 31.12; §9, §12.3 and F0006–F0008. The overall design remains
+  **Proposed design**.
+- **Amended by:** [ADR 0029](0029-bedrock-model-families.md),
+  [ADR 0030](0030-engine-owned-model-request.md)
 
 ## Context
 
-The engine had one production provider, Amazon Bedrock Converse. Its credential
-storage, authorization, call lifecycle, request text layout, HTTP exchange and
-response assembly lived in Bedrock-named modules, so a second provider could only
-copy them. The user wants Claude through the Anthropic Messages API as a peer, with
-the shared behaviour implemented once.
+Claude through the Anthropic Messages API is a peer of Amazon Bedrock Converse, with the
+shared behaviour implemented once.
 
 ## Decision
 
@@ -68,7 +35,7 @@ projections and never import a sibling provider.
 
 | Owner | Responsibility |
 | --- | --- |
-| `domain/llm_provider_contracts.zig` | `ProviderFacts`, a union tagged by provider family that replaces the Bedrock-only contract fields. Bedrock facts carry the compiled family (ADR 0029); Anthropic carries none. The tag also names the configuration schema. |
+| `domain/llm_provider_contracts.zig` | `ProviderFacts`, a union tagged by provider family. Bedrock facts carry the compiled family (ADR 0029); Anthropic carries none. The tag also names the configuration schema. |
 | `domain/llm_provider_config_schema.zig` | Closed catalogue configuration for each family, with the shared required `maxOutputTokens` and `requestTimeoutMs`. |
 | `domain/model_capabilities.zig`, `domain/model_schema_projection.zig` | One native JSON-schema capability and one native grammar projection for both providers. |
 | `domain/provider_failure.zig` | One retry classifier from neutral facts: pre-send failures never retry; otherwise the cause decides. |
@@ -103,23 +70,21 @@ implements the dated wire manifest, including the error table.
   - Keys are read once, after binding validation, and only for families bound to the
     selected workflow's model slots.
   - A missing or malformed key makes that family's authorization fail as `authentication_failed`;
-    the failure line says which (`credential=missing|malformed`, contract 08; user decision,
-    21 November 2026). There is no startup check.
+    the failure line says which (`credential=missing|malformed`, contract 08). There is no
+    startup check: a missing key fails when that provider's call is authorized.
 - **Request:**
   - **Text:** system and guidance parts, then the response-format and schema
     guidance, become `system` text blocks. User and evidence parts become one
     `user` message.
   - **Effort:** `reasoningEffort` maps to `output_config.effort`.
   - **Native schema:** sends `output_config.format = {type: "json_schema", schema}`,
-    using the shared projection as a JSON object.
-  - **Prompt-only:** keeps the full schema in system guidance and sends no format.
+    using the shared projection as a JSON object. Native schema is the only response
+    mode, and the catalogue has no `json` member.
   - **Fields never sent:** `temperature`, `top_p`, `top_k`, `thinking`, `stop_sequences`,
     tools, caching, `inference_geo` and `speed`. The registry declares
     `temperature: false`.
 - **Response:** decoding is closed against the dated manifest.
-  - **Presence** (amended 10 November 2026; user: "implement the necessary fixes",
-    after a live `claude-haiku-5-5` response omitted `usage.server_tool_use` and a text
-    block's `citations`): a field the manifest documents as nullable may be absent and
+  - **Presence:** a field the manifest documents as nullable may be absent and
     reads as null. A non-nullable documented field, at any depth, must be present: for
     example the envelope's `id`, `type`, `role`, `model`, `content`, `stop_reason` and
     `usage`, usage's `input_tokens` and `output_tokens`, and a thinking block's `signature`.
@@ -159,10 +124,8 @@ implements the dated wire manifest, including the error table.
 
 ### Model maximum output, for every provider
 
-ADR 0011's rule applies to every catalogue entry. Each entry records its model's
-documented maximum as `config.maxOutputTokens`, and every inference request sends
-it: Bedrock as `inferenceConfig.maxTokens`, Anthropic as `max_tokens`. No slot,
-binding, correction or replay can narrow it.
+[ADR 0011](0011-provider-owned-request-limits.md#model-maximum-output) owns the rule; it
+applies to every catalogue entry of every provider.
 
 ### Versions
 
@@ -175,21 +138,17 @@ binding, correction or replay can narrow it.
 
 ## Not decided here
 
-- **Response mode.** Whether Claude entries use native schema or prompt-only waits for
-  measured compatibility. Both are implemented, and the catalogue's `json` flag
-  selects one.
-- **Out of scope:**
-  - streaming, prompt caching, tools, batches and Claude through clouds other than
-    Bedrock (ADR 0029's `claude` family);
-  - an explicit inference-geography control and an Anthropic grader;
-  - the separate complete-receipt race correction (proposal R11), an existing shared
-    accounting gap that this ADR does not change.
+- Streaming, prompt caching, tools, batches and Claude through clouds other than
+  Bedrock (ADR 0029's `claude` family).
+- An explicit inference-geography control and an Anthropic grader.
+- The complete-receipt race correction, an existing shared accounting gap that this ADR
+  does not change.
 
 ## Consequences
 
-- Bedrock behaviour is unchanged. Its request bytes and response handling are
-  preserved, and existing Bedrock tests prove this through the shared owners.
-- The Bedrock-named lifecycle, authorization, key, transport, head-reader and
-  dispatch modules are removed, with no aliases.
+- Bedrock's request bytes and response handling run through the shared owners, and its
+  tests prove them there.
+- No Bedrock-named lifecycle, authorization, key, transport, head-reader or dispatch
+  module exists, and none has an alias.
 - A future provider adds a contract entry, a configuration schema and its own
   endpoint, encoder and decoder projections. It reuses everything else.
