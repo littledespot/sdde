@@ -984,7 +984,17 @@ status line so the references above still hold; its build and review record was 
         checking the status, and the publication builder passing no list.
       - **Not covered (residuals).** A form is closed only when an applied answer dropped its conflict: when the second leg's
         model does not re-declare the false conflict at all, the prior form stays open (absence is not a closure, §16.4's
-        obsolete-subject resolution is unbuilt). Proposals 4 (offer a conflict subject only `conflicting` or
+        obsolete-subject resolution is unbuilt). **A second shape, traced 28 November 2026**
+        (`2026-11-28T06-44-07Z-e0620df3…`, second leg `06-45-05Z-996e6366…`): T1 (call 10) dismissed the false group
+        `[1,5]`, then the source review of claim 1's signal (call 12) judged it `conflicting`, raising S02 on a **signal**
+        subject (line 5), not a conflict subject. The second leg re-declared both groups, S01's answer dropped `[1,5]`, and
+        claim 1 stayed retained with a signal that derives S02's own subject, so S02's subject is not absent and no
+        dropped conflict matches it. The form carries no typed claim list (the superseded claim appears only in its
+        prose), so no typed "obsolete" fact exists. Closing it needs an ADR 0025 amendment (the signal an applied
+        answer's drop leaves standing closes an open form of the same subject), with the risk that an unrelated gap on
+        that signal is closed. **Not built:** one sample of this shape (the `brief` form of `2026-11-26T23-05-40Z` is a
+        different subject), and a person answers S02 in one line, so only the harness is blocked. Reopen on a second
+        sample. Proposals 4 (offer a conflict subject only `conflicting` or
         `candidate_omission`) and 5 (the extraction definition) are not built; proposal 2 (answers to both overlapping forms
         apply together) is change 7.
       - **Approvals.** Made: the amendments and the build. Needed: `/preflight` and a build decision for each further proposal,
