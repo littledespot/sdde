@@ -48,8 +48,9 @@ fn falseConflict(mode: ?SourceLoss) bool {
 
 /// The conflicts a scripted reconciliation holds, as positions in model-claim order: the first two claims, for two
 /// conflicts that share none the next two as well, and for an overlapping pair the second and the third.
-fn conflictPairs(mode: ?SourceLoss) []const [2]usize {
-    return switch (mode orelse .empty) {
+fn conflictPairs(options: Options) []const [2]usize {
+    if (options.overlapping_conflicts) return &.{ .{ 0, 1 }, .{ 1, 2 } };
+    return switch (options.source_loss orelse .empty) {
         .two_false_conflicts => &.{ .{ 0, 1 }, .{ 2, 3 } },
         .overlapping_false_conflict => &.{ .{ 0, 1 }, .{ 1, 2 } },
         else => &.{.{ 0, 1 }},
@@ -70,6 +71,10 @@ pub const Options = struct {
     /// The reconciliation holds one conflict between the first two business claims, and its source review raises it.
     /// A rerun with the claims retained reconciles them again: the engine applies any answer.
     conflict: bool = false,
+    /// With `conflict`, the reconciliation holds a second conflict between the second and third model claims, so the two
+    /// share the second, and the source review judges each `conflicting`: both raise a form, as a model that declares an
+    /// overlapping pair and judges both genuine does.
+    overlapping_conflicts: bool = false,
     /// The extraction files every claim as an open question rather than a business claim, as a model may file two lines that
     /// contradict each other.
     open_question_claims: bool = false,
@@ -283,7 +288,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 // Each conflict is a pair of model claims, in claim order: the first two and, for two conflicts, the next
                 // two. A later phase holds the pairs the accepted groups still hold, so it follows an accepted repair of
                 // one pair and keeps the other.
-                const pairs = conflictPairs(options.source_loss);
+                const pairs = conflictPairs(options);
                 var needed: usize = 0;
                 for (pairs) |pair| needed = @max(needed, @max(pair[0], pair[1]) + 1);
                 const claims = try allocator.alloc(r.ClaimId, needed);

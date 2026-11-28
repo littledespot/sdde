@@ -19,8 +19,9 @@ const clarifications = @import("required_authority_clarifications.zig");
 
 pub const Error = std.mem.Allocator.Error || error{InvalidReferenceReconciliation};
 
-/// An answer to one conflict: the claim it keeps, and the other conflicts its supersessions leave with one claim.
-const Applied = struct { conflict: usize, chosen: r.ClaimId, dropped: []const usize };
+/// An answer to one conflict: the choice that made it, the claim it keeps, and the other conflicts its supersessions leave
+/// with one claim.
+const Applied = struct { conflict: usize, choice: resolution.ConflictChoice, chosen: r.ClaimId, dropped: []const usize };
 
 /// The caller's arena owns everything returned and everything allocated on the way, as the reconciliation's builders do.
 pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, records: r.Records, all: []const resolution.ConflictChoice) Error!r.Records {
@@ -37,7 +38,7 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
         try answered.append(allocator, index);
         const chosen = (resolution.chosenClaim(allocator, source_inputs.corpus.sources, held, conflict, choice.key, choice.label) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation) orelse continue;
         const dropped = (try answerable(allocator, held.items, records.conflicts, conflict, index, chosen)) orelse continue;
-        try candidates.append(allocator, .{ .conflict = index, .chosen = chosen, .dropped = dropped });
+        try candidates.append(allocator, .{ .conflict = index, .choice = choice, .chosen = chosen, .dropped = dropped });
     }
     // Two answers that touch one conflict apply nothing: neither can account for what the other changes. Nor does an
     // answer that would drop a conflict the user answered too, applicable or not, since that would set the user's own
@@ -70,6 +71,7 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
 
     var answer_superseded: std.ArrayList(r.ClaimId) = .empty;
     var answer_retained: std.ArrayList(r.ClaimId) = .empty;
+    var answer_dropped: std.ArrayList(r.DroppedConflict) = .empty;
     for (applied.items) |entry| {
         const conflict = records.conflicts[entry.conflict];
         // Only the claim the user chose: the last claim of a conflict the supersession dropped was not decided by an answer.
@@ -88,6 +90,11 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
             } else return error.InvalidReferenceReconciliation;
             try decide(dispositions, proposed, last, null);
             try retain(allocator, held.items, &signals, &proposed_signals, last);
+            // The form of the dropped conflict, if one was raised, asks a question that no longer exists. Its subject is the
+            // one the form carries, derived from the conflict's cited lines before the conflicts are renumbered.
+            const subject = clarifications.subjectFor(allocator, source_inputs, held, .{ .kind = .reference_meaning, .unit = .{ .conflict = records.conflicts[index].id }, .slot = .disposition }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
+            // The key is copied, so the record outlives the clarification state it was read from.
+            try answer_dropped.append(allocator, .{ .subject = subject, .response_id = entry.choice.response_id.ordinal, .key = try allocator.dupe(u8, entry.choice.key) });
         }
     }
     for (records.conflicts, 0..) |conflict, index| {
@@ -118,6 +125,7 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
         .conflicts = try kept.toOwnedSlice(allocator),
         .answer_superseded = try answer_superseded.toOwnedSlice(allocator),
         .answer_retained = try answer_retained.toOwnedSlice(allocator),
+        .answer_dropped = try answer_dropped.toOwnedSlice(allocator),
     };
 }
 

@@ -9,7 +9,7 @@ pub const Artifact = enum { specification, reference_context, clarification_stat
 /// report states the outcome that leg is expected to reach, `clarification` and `publication`, never the combined one.
 pub const ExpectedOutcome = enum { publication, clarification, clarification_then_publication };
 pub const Copy = struct { source: []const u8, destination: []const u8 };
-/// The user's answer to the one form the first leg is expected to raise: the key of the option to choose.
+/// The user's answer to the form the first leg raises that offers it: the key of the option to choose.
 pub const Answer = struct { key: []const u8 };
 pub const Case = struct {
     schema: []const u8,

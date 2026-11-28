@@ -21,7 +21,10 @@
     [ADR 0020](0020-derived-exact-reference-lineage.md) and [ADR 0022](0022-native-reference-phase-handoffs.md), for the
     claim an applied answer kept ("The answered reconciliation");
   - [ADR 0047](0047-engine-composed-primary-story.md) Decision 1, for the claims the story quotes;
-  - §16.2's snapshot facts and the `specification-state` version, which advances to v30 with no reader for v29.
+  - §16.2's snapshot facts and the `specification-state` version, which advances to v30 with no reader for v29;
+  - §23.2's rule that an open form pauses the run and that refresh retains a prior subject absent from the needs (13-05
+    `RefreshClarificationsAction`), by the one closure above, and the meaning of `resolved_by_authority`, which no clause
+    defined.
 
   It leaves §23.2's protection of user-closed forms, ADR 0017's incomplete
   publication and ADR 0009's fresh-invocation rule unchanged.
@@ -63,7 +66,9 @@
 6. **A form left open**, unanswered or deferred, is not a failure. A deferral takes
    no account and records nothing; the record stays open and its form is rendered
    afresh. If a required record is still open after refresh, the run pauses again
-   under the existing residual open-registry pause.
+   under the existing residual open-registry pause. The one open Specify form the
+   refresh does not leave open is that of a conflict an applied answer dropped
+   ("The answered reconciliation").
 7. **A `cancel` with its reason** is a form of the run like a closed one: it is
    authenticated, its response is recorded and its record becomes
    `cancelled_by_user`, and the other valid forms are accepted with it. The run then
@@ -180,6 +185,13 @@ A reference conflict is a gap that only the user can close, and the user closes 
   record content may map it, coverage requires it mapped as it does a business claim, the story quotes it, and the
   reference context lists it as an answered question. An `open_question` claim that no applied answer kept stays a
   question, offered only its clarification outcome (§17.3). The category the model gave a claim is never rewritten.
+  A conflict an applied answer drops has no question left to ask, so its form, when still open, is closed by the engine:
+  the clarification refresh sets the record `resolved_by_authority` and its form becomes the engine-owned audit view
+  (§23.2), whose resolution names the answer that decided it by its form and option key. This is decided from typed facts
+  alone: the form's subject equals the dropped conflict's, and the answer is a response the state holds. A form the user
+  answered or cancelled is never touched, a conflict that stays is still asked, a need raised for the same subject wins, and
+  nothing is closed because a subject is absent from a run (§16.4's obsolete-subject resolution stays unbuilt). The record
+  carries no response, the state shape is unchanged, and a rerun finds the form closed and does nothing.
 - **What it applies to.** A conflict is answered only when every claim is a model claim of one kind and the claim the
   answer keeps is in no other conflict, whose disposition would then have to stay `conflicting`. A claim the answer
   supersedes may also be in another conflict, but only when that conflict is left with one claim, a model claim in no

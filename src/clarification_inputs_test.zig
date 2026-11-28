@@ -131,6 +131,73 @@ test "refresh leaves a deferred form open and still refuses any other submitted 
     }
 }
 
+test "refresh closes only an open Specify form of a conflict that an applied answer dropped" {
+    const refresh = @import("domain/clarification_refresh.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // S01 is the user's answered form, S02 and S03 are open forms of other subjects, and P01 is an open Plan form that
+    // shares S02's subject. The state is as acceptance leaves it: the response is recorded and the form is resolved.
+    var answered = fixture.record("S01");
+    answered.subject.slot = "answered";
+    answered.answer_schema = .{ .select_one = &.{ .{ .key = "stories.md.8", .label = "Once." }, .{ .key = "stories.md.9", .label = "Twice." } } };
+    answered.status = .resolved_by_user;
+    answered.revision = 2;
+    answered.response_id = 1;
+    var dropped = fixture.record("S02");
+    dropped.subject.slot = "dropped";
+    var other = fixture.record("S03");
+    other.subject.slot = "other";
+    var plan = fixture.record("P01");
+    plan.subject.slot = "dropped";
+    var stored = fixture.state(&.{ answered, dropped, other, plan });
+    stored.state_ordinal = 2;
+    stored.revision = 2;
+    stored.next_response_ordinal = 2;
+    stored.responses = &.{.{ .id = 1, .clarification_id = "S01", .input_state_ordinal = 1, .input_state_revision = 1, .input_record_revision = 1, .submitted_form_bytes = "form", .answer = .{ .selected_option = "stories.md.8" }, .actor_id = "fixture-user", .authentication_evidence_id = "AE-1", .answered_at = "2026-09-05T00:00:00Z" }};
+    const inputs: c.Inputs = .{ .state = try c.validate(.{ .value = stored }, selected), .submissions = &.{}, .protected_forms = &.{} };
+    const decided: @import("domain/reference_reconciliation.zig").DroppedConflict = .{ .subject = dropped.subject, .response_id = 1, .key = "stories.md.8" };
+    const none: refresh.Needs = .{ .feature = selected, .original_sources = &.{}, .entries = &.{} };
+
+    // Accepted: the open Specify form of the dropped conflict is closed by authority, naming the answer that decided it.
+    const closed = (try refresh.refresh(a, inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{}, .decided = &.{decided} })).state.value.?;
+    try std.testing.expectEqual(c.EngineStatus.resolved_by_authority, closed.records[1].status);
+    try std.testing.expectEqual(@as(?u64, null), closed.records[1].response_id);
+    try std.testing.expectEqual(closed.revision, closed.records[1].revision);
+    try std.testing.expect(std.mem.indexOf(u8, closed.records[1].authority_resolution.?, "S01") != null);
+    try std.testing.expect(std.mem.indexOf(u8, closed.records[1].authority_resolution.?, "stories.md.8") != null);
+    // Rejected: the user's own form, a form of another subject and a form of another stage stay as they were, so a
+    // separate open form still pauses the run.
+    try std.testing.expectEqual(c.EngineStatus.resolved_by_user, closed.records[0].status);
+    try std.testing.expectEqual(c.EngineStatus.open, closed.records[2].status);
+    try std.testing.expectEqual(c.EngineStatus.open, closed.records[3].status);
+    try std.testing.expectEqual(refresh.Progress.needs_user, refresh.progress(.{ .ready = try refresh.refresh(a, inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{}, .decided = &.{decided} }) }));
+    // A dropped conflict whose subject is the answered form's own never touches it, and nothing decided closes nothing.
+    var own = decided;
+    own.subject = answered.subject;
+    try std.testing.expectEqual(c.EngineStatus.resolved_by_user, (try refresh.refresh(a, inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{}, .decided = &.{own} })).state.value.?.records[0].status);
+    try std.testing.expectEqual(c.EngineStatus.open, (try refresh.refresh(a, inputs, none)).state.value.?.records[1].status);
+    // A form the user cancelled is not an open question and is never closed this way, even for the dropped subject.
+    var cancelled = dropped;
+    cancelled.status = .cancelled_by_user;
+    cancelled.revision = 2;
+    cancelled.response_id = 2;
+    var with_cancel = fixture.state(&.{ answered, cancelled, other, plan });
+    with_cancel.state_ordinal = 2;
+    with_cancel.revision = 2;
+    with_cancel.next_response_ordinal = 3;
+    with_cancel.responses = &.{ stored.responses[0], .{ .id = 2, .clarification_id = "S02", .input_state_ordinal = 1, .input_state_revision = 1, .input_record_revision = 1, .submitted_form_bytes = "form", .answer = .{ .cancel_reason = "cancel: no longer needed" }, .actor_id = "fixture-user", .authentication_evidence_id = "AE-2", .answered_at = "2026-09-05T00:00:00Z" } };
+    const after_cancel: c.Inputs = .{ .state = try c.validate(.{ .value = with_cancel }, selected), .submissions = &.{}, .protected_forms = &.{} };
+    try std.testing.expectEqual(c.EngineStatus.cancelled_by_user, (try refresh.refresh(a, after_cancel, .{ .feature = selected, .original_sources = &.{}, .entries = &.{}, .decided = &.{decided} })).state.value.?.records[1].status);
+    // The answer that decided it is a response the state holds.
+    var unheld = decided;
+    unheld.response_id = 7;
+    try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(a, inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{}, .decided = &.{unheld} }));
+    // A need raised for the same subject wins: the form is open again, so a conflict that still exists is still asked.
+    const need: refresh.Need = .{ .stage = .spec, .subject = dropped.subject, .authority = dropped.authority, .question = dropped.question, .why_required = dropped.why_required, .answer_schema = dropped.answer_schema };
+    try std.testing.expectEqual(c.EngineStatus.open, (try refresh.refresh(a, inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{need}, .decided = &.{decided} })).state.value.?.records[1].status);
+}
+
 test "stored and untouched clarification questions revalidate against current original sources" {
     const refresh = @import("domain/clarification_refresh.zig");
     const views = @import("domain/clarification_views.zig");

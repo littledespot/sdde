@@ -8,6 +8,8 @@ pub const Records = struct {
     conflicts: []const r.Conflict,
     /// The claims an applied user answer kept (ADR 0025).
     answer_retained: []const r.ClaimId,
+    /// The conflicts an applied user answer dropped (ADR 0025). Execution-local: the persisted snapshot has none.
+    answer_dropped: []const r.DroppedConflict = &.{},
 };
 
 /// Whether the claim is an `open_question` claim that an applied user answer kept. An answer that chooses one of the
@@ -40,7 +42,7 @@ pub fn eligibleSelection(dispositions: []const r.ClaimDisposition, claims: []con
 }
 pub fn records(value: r.Accounted) Records {
     const global = value.global();
-    return .{ .items = global.input.progress.plan.layout.items, .dispositions = global.dispositions, .signals = value.records.signals, .conflicts = value.records.conflicts, .answer_retained = value.records.answer_retained };
+    return .{ .items = global.input.progress.plan.layout.items, .dispositions = global.dispositions, .signals = value.records.signals, .conflicts = value.records.conflicts, .answer_retained = value.records.answer_retained, .answer_dropped = value.records.answer_dropped };
 }
 pub fn snapshot(a: std.mem.Allocator, value: @import("reference_snapshot.zig").Snapshot) r.Error!Records {
     return .{ .items = try @import("reference_claim_items.zig").build(a, value.inputs, value.extraction), .dispositions = value.dispositions, .signals = value.signals, .conflicts = value.conflicts, .answer_retained = value.answer_retained };

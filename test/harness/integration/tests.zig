@@ -2929,7 +2929,7 @@ fn conflictAnsweredByOptionKey(open_question_claims: bool) !void {
     try std.testing.expect((try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, chosen, did_not_pause)) == .stop);
     try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.after(io, a, offline.project.dir, paths.specs, paths.workflows, feature, "no.such.key", paused)).unavailable);
     try std.testing.expectEqual(answer.Unavailable.no_clarification_state, (try answer.after(io, a, empty.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
-    // A first leg that paused on two open forms, or on one that is not a selection, has no form to answer.
+    // A first leg whose open forms are one form twice over, or are not selections, has no form to answer.
     {
         var crowded_dir = std.testing.tmpDir(.{});
         defer crowded_dir.cleanup();
@@ -2944,6 +2944,42 @@ fn conflictAnsweredByOptionKey(open_question_claims: bool) !void {
         typed.records = text_only;
         try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, typed, .{}) });
         try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+        // Beside the form that offers the key, other open forms are left as they were: the harness answers the one form that
+        // offers the key and no other, and the state it read is unchanged.
+        var other = raised.records[0];
+        other.id = "S02";
+        other.subject.slot = "other";
+        other.answer_schema = .{ .select_one = &.{ .{ .key = "other.1", .label = "One." }, .{ .key = "other.2", .label = "Two." } } };
+        var prose = other;
+        prose.id = "S03";
+        prose.subject.slot = "prose";
+        prose.answer_schema = .{ .bounded_business_text = 100 };
+        var several = raised;
+        several.records = try a.dupe(cl.Record, &.{ other, raised.records[0], prose });
+        const several_bytes = try std.json.Stringify.valueAlloc(a, several, .{});
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = several_bytes });
+        const among = try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused);
+        try std.testing.expect(among == .answer);
+        try std.testing.expect(std.mem.endsWith(u8, among.answer.path, "S01.md"));
+        try std.testing.expectEqualStrings(prepared.bytes, among.answer.bytes);
+        try std.testing.expectEqualStrings(several_bytes, try crowded_dir.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)));
+        // The other form's own key answers that form, and a key that no open selection offers answers none.
+        const other_key = (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, "other.2", paused)).answer;
+        try std.testing.expect(std.mem.endsWith(u8, other_key.path, "S02.md"));
+        try std.testing.expectEqual(answer.Unavailable.answer_not_offered, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, "no.such.key", paused)).unavailable);
+        // A key two open forms offer is no choice for the harness to make.
+        var shared = other;
+        shared.answer_schema = .{ .select_one = &.{ .{ .key = chosen, .label = "The same option." }, .{ .key = "other.2", .label = "Two." } } };
+        several.records = try a.dupe(cl.Record, &.{ shared, raised.records[0] });
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, several, .{}) });
+        try std.testing.expectEqual(answer.Unavailable.answer_form_count, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
+        // Forms that are no longer open leave nothing to answer.
+        var closed = raised.records[0];
+        closed.status = .resolved_by_authority;
+        closed.authority_resolution = "Decided by the answer to S09 (option x), which left this conflict with one claim.";
+        several.records = try a.dupe(cl.Record, &.{closed});
+        try crowded_dir.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, several, .{}) });
+        try std.testing.expectEqual(answer.Unavailable.answer_form_count, (try answer.after(io, a, crowded_dir.dir, paths.specs, paths.workflows, feature, chosen, paused)).unavailable);
     }
     // A leg that expects publication is evaluated when it retained a specification and stops when it did not; the case's
     // combined outcome is no leg's.
@@ -3040,6 +3076,102 @@ fn conflictAnsweredByOptionKey(open_question_claims: bool) !void {
     const registry = try strict_json.decode(evidence.Registry, a, try offline.project.dir.readFileAlloc(io, registry_path, a, .limited(evidence.max_bytes)), registry_limits);
     try std.testing.expectEqual(@as(u64, 1), registry.revision);
     try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, form_path, a, .limited(cl.max_form_bytes)));
+}
+
+// ADR 0025: an answer that leaves another conflict with one claim drops it, so that conflict's form has no question left to
+// ask. The engine closes such a form by authority instead of leaving it open, which would pause every later run.
+test "answering one of two overlapping conflict forms closes the other, which the answer dropped, and the run publishes" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    const workflow = @import("../../../src/domain/workflow.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.loan_renewal);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // Three sources make three claims, read in path order: "twice", "thrice" and "once". The scripted reconciliation holds
+    // two conflicts that share the second, and the review judges both genuine, so each raises a form.
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "a-twice.md" }), .data = "A loan may be renewed twice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "b-thrice.md" }), .data = "A loan may be renewed thrice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "stories.md" }), .data = "# Library Loan Renewal\n\nA loan may be renewed once.\n" });
+    const state_path = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", artifacts.clarification_state_filename });
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+    const options: @import("../../../src/test_fixtures/spec_generation_responses.zig").Options = .{ .conflict = true, .overlapping_conflicts = true };
+
+    var first: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("overlap run 1 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &first);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .needs_user), offline.report.workflow_outcome);
+    const raised = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqual(@as(usize, 2), raised.records.len);
+    // The conflict between "twice" and "thrice" is the one the user answers, keeping "twice".
+    const offers = struct {
+        fn label(record: cl.Record, text: []const u8) bool {
+            for (record.answer_schema.select_one) |option| if (std.mem.eql(u8, option.label, text)) return true;
+            return false;
+        }
+    }.label;
+    const real = for (raised.records) |record| {
+        if (offers(record, "A loan may be renewed twice.")) break record;
+    } else return error.TestUnexpectedResult;
+    const dropped = for (raised.records) |record| {
+        if (!std.mem.eql(u8, record.id, real.id)) break record;
+    } else return error.TestUnexpectedResult;
+    const key = for (real.answer_schema.select_one) |option| {
+        if (std.mem.eql(u8, option.label, "A loan may be renewed twice.")) break option.key;
+    } else return error.TestUnexpectedResult;
+    const answered = try forms.render(a, real, .{ .state_ordinal = raised.state_ordinal, .state_revision = raised.revision, .record_revision = real.revision, .status = real.status }, .closed, key);
+    const real_name = cl.Id.parse(real.id).?.filename();
+    const dropped_name = cl.Id.parse(dropped.id).?.filename();
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", &real_name }), .data = answered });
+
+    // Run 2 accepts the answer, which supersedes "thrice" and leaves the other conflict with "once" alone: the conflict is
+    // dropped, its form is closed by authority, and nothing is left open, so the run publishes.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var second: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("overlap run 2 of {s}: outcome {any}, step {?s}\n", .{ offline.choice.id, offline.report.workflow_outcome, offline.report.terminal_step });
+    try offline.execute(io, &second);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(.passed, offline.report.publication_check);
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    for (published.records) |record| {
+        if (std.mem.eql(u8, record.id, real.id)) {
+            try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, record.status);
+        } else {
+            try std.testing.expectEqual(cl.EngineStatus.resolved_by_authority, record.status);
+            try std.testing.expectEqual(@as(?u64, null), record.response_id);
+            try std.testing.expect(std.mem.indexOf(u8, record.authority_resolution.?, real.id) != null);
+            try std.testing.expect(std.mem.indexOf(u8, record.authority_resolution.?, key) != null);
+        }
+    }
+    // The closed form's file is the engine's audit view, and the user's answered form is untouched.
+    const audit = try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", &dropped_name }), a, .limited(cl.max_form_bytes));
+    try std.testing.expect(std.mem.indexOf(u8, audit, "engineStatus: resolved_by_authority") != null);
+    try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", &real_name }), a, .limited(cl.max_form_bytes)));
+
+    // A rerun reads the published state back, applies the same answer, finds the form already closed and publishes again.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var third: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("overlap run 3 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &third);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    const again = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    for (again.records, published.records) |now, before| {
+        try std.testing.expectEqual(before.status, now.status);
+        try std.testing.expectEqualStrings(before.authority_resolution orelse "", now.authority_resolution orelse "");
+    }
 }
 
 test "a valid cancel beside an answered form ends the run cancelled before its first request and publishes only the clarification state and its evidence" {

@@ -341,11 +341,12 @@ credentials. No model answer means no evidence yet about schema conformance.
   kinds, `expected_outcome`, `answers` and `evaluation_case`.
 - `expected_outcome` is `publication`, `clarification` or `clarification_then_publication`. `answers` is
   empty except for a case that expects `clarification_then_publication`, which declares exactly one answer: the key of the
-  option the user chooses on the one form its first leg raises.
+  option the user chooses on the form its first leg raises that offers it.
 - A case that answers a form runs two legs in one launch, each its own run directory and report. The first leg is an
-  ordinary run that must end `needs_user` (its report expects `clarification`) on exactly one open form that offers the
-  answer's key. The second starts only then, from a copy of the first's retained project with the closed form (its key in the
-  answer region and `requestedStatus: closed`) written over the form; it is an ordinary run that must publish (its report
+  ordinary run that must end `needs_user` (its report expects `clarification`) with exactly one open selection form that
+  offers the answer's key; it may hold other open forms, which the answer leaves as the first leg left them. The second
+  starts only then, from a copy of the first's retained project with that form closed (its key in the
+  answer region and `requestedStatus: closed`) written over it; it is an ordinary run that must publish (its report
   expects `publication` and names the first in `continued_from`). The first leg's project stays unchanged evidence. The
   second leg's project therefore holds the first leg's engine run beside the one it added, and every reader of the second
   leg takes only the run it added; a `continued_from` that names no run directory, names the run itself or names a first
@@ -353,9 +354,13 @@ credentials. No model answer means no evidence yet about schema conformance.
   answer is the user's input, written by the launcher as the user would, and running the second leg is the act of accepting it
   under the invoking account ([ADR 0025](../decisions/0025-clarification-answer-authentication.md)); it is no model
   output and no scripted provider response. A first leg that paused on no single form that offers the key ends the launch with
-  its report `answer_unavailable` and a diagnostic (`NO_CLARIFICATION_STATE`, `ANSWER_FORM_COUNT` or `ANSWER_NOT_OFFERED`),
-  an unmet criterion that is reported with no retry, no rewording and no other form chosen. One approval covers both legs of
-  one launch, and a launch is one attempted workload for the Spec quality gate, judged on its last leg.
+  its report `answer_unavailable` and a diagnostic, an unmet criterion that is reported with no retry, no rewording and no form
+  chosen beyond the one that offers the key: `NO_CLARIFICATION_STATE` (the first leg published no clarification state),
+  `ANSWER_FORM_COUNT` (no form is open, or more than one open selection offers the key, so the harness makes no choice among
+  them) or `ANSWER_NOT_OFFERED` (forms are open and no open selection offers the key). The other open forms are not a
+  guarantee that the second leg publishes: the engine closes the form of a conflict an applied answer dropped (ADR 0025), and
+  a form it leaves open pauses the second leg, which is then reported as that leg's own result. One approval covers both legs
+  of one launch, and a launch is one attempted workload for the Spec quality gate, judged on its last leg.
 - The evaluation case names source documents and a rubric.
 - Every selected reference must map exactly once to an evaluation source.
 - Unknown or duplicate fields, unsafe paths, symlinks, destination collisions and

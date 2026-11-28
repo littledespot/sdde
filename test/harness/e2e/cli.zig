@@ -129,7 +129,7 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     report.build.?.reconstruction = reconstruction;
     const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_keys, store, report, .{ .purpose = .whole_workflow });
     if (!try verifySources(io, allocator, case_path, case_bytes, captured, report)) return;
-    // A first leg that paused is answered when it raised exactly one form that offers the case's key; it retains no completed
+    // A first leg that paused is answered when exactly one of its open forms offers the case's key; it retains no completed
     // specification, so the answer cannot wait on one.
     const paths = generation_config.value().paths;
     const key: ?[]const u8 = if (answers_a_form) selected.answers[0].key else null;

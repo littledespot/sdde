@@ -2818,6 +2818,11 @@ test "a records clarification names the source text of its bound signal, and the
     try std.testing.expectEqualStrings("records", subject.unit);
     try std.testing.expectEqualStrings("content", subject.slot);
     try std.testing.expect(subject.sources.len != 0 and c.validSources(subject.sources));
+    // No answer was applied, so no conflict was dropped; the conflicts an applied answer dropped go to the refresh with the need.
+    try std.testing.expectEqual(@as(usize, 0), (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked)).decided.len);
+    var answered_context = fixture.context;
+    answered_context.references.records.answer_dropped = &.{.{ .subject = subject, .response_id = 1, .key = "stories.md.8" }};
+    try std.testing.expectEqual(@as(usize, 1), (try builder.execute(a, fixture.context.inputs.corpus.feature_id, answered_context, checked)).decided.len);
     // The same need asked again names the same subject: nothing a run draws enters it.
     const again = (try builder.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context, checked)).entries[0].subject;
     try std.testing.expect(c.sameSubject(subject, again));

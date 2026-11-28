@@ -1,9 +1,9 @@
-//! The user's answer between a case's two legs. The first leg's retained project holds the forms it raised; when it holds
-//! exactly one open form and that form offers the case's key, the answered form is the closed form with the key in its
-//! answer region, as the user would write it. The first leg's project is evidence and is only read: the answered form is
-//! written into the second leg's copy. Nothing is matched to a form by its wording, and nothing is retried or reworded:
-//! any other state is reported as the unmet criterion it is. The second leg's run is the act of accepting the answer
-//! (ADR 0025), made by the account that runs it.
+//! The user's answer between a case's two legs. The first leg's retained project holds the forms it raised; when exactly one
+//! of its open forms is a selection that offers the case's key, the answered form is that form closed with the key in its
+//! answer region, as the user would write it. The other open forms stay as the first leg left them. The first leg's project
+//! is evidence and is only read: the answered form is written into the second leg's copy. Nothing is matched to a form by its
+//! wording, and nothing is retried or reworded: any other state is reported as the unmet criterion it is. The second leg's
+//! run is the act of accepting the answer (ADR 0025), made by the account that runs it.
 const std = @import("std");
 const c = @import("contracts.zig");
 const clarification = @import("../../../src/domain/clarification_inputs.zig");
@@ -15,9 +15,9 @@ const strict_json = @import("../../../src/domain/strict_json.zig");
 pub const Unavailable = enum {
     /// The first leg published no clarification state.
     no_clarification_state,
-    /// The state does not hold exactly one open form.
+    /// The state holds no open form, or more than one open form offers the case's key.
     answer_form_count,
-    /// The one open form is not a selection that offers the case's key.
+    /// Open forms exist, and none is a selection that offers the case's key.
     answer_not_offered,
 
     pub fn diagnostic(self: Unavailable) []const u8 {
@@ -69,21 +69,27 @@ pub fn prepare(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, sp
         else => return err,
     };
     const state = try strict_json.decode(clarification.State, allocator, bytes, .{ .maximum_bytes = clarification.max_state_bytes, .maximum_depth = clarification.max_state_depth });
-    var open: ?clarification.Record = null;
+    // The form to answer is the one open selection that offers the case's key. The key names source lines, so no wording is
+    // read; the other open forms are left as the first leg left them, as a user who knows only this answer would leave them.
+    var open: usize = 0;
+    var offering: ?clarification.Record = null;
+    var offers: usize = 0;
     for (state.records) |record| {
         if (record.status != .open) continue;
-        if (open != null) return .{ .unavailable = .answer_form_count };
-        open = record;
+        open += 1;
+        const options = switch (record.answer_schema) {
+            .select_one => |value| value,
+            else => continue,
+        };
+        const offered = for (options) |option| {
+            if (std.mem.eql(u8, option.key, key)) break true;
+        } else false;
+        if (!offered) continue;
+        offers += 1;
+        offering = record;
     }
-    const record = open orelse return .{ .unavailable = .answer_form_count };
-    const options = switch (record.answer_schema) {
-        .select_one => |value| value,
-        else => return .{ .unavailable = .answer_not_offered },
-    };
-    const offered = for (options) |option| {
-        if (std.mem.eql(u8, option.key, key)) break true;
-    } else false;
-    if (!offered) return .{ .unavailable = .answer_not_offered };
+    if (open == 0 or offers > 1) return .{ .unavailable = .answer_form_count };
+    const record = offering orelse return .{ .unavailable = .answer_not_offered };
     const id = clarification.Id.parse(record.id) orelse return error.InvalidClarificationInput;
     const filename = id.filename();
     return .{ .ready = .{

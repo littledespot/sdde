@@ -311,7 +311,9 @@ merges) are variants of the generic repair operations, specified once in
   conflict, and applies each to the validated reconciliation: the chosen claim is retained and given a signal, the other claims of
   the conflict are superseded by it and the conflict is dropped, so the result is an ordinary reconciliation that every later
   reader and the persisted snapshot's validation accept ([ADR 0025](../../decisions/0025-clarification-answer-authentication.md),
-  "The answer to a conflict"). It records the chosen claims, which the snapshot keeps as `answer_retained`. Which conflicts an
+  "The answer to a conflict"). It records the chosen claims, which the snapshot keeps as `answer_retained`, and, for each
+  conflict an answer drops, the subject of that conflict's form with the answer that decided it, which the clarification
+  refresh reads to close a form still open (execution-local; the snapshot does not carry it). Which conflicts an
   answer applies to, including one that shares a claim with another, is that
   ADR's "What it applies to"; a choice is matched by the conflict's subject, so an answer whose option no claim offers any
   more, an answer of another kind and an answer to any other gap apply nothing. With no choice it returns the records

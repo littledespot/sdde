@@ -83,8 +83,16 @@ test "two answers that change one conflict, or one that would drop another answe
         const first: []const r.ClaimId = &.{ ids[0], ids[1] };
         const second: []const r.ClaimId = &.{ ids[1], ids[2] };
         // Alone, keeping 2 drops the first conflict, whose last claim stands alone.
-        const alone = try answered.apply(allocator, reference.inputs, accounted.records, try choices(allocator, &.{try formFor(allocator, reference, held, second, ids[2])}));
+        const deciding = try formFor(allocator, reference, held, second, ids[2]);
+        const alone = try answered.apply(allocator, reference.inputs, accounted.records, try choices(allocator, &.{deciding}));
         try std.testing.expectEqual(@as(usize, 0), alone.conflicts.len);
+        // The conflict the answer dropped is recorded by the subject its own form carries, with the answer that decided it. The
+        // answered conflict is not: its form is the user's.
+        try std.testing.expectEqual(@as(usize, 1), alone.answer_dropped.len);
+        try std.testing.expect(c.sameSubject((try formFor(allocator, reference, held, first, ids[0])).subject, alone.answer_dropped[0].subject));
+        try std.testing.expect(!c.sameSubject(deciding.subject, alone.answer_dropped[0].subject));
+        try std.testing.expectEqual(@as(u64, 1), alone.answer_dropped[0].response_id);
+        try std.testing.expectEqualStrings(deciding.key, alone.answer_dropped[0].key);
         // Only the claim the user chose is kept by the answer: the last claim of the conflict it dropped was not decided by one.
         try std.testing.expectEqual(@as(usize, 1), alone.answer_retained.len);
         try std.testing.expectEqual(ids[2].ordinal, alone.answer_retained[0].ordinal);
@@ -100,6 +108,7 @@ test "two answers that change one conflict, or one that would drop another answe
             try std.testing.expectEqual(@as(usize, 2), result.conflicts.len);
             try std.testing.expectEqual(@as(usize, 0), result.answer_superseded.len);
             try std.testing.expectEqual(@as(usize, 0), result.answer_retained.len);
+            try std.testing.expectEqual(@as(usize, 0), result.answer_dropped.len);
             for (support.records(.{ .records = result, .outcome = .blocked }).dispositions) |value| try std.testing.expectEqual(r.Disposition.conflicting, value.disposition);
         }
     }
@@ -121,6 +130,8 @@ test "two answers that change one conflict, or one that would drop another answe
         try std.testing.expect(r.contains(r.ClaimId, result.answer_superseded, ids[1]) and r.contains(r.ClaimId, result.answer_superseded, ids[2]));
         try std.testing.expectEqual(@as(usize, 2), result.answer_retained.len);
         try std.testing.expect(r.contains(r.ClaimId, result.answer_retained, ids[0]) and r.contains(r.ClaimId, result.answer_retained, ids[3]));
+        // Two conflicts that share nothing drop none: each answer removes only its own.
+        try std.testing.expectEqual(@as(usize, 0), result.answer_dropped.len);
         try expectOrdinary(allocator, reference, result);
         try expectSnapshot(allocator, reference, result);
     }

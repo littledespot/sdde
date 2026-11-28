@@ -951,6 +951,55 @@ status line so the references above still hold; its build and review record was 
           requirement. The engine judges no prose; whether that is acceptable is the user's decision.
       - **Approvals.** Made: the amendments, the build, the call-10 replay, the extraction screen, and `/live-e2e` of the
         conflict case. Needed: a decision to build the narrowed definition, and `/live-e2e` of both development cases for it.
+    - **Change 5: an open form of a conflict an applied answer dropped is closed by the engine. Decided and built 28 November
+      2026** (user: "implement 1", the first of five proposals from the research below). Offline proof only. Need: completion of
+      a clarification-expected run. Research of that day (code and design, not executed): since A the review has judged the
+      false pair `candidate_omission` 2, `conflicting` 2 and `inconclusive` 1 times (`candidate_invalid` 7 before A), and the
+      real pair `conflicting` in all 11 reviews. Only `candidate_omission` publishes. `inconclusive` ends the run `invalid`
+      (a conflict is established only by a `conflicting` review, `required_authority.zig:536-554`; 22-repair.md:50-52). Two
+      `conflicting` verdicts raise two forms, and answering the real one drops the false conflict (change 3) while its form
+      stays open: refresh never infers a closure (`clarification_refresh.zig`), any open record pauses the run, and published
+      state rejects an open Spec form (`specification_state.zig:121`). Answering both forms the same way applies neither
+      answer (an answer that would drop a conflict the user also answered applies nothing). `resolved_by_authority`, with its
+      audit view and readback, existed in the contract and nothing wrote it.
+      - **Built.** `answered_reconciliation.apply` records each conflict an applied answer drops as `r.DroppedConflict`
+        (the subject its form carries, the deciding response and option key; execution-local `Records.answer_dropped`).
+        `Needs.decided` carries them from the publication, authority and generation need builders to `clarification_refresh`,
+        which closes an open Specify record of the same subject as `resolved_by_authority` (resolution: "Decided by the answer
+        to <form> (option <key>), which left this conflict with one claim."), before the needs, so a need for the subject
+        wins. Never a user-answered or cancelled record, another stage or another subject; no state version change. Amended:
+        ADR 0025 (amends list, flow step 6, "The answered reconciliation"), 13-03, 13-05 (`RefreshClarificationsAction`,
+        `BuildResolvedClarificationNeedsAction`), 23-rendering.md §23.2. Fixed in passing: the stale `clarification-state/v3`
+        at 24-workflow-state.md:39.
+      - **Tests.** The answer step records the dropped conflict's subject, key and response, and none for answered or
+        disjoint conflicts; the refresh closes the open Specify form only (the answered form, another subject, another
+        stage, a cancelled form and a form of an unheld response are untouched or rejected, a need wins); the authority and
+        generation builders carry the list (each builder's test fails when it drops it); and a scripted scenario raises two overlapping conflict forms, answers the real one, publishes with the
+        other closed and its file the audit view, and reruns. Mutation checks, each failing its tests: closing without
+        checking the status, and the publication builder passing no list.
+      - **Not covered (residuals).** A form is closed only when an applied answer dropped its conflict: when the second leg's
+        model does not re-declare the false conflict at all, the prior form stays open (absence is not a closure, §16.4's
+        obsolete-subject resolution is unbuilt), and a user who answers both forms the same way applies neither. Proposals 2
+        (consistent answers to overlapping forms apply together), 4 (offer a conflict subject only `conflicting` or
+        `candidate_omission`) and 5 (the extraction definition) are not built.
+      - **Approvals.** Made: the amendments and the build. Needed: `/preflight` and a build decision for each further proposal,
+        and `/live-e2e` for each launch.
+    - **Change 6: the harness answers the one open form that offers the case's key. Decided and built 28 November 2026** (user:
+      "implement 3", after "Amendments: ADR 0025 and its related contract sections"). Offline proof only. Need: completion of a
+      clarification-expected run. A first leg that raised two overlapping conflict forms ended `ANSWER_FORM_COUNT` (28 November
+      2026, launch 3 of the first set) although change 5 lets the second leg publish when the real one is answered.
+      - **Built.** `test/harness/e2e/answer.zig` `prepare` answers the single open `select_one` form whose options include the
+        case's key and leaves the other open forms as the first leg left them. `ANSWER_FORM_COUNT` now means no open form, or
+        more than one open selection offers the key (no choice among them); `ANSWER_NOT_OFFERED` means forms are open and none
+        offers it; `NO_CLARIFICATION_STATE` is unchanged. Selection is by option key only, never by wording. Amended:
+        design/harness/e2e.md "Case and publication contract" (the `answers` sentence, the first-leg condition and the
+        diagnostics, with the note that other open forms do not guarantee the second leg publishes). ADR 0025 Decision 9 needed
+        no change: it states no form count.
+      - **Tests.** One open form; several open forms with one offering the key (answered, and the state file unchanged); another
+        form's own key answers that form; a key no open selection offers; a key two open forms offer; no open form; no state; a
+        text-only form beside an offering one. A mutation check removing the ambiguity guard crashes two integration tests.
+      - **Not covered.** The second leg may still pause on an open form the engine does not close; the harness reports that as the
+        leg's own result and works around nothing.
     - **Where the 27 runs ended** (tabulated on 27 November 2026 from the retained reports and model outputs): the token
       budget in a full first-pass review, 5 (before conflicts first); the token budget in a dependent pass, 1;
       `repair-source` on an overlapping false group, 8 (7 first legs and 1 second leg, all before A and T1); a second
@@ -1135,8 +1184,12 @@ are open and unscheduled: binding `conflicts[].group_id` in the conflict-group r
 group is built (A and T1, 27 November 2026). Its live set ran that day on the ruled proof route, the conflict case: one
 of three launches exercised it, the repair was graded `helpful`, and none published (§13). Decided and built that day,
 offline proof only: a replay screen (run) and three changes, each amending an accepted ADR or contract section (§10 item
-15). A fourth change, for a claim an applied answer kept, was built on 28 November 2026 (§10 item 15, change 4). The next
-steps are the approved billed replay of its records call and then an approved `/live-e2e` of the conflict case.
+15). A fourth change, for a claim an applied answer kept, was built on 28 November 2026 (§10 item 15, change 4, with its
+replay and screen results); the live set that followed is under `evaluations/e2e/` (launch 2 published and is adjudicated in
+`evaluations/adjudications/adjudication-aaaabffd80b15b9aaa4554f55950c7f6/`, and no launch drew a kept open question). A
+fifth change, closing a form an applied answer dropped, was built the same day (§10 item 15, change 5), and a sixth, the
+harness answering the one open form that offers the key (change 6). The order that follows is one live set, then proposals 2,
+4 and 5 one at a time.
 
 Any later phase follows SPEC01 §2: `/preflight`; offline tests at the owning boundary; `zig build verify`; one
 change set for each measured build, on a committed, unmodified build; each replay batch, launch and set approved

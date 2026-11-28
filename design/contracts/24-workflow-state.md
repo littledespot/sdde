@@ -36,7 +36,7 @@ Completed and clarification-pending specification state share one versioned
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md),
 [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 3 and 7,
 [ADR 0048](../decisions/0048-engine-derived-specification-title.md) and
-[ADR 0025](../decisions/0025-clarification-answer-authentication.md), whose `clarification-state/v3` joins each
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md), whose `clarification-state/v4` joins each
 response to the actor-evidence registry and whose answered reconciliation records the claims it kept in the
 reference snapshot) over canonical `specification/v8` content, in which
 an acceptance criterion holds a `given` only where its sources state a starting situation

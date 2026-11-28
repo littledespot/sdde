@@ -790,6 +790,15 @@ test "gaps over the same lines become one need and one form, and gaps over other
     const needs = try conversion.build(allocator, reference.inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
     // The signals over one line are one need that asks each question and gives each reason; the third has its own.
     try std.testing.expectEqual(@as(usize, 2), needs.entries.len);
+    // No answer was applied, so no conflict was dropped; the conflicts an applied answer dropped are handed to the refresh.
+    try std.testing.expectEqual(@as(usize, 0), needs.decided.len);
+    var answered = inputs;
+    var answered_records = held;
+    answered_records.answer_dropped = &.{.{ .subject = needs.entries[0].subject, .response_id = 1, .key = "stories.md.8" }};
+    answered.references = answered_records;
+    const handed = try conversion.build(allocator, reference.inputs, answered, try observe(allocator, answered), try run(allocator, answered), &packet_guidance.marked);
+    try std.testing.expectEqual(@as(usize, 1), handed.decided.len);
+    try std.testing.expectEqualStrings("stories.md.8", handed.decided[0].key);
     const first_path = reference.inputs.corpus.sources[0].path.bytes;
     const together = for (needs.entries) |need| {
         if (std.mem.eql(u8, need.subject.sources[0].path, first_path)) break need;

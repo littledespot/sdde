@@ -416,8 +416,8 @@ lands with its stage's code, in ADR 0025 and the contracts it names:
 - **Authoring answers between runs** (stage 7; amended 24 November 2026). An `answers` member in the case version after
   stage 4's holding one option key, since the form of a reference conflict is a selection and only its answer is applied
   (ADR 0025 Decision 7). The key names the lines of the claim to keep, so the case author states the source line, not a
-  per-run claim number. One launch runs run 1 and, only when it ends `needs_user` with exactly one open form that offers
-  that key, writes the key into the answer region, sets `requestedStatus: closed` and runs run 2; anything else is
+  per-run claim number. One launch runs run 1 and, only when it ends `needs_user` with exactly one open selection form that
+  offers that key, writes the key into the answer region, sets `requestedStatus: closed` and runs run 2; anything else is
   reported. No answer is matched to a form by its wording. The answer is the user's input, which ADR 0025 makes authority, not a project standard, so the principle-file
   rule (AGENTS.md "Testing expectations") is untouched.
 - **Adjudication basis** (stage 7, amended 24 November 2026 with D1 to D5 below). Leg 1 publishes the incomplete

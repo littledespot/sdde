@@ -74,7 +74,7 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
     }
     if (parts.items.len == 0) return error.InvalidRequiredAuthority;
     const entries = try consolidate(allocator, if (inputs.references) |refs| refs.items.entries else &.{}, parts.items);
-    return .{ .feature = inputs.feature, .original_sources = refresh.originalSources(allocator, source_inputs) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority, .entries = entries };
+    return .{ .feature = inputs.feature, .original_sources = refresh.originalSources(allocator, source_inputs) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority, .entries = entries, .decided = if (inputs.references) |held| held.answer_dropped else &.{} };
 }
 /// One gap's clarification before the gaps of one subject become one need: what the gap asks, why, which authorities it
 /// binds and which source evidence it cites.
