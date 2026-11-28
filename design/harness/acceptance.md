@@ -20,7 +20,7 @@ registered open clarification handles. A case may expect `clarification_then_pub
 The first leg passes as a `clarification` run, mechanically and with no adjudication, and the second is a `publication`
 run that awaits adjudication like any publication, scored on the case rubric with the declared answer counted as
 source. The adjudication record covers the second leg only, since the first publishes an incomplete specification that
-stays ungraded (ADR 0017). A first leg that paused with nothing to answer (`answer_unavailable`) fails as an unexpected
+stays ungraded (ADR 0017). A first leg that paused on no single open form that offers the answer's key (`answer_unavailable`) fails as an unexpected
 outcome.
 
 Raw model grades cannot authoritatively accept or reject a published specification.

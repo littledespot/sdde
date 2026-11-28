@@ -3711,7 +3711,7 @@ Decision 8). Offline; no live run was made.
 - **Change.** `spec-e2e-case/v5` adds a closed `answers` (empty, or exactly one option key for a case that expects
   `clarification_then_publication`); `spec-e2e-report/v27` adds `continued_from` and the status `answer_unavailable`. The CLI
   runs a launch as legs (`cli.zig` `leg`): leg 1 is an ordinary run that expects `clarification`; `answer.zig` `prepare` reads
-  its retained project (never writing it) and, only for exactly one open select-one form that offers the key, renders the closed
+  its retained project (never writing it) and, only for the one open select-one form that offers the key, renders the closed
   form with the key in its answer region; leg 2 starts from a copy of leg 1's project with that form written over the form
   (`continueProject`), expects `publication`, and names leg 1. Anything else ends the launch with leg 1's report
   (`answer_unavailable` plus a diagnostic code, or the ordinary unexpected outcome). Acceptance changed only to say that a

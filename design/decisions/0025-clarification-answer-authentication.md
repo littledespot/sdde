@@ -24,7 +24,9 @@
   - §16.2's snapshot facts and the `specification-state` version, which advances to v30 with no reader for v29;
   - §23.2's rule that an open form pauses the run and that refresh retains a prior subject absent from the needs (13-05
     `RefreshClarificationsAction`), by the one closure above, and the meaning of `resolved_by_authority`, which no clause
-    defined.
+    defined;
+  - [e2e.md](../harness/e2e.md#case-and-publication-contract)'s rule that the first leg pauses on exactly one open form, by
+    the harness's selection of the one open form that offers the key (Decision 9).
 
   It leaves §23.2's protection of user-closed forms, ADR 0017's incomplete
   publication and ADR 0009's fresh-invocation rule unchanged.
@@ -352,4 +354,8 @@ The sections above state each decision in full; other records cite these numbers
    the form of a case that declares an answer: the case's `answers` is the user's input, written by the launcher as the user
    would, and the second leg's run is the act of accepting it under the invoking account. A launch of such a case is two
    legs, two run directories and two reports, under one approval and one attempted workload
-   ([e2e.md](../harness/e2e.md#case-and-publication-contract)).
+   ([e2e.md](../harness/e2e.md#case-and-publication-contract)). The form it answers is the one open selection form that
+   offers the declared key. Other open forms stay as the first leg left them, as they would for a user who knows only that
+   answer, and the second leg's own result reports whatever they then do (the closure of a dropped conflict's form, above,
+   or a pause). No open form, several open selections offering the key, or none offering it ends the launch
+   `answer_unavailable`: the harness makes no choice among forms, rewords nothing and retries nothing.
