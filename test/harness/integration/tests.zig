@@ -3174,6 +3174,98 @@ test "answering one of two overlapping conflict forms closes the other, which th
     }
 }
 
+// ADR 0025: two answers to overlapping conflicts apply together when each would drop the other's conflict, so a user who
+// answers both forms is not stopped by the form they answered second.
+test "answering both overlapping conflict forms keeps both chosen claims, closes neither form by authority, and the run publishes" {
+    const io = std.testing.io;
+    @import("../../../src/composition/root.zig").Interrupt.resetForTest();
+    const cl = @import("../../../src/domain/clarification_inputs.zig");
+    const forms = @import("../../../src/domain/clarification_form.zig");
+    const strict_json = @import("../../../src/domain/strict_json.zig");
+    const workflow = @import("../../../src/domain/workflow.zig");
+    var account: FakeAccount = .{};
+    var offline: OfflineRun = undefined;
+    try offline.init(io, OfflineRun.loan_renewal);
+    defer offline.deinit();
+    offline.authenticator = account.port();
+    const a = offline.arena.allocator();
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, offline.captured.config);
+    defer config.deinit();
+    const feature = offline.choice.feature;
+    const paths = config.value().paths;
+    // Three sources make three claims, read in path order: "twice", "thrice" and "once". The scripted reconciliation holds
+    // two conflicts that share the second, and the review judges both genuine, so each raises a form.
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "a-twice.md" }), .data = "A loan may be renewed twice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "b-thrice.md" }), .data = "A loan may be renewed thrice.\n" });
+    try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ "references", feature, "stories.md" }), .data = "# Library Loan Renewal\n\nA loan may be renewed once.\n" });
+    const state_path = try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", artifacts.clarification_state_filename });
+    const state_limits: strict_json.Limits = .{ .maximum_bytes = cl.max_state_bytes, .maximum_depth = cl.max_state_depth };
+    const options: @import("../../../src/test_fixtures/spec_generation_responses.zig").Options = .{ .conflict = true, .overlapping_conflicts = true };
+
+    var first: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("both-answers run 1 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &first);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .needs_user), offline.report.workflow_outcome);
+    const raised = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    try std.testing.expectEqual(@as(usize, 2), raised.records.len);
+    // The user keeps "twice" in the conflict between "twice" and "thrice", and "once" in the one between "thrice" and "once":
+    // each answer supersedes "thrice", and each keeps the claim the other would have retained.
+    const keeps = [_][]const u8{ "twice", "once" };
+    var names: [2][]const u8 = undefined;
+    var answers: [2][]const u8 = undefined;
+    const offers = struct {
+        fn label(record: cl.Record, word: []const u8) bool {
+            for (record.answer_schema.select_one) |option| if (std.mem.indexOf(u8, option.label, word) != null) return true;
+            return false;
+        }
+    }.label;
+    for (keeps, &names, &answers) |keep, *name, *text| {
+        // Each kept claim is offered by one form only.
+        const record = for (raised.records) |candidate| {
+            if (offers(candidate, keep)) break candidate;
+        } else return error.TestUnexpectedResult;
+        const key = for (record.answer_schema.select_one) |option| {
+            if (std.mem.indexOf(u8, option.label, keep) != null) break option.key;
+        } else return error.TestUnexpectedResult;
+        text.* = try forms.render(a, record, .{ .state_ordinal = raised.state_ordinal, .state_revision = raised.revision, .record_revision = record.revision, .status = record.status }, .closed, key);
+        const file = cl.Id.parse(record.id).?.filename();
+        name.* = try a.dupe(u8, &file);
+        try offline.project.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", name.* }), .data = text.* });
+    }
+
+    // Run 2 accepts both answers, applies them together and has nothing left open, so it publishes.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var second: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("both-answers run 2 of {s}: outcome {any}, step {?s}\n", .{ offline.choice.id, offline.report.workflow_outcome, offline.report.terminal_step });
+    try offline.execute(io, &second);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+    try std.testing.expectEqual(.passed, offline.report.publication_check);
+    const published = try strict_json.decode(cl.State, a, try offline.project.dir.readFileAlloc(io, state_path, a, .limited(cl.max_state_bytes)), state_limits);
+    // Both forms stay the user's: neither was dropped by an answer, so the engine closes none.
+    for (published.records) |record| try std.testing.expectEqual(cl.EngineStatus.resolved_by_user, record.status);
+    // The snapshot keeps both claims the answers kept, each once.
+    const state_json = try std.json.parseFromSliceLeaky(std.json.Value, a, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.workflows, "features", feature, "state", "workflow.json" }), a, .limited(64 * 1024 * 1024)), .{});
+    try std.testing.expectEqual(@as(usize, 2), state_json.object.get("reference").?.object.get("answer_retained").?.array.items.len);
+    const text = offline.specification.?;
+    try std.testing.expect(std.mem.indexOf(u8, text, "renewed twice") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "renewed once") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "renewed thrice") == null);
+    for (names, answers) |name, answered| {
+        try std.testing.expectEqualStrings(answered, try offline.project.dir.readFileAlloc(io, try std.fs.path.join(a, &.{ paths.specs, feature, "clarify", name }), a, .limited(cl.max_form_bytes)));
+    }
+
+    // A rerun reads the published state back (validating its reference snapshot), reuses both responses and publishes again.
+    offline.evidence.cleanup();
+    offline.evidence = std.testing.tmpDir(.{});
+    offline.report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+    var third: ScriptedWire = .{ .options = options };
+    errdefer std.debug.print("both-answers run 3 of {s}\n", .{offline.choice.id});
+    try offline.execute(io, &third);
+    try std.testing.expectEqual(@as(?workflow.OutcomeTag, .ok), offline.report.workflow_outcome);
+}
+
 test "a valid cancel beside an answered form ends the run cancelled before its first request and publishes only the clarification state and its evidence" {
     const io = std.testing.io;
     @import("../../../src/composition/root.zig").Interrupt.resetForTest();

@@ -8,8 +8,11 @@
 //! A conflict is answered only when it can be: its claims are model claims of one kind, the claim the answer keeps is in no
 //! other conflict, and a claim it supersedes is in another conflict only when that conflict is left with one claim, a
 //! model claim in no further conflict. That conflict is dropped too and its last claim retained with a signal of its own.
-//! Any other conflict, two answers that touch one conflict, and an answer whose option no claim of the conflict offers
-//! any more leave it unresolved, so the form stays protected and its need is raised again.
+//! Two answers to overlapping conflicts apply together when each would drop the other's conflict: neither keeps a claim the
+//! other supersedes, and the claim each keeps is the last claim the other would have retained, so a claim both supersede is
+//! superseded by both kept claims. Any other conflict, two answers that drop one conflict between them, an answer that
+//! would drop a conflict whose own answer does not apply, and an answer whose option no claim of the conflict offers any
+//! more leave it unresolved, so the form stays protected and its need is raised again.
 const std = @import("std");
 const r = @import("reference_reconciliation.zig");
 const refs = @import("reference_support.zig");
@@ -40,19 +43,16 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
         const dropped = (try answerable(allocator, held.items, records.conflicts, conflict, index, chosen)) orelse continue;
         try candidates.append(allocator, .{ .conflict = index, .choice = choice, .chosen = chosen, .dropped = dropped });
     }
-    // Two answers that touch one conflict apply nothing: neither can account for what the other changes. Nor does an
-    // answer that would drop a conflict the user answered too, applicable or not, since that would set the user's own
-    // choice there aside unasked.
+    // Two answers that drop one conflict between them apply nothing: neither can account for what the other changes. Nor does
+    // an answer that would drop a conflict the user answered, unless that conflict's own answer is applicable too, since
+    // that would set the user's own choice there aside unasked.
     var applied: std.ArrayList(Applied) = .empty;
     defer applied.deinit(allocator);
     for (candidates.items, 0..) |entry, at| {
         const clash = for (candidates.items, 0..) |other, other_at| {
             if (other_at != at and touches(entry, other)) break true;
         } else false;
-        const overrides = for (entry.dropped) |dropped| {
-            if (std.mem.indexOfScalar(usize, answered.items, dropped) != null) break true;
-        } else false;
-        if (!clash and !overrides) try applied.append(allocator, entry);
+        if (!clash and settles(entry, answered.items, candidates.items)) try applied.append(allocator, entry);
     }
     if (applied.items.len == 0) return records;
 
@@ -76,15 +76,17 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
         const conflict = records.conflicts[entry.conflict];
         // Only the claim the user chose: the last claim of a conflict the supersession dropped was not decided by an answer.
         try answer_retained.append(allocator, entry.chosen);
-        const related = try allocator.dupe(r.ClaimId, &.{entry.chosen});
         for (conflict.value.claim_ids) |claim| {
             const superseded = claim.ordinal != entry.chosen.ordinal;
-            try decide(dispositions, proposed, claim, if (superseded) related else null);
-            if (superseded) try answer_superseded.append(allocator, claim);
+            try decide(dispositions, proposed, claim, if (superseded) try keepers(allocator, records, applied.items, claim) else null);
+            // A claim two applied answers supersede is recorded once.
+            if (superseded and !r.contains(r.ClaimId, answer_superseded.items, claim)) try answer_superseded.append(allocator, claim);
         }
         try retain(allocator, held.items, &signals, &proposed_signals, entry.chosen);
         // A conflict the supersession left with one claim is dropped with it, and its last claim stands alone.
         for (entry.dropped) |index| {
+            // A conflict the user answered too is settled by its own answer, which keeps that claim.
+            if (appliedConflict(applied.items, index)) continue;
             const last = for (records.conflicts[index].value.claim_ids) |claim| {
                 if (!r.contains(r.ClaimId, conflict.value.claim_ids, claim)) break claim;
             } else return error.InvalidReferenceReconciliation;
@@ -172,16 +174,36 @@ fn removedClaims(records: r.Records, applied: []const Applied, claims: []const r
     return false;
 }
 
-/// Whether two answers change one conflict.
+/// Whether two answers drop one conflict between them. Two answers that each drop the other's conflict do not touch by that:
+/// `answerable` makes the drop mutual (a conflict that shares a claim with the answered one is left with exactly one claim,
+/// the claim its own answer keeps), and the claim each keeps is in no other conflict, so neither supersedes what the other
+/// keeps. A conflict a third conflict shares with both, dropped by each, is left with a claim neither answer decided.
 fn touches(left: Applied, right: Applied) bool {
-    for ([_]Applied{ left, right }, [_]Applied{ right, left }) |one, other| {
-        if (one.conflict == other.conflict) return true;
-        for (one.dropped) |dropped| {
-            if (dropped == other.conflict) return true;
-            for (other.dropped) |also| if (also == dropped) return true;
-        }
-    }
+    for (left.dropped) |dropped| if (std.mem.indexOfScalar(usize, right.dropped, dropped) != null) return true;
     return false;
+}
+
+fn appliedConflict(applied: []const Applied, conflict: usize) bool {
+    for (applied) |entry| if (entry.conflict == conflict) return true;
+    return false;
+}
+
+/// Whether every conflict the user answered that this answer would drop has an applicable answer of its own, which is the
+/// counterpart that drops this answer's conflict in turn.
+fn settles(entry: Applied, answered: []const usize, candidates: []const Applied) bool {
+    for (entry.dropped) |dropped| {
+        if (std.mem.indexOfScalar(usize, answered, dropped) != null and !appliedConflict(candidates, dropped)) return false;
+    }
+    return true;
+}
+
+/// The claims the applied answers keep in the conflicts that hold `claim`, in conflict order: the claims that supersede it.
+fn keepers(allocator: std.mem.Allocator, records: r.Records, applied: []const Applied, claim: r.ClaimId) Error![]const r.ClaimId {
+    var kept: std.ArrayList(r.ClaimId) = .empty;
+    for (applied) |entry| {
+        if (r.contains(r.ClaimId, records.conflicts[entry.conflict].value.claim_ids, claim)) try kept.append(allocator, entry.chosen);
+    }
+    return try kept.toOwnedSlice(allocator);
 }
 
 /// A conflict is answerable when every claim is a model claim of one kind, which a supersession requires, and the claim the

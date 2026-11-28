@@ -26,7 +26,9 @@
     `RefreshClarificationsAction`), by the one closure above, and the meaning of `resolved_by_authority`, which no clause
     defined;
   - [e2e.md](../harness/e2e.md#case-and-publication-contract)'s rule that the first leg pauses on exactly one open form, by
-    the harness's selection of the one open form that offers the key (Decision 9).
+    the harness's selection of the one open form that offers the key (Decision 9);
+  - the rule above that two answers touching one conflict apply nothing, by the answers that each drop the other's conflict
+    (Decision 10).
 
   It leaves §23.2's protection of user-closed forms, ADR 0017's incomplete
   publication and ADR 0009's fresh-invocation rule unchanged.
@@ -200,7 +202,14 @@ A reference conflict is a gap that only the user can close, and the user closes 
   further conflict: the other conflict is then dropped too, and its last claim is retained with a signal of its own, as
   the chosen claim is. A conflict that would be left with no claim or with two or more stays,
   and the answer applies nothing, because its summary was written for claims it would no longer hold; so do two answers
-  that change one conflict, and an answer that would drop a conflict the user also answered. The choice is matched by the conflict's subject (the lines) and by the option the form showed, its
+  that drop one conflict between them, and an answer that would drop a conflict the user also answered whose own answer
+  does not apply, since that would set the user's choice there aside unasked. Two answers to overlapping conflicts apply
+  together when each would drop the other's conflict and they drop no other conflict in common. Each keeps a claim in no
+  other conflict, so neither keeps a claim the other supersedes, and the claim each keeps is the last claim the other would
+  have retained. Both kept claims are retained with a signal of their own, a claim both supersede is superseded by both of
+  them, and no conflict is dropped by an answer, since each is answered: both forms stay the user's and the engine closes
+  neither. Answers that are not consistent in this way stay as above. The choice is matched by the conflict's subject (the
+  lines) and by the option the form showed, its
   key and its label, so the text under the lines is the text the user chose. An answer whose option no claim of the conflict offers any
   more or offers under another quotation (the sources changed under a protected form), a key that two claims carry, an answer
   of another kind and an answer to any other gap apply nothing: the form stays protected and unused, and a rerun that raises
@@ -359,3 +368,6 @@ The sections above state each decision in full; other records cite these numbers
    answer, and the second leg's own result reports whatever they then do (the closure of a dropped conflict's form, above,
    or a pause). No open form, several open selections offering the key, or none offering it ends the launch
    `answer_unavailable`: the harness makes no choice among forms, rewords nothing and retries nothing.
+10. Two answers to overlapping conflicts apply together when each would drop the other's conflict and they drop no other
+    conflict in common ("What it applies to"), so a user who answers both forms is not stopped by the form answered second.
+    Answers that are not consistent in that way apply nothing, as before.

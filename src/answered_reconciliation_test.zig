@@ -67,7 +67,7 @@ fn expectSnapshot(allocator: std.mem.Allocator, reference: anytype, result: r.Re
     try snapshot.validate(allocator, try snapshot.build(.{ .bytes = "references" }, reference.inputs, reference.extracted, account, reference.text.registry, contract), @import("test_fixtures/reference_text.zig").normalizer);
 }
 
-test "two answers that change one conflict, or one that would drop another answered conflict, apply nothing; disjoint answers both apply" {
+test "answers to overlapping conflicts apply together only when each drops the other's conflict and no other; disjoint answers both apply" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -96,20 +96,54 @@ test "two answers that change one conflict, or one that would drop another answe
         // Only the claim the user chose is kept by the answer: the last claim of the conflict it dropped was not decided by one.
         try std.testing.expectEqual(@as(usize, 1), alone.answer_retained.len);
         try std.testing.expectEqual(ids[2].ordinal, alone.answer_retained[0].ordinal);
-        for ([_][2]r.ClaimId{
-            // The user kept 1 in the first form, which cannot apply while the second conflict holds it; the second answer
-            // would drop the first conflict and retain claim 0 against that choice.
-            .{ ids[1], ids[2] },
-            // Both answers apply alone, each dropping the other's conflict.
-            .{ ids[0], ids[2] },
-        }) |keep| {
-            const both = try choices(allocator, &.{ try formFor(allocator, reference, held, first, keep[0]), try formFor(allocator, reference, held, second, keep[1]) });
+        // The user kept 1 in the first form, which cannot apply while the second conflict holds it; the second answer would
+        // drop the first conflict and retain claim 0 against that choice.
+        {
+            const both = try choices(allocator, &.{ try formFor(allocator, reference, held, first, ids[1]), try formFor(allocator, reference, held, second, ids[2]) });
             const result = try answered.apply(allocator, reference.inputs, accounted.records, both);
             try std.testing.expectEqual(@as(usize, 2), result.conflicts.len);
             try std.testing.expectEqual(@as(usize, 0), result.answer_superseded.len);
             try std.testing.expectEqual(@as(usize, 0), result.answer_retained.len);
             try std.testing.expectEqual(@as(usize, 0), result.answer_dropped.len);
             for (support.records(.{ .records = result, .outcome = .blocked }).dispositions) |value| try std.testing.expectEqual(r.Disposition.conflicting, value.disposition);
+        }
+        // Each answer would drop the other's conflict, and each keeps the claim the other would have retained: both apply, and
+        // claim 1, which both supersede, is superseded by both kept claims. Neither conflict is dropped by an answer, since each
+        // is answered, so no form is closed by the engine.
+        {
+            const both = try choices(allocator, &.{ try formFor(allocator, reference, held, first, ids[0]), try formFor(allocator, reference, held, second, ids[2]) });
+            const result = try answered.apply(allocator, reference.inputs, accounted.records, both);
+            try std.testing.expectEqual(@as(usize, 0), result.conflicts.len);
+            try std.testing.expectEqual(@as(usize, 1), result.answer_superseded.len);
+            try std.testing.expectEqual(ids[1].ordinal, result.answer_superseded[0].ordinal);
+            try std.testing.expectEqual(@as(usize, 2), result.answer_retained.len);
+            try std.testing.expect(r.contains(r.ClaimId, result.answer_retained, ids[0]) and r.contains(r.ClaimId, result.answer_retained, ids[2]));
+            try std.testing.expectEqual(@as(usize, 0), result.answer_dropped.len);
+            const after = support.records(.{ .records = result, .outcome = .complete });
+            try std.testing.expectEqual(r.Disposition.superseded, after.dispositions[ids[1].ordinal - 1].disposition);
+            try std.testing.expectEqual(@as(usize, 2), after.dispositions[ids[1].ordinal - 1].related_claim_ids.len);
+            try std.testing.expect(r.contains(r.ClaimId, after.dispositions[ids[1].ordinal - 1].related_claim_ids, ids[0]) and r.contains(r.ClaimId, after.dispositions[ids[1].ordinal - 1].related_claim_ids, ids[2]));
+            // Each kept claim has a signal of its own, once.
+            try std.testing.expectEqual(accounted.records.signals.len + 2, result.signals.len);
+            try expectOrdinary(allocator, reference, result);
+            try expectSnapshot(allocator, reference, result);
+            // The same answers in either form order give the same result.
+            const swapped = try choices(allocator, &.{ try formFor(allocator, reference, held, second, ids[2]), try formFor(allocator, reference, held, first, ids[0]) });
+            const again = try answered.apply(allocator, reference.inputs, accounted.records, swapped);
+            try std.testing.expectEqual(result.conflicts.len, again.conflicts.len);
+            try std.testing.expectEqual(result.signals.len, again.signals.len);
+            try std.testing.expectEqual(result.answer_superseded.len, again.answer_superseded.len);
+            for (result.answer_superseded, again.answer_superseded) |left, right| try std.testing.expectEqual(left.ordinal, right.ordinal);
+            for (result.answer_retained, again.answer_retained) |left, right| try std.testing.expectEqual(left.ordinal, right.ordinal);
+            const related_again = support.records(.{ .records = again, .outcome = .complete }).dispositions[ids[1].ordinal - 1].related_claim_ids;
+            try std.testing.expectEqual(@as(usize, 2), related_again.len);
+            for (after.dispositions[ids[1].ordinal - 1].related_claim_ids, related_again) |left, right| try std.testing.expectEqual(left.ordinal, right.ordinal);
+        }
+        // Answering one of the two forms alone still drops the other.
+        {
+            const first_only = try answered.apply(allocator, reference.inputs, accounted.records, try choices(allocator, &.{try formFor(allocator, reference, held, first, ids[0])}));
+            try std.testing.expectEqual(@as(usize, 0), first_only.conflicts.len);
+            try std.testing.expectEqual(@as(usize, 1), first_only.answer_dropped.len);
         }
     }
     {
@@ -134,6 +168,47 @@ test "two answers that change one conflict, or one that would drop another answe
         try std.testing.expectEqual(@as(usize, 0), result.answer_dropped.len);
         try expectOrdinary(allocator, reference, result);
         try expectSnapshot(allocator, reference, result);
+    }
+    {
+        // Two conflicts share two claims: each answer keeps a claim outside the shared pair, and both shared claims are
+        // superseded by both kept claims.
+        const reference = try reconciled.prepare(allocator, texts);
+        defer reference.deinit();
+        const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+        const accounted = (try f.finish(allocator, final, try grouped(allocator, final, &.{ &.{ 0, 1, 2 }, &.{ 1, 2, 3 } }), reference.context())).valid;
+        const held = support.records(accounted);
+        const ids = final.partition.group.claim_ids;
+        const both = try choices(allocator, &.{ try formFor(allocator, reference, held, &.{ ids[0], ids[1], ids[2] }, ids[0]), try formFor(allocator, reference, held, &.{ ids[1], ids[2], ids[3] }, ids[3]) });
+        const result = try answered.apply(allocator, reference.inputs, accounted.records, both);
+        try std.testing.expectEqual(@as(usize, 0), result.conflicts.len);
+        try std.testing.expectEqual(@as(usize, 2), result.answer_superseded.len);
+        try std.testing.expect(r.contains(r.ClaimId, result.answer_superseded, ids[1]) and r.contains(r.ClaimId, result.answer_superseded, ids[2]));
+        try std.testing.expectEqual(@as(usize, 2), result.answer_retained.len);
+        try std.testing.expectEqual(@as(usize, 0), result.answer_dropped.len);
+        const after = support.records(.{ .records = result, .outcome = .complete });
+        for ([_]r.ClaimId{ ids[1], ids[2] }) |shared| try std.testing.expectEqual(@as(usize, 2), after.dispositions[shared.ordinal - 1].related_claim_ids.len);
+        try expectOrdinary(allocator, reference, result);
+        try expectSnapshot(allocator, reference, result);
+    }
+    {
+        // Three conflicts share claim 0, and the user answers two of them: each answer would drop the other's conflict, and
+        // the third as well, whose last claim neither answer decided, so nothing applies.
+        const reference = try reconciled.prepare(allocator, texts);
+        defer reference.deinit();
+        const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
+        const accounted = (try f.finish(allocator, final, try grouped(allocator, final, &.{ &.{ 0, 1 }, &.{ 0, 2 }, &.{ 0, 3 } }), reference.context())).valid;
+        const held = support.records(accounted);
+        const ids = final.partition.group.claim_ids;
+        const both = try choices(allocator, &.{ try formFor(allocator, reference, held, &.{ ids[0], ids[1] }, ids[1]), try formFor(allocator, reference, held, &.{ ids[0], ids[2] }, ids[2]) });
+        const result = try answered.apply(allocator, reference.inputs, accounted.records, both);
+        try std.testing.expectEqual(accounted.records.conflicts.len, result.conflicts.len);
+        try std.testing.expectEqual(@as(usize, 0), result.answer_retained.len);
+        try std.testing.expectEqual(@as(usize, 0), result.answer_dropped.len);
+        for (support.records(.{ .records = result, .outcome = .blocked }).dispositions) |value| try std.testing.expectEqual(r.Disposition.conflicting, value.disposition);
+        // Either answer alone drops the other two conflicts.
+        const alone = try answered.apply(allocator, reference.inputs, accounted.records, try choices(allocator, &.{try formFor(allocator, reference, held, &.{ ids[0], ids[1] }, ids[1])}));
+        try std.testing.expectEqual(@as(usize, 0), alone.conflicts.len);
+        try std.testing.expectEqual(@as(usize, 2), alone.answer_dropped.len);
     }
 }
 

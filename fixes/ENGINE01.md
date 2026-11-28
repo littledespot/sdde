@@ -959,8 +959,8 @@ status line so the references above still hold; its build and review record was 
       (a conflict is established only by a `conflicting` review, `required_authority.zig:536-554`; 22-repair.md:50-52). Two
       `conflicting` verdicts raise two forms, and answering the real one drops the false conflict (change 3) while its form
       stays open: refresh never infers a closure (`clarification_refresh.zig`), any open record pauses the run, and published
-      state rejects an open Spec form (`specification_state.zig:121`). Answering both forms the same way applies neither
-      answer (an answer that would drop a conflict the user also answered applies nothing). `resolved_by_authority`, with its
+      state rejects an open Spec form (`specification_state.zig:121`). Answering both forms applied neither answer until
+      change 7 (an answer that would drop a conflict the user also answered applied nothing). `resolved_by_authority`, with its
       audit view and readback, existed in the contract and nothing wrote it.
       - **Built.** `answered_reconciliation.apply` records each conflict an applied answer drops as `r.DroppedConflict`
         (the subject its form carries, the deciding response and option key; execution-local `Records.answer_dropped`).
@@ -979,9 +979,9 @@ status line so the references above still hold; its build and review record was 
         checking the status, and the publication builder passing no list.
       - **Not covered (residuals).** A form is closed only when an applied answer dropped its conflict: when the second leg's
         model does not re-declare the false conflict at all, the prior form stays open (absence is not a closure, §16.4's
-        obsolete-subject resolution is unbuilt), and a user who answers both forms the same way applies neither. Proposals 2
-        (consistent answers to overlapping forms apply together), 4 (offer a conflict subject only `conflicting` or
-        `candidate_omission`) and 5 (the extraction definition) are not built.
+        obsolete-subject resolution is unbuilt). Proposals 4 (offer a conflict subject only `conflicting` or
+        `candidate_omission`) and 5 (the extraction definition) are not built; proposal 2 (answers to both overlapping forms
+        apply together) is change 7.
       - **Approvals.** Made: the amendments and the build. Needed: `/preflight` and a build decision for each further proposal,
         and `/live-e2e` for each launch.
     - **Change 6: the harness answers the one open form that offers the case's key. Decided and built 28 November 2026** (user:
@@ -993,13 +993,43 @@ status line so the references above still hold; its build and review record was 
         more than one open selection offers the key (no choice among them); `ANSWER_NOT_OFFERED` means forms are open and none
         offers it; `NO_CLARIFICATION_STATE` is unchanged. Selection is by option key only, never by wording. Amended:
         design/harness/e2e.md "Case and publication contract" (the `answers` sentence, the first-leg condition and the
-        diagnostics, with the note that other open forms do not guarantee the second leg publishes). ADR 0025 Decision 9 needed
-        no change: it states no form count.
+        diagnostics, with the note that other open forms do not guarantee the second leg publishes) and, at the user's direction
+        ("Amendments: ADR 0025 and its related contract sections"), ADR 0025 Decision 9 and its amends list, which now state the
+        selection, acceptance.md's `answer_unavailable` sentence and the Z_SPEC01 description of `prepare`.
       - **Tests.** One open form; several open forms with one offering the key (answered, and the state file unchanged); another
         form's own key answers that form; a key no open selection offers; a key two open forms offer; no open form; no state; a
         text-only form beside an offering one. A mutation check removing the ambiguity guard crashes two integration tests.
       - **Not covered.** The second leg may still pause on an open form the engine does not close; the harness reports that as the
         leg's own result and works around nothing.
+    - **Change 7: answers to both overlapping conflict forms apply together. Decided and built 28 November 2026** (user:
+      "implement 2", after the preflight, which recommended against building it and named the ADR amendment). Offline proof
+      only. Need: completion of a run whose user answered both forms of two overlapping conflicts, which ended `blocked` with
+      `ProtectedClarification` because each answer would drop the other's answered conflict. **No live run has had a user answer
+      both forms**: the conflict case declares one answer key and the harness answers one form, so no harness launch reaches this
+      path, and the change was built without a pending run that needs it. The published-output defect class is completion after
+      valid answers, not specification content.
+      - **Built.** `answered_reconciliation.apply` lets two applicable answers apply together when each drops the other's
+        conflict and they drop no other conflict in common (`touches` now clashes only a shared dropped conflict). `answerable`
+        makes the drop mutual (a conflict sharing a claim with the answered one is left with exactly one claim, the claim its own
+        answer keeps) and each answer keeps a claim in no other conflict, so neither keeps a claim the other supersedes, and the
+        claim each keeps is the last claim the other would have retained. A claim both supersede is superseded by both kept
+        claims (`keepers`) and recorded once in `answer_superseded`; both kept claims are retained with a signal of their own;
+        no conflict is dropped by an answer, so `answer_dropped` is empty and the engine closes neither form. An answer that
+        would drop an answered conflict whose own answer is not applicable still applies nothing (`settles`). No state version,
+        schema or form change. Amended: ADR 0025 ("What it applies to", Decision 10 and the amends list).
+      - **Tests.** Accepted: the consistent pair applies (both kept, the shared claim superseded by both and recorded once, two
+        signals, an ordinary reconciliation, the snapshot validating on readback, the same result in either form order); two
+        conflicts sharing two claims apply with both shared claims superseded by both kept claims. Rejected: the pair whose
+        first answer keeps the shared claim applies nothing; two of three conflicts sharing one claim apply nothing, since both
+        would drop the third. Unrelated: one answer alone still drops the other conflicts; disjoint answers still apply. An
+        offline scenario answers both forms, publishes with both forms `resolved_by_user`, two kept claims in the snapshot and
+        the specification holding both, and reruns. Mutation checks, each failing a test: clashing any drop (the old rule),
+        recording a shared claim twice, retaining a counterpart's claim a second time, and not clashing a shared dropped
+        conflict. The contract review (28 November 2026) found no blocker; its minors are fixed: two branches that `answerable`
+        makes unreachable (a one-sided drop between two candidates, and a repeat of the removal pass) are removed, the shared
+        dropped conflict has its rejected test, and the ADR states the exclusion.
+      - **Not covered.** Three or more mutually overlapping answers still apply nothing. Whether a user would answer both forms
+        is unobserved.
     - **Where the 27 runs ended** (tabulated on 27 November 2026 from the retained reports and model outputs): the token
       budget in a full first-pass review, 5 (before conflicts first); the token budget in a dependent pass, 1;
       `repair-source` on an overlapping false group, 8 (7 first legs and 1 second leg, all before A and T1); a second
@@ -1188,8 +1218,8 @@ offline proof only: a replay screen (run) and three changes, each amending an ac
 replay and screen results); the live set that followed is under `evaluations/e2e/` (launch 2 published and is adjudicated in
 `evaluations/adjudications/adjudication-aaaabffd80b15b9aaa4554f55950c7f6/`, and no launch drew a kept open question). A
 fifth change, closing a form an applied answer dropped, was built the same day (§10 item 15, change 5), and a sixth, the
-harness answering the one open form that offers the key (change 6). The order that follows is one live set, then proposals 2,
-4 and 5 one at a time.
+harness answering the one open form that offers the key (change 6), and a seventh, answers to both overlapping forms
+applying together (change 7). The order that follows is one live set, then proposals 4 and 5 one at a time.
 
 Any later phase follows SPEC01 §2: `/preflight`; offline tests at the owning boundary; `zig build verify`; one
 change set for each measured build, on a committed, unmodified build; each replay batch, launch and set approved
