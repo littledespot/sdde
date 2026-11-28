@@ -260,7 +260,8 @@ pub fn row(comptime event: EventType) Row {
         // ADR 0039: every re-send of a runaway names the attempt it repeats.
         .model_runaway_resent => .{ .required = &.{ .model_route_id, .model_profile_id, .diagnostic_code }, .optional = &.{ .input_tokens, .output_tokens } },
         .validation_completed => .{ .required = &.{ .validator_id, .outcome }, .optional = &.{ .count, .duration_ms } },
-        .validation_failed => .{ .required = &.{ .validator_id, .diagnostic_code, .outcome }, .optional = &.{.count} },
+        // A failed validation may name the closed rule of the typed diagnostic it reports.
+        .validation_failed => .{ .required = &.{ .validator_id, .diagnostic_code, .outcome }, .optional = &.{ .count, .rule_id } },
         .repair_requested => .{ .required = &.{.repair_unit_kind} },
         .retry_admitted => .{ .required = &.{.count} },
         .retry_exhausted => .{ .required = &.{ .count, .diagnostic_code, .outcome } },

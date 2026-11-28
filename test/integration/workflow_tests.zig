@@ -2331,6 +2331,32 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expectEqual(@as(usize, 0), std.mem.count(u8, logged, "|run.completed|"));
             const finished = std.mem.count(u8, logged, "|action.completed|") + std.mem.count(u8, logged, "|action.invalid|") + std.mem.count(u8, logged, "|action.failed|");
             try std.testing.expectEqual(finished + @as(usize, if (publication) 1 else 0), std.mem.count(u8, logged, "|action.started|"));
+            // Every action end names, as its parent, a start row it alone closes, including the step whose start
+            // was logged with its end because it activated the log (F0002 section 6.2). A run that merged a
+            // reconciliation repair logged the rejection's typed rule.
+            {
+                const format = @import("../../src/domain/feature_log_format.zig");
+                var starts: std.StringHashMapUnmanaged(bool) = .empty;
+                defer starts.deinit(allocator);
+                var ends: usize = 0;
+                var reconciliation_rule = false;
+                var rows = std.mem.splitScalar(u8, logged, '\n');
+                while (rows.next()) |row| {
+                    const kind = format.cellAt(row, format.eventColumn("event_type")) orelse continue;
+                    if (std.mem.eql(u8, kind, "action.started")) {
+                        try starts.put(allocator, format.cellAt(row, format.eventColumn("event_id")).?, false);
+                    } else if (std.mem.eql(u8, kind, "action.completed") or std.mem.eql(u8, kind, "action.invalid") or std.mem.eql(u8, kind, "action.failed")) {
+                        const closed = starts.getPtr(format.cellAt(row, format.eventColumn("parent_event_id")).?) orelse return error.UnpairedActionEnd;
+                        try std.testing.expect(!closed.*);
+                        closed.* = true;
+                        ends += 1;
+                    } else if (std.mem.eql(u8, kind, "validation.failed") and std.mem.eql(u8, format.cellAt(row, format.eventColumn("diagnostic_code")).?, "RECONCILIATION")) {
+                        reconciliation_rule = reconciliation_rule or !std.mem.eql(u8, format.cellAt(row, format.eventColumn("rule_id")).?, "\\N");
+                    }
+                }
+                try std.testing.expectEqual(finished, ends);
+                if (driver.reconciliation_merges != 0) try std.testing.expect(reconciliation_rule);
+            }
             if (result == .execution_rejected and result.execution_rejected == .retry_limit) try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, logged, "|retry.exhausted|"));
             if (driver.support_merges != 0 or driver.reconciliation_merges != 0) try std.testing.expect(std.mem.indexOf(u8, logged, "|repair.requested|") != null);
             try std.testing.expect(std.mem.indexOf(u8, logged, "segment_trailer|") != null);

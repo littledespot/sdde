@@ -215,7 +215,7 @@ pub const Runner = struct {
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
         self.last_effects = null;
         self.stage_step = .{};
-        var started: bool = undefined;
+        var started: ActionStart = undefined;
         if (self.actionStart(id, &started, null)) |rejection| return .{ .rejected = rejection };
         const result = self.executeStep(id);
         // Only the stage's own error names its entry: a later cancellation, deadline or log stop that replaces it does not.
@@ -229,31 +229,48 @@ pub const Runner = struct {
         return result;
     }
 
+    /// A run's start: deferred to its end, because the feature log was not active when the run
+    /// began, or emitted then, with the persisted sequence the event ending the run names as its
+    /// parent (null when the threshold dropped it; F0002 section 6.2).
+    const ActionStart = union(enum) {
+        deferred,
+        emitted: ?u64,
+    };
+
     /// The pair of action events around one step or one stage run. The start is logged when the
     /// run begins, or, when the feature log only becomes active during it, with its end.
     /// `stage` is the stage this run is, when it is one of a `request-model` step's: every event of
     /// that run then names it (ADR 0030).
-    fn actionStart(self: *Runner, id: workflow.WorkflowStepId, started: *bool, stage: ?request_stage.Stage) ?execution.Rejection {
-        started.* = self.eventsActive();
-        if (started.*) if (self.logActionStart(id, stage)) |stop| return execution.Rejection.logStop(stop);
+    fn actionStart(self: *Runner, id: workflow.WorkflowStepId, started: *ActionStart, stage: ?request_stage.Stage) ?execution.Rejection {
+        started.* = .deferred;
+        if (self.eventsActive()) switch (self.logActionStart(id, stage)) {
+            .stopped => |stop| return execution.Rejection.logStop(stop),
+            .logged => |sequence| started.* = .{ .emitted = sequence },
+        };
         return null;
     }
 
     /// `stage_name` is the internal step a stage action or a kernel step stopped at; only a failed
     /// event records it (ADR 0031). A run that is itself a kernel stage names it on every event.
-    fn actionEnd(self: *Runner, id: workflow.WorkflowStepId, started: bool, result: execution.Applied, stage_name: ?[]const u8, stage: ?request_stage.Stage) ?execution.Rejection {
+    fn actionEnd(self: *Runner, id: workflow.WorkflowStepId, started: ActionStart, result: execution.Applied, stage_name: ?[]const u8, stage: ?request_stage.Stage) ?execution.Rejection {
         if (!self.eventsActive()) return null;
         // A logging failure here replaces the step's own rejection, when it ended in one.
         const replaced: ?execution.Rejection = if (result == .rejected) result.rejected else null;
-        if (!started) if (self.logActionStart(id, stage)) |stop| return self.replacing(replaced, execution.Rejection.logStop(stop));
+        const parent = switch (started) {
+            .emitted => |sequence| sequence,
+            .deferred => switch (self.logActionStart(id, stage)) {
+                .stopped => |stop| return self.replacing(replaced, execution.Rejection.logStop(stop)),
+                .logged => |sequence| sequence,
+            },
+        };
         const diagnostic = if (self.last_effects) |effects| effects.diagnostic else null;
-        const failure = if (stage) |named| self.events().requestStage(id, named.name(), result, diagnostic) else self.events().action(id, result, diagnostic, stage_name);
+        const failure = if (stage) |named| self.events().requestStage(id, named.name(), parent, result, diagnostic) else self.events().action(id, parent, result, diagnostic, stage_name);
         if (failure) |value| return self.replacing(replaced, self.captureRejectionWithLogging(value));
         return null;
     }
 
-    fn logActionStart(self: *Runner, id: workflow.WorkflowStepId, stage: ?request_stage.Stage) ?@import("../domain/feature_log_stream.zig").Stop {
-        return if (stage) |named| self.events().requestStage(id, named.name(), null, null) else self.events().action(id, null, null, null);
+    fn logActionStart(self: *Runner, id: workflow.WorkflowStepId, stage: ?request_stage.Stage) event_capture.Started {
+        return self.events().start(id, if (stage) |named| named.name() else null);
     }
 
     fn eventsActive(self: *const Runner) bool {
@@ -337,7 +354,7 @@ pub const Runner = struct {
         // The step's own failed event names the stage that stopped the request; every event of
         // this stage names the stage (ADR 0030).
         self.stage_step = .{ .name = stage.name() };
-        var started: bool = undefined;
+        var started: ActionStart = undefined;
         if (self.actionStart(context.id, &started, stage)) |rejection| return .{ .rejected = rejection };
         const result = self.executeBound(context.id, context.index, compiled, .{ .contract = registered.contract, .binding = registered.binding }, stage);
         if (self.actionEnd(context.id, started, result, stage.name(), stage)) |rejection| return .{ .rejected = rejection };
@@ -827,7 +844,7 @@ pub const Runner = struct {
                 const rejected: event_capture.Rejection = .{ .status = candidate.outcome, .reason = value };
                 if (self.events().model(step.id, info, if (schema_rejected) .{ .schema_failed = rejected } else .{ .protocol_failed = rejected })) |failure| return failure;
             }
-            if (self.events().validation(step.id, candidate.outcome, reason, origin)) |failure| return failure;
+            if (self.events().validation(step.id, candidate.outcome, if (reason) |code| .{ .code = code } else null, origin)) |failure| return failure;
         }
         // Project only this operation's newly published evidence. Reading the
         // complete envelope here would repeatedly attribute historical defects.
@@ -840,11 +857,10 @@ pub const Runner = struct {
             if (value == .support_findings and value.support_findings.repair_rejection == null) {
                 if (self.events().emit(.{ .review_rejected = .{ .node_id = .{ .bytes = step.id.bytes }, .outcome = event_capture.outcome(candidate.outcome) } })) |failure| return failure;
             }
-            const reason = value.code();
-            if (self.events().validation(step.id, candidate.outcome, reason, value.origin())) |failure| return failure;
+            if (self.events().validation(step.id, candidate.outcome, .{ .code = value.code(), .rule = value.rule() }, value.origin())) |failure| return failure;
         }
         if (candidate.delta.repair_transition) |transition| {
-            if (transition == .validated) return self.events().validation(step.id, candidate.outcome, if (transition.validated.result == .recurring) "REPAIR_RECURRING" else null, null);
+            if (transition == .validated) return self.events().validation(step.id, candidate.outcome, if (transition.validated.result == .recurring) .{ .code = "REPAIR_RECURRING" } else null, null);
             const event: event_capture.RepairEvent = switch (transition) {
                 .authorized => .requested,
                 .merged => .{ .applied = candidate.outcome },

@@ -458,7 +458,7 @@ test "debugger reconstructs full raw request description response and rejects mi
     try restored.ingest(sink.rows.items);
     try sink.events.appendSlice(a, format.event_heading);
     const events: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = sink.barrier(), .shortcode = try @import("domain/telemetry.zig").WorkflowShortcode.parse("SPEC") };
-    try std.testing.expect(events.validation(.{ .bytes = "check-evidence" }, .invalid, "SOURCE_SELECTIONS", .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }) == null);
+    try std.testing.expect(events.validation(.{ .bytes = "check-evidence" }, .invalid, .{ .code = "SOURCE_SELECTIONS" }, .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }) == null);
     try restored.ingestEvents(sink.events.items);
     const calls = try restored.calls();
     try std.testing.expectEqual(@as(usize, 1), calls.len);

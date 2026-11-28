@@ -300,6 +300,22 @@ Logging-internal nodes are not recursively observed.
   `message_template_id`, `run_id`, and `feature_id`.
 - Event rows may additionally use the common optional `stage`, `node_id`,
   `parent_event_id`, `correlation_id`, `attempt`, and `evidence_status` fields.
+- On `action.completed`, `action.invalid` and `action.failed`, `parent_event_id` is the
+  `event_id` of the `action.started` the event closes (for one stage of a `request-model`
+  step, that stage's start). It is unset when the threshold dropped that start (user
+  decision, 28 November 2026).
+- `duration_ms` stays unset on the rows the runner produces (the run, stage, action, model
+  and validation events): no clock times runner work, because the runner performs no I/O
+  ([27-observability.md](../contracts/27-observability.md)) and the trusted clock belongs to
+  the logging routines. An action's duration is its event's `monotonic_offset` minus its
+  parent's. A start logged with its end, because the feature log became active during the
+  step, gives no duration (user decision, 28 November 2026).
+- On `validation.failed`, `rule_id` is the closed rule of the typed candidate diagnostic
+  the event reports. For a diagnostic holding several issues, it is the validator's own
+  selected issue, or, for an issue set, the first nonempty member in declared order. It is
+  unset when the failure reports no typed candidate diagnostic, when that diagnostic selects
+  no issue, and for review findings, whose `diagnostic_code` already names any repair
+  rejection (user decision, 28 November 2026).
 - Prompt rows may use optional `stage` and `node_id`; their other fields are listed by
   `model.prompt_fragment`.
 - A field is permitted only when it is common or listed for that event below; every
@@ -345,7 +361,7 @@ Logging-internal nodes are not recursively observed.
 | `model.provider_stopped` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code`, `outcome` | `input_tokens`, `output_tokens` |
 | `model.runaway_resent` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code` | `input_tokens`, `output_tokens` |
 | `validation.completed` | `debug` | `validator_id`, `outcome` | `count`, `duration_ms` |
-| `validation.failed` | `warning` | `validator_id`, `diagnostic_code`, `outcome` | `count` |
+| `validation.failed` | `warning` | `validator_id`, `diagnostic_code`, `outcome` | `count`, `rule_id` |
 | `repair.requested` | `debug` | `repair_unit_kind` | — |
 | `repair.applied` | `info` | `repair_unit_kind`, `outcome` | — |
 | `repair.rejected` | `warning` | `repair_unit_kind`, `diagnostic_code`, `outcome` | — |

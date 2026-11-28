@@ -23,6 +23,27 @@ pub const Diagnostic = union(enum) {
         };
     }
 
+    /// The closed rule this diagnostic reports, as the event stream's `rule_id` (F0002 section 6.2): a tag
+    /// of the validator's own closed issue set, never model text. A diagnostic holding several issues reports
+    /// the validator's selected one, or an issue set's first nonempty member in declared order. A
+    /// diagnostic selecting no issue reports none, and so do review findings, whose `code()` already names
+    /// any repair rejection: a fact is stated once.
+    pub fn rule(self: Diagnostic) ?[]const u8 {
+        return switch (self) {
+            .extraction_text => |value| @tagName(value.issue.reason),
+            .reconciliation => |value| @tagName(value.issue.rule),
+            .token_classifications => |value| {
+                inline for (comptime std.meta.fieldNames(@TypeOf(value.issues))) |name| if (@field(value.issues, name).len != 0) return name;
+                return null;
+            },
+            .coverage => |value| @tagName(value.issue),
+            .support_findings => null,
+            .support => |value| if (value.selected()) |selected| @tagName(selected.issue) else null,
+            .specification => |value| @tagName(value.issue.rule),
+            .source_catalogue => |value| @tagName(value.reason),
+        };
+    }
+
     pub fn origin(self: Diagnostic) ?@import("model_candidate_origin.zig").Origin {
         return switch (self) {
             .extraction_text => |value| value.origin,

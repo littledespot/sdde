@@ -428,15 +428,15 @@ test "a failed action's event records the stage step, and no other action event 
     const capture: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = recorder.port(), .shortcode = try telemetry.WorkflowShortcode.parse("TEST") };
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "toolchain" };
     const rejected: execution.Applied = .{ .rejected = .{ .operation_failed = error.InvalidToolchain } };
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, rejected, null, "validate_registry"));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, null, rejected, null, "validate_registry"));
     const failed = recorder.last.?.fact;
     try std.testing.expectEqual(telemetry.EventType.action_failed, telemetry.eventOf(failed));
     try std.testing.expectEqualStrings("validate_registry", telemetry.fieldOf(failed, .step_id).?.bytes);
     _ = try registry.validateFact(failed);
     // A failure with no stage step, and a completed action given one, record none.
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, rejected, null, null));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, null, rejected, null, null));
     try std.testing.expectEqual(@as(?telemetry.Identifier, null), telemetry.fieldOf(recorder.last.?.fact, .step_id));
-    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, .{ .outcome = .ok }, null, "validate_registry"));
+    try std.testing.expectEqual(@as(?@import("domain/feature_log_stream.zig").Stop, null), capture.action(node, null, .{ .outcome = .ok }, null, "validate_registry"));
     try std.testing.expectEqual(telemetry.EventType.action_completed, telemetry.eventOf(recorder.last.?.fact));
     try std.testing.expectEqual(@as(?telemetry.Identifier, null), telemetry.fieldOf(recorder.last.?.fact, .step_id));
     // The field is for action events only: no other event's row names it.
@@ -458,24 +458,31 @@ test "every event of a request stage names the stage, and a stage action's other
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "request" };
     const failure: ?@import("domain/feature_log_stream.zig").Stop = null;
     // A stage's start and each kind of end name the stage, and the registry admits each fact.
-    const ends = [_]struct { result: ?execution.Applied, event: telemetry.EventType }{
-        .{ .result = null, .event = .action_started },
+    const ends = [_]struct { result: execution.Applied, event: telemetry.EventType }{
         .{ .result = .{ .outcome = .ok }, .event = .action_completed },
         .{ .result = .{ .outcome = .invalid }, .event = .action_invalid },
         .{ .result = .{ .outcome = .failed }, .event = .action_failed },
         .{ .result = .{ .outcome = .cancelled }, .event = .action_failed },
         .{ .result = .{ .rejected = .{ .authority = .kernel_stage } }, .event = .action_failed },
     };
-    for (std.enums.values(@import("domain/model_request_stage.zig").Stage)) |request_stage| for (ends) |end| {
-        try std.testing.expectEqual(failure, capture.requestStage(node, request_stage.name(), end.result, null));
-        const fact = recorder.last.?.fact;
-        try std.testing.expectEqual(end.event, telemetry.eventOf(fact));
-        try std.testing.expectEqualStrings(request_stage.name(), telemetry.fieldOf(fact, .step_id).?.bytes);
-        _ = try registry.validateFact(fact);
-    };
+    for (std.enums.values(@import("domain/model_request_stage.zig").Stage)) |request_stage| {
+        try std.testing.expect(capture.start(node, request_stage.name()) == .logged);
+        try std.testing.expectEqual(telemetry.EventType.action_started, telemetry.eventOf(recorder.last.?.fact));
+        try std.testing.expectEqualStrings(request_stage.name(), telemetry.fieldOf(recorder.last.?.fact, .step_id).?.bytes);
+        _ = try registry.validateFact(recorder.last.?.fact);
+        for (ends) |end| {
+            try std.testing.expectEqual(failure, capture.requestStage(node, request_stage.name(), null, end.result, null));
+            const fact = recorder.last.?.fact;
+            try std.testing.expectEqual(end.event, telemetry.eventOf(fact));
+            try std.testing.expectEqualStrings(request_stage.name(), telemetry.fieldOf(fact, .step_id).?.bytes);
+            _ = try registry.validateFact(fact);
+        }
+    }
     // The same events of a step that is no stage name nothing unless a stage action failed (ADR 0031).
+    try std.testing.expect(capture.start(node, null) == .logged);
+    try std.testing.expectEqual(@as(?telemetry.Identifier, null), telemetry.fieldOf(recorder.last.?.fact, .step_id));
     for (ends) |end| {
-        try std.testing.expectEqual(failure, capture.action(node, end.result, null, null));
+        try std.testing.expectEqual(failure, capture.action(node, null, end.result, null, null));
         try std.testing.expectEqual(@as(?telemetry.Identifier, null), telemetry.fieldOf(recorder.last.?.fact, .step_id));
         _ = try registry.validateFact(recorder.last.?.fact);
     }
@@ -517,7 +524,7 @@ test "an authority rejection's events carry its reason as their diagnostic code"
         // The existing token rule upper-cases the reason: no new code family, and each reason is its own code.
         var upper: [64]u8 = undefined;
         const expected = std.ascii.upperString(&upper, @tagName(reason));
-        try std.testing.expectEqual(accepted, capture.action(node, .{ .rejected = .{ .authority = reason } }, null, null));
+        try std.testing.expectEqual(accepted, capture.action(node, null, .{ .rejected = .{ .authority = reason } }, null, null));
         try std.testing.expectEqual(@as(?telemetry.EventType, .action_failed), recorder.event);
         try std.testing.expectEqualStrings(expected, recorder.written());
         try std.testing.expectEqual(accepted, capture.terminal(.{ .execution_rejected = .{ .authority = reason } }));

@@ -9449,6 +9449,98 @@ fn activateEvents(runner: *runner_module.Runner) !void {
     });
 }
 
+/// Persists every action event under the next sequence, unless told to drop starts, and records each
+/// event's kind, node, stage and the sequence its parent names.
+const ParentEvents = struct {
+    const telemetry = @import("domain/telemetry.zig");
+    const Event = struct { kind: telemetry.EventType, node: [128]u8 = undefined, node_len: usize = 0, stage: [128]u8 = undefined, stage_len: usize = 0, parent: ?u64 = null };
+    drop_starts: bool = false,
+    invalid: bool = false,
+    events: [256]Event = undefined,
+    count: usize = 0,
+
+    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+        const self: *ParentEvents = @ptrCast(@alignCast(context));
+        _ = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch {
+            self.invalid = true;
+            return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        };
+        const kind = telemetry.eventOf(fact.fact);
+        switch (kind) {
+            .action_started, .action_completed, .action_invalid, .action_failed => {},
+            else => return .dropped,
+        }
+        if (self.drop_starts and kind == .action_started) return .dropped;
+        if (self.count == self.events.len) {
+            self.invalid = true;
+            return .{ .blocked = .LOG_SINK_FAILURE };
+        }
+        var event: Event = .{ .kind = kind };
+        const common = telemetry.commonOf(fact.fact);
+        const node = (common.node_id orelse return .dropped).bytes;
+        @memcpy(event.node[0..node.len], node);
+        event.node_len = node.len;
+        if (telemetry.fieldOf(fact.fact, .step_id)) |stage| {
+            @memcpy(event.stage[0..stage.bytes.len], stage.bytes);
+            event.stage_len = stage.bytes.len;
+        }
+        if (common.parent_event_id) |id| {
+            if (!std.mem.startsWith(u8, id.bytes, "EVENT-")) {
+                self.invalid = true;
+                return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            }
+            event.parent = std.fmt.parseInt(u64, id.bytes["EVENT-".len..], 10) catch {
+                self.invalid = true;
+                return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            };
+        }
+        self.events[self.count] = event;
+        self.count += 1;
+        return .{ .persisted = .{ .segment_ordinal = 1, .sequence = self.count, .bytes_written = 1, .flushed = true } };
+    }
+};
+
+test "request-model: every action end names the start it closes, and none when the starts were dropped" {
+    for ([_]bool{ false, true }) |drop_starts| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        kernelObserver(&fixture);
+        const graph = try fixture.compile(kernel_yaml);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try activateEvents(&runner);
+        var events: ParentEvents = .{ .drop_starts = drop_starts };
+        runner.barrier = .{ .context = &events, .process_fn = ParentEvents.process };
+        var scripted: ScriptedProvider = .{ .inner = invocationProvider(&runner, std.testing.allocator), .script = &.{valid_plan} };
+        fixture.native.stages.invoke_model.action = .{ .provider = scripted.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.ok, harness.run());
+        try std.testing.expect(!events.invalid);
+        var closed: [256]bool = @splat(false);
+        var ends: usize = 0;
+        for (events.events[0..events.count]) |event| {
+            if (event.kind == .action_started) continue;
+            ends += 1;
+            if (drop_starts) {
+                try std.testing.expect(event.parent == null);
+                continue;
+            }
+            // The parent is a start of the same step and, for a request stage, the same stage, closed once.
+            const parent = event.parent orelse return error.TestExpectedParent;
+            try std.testing.expect(parent >= 1 and parent <= events.count);
+            const start = &events.events[parent - 1];
+            try std.testing.expectEqual(ParentEvents.telemetry.EventType.action_started, start.kind);
+            try std.testing.expectEqualStrings(start.node[0..start.node_len], event.node[0..event.node_len]);
+            try std.testing.expectEqualStrings(start.stage[0..start.stage_len], event.stage[0..event.stage_len]);
+            try std.testing.expect(!closed[parent - 1]);
+            closed[parent - 1] = true;
+        }
+        // The run logged ends, including request stages' (more than one per step).
+        try std.testing.expect(ends > 1);
+    }
+}
+
 test "request-model: the release actions retire exactly the keys the kernel keeps, and only a terminal request" {
     const transport = @import("domain/model_transport.zig");
     const release_request = @import("actions/model/release_model_request.zig").Action{};
