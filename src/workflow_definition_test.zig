@@ -151,7 +151,7 @@ test "concise resources and native parameters compile into immutable operation a
         try std.testing.expectEqual(@as(usize, 2), resource_parameters);
         try std.testing.expectEqualStrings("model-ready@1", graph.authority.steps[0].gates[0].id.bytes);
         if (provider_calls) {
-            try std.testing.expectEqualStrings("model-provider", graph.authority.steps[0].capabilities[0]);
+            try std.testing.expectEqual(.model_provider, graph.authority.steps[0].capabilities[0]);
         } else {
             try std.testing.expectEqual(@as(usize, 0), graph.authority.steps[0].capabilities.len);
             try std.testing.expectEqual(@as(usize, 0), graph.authority.allowed_capabilities.len);
@@ -254,7 +254,7 @@ test "compiled native repair roles retain their counter scope and finite bound" 
             1 => steps[0].retry_authority.?.scope = .operation,
             2 => steps[0].retry_authority.?.scope = .model_request,
             3 => invalid.authority.maximum_step_executions -= 1,
-            4 => steps[0].capabilities = &.{"model-provider"},
+            4 => steps[0].capabilities = &.{.model_provider},
             // The authority's limit is no longer the step's `retry-limit` parameter.
             5 => steps[0].retry_authority.?.limit.value += 1,
             else => unreachable,
@@ -790,7 +790,7 @@ const operations: operation_registry.Registry = .{
     .operations = &operation_entries,
     .policies = &.{
         .{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok} },
-        .{ .id = "test.model-policy@1", .allowed_capabilities = &.{"model-provider"}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled } },
+        .{ .id = "test.model-policy@1", .allowed_capabilities = &.{.model_provider}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled } },
     },
     .gates = &.{.{ .id = .{ .bytes = "model-ready@1" }, .issuer = .{ .bytes = "test.validate" }, .evidence = .workflow_operation_registry_evidence, .authority = &.{.workflow_invocation} }},
     .data_schemas = &.{ values.schema(.workflow_invocation, u32, 1, 32), values.schema(.workflow_operation_registry_evidence, gate_module.Decision, 1, 32) },

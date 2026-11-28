@@ -624,6 +624,7 @@ test "an authority subject names the source text its unit concerns, never a gene
     try std.testing.expectEqualStrings("reference_meaning", first.requirement);
     try std.testing.expectEqualStrings("signal", first.unit);
     try std.testing.expectEqualStrings("disposition", first.slot);
+    try std.testing.expect(!a.isConflictSubject(first));
     try std.testing.expect(first.sources.len != 0 and c.validSources(first.sources));
     for (first.sources) |span| {
         var held_path = false;
@@ -653,19 +654,23 @@ test "an authority subject names the source text its unit concerns, never a gene
     const token = try clarifications.subjectFor(allocator, read, held, .{ .kind = .preservation, .unit = .{ .token = token_id }, .slot = .value });
     try std.testing.expectEqualStrings("preservation", token.requirement);
     try std.testing.expectEqualStrings("token", token.unit);
+    try std.testing.expect(!a.isConflictSubject(token));
     try std.testing.expect(token.sources.len == 1 and token.sources[0].lines.?.first == 1);
     // A whole source is named by its path, and a source the corpus lacks is no subject.
     const whole = try clarifications.subjectFor(allocator, read, null, .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 1 } }, .slot = .disposition });
     try std.testing.expectEqualStrings("source", whole.unit);
+    try std.testing.expect(!a.isConflictSubject(whole));
     try std.testing.expect(whole.sources.len == 1 and whole.sources[0].lines == null);
     try std.testing.expectEqualStrings(read.corpus.sources[0].path.bytes, whole.sources[0].path);
     try std.testing.expectError(error.InvalidRequiredAuthority, clarifications.subjectFor(allocator, read, null, .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 99 } }, .slot = .disposition }));
     // The feature has no source text, and a decision, owned by a workflow that does not exist yet, keeps its ordinal.
     const feature = try clarifications.subjectFor(allocator, read, null, id(.feature_intent));
     try std.testing.expectEqualStrings("feature", feature.unit);
+    try std.testing.expect(!a.isConflictSubject(feature));
     try std.testing.expectEqual(@as(usize, 0), feature.sources.len);
     const decision = try clarifications.subjectFor(allocator, read, null, id(.design_decision));
     try std.testing.expectEqualStrings("decision.1", decision.unit);
+    try std.testing.expect(!a.isConflictSubject(decision));
     try std.testing.expectEqual(@as(usize, 0), decision.sources.len);
 }
 
@@ -690,6 +695,9 @@ test "a conflict's subject names the lines its claims cite in every source, what
     };
     const subject = try clarifications.subjectFor(allocator, reference.inputs, held, requirement.id(held.conflicts[0].id.ordinal));
     try std.testing.expectEqualStrings("conflict", subject.unit);
+    // The subject the engine writes for this conflict's disposition is the one the answer filter recognises; its names read
+    // tags only, so which conflict it is cannot matter (the typed test below checks that).
+    try std.testing.expect(a.isConflictSubject(subject));
     // The conflict sets one source against another, so its subject names both.
     try std.testing.expectEqual(@as(usize, 2), subject.sources.len);
     try std.testing.expect(c.validSources(subject.sources));
@@ -699,6 +707,43 @@ test "a conflict's subject names the lines its claims cite in every source, what
     regenerated.conflicts = renumbered;
     try std.testing.expect(c.sameSubject(subject, try clarifications.subjectFor(allocator, reference.inputs, regenerated, requirement.id(41))));
     try std.testing.expectError(error.InvalidRequiredAuthority, clarifications.subjectFor(allocator, reference.inputs, held, requirement.id(999)));
+}
+
+test "one typed identity is a conflict's disposition, and only the names written for it identify a conflict subject" {
+    const c = @import("domain/clarification_inputs.zig");
+    const conflict = a.conflictDisposition(.{ .ordinal = 7 });
+    try std.testing.expect(a.isConflictDisposition(conflict));
+    try std.testing.expectEqual(@as(u32, 7), a.conflictOf(conflict).?.ordinal);
+    try std.testing.expect(a.policy(conflict) != null);
+    // The registry gives a conflict unit no other requirement, so a form over one is always a conflict's disposition.
+    for (std.enums.values(a.Kind)) |kind| for (std.enums.values(a.Slot)) |slot| {
+        const over_conflict: a.Id = .{ .kind = kind, .unit = .{ .conflict = .{ .ordinal = 7 } }, .slot = slot };
+        if (a.policy(over_conflict) != null) try std.testing.expect(a.isConflictDisposition(over_conflict));
+    };
+    // The same requirement over another unit, and a conflict unit under any other requirement or slot, is no conflict disposition.
+    const others = [_]a.Id{
+        .{ .kind = .reference_meaning, .unit = .{ .signal = .{ .ordinal = 7 } }, .slot = .disposition },
+        .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 7 } }, .slot = .disposition },
+        .{ .kind = .reference_meaning, .unit = .{ .conflict = .{ .ordinal = 7 } }, .slot = .description },
+        .{ .kind = .preservation, .unit = .{ .conflict = .{ .ordinal = 7 } }, .slot = .disposition },
+        .{ .kind = .preservation, .unit = .{ .token = .{ .ordinal = 7 } }, .slot = .value },
+        id(.feature_intent),
+        id(.design_decision),
+    };
+    const subject = struct {
+        fn of(identity: a.Id) c.Subject {
+            const names = a.subjectNames(identity);
+            return .{ .requirement = names.requirement, .unit = names.unit, .slot = names.slot, .sources = &.{} };
+        }
+    };
+    // The names a conflict's subject carries do not depend on which conflict it is.
+    try std.testing.expect(a.isConflictSubject(subject.of(conflict)));
+    try std.testing.expect(a.isConflictSubject(subject.of(a.conflictDisposition(.{ .ordinal = 99 }))));
+    for (others) |other| {
+        try std.testing.expect(a.conflictOf(other) == null);
+        try std.testing.expect(!a.isConflictDisposition(other));
+        try std.testing.expect(!a.isConflictSubject(subject.of(other)));
+    }
 }
 
 test "two gaps owned by one stage become two needs and two open forms with distinct subjects" {

@@ -113,7 +113,7 @@ test "binding projection rejects missing duplicate malformed or unprojected slot
             4 => {
                 step.model = null;
                 step.parameters = &.{};
-                step.capabilities = &.{"model-provider"};
+                step.capabilities = &.{.model_provider};
             },
             5 => step.model.?.slot = .{ .bytes = "another-slot" },
             else => unreachable,
@@ -255,14 +255,14 @@ test "generic runner blocks provider ports at exhausted budget but permits pure 
     control.entries[0].binding = @import("application/workflow_operation_binding.zig").bind(CallingStep, &calling, CallingStep.invoke);
     registry.policies = &.{.{
         .id = "test.model-policy@1",
-        .allowed_capabilities = &.{"model-provider"},
+        .allowed_capabilities = &.{.model_provider},
         .allowed_terminal_outcomes = &.{.ok},
     }};
     var step = model_step;
-    step.capabilities = &.{"model-provider"};
+    step.capabilities = &.{.model_provider};
     var graph = model_graph;
     graph.authority.steps = &.{step};
-    graph.authority.allowed_capabilities = &.{"model-provider"};
+    graph.authority.allowed_capabilities = &.{.model_provider};
     runner.selected.graph = &graph;
     const rejected = runner.bindings().invokeStep(step.id);
     try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, rejected.rejected.token_budget);

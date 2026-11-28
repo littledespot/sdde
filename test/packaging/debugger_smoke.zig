@@ -36,4 +36,23 @@ pub fn main(init: std.process.Init) !void {
     if (denied.status != .forbidden) return error.CrossOriginReplay;
     const invalid = try client.fetch(.{ .location = .{ .url = replay }, .method = .POST, .payload = "{\"call\":0,\"mode\":\"workflow\",\"edit\":null}", .keep_alive = false, .extra_headers = &.{ .{ .name = "x-sdde-debugger-token", .value = token }, .{ .name = "origin", .value = origin }, .{ .name = "content-type", .value = "application/json" } } });
     if (invalid.status != .bad_request) return error.WorkflowReplayAccepted;
+    try rejectsArchivedFeature(init.io, binary, &environment);
+}
+
+/// A feature under `paths.specsArchive` is no feature: the debugger must refuse it before serving or writing there.
+fn rejectsArchivedFeature(io: std.Io, binary: []const u8, environment: *const std.process.Environ.Map) !void {
+    var child = try std.process.spawn(io, .{ .argv = &.{ binary, "--debugger", "_archive/archived" }, .environ_map = environment, .stdin = .ignore, .stdout = .pipe, .stderr = .pipe });
+    errdefer child.kill(io);
+    var buffer: [256]u8 = undefined;
+    var reader = child.stdout.?.reader(io, &buffer);
+    // A refused start closes its output without a line; a served one prints the link.
+    if (reader.interface.takeDelimiterExclusive('\n')) |_| return error.ArchivedFeatureServed else |err| if (err != error.EndOfStream) return err;
+    // The refusal is the feature-directory validation's, not some other failure that also prints nothing.
+    var failure_buffer: [256]u8 = undefined;
+    var failure = child.stderr.?.reader(io, &failure_buffer);
+    if (!std.mem.eql(u8, try failure.interface.takeDelimiterExclusive('\n'), "InvalidFeatureDirectory")) return error.ArchivedFeatureNotRefused;
+    switch (try child.wait(io)) {
+        .exited => |code| if (code != 1) return error.ArchivedFeatureNotRefused,
+        else => return error.ArchivedFeatureNotRefused,
+    }
 }

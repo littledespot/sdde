@@ -102,6 +102,12 @@ test "rows state the fields F0002 section 6.2 gives them" {
     // A command's exit code is optional, and only a command row carries it.
     try std.testing.expect(@FieldType(telemetry.Payload(.command_completed), "exit_code") == ?i32);
     try std.testing.expect(!@hasField(telemetry.Payload(.task_started), "exit_code"));
+    // A failed validation may name its rule; a security denial requires one; no action or run row carries one.
+    try std.testing.expect(@FieldType(telemetry.Payload(.validation_failed), "rule_id") == ?Identifier);
+    try std.testing.expect(@FieldType(telemetry.Payload(.security_denied), "rule_id") == Identifier);
+    try std.testing.expect(!@hasField(telemetry.Payload(.validation_completed), "rule_id"));
+    try std.testing.expect(!@hasField(telemetry.Payload(.action_failed), "rule_id"));
+    try std.testing.expect(!@hasField(telemetry.Payload(.run_failed), "rule_id"));
 }
 
 test "only the prompt fragment is sanitized content, and the event stream admits public metadata alone" {

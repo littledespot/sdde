@@ -1,34 +1,40 @@
 const std = @import("std");
 
-pub const feature_logging = "feature-logging";
-pub const model_provider = "model-provider";
-pub const provider_authorization = "provider-authorization";
-pub const principle_read = "principle-read";
-pub const toolchain_read = "toolchain-read";
-pub const toolchain_parser = "toolchain-parser";
-pub const reference_read = "reference-read";
-pub const feature_read = "feature-read";
-pub const feature_input_read = "feature-input-read";
-pub const feature_output_write = "feature-output-write";
-pub const reference_content_read = "reference-content-read";
-pub const reference_decode = "reference-decode";
-pub const reference_identity = "reference-identity";
-pub const actor_authentication = "actor-authentication";
+/// The closed set of operational capabilities a registered operation can hold. A capability derives
+/// only from the narrow ports an operation's binding reaches, and a workflow policy bounds it. This
+/// declaration order is the order a binding lists its capabilities in.
+pub const Capability = enum {
+    feature_logging,
+    model_provider,
+    provider_authorization,
+    principle_read,
+    toolchain_read,
+    toolchain_parser,
+    reference_read,
+    feature_read,
+    feature_input_read,
+    feature_output_write,
+    reference_content_read,
+    reference_decode,
+    reference_identity,
+    actor_authentication,
+};
 
-pub fn known(id: []const u8) bool {
-    inline for (.{ feature_logging, principle_read, model_provider, provider_authorization, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, feature_output_write, reference_content_read, reference_decode, reference_identity, actor_authentication }) |known_id| {
-        if (std.mem.eql(u8, id, known_id)) return true;
-    }
+pub const Set = std.enums.EnumSet(Capability);
+
+pub fn contains(capabilities: []const Capability, expected: Capability) bool {
+    for (capabilities) |capability| if (capability == expected) return true;
     return false;
 }
 
-pub fn permits(ceiling: []const []const u8, required: []const []const u8) bool {
-    for (required) |id| {
-        var found = false;
-        for (ceiling) |allowed| if (std.mem.eql(u8, id, allowed)) {
-            found = true;
-        };
-        if (!found) return false;
+pub fn unique(capabilities: []const Capability) bool {
+    for (capabilities, 0..) |capability, index| {
+        if (contains(capabilities[0..index], capability)) return false;
     }
+    return true;
+}
+
+pub fn permits(ceiling: []const Capability, required: []const Capability) bool {
+    for (required) |capability| if (!contains(ceiling, capability)) return false;
     return true;
 }

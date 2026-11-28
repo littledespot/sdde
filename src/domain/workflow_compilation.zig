@@ -92,7 +92,7 @@ pub const CompiledStep = struct {
     repair_role: workflow_retry.Role = .none,
     outcome_association: @import("workflow_outcome_association.zig").Descriptor = .independent,
     gates: []const @import("workflow_gate.zig").Contract,
-    capabilities: []const []const u8,
+    capabilities: []const @import("workflow_capability.zig").Capability,
     retry_authority: ?workflow_retry.CompiledAuthority,
     iteration: ?@import("workflow_iteration.zig").Descriptor = null,
     // Compiler-proven immutable model-binding requirements, including for pure
@@ -110,7 +110,7 @@ pub const RequestStage = struct {
 };
 
 pub const SemanticAuthority = struct {
-    allowed_capabilities: []const []const u8 = &.{},
+    allowed_capabilities: []const @import("workflow_capability.zig").Capability = &.{},
     data_schemas: []const @import("pipeline_data.zig").Schema = &.{},
     workflow_id: workflow.WorkflowId,
     workflow_version: u32,

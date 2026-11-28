@@ -69,7 +69,7 @@ pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_id
         });
     }
     for (references.conflicts) |conflict| {
-        const id: authority.Id = .{ .kind = .reference_meaning, .unit = .{ .conflict = conflict.id }, .slot = .disposition };
+        const id = authority.conflictDisposition(conflict.id);
         try seeds.append(allocator, .{ .id = id, .requiredness = .{ .obligation = .reference_accounting }, .input_authorities = sources });
         // A reconciliation label is a candidate assertion. Source review
         // establishes whether the gap needs user authority or candidate repair.

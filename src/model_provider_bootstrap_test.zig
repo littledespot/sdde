@@ -479,7 +479,7 @@ const operation_registry: operations.Registry = .{
     },
     .policies = &.{.{
         .id = "test.safe@1",
-        .allowed_capabilities = &.{requirement.capability_id},
+        .allowed_capabilities = &.{.model_provider},
         .allowed_terminal_outcomes = &.{.ok},
     }},
     .gates = &.{},

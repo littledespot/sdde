@@ -285,12 +285,12 @@ test "runner rejects changed gate contracts policy ceilings and compiled capabil
                 fixture.registry.gates = (&changed_gate)[0..1];
             },
             .policy_ceiling => {
-                changed_policy.allowed_capabilities = &.{"model-provider"};
+                changed_policy.allowed_capabilities = &.{.model_provider};
                 fixture.registry.policies = (&changed_policy)[0..1];
             },
             .compiled_capabilities => {
                 for (steps) |*step| if (std.mem.eql(u8, step.id.bytes, "guarded")) {
-                    step.capabilities = &.{"model-provider"};
+                    step.capabilities = &.{.model_provider};
                 };
                 graph.authority.steps = steps;
                 runner.selected.graph = &graph;

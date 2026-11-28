@@ -18,16 +18,16 @@ authority (intent.md:3-9).
 
 - **Stage design:** design.md §18 and [18-plan.md](../design/contracts/18-plan.md), as amended
   by the accepted ADRs (design.md §32); **Proposed design**.
-- **Model and engine split:** design.md §4 (design.md:261-263, 267, 271-272) and
+- **Model and engine split:** design.md §4 (design.md:263-265, 269, 273-274) and
   [21-validation.md](../design/contracts/21-validation.md) §21.3's semantic remainders and
   §21.6 (21-validation.md:121).
-- **Delivery:** design.md §30 Increment 3 (design.md:732-742). Its only exit rule is that an
+- **Delivery:** design.md §30 Increment 3 (design.md:734-744). Its only exit rule is that an
   increment "must be usable with a fake `LLMProviderInterface` before integrating a real
-  provider" (design.md:765).
+  provider" (design.md:767).
 - **Acceptance:** design.md §31, written for the whole engine. Criteria 9, 10, 13, 19, 20, 22,
-  23 and 38 name Plan's work (design.md:876-886, :937-938, :962-985, :992-1005, :1089-1092).
+  23 and 38 name Plan's work (design.md:878-888, :937-938, :960-983, :990-1003, :1087-1090).
 
-## 2. Verdict (22 November 2026)
+## 2. Verdict (22 November 2026; rechecked 28 November 2026)
 
 **Feasible on the current engine, not as §18 stands.**
 
@@ -37,8 +37,8 @@ authority (intent.md:3-9).
   - Shared code already names Plan in four places: the authority registry makes it the owner
     of `design_decision` and `policy_predicate`, clarification IDs and allocation handle `PNN`,
     the request-owner unions declare `plan_unit`, and log events carry a `plan` stage.
-  - The request step, repairs, ID restrictions, model slots and the output writer are generic
-    too.
+  - The request step, repairs, ID restrictions, model slots, the output writer and the
+    clarification-answer authentication chain are generic too.
   - Below selection it isn't: the data keys, the operation, error and diagnostic sets and the
     outcome association hold only Spec's members, and Spec's field names sit at the model
     boundary. Each changes for a second workflow (§4).
@@ -46,11 +46,14 @@ authority (intent.md:3-9).
   - see the target project: discovery, file kinds, path policy, commands (§4);
   - start from a feature directory alone, or publish under any policy but Spec's (§4);
   - read a published `spec.md` in a later invocation;
-  - record an approval or authenticate a user.
+  - record an approval, or authenticate a user for anything but a Spec clarification answer
+    (§3).
   - No Plan workflow definition, prompt or schema exists (§4).
   - The §13 catalogue lists every Plan action only as "Proposed, no code" (13-01:442-512,
-    13-02:135-151, 13-05:356-518, 13-06:17-35), to be rewritten when Plan design starts
-    (design.md:407-409).
+    13-02:135-151, 13-05:469-566, 13-06:17-35), to be rewritten when Plan design starts
+    (design.md:409-411). The exception is `AuthenticateActorAction`, which §18.1 names
+    (18-plan.md:67): it is built for Spec clarifications (13-05:418-427), and its Plan uses,
+    the edit lease and the review binding, are proposed (13-05:558-566).
 - **The design has open conflicts (§5).** Eight decisions block design. They include whether
   plan output gets a model review, how approval happens, whether Plan runs commands and which
   existing files the model sees.
@@ -58,9 +61,9 @@ authority (intent.md:3-9).
   rows of coverage and quickstart, `data-model.md` applicability and every restated requirement
   could be engine-built, leaving the model the design choices, their rationale and the
   verification methods.
-- **Size.** The Spec stage is 17,370 of the engine's 69,913 production Zig lines (22 November
-  2026): 7,949 on the generation side (domain, action and application files named for
-  specification or specify), 9,140 on the reference side (named for reference or source) and
+- **Size.** The Spec stage is 17,619 of the engine's 72,373 production Zig lines (28 November
+  2026): 8,043 on the generation side (domain, action and application files named for
+  specification or specify), 9,295 on the reference side (named for reference or source) and
   281 named for both. The count covers `src/**/*.zig` without `*_test.zig`, `*_test_fixture.zig`
   or `test_fixtures/`, inline tests included; another filter gives a somewhat different figure.
   Plan has no reference side, but needs discovery, file and path policy and its renderers, which
@@ -77,24 +80,25 @@ authority (intent.md:3-9).
 | Mechanism | State | Evidence |
 | --- | --- | --- |
 | Multi-workflow selection, compiler, runner | Generic | `src/actions/workflow/parse_workflow_invocation.zig:14-21`; `test/integration/workflow_tests.zig`, test "unrelated workflows do not load toolchain documents even with a toolchain workflow installed"; no `spec-generation` literal outside tests (one inline test, `src/domain/llm_provider_identity.zig:81`); the definition schema holds no Spec member (`design/schemas/workflow-definition-v1.schema.json`) |
-| One `request-model` step per model request (E1) | Generic | Later workflow files copy no request subgraph (ADR 0030:397-398) |
-| Model slots | Generic: open configured keys | 09-configuration.md:71, :85-86; the case configuration already holds `design_section_generation` and `implementation` (`test/e2e/wf-001-hello-world/.sddtoolkit.json:10-21`) |
-| Integer-choice and exact-member restrictions | Generic; Spec and reference users; a choice set holds at most 1,024 members | 12-model-boundary.md:100, :133, :162 (ADR 0046; ADR 0006); `src/domain/model_result_schema.zig` |
-| Generic repair operations and contract variants (E4) | Generic; 12 Specify owners, 28 variants | ADR 0033:106; `src/domain/repair_owner.zig:72-85`. A new owner adds its binding, one `RepairOwner` member with an arm in each owner switch (`repair_owner.zig:104-148`), an arm and a `frozen` row for each generic operation it joins, and its YAML steps (Z_SPEC01 E4; `src/repair_operations_test.zig:215`) |
-| Stage actions (E2) | Generic; four Spec stage actions; side effects `none` or `filesystem_read` only | ADR 0031:3-7, :141-143 |
-| Required-authority ledger, reconcile, routing, gate | Generic; Plan owns `design_decision` and `policy_predicate`; no Plan seed producer | `src/domain/required_authority.zig:16`, `:59-61`, `:352-356`; seeds only `specification_authority.zig`, `source_preservation.zig` |
-| Clarification registry, `PNN` IDs, forms, refresh | Generic for S/P/T; an invalid closed form blocks before any model call (E7 Stage 1); answers rejected for every stage; progress ignores the stage (§4) | `src/domain/clarification_inputs.zig:16`; `src/domain/clarification_refresh.zig:54-59`, `:64-66`, `:105-113`; SPEC01 §5 E7 |
+| One `request-model` step per model request (E1) | Generic | One step per model request, in an engine-compiled stage order that is "the same for every workflow" and that YAML can't change (ADR 0030:30, :91-92) |
+| Model slots | Generic: open configured keys | 09-configuration.md:70, :84-85; the case configuration already holds `design_section_generation` and `implementation` (`test/e2e/wf-001-hello-world/.sddtoolkit.json:10-21`) |
+| Integer-choice and exact-member restrictions | Generic; Spec and reference users; a choice set holds at most 1,024 members | 12-model-boundary.md:100, :142, :171 (ADR 0046; ADR 0006); `src/domain/model_result_schema.zig` |
+| Generic repair operations and contract variants (E4) | Generic; 12 Specify owners, 28 variants | ADR 0033:44; `src/domain/repair_owner.zig:72-85`. A new owner adds its binding, one `RepairOwner` member with an arm in each owner switch (`repair_owner.zig:104-148`), an arm and a `frozen` row for each generic operation it joins, and its YAML steps (Z_SPEC01 E4; `src/repair_operations_test.zig:215`) |
+| Stage actions (E2) | Generic; six Spec stage actions; side effects `none` or `filesystem_read` only | ADR 0031:3-4, :77; `pub const steps` in `prepare_toolchain`, `prepare_inputs`, `prepare_reference_evidence`, `prepare_reference_tokens`, `prepare_actor_evidence` and `accept_clarification_responses` |
+| Required-authority ledger, reconcile, routing, gate | Generic; Plan owns `design_decision` and `policy_predicate`; no Plan seed producer | `src/domain/required_authority.zig:16`, `:59-61`, `:375-378`; seeds only `specification_authority.zig`, `source_preservation.zig` |
+| Clarification registry, `PNN` IDs, forms, refresh | Generic for S/P/T; an invalid closed form blocks before any model call (E7 stage 1); a valid closed form or `cancel` is authenticated and accepted before refresh, by code that reads no stage (E7 stage 4; PD3); refresh rejects an unauthenticated answer; progress ignores the stage (§4) | `src/domain/clarification_inputs.zig:27`; `src/domain/clarification_acceptance.zig:11-21`; `src/domain/clarification_refresh.zig:54-61`, `:66-74`, `:106-112`; SPEC01 §5 E7 |
+| Authentication chain and actor-evidence registry | Built for Spec clarification answers: the invoking OS account, a runner-issued single-use lease, evidence in `state/actor-evidence.json`; ADR 0025 scopes it to Specify | 13-05:381-497, :422-425; `src/actions/clarification/authenticate_actor.zig`; 24-workflow-state.md:19-22; ADR 0025:6-7, :337-342 (Decisions 1 to 4) |
 | Toolchain capture and registered policies | Generic; two policies, naming rules only | `src/composition/toolchain_policy_registry.zig:6-22`; `src/domain/toolchain.zig:40-46` |
 | Workspace filesystem policy | Resolved at startup | `runInProjectWithRegistry` in `src/composition/root.zig`; `src/adapters/filesystem/workspace_path_policy.zig:1` |
-| Principle capture | Generic, persisted, read by the Spec records request only (Z_SPEC01 Q17); bounded by engine constants | `spec.workflow.yaml` step `principles`; 09-configuration.md:337; 13-01:430-432 |
+| Principle capture | Generic, persisted, read by the Spec records request only (Z_SPEC01 Q17); bounded by engine constants | `spec.workflow.yaml` step `principles`; 09-configuration.md:336; 13-01:430-432 |
 | `spec.md` codec | Renders and parses; used only in Spec publication, on a document projected from run values (PD4) | `src/domain/specification_markdown.zig:14`, `:101`; `validate_specification_rendering.zig:13-20`; `project_specification_document.zig:9` |
-| Stored Spec state readback | Validates from the state file, the installed definitions and the Unicode normalizer, with no model request; keeps the reference directory | `specification_state.zig:45-72`, `:74-79`; `src/domain/workflow_registry.zig:28-32`; `src/domain/reference_snapshot.zig:10`; 24-workflow-state.md:64-65 |
+| Stored Spec state readback | Validates from the state file, the installed definitions and the Unicode normalizer, with no model request; keeps the reference directory | `specification_state.zig:45-72`, `:74-79`; `src/domain/workflow_registry.zig:28-32`; `src/domain/reference_snapshot.zig:10`; 24-workflow-state.md:68-71 |
 | Input stage | Thirteen typed steps; ten read no reference argument | `src/actions/specify/prepare_inputs.zig:154-157`; the three reference steps, `:172-184` |
-| Output writer | Generic `publish-workflow-output`: the whole set is validated first, its read preconditions are rechecked before each replacement, and completion state is written last | `src/domain/workflow_output.zig:9-16`, `:33-45`; `src/adapters/filesystem/workflow_output.zig:40-83`; 25-publication.md:28-31, :42 |
+| Output writer | Generic `publish-workflow-output`: the whole set is validated first, its read preconditions are rechecked before each replacement, and completion state is written last | `src/domain/workflow_output.zig:11-23`, `:40-59`; `src/adapters/filesystem/workflow_output.zig:40-83`; 25-publication.md:28-31, :43 |
 | Bounded no-follow directory scan | Root-generic; two users; prunes nothing before descent | `src/adapters/filesystem/directory_inventory.zig:8-35`; users `src/adapters/filesystem/principle_source.zig:7`, `src/adapters/filesystem/reference_corpus_source.zig:42` |
 | Request-owner and state ID types | Declared, with `plan_unit` in the owner unions; never built in production | `src/domain/model_request_identity.zig:15-19`, `:53-60`, `:67-88` |
 | Log events and the request debugger | Generic; events carry a `plan` stage, and the debugger keys calls by lineage, not by workflow | `src/domain/telemetry.zig:156`; `src/debugger/app.js:6-14` |
-| Offline proof of a workflow | Generic: the production composition with a scripted transport, fixture definitions with test operations, and request projection. Non-Spec definitions already run this way; none has model-backed operations of its own | `test/harness/integration/tests.zig`, test "an offline Spec run of each development case reaches publication through the production composition and the harness oracle"; `test/integration/workflow_tests.zig`, the `hello` definition and the `test.propose-extraction` operations; design/harness/e2e.md:741-775 |
+| Offline proof of a workflow | Generic: the production composition with a scripted transport, fixture definitions with test operations, and request projection. Non-Spec definitions already run this way; none has model-backed operations of its own | `test/harness/integration/tests.zig`, test "an offline Spec run of each development case reaches publication through the production composition and the harness oracle"; `test/integration/workflow_tests.zig`, the `hello` definition and the `test.propose-extraction` operations; design/harness/e2e.md:765-800 |
 
 ## 4. What is missing
 
@@ -102,20 +106,20 @@ Each item has no code; the owner column names where its contract is.
 
 | Missing | Owner | Note |
 | --- | --- | --- |
-| Repository discovery, project IDs, file registry, repository facts | §10.2, §18.2; 13-01:454-462, 13-06:17-20 | No adapter reads the target project, and no capability permits it (`src/domain/workflow_capability.zig:3-15`). The scan in §3 walks every directory, so a project with `node_modules` reaches its limits; §18.2 prunes before descent (18-plan.md:97-102) |
-| File kinds, path-intent options, name transforms, candidates, file grants | §10.3, §11; 13-05:500-503, 13-06:28-35 | Not in the policies (§3), and §10's richer fields aren't accepted YAML (10-toolchain-presets.md:13-17); PD7 |
-| Command registry | §10.4; 13-01:464-492 | 13 capabilities, none for processes (`workflow_capability.zig:3-15`); running a command is Implement's (13-07:67); PD14 |
-| Plan's required-decision seeds | §18.1 (18-plan.md:30-31, :40-43) | Only Spec's projections produce seeds (§3), and principle prose is never compiled into a validator (09-configuration.md:341); PD12 |
-| Reading the published `spec.md` in a later invocation and comparing it with stored state | §18.1, §23.1; 13-05:462-465 | The codec exists (§3), but no later invocation reads `spec.md`, and a Spec rerun overwrites it unread (`src/adapters/filesystem/workflow_output.zig:83`; 23-rendering.md:239-240) |
-| Authentication chain and actor-evidence registry | ADR 0025; 13-05:356-448 | Not built (SPEC01 §5 E7); ADR 0025 covers Spec answers only |
-| Review, approval and review-decision records | §14.5, §24.5; 13-05:510-518 | No approval type or state |
+| Repository discovery, project IDs, file registry, repository facts | §10.2, §18.2; 13-01:454-462, 13-06:17-20 | No adapter reads the target project, and none of the 14 capabilities permits it (`src/domain/workflow_capability.zig:3-16`). The scan in §3 walks every directory, so a project with `node_modules` reaches its limits; §18.2 prunes before descent (18-plan.md:97-102) |
+| File kinds, path-intent options, name transforms, candidates, file grants | §10.3, §11; 13-05:548-551, 13-06:28-35 | Not in the policies (§3), and §10's richer fields aren't accepted YAML (10-toolchain-presets.md:13-17); PD7 |
+| Command registry | §10.4; 13-01:464-492 | 14 capabilities, none for processes (`workflow_capability.zig:3-16`); running a command is Implement's (13-07:67); PD14 |
+| Plan's required-decision seeds | §18.1 (18-plan.md:30-31, :40-43) | Only Spec's projections produce seeds (§3), and principle prose is never compiled into a validator (09-configuration.md:339-340); PD12 |
+| Reading the published `spec.md` in a later invocation and comparing it with stored state | §18.1, §23.1; 13-05:510-513 | The codec exists (§3), but no later invocation reads `spec.md`, and a Spec rerun overwrites it unread (`src/adapters/filesystem/workflow_output.zig:93`, `:110`; 23-rendering.md:239-240) |
+| Authentication of Plan's actors | ADR 0025 Decision 4; 13-05:558-566 | The chain and registry exist for Spec answers (§3); ADR 0025 leaves Plan- and Tasks-stage clarifications to be decided when those workflows are built (0025:341-342), and the edit lease and review binding are proposed; PD3 |
+| Review, approval and review-decision records | §14.5, §24.5; 13-05:558-566 | No approval type or state |
 | Multi-stage workflow state | §24.1; 13-02:140-151 | One `workflow.json` typed as Spec state, stages `specified` and `spec_clarification_pending` only (`src/domain/specification_state.zig:8`, `:54`) |
 | Plan entry gate | §14.2, §18.1 | `checkClarifications` checks open `S` only and serves Spec (`specification_state.zig:117-124`). The gate also recaptures the reference and routes a change back to Specify (18-plan.md:261-263, :268; 24-workflow-state.md:152) |
 | Plan artifacts and their renderers | §18.5, §23 | Publication targets are Spec's five (`src/domain/workflow_output.zig:6`; `src/domain/workflow_artifact_registry.zig`) |
-| Research evidence and dependency registries | §18.2 (18-plan.md:151-160); dependencies, 12-model-boundary.md:183-187 | No configuration member (09-configuration.md:57-62) |
-| AST parsing and import resolution | §10.5; 18-plan.md:90 | Parser and tree-sitter libraries are a deferred choice (design.md:1189), and a production dependency needs an accepted ADR (AGENTS.md "Zig implementation expectations"); PD7 |
-| Plan workflow definition, prompts, schemas and contexts | ADR 0003; ADR 0034 "What waits" | `design/workflows/` holds Spec's only, and none is written before the gate (0034:32-36) |
-| Plan invocation contract | §18.1 (18-plan.md:8-11); ADR 0010 | §18.1 names only the feature directory. The registered contracts take a feature and a reference (`specify-invocation`, `src/application/specify_invocation_runner.zig:47-53`; `parse-specify-invocation`, `src/actions/specify/parse_specify_invocation.zig:7`; `src/composition/native_workflow_operations.zig:65-66`) or nothing (`core.empty-invocation`, `src/composition/core_workflow_operations.zig:5`). The stored snapshot keeps the reference directory (§3), where a feature-only contract can read it |
+| Research evidence and dependency registries | §18.2 (18-plan.md:151-160); dependencies, 12-model-boundary.md:192-196 | No configuration member (09-configuration.md:56-61) |
+| AST parsing and import resolution | §10.5; 18-plan.md:90 | Parser and tree-sitter libraries are a deferred choice (design.md:1183), and a production dependency needs an accepted ADR (AGENTS.md "Zig implementation expectations"); PD7 |
+| Plan workflow definition, prompts, schemas and contexts | ADR 0003; ADR 0034 "What waits" | `design/workflows/` holds Spec's only, and none is written before the gate (0034:23) |
+| Plan invocation contract | §18.1 (18-plan.md:8-11); ADR 0010 | §18.1 names only the feature directory. The registered contracts take a feature and a reference (`specify-invocation`, `src/application/specify_invocation_runner.zig:47-53`; `parse-specify-invocation`, `src/actions/specify/parse_specify_invocation.zig:7`; `src/composition/native_workflow_operations.zig:68-69`) or nothing (`core.empty-invocation`, `src/composition/core_workflow_operations.zig:5`). The stored snapshot keeps the reference directory (§3), where a feature-only contract can read it |
 
 **Shared code closed to Spec today.** A second workflow extends these, so each is a shared-code
 change, not a Plan-local one:
@@ -123,19 +127,20 @@ change, not a Plan-local one:
 | Closed set | Where | A second workflow adds |
 | --- | --- | --- |
 | Data keys | `src/domain/pipeline.zig:4`; one closed enum by decision (SPEC01 §8, C20) | Its keys |
-| Native operations with their ports, bindings and data schemas | `src/composition/native_workflow_operations.zig:61-172`, `:182`, `:330-358`, `:361`; `Runtime`'s wiring in `src/composition/root.zig` | A field and an initializer for each operation, its ports and its schemas: about 8 production files for one operation with one new key (SPEC01 §10.3 C22) |
-| Operation errors | `src/domain/operation_error.zig:56-96` | Its error sets |
-| Validation diagnostics and repair observations | `src/domain/candidate_validation_diagnostic.zig:9-17`; readers `src/application/candidate_validation_diagnostics.zig:6-59`, `src/application/candidate_repair_observations.zig:8` | A variant and a probe for each validator. Until then a Plan validator's rejection emits no `validation.failed` event (`src/application/workflow_pipeline_runner.zig:823-830`) |
-| Outcome association | `src/domain/workflow_outcome_association.zig:274-283`; `src/application/workflow_outcome_binding.zig:199-214` | Readers for its units' routes, and publication permission, which only a clarification subject has |
+| Native operations with their ports, bindings and data schemas | `src/composition/native_workflow_operations.zig:61-184`, `:188`, `:351-380`, `:383`; `Runtime`'s wiring in `src/composition/root.zig` | A field and an initializer for each operation, its ports and its schemas: about 8 production files for one operation with one new key (SPEC01 §10.3 C22) |
+| Operation errors | `src/domain/operation_error.zig:60-101` | Its error sets |
+| Validation diagnostics and repair observations | `src/domain/candidate_validation_diagnostic.zig:9-17`; readers `src/application/candidate_validation_diagnostics.zig:6-59`, `src/application/candidate_repair_observations.zig:8` | A variant and a probe for each validator. Until then a Plan validator's rejection emits no `validation.failed` event (`src/application/workflow_pipeline_runner.zig:846-857`) |
+| Outcome association | `src/domain/workflow_outcome_association.zig:275-284`; `src/application/workflow_outcome_binding.zig:199-214` | Readers for its units' routes, and publication permission, which only a clarification subject has |
 | Text fields at the model boundary | The 32-tag `text_field_policy.Field` (SPEC01 §10.3 C23) | One enum per owner, built with Plan's first text field (C23, deferred 21 November 2026) |
-| Packet guidance | One closed `packet-guidance/v7` whose keys are native enums (ADR 0016:137-143) | Its keys |
-| Repair owners | `src/domain/repair_owner.zig:72-85`; `src/application/repair_workflow.zig:172-256` | §3 |
+| Packet guidance | One closed `packet-guidance/v7` whose keys are native enums (ADR 0016:114-122) | Its keys |
+| Repair owners | `src/domain/repair_owner.zig:72-85`; `src/application/repair_workflow.zig:169-271` | §3 |
 | Invocation and inputs | `prepare-inputs` requires the Spec invocation and is the only producer of the feature directory, artifact paths and clarification inputs (`src/actions/specify/prepare_inputs.zig:87-93`), which feature logging requires (`src/application/feature_logging_workflow.zig:16`) | A feature-only invocation and producer (§3) |
-| State capture and parser | One `workflow_state` read, bounded by Spec's limit (`src/adapters/filesystem/feature_input_source.zig:33`); the parser accepts two Spec stages (`specification_state.zig:54`) | Its own state read. PD6's recommendation leaves Spec's parser unchanged |
-| Publication targets | `src/domain/workflow_output.zig:6`, `:34`; `src/domain/workflow_artifact_registry.zig:14`, `:42-50` | Its artifacts and paths |
-| Policy profiles and capabilities | Only `core.specification-output@1` permits `feature-output-write` (`native_workflow_operations.zig:362-365`); a capability derives from a port type through one closed table (`src/application/workflow_operation_binding.zig:73-99`) | A profile and a project-read capability |
-| Clarification progress | Reports `needs_user` for an open record of any stage (`clarification_refresh.zig:54-59`). Spec routes that to its pending publication (`design/workflows/spec.workflow.yaml:820-822`), which collects only open `S` records and rejects an empty set (`src/domain/incomplete_specification.zig:26`, `:46`). So with an open `PNN` and no open `S`, a Spec rerun ends `failed` (`spec.workflow.yaml:935-937`), although only an open `S` stops Spec completing (`specification_state.zig:117-124`) and a reference change returns through Specify (18-plan.md:268) | Progress scoped by stage (§9 Phase 1) |
-| Feature log retention | A run validates and prunes the feature's prior-run segments by the identity recorded in them, and invalid history blocks it (ADR 0026:60-83; 26-security.md:243-245). Every run so far found only Spec's | A Plan run beside Spec's logs, and a Spec rerun beside Plan's; neither is exercised (§9 Phases 2 and 6) |
+| State capture and parser | One `workflow_state` read, bounded by Spec's limit (`src/adapters/filesystem/feature_input_source.zig:48`); the parser accepts two Spec stages (`specification_state.zig:54`) | Its own state read. PD6's recommendation leaves Spec's parser unchanged |
+| Publication targets | `src/domain/workflow_output.zig:6`, `:34`; `src/domain/workflow_artifact_registry.zig:15`, `:42-51` | Its artifacts and paths |
+| Policy profiles and capabilities | Only `core.specification-output@1` permits `feature-output-write` (`native_workflow_operations.zig:384-388`); a capability derives from a port type through one closed table (`src/application/workflow_operation_binding.zig:73-99`) | A profile and a project-read capability |
+| Clarification progress | Reports `needs_user` for an open record of any stage (`clarification_refresh.zig:54-61`). Spec routes that to its pending publication (`design/workflows/spec.workflow.yaml:865-867`), which collects only open `S` records and rejects an empty set (`src/domain/incomplete_specification.zig:26`, `:46`). So with an open `PNN` and no open `S`, a Spec rerun ends `failed` (`spec.workflow.yaml:980-982`), although only an open `S` stops Spec completing (`specification_state.zig:117-124`) and a reference change returns through Specify (18-plan.md:268) | Progress scoped by stage (§9 Phase 1) |
+| Clarification acceptance | Authenticates and accepts every closed or cancelled submitted form, whatever its stage (`clarification_acceptance.zig:11-21`, `:24-29`), where ADR 0025 covers Specify only (0025:341-342). No `P` form exists yet, so no run has shown it | Acceptance scoped by stage (§9 Phase 1; PD3) |
+| Feature log retention | A run validates and prunes the feature's prior-run segments by the identity recorded in them, and invalid history blocks it (ADR 0026:25-59, :80-92; 26-security.md:243-245). Every run so far found only Spec's | A Plan run beside Spec's logs, and a Spec rerun beside Plan's; neither is exercised (§9 Phases 2 and 6) |
 | Reserved names | `core.safety@1` reserves Spec's five artifact names (`toolchain_policy_registry.zig`) | Plan's artifact names |
 | Architecture rules | In `src/architecture_test.zig`: stage-module prefixes and their recorded importers (`spec_stage_prefixes`, `generic_importers_of_spec_stages`); the child-bindings list (`child_bindings_files`); a test for each stage action ("the prepare-inputs stage action obeys ADR 0031's stage rules" and its siblings); the toolchain's two readers ("the valid toolchain has one producer and is required only by the two stages that read the toolchain") | Its prefixes and rules; a third toolchain reader (PD7) |
 | Packaged smoke test | Installs and runs the Spec definition (`test/packaging/smoke.zig:324-342`) | The Plan definition |
@@ -147,24 +152,25 @@ change, not a Plan-local one:
 
 - **PD1. Model review of plan output.**
   - §18 has one: 18-plan.md:289 and :307. §12.6 offers a generic model operation "if desired"
-    (12-model-boundary.md:350-351), and §21.6 lists the judgments that stay model-assisted or
+    (12-model-boundary.md:359-360), and §21.6 lists the judgments that stay model-assisted or
     human-reviewed (21-validation.md:113-126).
   - ADR 0023 removed post-generation review for Spec and says "no other review policy
-    exists" (0023:46, :60-62).
+    exists" (0023:12, :62-64).
   - The 26 October source review caught 1 of 28 defects (Z_SPEC01 "Decisions that changed
     nothing", Link checks).
   - §18's semantic-review wording stays until the gate, because ADR 0034 bars Plan-specific
-    design edits (0034:32-36), so it changes only with the ADR that records PD1.
+    design edits (0034:18-24), so it changes only with the ADR that records PD1.
   - **Recommended:** no model review; the semantic remainders rest on the user at plan review
-    and on adjudication, as Spec's rest on the reviewer of `spec.md` (ADR 0023:36-40). PD16
+    and on adjudication, as Spec's rest on the reviewer of `spec.md` (ADR 0023:17-22). PD16
     makes deterministic the applicability choice §18.5's review would challenge. Amends
     18-plan.md:289 and :307.
 - **PD2. How approval happens.**
-  - The review operation "waits" (14-orchestration.md:168-169).
-  - But publication ends the run (25-publication.md:35-36; ADR 0018:74-75) with `ok` or
-    `needs_user` as its only outcomes (25-publication.md:37-38), and `needs_user` saves no
-    continuation (ADR 0009:74). In non-interactive use approval arrives through "an explicit
-    API/CLI approval event or a deliberately selected policy profile" (14-orchestration.md:185).
+  - The review operation "waits" (14-orchestration.md:165-166).
+  - But publication ends the run (25-publication.md:35-36; ADR 0018:76-77) with `ok`,
+    `needs_user` or `cancelled` as its only outcomes, the last only for an accepted user
+    `cancel` (25-publication.md:37-41), and `needs_user` saves no continuation (ADR 0009:65).
+    In non-interactive use approval arrives through "an explicit API/CLI approval event or a
+    deliberately selected policy profile" (14-orchestration.md:182).
   - No invocation carries an approval, and `plan_review_pending` appears only at
     18-plan.md:345 and :363. §18.7 calls `plan` complete only once the plan state has explicit
     approval (18-plan.md:351, :362).
@@ -174,12 +180,12 @@ change, not a Plan-local one:
   - The Tasks gate is a plan approval's first reader (19-tasks.md:8-9; 24-workflow-state.md:132);
     Implement needs it too (invariant 17, design.md:159).
   - **Recommended:** a Plan run publishes and ends at `plan_review_pending` with the outcome
-    `ok`; `needs_user` stays the clarification pause (`src/main.zig:35-42`), and "complete" in
+    `ok`; `needs_user` stays the clarification pause (`src/main.zig:34-41`), and "complete" in
     §18.7 describes the stage, not the run. Approval or rejection is a later invocation of a
     separate workflow definition, built with Tasks together with the blocking Tasks gate. Plan's
-    first slice then needs no review records, review units or authentication. Moves plan review
-    and the Tasks gate from Increment 3 to Increment 4 (design.md:742, :744-749), and amends
-    18-plan.md:351-363.
+    first slice then needs no review records, review units or review authentication. Moves plan
+    review and the Tasks gate from Increment 3 to Increment 4 (design.md:744, :746-751), and
+    amends 18-plan.md:351-363.
 - **PD4. Edited `spec.md`.**
   - §18.1 reads an edit back as authority (18-plan.md:52-79; 24-workflow-state.md:153).
   - A Spec rerun overwrites it (§4), so no edit becomes authority anywhere yet, although
@@ -205,44 +211,45 @@ change, not a Plan-local one:
     - The reread before publication (18-plan.md:332-336) is the output writer's read
       precondition on the bytes the gate captured (§3), not a second parse.
     - Any Spec stage but `specified` blocks, which covers ADR 0041's `spec_incomplete` if it is
-      built (24-workflow-state.md:81-87).
+      built (ADR 0041:104, :244).
 
     That defers the edit path, its change sets and its authentication. The trade-off: a user
     who edits `spec.md`, as invariant 16 invites, is stopped at Plan, and the only way past is
     a Spec rerun, which overwrites the edit (23-rendering.md:239-240). Amends 18-plan.md:21,
     :52-79 and :332-333, 23-rendering.md:104-105, 24-workflow-state.md:125 and
-    14-orchestration.md:125; replaces the typed comparison §13 proposes (13-05:462-465); and
-    defers invariant 16's edits and criterion 20's round trip (design.md:979-982).
+    14-orchestration.md:122; replaces the typed comparison §13 proposes (13-05:510-513); and
+    defers invariant 16's edits and criterion 20's round trip (design.md:977-980).
   - **What the render needs.** No code renders `spec.md` from stored state: the document is
     projected from run values (`project_specification_document.zig:9`;
     `specification_projection.zig:222`). The stored snapshot keeps the same inputs, reference
-    records and passive records (`reference_snapshot.zig:8-18`; `reference_support.zig:25-31`),
+    records and passive records (`reference_snapshot.zig:8-20`; `reference_support.zig:47-49`),
     but not the token grammar that the projection's passive registry carries
     (`src/domain/passive_literals.zig:22-23`). The stored-state projection is new code at that
     owner, with its tests.
 - **PD5. What a `PNN` pause persists.**
   - §18.4 publishes a successor input state and ID ledger (18-plan.md:252-257) and enters
-    `plan_clarification_pending` (24-workflow-state.md:92-94; 12-model-boundary.md:531-533).
-  - The accepted persistence exception covers clarifications and Spec's pending set only (ADR
-    0009:67-69; ADR 0017), and "Nothing from the paused execution is reused"
-    (24-workflow-state.md:99).
+    `plan_clarification_pending` (24-workflow-state.md:89-91; 12-model-boundary.md:540-542).
+  - The accepted persistence exception covers clarifications, Spec's pending set and a
+    cancelled run's forms, actor evidence and clarification state only (ADR 0009:58-60,
+    :104-105; ADR 0017; ADR 0025), and "Nothing from the paused execution is reused"
+    (24-workflow-state.md:96).
   - The pause ledger guards IDs that reach no authority: a `PNN` can't cite uncommitted
     records (18-plan.md:258-259). Spec's pending state carries its ID ledger because it
-    replaces the state that held the ledger (ADR 0017:32-33, :48-50).
-  - `clarifications.json` is one registry across executions (24-workflow-state.md:114-115)
+    replaces the state that held the ledger (ADR 0017:26-27, :51-52).
+  - `clarifications.json` is one registry across executions (24-workflow-state.md:111-113)
     that both workflows publish. A run rewrites only its own workflow's unresolved forms
-    (23-rendering.md:260-262).
+    (23-rendering.md:256-258).
   - **Recommended:** forms and `clarifications.json` only; Plan is pending while a `P` record
     is open, and no state is written. A plan published earlier stays on disk with its state
     through the pause; the open `P` record is what stops Tasks and approval
-    (24-workflow-state.md:105-108). The alternative writes a pending Plan state last, as Spec's
-    pause does to revoke its completion (ADR 0017:32-33); that state would have to carry Plan's
+    (24-workflow-state.md:102-105). The alternative writes a pending Plan state last, as Spec's
+    pause does to revoke its completion (ADR 0017:26-27); that state would have to carry Plan's
     ledgers. Amends 18-plan.md:252-257,
-    24-workflow-state.md:92-94 and 12-model-boundary.md:531-533.
+    24-workflow-state.md:89-91 and 12-model-boundary.md:540-542.
 - **PD6. State layout.**
-  - One `workflow.json` per feature (24-workflow-state.md:15-20) is typed as Spec state today.
+  - One `workflow.json` per feature (24-workflow-state.md:15-18) is typed as Spec state today.
   - The specification Plan compared against is stored in `PlanState` according to
-    14-orchestration.md:127 and 23-rendering.md:199-200, but in `PlanInputAuthorityState`
+    14-orchestration.md:124 and 23-rendering.md:199-200, but in `PlanInputAuthorityState`
     according to 18-plan.md:338-342 and 19-tasks.md:9-10 and :13.
   - The repository-fact registry splits the same way: `PlanInputAuthorityState`
     (18-plan.md:127-129) against `PlanState` (20-implement.md:31).
@@ -251,16 +258,17 @@ change, not a Plan-local one:
     (`model_request_identity.zig:53-56`), which an execution-local identity also gives
     (13-01:508-510).
   - §18 adds about ten persisted registries and states (18-plan.md:113-131, :207, :242-244,
-    :297; 24-workflow-state.md:173; 13-05:392-393). No version migrates
-    (24-workflow-state.md:42-43), and Spec's one state contract moved seven times in two weeks,
-    v21 to v28 (ADR 0041:5-17; ADR 0023:164-173); a persisted shape that embeds another
-    contract's goes stale with it.
+    :297; 24-workflow-state.md:173; 13-05:533-538). No version migrates
+    (24-workflow-state.md:46-47), and Spec's one state contract is at v30
+    (`specification_state.zig:8`), two versions past the v28 of 22 November 2026 (Z_SPEC01 "E7
+    stage 4"; ENGINE01 §10); a persisted shape that embeds another contract's goes stale with
+    it.
   - **Recommended:** one Plan state document beside Spec's, with its own version, written last.
     - It holds what later gates and later plan revisions read: the specification it planned
       from, the captured principle registry (24-workflow-state.md:155; Spec's state holds its
       own, `specification_state.zig:21-23`), the gate-sensitive fact values, the file registry
       with its ordinals and retired IDs, the file grants, the plan records, the artifact
-      decisions, its workflow ID (ADR 0003:114-115) and the plan ID ledger, so no retired ID is
+      decisions, its workflow ID (ADR 0003:105-106) and the plan ID ledger, so no retired ID is
       reused (18-plan.md:113-114, :238-244), as Spec persists its ledger
       (`specification_state.zig:18`).
     - Path candidates and review units are rebuilt each run.
@@ -270,7 +278,7 @@ change, not a Plan-local one:
     - The cost: the stale plan views stay on disk, unmarked, until Plan reruns, because a run
       replaces only its own workflow's outputs (23-rendering.md:314).
 
-    Amends §24.1, which allows no other layout (24-workflow-state.md:8-10, :19-20);
+    Amends §24.1, which allows no other layout (24-workflow-state.md:8-10, :23-24);
     24-workflow-state.md:172-175 and 28-testing.md:187-190, which have the changing run write
     its descendants' invalidation; 18-plan.md:227-228 and :242-244 for the candidate and
     review-unit registries; and 18-plan.md:338-342 and 19-tasks.md:13 for the input and output
@@ -285,7 +293,7 @@ change, not a Plan-local one:
   - Without them no planned path can be validated, so the intent's "applicable project
     constraints" (intent.md:35) can't be checked.
   - Four things §10 and §11 require have no owner or conflict with §18:
-    - environments and target platforms (09-configuration.md:176-180, :218-223; invariant 4,
+    - environments and target platforms (09-configuration.md:174-178, :216-221; invariant 4,
       design.md:146), which no accepted schema carries;
     - the semantic name source a name transform consumes (10-toolchain-presets.md:160-163),
       which no section defines;
@@ -312,10 +320,10 @@ change, not a Plan-local one:
       policy-defined command that configuration selects as invariant 13's "preset/config-defined"
       command (design.md:155). The ADR says so or amends the wording.
 
-    Narrows the rule sources of §10.3-10.4 and 09-configuration.md:345-347 to engine policy,
+    Narrows the rule sources of §10.3-10.4 and 09-configuration.md:343-345 to engine policy,
     amends 10-toolchain-presets.md:245-255 for Plan, and for the slice reads invariant 4's
-    configured environment as the project root, setting aside 09-configuration.md:176-180 and
-    :218-223. `valid_toolchain` gains a third reader (F0003:30-32, :255-257; §4).
+    configured environment as the project root, setting aside 09-configuration.md:174-178 and
+    :216-221. `valid_toolchain` gains a third reader (F0003:30-32, :255-257; §4).
 - **PD14. Whether Plan runs commands.**
   - §18.2 builds tool availability (18-plan.md:89-90, :95), and §10.4 exposes a command ID to a
     model only after sandbox validation and a probe, disabling an unsupported one with a reason
@@ -328,23 +336,24 @@ change, not a Plan-local one:
     The trade-off: a tool that is declared but not installed fails at Implement's gate, after
     both approvals, where §10.4's probe would disable it before a model sees its command ID.
     Amends 10-toolchain-presets.md:230-231 and :235 for Plan, and the meaning of "available"
-    in 18-plan.md:318-319, 21-validation.md:83 and design.md:261.
+    in 18-plan.md:318-319 and design.md:263; §21.4's Tasks row (21-validation.md:83) keeps its
+    meaning.
 - **PD15. Which existing files the model sees.**
   - §18.2 builds "current files near requirement-relevant terms" (18-plan.md:91). Matching
     specification words against file names is a word-list heuristic over prose, which AGENTS.md
     "Model output, prompts and evidence" forbids, and as a filter it can hide a file the plan
     needs.
-  - §12 sends no "raw whole-repository listings" (12-model-boundary.md:189) and rejects a
-    choice set above 1,024 members before the request (12-model-boundary.md:162).
+  - §12 sends no "raw whole-repository listings" (12-model-boundary.md:198) and rejects a
+    choice set above 1,024 members before the request (12-model-boundary.md:171).
   - Nothing states discovery's rule for a symlink inside the project or a file that matches no
-    kind, and 09-configuration.md:232 rejects an absent discovery limit that the closed
-    configuration has no member for (09-configuration.md:57-62). §26 treats only model and
+    kind, and 09-configuration.md:230 rejects an absent discovery limit that the closed
+    configuration has no member for (09-configuration.md:56-60). §26 treats only model and
     reference content as untrusted data and redacts only the run's own credentials
-    (26-security.md:8-15, :139-144).
+    (26-security.md:8-15, :137-141).
   - **Recommended:** send the complete typed file registry of the selected project's source and
     test roots (file IDs, normalized paths, kinds), with protected, generated and dependency
     roots pruned before descent; the model selects files by ID. The decision includes:
-    - reading 12-model-boundary.md:189 as not covering that registry, which is typed and
+    - reading 12-model-boundary.md:198 as not covering that registry, which is typed and
       limited to those roots;
     - no file body in any request: facts carry dependency names and versions and script names.
       §26 then needs no new rule for secrets in project files, and its untrusted-data rule
@@ -354,39 +363,46 @@ change, not a Plan-local one:
       left out (18-plan.md:103-104);
     - discovery's limits are engine constants, as principle capture's are (§3);
     - a registry over the 1,024 bound blocks with its reason, and a provider size failure
-      follows the workflow's outcome transitions, as for principles (09-configuration.md:337).
+      follows the workflow's outcome transitions, as for principles (09-configuration.md:335).
 
     For the development cases it is a few files. Amends 18-plan.md:91 and
-    09-configuration.md:232, and fixes the reading of 12-model-boundary.md:189.
+    09-configuration.md:230, and fixes the reading of 12-model-boundary.md:198.
 
-**Settle with E7.**
+**Settle when `PNN` answers are built.**
 
 - **PD3. Who authenticates.**
   - Spec edits, `PNN` answers and review decisions all need an authenticated actor
-    (18-plan.md:63-67, :269-270; 14-orchestration.md:173-176).
-  - ADR 0025 covers Spec answers only (0025:14-15, :180-181), and nothing says how the
-    `specification_edit` lease is issued.
-  - The authentication chain isn't built, and SPEC01 §5 E7 records recommendations for it,
-    none decided.
-  - With PD2 and PD4, only `PNN` answers remain in the first slice. Like Spec's, they wait for
-    E7 (§7); until then a `PNN` closes only through authority resolution (18-plan.md:269-270).
+    (18-plan.md:63-67, :269-270; 14-orchestration.md:170-173).
+  - The chain is built for Spec answers: the invoking account, a runner-issued single-use
+    lease and the actor-evidence registry (§3; SPEC01 §5 E7). ADR 0025 scopes it to Specify and
+    leaves Plan- and Tasks-stage clarifications to be decided when those workflows are built
+    (0025:341-342); its approval doesn't choose the provider for plan or task review approvals
+    (0025:6-7). Nothing says how the `specification_edit` lease is issued.
+  - Acceptance reads no stage (`clarification_acceptance.zig:11-21`), so a Spec run would
+    likely authenticate and accept a closed `P` form, outside ADR 0025's scope (not run; no `P`
+    form exists).
+  - With PD2 and PD4, only `PNN` answers remain in the first slice. Until ADR 0025 extends to
+    them, a `PNN` closes only through authority resolution (18-plan.md:269-270).
   - **Recommended:** extend ADR 0025 Decision 1, where the invoking account is the actor, to
-    `PNN` answers with E7, and to review decisions when approval is built.
+    `PNN` answers accepted by a Plan run, and to review decisions when approval is built. Each
+    workflow accepts only its own stage's forms (§9 Phase 1).
 
 **Settle during Plan design.**
 
 - **PD8. Principles.**
   - 18-plan.md:128-129 says "principle selection" and :152 "selected".
-  - ADR 0015:25-26 says any filter needs its own decision, and 09-configuration.md:336-337
+  - ADR 0015:29 says any filter needs its own decision, and 09-configuration.md:334-335
     sends every chunk, untruncated.
   - The case principles are 28,067 and 29,399 bytes (each case's `principles/*.md`;
-    hello-world's sit under `node-vitest/`), and carrying them added about 5.5k to 6k tokens to
-    Spec's records request (Z_SPEC01 Q17).
+    hello-world's sit under `node-vitest/`). In ENGINE01's set they are an estimated 9,700 to
+    11,300 tokens and 68% of the characters of Spec's records request (ENGINE01 §4), above Z_SPEC01
+    Q17's earlier 5.5k to 6k.
   - The budget is one total for an execution (ADR 0011), 125,000 tokens in the case
-    configuration (`test/e2e/wf-001-hello-world/.sddtoolkit.json:6`), so about 20 carrying
-    requests use it all before any other input or output. The closing set's whole Spec runs
-    used 18.7k to 24.1k tokens (Z_SPEC01 "Closing set"); the twelve runs retained from 22
-    November 2026 used 38,397 to 106,828 (`evaluations/e2e/2026-11-22T*/measures.json`,
+    configuration (`test/e2e/wf-001-hello-world/.sddtoolkit.json:6`), so about 11 to 13
+    carrying requests use it all before any other input or output (ENGINE01 §4 "Other
+    workflows", §10 item 8). The closing set's whole Spec runs used 18.7k to 24.1k tokens
+    (Z_SPEC01 "Closing set"); the twelve runs SPEC01 §1 retained from 22 November 2026, set B
+    and the Q26 follow-up's set, used 38,580 to 105,999 (`evaluations/e2e/<run>/measures.json`,
     `actual_tokens`).
   - **Recommended:** every chunk, to every Plan model request. That holds only while the
     request count stays well under that bound, so it is settled with PD18's split. The
@@ -396,7 +412,7 @@ change, not a Plan-local one:
     under an older principle registry stale at Plan's gate? Spec's records request reads the
     principles, and Spec state stores the registry it captured
     (`specification_state.zig:21-23`). The design says a changed registry invalidates plan and
-    task approvals and doesn't regenerate unchanged business content (09-configuration.md:368-370;
+    task approvals and doesn't regenerate unchanged business content (09-configuration.md:366-368;
     24-workflow-state.md:155). **Recommended:** not stale. Plan recaptures the registry and
     judges current policy itself (18-plan.md:32-35).
 - **PD9. External evidence and dependencies.**
@@ -409,40 +425,40 @@ change, not a Plan-local one:
     (§8), so a story that needs more blocks. Amends 18-plan.md:151-160, :173 and :314 for the
     first slice.
 - **PD10. Rejection.**
-  - Regenerate the mapped units (18-plan.md:349), or the whole plan (design.md:742;
+  - Regenerate the mapped units (18-plan.md:349), or the whole plan (design.md:744;
     25-publication.md:53-54)?
   - Mapping free-text feedback to units needs a model or a per-unit review form
-    (14-orchestration.md:179-183).
+    (14-orchestration.md:176-180).
   - **Recommended:** whole plan, from `start`, with the feedback as input, built with approval
     (PD2); it needs no `PlanReviewUnitRegistry`. It can change parts the user accepted; a
     per-unit review form is the alternative if that matters. Amends 18-plan.md:242-244 and :349,
-    14-orchestration.md:179-183 and 23-rendering.md:213.
+    14-orchestration.md:176-180 and 23-rendering.md:213.
 - **PD11. Startup or graph steps.**
   - Discovery and the command registry are bootstrap work in 10-toolchain-presets.md:130-132
-    and :235, and principle capture in 09-configuration.md:358-360. ADR 0003 puts setup beyond
-    the startup graph in the selected workflow's graph (ADR 0003:94-96), invariant 27 fixes
+    and :235, and principle capture in 09-configuration.md:356-358. ADR 0003 puts setup beyond
+    the startup graph in the selected workflow's graph (ADR 0003:84-85), invariant 27 fixes
     startup at two routines (design.md:176-181), and principle capture is already a graph step
     (§3). F0003 leaves repository discovery and command authorization as separate work
     (F0003:7-8).
   - §14 names orchestrators for the stage gate, authority reconciliation and the clarification
     lifecycle (14-orchestration.md:119-131, :332-334). Spec runs the same work as YAML subgraphs
     (`spec.workflow.yaml`, `authority-gate` and `clarification-output`), as ADR 0005 requires of
-    sequencing (ADR 0005:74-77).
+    sequencing (ADR 0005:37).
   - §27 activates the feature log "after deterministic reference preflight"
     (27-observability.md:39-41), which Plan doesn't have.
   - **Recommended:** graph steps, each deterministic sequence one stage action (ADR 0031), as
     `prepare-toolchain` is; the gate, reconciliation and clarification work are YAML subgraphs,
     as Spec's are; and the feature log activates after the inputs stage and before the gate's
     checks, so a refused entry is logged. Amends 10-toolchain-presets.md:130-132 and :235,
-    09-configuration.md:358-360 and 27-observability.md:39-41.
+    09-configuration.md:356-358 and 27-observability.md:39-41.
 - **PD12. Validators, ledger and required decisions.**
   - §21.3 lists 12 Plan validators and §18.6 lists 24 checks; 21-validation.md:6 calls §21
     normative. Each of the twelve maps to one or more of the 24.
   - The obligation ledger is a Plan input (18-plan.md:25) but a Tasks deliverable
-    (design.md:746; 19-tasks.md:20).
+    (design.md:748; 19-tasks.md:20).
   - Nothing says which planning decisions are required (§4). Requiredness is closed: it comes
     "only from a versioned schema, compiler-locked ownership/reconciliation policy, accepted
-    canonical record, or explicit obligation" (12-model-boundary.md:692-693).
+    canonical record, or explicit obligation" (12-model-boundary.md:703-704).
   - **Recommended:** §18.6 is the complete list, and §21.3 keeps the semantic remainders.
     - The ledger is a function of the specification, built by each stage that needs it and
       persisted by none; Tasks adds the plan's entries (19-tasks.md:20-33).
@@ -451,25 +467,26 @@ change, not a Plan-local one:
       and for each specification obligation.
     - A need the model raises is admitted only as the clarification candidate of its unit's
       slot (18-plan.md:181-185); it never creates a slot, and a gap with no registered slot is
-      an administrative block (`required_authority.zig:352-356`).
+      an administrative block (`required_authority.zig:375-378`).
     - With no review (PD1), a gap becomes a `PNN` through a unit's own need or a descriptor
       question, which serves only a `missing` or `stale` gap (13-05:32-38).
-    - Principle compliance stays a cited, model-assisted judgment (09-configuration.md:339)
+    - Principle compliance stays a cited, model-assisted judgment (09-configuration.md:337)
       that adjudication scores.
     - A new requirement kind brings its schema, ownership entry, reconciliation policy,
-      fixtures and stage-gate tests (12-model-boundary.md:747).
+      fixtures and stage-gate tests (12-model-boundary.md:758).
 
     Amends 18-plan.md:25, which makes the ledger a Plan input.
 - **PD13. Shared items: upstream rework, repair owners and the renderer version.**
   - Upstream rework is settled, decided 15 November 2026: a gap an earlier stage owns takes
     §24.5's rework route and never becomes a form (Z_SPEC01 "Upstream rework";
-    `required_authority.zig:352-356`), so a Spec-owned gap that Plan detects ends the Plan run
+    `required_authority.zig:375-378`), so a Spec-owned gap that Plan detects ends the Plan run
     for Spec rework.
-  - Plan's repair owner enums are deferred to the gate (ADR 0033:375-376).
+  - Plan's repair owner enums are deferred to the gate (ADR 0033:216-219).
   - The renderer version isn't built: Spec state and views record none, and §23.1's version
-    rules remain the target (23-rendering.md:47-51, :99-101). ADR 0036 changed the renderer
-    without a version because "no Plan or Tasks review exists to renew" (ADR 0036:233-234),
-    which stops holding once a plan is published for review.
+    rules remain the target (23-rendering.md:47-51, :99-101). Renderer changes so far needed
+    none, because "No renderer revision exists to change … a rerun regenerates the views"
+    (23-rendering.md:87-89), which stops holding once a plan published for review depends on
+    `spec.md`'s bytes.
   - **Recommended:** the renderer version is built with approval (PD2), as a new Plan state
     version; until then PD4's byte check blocks on any renderer change.
 - **PD16. Artifact applicability.**
@@ -492,12 +509,12 @@ change, not a Plan-local one:
   - §18 leaves open how many quickstart scenarios there are (18-plan.md:317), makes coverage
     mappings and quickstart scenarios separate model units (:177-178), and lets the model
     restate requirement text.
-  - The split also sets the request count, which PD8's principle cost multiplies. Of the twelve
-    runs retained from 22 November 2026 (`zig-out/e2e-spec/2026-11-22T*`), the six loan-renewal
-    specifications each hold five `AC` and one `UO`, with one to three `FR` and one to three
-    `BR`; the six hello-world ones hold three `AC` and two or three `FR`. §18.6 covers business
-    rules and visible states as well (18-plan.md:320-321), and the count varies between runs on
-    one case.
+  - The split also sets the request count, which PD8's principle cost multiplies. Of the six
+    runs from 22 November 2026 still retained (`zig-out/e2e-spec/2026-11-22T06-*`, three per
+    case), the three loan-renewal specifications each hold five `AC` and one `UO`, with one to
+    three `FR` and one to three `BR`; the three hello-world ones hold three `AC` and two or three
+    `FR`. §18.6 covers business rules and visible states as well (18-plan.md:320-321), and the
+    count varies between runs on one case.
   - **Recommended:** §6's split: one quickstart scenario per acceptance criterion and edge
     case; coverage and quickstart from one model answer per obligation, every row in one
     `exact_members` request; requirement text and the technical context rendered by the engine,
@@ -505,25 +522,25 @@ change, not a Plan-local one:
     proposes (intent.md:84-100) at that many times the context, and is decided only on a
     measured set. The decision includes:
     - a missing or repeated row is corrected by resending the whole answer and fails the run
-      when the corrections are spent (ADR 0046:58-60, :92-93), so the publication rate per case
+      when the corrections are spent (ADR 0046:58-60, :67-69), so the publication rate per case
       is this split's guard;
     - an ID outside the offered set is rejected at admission (12-model-boundary.md:100-104), and
       Plan's repair owners serve only defects a schema can't state, where criterion 13 expects
       an atomic repair for every invalid selection (design.md:937-938);
     - a later unit receives earlier units only as typed selections and engine-rendered paths,
-      never their prose (12-model-boundary.md:189);
+      never their prose (12-model-boundary.md:198);
     - path-intent requests carry option and candidate IDs with engine-rendered labels and no
-      examples (12-model-boundary.md:336-337, against 11-path-validation.md:107);
+      examples (12-model-boundary.md:345-346, against 11-path-validation.md:107);
     - a specification record printed in a plan view goes through `spec.md`'s renderer for that
       record, so its bytes match what the user reviewed (23-rendering.md:75-89 scopes the escape
       table to Spec's views);
     - Plan's prose fields are exact-copy `prohibited`, since requirement text is rendered by
       ID, and name a file only by its file ID (text-field-composition.md:41, :53-70;
       18-plan.md:229-230). C23's per-owner field enum carries those roles (§4), and
-      28-testing.md:367 requires the rejected case of an unbound filename in plan prose.
+      28-testing.md:366 requires the rejected case of an unbound filename in plan prose.
 
     Amends 18-plan.md:177-178 and :317 and criterion 13 (design.md:937-938), applies ADR 0046's
-    whole-answer correction where 12-model-boundary.md:342 bars a full-document retry, and adds
+    whole-answer correction where 12-model-boundary.md:351 bars a full-document retry, and adds
     the rendering rule.
 
 **Settle before the first live Plan run:** PD17 (§8).
@@ -531,28 +548,27 @@ change, not a Plan-local one:
 ## 6. Recommended split between engine and model (not decided; PD18)
 
 The operating rule is "if a validator can answer from typed data or executable evidence, do not
-ask the LLM to answer it" (design.md:271). Applied to §18 with the mechanisms that exist:
+ask the LLM to answer it" (design.md:273). Applied to §18 with the mechanisms that exist:
 
 | Plan content | Engine | Model | Mechanism |
 | --- | --- | --- | --- |
 | Feature, date, spec link, IDs, headings, status | All of it | Nothing | Invariant 14 (design.md:156); 18-plan.md:305 |
-| Technical context: language, runtime, test runner, dependencies, scripts, roots | Rendered from repository and policy facts | Nothing; it cites fact IDs | design.md:261; 18-plan.md:137-140 |
+| Technical context: language, runtime, test runner, dependencies, scripts, roots | Rendered from repository and policy facts | Nothing; it cites fact IDs | design.md:263; 18-plan.md:137-140 |
 | Existing files a change touches | The registry (PD15) | Selects file IDs | Integer-choice restriction (12-model-boundary.md:100) |
 | New files | The path, from the policy's kind, root and placement (PD7) | An option and a name source, never a filename | 18-plan.md:197-209 |
-| Coverage: one design and verification record per obligation | Rows listed from the specification's IDs | Each record's content | `exact_members` (12-model-boundary.md:133; ADR 0046): a missing or repeated row is rejected at admission |
+| Coverage: one design and verification record per obligation | Rows listed from the specification's IDs | Each record's content | `exact_members` (12-model-boundary.md:142; ADR 0046): a missing or repeated row is rejected at admission |
 | Quickstart scenarios | One per acceptance criterion and edge case, from the same records | Automated (test-file and command IDs) or manual steps | 18-plan.md:317-319 |
 | Requirement text in plan views: criteria, exact copy, values | Rendered from the specification record by ID | Never restated | 18-plan.md:236-237, :322; ADR 0047; ADR 0038 Decision 7 |
 | `data-model.md` applicability; `contracts/` | Computed (PD16) | The data model's content | ADR 0038 Decision 6 |
 | Research decisions | IDs; fact and source links checked | Decision, rationale, alternatives | 18-plan.md:313 |
-| Principle consideration | Chunk citations checked | Reasoning and any deviation | 09-configuration.md:339 |
+| Principle consideration | Chunk citations checked | Reasoning and any deviation | 09-configuration.md:337 |
 | Approach, minimal change, task-generation approach | Nothing | All of it | 21-validation.md:121 |
 
 - **Restated text is rendered, not generated.** A model that restates a requirement drops or
-  weakens part of it, as Spec's edge-case outcomes did (ADR 0038:375-378; Z_SPEC01 "Next 8").
+  weakens part of it, as Spec's edge-case outcomes did (ADR 0038:369-370; Z_SPEC01 "Next 8").
   The levers that held were engine-composed text (ADR 0047) and a link whose target's text is
-  printed (ADR 0038 Decision 7). This is not the rejected lever, filling a record from its cited
-  source lines (ADR 0038:389-391): Plan prints a linked specification record, never source
-  lines.
+  printed (ADR 0038 Decision 7). This doesn't fill a record from source lines, which ADR 0038
+  rules out (ADR 0038:245-246): Plan prints a linked specification record, never source lines.
 - **Coverage and quickstart share one answer per obligation,** rendered twice, so they can't
   disagree and no obligation is asked twice.
 
@@ -562,11 +578,12 @@ What each engine-track item means for Plan; its status is its owner's.
 
 - **E1 (ADR 0030; Z_SPEC01 E1).** Plan's model requests are `request-model` steps.
 - **E4 (ADR 0033; Z_SPEC01 E4).** Plan's repairs join the four generic operations as owners
-  and variants (ADR 0033:262-264); the Plan owner enums wait for the gate (:375-376).
-- **E2 (ADR 0031).** Four stage actions are built, and every other Spec stage is still a run
-  of single-step actions until its conversion lands (ADR 0031:3-7). Under PD11 Plan's
+  and variants (ADR 0033:50-52); the Plan owner enums wait for the gate (:216-219).
+- **E2 (ADR 0031).** Six stage actions are built, and every other Spec stage is still a run
+  of single-step actions until its conversion lands (ADR 0031:3-4). Under PD11 Plan's
   deterministic sequences are stage actions from the start, so none waits for a conversion.
-- **E7 (ADR 0025; SPEC01 §5 E7).** It gates `PNN` answers (PD3), not the first slice.
+- **E7 (ADR 0025; SPEC01 §5 E7).** Stages 1, 4, 5, 5b, 6a and 7 are built; 6b and the live runs
+  are not. Its chain is what PD3 extends to `PNN` answers, which the first slice doesn't need.
 - **E0 (ADR 0041; SPEC01 §5 E0).** If it is built, `spec_incomplete` blocks Plan at its gate
   (PD4).
 - **C23 (SPEC01 §10.3).** §9 places it in Phase 7, with Plan's first text field (§4).
@@ -574,37 +591,37 @@ What each engine-track item means for Plan; its status is its owner's.
   `root.Runtime`, its development-case offline runs go through the harness's `invoke.run` as
   well, and a failed hook assertion fails its scenario.
 - **Gate.** SPEC01 §1 holds the gate's evidence; the gate stays the user's to declare (ADR
-  0034:67-69).
+  0034:51-53).
 - Nothing in the engine track blocks Plan design; only the gate does.
 
 ## 8. Evaluation gap
 
 - **The harness is Spec-only:**
-  - case `spec-e2e-case/v4`, which requires a reference and Spec's five artifacts
-    (`test/harness/e2e/contracts.zig:6`, `:15`, `:25-28`). The harness passes `--feature` and
-    `--reference` (`test/harness/e2e/invoke.zig:61`), its oracle keeps the specification's bytes
+  - case `spec-e2e-case/v5`, which requires a reference and Spec's five artifacts
+    (`test/harness/e2e/contracts.zig:6`, `:21`, `:31-34`). The harness passes `--feature` and
+    `--reference` (`test/harness/e2e/invoke.zig:64`), its oracle keeps the specification's bytes
     alone (`test/harness/e2e/oracle.zig:46`), and runs are retained under `zig-out/e2e-spec`
     (`test/harness/e2e/cli.zig:5`);
-  - report `spec-e2e-report/v26` (`contracts.zig`): changing a closed member needs a
+  - report `spec-e2e-report/v27` (`contracts.zig`): changing a closed member needs a
     new version (SPEC01 §2 rule 12), and earlier runs need their own build (SPEC01 §1, Retained
     runs). **Recommended:** a Plan report of its own, which leaves Spec's decoder unchanged;
   - adjudication `spec-adjudication-record/v1`, which yields `spec-adjudication/v3`
     (`test/harness/adjudication.zig:13`, `:19`);
   - the E2E gate's mechanics, an intact source and provenance join and zero measured admission
-    escape (acceptance.md:52-54), which are Spec's;
+    escape (acceptance.md:58-60), which are Spec's;
   - measures, which read Spec's response shapes (`test/harness/e2e/measures.zig:27-49`), and
     stage measures, which count `plan_unit` as `other` (`test/harness/baseline/stages.zig:94`);
   - `e2e-call`, which reads a retained case through the Spec contract
-    (`test/harness/call/capture.zig:38`);
+    (`test/harness/call/capture.zig:39`);
   - the evaluation case `evaluation-case/v2`, whose required grading-qualification paths serve
-    only the supplied-spec grader (`test/harness/contracts.zig:21-31`; acceptance.md:113-117,
-    :144). **Recommended:** a Plan evaluation case names its sources and rubric only;
+    only the supplied-spec grader (`test/harness/contracts.zig:21-31`; acceptance.md:119-123,
+    :150). **Recommended:** a Plan evaluation case names its sources and rubric only;
   - the evaluate-e2e and live-e2e skills, and AGENTS.md, which names only Spec's record,
-    `adjudicate-spec` and "published specifications" (AGENTS.md:205-207, :324-325); a Plan
-    record extends that policy text;
-  - "Plan, Tasks and Implement need their own workflow cases" (design/harness/e2e.md:334).
+    `adjudicate-spec` and "published specifications" (AGENTS.md:38, :239, :357); a Plan record
+    extends that policy text;
+  - "Plan, Tasks and Implement need their own workflow cases" (design/harness/e2e.md:333).
 - **Live steps are listed by name** in `build.zig:967` (the steps no automated step may reach),
-  `.claude/settings.json:32-50`, `.claude/hooks/guard-bash.sh:57` and `:67-69`,
+  `.claude/settings.json:39-58`, `.claude/hooks/guard-bash.sh:57` and `:67-69`,
   `.claude/hooks/live-e2e-approval.py:24-25`, AGENTS.md:41-43 and CLAUDE.md "Live and billed
   steps". A Plan live step outside those lists runs without a prompt, because `Bash(zig *)` is
   allowed (`settings.json:10`). All but `build.zig` are policy files, changed only when the user
@@ -618,7 +635,7 @@ What each engine-track item means for Plan; its status is its owner's.
   material, never runtime configuration (10-toolchain-presets.md:10-11), and the only selectable
   registered policy is `project.zig@1` (PD7).
   - **Recommended:** one minimal project per case, with no feature code, as case principles never
-    anticipate a story (AGENTS.md:317-318): `package.json` with TypeScript and Vitest dev
+    anticipate a story (AGENTS.md:349-350): `package.json` with TypeScript and Vitest dev
     dependencies and `build` and `test` scripts, `tsconfig.json`, an empty `src/`, and the
     registered policies for that stack (PD7). Plan then has real facts to select or misstate.
   - Spec must see the same toolchain as Plan. Spec's token grammar reads the compiled naming
@@ -634,21 +651,24 @@ What each engine-track item means for Plan; its status is its owner's.
   - **Recommended:** a Plan run names a retained Spec run of the same build and case inputs
     whose adjudication passed, and copies its published feature directory and state; Plan's
     measurements then vary only with Plan. The copied input is a live production run's
-    published output, so nothing scripted substitutes (AGENTS.md:322-323). The alternative,
+    published output, so nothing scripted substitutes (AGENTS.md:354-355). The alternative,
     running Spec inside each Plan case, adds Spec's variance and cost to every Plan measurement.
   - That is pre-seeded feature output, which the Spec case contract rejects
-    (design/harness/e2e.md:345-346); the Plan case contract admits exactly this input.
+    (design/harness/e2e.md:366-367); the Plan case contract admits exactly this input.
+  - E7 stage 7's two-leg launch already runs a second leg from a copy of the first leg's
+    project and names it in `continued_from` (`spec-e2e-report/v27`; Z_SPEC01 "E7 stage 7"), so
+    the harness has a copy-forward precedent. Its conflict case adjudicates leg 2 only, and its
+    project holds both legs' logs (Z_SPEC01 "E7 stage 7"); PD17 takes its input runs from the two
+    development cases.
   - State lies outside the feature directory, under
-    `<paths.workflows>/features/<featureId>/state/` (`workflow_artifact_registry.zig:46-47`),
-    so the copy takes both roots, and the Spec run's logs with them, as a real project holds
-    them (§4).
+    `<paths.workflows>/features/<featureId>/state/` (`workflow_artifact_registry.zig:47-48`),
+    so the copy takes both roots, and the Spec run's logs and its actor-evidence registry
+    (`workflow_artifact_registry.zig:51`) with them, as a real project holds them (§4).
   - The Plan case also installs the Spec definition that published the run: reading stored
     Spec state resolves its extraction contract by workflow ID and rejects a missing or changed
-    one (`specification_state.zig:74-79`; 24-workflow-state.md:24-27). Readback also rejects a
+    one (`specification_state.zig:74-79`; 24-workflow-state.md:28-29). Readback also rejects a
     state whose stored claim text predates the build's quote rules (Z_SPEC01 "Refactors that
     leave request bytes unchanged", B7), which is why the input run is of the same build.
-  - SPEC01 §5 E7 recommends a fifth registered Spec output and case v4; if taken, the copy and
-    the Plan case follow them.
   - **Recommended bar:** Plan's rubrics carry R8's, an 80% aggregate and 3/4 on each critical
     criterion (acceptance.md:9-13), with the adjudication classes below as the critical
     criteria. The bar is the user's to approve, as R8's was, and a rubric without a threshold
@@ -669,7 +689,7 @@ What each engine-track item means for Plan; its status is its owner's.
 ## 9. Phased rollout (recommended; not decided)
 
 Only the user declares the ADR 0034 gate passed and actions Plan; nothing below starts before
-that. Increment 3 (design.md:732-742) is Phases 1 to 8, less plan review and the Tasks gate,
+that. Increment 3 (design.md:734-744) is Phases 1 to 8, less plan review and the Tasks gate,
 which PD2 moves to Increment 4.
 
 **Rules for every phase.**
@@ -678,13 +698,13 @@ which PD2 moves to Increment 4.
   "Definition of done", owner first and offline first (SPEC01 §2 rule 2). Its proof below is
   in addition to those rules.
 - **Offline proof.** Every phase but the last is proven without a model call, as §30 requires
-  of an increment (design.md:765). Unit tests sit at the owner. Scenarios run through the
+  of an increment (design.md:767). Unit tests sit at the owner. Scenarios run through the
   production composition, `root.Runtime`, with only the transport scripted, and a development
   case's offline run also goes through the harness's `invoke.run`, as Spec's does (§3; SPEC01
   §10.6 C42). A step the shipped Plan definition doesn't reach yet is driven by a fixture
   definition with test operations, as the reference fixtures are (§3).
 - **Spec guard.** A phase that touches shared code or `spec.workflow.yaml` shows that a
-  request-projection freeze taken before it equals one taken after (design/harness/e2e.md:741-775;
+  request-projection freeze taken before it equals one taken after (design/harness/e2e.md:765-800;
   SPEC01 §2 rule 10), and that the offline Spec run of each development case still publishes.
   A phase that can't show this changes Spec's model input and is a measured Spec change instead
   (SPEC01 §2).
@@ -701,22 +721,25 @@ which PD2 moves to Increment 4.
 
 - The user settles the blocking decisions: PD1, PD2, PD4 to PD7, PD14 and PD15. The others are
   settled as the design reaches them: PD9, PD11 to PD13, PD16, PD18 and PD8's staleness
-  question with Phases 2 to 6; the rest of PD8 with Phase 7; PD17 with Phase 9; PD3 with E7;
-  PD10 with approval.
+  question with Phases 2 to 6; the rest of PD8 with Phase 7; PD17 with Phase 9; PD3 with `PNN`
+  answers; PD10 with approval.
 - One ADR records them with the clauses each amends. The design rewrites Plan's §13 entries
-  (design.md:407-409) and writes a Plan feature contract, as F0100 is Spec's.
+  (design.md:409-411) and writes a Plan feature contract, as F0100 is Spec's.
 - **Proof:** none of its own. Each clause is proven by the phase that builds it.
 
-**Phase 1. Clarification progress by stage.** Shared code; no PD.
+**Phase 1. Clarification progress and acceptance by stage.** Shared code; no PD.
 
 - **Delivers:** `check-clarification-progress` reports `needs_user` only for an open record of
   the stage its step names, so an open `PNN` no longer fails a Spec rerun (§4). It amends the
-  operation's contract (13-05:59-63) and both of Spec's uses of it (`spec.workflow.yaml:821`,
-  `:921`).
+  operation's contract (13-05:81-87) and both of Spec's uses of it (`spec.workflow.yaml:866`,
+  `:966`). Acceptance authenticates only forms of its workflow's stage, as ADR 0025 scopes it
+  (0025:341-342), and a form of another stage neither is accepted nor blocks the run.
 - **Proof:**
   - the progress rule over registries that mix open and closed `S`, `P` and `T` records;
   - a Spec rerun on a registry with an open `P01` and no open `S` publishes and keeps the open
     `P` record and its form;
+  - a Spec rerun with a closed `P01` form publishes, records no response or actor evidence for
+    it, and leaves the form and its record as they were;
   - a Spec rerun with an open `S01` still pauses;
   - the Spec guard.
 
@@ -781,7 +804,7 @@ Phase 4.
   one unrelated domain:
   - each check has an accepted and a rejected plan: a missing or repeated coverage row; an
     unknown fact, file or command ID; a path outside its kind's root;
-  - each view has golden bytes and renders identically twice (invariant 15; 28-testing.md:411);
+  - each view has golden bytes and renders identically twice (invariant 15; 28-testing.md:410);
   - requirement text in a view equals `spec.md`'s rendering of that record;
   - IDs are monotonic, and none is reused across a prior ledger.
 
@@ -829,7 +852,7 @@ Phase 4.
   - a rerun with it open asks under the same ID, and an authority resolution closes it;
   - a need with no registered slot blocks administratively, and a Spec-owned gap ends the run
     for Spec rework with no form (PD13);
-  - a submitted answer is rejected until E7.
+  - a closed `P01` form is not accepted by a Plan run until PD3's extension of ADR 0025.
 
 **Phase 9. Evaluation harness.** Needs PD17. Its offline run needs Phase 8.
 
@@ -854,7 +877,7 @@ Phase 4.
   the engine-rejected attempts, §8's defect counts, and the tokens and requests of each run.
 
 **After the first slice.** Approval, rejection and the Tasks gate with Tasks (PD2, PD10); `PNN`
-answers with E7 (PD3); each row below when its decision is revisited.
+answers under an extended ADR 0025 (PD3); each row below when its decision is revisited.
 
 **First slice.** The recommendations leave out the following; each decision names what it
 amends.
@@ -865,6 +888,7 @@ amends.
 | The pause-time input state and ID ledger, and a pending Plan state | PD5 |
 | Persisted path-candidate and review-unit registries, and the input and output state split | PD6 |
 | Approval, rejection, review units, their authentication and the blocking Tasks gate, until Tasks | PD2, PD10 |
+| `PNN` answers, until ADR 0025 extends to them | PD3 |
 | Model review of plan output | PD1 |
 | Command execution, probes and the sandbox, for Plan | PD14 |
 | File content in model requests, and a project whose source and test roots hold more than 1,024 files | PD15 |

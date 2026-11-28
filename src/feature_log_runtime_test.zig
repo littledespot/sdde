@@ -1016,15 +1016,15 @@ test "production event projection uses closed facts and propagates every barrier
         spy.blocked = blocked;
         const expected: ?log_stream.Stop = if (blocked) .{ .blocked = .LOG_FLUSH_FAILURE } else null;
         try std.testing.expectEqual(expected, events.emit(.{ .run_started = .{} }));
-        try std.testing.expectEqual(expected, events.action(node, null, null, null));
+        try std.testing.expectEqual(expected, startStop(events.start(node, null)));
         for (std.enums.values(@import("domain/workflow.zig").OutcomeTag)) |status| {
-            try std.testing.expectEqual(expected, events.action(node, .{ .outcome = status }, null, null));
+            try std.testing.expectEqual(expected, events.action(node, null, .{ .outcome = status }, null, null));
             if (status != .more) try std.testing.expectEqual(expected, events.terminal(.{ .execution = status }));
         }
-        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = .{ .authority = .kernel_stage } }, null, null));
+        try std.testing.expectEqual(expected, events.action(node, null, .{ .rejected = .{ .authority = .kernel_stage } }, null, null));
         try std.testing.expectEqual(log_stream.Stop{ .blocked = .LOG_SERIALIZATION_FAILURE }, events.terminal(.{ .execution = .more }).?);
         try std.testing.expectEqual(expected, events.validation(node, .ok, null, null));
-        try std.testing.expectEqual(expected, events.validation(node, .invalid, "WRONG_SHAPE", null));
+        try std.testing.expectEqual(expected, events.validation(node, .invalid, .{ .code = "WRONG_SHAPE" }, null));
         try std.testing.expectEqual(expected, events.repair(node, .requested));
         try std.testing.expectEqual(expected, events.repair(node, .{ .applied = .ok }));
         try std.testing.expectEqual(expected, events.repair(node, .{ .rejected = .{ .status = .invalid, .reason = "REPAIR_RECURRING" } }));
@@ -1033,11 +1033,123 @@ test "production event projection uses closed facts and propagates every barrier
         try std.testing.expectEqual(expected, events.emit(.{ .publication_prepared = .{ .outcome = .needs_user } }));
         spy.expect_capture = true;
         const rejected: @import("domain/workflow_execution.zig").Rejection = .{ .model_capture = .{ .code = .LOG_SERIALIZATION_FAILURE, .stage = .lineage, .cause = .{ .lineage = .missing_source }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .direction = .request } };
-        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = rejected }, null, null));
+        try std.testing.expectEqual(expected, events.action(node, null, .{ .rejected = rejected }, null, null));
         try std.testing.expectEqual(expected, events.terminal(.{ .execution_rejected = rejected }));
         spy.expect_capture = false;
     }
     try std.testing.expect(spy.count > 0);
+}
+
+/// The stop a logged start ended in, or none when it was dropped or persisted.
+fn startStop(started: @import("application/workflow_event_capture.zig").Started) ?log_stream.Stop {
+    return switch (started) {
+        .stopped => |stop| stop,
+        .logged => null,
+    };
+}
+
+/// Records the parent and rule of the last fact, copied out of the emitter's buffers, and persists
+/// each fact under the next sequence unless told to drop it.
+const LinkSpy = struct {
+    sequence: u64 = 0,
+    drop: bool = false,
+    parent: ?[]const u8 = null,
+    rule: ?[]const u8 = null,
+    parent_buffer: [32]u8 = undefined,
+    rule_buffer: [128]u8 = undefined,
+
+    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
+        const self: *LinkSpy = @ptrCast(@alignCast(context));
+        _ = log_event_registry.validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        self.parent = if (telemetry.commonOf(fact.fact).parent_event_id) |id| copied(&self.parent_buffer, id.bytes) else null;
+        self.rule = if (telemetry.fieldOf(fact.fact, .rule_id)) |id| copied(&self.rule_buffer, id.bytes) else null;
+        if (self.drop) return .dropped;
+        self.sequence += 1;
+        return .{ .persisted = .{ .segment_ordinal = 1, .sequence = self.sequence, .bytes_written = 1, .flushed = true } };
+    }
+
+    fn copied(buffer: []u8, bytes: []const u8) []const u8 {
+        @memcpy(buffer[0..bytes.len], bytes);
+        return buffer[0..bytes.len];
+    }
+};
+
+test "an action's end names its persisted start as its parent, and none when the start was dropped" {
+    const capture = @import("application/workflow_event_capture.zig");
+    var spy: LinkSpy = .{};
+    const events: capture.Capture = .{ .barrier = .{ .context = &spy, .process_fn = LinkSpy.process }, .shortcode = try telemetry.WorkflowShortcode.parse("OTHR") };
+    const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "check" };
+    spy.sequence = 6;
+    const step = events.start(node, null);
+    try std.testing.expectEqual(capture.Started{ .logged = 7 }, step);
+    try std.testing.expect(spy.parent == null);
+    // Every completion, invalid or failed end names the start it closes.
+    for ([_]@import("domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed }) |status| {
+        try std.testing.expect(events.action(node, step.logged, .{ .outcome = status }, null, "invoke-model") == null);
+        try std.testing.expectEqualStrings("EVENT-7", spy.parent.?);
+    }
+    // A stage of a request-model step names its own start, not the step's.
+    const stage = events.start(node, "admit-response");
+    try std.testing.expectEqual(capture.Started{ .logged = 11 }, stage);
+    try std.testing.expect(events.requestStage(node, "admit-response", stage.logged, .{ .outcome = .ok }, null) == null);
+    try std.testing.expectEqualStrings("EVENT-11", spy.parent.?);
+    // A start the threshold dropped has no identity, so the end names no parent.
+    spy.drop = true;
+    const dropped = events.start(node, null);
+    try std.testing.expectEqual(capture.Started{ .logged = null }, dropped);
+    try std.testing.expect(events.action(node, dropped.logged, .{ .outcome = .ok }, null, null) == null);
+    try std.testing.expect(spy.parent == null);
+    // No event has sequence zero, so a parent naming it is no safe record.
+    try std.testing.expectEqual(log_stream.Stop{ .blocked = .LOG_SERIALIZATION_FAILURE }, events.action(node, 0, .{ .outcome = .ok }, null, null).?);
+}
+
+test "a failed validation names the typed rule it reports, and a passed one or an untyped failure names none" {
+    const capture = @import("application/workflow_event_capture.zig");
+    var spy: LinkSpy = .{};
+    const events: capture.Capture = .{ .barrier = .{ .context = &spy, .process_fn = LinkSpy.process }, .shortcode = try telemetry.WorkflowShortcode.parse("OTHR") };
+    const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "validate" };
+    try std.testing.expect(events.validation(node, .invalid, .{ .code = "SPECIFICATION", .rule = "exact_copy" }, null) == null);
+    try std.testing.expectEqualStrings("exact_copy", spy.rule.?);
+    try std.testing.expect(events.validation(node, .invalid, .{ .code = "STRING_LENGTH" }, null) == null);
+    try std.testing.expect(spy.rule == null);
+    try std.testing.expect(events.validation(node, .ok, null, null) == null);
+    try std.testing.expect(spy.rule == null);
+    // A rule that is no opaque identifier is no safe record.
+    try std.testing.expectEqual(log_stream.Stop{ .blocked = .LOG_SERIALIZATION_FAILURE }, events.validation(node, .invalid, .{ .code = "SPECIFICATION", .rule = "exact copy" }, null).?);
+}
+
+test "a candidate diagnostic reports its validator's closed rule as an identifier, and none when it selects nothing" {
+    const Diagnostic = @import("domain/candidate_validation_diagnostic.zig").Diagnostic;
+    const Support = @import("domain/specification_support.zig").Source;
+    const tokens = @import("domain/structured_tokens.zig");
+    // A one-issue rejection reports its issue: coverage, and an unrelated catalogue reason.
+    const coverage: Diagnostic = .{ .coverage = .{ .claim_id = .{ .ordinal = 1 }, .issue = .open_question_mapped, .targets = &.{} } };
+    try std.testing.expectEqualStrings("open_question_mapped", coverage.rule().?);
+    const catalogue: Diagnostic = .{ .source_catalogue = .{ .state_id = .{ .bytes = "reference-1" }, .partition_id = .{ .ordinal = 1 }, .revision = 1, .origin = null, .reason = .no_title_heading, .eligible_signals = &.{} } };
+    try std.testing.expectEqualStrings("no_title_heading", catalogue.rule().?);
+    // Several support issues report the validator's selected (first) one; an empty rejection selects nothing.
+    const entries = [_]Support.Diagnostic{
+        .{ .issue = .invalid_question, .requirement = null, .ordinal = null, .revision = 1, .origin = null },
+        .{ .issue = .missing_finding, .requirement = null, .ordinal = null, .revision = 1, .origin = null },
+    };
+    try std.testing.expectEqualStrings("invalid_question", (Diagnostic{ .support = .{ .diagnostics = &entries } }).rule().?);
+    try std.testing.expect((Diagnostic{ .support = .{ .diagnostics = &.{} } }).rule() == null);
+    // An issue set reports its first nonempty member in declared order, and nothing when every member is empty.
+    const token: tokens.CandidateId = .{ .source_id = .{ .ordinal = 1 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 1 };
+    const classified = struct {
+        fn diagnostic(issues: @import("domain/token_classification_validation.zig").Issues) Diagnostic {
+            return .{ .token_classifications = .{ .scope = .{ .state_id = .{ .bytes = "reference-1" }, .chunk_id = .{ .bytes = "chunk-1" } }, .revision = 1, .issues = issues, .choices = .{ .outcome = .claims, .decisions = &.{} }, .observed = &.{} } };
+        }
+    };
+    try std.testing.expectEqualStrings("duplicate", classified.diagnostic(.{ .missing = &.{}, .duplicate = &.{token}, .unknown = &.{token}, .forbidden = &.{} }).rule().?);
+    try std.testing.expect(classified.diagnostic(.{ .missing = &.{}, .duplicate = &.{}, .unknown = &.{}, .forbidden = &.{} }).rule() == null);
+    // Review findings report no rule: their code already names a repair rejection, which is stated once.
+    const findings: Diagnostic = .{ .support_findings = .{ .revision = 1, .evidence = &.{}, .origins = &.{}, .origin = null, .repair_rejection = .unlocalized_omission } };
+    try std.testing.expectEqualStrings("unlocalized_omission", findings.code());
+    try std.testing.expect(findings.rule() == null);
+    try std.testing.expect((Diagnostic{ .support_findings = .{ .revision = 1, .evidence = &.{}, .origins = &.{}, .origin = null, .repair_rejection = null } }).rule() == null);
+    // Every rule a diagnostic reports is an opaque identifier the event stream admits.
+    for ([_]Diagnostic{ coverage, catalogue }) |value| try std.testing.expect(telemetry.Identifier.validate(value.rule().?) != null);
 }
 
 // The order of the retention steps, the release after any prune outcome, the prune stop kept over a release failure and
@@ -1673,7 +1785,7 @@ test "production event projection reports a log cancellation as a cancellation" 
     const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "check" };
     const cancelled: ?log_stream.Stop = .cancelled;
     try std.testing.expectEqual(cancelled, events.emit(.{ .run_started = .{} }));
-    try std.testing.expectEqual(cancelled, events.action(node, null, null, null));
+    try std.testing.expectEqual(cancelled, startStop(events.start(node, null)));
     try std.testing.expectEqual(cancelled, events.terminal(.{ .execution = .cancelled }));
     try std.testing.expectEqual(cancelled, events.retryAttempt(node, 2, false));
 }

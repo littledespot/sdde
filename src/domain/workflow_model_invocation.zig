@@ -10,7 +10,7 @@ pub const validation_requires = [_]pipeline.DataKey{ .model_request_identity_led
 pub const admission_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .provider_invocation_validation_result };
 pub const admission_produces = [_]pipeline.DataKey{ .model_envelope_result, .model_payload_schema_result };
 
-pub fn validContract(contract: operation.Contract, ports: []const []const u8) bool {
+pub fn validContract(contract: operation.Contract, ports: []const capabilities.Capability) bool {
     return valid(contract.requires, contract.produces, contract.optional, contract.replaces, contract.invalidates, contract.side_effect, contract.runner_accounting, contract.parameters.len, contract.retry_limit != null, ports);
 }
 
@@ -18,7 +18,7 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
     return valid(step.requires, step.produces, step.optional, step.replaces, step.invalidates, step.side_effect, step.runner_accounting, step.parameters.len, step.retry_authority != null, step.capabilities);
 }
 
-fn valid(inputs: []const pipeline.DataKey, outputs: []const pipeline.DataKey, optional: []const pipeline.DataKey, replaces: []const pipeline.DataKey, invalidates: []const pipeline.DataKey, effect: pipeline.SideEffect, accounting: pipeline.RunnerAccountingCapability, parameters: usize, retry: bool, ports: []const []const u8) bool {
+fn valid(inputs: []const pipeline.DataKey, outputs: []const pipeline.DataKey, optional: []const pipeline.DataKey, replaces: []const pipeline.DataKey, invalidates: []const pipeline.DataKey, effect: pipeline.SideEffect, accounting: pipeline.RunnerAccountingCapability, parameters: usize, retry: bool, ports: []const capabilities.Capability) bool {
     for ([_]pipeline.DataKey{ .provider_invocation_validation_result, .model_envelope_result, .model_payload_schema_result }) |key| {
         if (std.mem.indexOfScalar(pipeline.DataKey, replaces, key) != null) return false;
     }
@@ -39,7 +39,7 @@ fn valid(inputs: []const pipeline.DataKey, outputs: []const pipeline.DataKey, op
     const publishes = std.mem.indexOfScalar(pipeline.DataKey, outputs, .provider_invocation_result) != null;
     if (effect != .model_call) return !publishes;
     if (!std.mem.eql(pipeline.DataKey, outputs, &produces) or optional.len != 0 or replaces.len != 0 or invalidates.len != 0 or
-        parameters != 0 or retry or accounting != .none or ports.len != 1 or !std.mem.eql(u8, ports[0], capabilities.model_provider)) return false;
+        parameters != 0 or retry or accounting != .none or ports.len != 1 or ports[0] != .model_provider) return false;
     for (requires) |key| if (std.mem.indexOfScalar(pipeline.DataKey, inputs, key) == null) return false;
     return true;
 }

@@ -165,10 +165,7 @@ fn merged(allocator: std.mem.Allocator, items: []const @import("reference_reconc
 /// The user chooses among the claims of a conflict, and answers every other gap in text. The options come from the
 /// conflict's own claims, so the form offers exactly what the sources say.
 fn answerFor(allocator: std.mem.Allocator, source_inputs: @import("reference_evidence.zig").Inputs, references: ?@import("reference_support.zig").Records, id: a.Id) a.Error!c.AnswerSchema {
-    const conflict = switch (id.unit) {
-        .conflict => |value| value,
-        else => return .{ .bounded_business_text = c.max_text_bytes },
-    };
+    const conflict = a.conflictOf(id) orelse return .{ .bounded_business_text = c.max_text_bytes };
     const held = references orelse return error.InvalidRequiredAuthority;
     for (held.conflicts) |candidate| {
         if (candidate.id.ordinal != conflict.ordinal) continue;
@@ -222,19 +219,20 @@ pub fn subjectFor(allocator: std.mem.Allocator, source_inputs: @import("referenc
     if (a.policy(id) == null) return error.InvalidRequiredAuthority;
     const derivation = @import("clarification_subject.zig");
     const corpus = source_inputs.corpus.sources;
+    const names = a.subjectNames(id);
     const named: struct { unit: []const u8, spans: []const c.SourceSpan } = switch (id.unit) {
-        .feature => .{ .unit = "feature", .spans = &.{} },
+        .feature => .{ .unit = names.unit, .spans = &.{} },
         .record => |record| .{ .unit = try std.fmt.allocPrint(allocator, "{s}.{d}", .{ @tagName(record.kind), record.ordinal }), .spans = &.{} },
-        .decision => |decision| .{ .unit = try std.fmt.allocPrint(allocator, "decision.{d}", .{decision.ordinal}), .spans = &.{} },
-        .source => |source| .{ .unit = "source", .spans = derivation.wholeSource(allocator, corpus, source) catch |err| return mapped(err) },
+        .decision => |decision| .{ .unit = try std.fmt.allocPrint(allocator, "{s}.{d}", .{ names.unit, decision.ordinal }), .spans = &.{} },
+        .source => |source| .{ .unit = names.unit, .spans = derivation.wholeSource(allocator, corpus, source) catch |err| return mapped(err) },
         .signal, .conflict, .token => cited: {
             const held = references orelse return error.InvalidRequiredAuthority;
             const ids = (try citationsOf(allocator, held, id.unit)) orelse return error.InvalidRequiredAuthority;
             defer allocator.free(ids);
-            break :cited .{ .unit = @tagName(id.unit), .spans = derivation.fromCitations(allocator, corpus, held.items.entries, ids) catch |err| return mapped(err) };
+            break :cited .{ .unit = names.unit, .spans = derivation.fromCitations(allocator, corpus, held.items.entries, ids) catch |err| return mapped(err) };
         },
     };
-    return .{ .requirement = @tagName(id.kind), .unit = named.unit, .slot = @tagName(id.slot), .sources = named.spans };
+    return .{ .requirement = names.requirement, .unit = named.unit, .slot = names.slot, .sources = named.spans };
 }
 
 fn mapped(err: @import("clarification_subject.zig").Error) a.Error {

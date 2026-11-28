@@ -71,7 +71,7 @@ const test_step: @import("../domain/workflow_compilation.zig").CompiledStep = .{
     .outcomes = Activate.contract.outcomes,
     .side_effect = Activate.contract.side_effect,
     .gates = &.{},
-    .capabilities = &.{"feature-output-write"},
+    .capabilities = &.{.feature_output_write},
     .retry_authority = null,
 };
 

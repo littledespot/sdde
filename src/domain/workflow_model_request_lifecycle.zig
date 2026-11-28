@@ -38,7 +38,7 @@ pub fn terminates(inputs: []const pipeline.DataKey) bool {
     return completes(inputs) and contains(inputs, .provider_authorization_result);
 }
 
-pub fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+pub fn validContract(contract: operation.Contract, capabilities: []const @import("workflow_capability.zig").Capability) bool {
     if (!advances(contract.replaces, contract.produces)) return true;
     if (!validEffects(contract.requires, contract.produces, contract.replaces, contract.optional, contract.invalidates) or
         contract.side_effect != .none or contract.runner_accounting != .none or contract.retry_limit != null or

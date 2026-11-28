@@ -1,6 +1,7 @@
 const std = @import("std");
 const compilation = @import("workflow_compilation.zig");
 const execution = @import("workflow_execution.zig");
+const capability = @import("workflow_capability.zig");
 const requirement = @import("model_provider_requirement.zig");
 const telemetry = @import("telemetry.zig");
 const workflow = @import("workflow.zig");
@@ -10,11 +11,7 @@ const workflow = @import("workflow.zig");
 pub fn derive(selected: *const execution.SelectedWorkflow) requirement.Requirement {
     for (selected.graph.authority.steps) |step| {
         if (step.model != null) return .required;
-        for (step.capabilities) |capability| {
-            if (std.mem.eql(u8, capability, requirement.capability_id)) {
-                return .required;
-            }
-        }
+        if (capability.contains(step.capabilities, .model_provider)) return .required;
     }
     return .not_required;
 }
@@ -22,7 +19,7 @@ pub fn derive(selected: *const execution.SelectedWorkflow) requirement.Requireme
 test "provider-call requirement uses the exact capability and ignores workflow names" {
     try std.testing.expectEqual(
         requirement.Requirement.required,
-        deriveFor("arbitrary-flow", &.{requirement.capability_id}),
+        deriveFor("arbitrary-flow", &.{.model_provider}),
     );
     try std.testing.expectEqual(
         requirement.Requirement.not_required,
@@ -30,15 +27,15 @@ test "provider-call requirement uses the exact capability and ignores workflow n
     );
     try std.testing.expectEqual(
         requirement.Requirement.not_required,
-        deriveFor("arbitrary-flow", &.{"model-provider-extra"}),
+        deriveFor("arbitrary-flow", &.{ .provider_authorization, .feature_read }),
     );
     try std.testing.expectEqual(
         requirement.Requirement.not_required,
-        deriveFor("model-provider", &.{"project-read"}),
+        deriveFor("model-provider", &.{.feature_read}),
     );
 }
 
-fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirement.Requirement {
+fn deriveFor(workflow_id: []const u8, capabilities: []const capability.Capability) requirement.Requirement {
     const step: compilation.CompiledStep = .{
         .id = workflow.WorkflowStepId.parse("run").?,
         .operation_id = workflow.OperationId.parse("test.operation").?,

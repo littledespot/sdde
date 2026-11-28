@@ -116,7 +116,7 @@ fn buildStep(
     source_chain: []const @import("workflow_source.zig").Entry,
     operation_id: workflow.OperationId,
     contract: operation.Contract,
-    capabilities: []const []const u8,
+    capabilities: []const @import("workflow_capability.zig").Capability,
     parameters: []const compilation.CompiledParameter,
     retry_authority: ?workflow_retry.CompiledAuthority,
 ) Error!compilation.CompiledStep {

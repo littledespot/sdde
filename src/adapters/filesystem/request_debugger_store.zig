@@ -4,6 +4,12 @@ const debug = @import("../../domain/request_debugger.zig");
 const archive = @import("../../domain/request_debugger_archive.zig");
 const replay_port = @import("../../ports/request_replay.zig");
 const directories = @import("directory_access.zig");
+const artifacts = @import("../../domain/workflow_artifact_registry.zig");
+
+/// Where replay records go, beneath the selected feature (ADR 0019). The engine's own log collections are named by
+/// the artifact registry.
+const replay_collection = "logs/debugger";
+
 pub const Store = struct {
     io: std.Io,
     feature: std.Io.Dir,
@@ -26,7 +32,7 @@ pub const Store = struct {
     }
     fn write(self: *Store, a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) replay_port.Error!void {
         if (!validId(id)) return error.InvalidReplay;
-        const dir = directories.ensureWithPermissions(self.io, self.feature, "logs/debugger", .fromMode(0o700)) catch return error.ReplayStorageFailure;
+        const dir = directories.ensureWithPermissions(self.io, self.feature, replay_collection, .fromMode(0o700)) catch return error.ReplayStorageFailure;
         defer dir.close(self.io);
         @import("feature_log_directory.zig").validateOwner(self.io, dir) catch return error.ReplayStorageFailure;
         const name = try std.mem.concat(a, u8, &.{ id, suffix });
@@ -39,11 +45,11 @@ pub const Store = struct {
 
     pub fn load(self: *Store, a: std.mem.Allocator) ![]debug.Call {
         var accumulated: archive.Archive = .{ .allocator = a };
-        try self.loadStream(a, "logs/prompts", &accumulated, false);
-        try self.loadStream(a, "logs/events", &accumulated, true);
+        try self.loadStream(a, artifacts.prompt_logs_collection, &accumulated, false);
+        try self.loadStream(a, artifacts.event_logs_collection, &accumulated, true);
         var calls: std.ArrayList(debug.Call) = .empty;
         try calls.appendSlice(a, try accumulated.calls());
-        const dir = directories.open(self.io, self.feature, "logs/debugger") catch |err| {
+        const dir = directories.open(self.io, self.feature, replay_collection) catch |err| {
             if (err == error.DirectoryMissing) return calls.toOwnedSlice(a);
             return err;
         };
@@ -134,13 +140,13 @@ pub const Store = struct {
     }
 };
 
-/// Depths 0 and 1 are the stream collection and its run directories; depth 2 is
-/// a binding directory.
+/// The stream collection and its run directories are containers (`container_levels`); below them a binding directory
+/// holds the segments.
 fn enumerate(io: std.Io, a: std.mem.Allocator, dir: std.Io.Dir, prefix: []const u8, depth: usize, paths: *std.ArrayList([]const u8)) !void {
     const log_file = @import("feature_log_file.zig");
     var iterator = dir.iterate();
     while (try iterator.next(io)) |entry| {
-        if (depth < 2) switch (log_file.classifyContainerEntry(entry)) {
+        if (depth < log_file.container_levels) switch (log_file.classifyContainerEntry(entry)) {
             .directory => {
                 const child = try directories.open(io, dir, entry.name);
                 defer child.close(io);

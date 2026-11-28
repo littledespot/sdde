@@ -8,19 +8,17 @@ const provider_module = @import("../adapters/provider/request_replay.zig");
 const server_module = @import("../adapters/system/request_debugger_server.zig");
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, feature_name: []const u8, environment: *const std.process.Environ.Map) !void {
-    const feature_id = @import("../domain/feature_identity.zig").FeatureId.parse(feature_name) orelse return error.InvalidFeatureDirectory;
     var runtime: runtime_module.Runtime = undefined;
     runtime.init(io, allocator, .cwd(), .{});
     defer runtime.deinit();
     if (runtime.boot != .ready) return error.DebuggerBootstrapFailed;
-    const roots = runtime.boot.ready.roots.registry();
-    const directories = @import("../adapters/filesystem/directory_access.zig");
-    const specs = try directories.open(io, .cwd(), roots.featureDirectoryRoots().specs);
-    defer specs.close(io);
-    const feature = try directories.open(io, specs, feature_id.bytes);
-    defer feature.close(io);
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
+    // The supplied directory is a feature only as the workflow invocation's validation says: contained in `paths.specs`
+    // and outside `paths.specsArchive` (ADR 0010, "Validation"), the identity ADR 0019 selects the feature by.
+    const selected = try @import("../domain/feature_directory.zig").validate(arena.allocator(), .{ .bytes = feature_name }, runtime.boot.ready.roots.registry().featureDirectoryRoots());
+    const feature = try @import("../adapters/filesystem/directory_access.zig").open(io, .cwd(), selected.project_relative_path);
+    defer feature.close(io);
     var store: store_module.Store = .{ .io = io, .feature = feature };
     var authority: Authority = .{ .runtime = &runtime };
     var compiler: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};

@@ -14,7 +14,7 @@ pub const Descriptor = struct {
 pub const Transition = struct { limit: usize, before: usize, after: usize };
 pub const Error = error{InvalidNativeIteration};
 
-pub fn validContract(contract: @import("workflow_operation.zig").Contract, capabilities: []const []const u8) bool {
+pub fn validContract(contract: @import("workflow_operation.zig").Contract, capabilities: []const @import("workflow_capability.zig").Capability) bool {
     if (contract.iteration == null) return true;
     return contract.kind == .step and valid(contract.iteration.?, contract.requires, contract.produces, contract.replaces, contract.invalidates, contract.outcomes) and
         capabilities.len == 0 and contract.side_effect == .none and contract.runner_accounting == .none and
