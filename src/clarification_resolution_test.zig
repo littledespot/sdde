@@ -7,7 +7,20 @@ const fixture = @import("test_fixtures/clarification_inputs.zig");
 const f = @import("test_fixtures/reference_reconciliation.zig");
 const reconciled = @import("reference_reconciliation_test.zig");
 
-const conflict_subject: c.Subject = .{ .requirement = "reference_meaning", .unit = "conflict", .slot = "disposition", .sources = &.{} };
+const authority = @import("domain/required_authority.zig");
+
+/// A form's subject as the engine writes it for `id`, naming `sources`.
+fn subjectOf(id: authority.Id, sources: []const c.SourceSpan) c.Subject {
+    const names = authority.subjectNames(id);
+    return .{ .requirement = names.requirement, .unit = names.unit, .slot = names.slot, .sources = sources };
+}
+
+/// `path` is comptime so the returned subject's `sources` is a constant, never a pointer into this frame.
+fn conflictAt(comptime path: []const u8) c.Subject {
+    return subjectOf(authority.conflictDisposition(.{ .ordinal = 1 }), &.{.{ .path = path, .lines = null }});
+}
+
+const conflict_subject = subjectOf(authority.conflictDisposition(.{ .ordinal = 1 }), &.{});
 
 test "a conflict offers one option for each claim, named by the lines it cites and labelled by its quotation" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -79,14 +92,14 @@ test "only a resolved Specify conflict form that offered options grants a choice
     const allocator = arena.allocator();
     const options: c.AnswerSchema = .{ .select_one = &.{ .{ .key = "first", .label = "First." }, .{ .key = "second", .label = "Second." } } };
     const text: c.AnswerSchema = .{ .bounded_business_text = 2000 };
-    const other: c.Subject = .{ .requirement = "reference_meaning", .unit = "signal", .slot = "disposition", .sources = &.{} };
+    const other = subjectOf(.{ .kind = .reference_meaning, .unit = .{ .signal = .{ .ordinal = 1 } }, .slot = .disposition }, &.{});
     const records = [_]c.Record{
         answered("S01", .resolved_by_user, options, conflict_subject, 1),
-        answered("S02", .cancelled_by_user, options, .{ .requirement = "reference_meaning", .unit = "conflict", .slot = "disposition", .sources = &.{.{ .path = "a.md", .lines = null }} }, 2),
-        answered("S03", .open, options, .{ .requirement = "reference_meaning", .unit = "conflict", .slot = "disposition", .sources = &.{.{ .path = "b.md", .lines = null }} }, null),
-        answered("S04", .resolved_by_user, text, .{ .requirement = "reference_meaning", .unit = "conflict", .slot = "disposition", .sources = &.{.{ .path = "c.md", .lines = null }} }, 3),
+        answered("S02", .cancelled_by_user, options, conflictAt("a.md"), 2),
+        answered("S03", .open, options, conflictAt("b.md"), null),
+        answered("S04", .resolved_by_user, text, conflictAt("c.md"), 3),
         answered("S05", .resolved_by_user, options, other, 4),
-        answered("P01", .resolved_by_user, options, .{ .requirement = "reference_meaning", .unit = "conflict", .slot = "disposition", .sources = &.{.{ .path = "d.md", .lines = null }} }, 5),
+        answered("P01", .resolved_by_user, options, conflictAt("d.md"), 5),
     };
     var state = fixture.state(&records);
     const responses = [_]c.Response{

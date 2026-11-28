@@ -25,6 +25,41 @@ pub const Unit = union(enum) {
     decision: struct { ordinal: u32 },
 };
 pub const Id = struct { kind: Kind, unit: Unit, slot: Slot, contract_version: u32 = version };
+
+/// The requirement a user's choice among one reference conflict's claims answers. A production site builds it with
+/// `conflictDisposition`, reads the conflict it names with `conflictOf`, and recognises a persisted subject written for it
+/// with `isConflictSubject`.
+pub fn conflictDisposition(conflict: @import("reference_reconciliation.zig").ConflictId) Id {
+    return .{ .kind = .reference_meaning, .unit = .{ .conflict = conflict }, .slot = .disposition };
+}
+
+/// The conflict whose disposition `id` is, or null for every other identity.
+pub fn conflictOf(id: Id) ?@import("reference_reconciliation.zig").ConflictId {
+    if (id.kind != .reference_meaning or id.slot != .disposition) return null;
+    return switch (id.unit) {
+        .conflict => |conflict| conflict,
+        else => null,
+    };
+}
+
+pub fn isConflictDisposition(id: Id) bool {
+    return conflictOf(id) != null;
+}
+
+/// What a clarification subject calls an identity (ADR 0025): the tags of its kind, of its unit's kind and of its
+/// slot. They are persisted in `clarification-state/v4`, so a tag is part of that format. A unit that carries an
+/// ordinal (a record or a decision) is named by its tag followed by that ordinal in the subject itself.
+pub const SubjectNames = struct { requirement: []const u8, unit: []const u8, slot: []const u8 };
+
+pub fn subjectNames(id: Id) SubjectNames {
+    return .{ .requirement = @tagName(id.kind), .unit = @tagName(id.unit), .slot = @tagName(id.slot) };
+}
+
+/// Whether `subject` is one `subjectNames` gives a conflict's disposition, whichever conflict it names.
+pub fn isConflictSubject(subject: @import("clarification_inputs.zig").Subject) bool {
+    const names = subjectNames(conflictDisposition(.{ .ordinal = 1 }));
+    return std.mem.eql(u8, subject.requirement, names.requirement) and std.mem.eql(u8, subject.unit, names.unit) and std.mem.eql(u8, subject.slot, names.slot);
+}
 pub const Authority = @import("authority_identity.zig").Authority;
 pub const EvidenceId = struct { ordinal: u32 };
 pub const CandidateId = struct { ordinal: u32, revision: u64 };

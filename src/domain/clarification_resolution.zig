@@ -3,6 +3,7 @@
 //! Only a choice among the claims of one reference conflict is applied; every other answer stays protected and unused.
 const std = @import("std");
 const c = @import("clarification_inputs.zig");
+const authority = @import("required_authority.zig");
 const r = @import("reference_reconciliation.zig");
 const refs = @import("reference_support.zig");
 const spec = @import("specification.zig");
@@ -23,7 +24,7 @@ pub fn choices(allocator: std.mem.Allocator, state: c.ValidatedState) Error![]co
     errdefer result.deinit(allocator);
     for (held.records) |record| {
         const id = c.Id.parse(record.id) orelse return error.InvalidClarificationInput;
-        if (id.stage != .spec or record.status != .resolved_by_user or !isConflict(record.subject)) continue;
+        if (id.stage != .spec or record.status != .resolved_by_user or !authority.isConflictSubject(record.subject)) continue;
         const options = switch (record.answer_schema) {
             .select_one => |value| value,
             else => continue,
@@ -47,10 +48,6 @@ pub fn choices(allocator: std.mem.Allocator, state: c.ValidatedState) Error![]co
 pub fn answerFor(all: []const ConflictChoice, subject: c.Subject) ?ConflictChoice {
     for (all) |choice| if (c.sameSubject(choice.subject, subject)) return choice;
     return null;
-}
-
-fn isConflict(subject: c.Subject) bool {
-    return std.mem.eql(u8, subject.requirement, "reference_meaning") and std.mem.eql(u8, subject.unit, "conflict") and std.mem.eql(u8, subject.slot, "disposition");
 }
 
 /// One option for each claim of the conflict. The key names the source lines the claim cites, so it is the same on every

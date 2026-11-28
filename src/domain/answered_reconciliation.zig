@@ -18,6 +18,7 @@ const r = @import("reference_reconciliation.zig");
 const refs = @import("reference_support.zig");
 const resolution = @import("clarification_resolution.zig");
 const model_evidence = @import("model_evidence.zig");
+const authority = @import("required_authority.zig");
 const clarifications = @import("required_authority_clarifications.zig");
 
 pub const Error = std.mem.Allocator.Error || error{InvalidReferenceReconciliation};
@@ -36,7 +37,7 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
     var answered: std.ArrayList(usize) = .empty;
     defer answered.deinit(allocator);
     for (records.conflicts, 0..) |conflict, index| {
-        const subject = clarifications.subjectFor(allocator, source_inputs, held, .{ .kind = .reference_meaning, .unit = .{ .conflict = conflict.id }, .slot = .disposition }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
+        const subject = clarifications.subjectFor(allocator, source_inputs, held, authority.conflictDisposition(conflict.id)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
         const choice = resolution.answerFor(all, subject) orelse continue;
         try answered.append(allocator, index);
         const chosen = (resolution.chosenClaim(allocator, source_inputs.corpus.sources, held, conflict, choice.key, choice.label) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation) orelse continue;
@@ -94,7 +95,7 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
             try retain(allocator, held.items, &signals, &proposed_signals, last);
             // The form of the dropped conflict, if one was raised, asks a question that no longer exists. Its subject is the
             // one the form carries, derived from the conflict's cited lines before the conflicts are renumbered.
-            const subject = clarifications.subjectFor(allocator, source_inputs, held, .{ .kind = .reference_meaning, .unit = .{ .conflict = records.conflicts[index].id }, .slot = .disposition }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
+            const subject = clarifications.subjectFor(allocator, source_inputs, held, authority.conflictDisposition(records.conflicts[index].id)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
             // The key is copied, so the record outlives the clarification state it was read from.
             try answer_dropped.append(allocator, .{ .subject = subject, .response_id = entry.choice.response_id.ordinal, .key = try allocator.dupe(u8, entry.choice.key) });
         }
