@@ -1,6 +1,7 @@
 const std = @import("std");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const provider = @import("../ports/llm_provider_interface.zig");
+const capability = @import("../domain/workflow_capability.zig");
 
 /// Composition supplies a typed context. The runner-facing erasure retains
 /// exactly the capabilities derived from its reachable registered narrow ports.
@@ -29,13 +30,7 @@ pub fn bindRequestKernel(comptime stage_types: []const type) operations.Binding 
     @setEvalBranchQuota(100000);
     const derived = comptime union_of: {
         var result: Inspection = .{};
-        for (stage_types) |T| {
-            const stage = inspect(T, &.{});
-            result.valid = result.valid and stage.valid;
-            for (@typeInfo(Inspection).@"struct".fields) |field| {
-                if (field.type == bool and !std.mem.eql(u8, field.name, "valid")) @field(result, field.name) = @field(result, field.name) or @field(stage, field.name);
-            }
-        }
+        for (stage_types) |T| result.absorb(inspect(T, &.{}));
         break :union_of result;
     };
     if (!derived.valid) @compileError("operation contexts require typed data and registered narrow ports; erased capabilities and callbacks are forbidden");
@@ -54,50 +49,66 @@ pub fn bindRequestKernel(comptime stage_types: []const type) operations.Binding 
 
 fn Capabilities(comptime derived: Inspection) type {
     return struct {
-        const list: []const []const u8 = &(if (derived.feature_logging) [_][]const u8{@import("../domain/workflow_capability.zig").feature_logging} else [_][]const u8{}) ++
-            (if (derived.model_provider) [_][]const u8{@import("../domain/workflow_capability.zig").model_provider} else [_][]const u8{}) ++
-            (if (derived.provider_authorization) [_][]const u8{@import("../domain/workflow_capability.zig").provider_authorization} else [_][]const u8{}) ++
-            (if (derived.principle_read) [_][]const u8{@import("../domain/workflow_capability.zig").principle_read} else [_][]const u8{}) ++
-            (if (derived.toolchain_read) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_read} else [_][]const u8{}) ++
-            (if (derived.toolchain_parser) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_parser} else [_][]const u8{}) ++
-            (if (derived.reference_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_read} else [_][]const u8{}) ++
-            (if (derived.feature_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_read} else [_][]const u8{}) ++
-            (if (derived.feature_input_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_input_read} else [_][]const u8{}) ++
-            (if (derived.feature_output_write) [_][]const u8{@import("../domain/workflow_capability.zig").feature_output_write} else [_][]const u8{}) ++
-            (if (derived.reference_content_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_content_read} else [_][]const u8{}) ++
-            (if (derived.reference_decode) [_][]const u8{@import("../domain/workflow_capability.zig").reference_decode} else [_][]const u8{}) ++
-            (if (derived.reference_identity) [_][]const u8{@import("../domain/workflow_capability.zig").reference_identity} else [_][]const u8{}) ++
-            (if (derived.actor_authentication) [_][]const u8{@import("../domain/workflow_capability.zig").actor_authentication} else [_][]const u8{});
+        const held = listed(derived.capabilities);
+        const list: []const capability.Capability = &held;
     };
 }
 
-pub const Inspection = struct { valid: bool = true, actor_authentication: bool = false, feature_logging: bool = false, principle_read: bool = false, model_provider: bool = false, provider_authorization: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, feature_output_write: bool = false, reference_content_read: bool = false, reference_decode: bool = false, reference_identity: bool = false };
+fn listed(comptime set: capability.Set) [set.count()]capability.Capability {
+    var result: [set.count()]capability.Capability = undefined;
+    var index: usize = 0;
+    var members = set.iterator();
+    while (members.next()) |member| : (index += 1) result[index] = member;
+    return result;
+}
+
+/// What a context type reaches: the capabilities its registered narrow ports grant, and whether
+/// every field is typed data or such a port. The set is closed by `capability.Capability`.
+pub const Inspection = struct {
+    valid: bool = true,
+    capabilities: capability.Set = .initEmpty(),
+
+    pub fn has(self: Inspection, held: capability.Capability) bool {
+        return self.capabilities.contains(held);
+    }
+
+    fn grants(comptime held: capability.Capability) Inspection {
+        var result: Inspection = .{};
+        result.capabilities.insert(held);
+        return result;
+    }
+
+    fn absorb(self: *Inspection, other: Inspection) void {
+        self.valid = self.valid and other.valid;
+        self.capabilities.setUnion(other.capabilities);
+    }
+};
 
 pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
-    if (T == @import("../ports/feature_log_activation.zig").Activator) return .{ .feature_logging = true };
-    if (T == provider.LLMProviderInterface) return .{ .model_provider = true };
-    if (T == @import("../ports/provider_operation_authorization.zig").Port) return .{ .provider_authorization = true };
-    if (T == @import("../ports/actor_authentication.zig").Port) return .{ .actor_authentication = true };
+    if (T == @import("../ports/feature_log_activation.zig").Activator) return .grants(.feature_logging);
+    if (T == provider.LLMProviderInterface) return .grants(.model_provider);
+    if (T == @import("../ports/provider_operation_authorization.zig").Port) return .grants(.provider_authorization);
+    if (T == @import("../ports/actor_authentication.zig").Port) return .grants(.actor_authentication);
     if (T == @import("../ports/unicode_normalizer.zig").Normalizer) return .{};
     if (T == @import("../ports/unicode_normalizer.zig").CaseFolder) return .{};
     if (T == @import("../ports/unicode_normalizer.zig").LexicalClassifier) return .{};
     const principle_source = @import("../ports/principle_source.zig");
-    if (T == principle_source.Reader) return .{ .principle_read = true };
+    if (T == principle_source.Reader) return .grants(.principle_read);
     const reference_source = @import("../ports/reference_corpus_source.zig");
-    if (T == reference_source.Enumerator or T == reference_source.Capturer) return .{ .reference_content_read = true };
-    if (T == @import("../ports/reference_decoder.zig").Decoder) return .{ .reference_decode = true };
-    if (T == @import("../ports/reference_state_identity.zig").Source) return .{ .reference_identity = true };
-    if (T == @import("../ports/reference_directory_inspector.zig").Inspector) return .{ .reference_read = true };
-    if (T == @import("../ports/feature_directory_inspector.zig").Inspector) return .{ .feature_read = true };
-    if (T == @import("../ports/feature_input_source.zig").Capturer) return .{ .feature_input_read = true };
-    if (T == @import("../ports/workflow_state_source.zig").Capturer) return .{ .feature_input_read = true };
-    if (T == @import("../ports/workflow_output.zig").Port) return .{ .feature_output_write = true };
+    if (T == reference_source.Enumerator or T == reference_source.Capturer) return .grants(.reference_content_read);
+    if (T == @import("../ports/reference_decoder.zig").Decoder) return .grants(.reference_decode);
+    if (T == @import("../ports/reference_state_identity.zig").Source) return .grants(.reference_identity);
+    if (T == @import("../ports/reference_directory_inspector.zig").Inspector) return .grants(.reference_read);
+    if (T == @import("../ports/feature_directory_inspector.zig").Inspector) return .grants(.feature_read);
+    if (T == @import("../ports/feature_input_source.zig").Capturer) return .grants(.feature_input_read);
+    if (T == @import("../ports/workflow_state_source.zig").Capturer) return .grants(.feature_input_read);
+    if (T == @import("../ports/workflow_output.zig").Port) return .grants(.feature_output_write);
     const clarification_parser = @import("../ports/clarification_input_parser.zig");
     if (T == clarification_parser.StateParser or T == clarification_parser.FormParser) return .{};
     if (T == @import("../ports/actor_evidence_parser.zig").Parser) return .{};
     const toolchain_source = @import("../ports/toolchain_authority_source.zig");
-    if (T == toolchain_source.ProjectCapturer or T == toolchain_source.PresetEnumerator or T == toolchain_source.PresetCapturer) return .{ .toolchain_read = true };
-    if (T == @import("../ports/toolchain_document_parser.zig").Parser) return .{ .toolchain_parser = true };
+    if (T == toolchain_source.ProjectCapturer or T == toolchain_source.PresetEnumerator or T == toolchain_source.PresetCapturer) return .grants(.toolchain_read);
+    if (T == @import("../ports/toolchain_document_parser.zig").Parser) return .grants(.toolchain_parser);
     if (T == @import("../ports/workflow_contract_source.zig").Source) return .{}; // Immutable compiled metadata only.
     if (T == std.mem.Allocator) return .{}; // Allocation is runner-local, not an operational port.
     inline for (ancestors) |ancestor| if (T == ancestor) return .{};
@@ -108,24 +119,7 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
         .pointer => |info| if (info.size == .one or info.size == .slice) inspect(info.child, next) else .{ .valid = false },
         inline .@"struct", .@"union" => |info| result: {
             var result: Inspection = .{};
-            inline for (info.fields) |field| {
-                const child = inspect(field.type, next);
-                result.valid = result.valid and child.valid;
-                result.feature_logging = result.feature_logging or child.feature_logging;
-                result.principle_read = result.principle_read or child.principle_read;
-                result.model_provider = result.model_provider or child.model_provider;
-                result.provider_authorization = result.provider_authorization or child.provider_authorization;
-                result.actor_authentication = result.actor_authentication or child.actor_authentication;
-                result.toolchain_read = result.toolchain_read or child.toolchain_read;
-                result.toolchain_parser = result.toolchain_parser or child.toolchain_parser;
-                result.reference_read = result.reference_read or child.reference_read;
-                result.feature_read = result.feature_read or child.feature_read;
-                result.feature_input_read = result.feature_input_read or child.feature_input_read;
-                result.feature_output_write = result.feature_output_write or child.feature_output_write;
-                result.reference_content_read = result.reference_content_read or child.reference_content_read;
-                result.reference_decode = result.reference_decode or child.reference_decode;
-                result.reference_identity = result.reference_identity or child.reference_identity;
-            }
+            inline for (info.fields) |field| result.absorb(inspect(field.type, next));
             break :result result;
         },
         else => .{ .valid = false },

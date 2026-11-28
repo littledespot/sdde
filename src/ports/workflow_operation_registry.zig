@@ -68,11 +68,11 @@ pub const Binding = struct {
 
     pub const Implementation = struct {
         invoke_fn: *const fn (?*anyopaque, Input) Error!execution.Candidate,
-        capabilities: []const []const u8,
+        capabilities: []const capability_contract.Capability,
         context_required: bool,
     };
 
-    pub fn capabilities(self: Binding) []const []const u8 {
+    pub fn capabilities(self: Binding) []const capability_contract.Capability {
         return self.implementation.capabilities;
     }
 
@@ -182,13 +182,12 @@ pub const Registry = struct {
         }
         for (self.policies, 0..) |profile, index| {
             if (workflow.RegisteredRef.parse(profile.id) == null or
-                !uniqueStrings(profile.allowed_capabilities) or
+                !capability_contract.unique(profile.allowed_capabilities) or
                 !uniqueOutcomes(profile.allowed_terminal_outcomes) or
                 std.mem.indexOfScalar(workflow.OutcomeTag, profile.allowed_terminal_outcomes, .more) != null) return false;
             for (self.policies[0..index]) |prior| {
                 if (std.mem.eql(u8, prior.id, profile.id)) return false;
             }
-            for (profile.allowed_capabilities) |capability| if (!capability_contract.known(capability)) return false;
         }
         return true;
     }
@@ -302,11 +301,11 @@ fn validRequestKernel(entry: Entry, schemas: *const [data.key_count]?*const data
         }
         // ADR 0030: no stage both invokes and interprets the model, and none holds both the
         // `model-provider` and `provider-authorization` capabilities.
-        if (containsString(stage.binding.capabilities(), capability_contract.model_provider) and
-            containsString(stage.binding.capabilities(), capability_contract.provider_authorization)) return false;
+        if (capability_contract.contains(stage.binding.capabilities(), .model_provider) and
+            capability_contract.contains(stage.binding.capabilities(), .provider_authorization)) return false;
         for (stage.binding.capabilities()) |capability| {
-            if (!containsString(entry.binding.capabilities(), capability)) return false;
-            if (std.mem.eql(u8, capability, capability_contract.model_provider)) model_provider_stages += 1;
+            if (!capability_contract.contains(entry.binding.capabilities(), capability)) return false;
+            if (capability == .model_provider) model_provider_stages += 1;
         }
         for (stage.contract.parameters) |descriptor| {
             if (kernel.fixedParameter(expected)) |fixed| if (std.mem.eql(u8, fixed.id, descriptor.id)) continue;
@@ -316,7 +315,7 @@ fn validRequestKernel(entry: Entry, schemas: *const [data.key_count]?*const data
     }
     for (entry.binding.capabilities()) |capability| {
         const provided = for (entry.request_stages) |stage| {
-            if (containsString(stage.binding.capabilities(), capability)) break true;
+            if (capability_contract.contains(stage.binding.capabilities(), capability)) break true;
         } else false;
         if (!provided) return false;
     }
@@ -324,7 +323,7 @@ fn validRequestKernel(entry: Entry, schemas: *const [data.key_count]?*const data
     const accounting_contract = (entry.requestStage(kernel.accounting_stage) orelse return false).contract;
     const limit = findParameter(accounting_contract.parameters, workflow_retry.parameter_id) orelse return false;
     const stage_limit = accounting_contract.retry_limit orelse return false;
-    if (entry.contract.parameters.len != prepare.len + 1 or !uniqueStrings(entry.binding.capabilities()) or model_provider_stages != 1) return false;
+    if (entry.contract.parameters.len != prepare.len + 1 or !capability_contract.unique(entry.binding.capabilities()) or model_provider_stages != 1) return false;
     for (prepare, entry.contract.parameters[0..prepare.len]) |expected, declared| if (!sameDescriptor(expected, declared)) return false;
     if (!sameDescriptor(limit, entry.contract.parameters[prepare.len])) return false;
     if (!@import("../domain/workflow_model.zig").validDescriptors(entry.contract.parameters)) return false;
@@ -360,7 +359,7 @@ fn containsString(values: []const []const u8, expected: []const u8) bool {
     return false;
 }
 
-fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+fn validContract(contract: operation.Contract, capabilities: []const capability_contract.Capability) bool {
     if (!@import("../domain/workflow_outcome_association.zig").validDescriptor(contract.outcome_association, contract.requires, contract.optional, contract.produces, contract.replaces, contract.repair_role, contract.outcomes)) return false;
     if (!@import("../domain/workflow_iteration.zig").validContract(contract, capabilities)) return false;
     if (!operation.validRepair(contract.repair_role, if (contract.retry_limit) |limit| limit.scope else null, contract.runner_accounting, contract.side_effect)) return false;
@@ -372,9 +371,8 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
     if (!operation.validAccounting(contract.runner_accounting, contract.requires, contract.produces, contract.side_effect, contract.retry_limit != null)) return false;
     if (!@import("../domain/workflow_provider_operation.zig").validContract(contract, capabilities)) return false;
     if (contract.outcomes.len == 0 or !uniqueOutcomes(contract.outcomes) or
-        !uniqueStrings(contract.gates) or !uniqueStrings(capabilities) or
+        !uniqueStrings(contract.gates) or !capability_contract.unique(capabilities) or
         !validDataContract(contract)) return false;
-    for (capabilities) |capability| if (!capability_contract.known(capability)) return false;
     if (contract.kind == .invocation and
         (contract.parameters.len != 0 or contract.requires.len != 0 or contract.optional.len != 0 or contract.replaces.len != 0 or
             contract.invalidates.len != 0 or contract.side_effect != .none or contract.gates.len != 0 or
@@ -391,7 +389,7 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
             if (std.mem.eql(u8, prior.id, descriptor.id)) return false;
         }
     }
-    const model_capable = containsExactlyOnce(capabilities, "model-provider");
+    const model_capable = std.mem.count(capability_contract.Capability, capabilities, &.{.model_provider}) == 1;
     var model_slot_count: usize = 0;
     for (contract.parameters) |descriptor| {
         if (descriptor.kind != .model_slot) continue;
@@ -464,12 +462,4 @@ fn uniqueOutcomes(values: []const workflow.OutcomeTag) bool {
         for (values[0..index]) |prior| if (prior == value) return false;
     }
     return true;
-}
-
-fn containsExactlyOnce(values: []const []const u8, expected: []const u8) bool {
-    var count: usize = 0;
-    for (values) |value| {
-        if (std.mem.eql(u8, value, expected)) count += 1;
-    }
-    return count == 1;
 }

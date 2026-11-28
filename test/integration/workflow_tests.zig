@@ -9,7 +9,6 @@ const workflow_execution = @import("../../src/domain/workflow_execution.zig");
 const telemetry = @import("../../src/domain/telemetry.zig");
 const request_projection = @import("../../src/test_fixtures/request_projection.zig");
 const workflow_resources = @import("../../src/test_fixtures/workflow_resources.zig");
-const model_provider_requirement = @import("../../src/domain/model_provider_requirement.zig");
 const llm_provider_identity = @import("../../src/domain/llm_provider_identity.zig");
 const bootstrap_services = @import("../../src/application/bootstrap_services.zig");
 const llm_provider_contracts = @import("../../src/domain/llm_provider_contracts.zig");
@@ -4242,7 +4241,7 @@ const test_model_step: workflow_compilation.CompiledStep = .{
     .outcomes = &.{.ok},
     .side_effect = .none,
     .gates = &.{},
-    .capabilities = &.{model_provider_requirement.capability_id},
+    .capabilities = &.{.model_provider},
     .retry_authority = null,
 };
 const test_model_transition: workflow.Transition = .{

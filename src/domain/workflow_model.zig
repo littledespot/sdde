@@ -2,6 +2,7 @@ const std = @import("std");
 const compilation = @import("workflow_compilation.zig");
 const operation = @import("workflow_operation.zig");
 const identity = @import("llm_provider_identity.zig");
+const capabilities = @import("workflow_capability.zig");
 
 // A projection of the originating parameters, not another selection authority.
 pub const Requirements = struct {
@@ -13,10 +14,7 @@ pub const Requirements = struct {
 };
 
 pub fn validProjection(step: compilation.CompiledStep) bool {
-    var capability_count: usize = 0;
-    for (step.capabilities) |capability| {
-        if (std.mem.eql(u8, capability, "model-provider")) capability_count += 1;
-    }
+    const capability_count = std.mem.count(capabilities.Capability, step.capabilities, &.{.model_provider});
     const has_slot = for (step.parameters) |parameter| {
         if (parameter.value == .model_slot) break true;
     } else false;

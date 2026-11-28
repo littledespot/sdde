@@ -1730,7 +1730,6 @@ test "a step that authorizes a repair key past the execution's population stops 
 const actor_lease = @import("domain/actor_authentication_lease.zig");
 const actor_port = @import("ports/actor_authentication.zig");
 const actor_evidence = @import("domain/actor_evidence.zig");
-const workflow_capability = @import("domain/workflow_capability.zig");
 
 /// An operation that reaches the authentication port under the lease the runner issued for it.
 const AuthenticatingOperation = struct {
@@ -1767,11 +1766,11 @@ var authentication_token: u8 = 0;
 fn authenticatingWorkflow(control: *OperationControl, operation: *AuthenticatingOperation, steps: *[1]compilation.CompiledStep) !compilation.CompiledWorkflow {
     steps.* = test_steps;
     steps[0].side_effect = .actor_authentication;
-    steps[0].capabilities = &.{workflow_capability.actor_authentication};
+    steps[0].capabilities = &.{.actor_authentication};
     var graph = try testGraph();
     graph.authority.steps = steps;
     graph.authority.maximum_step_executions = 2;
-    graph.authority.allowed_capabilities = &.{workflow_capability.actor_authentication};
+    graph.authority.allowed_capabilities = &.{.actor_authentication};
     operation.port = .{ .context = @ptrCast(&authentication_token), .observe_fn = AuthenticatingOperation.observe };
     _ = control;
     return graph;
@@ -1781,7 +1780,7 @@ fn authenticatingRegistry(control: *OperationControl, operation: *Authenticating
     var registry = testRegistry(control);
     control.entries[1].binding = operation_bindings.bind(AuthenticatingOperation, operation, AuthenticatingOperation.invoke);
     control.entries[1].contract.side_effect = .actor_authentication;
-    registry.policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{workflow_capability.actor_authentication}, .allowed_terminal_outcomes = test_outcomes }};
+    registry.policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{.actor_authentication}, .allowed_terminal_outcomes = test_outcomes }};
     return registry;
 }
 
@@ -1863,13 +1862,13 @@ test "a step that does not authenticate is issued no lease" {
 test "an authenticating step must declare the effect and the capability together and carry no accounting, retry or repair" {
     var base = test_steps[0];
     base.side_effect = .actor_authentication;
-    base.capabilities = &.{workflow_capability.actor_authentication};
+    base.capabilities = &.{.actor_authentication};
     try std.testing.expect(@import("domain/workflow_actor_authentication.zig").validProjection(base));
     var without_capability = base;
     without_capability.capabilities = &.{};
     try std.testing.expect(!@import("domain/workflow_actor_authentication.zig").validProjection(without_capability));
     var without_effect = test_steps[0];
-    without_effect.capabilities = &.{workflow_capability.actor_authentication};
+    without_effect.capabilities = &.{.actor_authentication};
     try std.testing.expect(!@import("domain/workflow_actor_authentication.zig").validProjection(without_effect));
     var retried = base;
     retried.retry_authority = .{ .workflow_id = .{ .bytes = "arbitrary-workflow" }, .workflow_version = 1, .operation_instance_id = base.id, .limit = .{ .value = 1 }, .scope = .operation };

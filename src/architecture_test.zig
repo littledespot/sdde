@@ -1424,7 +1424,7 @@ test "YAML invocation owns one response and uses runner accounting without hidde
     try std.testing.expect(@typeInfo(@import("domain/model_invocation_result.zig").Result) == .@"opaque");
     try std.testing.expect(native.schema.maximum_bytes == null);
     const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Invoke, &.{});
-    try std.testing.expect(capabilities.valid and capabilities.model_provider and !capabilities.provider_authorization);
+    try std.testing.expect(capabilities.valid and capabilities.has(.model_provider) and !capabilities.has(.provider_authorization));
     try std.testing.expect(native.Invoke.contract.side_effect == .model_call);
     try std.testing.expectEqual(@as(usize, 0), native.Invoke.contract.parameters.len);
     const source = @embedFile("application/model_invocation_workflow.zig");
@@ -1450,8 +1450,8 @@ test "inference action forwards one provider call without hidden work" {
     try std.testing.expect(signature.params[4].type.? == *const llm_provider_operation.InvokedProviderOperation);
     try std.testing.expect(signature.return_type.? == llm_provider_interface.Error!llm_provider_operation.ProviderInvocationObservation);
     const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(action, &.{});
-    try std.testing.expect(capabilities.valid and capabilities.model_provider);
-    try std.testing.expect(!capabilities.toolchain_read and !capabilities.toolchain_parser and !capabilities.reference_read);
+    try std.testing.expect(capabilities.valid and capabilities.has(.model_provider));
+    try std.testing.expect(!capabilities.has(.toolchain_read) and !capabilities.has(.toolchain_parser) and !capabilities.has(.reference_read));
     const source = @embedFile("actions/model/invoke_model.zig");
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.provider."));
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.provider.invoke("));
@@ -1468,7 +1468,7 @@ test "YAML observation validation reuses the pure validator and retains immutabl
     try std.testing.expect(@FieldType(native.Outcome, "validated") == *const @import("domain/provider_invocation_validation.zig").Evidence);
     try std.testing.expect(native.schema.maximum_bytes == null);
     const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Validate, &.{});
-    try std.testing.expect(capabilities.valid and !capabilities.model_provider and !capabilities.provider_authorization);
+    try std.testing.expect(capabilities.valid and !capabilities.has(.model_provider) and !capabilities.has(.provider_authorization));
     try std.testing.expect(native.Validate.contract.side_effect == .none);
     try std.testing.expect(native.Validate.contract.runner_accounting == .none);
     try std.testing.expectEqual(@as(usize, 0), native.Validate.contract.parameters.len);
@@ -1497,7 +1497,7 @@ test "response admission decodes and validates in one binding without schema or 
     try std.testing.expect(!@hasDecl(native, "Validate"));
     inline for (.{native.Admit}) |Binding| {
         const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(Binding, &.{});
-        try std.testing.expect(capabilities.valid and !capabilities.model_provider and !capabilities.provider_authorization);
+        try std.testing.expect(capabilities.valid and !capabilities.has(.model_provider) and !capabilities.has(.provider_authorization));
         try std.testing.expect(Binding.contract.side_effect == .none);
         try std.testing.expect(Binding.contract.runner_accounting == .none);
         try std.testing.expectEqual(@as(usize, 0), Binding.contract.parameters.len);
@@ -1511,7 +1511,7 @@ test "response admission decodes and validates in one binding without schema or 
 test "YAML request lifecycle uses its existing action and publishes only a validated ledger successor" {
     const native = @import("application/model_request_lifecycle_workflow.zig");
     const metadata = @import("application/workflow_operation_binding.zig").inspect(native.Advance, &.{});
-    try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
+    try std.testing.expect(metadata.valid and !metadata.has(.model_provider) and !metadata.has(.provider_authorization));
     try std.testing.expectEqual(@as(usize, 0), native.Advance.contract.produces.len);
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.model_request_identity_ledger}, native.Advance.contract.replaces);
     const source = @embedFile("application/model_request_lifecycle_workflow.zig");
@@ -1528,7 +1528,7 @@ test "YAML request lifecycle uses its existing action and publishes only a valid
 test "YAML request closure reuses lifecycle validation without new authority or effects" {
     inline for (.{ @import("application/model_request_completion_workflow.zig").Complete, @import("application/model_request_termination_workflow.zig").Terminate }, .{ "application/model_request_completion_workflow.zig", "application/model_request_termination_workflow.zig" }) |Native, path| {
         const metadata = @import("application/workflow_operation_binding.zig").inspect(Native, &.{});
-        try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
+        try std.testing.expect(metadata.valid and !metadata.has(.model_provider) and !metadata.has(.provider_authorization));
         try std.testing.expectEqual(.none, Native.contract.runner_accounting);
         try std.testing.expectEqual(@as(usize, 0), Native.contract.parameters.len);
         try std.testing.expectEqual(@as(usize, 0), Native.contract.produces.len);
@@ -1577,7 +1577,7 @@ test "provider operation boundary has one capability-limited interface" {
 test "YAML provider invocation proposes one lifecycle change without receiving a lease capability" {
     const native = @import("application/provider_operation_lifecycle_workflow.zig");
     const metadata = @import("application/workflow_operation_binding.zig").inspect(native.Advance, &.{});
-    try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
+    try std.testing.expect(metadata.valid and !metadata.has(.model_provider) and !metadata.has(.provider_authorization));
     try std.testing.expectEqual(.advance_provider_operation, native.Advance.contract.runner_accounting);
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.invoked_provider_operation}, native.Advance.contract.produces);
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.assigned_provider_operation}, native.Advance.contract.invalidates);
@@ -1597,7 +1597,7 @@ test "YAML provider invocation proposes one lifecycle change without receiving a
 test "YAML provider completion uses one lifecycle action and runner-published terminal evidence" {
     const native = @import("application/provider_operation_completion_workflow.zig");
     const metadata = @import("application/workflow_operation_binding.zig").inspect(native.Complete, &.{});
-    try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
+    try std.testing.expect(metadata.valid and !metadata.has(.model_provider) and !metadata.has(.provider_authorization));
     try std.testing.expectEqual(.advance_provider_operation, native.Complete.contract.runner_accounting);
     try std.testing.expectEqual(@as(usize, 0), native.Complete.contract.parameters.len);
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.terminal_provider_operation}, native.Complete.contract.produces);
@@ -1614,7 +1614,7 @@ test "YAML provider completion uses one lifecycle action and runner-published te
 test "YAML pre-call termination reuses one lifecycle action and canonical terminal publication" {
     const native = @import("application/provider_operation_termination_workflow.zig");
     const metadata = @import("application/workflow_operation_binding.zig").inspect(native.Terminate, &.{});
-    try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
+    try std.testing.expect(metadata.valid and !metadata.has(.model_provider) and !metadata.has(.provider_authorization));
     try std.testing.expectEqual(.advance_provider_operation, native.Terminate.contract.runner_accounting);
     try std.testing.expectEqual(@as(usize, 0), native.Terminate.contract.parameters.len);
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.terminal_provider_operation}, native.Terminate.contract.produces);
@@ -1643,7 +1643,7 @@ test "provider authorization exposes only non-operational references and narrow 
     try std.testing.expect(!@hasField(lease.Port, "deposit_fn"));
     const native_binding = @import("application/workflow_operation_binding.zig");
     const capability = native_binding.inspect(preparation.Port, &.{});
-    try std.testing.expect(capability.valid and capability.provider_authorization and !capability.model_provider);
+    try std.testing.expect(capability.valid and capability.has(.provider_authorization) and !capability.has(.model_provider));
     try std.testing.expect(!native_binding.inspect(preparation.AllocatedSlot, &.{}).valid);
     try std.testing.expect(@typeInfo(@import("domain/provider_authorization_result.zig").Result) == .@"opaque");
     const yaml_binding = @embedFile("application/provider_authorization_workflow.zig");
@@ -1699,8 +1699,8 @@ test "actor authentication has one runner-issued lease, one action that observes
     const port = @import("ports/actor_authentication.zig");
     // The port grants the authentication capability and no other.
     const capability = native_binding.inspect(port.Port, &.{});
-    try std.testing.expect(capability.valid and capability.actor_authentication);
-    try std.testing.expect(!capability.model_provider and !capability.provider_authorization and !capability.feature_logging and !capability.feature_input_read and !capability.feature_output_write and !capability.feature_read and !capability.reference_read);
+    try std.testing.expect(capability.valid and capability.has(.actor_authentication));
+    try std.testing.expect(!capability.has(.model_provider) and !capability.has(.provider_authorization) and !capability.has(.feature_logging) and !capability.has(.feature_input_read) and !capability.has(.feature_output_write) and !capability.has(.feature_read) and !capability.has(.reference_read));
     // The runner alone issues and ends a lease: it ends first on every path (a `defer`), issues before the step runs, and
     // checks after the step that an `ok` one consumed it.
     const runner = @embedFile("application/workflow_pipeline_runner.zig");
@@ -2889,8 +2889,8 @@ test "feature log paths have one opaque artifact authority and one sink consumer
 test "feature log activation owns only registered target write authority" {
     const activation = @import("application/feature_logging_workflow.zig");
     const inspection = comptime @import("application/workflow_operation_binding.zig").inspect(activation.Activate, &.{});
-    try std.testing.expect(inspection.valid and inspection.feature_logging);
-    try std.testing.expect(!inspection.model_provider and !inspection.feature_output_write);
+    try std.testing.expect(inspection.valid and inspection.has(.feature_logging));
+    try std.testing.expect(!inspection.has(.model_provider) and !inspection.has(.feature_output_write));
     const io = std.testing.io;
     var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
     defer sources.close(io);
@@ -3281,9 +3281,9 @@ test "clarification input operations have narrow read-only ports and no workflow
     const binding = @import("application/workflow_operation_binding.zig");
     const inputs = comptime binding.inspect(@import("application/input_preparation_workflow.zig").PrepareInputs, &.{});
     // Reads the feature's inputs through the narrow input port, with no model or output capability.
-    try std.testing.expect(inputs.valid and inputs.feature_input_read);
+    try std.testing.expect(inputs.valid and inputs.has(.feature_input_read));
     try std.testing.expectEqual(.filesystem_read, @import("actions/specify/prepare_inputs.zig").Action.contract.side_effect);
-    try std.testing.expect(!inputs.model_provider and !inputs.feature_output_write and !inputs.toolchain_read);
+    try std.testing.expect(!inputs.has(.model_provider) and !inputs.has(.feature_output_write) and !inputs.has(.toolchain_read));
     inline for (.{
         @embedFile("actions/specify/prepare_inputs.zig"),
         @embedFile("application/clarification_input_workflow.zig"),
@@ -3328,8 +3328,8 @@ test "reference evidence has shared identity types and pure chunk citation bound
     const binding = @import("application/workflow_operation_binding.zig");
     // The stage reads the reference content and draws identities, and nothing else.
     const preparing = comptime binding.inspect(@import("application/reference_evidence_preparation_workflow.zig").PrepareReferenceEvidence, &.{});
-    try std.testing.expect(preparing.valid and preparing.reference_identity and preparing.reference_content_read);
-    try std.testing.expect(!preparing.reference_read and !preparing.model_provider and !preparing.feature_input_read and !preparing.feature_output_write);
+    try std.testing.expect(preparing.valid and preparing.has(.reference_identity) and preparing.has(.reference_content_read));
+    try std.testing.expect(!preparing.has(.reference_read) and !preparing.has(.model_provider) and !preparing.has(.feature_input_read) and !preparing.has(.feature_output_write));
     inline for (.{
         @embedFile("domain/reference_evidence.zig"),
         @embedFile("actions/reference/prepare_reference_evidence.zig"),
@@ -4054,7 +4054,7 @@ test "the scenarios context repeats the generation context's shared rules and of
 test "principle root access stays in its narrow source adapter and shares physical traversal" {
     inline for (.{@import("actions/principle/capture_principle_registry.zig").Action}) |Action| {
         try std.testing.expectEqual(.filesystem_read, Action.contract.side_effect);
-        try std.testing.expect(@import("application/workflow_operation_binding.zig").inspect(Action, &.{}).principle_read);
+        try std.testing.expect(@import("application/workflow_operation_binding.zig").inspect(Action, &.{}).has(.principle_read));
     }
     const io = std.testing.io;
     var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });

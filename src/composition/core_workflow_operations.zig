@@ -34,11 +34,11 @@ pub const profiles = [_]@import("../domain/workflow_operation.zig").PolicyProfil
     .allowed_terminal_outcomes = &.{ .ok, .needs_user, .invalid, .blocked, .failed, .cancelled },
 }, .{
     .id = "core.model-authorization@1",
-    .allowed_capabilities = &.{@import("../domain/workflow_capability.zig").provider_authorization},
+    .allowed_capabilities = &.{.provider_authorization},
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
 }, .{
     .id = "core.model-inference@1",
-    .allowed_capabilities = &.{ @import("../domain/workflow_capability.zig").model_provider, @import("../domain/workflow_capability.zig").provider_authorization },
+    .allowed_capabilities = &.{ .model_provider, .provider_authorization },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .failed, .cancelled },
 } };
 

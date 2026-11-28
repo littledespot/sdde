@@ -27,7 +27,7 @@ pub fn terminatesAssigned(inputs: []const pipeline.DataKey) bool {
     return std.mem.indexOfScalar(pipeline.DataKey, inputs, .assigned_provider_operation) != null;
 }
 
-pub fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+pub fn validContract(contract: operation.Contract, capabilities: []const @import("workflow_capability.zig").Capability) bool {
     if (contract.runner_accounting != .advance_provider_operation) return true;
     if (completes(contract.produces)) return validCompletionEffects(contract.requires, contract.produces, contract.optional, contract.replaces, contract.invalidates) and
         contract.side_effect == .none and contract.retry_limit == null and capabilities.len == 0 and contract.parameters.len == 0 and

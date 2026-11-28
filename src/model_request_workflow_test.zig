@@ -529,7 +529,7 @@ test "retained request consumers still require policy permission and available w
     fixture.entries[fixture.entries.len - 1].binding = bindings.bind(Consumer, &consumer, Consumer.invoke);
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(yaml));
     var profile = core.profiles[0];
-    profile.allowed_capabilities = &.{"model-provider"};
+    profile.allowed_capabilities = &.{.model_provider};
     fixture.registry.policies = &.{profile};
     const graph = try fixture.compile(yaml);
     var runner = fixture.runner(graph, std.testing.allocator);
@@ -1065,7 +1065,7 @@ test "YAML authorization prepares one private lease for the assigned operation a
         try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
         try std.testing.expectEqual(.assigned, (try assignedOperation(&runner)).record().state);
         for (graph.authority.steps) |step| for (step.capabilities) |capability| {
-            try std.testing.expectEqualStrings("provider-authorization", capability);
+            try std.testing.expectEqual(.provider_authorization, capability);
         };
     }
     try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
@@ -1890,7 +1890,7 @@ test "pre-call request closure refuses a forged compiled contract where it runs"
         for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, request_termination.Terminate.contract.id)) {
             switch (variant) {
                 0 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation },
-                1 => step.capabilities = &.{"provider-authorization"},
+                1 => step.capabilities = &.{.provider_authorization},
                 2 => step.replaces = &.{ .model_request_identity_ledger, .prepared_model_request },
                 3 => step.outcomes = &.{ .ok, .failed, .cancelled },
                 4 => step.optional = &.{.model_payload_schema_result},
@@ -2254,7 +2254,7 @@ test "pre-call termination refuses a forged compiled contract where it runs" {
         for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, termination_workflow.Terminate.contract.id)) {
             switch (variant) {
                 0 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .assigned_provider_operation },
-                1 => step.capabilities = &.{"provider-authorization"},
+                1 => step.capabilities = &.{.provider_authorization},
                 2 => step.invalidates = &.{.invoked_provider_operation},
                 3 => step.runner_accounting = .none,
                 4 => step.optional = &.{.provider_invocation_validation_result},
@@ -2754,7 +2754,7 @@ test "provider invocation accounting permission and exact compiled profile canno
                 1 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt },
                 2 => step.runner_accounting = .none,
                 3 => step.invalidates = &.{},
-                4 => step.capabilities = &.{"model-provider"},
+                4 => step.capabilities = &.{.model_provider},
                 else => unreachable,
             }
         };
@@ -3610,7 +3610,7 @@ test "response admission permits only the exact pure output pair" {
         }
         try std.testing.expect(!contract.validContract(invalid, &.{}));
     }
-    try std.testing.expect(!contract.validContract(payload_workflow.Admit.contract, &.{"model-provider"}));
+    try std.testing.expect(!contract.validContract(payload_workflow.Admit.contract, &.{.model_provider}));
 }
 
 test "response admission rejects missing and foreign observation authority without partial publication" {
@@ -5454,7 +5454,7 @@ test "request closure refuses a forged compiled contract where it runs" {
         for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, request_completion.Complete.contract.id)) {
             switch (variant) {
                 0 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request },
-                1 => step.capabilities = &.{"model-provider"},
+                1 => step.capabilities = &.{.model_provider},
                 2 => step.replaces = &.{ .model_request_identity_ledger, .prepared_model_request },
                 3 => step.outcomes = &.{.ok},
                 4 => step.optional = &.{.provider_authorization_result},
@@ -5866,7 +5866,7 @@ test "provider completion refuses a forged compiled contract where it runs" {
         for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, completion_workflow.Complete.contract.id)) {
             switch (variant) {
                 0 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation },
-                1 => step.capabilities = &.{"model-provider"},
+                1 => step.capabilities = &.{.model_provider},
                 2 => step.invalidates = &.{},
                 3 => step.runner_accounting = .none,
                 4 => step.optional = &.{.provider_authorization_result},
@@ -6267,7 +6267,7 @@ test "compiled payload validation cannot bypass its candidate or add effects" {
             for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, payload_workflow.Admit.contract.id)) {
                 switch (variant) {
                     0 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request },
-                    1 => step.capabilities = &.{"model-provider"},
+                    1 => step.capabilities = &.{.model_provider},
                     2 => step.invalidates = &.{.model_envelope_result},
                     else => unreachable,
                 }
@@ -6545,7 +6545,7 @@ test "compiled observation validation cannot hide its dependencies or add a capa
         for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, observation_workflow.Validate.contract.id)) {
             switch (variant) {
                 0 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .provider_invocation_result },
-                1 => step.capabilities = &.{"model-provider"},
+                1 => step.capabilities = &.{.model_provider},
                 2 => step.invalidates = &.{.provider_invocation_result},
                 else => unreachable,
             }

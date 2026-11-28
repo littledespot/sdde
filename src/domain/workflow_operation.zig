@@ -141,7 +141,7 @@ pub fn validRepair(role: @import("workflow_retry.zig").Role, retry: ?@import("wo
 
 pub const PolicyProfile = struct {
     id: []const u8,
-    allowed_capabilities: []const []const u8,
+    allowed_capabilities: []const @import("workflow_capability.zig").Capability,
     allowed_terminal_outcomes: []const workflow.OutcomeTag,
 };
 

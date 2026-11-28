@@ -108,8 +108,8 @@ test "registered bindings derive only their narrow operational capabilities" {
     const binding = @import("application/workflow_operation_binding.zig");
     const inputs = comptime binding.inspect(runner.PrepareInputs, &.{});
     // The stage reads the feature and reference directories and the feature's inputs, and nothing else.
-    try std.testing.expect(inputs.valid and inputs.reference_read and inputs.feature_read and inputs.feature_input_read);
-    try std.testing.expect(!inputs.model_provider and !inputs.toolchain_read and !inputs.toolchain_parser and !inputs.feature_output_write and !inputs.reference_content_read);
+    try std.testing.expect(inputs.valid and inputs.has(.reference_read) and inputs.has(.feature_read) and inputs.has(.feature_input_read));
+    try std.testing.expect(!inputs.has(.model_provider) and !inputs.has(.toolchain_read) and !inputs.has(.toolchain_parser) and !inputs.has(.feature_output_write) and !inputs.has(.reference_content_read));
     try std.testing.expect((comptime binding.inspect(invocation_runner.Invocation, &.{})).valid);
 }
 

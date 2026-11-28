@@ -146,8 +146,8 @@ const Countdown = struct {
 
 test "the binding derives exactly the toolchain read and parser capabilities" {
     const derived = comptime bindings.inspect(runners.PrepareToolchain, &.{});
-    try std.testing.expect(derived.valid and derived.toolchain_read and derived.toolchain_parser);
-    try std.testing.expect(!derived.model_provider and !derived.feature_logging and !derived.principle_read and !derived.feature_output_write and !derived.feature_read);
+    try std.testing.expect(derived.valid and derived.has(.toolchain_read) and derived.has(.toolchain_parser));
+    try std.testing.expect(!derived.has(.model_provider) and !derived.has(.feature_logging) and !derived.has(.principle_read) and !derived.has(.feature_output_write) and !derived.has(.feature_read));
 }
 
 test "the stage contract is one read-only operation that produces only the valid toolchain" {

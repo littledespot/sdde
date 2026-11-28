@@ -40,6 +40,7 @@ const retry = @import("../domain/workflow_retry.zig");
 const iteration = @import("../domain/workflow_iteration.zig");
 const event_capture = @import("workflow_event_capture.zig");
 const outcome_association = @import("../domain/workflow_outcome_association.zig");
+const workflow_capability = @import("../domain/workflow_capability.zig");
 const outcome_binding = @import("workflow_outcome_binding.zig");
 const kernel = @import("../domain/model_request_kernel.zig");
 const request_stage = @import("../domain/model_request_stage.zig");
@@ -312,8 +313,8 @@ pub const Runner = struct {
     /// run through the same checks, accounting and retention as any step, each with its own event.
     fn executeRequestKernel(self: *Runner, id: workflow.WorkflowStepId, index: usize, step: *const compilation.CompiledStep, entry: *const operations.Entry) execution.Applied {
         if (!kernel.validProjection(step.*) or !compilation.matchesContract(entry.contract, step.*) or
-            !equalStrings(entry.binding.capabilities(), step.capabilities) or
-            !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
+            !std.mem.eql(workflow_capability.Capability, entry.binding.capabilities(), step.capabilities) or
+            !workflow_capability.permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         if (self.remaining_step_executions == 0) return .{ .rejected = .{ .authority = .step_execution_ceiling } };
         self.remaining_step_executions -= 1;
         var context: KernelContext = .{ .runner = self, .id = id, .index = index, .step = step, .entry = entry };
@@ -371,8 +372,8 @@ pub const Runner = struct {
             !authorization_selection.validProjection(step.*) or
             !actor_selection.validProjection(step.*)) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         if (!compilation.matchesContract(entry.contract, step.*) or
-            !equalStrings(entry.binding.capabilities(), step.capabilities) or
-            !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
+            !std.mem.eql(workflow_capability.Capability, entry.binding.capabilities(), step.capabilities) or
+            !workflow_capability.permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .{ .authority = .step_contract_mismatch } };
         switch (step.side_effect) {
             .filesystem_read, .filesystem_write, .actor_authentication => if (self.envelope.outcomes.firstUnresolved() != null) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } },
             .none, .model_call, .workflow_publication => {},
@@ -418,9 +419,9 @@ pub const Runner = struct {
         }
         // Every model send shares the same execution budget. Native completion
         // steps need no remaining tokens, but cannot authorize another send.
-        for (step.capabilities) |capability| if (std.mem.eql(u8, capability, @import("../domain/workflow_capability.zig").model_provider)) {
+        if (workflow_capability.contains(step.capabilities, .model_provider)) {
             self.token_accounting.check() catch |err| return .{ .rejected = .{ .token_budget = err } };
-        };
+        }
         if (input_data.slots[@intFromEnum(pipeline.DataKey.accounted_model_attempt)] != null) {
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .{ .authority = .request_state_missing } };
             const request = retained_request orelse return .{ .rejected = .{ .authority = .request_state_missing } };
@@ -952,7 +953,7 @@ pub const Runner = struct {
         }
         const authority = self.selected.graph.authority;
         const policy = self.operation_registry.resolvePolicy(authority.policy_profile_id) orelse return false;
-        if (!equalStrings(policy.allowed_capabilities, authority.allowed_capabilities)) return false;
+        if (!std.mem.eql(workflow_capability.Capability, policy.allowed_capabilities, authority.allowed_capabilities)) return false;
         for (self.selected.graph.authority.data_schemas) |schema| {
             const current = data.find(self.operation_registry.data_schemas, schema.key) orelse return false;
             if (!schema.eql(current)) return false;
@@ -1172,13 +1173,6 @@ fn terminalFor(transitions: []const workflow.Transition, step: workflow.Workflow
         };
     };
     return null;
-}
-fn equalStrings(left: []const []const u8, right: []const []const u8) bool {
-    if (left.len != right.len) return false;
-    for (left, right) |left_value, right_value| {
-        if (!std.mem.eql(u8, left_value, right_value)) return false;
-    }
-    return true;
 }
 fn invokeInvocation(context: *anyopaque) execution.Applied {
     return cast(context).invokeInvocation();

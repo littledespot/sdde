@@ -232,7 +232,7 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         .source_ordinal = source.source_ordinal,
         .shortcode = source.shortcode,
         .authority = .{
-            .allowed_capabilities = try cloneStrings(allocator, source.authority.allowed_capabilities),
+            .allowed_capabilities = try allocator.dupe(std.meta.Child(@TypeOf(source.authority.allowed_capabilities)), source.authority.allowed_capabilities),
             .data_schemas = try cloneDataSchemas(allocator, source.authority.data_schemas),
             .workflow_id = .{ .bytes = try allocator.dupe(u8, source.authority.workflow_id.bytes) },
             .workflow_version = source.authority.workflow_version,
@@ -270,7 +270,7 @@ fn cloneStep(allocator: std.mem.Allocator, step: compilation.CompiledStep) !comp
         gate.authority = try allocator.dupe(pipeline.DataKey, gate.authority);
     }
     destination.gates = gates;
-    destination.capabilities = try cloneStrings(allocator, step.capabilities);
+    destination.capabilities = try allocator.dupe(std.meta.Child(@TypeOf(step.capabilities)), step.capabilities);
     if (step.retry_authority) |authority| {
         destination.retry_authority = authority;
         destination.retry_authority.?.workflow_id.bytes = try allocator.dupe(u8, authority.workflow_id.bytes);
@@ -298,12 +298,6 @@ fn cloneParameters(allocator: std.mem.Allocator, source: []const compilation.Com
             .boolean, .integer => {},
         }
     }
-    return values;
-}
-
-fn cloneStrings(allocator: std.mem.Allocator, source: []const []const u8) ![]const []const u8 {
-    const values = try allocator.alloc([]const u8, source.len);
-    for (values, source) |*destination, value| destination.* = try allocator.dupe(u8, value);
     return values;
 }
 

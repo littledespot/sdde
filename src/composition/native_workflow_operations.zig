@@ -10,7 +10,6 @@ const core = @import("core_workflow_operations.zig");
 const model_request = @import("model_request_operations.zig");
 const toolchain = @import("../domain/toolchain.zig");
 const roots = @import("../domain/bootstrap_root_registry.zig");
-const capabilities = @import("../domain/workflow_capability.zig");
 const input_preparation = @import("../application/input_preparation_workflow.zig");
 const invocation = @import("../application/specify_invocation_runner.zig");
 const invocation_values = @import("../application/specify_invocation_values.zig");
@@ -383,27 +382,27 @@ pub const Assembly = struct {
 pub const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_generation.schemas ++ scenario_link.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas ++ actor_evidence_workflow.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
-    .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging, capabilities.actor_authentication },
+    .allowed_capabilities = &.{ .principle_read, .reference_read, .feature_read, .feature_input_read, .reference_content_read, .reference_decode, .reference_identity, .toolchain_read, .toolchain_parser, .model_provider, .provider_authorization, .feature_output_write, .feature_logging, .actor_authentication },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .needs_user, .blocked, .failed, .cancelled },
 }, .{
     .id = "core.toolchain@1",
-    .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },
+    .allowed_capabilities = &.{ .toolchain_read, .toolchain_parser },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
 }, .{
     .id = "core.reference-read@1",
-    .allowed_capabilities = &.{capabilities.reference_read},
+    .allowed_capabilities = &.{.reference_read},
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
 }, .{
     .id = "core.directory-read@1",
-    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read },
+    .allowed_capabilities = &.{ .reference_read, .feature_read },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
 }, .{
     .id = "core.feature-input-read@1",
-    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read },
+    .allowed_capabilities = &.{ .reference_read, .feature_read, .feature_input_read },
     .allowed_terminal_outcomes = &.{ .ok, .blocked, .failed, .cancelled },
 }, .{
     .id = "core.reference-ingestion@1",
-    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser },
+    .allowed_capabilities = &.{ .reference_read, .feature_read, .feature_input_read, .reference_content_read, .reference_decode, .reference_identity, .toolchain_read, .toolchain_parser },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .blocked, .failed, .cancelled },
 } };
 

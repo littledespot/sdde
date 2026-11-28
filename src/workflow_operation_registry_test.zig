@@ -4,6 +4,7 @@ const operations = @import("ports/workflow_operation_registry.zig");
 const Entry = operations.Entry;
 const Registry = operations.Registry;
 const bindings = @import("application/workflow_operation_binding.zig");
+const capability = @import("domain/workflow_capability.zig");
 const fixture = @import("workflow_binding_test_fixture.zig");
 const workflow = @import("domain/workflow.zig");
 
@@ -359,10 +360,10 @@ test "bindings derive reachable port capabilities and reject erased or executabl
     const nested = comptime bindings.inspect(Nested, &.{});
     const recursive = comptime bindings.inspect(Recursive, &.{});
     const output = comptime bindings.inspect(@import("application/workflow_output_binding.zig").Publish, &.{});
-    try std.testing.expect(pure.valid and !pure.model_provider);
-    try std.testing.expect(nested.valid and nested.model_provider);
-    try std.testing.expect(recursive.valid and recursive.model_provider);
-    try std.testing.expect(output.valid and output.feature_output_write and !output.model_provider and !output.feature_input_read);
+    try std.testing.expect(pure.valid and !pure.has(.model_provider));
+    try std.testing.expect(nested.valid and nested.has(.model_provider));
+    try std.testing.expect(recursive.valid and recursive.has(.model_provider));
+    try std.testing.expect(output.valid and output.has(.feature_output_write) and !output.has(.model_provider) and !output.has(.feature_input_read));
     inline for (.{ anyopaque, *anyopaque, *const fn () void, [*]u8, struct { hidden: ?*anyopaque } }) |T| {
         try std.testing.expect(!(comptime bindings.inspect(T, &.{})).valid);
     }
@@ -370,7 +371,49 @@ test "bindings derive reachable port capabilities and reject erased or executabl
     const model_binding = bindings.bind(fixture.ModelContext, &fixture.model_context, fixture.unusedModel);
     try std.testing.expectEqual(@as(usize, 0), pure_binding.capabilities().len);
     try std.testing.expectEqual(@as(usize, 1), model_binding.capabilities().len);
-    try std.testing.expectEqualStrings("model-provider", model_binding.capabilities()[0]);
+    try std.testing.expectEqual(.model_provider, model_binding.capabilities()[0]);
+}
+
+test "a binding lists the union of its reachable ports' capabilities once, in declaration order" {
+    const Publish = @import("application/workflow_output_binding.zig").Publish;
+    const Mixed = struct { output: Publish, model: fixture.ModelContext, again: ?*fixture.ModelContext };
+    const Either = union(enum) { model: fixture.ModelContext, output: Publish };
+    const mixed = comptime bindings.inspect(Mixed, &.{});
+    const either = comptime bindings.inspect(Either, &.{});
+    // Two different capabilities reached through different fields both survive the merge.
+    try std.testing.expect(mixed.valid and mixed.has(.model_provider) and mixed.has(.feature_output_write) and !mixed.has(.provider_authorization));
+    try std.testing.expect(either.valid and either.has(.model_provider) and either.has(.feature_output_write));
+    const Invoke = struct {
+        fn unused(_: ?*Mixed, _: operations.Input) operations.Error!@import("domain/workflow_execution.zig").Candidate {
+            return error.InvocationFailureUnrecorded;
+        }
+    };
+    const binding = bindings.bind(Mixed, null, Invoke.unused);
+    try std.testing.expectEqualSlices(capability.Capability, &.{ .model_provider, .feature_output_write }, binding.capabilities());
+}
+
+test "capability lists reject a duplicate and a requirement outside the ceiling" {
+    try std.testing.expect(capability.unique(&.{}));
+    try std.testing.expect(capability.unique(&.{ .model_provider, .provider_authorization }));
+    try std.testing.expect(!capability.unique(&.{ .model_provider, .feature_read, .model_provider }));
+    try std.testing.expect(capability.permits(&.{}, &.{}));
+    try std.testing.expect(capability.permits(&.{ .model_provider, .provider_authorization }, &.{.provider_authorization}));
+    try std.testing.expect(!capability.permits(&.{.provider_authorization}, &.{ .provider_authorization, .model_provider }));
+    try std.testing.expect(!capability.permits(&.{}, &.{.feature_read}));
+    // A policy that lists one capability twice is not a valid policy.
+    const noop: Entry = .{
+        .contract = .{ .id = "core.noop", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },
+        .binding = bindings.bind(void, null, fixture.unused),
+    };
+    const once: Registry = .{
+        .operations = &.{noop},
+        .policies = &.{.{ .id = "core.safe@1", .allowed_capabilities = &.{.model_provider}, .allowed_terminal_outcomes = &.{.ok} }},
+        .gates = &.{},
+    };
+    try std.testing.expect(once.validate());
+    var twice = once;
+    twice.policies = &.{.{ .id = "core.safe@1", .allowed_capabilities = &.{ .model_provider, .model_provider }, .allowed_terminal_outcomes = &.{.ok} }};
+    try std.testing.expect(!twice.validate());
 }
 
 test "registry rejects absent typed operation context" {
