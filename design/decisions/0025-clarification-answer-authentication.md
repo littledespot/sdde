@@ -3,7 +3,7 @@
 - **Status:** Accepted. Not built: generation's use of answers other than a reference conflict's, and
   response-owned passive literals ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 - **Date:** 2026-10-21
-- **Decision authority:** User decisions, 21 October and 23, 24 and 27 November 2026. The approval covers
+- **Decision authority:** User decisions, 21 October and 23, 24, 27 and 28 November 2026. The approval covers
   clarification answers. It does not choose the provider for plan or task review approvals.
 - **Amends:**
   - §17.4, by defining the authenticated actor and the act of acceptance;
@@ -16,7 +16,12 @@
   - the §13.03 catalogue, by `ApplyClarificationAnswersAction`, and [§13.05](../contracts/actions/13-05-artifacts-rendering-traceability.md)'s
     authority need builder, by the selection form of a conflict (Decision 7).
 
-  - §17.3, for the source text generation receives after an answered conflict.
+  - §17.3, for the source text generation receives after an answered conflict;
+  - §17.3's rule that positive record content maps no open question, and its statements in
+    [ADR 0020](0020-derived-exact-reference-lineage.md) and [ADR 0022](0022-native-reference-phase-handoffs.md), for the
+    claim an applied answer kept ("The answered reconciliation");
+  - [ADR 0047](0047-engine-composed-primary-story.md) Decision 1, for the claims the story quotes;
+  - §16.2's snapshot facts and the `specification-state` version, which advances to v30 with no reader for v29.
 
   It leaves §23.2's protection of user-closed forms, ADR 0017's incomplete
   publication and ADR 0009's fresh-invocation rule unchanged.
@@ -170,6 +175,11 @@ A reference conflict is a gap that only the user can close, and the user closes 
   the chosen claim as they read any retained claim. The engine applies the choice by its option key. No model reads the
   answer and no code judges its prose. The source text generation and scenarios receive leaves out the lines only the
   superseded claims cite ([§17](../contracts/17-specify.md)), since with them the model asked the decided question again.
+  The snapshot records each claim an applied answer kept, and readback checks that each is a retained model claim that
+  stands alone in a signal of its own. A kept claim of the `open_question` category is decided by the answer: positive
+  record content may map it, coverage requires it mapped as it does a business claim, the story quotes it, and the
+  reference context lists it as an answered question. An `open_question` claim that no applied answer kept stays a
+  question, offered only its clarification outcome (§17.3). The category the model gave a claim is never rewritten.
 - **What it applies to.** A conflict is answered only when every claim is a model claim of one kind and the claim the
   answer keeps is in no other conflict, whose disposition would then have to stay `conflicting`. A claim the answer
   supersedes may also be in another conflict, but only when that conflict is left with one claim, a model claim in no

@@ -951,9 +951,9 @@ validators:
   revision, `specified` stage, captured reference sources/chunks/claims/citations,
   exact compiled extraction-contract comparison evidence (each part is the `request-model`
   step that makes its request, with that step's own parameters), reconciliation and
-  passive-literal records, accepted brief/content/provenance,
+  passive-literal records, the claims an applied answer kept, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v29`). Neither variant holds review evidence.
+  registry identity (`specification-state/v30`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton

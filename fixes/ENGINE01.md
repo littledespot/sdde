@@ -882,6 +882,75 @@ status line so the references above still hold; its build and review record was 
         (`reference_reconciliation_repair.zig:698-702`), so a later false conflict localized after an answer that drops
         a lower-numbered one fails closed (`InvalidAtomicRepair`) instead of being repaired (likely; not executed); the
         owner fix is to find the record by its claims, as `applyGroup` does.
+    - **Change 4: a claim an applied answer kept is decided. Decided and built 28 November 2026** (user: "action the above
+      as per recommendations"). Offline proof only. Need: completion of a clarification-expected run. The second leg of the
+      27 November set's launch 1 (`2026-11-27T20-17-27Z-431dfe5465d339ee5d1956bd06887644`) applied the answer and stopped at
+      records call 10: extraction had filed lines 8 and 9 as one `open_question` claim (8 of 29 retained runs filed them so),
+      the claim the answer kept stayed an open question, its records batch was offered only a clarification outcome and the
+      model asked the decided question again. The rule is the category's, in three places that read it: the records request
+      (`specification_source_binding.activeSignal`), coverage (`open_question_mapped`, context-only), and the story
+      (ADR 0047). The answer cannot rewrite the category: an open question's text and a business claim's are different
+      types, and the engine would choose a meaning.
+      - **Built.** `r.Records.answer_retained` (the chosen claims of applied answers, filled by `answered_reconciliation`), kept
+        by `Snapshot.answer_retained` and checked on load (each a retained model claim standing alone in a signal;
+        `specification-state/v30`, no reader for v29). One reader, `reference_support.openQuestion` (an `open_question` claim no
+        applied answer kept), serves the records request and coverage; a kept question is mapped like a business claim.
+        `reference_support.answeredQuestion` serves the story, which quotes a kept question with the business claims, and
+        `reference_context`, which lists it under "Answered Questions". `spec.permitsPositiveMapping` is deleted. Only the claim
+        the user chose is recorded, never the last claim of a conflict the supersession dropped. Amended: ADR 0025 (amends
+        list, "The answered reconciliation"), ADR 0020, ADR 0022, ADR 0047 Decision 1, 17-specify.md §17.3 and §17.5, 16 §16.2,
+        13-03 `ApplyClarificationAnswersAction`, 24-workflow-state.md, F0100's `specification-state` list.
+      - **Tests.** The answer records exactly the chosen claim (not a dropped conflict's last claim, none when no answer
+        applied); a snapshot with a repeated, superseded or unknown kept claim is rejected on load; the records batch over
+        an open-question group is offered record content only with the fact and clarification only without it, in both modes
+        of one test; coverage maps no unanswered question and requires a kept one (`missing_business_mapping`); the story
+        quotes a kept question and skips an open one; a kept technical claim stays context only; and an integration scenario
+        answers a conflict whose claims are filed as open questions, publishes, keeps one claim in the published snapshot,
+        lists it under "Answered Questions" (a section the view has only then) and reads it back on a rerun. Mutation
+        checks, each failing its tests: the reader ignoring the fact (unit tests and the scenario) and the story ignoring
+        it.
+      - **Not taken.** Rewriting the category on answer; working the fact out on readback from the clarification state (it
+        would mark a claim the model kept while the answer stayed unused); treating line overlap as an answer; answering any
+        generation clarification in text (ADR 0025 Decision 7); a retry, a re-extraction or a second model.
+      - **Replay of launch 1's call 10 with the records variant offered** (28 November 2026, user-approved, billed;
+        `zig-out/e2e-call/2026-11-27T23-45-43Z-4f7e1d43eac74515e38b266ff387df69`, edit file
+        `evaluations/replay-screen/records-offered-for-kept-claim.edit.json`: call 10's captured content unchanged, so the
+        claim is still shown as `open_question`, with call 9's records schema narrowed to claim 5 and signal 4;
+        claude-haiku-5-5, low). 10 of 10 trials returned one record for claim 5 stating "A loan may be renewed only once."
+        (7 business rules, 3 functional requirements); none asked a question. Protocol checks only; this is one chunk of one
+        run, and the engine's own validation, coverage and review were not run.
+      - **Extraction screen for option 2** (28 November 2026, user-approved, billed; same model and effort; edit files in
+        `evaluations/replay-screen/extraction-open-question-definition*.edit.json`, each the captured extraction call with
+        one change: the category definition "A question left unresolved by the source." replaced by "A question the source
+        itself asks or states as undecided. Statements that disagree with each other are not questions; each is a claim of
+        its own category."). Launch 1's extraction call (`2026-11-27T20-17-27Z-…`, call 1), 20 trials each: as captured, 7
+        answers held an `open_question` claim over lines 8 and 9 (6 of them also filed those lines as business, which the
+        protocol rejects as `disagreeing_items`; 2 more answers filed them as business and scope guard, also rejected), 8
+        rejected in all; modified, 0 held one and 0 were rejected. Guards, categories only: hello-world (30 each) none
+        shifted, and the 4-claim split that cites the heading occurred in 7 of 30 as captured and 4 of 30 modified (so it is
+        run-to-run variance, not the wording); loan-renewal (10 each) identical. The screen measures the first answer of
+        one chunk; it does not show that a published specification improves, and AGENTS.md decides a guidance change on
+        repeated runs of both development cases on one build.
+      - **Residuals.** The fact is checked on load for structure, not against the clarification state (a test accepts a
+        structurally valid claim and rejects a repeated, superseded, unknown and exact-token one). Narrowing the
+        extraction definition of an open question (`extraction.context.json`) is not built: the screen above shows it
+        would remove the open-question filing for this source, but it is a model-facing change decided on live runs of
+        both development cases, and it is kept apart from this change so that one build's runs decide one change. Found by
+        the contract review and not changed, each outside this change's owner:
+        - the exact-value duty is derived at extraction from business and scope text (`exact_token_obligation.zig:36`), so a
+          kept question that holds an exact value does not require the published record to carry it, as the same claim filed
+          as `business` would; deciding it needs an exact-token ADR amendment (the duty cannot depend on an answer that
+          comes after extraction);
+        - the incomplete specification's draft (`incomplete_specification_markdown.zig`) lists business and scope claims
+          only, so a kept question is missing from the draft while another conflict is still open (a display, never
+          authority; its question text renders through a different path);
+        - `test/harness/baseline/candidates.zig` copies the reference support without `answer_retained`, so a baseline
+          artifact of an answered run cannot reproduce its coverage (write-only evidence; no reader found);
+        - `answerable` requires only that a conflict's claims be model claims of one kind, so a conflict between two
+          genuinely interrogative questions that the user answers makes the kept question's text the story and a
+          requirement. The engine judges no prose; whether that is acceptable is the user's decision.
+      - **Approvals.** Made: the amendments, the build, the call-10 replay, the extraction screen, and `/live-e2e` of the
+        conflict case. Needed: a decision to build the narrowed definition, and `/live-e2e` of both development cases for it.
     - **Where the 27 runs ended** (tabulated on 27 November 2026 from the retained reports and model outputs): the token
       budget in a full first-pass review, 5 (before conflicts first); the token budget in a dependent pass, 1;
       `repair-source` on an overlapping false group, 8 (7 first legs and 1 second leg, all before A and T1); a second
@@ -1022,9 +1091,10 @@ status line so the references above still hold; its build and review record was 
 
 **Open uncertainty.**
 
-- The conflict case's second leg has run four times and none published: three applied the answer and asked again at the
-  brief call (30,164 to 30,633 tokens), and one regrouped and left the answer unused (43,862). Nothing after the brief
-  call has run, so the cost of a second leg that publishes is an estimate (§10 item 15).
+- The conflict case's second leg has run six times and one published (27 November 2026, launch 2: accepted, 94,623
+  tokens). Of the other five, three applied the answer and asked again at the brief call, one regrouped and left it
+  unused, and one stopped at the records call of an answered open question (§10 item 15, change 4). One published run
+  is one sample.
 - No large source has been run. §4's growth is read from code and contracts and sized on three small cases.
 - §9's savings are estimates. Only A and C were built; C measured −12% to −15% on the development cases (§13).
 - Two of the three `STRING_LENGTH` rejections since 17 November are no longer retained, so which limit they
@@ -1065,7 +1135,8 @@ are open and unscheduled: binding `conflicts[].group_id` in the conflict-group r
 group is built (A and T1, 27 November 2026). Its live set ran that day on the ruled proof route, the conflict case: one
 of three launches exercised it, the repair was graded `helpful`, and none published (§13). Decided and built that day,
 offline proof only: a replay screen (run) and three changes, each amending an accepted ADR or contract section (§10 item
-15). The next step is an approved `/live-e2e` of the conflict case.
+15). A fourth change, for a claim an applied answer kept, was built on 28 November 2026 (§10 item 15, change 4). The next
+steps are the approved billed replay of its records call and then an approved `/live-e2e` of the conflict case.
 
 Any later phase follows SPEC01 §2: `/preflight`; offline tests at the owning boundary; `zig build verify`; one
 change set for each measured build, on a committed, unmodified build; each replay batch, launch and set approved

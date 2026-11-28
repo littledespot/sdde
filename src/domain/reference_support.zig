@@ -6,7 +6,23 @@ pub const Records = struct {
     dispositions: []const r.ClaimDisposition,
     signals: []const r.Signal,
     conflicts: []const r.Conflict,
+    /// The claims an applied user answer kept (ADR 0025).
+    answer_retained: []const r.ClaimId,
 };
+
+/// Whether the claim is an `open_question` claim that an applied user answer kept. An answer that chooses one of the
+/// question claims in conflict decides it, so the claim it kept stands as the requirement the answer chose (ADR 0025).
+pub fn answeredQuestion(held: Records, id: r.ClaimId) r.Error!bool {
+    const content = (try r.item(held.items, id)).claim.content;
+    return content == .model and content.model == .open_question and r.contains(r.ClaimId, held.answer_retained, id);
+}
+
+/// Whether the claim is a question the source leaves open: an `open_question` claim no applied answer kept. Positive
+/// record content maps no such claim.
+pub fn openQuestion(held: Records, id: r.ClaimId) r.Error!bool {
+    const content = (try r.item(held.items, id)).claim.content;
+    return content == .model and content.model == .open_question and !try answeredQuestion(held, id);
+}
 
 /// Eligibility for positive authored source selections. Historical and
 /// diagnostic evidence remains available independently of this native check.
@@ -24,10 +40,10 @@ pub fn eligibleSelection(dispositions: []const r.ClaimDisposition, claims: []con
 }
 pub fn records(value: r.Accounted) Records {
     const global = value.global();
-    return .{ .items = global.input.progress.plan.layout.items, .dispositions = global.dispositions, .signals = value.records.signals, .conflicts = value.records.conflicts };
+    return .{ .items = global.input.progress.plan.layout.items, .dispositions = global.dispositions, .signals = value.records.signals, .conflicts = value.records.conflicts, .answer_retained = value.records.answer_retained };
 }
 pub fn snapshot(a: std.mem.Allocator, value: @import("reference_snapshot.zig").Snapshot) r.Error!Records {
-    return .{ .items = try @import("reference_claim_items.zig").build(a, value.inputs, value.extraction), .dispositions = value.dispositions, .signals = value.signals, .conflicts = value.conflicts };
+    return .{ .items = try @import("reference_claim_items.zig").build(a, value.inputs, value.extraction), .dispositions = value.dispositions, .signals = value.signals, .conflicts = value.conflicts, .answer_retained = value.answer_retained };
 }
 pub const Resolved = struct {
     claim_ids: []const r.ClaimId,

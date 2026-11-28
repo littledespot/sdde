@@ -134,7 +134,8 @@ admission, review, coverage and canonical readback. Historical duplicate/superse
 groups remain evidence but cannot acquire positive authored associations. Filtering
 preserves occurrence IDs and all members; it never trims a mixed group or chooses
 semantic support. Positive values additionally retain the existing prohibition on
-mapping open questions; clarification question evidence has its own scope.
+mapping open questions that no applied user answer kept ([ADR 0025](0025-clarification-answer-authentication.md));
+clarification question evidence has its own scope.
 An empty retained catalogue blocks native readiness before dispatch. Protocol
 correction retains the same catalogue, selected schema and existing allowance.
 No role list, unsupported-only schema or positive default is reconstructed.

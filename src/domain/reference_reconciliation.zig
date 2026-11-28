@@ -160,6 +160,9 @@ pub const Records = struct {
     /// The claims an applied user answer superseded (ADR 0025). Execution-local: a supersession the model proposed is not
     /// one, and the persisted snapshot does not carry it.
     answer_superseded: []const ClaimId = &.{},
+    /// The claims an applied user answer kept (ADR 0025). Unlike `answer_superseded` it is persisted with the snapshot, since
+    /// what a retained question claim may map to depends on it each time the snapshot is read back.
+    answer_retained: []const ClaimId = &.{},
 };
 pub const Accounted = struct {
     records: Records,

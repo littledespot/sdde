@@ -7,6 +7,7 @@ const p = @import("specification_provenance.zig");
 const r = @import("reference_reconciliation.zig");
 const text = @import("typed_text.zig");
 const binding = @import("specification_source_binding.zig");
+const refs = @import("reference_support.zig");
 const sessions = @import("specification_session.zig");
 const reading = @import("source_paragraph.zig");
 
@@ -14,7 +15,7 @@ pub const Error = sessions.Error;
 pub const Composition = union(enum) { story: g.spec.Values(.model).AttributedValue, blocked: binding.Rejection };
 pub const Outcome = union(enum) { composed: sessions.Session, blocked: binding.Rejection };
 
-/// The story unit's value: its catalogue's business claims in source order, each
+/// The story unit's value: its catalogue's business claims, and any question an applied answer kept, in source order, each
 /// quote flattened to one paragraph (`reading.paragraph`) and joined by one space. A quote of
 /// headings alone is skipped. The story selects the groups whose claims it quotes;
 /// unit validation recognises its exact values as in model text. Without a
@@ -30,7 +31,7 @@ pub fn compose(a: std.mem.Allocator, current: sessions.Session, context: p.Conte
     for (groups) |group| for (group.claim_ids) |id| {
         if (quoted(quotes.items, id)) continue;
         const item = try r.item(available.records.items, id);
-        if (item.claim.content != .model or item.claim.content.model != .business) continue;
+        if (item.claim.content != .model or (item.claim.content.model != .business and !try refs.answeredQuestion(available.records, id))) continue;
         const at = try sourcePosition(structure, item);
         const words = (try reading.paragraph(a, &structure, item)) orelse continue;
         const segments = try a.alloc(text.BusinessSegment, 1);

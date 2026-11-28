@@ -655,6 +655,23 @@ test "the composed story skips heading and technical claims and blocks without a
         try std.testing.expectEqualDeep(try @import("domain/specification_source_binding.zig").catalogue(a, @import("domain/reference_support.zig").records(fixture.context.references), .content), rejection.eligible_signals);
         try std.testing.expectEqual(.no_story_requirements, (try compose_story.execute(a, current, fixture.context)).blocked.reason);
     }
+    // A question the source leaves open is not quoted. One an applied answer kept is the requirement the answer chose, so
+    // the story quotes it with the business claims, in source order (ADR 0025).
+    {
+        var fixture = try Fixture.initClaims(a, "MOCK Renew an eligible loan.\nMOCK A loan may be renewed only once.\n", null, .{ .selected = &.{
+            .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+            .{ .category = .open_question, .citations = &.{.{ .ordinal = 2 }} },
+        } });
+        defer fixture.deinit();
+        const current = try sessionAtStory(a, &fixture);
+        const open = (try story.compose(a, current, fixture.context)).story;
+        try std.testing.expectEqualStrings("MOCK Renew an eligible loan.", (try quotedText(a, fixture.context, open.value)).text);
+        try std.testing.expectEqual(@as(usize, 1), open.source_group_ids.len);
+        fixture.context.references.records.answer_retained = fixture.context.references.records.signals[1].value.claim_ids;
+        const answered = (try story.compose(a, current, fixture.context)).story;
+        try std.testing.expectEqualStrings("MOCK Renew an eligible loan. MOCK A loan may be renewed only once.", (try quotedText(a, fixture.context, answered.value)).text);
+        try std.testing.expectEqual(@as(usize, 2), answered.source_group_ids.len);
+    }
     // Each quote is one paragraph: a heading quoted with content, a wrapped list
     // item and lines cited apart keep their words, without headings or line breaks.
     for (reading_cases) |case| {
@@ -1321,8 +1338,9 @@ test "authoring schema reuse keeps positive support separate from open question 
 // SPEC01 C49 (decided 20 November 2026): a records batch is assigned its group with `.question` (`binding.record`,
 // `recordCount`) and every record over a group is validated with `.content` (`validateRecordAssociation`), which a
 // group holding an open question fails. The request offers what the validation accepts: a batch over such a group is
-// offered its clarification outcome and no record content (invariant 20; ADR 0020).
-test "a records batch over a group that holds an open question is offered only its clarification outcome" {
+// offered its clarification outcome and no record content (invariant 20; ADR 0020). A question an applied user answer kept is
+// decided, so its batch is offered record content like any other group's (ADR 0025).
+test "a records batch over a group that holds an open question is offered only its clarification outcome, unless an applied answer kept it" {
     const binding = @import("domain/specification_source_binding.zig");
     const refs = @import("domain/reference_support.zig");
     const extraction_contract = @import("domain/reference_extraction.zig");
@@ -1334,7 +1352,7 @@ test "a records batch over a group that holds an open question is offered only i
     const a = arena.allocator();
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
-    for ([_]struct { behavior: []const u8, question: []const u8 }{
+    for ([_]bool{ false, true }) |answered| for ([_]struct { behavior: []const u8, question: []const u8 }{
         .{ .behavior = "MOCK Show the startup time.", .question = "MOCK Which timezone applies?" },
         .{ .behavior = "MOCK Renew an eligible loan.", .question = "MOCK Which renewal period applies?" },
     }) |case| {
@@ -1344,11 +1362,13 @@ test "a records batch over a group that holds an open question is offered only i
         };
         var fixture = try Fixture.initClaims(a, try std.fmt.allocPrint(a, "{s}\n{s}\n", .{ case.behavior, case.question }), null, .{ .selected = &claims });
         defer fixture.deinit();
+        // The claim the question group holds is the one an applied answer kept, or no answer applied.
+        if (answered) fixture.context.references.records.answer_retained = fixture.context.references.records.signals[1].value.claim_ids;
         const records = refs.records(fixture.context.references);
         try std.testing.expectEqual(@as(usize, 2), records.signals.len);
         const business = records.signals[0];
         const question = records.signals[1];
-        try std.testing.expect(!spec.permitsPositiveMapping((try references.r.item(records.items, question.value.claim_ids[0])).claim.content));
+        try std.testing.expectEqual(!answered, try refs.openQuestion(records, question.value.claim_ids[0]));
         // Both groups get a records batch, the question's included, and the batch carries its claim.
         try std.testing.expectEqual(@as(usize, 2), try binding.recordCount(records));
         const bound = (try binding.record(a, records, fixture.context.inputs, 1)).records;
@@ -1357,12 +1377,15 @@ test "a records batch over a group that holds an open question is offered only i
         // Record content is bound with `.content`: the business group resolves and the question group does not,
         // which is the first check of `validateRecordAssociation`.
         _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{business.id}, .content);
-        try std.testing.expectError(error.InvalidSpecificationBinding, binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .content));
+        if (answered) {
+            _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .content);
+        } else try std.testing.expectError(error.InvalidSpecificationBinding, binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .content));
         // Question mode resolves it, so a clarification over it stays valid.
         _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{question.id}, .question);
-        // The binding names the rule the offer follows: content binds the business group and not the question group.
+        // The binding names the rule the offer follows: content binds the business group, and the question group only when
+        // an applied answer kept its claim.
         try std.testing.expect(try binding.bindsContent(records, business.id));
-        try std.testing.expect(!try binding.bindsContent(records, question.id));
+        try std.testing.expectEqual(answered, try binding.bindsContent(records, question.id));
         try std.testing.expectError(error.InvalidSpecificationBinding, binding.bindsContent(records, .{ .ordinal = 999 }));
         // Each batch's request, at its own group. Both offer the clarification outcome over their own group; only the
         // business batch offers record content, which the question batch's schema rejects.
@@ -1375,12 +1398,14 @@ test "a records batch over a group that holds an open question is offered only i
             for (packet.excludedVariants()) |entry| if (std.mem.eql(u8, entry.kind, "records")) {
                 excludes_records = true;
             };
-            try std.testing.expectEqual(question_batch, excludes_records);
+            // A batch over a question no answer kept is offered only its clarification outcome.
+            const clarification_only = question_batch and !answered;
+            try std.testing.expectEqual(clarification_only, excludes_records);
             var names_claims = false;
             for (packet.integerChoices()) |choice| if (choice.target.path.len == 3 and std.mem.eql(u8, choice.target.path[0].property, "records")) {
                 names_claims = true;
             };
-            try std.testing.expectEqual(!question_batch, names_claims);
+            try std.testing.expectEqual(!clarification_only, names_claims);
             const restricted = try schema.restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
             defer restricted.release();
             var good = try fixture.proposal(case.behavior);
@@ -1390,7 +1415,7 @@ test "a records batch over a group that holds an open question is offered only i
             var asked = good;
             asked.value = .{ .segments = &.{.{ .literal = .{ .value = case.question } }} };
             const wires = [_]struct { response: g.Response, accepted: bool }{
-                .{ .response = .{ .content = .{ .records = &.{requirement} } }, .accepted = !question_batch },
+                .{ .response = .{ .content = .{ .records = &.{requirement} } }, .accepted = !clarification_only },
                 .{ .response = .{ .clarification = .{ .reason = .missing, .question = asked, .record_kind = .functional_requirement } }, .accepted = true },
             };
             for (wires) |wire| {
@@ -1401,7 +1426,7 @@ test "a records batch over a group that holds an open question is offered only i
             // The business batch is written, which moves the session to the question group's batch.
             if (!question_batch) current = try sessions.appendBound(a, current, (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{requirement} } } })).valid);
         }
-    }
+    };
 }
 
 test "record authoring excludes only complete preserved-token groups and keeps sparse native assignments" {
@@ -11769,6 +11794,62 @@ test "coverage counts only the claims each record names" {
     // not (an ADR 0038 limit).
     const story = try attributed(a, behaviours.id, behaviours.value.claim_ids);
     try std.testing.expect(try coverage.checkRecords(a, records, brief, content(story, narrative, &.{ requirement, scenario })) == .valid);
+}
+
+test "coverage maps no question the source leaves open and requires one an applied answer kept" {
+    const coverage = @import("domain/specification_coverage.zig");
+    const ClaimId = @import("domain/reference_identity.zig").ClaimId;
+    const SignalId = @import("domain/reference_reconciliation.zig").SignalId;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const claims = [_]@import("domain/reference_extraction.zig").Proposal{
+        .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+        .{ .category = .open_question, .citations = &.{.{ .ordinal = 2 }} },
+    };
+    var fixture = try Fixture.initClaims(a, "MOCK Renew loans.\nMOCK A loan may be renewed only once.\n", null, .{ .selected = &claims });
+    defer fixture.deinit();
+    const unanswered = @import("domain/reference_support.zig").records(fixture.context.references);
+    var kept_references = fixture.context.references;
+    kept_references.records.answer_retained = unanswered.signals[1].value.claim_ids;
+    const kept = @import("domain/reference_support.zig").records(kept_references);
+    const purpose = unanswered.signals[0];
+    const question = unanswered.signals[1];
+    const attributed = struct {
+        fn of(allocator: std.mem.Allocator, group: SignalId, named: []const ClaimId) !spec.AttributedValue {
+            return .{ .value = .{ .segments = try allocator.dupe(@import("domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = "MOCK value" } }}) }, .source_group_ids = try allocator.dupe(SignalId, &.{group}), .provenance = .{ .claim_ids = named, .citation_ids = &.{}, .clarification_response_ids = &.{} } };
+        }
+    }.of;
+    const narrative = try attributed(a, purpose.id, purpose.value.claim_ids);
+    const brief: spec.Brief = .{ .description = narrative, .primary_goal = narrative };
+    const requirement: spec.IdentifiedRecord = .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .proposal = .{ .content = .{ .functional_requirement = .{ .text = narrative.value } }, .source_group_ids = narrative.source_group_ids, .provenance = narrative.provenance } };
+    const mapped = try attributed(a, question.id, question.value.claim_ids);
+    const naming: spec.IdentifiedRecord = .{ .id = .{ .kind = .functional_requirement, .ordinal = 2 }, .proposal = .{ .content = .{ .functional_requirement = .{ .text = narrative.value } }, .source_group_ids = mapped.source_group_ids, .provenance = mapped.provenance } };
+    const without: spec.IdentifiedContent = .{ .display_name = fixture_display_name, .primary_user_story = narrative, .records = &.{requirement}, .entities = .{ .disposition = .not_applicable, .basis = narrative } };
+    const with: spec.IdentifiedContent = .{ .display_name = fixture_display_name, .primary_user_story = narrative, .records = &.{ requirement, naming }, .entities = .{ .disposition = .not_applicable, .basis = narrative } };
+    // A question no answer decided stays context only: no record names it, and a record that does is rejected.
+    try std.testing.expect(try coverage.checkRecords(a, unanswered, brief, without) == .valid);
+    const refused = try coverage.checkRecords(a, unanswered, brief, with);
+    try std.testing.expect(refused == .invalid);
+    try std.testing.expectEqual(question.value.claim_ids[0], refused.invalid.claim_id);
+    try std.testing.expect(refused.invalid.issue == .open_question_mapped);
+    // A question an applied answer kept is a requirement: it must be mapped, and a record may name it.
+    const missing = try coverage.checkRecords(a, kept, brief, without);
+    try std.testing.expect(missing == .invalid);
+    try std.testing.expectEqual(question.value.claim_ids[0], missing.invalid.claim_id);
+    try std.testing.expect(missing.invalid.issue == .missing_business_mapping);
+    try std.testing.expect(try coverage.checkRecords(a, kept, brief, with) == .valid);
+    // The rule is the question's alone: a kept claim of another category keeps its place, so a technical claim stays
+    // context only and needs no record.
+    const technical = [_]@import("domain/reference_extraction.zig").Proposal{
+        .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+        .{ .category = .technical, .citations = &.{.{ .ordinal = 2 }} },
+    };
+    var other = try Fixture.initClaims(a, "MOCK Renew loans.\nMOCK Store loans in a relational database.\n", null, .{ .selected = &technical });
+    defer other.deinit();
+    var other_references = other.context.references;
+    other_references.records.answer_retained = other.context.references.records.signals[1].value.claim_ids;
+    try std.testing.expect(try coverage.checkRecords(a, @import("domain/reference_support.zig").records(other_references), brief, without) == .valid);
 }
 
 fn authoredRecord(content: spec.Content(spec.BusinessValue), value: spec.Model.AttributedValue) spec.Model.RecordProposal {

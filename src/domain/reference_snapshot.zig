@@ -13,6 +13,8 @@ pub const Snapshot = struct {
     dispositions: []const r.ClaimDisposition,
     signals: []const r.Signal,
     conflicts: []const r.Conflict,
+    /// The claims an applied user answer kept (ADR 0025); empty when no answer applied.
+    answer_retained: []const r.ClaimId,
     passive_records: []const passive.Record,
     passive_occurrences: []const passive.Occurrence,
 };
@@ -34,6 +36,7 @@ pub fn build(directory: @import("reference_ingestion.zig").RelativePath, inputs:
         .dispositions = global.dispositions,
         .signals = reconciled.records.signals,
         .conflicts = reconciled.records.conflicts,
+        .answer_retained = reconciled.records.answer_retained,
         .passive_records = registry.records,
         .passive_occurrences = registry.occurrences,
     };
@@ -143,6 +146,21 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot, normalizer: @i
         try citationUnion(a, items, proposal.claim_ids, conflict.value.citation_ids);
     }
     if (try v.conflictCoverage(a, items, records.dispositions, conflicts) != null) return error.InvalidReferenceSnapshot;
+    try answerRetained(records);
+}
+
+/// A claim an applied answer kept is a retained model claim that stands alone in a signal of its own, as the answered
+/// reconciliation leaves it (ADR 0025). A retained claim is in no conflict, which the conflict coverage above holds.
+fn answerRetained(records: @import("reference_support.zig").Records) !void {
+    try r.unique(r.ClaimId, records.answer_retained);
+    for (records.answer_retained) |id| {
+        if ((try r.item(records.items, id)).claim.content != .model) return error.InvalidReferenceSnapshot;
+        if ((try @import("reference_reconciliation_validation.zig").disposition(records.dispositions, id)).disposition != .retained) return error.InvalidReferenceSnapshot;
+        const alone = for (records.signals) |signal| {
+            if (signal.value.claim_ids.len == 1 and signal.value.claim_ids[0].ordinal == id.ordinal) break true;
+        } else false;
+        if (!alone) return error.InvalidReferenceSnapshot;
+    }
 }
 
 fn citationUnion(a: std.mem.Allocator, items: r.Items, claims: []const r.ClaimId, citations: []const r.CitationId) !void {

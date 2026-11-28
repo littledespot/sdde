@@ -108,16 +108,6 @@ pub fn requiredByRecords(kind: Kind) bool {
     return requiresRecords(kind) and kind != scenario_family;
 }
 
-/// Structural mapping permission; semantic support still requires review.
-pub fn permitsPositiveMapping(content: reference.ClaimContent) bool {
-    return switch (content) {
-        .preserved_token => true,
-        .model => |model| switch (model) {
-            .open_question => false,
-            .business, .scope_guard, .design, .technical, .validation, .implementation_assumption => true,
-        },
-    };
-}
 pub fn requiresRecords(kind: Kind) bool {
     return std.mem.indexOfScalar(Kind, &required_record_families, kind) != null;
 }

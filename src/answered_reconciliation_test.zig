@@ -85,6 +85,9 @@ test "two answers that change one conflict, or one that would drop another answe
         // Alone, keeping 2 drops the first conflict, whose last claim stands alone.
         const alone = try answered.apply(allocator, reference.inputs, accounted.records, try choices(allocator, &.{try formFor(allocator, reference, held, second, ids[2])}));
         try std.testing.expectEqual(@as(usize, 0), alone.conflicts.len);
+        // Only the claim the user chose is kept by the answer: the last claim of the conflict it dropped was not decided by one.
+        try std.testing.expectEqual(@as(usize, 1), alone.answer_retained.len);
+        try std.testing.expectEqual(ids[2].ordinal, alone.answer_retained[0].ordinal);
         for ([_][2]r.ClaimId{
             // The user kept 1 in the first form, which cannot apply while the second conflict holds it; the second answer
             // would drop the first conflict and retain claim 0 against that choice.
@@ -96,6 +99,7 @@ test "two answers that change one conflict, or one that would drop another answe
             const result = try answered.apply(allocator, reference.inputs, accounted.records, both);
             try std.testing.expectEqual(@as(usize, 2), result.conflicts.len);
             try std.testing.expectEqual(@as(usize, 0), result.answer_superseded.len);
+            try std.testing.expectEqual(@as(usize, 0), result.answer_retained.len);
             for (support.records(.{ .records = result, .outcome = .blocked }).dispositions) |value| try std.testing.expectEqual(r.Disposition.conflicting, value.disposition);
         }
     }
@@ -115,6 +119,8 @@ test "two answers that change one conflict, or one that would drop another answe
         try std.testing.expectEqual(ids[3].ordinal, result.signals[result.signals.len - 1].value.claim_ids[0].ordinal);
         try std.testing.expectEqual(@as(usize, 2), result.answer_superseded.len);
         try std.testing.expect(r.contains(r.ClaimId, result.answer_superseded, ids[1]) and r.contains(r.ClaimId, result.answer_superseded, ids[2]));
+        try std.testing.expectEqual(@as(usize, 2), result.answer_retained.len);
+        try std.testing.expect(r.contains(r.ClaimId, result.answer_retained, ids[0]) and r.contains(r.ClaimId, result.answer_retained, ids[3]));
         try expectOrdinary(allocator, reference, result);
         try expectSnapshot(allocator, reference, result);
     }
@@ -168,7 +174,17 @@ test "an answered conflict leaves an ordinary reconciliation that keeps the chos
     const contract = try @import("domain/reference_extraction_contract.zig").capture(allocator, contracts.authority, reference.inputs.chunks.partition);
     const snapshot = @import("domain/reference_snapshot.zig");
     const saved = try snapshot.build(.{ .bytes = "references" }, reference.inputs, reference.extracted, account, reference.text.registry, contract);
-    try snapshot.validate(allocator, saved, @import("test_fixtures/reference_text.zig").normalizer);
+    const normalizer = @import("test_fixtures/reference_text.zig").normalizer;
+    try snapshot.validate(allocator, saved, normalizer);
+    // The snapshot carries the claim the answer kept, and readback accepts only what an answered reconciliation leaves: a
+    // retained model claim that stands alone in a signal. A repeated claim, a superseded one and an unknown one are not.
+    try std.testing.expectEqual(@as(usize, 1), saved.answer_retained.len);
+    try std.testing.expectEqual(chosen_claim.ordinal, saved.answer_retained[0].ordinal);
+    for ([_][]const r.ClaimId{ &.{ chosen_claim, chosen_claim }, &.{other_claim}, &.{.{ .ordinal = 99 }} }) |forged| {
+        var forged_snapshot = saved;
+        forged_snapshot.answer_retained = forged;
+        try std.testing.expectError(error.InvalidReferenceSnapshot, snapshot.validate(allocator, forged_snapshot, normalizer));
+    }
     // The conflict seed is gone: the authority ledger sees the sources as one claim.
     const inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, reference.inputs.corpus.feature_id, account, .first);
     try std.testing.expectEqual(@as(usize, 0), inputs.forced_gaps.len);

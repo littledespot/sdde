@@ -182,8 +182,9 @@ level-1 heading, native text with no lineage or group support (ADR 0048). Initia
 use the same selected-group value with the existing reason and optional record
 kind. Their native scope resolves only selected question-eligible groups, never the
 whole available catalogue. Missing/duplicate/foreign/inactive group handles reject.
-Positive authored associations cannot select groups containing an `open_question`;
-question evidence has its distinct native eligibility. Other semantic categories
+Positive authored associations cannot select groups containing an `open_question`
+that no applied user answer kept ([ADR 0025](0025-clarification-answer-authentication.md), "The answered
+reconciliation"); question evidence has its distinct native eligibility. Other semantic categories
 are not categorically excluded. An empty retained catalogue rejects readiness
 before dispatch without fabricating a user gap, unsupported verdict or completion.
 

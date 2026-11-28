@@ -116,7 +116,9 @@ Initial readers should cover:
   `specified`.
 - The snapshot records only reference-derived facts: every claim has one
   retained/superseded/duplicate/conflicting extraction disposition, with valid
-  block/chunk/related-claim joins.
+  block/chunk/related-claim joins. The one exception is the claims an applied user answer kept
+  (`answer_retained`, [ADR 0025](../decisions/0025-clarification-answer-authentication.md)): each is a
+  retained model claim standing alone in a signal of its own, checked on load.
 - It never stores a mapping to the current editable specification.
 
 - Every citation ID must resolve uniquely to the same `referenceStateId` and a manifest

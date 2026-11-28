@@ -188,7 +188,8 @@ occurrences into required `source_group_ids`, their complete ordered claim union
 `S`, exact dependencies and citations. Joint support and legitimate overlaps are
 permitted; repeated, foreign, mixed-inactive or stale groups reject. A larger
 catalogue is availability, not semantic support. Positive associations cannot map
-open questions; initial clarification questions have a separate native eligibility
+open questions that no applied user answer kept ([ADR 0025](../decisions/0025-clarification-answer-authentication.md));
+initial clarification questions have a separate native eligibility
 scope and select only their actual evidence. Existing missing/ambiguous/conflicting
 reasons and inconclusive outcomes remain. A question does not establish a genuine
 user gap merely by having valid IDs. Field purposes, owned by the workflow's
@@ -197,11 +198,13 @@ Do not invent an actor, benefit or entity to fill a field.
 
 Record authoring binds one complete retained group containing at least one
 non-token claim and may return multiple records
-or none. A batch over a group that holds an open question is offered only its
-clarification outcome, never record content (the engine excludes the records variant
-from that batch's request, through the schema restriction it already applies): a
-positive record cannot map an open question, so the request offers what validation
-accepts. Each record names the claims it supports, a nonempty subset of that group's
+or none. A batch over a group that holds an open question no applied user answer kept is
+offered only its clarification outcome, never record content (the engine excludes the records
+variant from that batch's request, through the schema restriction it already applies): a
+positive record cannot map such a question, so the request offers what validation
+accepts. A question an applied answer kept (ADR 0025, the snapshot's `answer_retained`) is a
+requirement the answer chose: its batch is offered record content, and the claim must be mapped
+as a business claim is. One native rule decides both the request and the validation. Each record names the claims it supports, a nonempty subset of that group's
 claims kept in the group's order, and keeps exactly one group occurrence. Requirements
 own their claims: in one response, a business rule, outcome, assumption, non-goal or
 prohibition whose every claim a requirement or an earlier such record names is deleted
@@ -536,7 +539,7 @@ The engine validates:
 - typed clarification state rather than fragile substring matching;
 - citation validity and reference-file accounting;
 - for every spec record, each authority is either a resolvable reference-claim/citation set, a current resolved clarification response, or an allowed combination; reference citations equal the stable unique union derived under ADR 0020 from explicit support and exact dependencies, while user answers never receive fabricated citations;
-- every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs (including reference-context question signals), a blocking conflict, a specification clarification need bound to its `SNN` record, or an explicit non-spec reason; no claim disappears between the snapshot and specification, and no question becomes a specification content record;
+- every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs (including reference-context question signals), a blocking conflict, a specification clarification need bound to its `SNN` record, or an explicit non-spec reason; no claim disappears between the snapshot and specification, and no question left open becomes a specification content record (a question an applied answer kept is mapped like a business claim);
 - derived-feature-brief records cite the reference claims from which they were generated; a later user-authored record requires its explicit acknowledgement provenance;
 - exact user-facing copy obligations;
 - exact preserved-token propagation in `reference-context.md`, with visual/style kinds additionally requiring visual checks;

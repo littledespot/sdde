@@ -60,17 +60,21 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
         }
         var signals: std.ArrayList(r.SignalId) = .empty;
         for (references.signals) |signal| if (r.contains(r.ClaimId, signal.value.claim_ids, item.claim.id)) try signals.append(allocator, signal.id);
+        // A question the source leaves open maps to no record and is context only; one an applied answer kept stands as a
+        // requirement and must be mapped like any business claim (ADR 0025).
+        const open = @import("reference_support.zig").openQuestion(references, item.claim.id) catch return error.InvalidSpecificationCoverage;
         const context_only = switch (item.claim.content) {
             .model => |model| switch (model) {
                 .business, .scope_guard => false,
-                .design, .technical, .validation, .implementation_assumption, .open_question => true,
+                .design, .technical, .validation, .implementation_assumption => true,
+                .open_question => open,
             },
             .preserved_token => policy: {
                 const value = @import("specification_exact_tokens.zig").policy(items, item.claim.id) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverage;
                 break :policy !value.mandatory;
             },
         };
-        if (!spec.permitsPositiveMapping(item.claim.content) and targets.items.len != 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .open_question_mapped, .targets = targets.items } };
+        if (open and targets.items.len != 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .open_question_mapped, .targets = targets.items } };
         if (targets.items.len == 0 and (!context_only or signals.items.len == 0)) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = if (context_only) .missing_context_mapping else .missing_business_mapping, .targets = targets.items } };
         try accounts.append(allocator, .{ .claim_id = item.claim.id, .disposition = if (targets.items.len != 0) .{ .mapped = targets.items } else .{ .context_only = signals.items } });
     }

@@ -3222,8 +3222,8 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts, readback_normalizer);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v29", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v29", "specification-state/v28");
+    try std.testing.expectEqualStrings("specification-state/v30", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v30", "specification-state/v29");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
     try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts, readback_normalizer));
     const principles = @import("../../src/domain/principle_registry.zig");

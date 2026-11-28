@@ -22,7 +22,8 @@ exact source bytes and structure; it can join quoted claims, but it can't paraph
 ## Decision
 
 1. **The engine composes the story.** The story unit's content is built natively from the
-   business claims (`business` category) of the groups in its catalogue, in source order:
+   business claims (`business` category) of the groups in its catalogue, and any `open_question` claim an applied user
+   answer kept ([ADR 0025](0025-clarification-answer-authentication.md)), in source order:
    - each quote becomes one paragraph: its blank and Markdown heading lines are dropped, and
      each other line loses its indentation and leading list marker, the lines joined by one
      space; a quote of headings alone is skipped. A Setext heading's text is a heading, and
@@ -36,7 +37,7 @@ exact source bytes and structure; it can join quoted claims, but it can't paraph
      them as for any authored value.
    No model call writes the story. It then passes the same unit validation as any unit.
 2. **No non-content story outcome.** The story has no clarification or inconclusive outcome.
-   A catalogue with no business claim blocks with the typed rejection
+   A catalogue with no such claim blocks with the typed rejection
    `no_story_requirements`. A composed story that fails unit validation or exact-value
    recognition (for example, a quote that is only an exact value, or an ambiguous exact
    value) blocks with the typed rejection `story_not_admissible`, carrying the unit issue;

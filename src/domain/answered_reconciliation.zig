@@ -2,6 +2,7 @@
 //! chosen claim retained and the others superseded by it, drops the conflict and gives the chosen claim a signal, so the
 //! result is an ordinary reconciliation: every reconciliation rule holds for it, the persisted reference snapshot
 //! validates, and generation, review, scenarios and rendering read the chosen claim as they read any retained claim. The
+//! chosen claims are also recorded (`answer_retained`), since a kept `open_question` claim is decided by the answer. The
 //! engine applies the choice; no model reads it and no code judges its prose (ADR 0025).
 //!
 //! A conflict is answered only when it can be: its claims are model claims of one kind, the claim the answer keeps is in no
@@ -68,8 +69,11 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
     for (global.proposal.conflict_groups) |group| if (!removedClaims(records, applied.items, group.claim_ids)) try groups.append(allocator, group);
 
     var answer_superseded: std.ArrayList(r.ClaimId) = .empty;
+    var answer_retained: std.ArrayList(r.ClaimId) = .empty;
     for (applied.items) |entry| {
         const conflict = records.conflicts[entry.conflict];
+        // Only the claim the user chose: the last claim of a conflict the supersession dropped was not decided by an answer.
+        try answer_retained.append(allocator, entry.chosen);
         const related = try allocator.dupe(r.ClaimId, &.{entry.chosen});
         for (conflict.value.claim_ids) |claim| {
             const superseded = claim.ordinal != entry.chosen.ordinal;
@@ -113,6 +117,7 @@ pub fn apply(allocator: std.mem.Allocator, source_inputs: r.evidence.Inputs, rec
         .signals = try signals.toOwnedSlice(allocator),
         .conflicts = try kept.toOwnedSlice(allocator),
         .answer_superseded = try answer_superseded.toOwnedSlice(allocator),
+        .answer_retained = try answer_retained.toOwnedSlice(allocator),
     };
 }
 

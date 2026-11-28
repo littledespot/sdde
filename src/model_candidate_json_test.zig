@@ -274,7 +274,7 @@ test "fixed source review reconstructs bound claims and rejects an echoed union"
     const a = arena.allocator();
     const model = @import("domain/specification_support_model.zig");
     const required: @import("domain/specification_support_evidence.zig").Requirements = .{
-        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{}, .answer_retained = &.{} },
         .eligible_claim_ids = &.{.{ .ordinal = 1 }},
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
         .positive_claims = .exact_set,
@@ -296,7 +296,7 @@ test "source variants require questions only for gaps in focused findings" {
     const json = @import("domain/model_candidate_json.zig");
     const model = @import("domain/specification_support_model.zig");
     const required: @import("domain/specification_support_evidence.zig").Requirements = .{
-        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{}, .answer_retained = &.{} },
         .eligible_claim_ids = &.{.{ .ordinal = 1 }},
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
         .positive_claims = .exact_set,
@@ -446,7 +446,7 @@ test "focused review evidence shapes follow native minima without excluding sour
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
     const bound: admission.Requirements = .{
-        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{}, .answer_retained = &.{} },
         .eligible_claim_ids = &.{.{ .ordinal = 7 }},
         .eligible_source_ids = &.{.{ .ordinal = 7 }},
         .positive_claims = .eligible_subset,
